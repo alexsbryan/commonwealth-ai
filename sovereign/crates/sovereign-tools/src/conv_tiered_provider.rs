@@ -1293,7 +1293,6 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                     themes = theme_count,
                     "folder_tiered: vault synthesis complete"
                 );
-                Ok(())
             }
             Err(e) => {
                 tracing::warn!(
@@ -1301,9 +1300,58 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                     error = %e,
                     "folder_tiered: vault synthesis failed; cross-note briefing block will be empty until next enrichment"
                 );
-                Ok(())
             }
         }
+
+        // Typed-extension pass over RAPTOR leaves + vault_themes →
+        // atoms.json. Bench-side concern (per
+        // `sovereign/docs/specs/TYPED_EXTENSION_PASS.md`). Best-effort:
+        // a failure here only loses bench-side typed atoms — chat-side
+        // retrieval is unaffected. Skipped when the resolver doesn't
+        // know this corpus's index dir (unit tests, transient bring-up).
+        if let Some(resolver) = self.index_dir_resolver.as_ref() {
+            if let Some(index_dir) = resolver.resolve(corpus_id) {
+                let atlas_dir = index_dir.join("atlas");
+                match crate::typed_extension::run_typed_extension(
+                    corpus_id,
+                    &self.store,
+                    &self.inference,
+                    &atlas_dir,
+                )
+                .await
+                {
+                    Ok(report) => {
+                        tracing::info!(
+                            corpus = corpus_id,
+                            status = ?report.status,
+                            pass_a = report.pass_a_calls,
+                            pass_b = report.pass_b_calls,
+                            soft_failures = report.soft_failures.len(),
+                            "folder_tiered: typed extension complete"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            corpus = corpus_id,
+                            error = %e,
+                            "folder_tiered: typed extension failed; bench atoms.json will be stale until next enrichment"
+                        );
+                    }
+                }
+            } else {
+                tracing::debug!(
+                    corpus = corpus_id,
+                    "folder_tiered: typed extension skipped — index dir resolver returned None"
+                );
+            }
+        } else {
+            tracing::debug!(
+                corpus = corpus_id,
+                "folder_tiered: typed extension skipped — no index dir resolver wired"
+            );
+        }
+
+        Ok(())
     }
 }
 

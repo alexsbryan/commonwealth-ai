@@ -27,6 +27,7 @@ pub mod inspect;
 pub mod migrate_ids;
 pub mod stats;
 pub mod status;
+pub mod typed_extension;
 pub mod wikipedia;
 
 use crate::util::help::{self, Help, HelpSection};
@@ -73,6 +74,10 @@ const HELP: Help = Help {
                 "enable-incremental",
                 "Move 6 P5: flip per-corpus atlas_incremental_enabled flag (pre-flight checks content-hash).",
             ),
+            (
+                "typed-extension",
+                "Run the tiered typed-extension LLM pass over RAPTOR leaves + vault themes; writes atoms.json + atoms.meta.json.",
+            ),
         ]),
         HelpSection::Notes(
             "Atlas commands operate against an already-installed corpus index. Install \
@@ -103,6 +108,7 @@ pub async fn run_atlas(args: &[String]) -> i32 {
         "migrate-ids" => migrate_ids::run(&args[1..]).await,
         "build-doc-index" => build_doc_index::run(&args[1..]).await,
         "enable-incremental" => enable_incremental::run(&args[1..]).await,
+        "typed-extension" => typed_extension::run(&args[1..]).await,
         "stats" => stats::run(&args[1..]).await,
         other => {
             eprintln!("error: unknown atlas subcommand `{other}`");
