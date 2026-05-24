@@ -62,8 +62,13 @@ pub async fn run_auto_witness(
     // budget already accommodates cold-compile + iteration; the
     // witness only needs a fresh compile + the test run, so 2×
     // covers cold-target rebuild even on a slow disk.
-    let witness_wall =
-        std::time::Duration::from_secs(problem.budget.wall_seconds_cap.saturating_mul(2).max(60));
+    // Tight per-call cap on the witness verify. Same fix as the
+    // executor's run_shell: if the model wrote an infinite loop,
+    // pytest can spin for 30+ min at 100% CPU eating the bench's
+    // total wall (observed 4.2 2026-05-23). The witness's verify
+    // is one shot of build+test; 180s is generous for well-formed
+    // code while bounding the pathological case sharply.
+    let witness_wall = std::time::Duration::from_secs(180);
     let (verify_exit_ok, stdout_tail) =
         run_verify_cmd(workdir, &problem.witness.verify_cmd, witness_wall).await;
 
@@ -166,22 +171,30 @@ async fn run_verify_cmd(
     // an infinite-loop test (e.g. agent's broken two_sum running a
     // non-terminating while loop) would leave a zombie cargo
     // process consuming a core indefinitely.
-    let mut child = match tokio::process::Command::new("sh")
+    let mut command = tokio::process::Command::new("sh");
+    command
         .arg("-c")
         .arg(cmd)
         .current_dir(workdir)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-    {
+        .kill_on_drop(true);
+    // Same process-group trick as executor::run_shell so kill on
+    // timeout reaches grandchildren (sh's child pytest) instead of
+    // leaking them as init-owned orphans.
+    #[cfg(unix)]
+    command.process_group(0);
+    let child = match command.spawn() {
         Ok(c) => c,
         Err(e) => {
             warn!(error = %e, "agent_bench: verify spawn failed");
             return (false, format!("verify spawn failed: {e}"));
         }
     };
+    // Capture PID before moving child into wait_with_output, so the
+    // timeout path can kill the whole process group.
+    let child_pid = child.id();
     let wait_future = child.wait_with_output();
     let output = match tokio::time::timeout(wall_cap, wait_future).await {
         Ok(Ok(o)) => o,
@@ -190,6 +203,15 @@ async fn run_verify_cmd(
             return (false, format!("verify wait failed: {e}"));
         }
         Err(_) => {
+            // Kill the full process group, not just sh — sh's
+            // grandchildren (e.g. pytest) would otherwise leak.
+            #[cfg(unix)]
+            if let Some(pid) = child_pid {
+                let pgid_arg = format!("-{pid}");
+                let _ = std::process::Command::new("kill")
+                    .args(["-KILL", "--", &pgid_arg])
+                    .status();
+            }
             warn!(
                 wall_cap_secs = wall_cap.as_secs(),
                 "agent_bench: verify wall-cap fired — verify subprocess killed"
@@ -209,22 +231,75 @@ async fn run_verify_cmd(
         combined.push_str("\n---stderr---\n");
         combined.push_str(&String::from_utf8_lossy(&output.stderr));
     }
-    let truncated = truncate(&combined, 16 * 1024);
+    // Keep the TAIL not the head: every test framework (cargo, pytest,
+    // go test, vitest) prints its pass/fail summary as the LAST line.
+    // The witness's `parse_test_output` reads that summary; if we keep
+    // the head, the summary is lost when verbose failure tracebacks
+    // exceed the cap. Observed 2026-05-23 on 4.2-mini-evaluator (20
+    // failing tests with full tracebacks → 462 lines → 16K head cut
+    // off the count line → witness reported passed=0/total=0).
+    //
+    // 32K is sufficient for the typical 20-test failing run (the
+    // failure block per test is ~600 bytes including diff) while
+    // still bounding context. Together with tail-keeping this gives
+    // both the summary AND the most-recent ~50 test failures.
+    let truncated = truncate_tail(&combined, 32 * 1024);
     (output.status.success(), truncated)
 }
 
-fn truncate(s: &str, limit: usize) -> String {
+/// Keep the LAST `limit` bytes of `s`, UTF-8 safe. When truncated,
+/// prefix with a marker so readers know prefix was dropped.
+fn truncate_tail(s: &str, limit: usize) -> String {
     if s.len() <= limit {
-        s.to_string()
-    } else {
-        format!("{}\n... (truncated to {} bytes)", &s[..limit], limit)
+        return s.to_string();
     }
+    // Walk forward from `s.len() - limit` to the next char boundary
+    // so we never slice mid-codepoint.
+    let mut cut = s.len() - limit;
+    while cut < s.len() && !s.is_char_boundary(cut) {
+        cut += 1;
+    }
+    format!(
+        "... (truncated head: {} bytes dropped)\n{}",
+        cut,
+        &s[cut..]
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::problem::WitnessLanguage;
+
+    #[test]
+    fn truncate_tail_keeps_end_not_start() {
+        // Regression: 2026-05-23 witness reported passed=0/total=0
+        // on 4.2 because head-truncation cut the pytest summary
+        // line ("20 failed in 0.05s") at the end of the output.
+        // Tail-keeping ensures the summary survives.
+        let body: String = (0..1000).map(|i| format!("line {i}\n")).collect();
+        let tail_marker = "20 failed in 0.05s\n";
+        let combined = format!("{body}{tail_marker}");
+        let cut = truncate_tail(&combined, 200);
+        assert!(cut.contains("20 failed in 0.05s"), "summary line lost: {cut}");
+        assert!(cut.contains("(truncated head:"));
+    }
+
+    #[test]
+    fn truncate_tail_safe_for_short_inputs() {
+        assert_eq!(truncate_tail("short", 100), "short");
+    }
+
+    #[test]
+    fn truncate_tail_utf8_safe() {
+        // Multibyte char straddling the truncation point — must
+        // walk forward to next char boundary instead of slicing
+        // mid-codepoint.
+        let s = format!("{}—tail", "x".repeat(100));
+        let cut = truncate_tail(&s, 50);
+        assert!(cut.contains("tail"));
+        assert!(cut.starts_with("... (truncated head:"));
+    }
 
     #[test]
     fn bucket_pass_fraction_default_quartile() {

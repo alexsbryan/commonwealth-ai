@@ -63,11 +63,17 @@ pub fn default_profile_for(role: Role) -> RoleProfile {
         Role::Planner => RoleProfile {
             role: Role::Planner,
             system_prompt:
-                "You are the Planner. Your job is exactly one tool call: `agent_plan` with a \
-                 3-6 sentence plan covering (a) data structures, (b) algorithm in one phrase, \
-                 (c) files to write or modify. The workdir contents are already listed in your \
-                 user message — you have everything you need. Do not inspect, do not write \
-                 code, do not build. The Implementer reads your plan and executes it."
+                "You are the Planner. Your job is exactly one tool call: `agent_plan`. \
+                 Fill `plan` with a 3-6 sentence high-level approach (data structures, \
+                 algorithm, files to modify). For problems with MULTIPLE distinct edits \
+                 (bug-fixes spanning several functions, multi-feature implementations), ALSO \
+                 fill `pseudocode` — a numbered list of every concrete change the Implementer \
+                 needs to make. One entry per change, naming the target (function or file + \
+                 line range) AND the approach. The pseudocode stays pinned in every \
+                 Implementer turn, so the Implementer can execute changes one-at-a-time while \
+                 staying informed by the full set. Workdir contents are listed in your user \
+                 message — you have everything you need. Do not inspect, do not write code, \
+                 do not build."
                     .to_string(),
             allowed_primitives: vec![PrimitiveKind::AgentPlan],
             sampling: SamplingOverrides {
@@ -80,23 +86,38 @@ pub fn default_profile_for(role: Role) -> RoleProfile {
             role: Role::Implementer,
             system_prompt:
                 "You are the Implementer. The Planner's plan and the workdir state are in \
-                 your context. Make exactly one change using `write_file` (full file body) \
-                 or `patch_file` (replace a contiguous line range — preferred for targeted \
-                 edits to an existing file, since it has less JSON-escape pressure and the \
-                 resulting content is syntax-checked at the write boundary). After your \
-                 change, call `handoff_to_evaluator` with a one-line `what_you_changed` \
-                 summary. If the last Evaluator diagnosis says tests passed, call \
-                 `agent_done`. You do not have an `inspect_workdir` tool here — the workdir \
-                 contents are already listed in the user message. The `content` and \
-                 `new_content` fields must be valid source code only; never include \
-                 reasoning, narration, or English sentences outside of comments/docstrings."
+                 your context. Make exactly one edit per turn. Pick the smallest-output tool \
+                 that fits: `replace_function` (rewrite one named function/class — preferred \
+                 when you know the function name), `patch_file` (replace a line range), or \
+                 `write_file` (full file body — rejected on existing files >150 lines). \
+                 After your edit, call `handoff_to_evaluator` with a one-line summary. If \
+                 the last Evaluator diagnosis says tests passed, call `agent_done`. You do \
+                 not have `inspect_workdir` — the workdir contents are in your user message. \
+                 The `content` / `new_content` / `new_body` fields must be valid source code \
+                 only; never include reasoning or English outside comments/docstrings."
                     .to_string(),
             allowed_primitives: vec![
                 PrimitiveKind::WriteFile,
                 PrimitiveKind::PatchFile,
+                PrimitiveKind::ReplaceFunction,
                 PrimitiveKind::HandoffToEvaluator,
                 PrimitiveKind::AgentDone,
             ],
+            // Implementer uses daemon defaults for sampling. The
+            // 4.2 isolation probe v3 (2026-05-24) measured a big
+            // pass-rate lift from default temp → 0.1 for ONE-SHOT
+            // emission, but the dynamic-loop ablation (same date)
+            // showed temp=0.1 destructively interacts with the
+            // sticky-retry detector: low-temp emission produces
+            // similar text across attempts, the rejection signatures
+            // recur, and the windowed sticky-retry kills the loop
+            // before the model recovers. Config D in the ablation
+            // (both indent-normalize and low-temp reverted) scored
+            // 8/9 on 4.1; any config with low-temp enabled scored
+            // 0-2/9 on the same problem. The isolation-vs-dynamic
+            // delta is real — single-shot probes do not transfer
+            // when the surrounding harness reacts to sampling
+            // variance.
             sampling: SamplingOverrides::default(),
             forced_first_tool: Some(PrimitiveKind::WriteFile),
         },
@@ -189,6 +210,20 @@ mod tests {
         // honestly.
         let p = default_profile_for(Role::Evaluator);
         assert_eq!(p.forced_first_tool, None);
+    }
+
+    #[test]
+    fn implementer_uses_default_sampling() {
+        // 2026-05-24 dynamic ablation: temp=0.1 (a one-shot
+        // isolation-probe win) destructively interacts with
+        // sticky-retry in the dynamic loop. The Implementer keeps
+        // daemon defaults so the model's sampling variance lets it
+        // recover from rejected patches before sticky-retry trips.
+        // If a future PR re-introduces an explicit temperature
+        // override here, re-run the dynamic ablation matrix first.
+        let p = default_profile_for(Role::Implementer);
+        assert_eq!(p.sampling.temperature, None);
+        assert_eq!(p.sampling.max_tokens, None);
     }
 
     #[test]

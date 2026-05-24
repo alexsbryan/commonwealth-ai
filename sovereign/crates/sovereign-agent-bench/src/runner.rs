@@ -76,6 +76,16 @@ pub enum ExitReason {
         tool_calls: u32,
         cap: u32,
     },
+    /// Model emitted the SAME edit (same args hash) N times in a
+    /// row after each was rejected. Observed 4.2 v-rollback
+    /// 2026-05-23: model emitted identical broken replace_function
+    /// 6 times consecutively despite explicit syntax-error
+    /// rejection in chat history. Force-exit so the trial doesn't
+    /// burn tokens on repeated identical attempts.
+    StickyRetry {
+        primitive: String,
+        repeats: u32,
+    },
 }
 
 impl Default for ExitReason {
@@ -97,6 +107,7 @@ impl ExitReason {
             ExitReason::VerifyStuck { .. } => "verify_stuck",
             ExitReason::CycleLimit { .. } => "cycle_limit",
             ExitReason::RoleTurnCap { .. } => "role_turn_cap",
+            ExitReason::StickyRetry { .. } => "sticky_retry",
         }
     }
 

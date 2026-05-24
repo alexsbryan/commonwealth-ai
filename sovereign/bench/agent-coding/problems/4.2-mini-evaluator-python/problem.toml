@@ -1,0 +1,80 @@
+[meta]
+id = "4.2-mini-evaluator-python"
+title = "Mini expression evaluator — cascading bug fix (Python, attention-tier)"
+category = "CodeTest"
+tier = "Scaffolded"
+version = "v0"
+notes = """
+4.x problems are attention-tier: capability-light, attention-heavy.
+
+This problem stress-tests three attentional edges the harness hasn't
+yet measured deterministically:
+
+1. **Outline-only anchor.** The scaffold file is ~260 lines, above
+   the 150-line inline cap on `render_workdir_anchors`. The model
+   sees function signatures with line numbers but not body lines —
+   it must navigate the file structure from declaration cues and
+   infer body locations.
+
+2. **Cascading bugs.** Five subtle bugs distributed across tokenizer,
+   parser, and evaluator. Fixing one bug changes which tests fail
+   next (e.g., a lexer fix exposes parser tests that previously
+   died on tokenization). The model must adapt its mental model
+   per cycle as the test-failure landscape shifts.
+
+3. **First-past-the-post scoring.** Score buckets reward only
+   COMPLETE solutions; partial fixes earn intermediate marks but
+   the top bucket requires all 20 tests passing. Surfaces the gap
+   between "got most of the way" and "actually finished."
+
+Bug map:
+  1. tokenize: `<=`, `>=`, `==`, `!=` lexed as two-char sequences
+     instead of single comparison tokens
+  2. parse: right-associative `**` is parsed left-associative
+  3. parse: unary `-` precedence too low — `-3 ** 2` parses as
+     `(-3) ** 2` instead of `-(3 ** 2)`
+  4. evaluate: `and` and `or` evaluate both operands instead of
+     short-circuiting
+  5. evaluate: `let` bindings use dynamic scoping instead of
+     lexical scoping
+
+Tier=Scaffolded: harness pre-installs `evaluator.py` + 20-test
+smoke suite. Agent's job is fix-not-author.
+"""
+
+[prompt]
+file = "prompt.md"
+
+[witness]
+kind = "Hybrid"
+language = "Python"
+fixture_subdir = "fixtures"
+scaffold_subdir = "scaffold"
+verify_cmd = "python3 -m pytest -q tests/test_integration.py 2>&1"
+# First-past-the-post buckets: only ALL tests pass earns 3.
+score_buckets = [
+  [0.0,  0.6,    0],
+  [0.6,  0.85,   1],
+  [0.85, 0.999,  2],
+  [0.999, 1.001, 3],
+]
+
+[budget]
+# 5 bugs × ~3 cycles to converge × ~3K tokens/cycle, plus
+# diagnostic overhead, plus the longer-file anchor cost.
+token_cap = 30000
+wall_seconds_cap = 1800
+
+[scoring.dim_a]
+name = "Correctness"
+mode = "AutoTestPassFraction"
+
+[scoring.dim_b]
+name = "Diagnosis discipline across cascading fixes"
+mode = "JudgeRubric"
+rubric_id = "dim_b"
+
+[scoring.dim_c]
+name = "Navigation discipline (outline-only anchor)"
+mode = "HybridAutoFloor"
+rubric_id = "dim_c"

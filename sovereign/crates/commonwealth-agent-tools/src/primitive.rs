@@ -24,6 +24,16 @@ pub enum PrimitiveKind {
     /// patches are rejected at the write boundary same as
     /// write_file.
     PatchFile,
+    /// Replace a named function or class with a new definition.
+    /// Smaller output surface than write_file or patch_file (the
+    /// model emits only the function body, not line ranges) and
+    /// matches how the model reasons about edits ("replace
+    /// tokenize" not "replace lines 54-105"). Added 2026-05-23
+    /// after the 4.2 isolation probe showed the 35B's success
+    /// rate on individual bug-fixes jumps significantly when the
+    /// output surface is bounded to a single function rather than
+    /// the whole file.
+    ReplaceFunction,
     /// Language-agnostic build step. The command is bound at
     /// `ExecCtx.build_cmd` per problem — Rust uses
     /// `cargo build 2>&1`, Go uses `go build ./...`, Python is a
@@ -56,6 +66,7 @@ impl PrimitiveKind {
             PrimitiveKind::InspectWorkdir => "inspect_workdir",
             PrimitiveKind::WriteFile => "write_file",
             PrimitiveKind::PatchFile => "patch_file",
+            PrimitiveKind::ReplaceFunction => "replace_function",
             PrimitiveKind::Build => "build",
             PrimitiveKind::Smoke => "smoke",
             PrimitiveKind::AgentDone => "agent_done",
@@ -73,6 +84,7 @@ impl PrimitiveKind {
             "inspect_workdir" => Some(PrimitiveKind::InspectWorkdir),
             "write_file" => Some(PrimitiveKind::WriteFile),
             "patch_file" => Some(PrimitiveKind::PatchFile),
+            "replace_function" => Some(PrimitiveKind::ReplaceFunction),
             "build" => Some(PrimitiveKind::Build),
             "smoke" => Some(PrimitiveKind::Smoke),
             "agent_done" => Some(PrimitiveKind::AgentDone),
@@ -90,6 +102,7 @@ impl PrimitiveKind {
             PrimitiveKind::InspectWorkdir,
             PrimitiveKind::WriteFile,
             PrimitiveKind::PatchFile,
+            PrimitiveKind::ReplaceFunction,
             PrimitiveKind::Build,
             PrimitiveKind::Smoke,
             PrimitiveKind::AgentDone,
@@ -109,6 +122,7 @@ pub enum Primitive {
     InspectWorkdir(InspectIntent),
     WriteFile(WriteFileArgs),
     PatchFile(PatchFileArgs),
+    ReplaceFunction(ReplaceFunctionArgs),
     Build,
     Smoke(SmokeArgs),
     AgentDone(AgentDoneArgs),
@@ -123,6 +137,7 @@ impl Primitive {
             Primitive::InspectWorkdir(_) => PrimitiveKind::InspectWorkdir,
             Primitive::WriteFile(_) => PrimitiveKind::WriteFile,
             Primitive::PatchFile(_) => PrimitiveKind::PatchFile,
+            Primitive::ReplaceFunction(_) => PrimitiveKind::ReplaceFunction,
             Primitive::Build => PrimitiveKind::Build,
             Primitive::Smoke(_) => PrimitiveKind::Smoke,
             Primitive::AgentDone(_) => PrimitiveKind::AgentDone,
@@ -156,6 +171,33 @@ pub enum InspectIntent {
 pub struct WriteFileArgs {
     pub path: String,
     pub content: String,
+}
+
+/// Arguments for `replace_function`: replace the entire definition
+/// (decorators + signature + body) of a named function/class with
+/// `new_body`. Function bounds are discovered structurally: scan
+/// for `def NAME(`, `async def NAME(`, or `class NAME` at any
+/// indent, then extend until the next sibling declaration at the
+/// SAME OR LESS indent. The new_body is spliced in place and the
+/// post-replace full file is syntax-checked.
+///
+/// Matches how the model reasons about edits ("replace tokenize")
+/// rather than asking it to count lines. Significantly reduces the
+/// output-side token-level corruption observed when the model
+/// rewrites whole files. Added 2026-05-23 after the 4.2 isolation
+/// probe showed model success-rate on individual bug fixes jumps
+/// when the output surface is one function instead of a full file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplaceFunctionArgs {
+    pub path: String,
+    /// Function or class name. Plain identifier (e.g. `tokenize`),
+    /// not a dotted path. If multiple definitions share the name
+    /// (e.g. method overrides), the first match wins.
+    pub name: String,
+    /// New source for the entire definition: decorator(s) +
+    /// signature + body. Must be valid source at the indent level
+    /// of the original definition.
+    pub new_body: String,
 }
 
 /// Arguments for `patch_file`: replace a contiguous range of lines
@@ -204,6 +246,22 @@ pub struct AgentPlanArgs {
     /// modification.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub files_to_create: Option<Vec<String>>,
+    /// Optional concrete change list — pseudocode of every distinct
+    /// edit the Implementer will need to make, in order. Each entry
+    /// is a numbered one-line description naming the target
+    /// (function/file/line range) and the approach. Pinning the
+    /// full set at planning time prevents the "patch reactively,
+    /// break a sibling change" failure observed on cascading-bug
+    /// problems (4.2 2026-05-23): with the full list visible at
+    /// position-0 of every Implementer turn, each patch is informed
+    /// by what other changes are coming, not just the most recent
+    /// diagnosis.
+    ///
+    /// Empty/None for trivial problems where the high-level `plan`
+    /// is sufficient. Populated for problems with multiple
+    /// independent changes the Implementer must coordinate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pseudocode: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -255,6 +313,11 @@ mod tests {
                     end_line: 1,
                     new_content: String::new(),
                 }),
+                PrimitiveKind::ReplaceFunction => Primitive::ReplaceFunction(ReplaceFunctionArgs {
+                    path: "x".into(),
+                    name: "foo".into(),
+                    new_body: String::new(),
+                }),
                 PrimitiveKind::Build => Primitive::Build,
                 PrimitiveKind::Smoke => Primitive::Smoke(SmokeArgs::default()),
                 PrimitiveKind::AgentDone => Primitive::AgentDone(AgentDoneArgs {
@@ -263,6 +326,7 @@ mod tests {
                 PrimitiveKind::AgentPlan => Primitive::AgentPlan(AgentPlanArgs {
                     plan: "test plan".into(),
                     files_to_create: None,
+                    pseudocode: None,
                 }),
                 PrimitiveKind::HandoffToEvaluator => {
                     Primitive::HandoffToEvaluator(HandoffToEvaluatorArgs {

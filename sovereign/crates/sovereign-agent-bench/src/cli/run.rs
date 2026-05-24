@@ -18,7 +18,7 @@ use crate::judge::{request_for_dimension, HttpJudgeClient, JudgeClient, JudgeErr
 use crate::judge_multi::{aggregate, MultiTrialOutcome};
 use crate::problem::{load_problem, Problem, ProblemLoadError, ScoringMode};
 use crate::report::BenchReport;
-use crate::runner::{context_for, AgentRunArtifact, AgentRunner};
+use crate::runner::{context_for, AgentRunArtifact, AgentRunner, ExitReason, TokenCounts};
 use crate::runners::pi::PI_TOOL_ALLOWLIST;
 use crate::runners::AgentRunnerRegistry;
 use crate::sandbox::Sandbox;
@@ -335,8 +335,52 @@ pub async fn run_one_problem(
         args.role_model_map.clone(),
     );
 
-    // 2. Run the agent.
-    let artifact = runner.run(ctx).await?;
+    // 2. Run the agent. Outer wall-cap watchdog: the runner has its
+    // own wall-cap check at the top of its loop, but observed
+    // 2026-05-23 the runner can wedge in futex_wait past the cap
+    // (suspected tokio shutdown / mutex ordering bug; surfaces as
+    // a 30+min no-progress hang without artifact emission). The
+    // watchdog at wall_cap × 1.5 cancels the future and emits a
+    // degenerate Timeout artifact so the bench moves forward
+    // instead of becoming permanently stuck.
+    let outer_cap = Duration::from_secs(
+        problem
+            .budget
+            .wall_seconds_cap
+            .saturating_mul(3)
+            .saturating_div(2),
+    );
+    let artifact = match tokio::time::timeout(outer_cap, runner.run(ctx)).await {
+        Ok(r) => r?,
+        Err(_) => {
+            warn!(
+                problem = %problem.meta.id,
+                outer_cap_secs = outer_cap.as_secs(),
+                "agent_bench: outer wall-cap watchdog fired — runner wedged past cap; \
+                 emitting degenerate Timeout artifact and continuing"
+            );
+            // Synthesize a minimal artifact. Workdir is a fresh empty
+            // TempDir (the wedged runner kept the real one); the
+            // witness will see empty contents and score 0, which is
+            // the honest outcome for "agent never produced anything
+            // we could observe."
+            let synth_workdir = tempfile::tempdir()?;
+            AgentRunArtifact {
+                workdir: synth_workdir,
+                tokens: TokenCounts::default(),
+                wall_ms: outer_cap.as_millis() as u64,
+                exit_reason: ExitReason::Timeout {
+                    cap_seconds: outer_cap.as_secs(),
+                },
+                tool_calls: Vec::new(),
+                stderr_tail: "(runner wedged past wall cap; outer watchdog fired)".to_string(),
+                final_assistant_text: String::new(),
+                raw_stdout_lines: Vec::new(),
+                request_records: Vec::new(),
+                role_model_map_used: None,
+            }
+        }
+    };
 
     // 2b. Persist agent artifacts (workdir copy + run summary). Do
     // this BEFORE witness so a witness failure can't lose the

@@ -42,6 +42,15 @@ pub struct RoleDossier {
     /// reads it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan: Option<String>,
+    /// Concrete change list (pseudocode) emitted alongside the
+    /// high-level plan. Each entry is a numbered one-line
+    /// description of one distinct edit. Pinned in every
+    /// Implementer turn so each patch is informed by the full set
+    /// of pending changes, not just the most recent diagnosis.
+    /// Closes the "patch reactively, break a sibling change" class
+    /// observed on 4.2 2026-05-23.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pseudocode: Option<Vec<String>>,
     /// One-line summary of the prior role's last action.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_action_summary: Option<String>,
@@ -119,6 +128,17 @@ impl RoleDossier {
         self.plan = Some(plan);
     }
 
+    /// Set the pseudocode change list emitted by the Planner.
+    /// Sticky across the run. Rendered prominently in every
+    /// Implementer turn so each patch is informed by the full set.
+    pub fn set_pseudocode(&mut self, pseudocode: Vec<String>) {
+        if pseudocode.is_empty() {
+            self.pseudocode = None;
+        } else {
+            self.pseudocode = Some(pseudocode);
+        }
+    }
+
     /// Set diagnosis text from a handoff primitive. Capped at 1 KB.
     pub fn set_diagnosis(&mut self, diagnosis: String) {
         self.diagnosis = Some(cap_str(&diagnosis, 1024));
@@ -184,6 +204,22 @@ impl RoleDossier {
         out.push_str(&format!("[Role: {}]\n", for_role.id()));
         if let Some(plan) = self.plan.as_deref() {
             out.push_str(&format!("Plan (from Planner): {plan}\n"));
+        }
+        // Pseudocode change list — sink-anchored for Implementer and
+        // Evaluator so each turn sees the full set of pending edits
+        // and can execute one-at-a-time without forgetting what
+        // sibling changes are still due. Skipped for Planner because
+        // it just emitted the list.
+        if !matches!(for_role, Role::Planner) {
+            if let Some(items) = self.pseudocode.as_deref() {
+                if !items.is_empty() {
+                    out.push_str("\nChange list (from Planner — execute these in order, do NOT discard any):\n");
+                    for (i, item) in items.iter().enumerate() {
+                        out.push_str(&format!("  {}. {}\n", i + 1, item));
+                    }
+                    out.push('\n');
+                }
+            }
         }
         if let Some(diagnosis) = self.diagnosis.as_deref() {
             out.push_str(&format!("Diagnosis from {}: {diagnosis}\n",
@@ -281,6 +317,29 @@ pub fn summarize(primitive: PrimitiveKind, result: &ToolResult) -> String {
                 }
                 _ => format!("inspect_workdir {intent}"),
             }
+        }
+        PrimitiveKind::ReplaceFunction => {
+            let name = result
+                .payload
+                .get("replaced")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let path = result
+                .payload
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let replaced = result
+                .payload
+                .get("lines_replaced")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let inserted = result
+                .payload
+                .get("lines_inserted")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            format!("replaced fn {name} in {path} (-{replaced}/+{inserted} lines)")
         }
         PrimitiveKind::PatchFile => {
             let path = result
@@ -391,10 +450,17 @@ fn first_error_line(tail: &str) -> String {
 
 fn cap_str(s: &str, limit: usize) -> String {
     if s.len() <= limit {
-        s.to_string()
-    } else {
-        format!("{}…(+{} bytes)", &s[..limit], s.len() - limit)
+        return s.to_string();
     }
+    // UTF-8 safe: walk back from `limit` to the previous char
+    // boundary so we never slice mid-codepoint. Em-dashes and
+    // other multibyte chars in Evaluator diagnoses (observed
+    // 2026-05-23) used to panic the runner.
+    let mut cut = limit;
+    while cut > 0 && !s.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    format!("{}…(+{} bytes)", &s[..cut], s.len() - cut)
 }
 
 #[cfg(test)]
@@ -419,6 +485,45 @@ mod tests {
             "#{}",
             MAX_DOSSIER_OUTCOMES + 4
         )));
+    }
+
+    #[test]
+    fn dossier_render_includes_pseudocode_for_implementer() {
+        // Closes class: "Implementer patches reactively because the
+        // full change list isn't anchored in attention." If a
+        // future PR drops the pseudocode rendering, multi-change
+        // problems regress to one-cycle-per-bug iteration.
+        let mut d = RoleDossier::new();
+        d.set_plan("Fix four bugs in config_applier".into());
+        d.set_pseudocode(vec![
+            "1. deep_merge: lists replace, don't concat".into(),
+            "2. expand_env: recurse to fixpoint".into(),
+            "3. validate_schema: check missing required keys".into(),
+        ]);
+        let s = d.render(Role::Implementer);
+        assert!(s.contains("Change list (from Planner"));
+        assert!(s.contains("1. deep_merge"));
+        assert!(s.contains("2. expand_env"));
+        assert!(s.contains("3. validate_schema"));
+    }
+
+    #[test]
+    fn dossier_render_skips_pseudocode_for_planner() {
+        // Planner just emitted the list; rendering it back wastes
+        // tokens. Skipped for that role only.
+        let mut d = RoleDossier::new();
+        d.set_pseudocode(vec!["1. do thing".into()]);
+        let s = d.render(Role::Planner);
+        assert!(!s.contains("Change list"));
+    }
+
+    #[test]
+    fn dossier_pseudocode_empty_means_none() {
+        let mut d = RoleDossier::new();
+        d.set_pseudocode(vec!["1. one".into()]);
+        assert!(d.pseudocode.is_some());
+        d.set_pseudocode(Vec::new());
+        assert!(d.pseudocode.is_none());
     }
 
     #[test]
@@ -477,6 +582,19 @@ mod tests {
         let s = summarize(PrimitiveKind::Smoke, &r);
         assert!(s.contains("2/3"));
         assert!(s.contains("1 failed"));
+    }
+
+    #[test]
+    fn cap_str_handles_multibyte_chars_at_boundary() {
+        // Regression: 2026-05-23 panic when an em-dash (3 bytes)
+        // straddled the cap. cap_str must walk back to the prev
+        // char boundary rather than slicing mid-codepoint.
+        let s = "x".repeat(198) + "—" + "y";
+        // limit=200 lands inside the em-dash bytes.
+        let out = cap_str(&s, 200);
+        // Just assert it didn't panic and produced something.
+        assert!(out.contains("…"));
+        assert!(!out.contains("—") || out.len() < s.len());
     }
 
     #[test]

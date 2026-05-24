@@ -16,7 +16,7 @@ use tracing::info;
 
 use crate::primitive::{
     AgentDoneArgs, AgentPlanArgs, HandoffToEvaluatorArgs, HandoffToImplementerArgs,
-    InspectIntent, PatchFileArgs, Primitive, SmokeArgs, WriteFileArgs,
+    InspectIntent, PatchFileArgs, Primitive, ReplaceFunctionArgs, SmokeArgs, WriteFileArgs,
 };
 use crate::result::{ToolError, ToolResult};
 use crate::syntax::DynSyntaxValidator;
@@ -107,6 +107,7 @@ pub async fn execute(ctx: &ExecCtx, prim: &Primitive) -> Result<ToolResult, Tool
         Primitive::InspectWorkdir(intent) => exec_inspect(ctx, intent).await,
         Primitive::WriteFile(args) => exec_write_file(ctx, args).await,
         Primitive::PatchFile(args) => exec_patch_file(ctx, args).await,
+        Primitive::ReplaceFunction(args) => exec_replace_function(ctx, args).await,
         Primitive::Build => exec_build(ctx).await,
         Primitive::Smoke(args) => exec_smoke(ctx, args).await,
         Primitive::AgentDone(args) => exec_agent_done(args).await,
@@ -271,8 +272,39 @@ fn walk_grep_contents(
 
 // ── write_file ────────────────────────────────────────────────────
 
+/// File-size threshold above which `write_file` is rejected for
+/// EXISTING files in favor of `patch_file`. Files at or below this
+/// fit comfortably in a single chat-completion response without
+/// hitting the token-level corruption regime observed on
+/// 4.2-mini-evaluator-python (2026-05-23). Net-new files (path
+/// doesn't exist yet) are unaffected — initial author is the
+/// legitimate use case for write_file on any size.
+pub const LARGE_FILE_REWRITE_THRESHOLD_LINES: usize = 150;
+
 async fn exec_write_file(ctx: &ExecCtx, args: &WriteFileArgs) -> Result<ToolResult, ToolError> {
     let abs = resolve_workdir_path(&ctx.workdir, &args.path)?;
+
+    // Structural rejection: existing large files must be edited via
+    // patch_file, not rewritten via write_file. Closes the
+    // "5000-token Python rewrite accumulates token-level corruption"
+    // class. New files (path doesn't exist yet) bypass this check
+    // because there's no "small patch" alternative for initial author.
+    if let Ok(existing) = tokio::fs::read_to_string(&abs).await {
+        let existing_lines = existing.lines().count();
+        if existing_lines > LARGE_FILE_REWRITE_THRESHOLD_LINES {
+            tracing::info!(
+                path = %args.path,
+                existing_lines,
+                threshold = LARGE_FILE_REWRITE_THRESHOLD_LINES,
+                "commonwealth_agent_tools::executor: write_file rejected — large existing file, use patch_file"
+            );
+            return Err(ToolError::WriteFileTooLarge {
+                path: args.path.clone(),
+                existing_lines,
+                threshold: LARGE_FILE_REWRITE_THRESHOLD_LINES,
+            });
+        }
+    }
 
     // Pre-write syntax check. When a SyntaxValidator is bound and the
     // target path's extension is one the validator handles, parse
@@ -337,6 +369,53 @@ async fn exec_write_file(ctx: &ExecCtx, args: &WriteFileArgs) -> Result<ToolResu
 
 async fn exec_patch_file(ctx: &ExecCtx, args: &PatchFileArgs) -> Result<ToolResult, ToolError> {
     let abs = resolve_workdir_path(&ctx.workdir, &args.path)?;
+
+    // Structural redirect to replace_function when the patch range
+    // exactly matches a function/class's bounds. Same gate-style
+    // pattern as write_file → patch_file for large files: the
+    // model uses the wrong tool, the executor rejects with a
+    // pointer at the right one. The model has no way to ignore
+    // the rejection. Closes the "model has replace_function
+    // available but defaults to patch_file from habit" class
+    // observed on 4.2 v-replfn 2026-05-23.
+    if let Ok(existing) = tokio::fs::read_to_string(&abs).await {
+        if let Some(fn_name) = function_at_range(
+            &existing,
+            args.start_line as usize,
+            args.end_line as usize,
+        ) {
+            return Err(ToolError::InvalidArguments {
+                primitive: "patch_file",
+                reason: format!(
+                    "this patch range matches the bounds of function/class `{fn_name}` exactly. Use `replace_function(path=\"{}\", name=\"{fn_name}\", new_body=...)` instead — it's a smaller output surface (no line ranges to count) and matches how the model reasons about whole-function rewrites.",
+                    args.path
+                ),
+            });
+        }
+    }
+
+    // Reject unified-diff-shaped `new_content`. The tool name
+    // "patch_file" + the line-numbered file anchor at position 0
+    // jointly cued the model to emit diff-style content (with
+    // `+/-` line prefixes and `N | ` line-number columns copied
+    // verbatim from the anchor display). Observed 4.2 2026-05-23:
+    // 6 consecutive rejected patches all in diff format. Reject
+    // structurally with a help message clarifying that new_content
+    // is raw replacement text. The check is heuristic: at least
+    // two leading lines (after optional whitespace) start with
+    // `+`, `-`, or `<digits>:`/`<digits> |` — strong indicator the
+    // model is emitting a diff rather than raw code.
+    if looks_like_diff(&args.new_content) {
+        tracing::info!(
+            path = %args.path,
+            "executor: patch_file new_content looks like a unified diff or anchor-copy; rejecting"
+        );
+        return Err(ToolError::InvalidArguments {
+            primitive: "patch_file",
+            reason: "new_content looks like a unified diff or copy of the line-numbered file anchor (contains `+/-` line prefixes or `N: ` / `N | ` line-number columns). The new_content field must be raw replacement source code — exactly what should appear in the file. Strip any diff markers and line-number prefixes. Example: to replace lines 5-7 with two lines of code, new_content should be \"x = 1\\ny = 2\" (just the code, no `+` markers, no `5:` prefixes).".to_string(),
+        });
+    }
+
     let existing = tokio::fs::read_to_string(&abs)
         .await
         .map_err(|e| ToolError::Filesystem {
@@ -366,9 +445,20 @@ async fn exec_patch_file(ctx: &ExecCtx, args: &PatchFileArgs) -> Result<ToolResu
     }
 
     // Assemble: prefix [0, start-1) + replacement + suffix [end, total).
+    //
+    // No auto-reindentation: experimentally validated 2026-05-24
+    // (dynamic-loop ablation), letting model-emitted patches land
+    // verbatim is correct even when their indent is "off." The
+    // pre-write syntax check rejects mismatches, the rejection
+    // becomes the model's next-turn feedback, and the model
+    // typically recovers in one round. Auto-shifting the indent
+    // bypassed that recovery loop AND let algorithmically-broken
+    // patches (that previously bounced for incidental indent
+    // issues) land on disk.
     let trailing_newline = existing.ends_with('\n');
     let prefix = &lines[..(args.start_line as usize - 1)];
     let suffix = &lines[args.end_line as usize..];
+
     let mut out_lines: Vec<&str> = Vec::with_capacity(prefix.len() + 64 + suffix.len());
     out_lines.extend_from_slice(prefix);
     // Empty new_content means pure deletion. A trailing \n in
@@ -433,6 +523,244 @@ async fn exec_patch_file(ctx: &ExecCtx, args: &PatchFileArgs) -> Result<ToolResu
     let lines_inserted = new_lines.len() as u32;
     Ok(ToolResult::ok(json!({
         "patched": args.path,
+        "lines_replaced": lines_replaced,
+        "lines_inserted": lines_inserted,
+        "bytes": result.len(),
+    })))
+}
+
+// ── replace_function ──────────────────────────────────────────────
+
+/// If a function/class in `content` has bounds that match the
+/// 1-indexed inclusive (start_line, end_line) range, return its
+/// name. Used by exec_patch_file to redirect whole-function patches
+/// to replace_function. "Matches" is exact: start_line equals the
+/// `def`/`class` line (or its decorator-prefix start) AND end_line
+/// equals the function's last body line.
+pub fn function_at_range(content: &str, start_line: usize, end_line: usize) -> Option<String> {
+    // The patch_file API uses 1-indexed inclusive line numbers;
+    // find_function_bounds returns 0-indexed half-open.
+    // Convert: 0-indexed start = start_line - 1; 0-indexed end
+    // (half-open) = end_line.
+    if start_line == 0 || end_line < start_line {
+        return None;
+    }
+    let pstart = start_line - 1;
+    let pend = end_line;
+    let lines: Vec<&str> = content.lines().collect();
+    let patterns = ["def ", "async def ", "class "];
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim_start();
+        let indent = line.len() - trimmed.len();
+        let mut name: Option<String> = None;
+        for p in &patterns {
+            if let Some(after) = trimmed.strip_prefix(p) {
+                let n: String = after
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .collect();
+                if !n.is_empty() {
+                    name = Some(n);
+                }
+                break;
+            }
+        }
+        let Some(fn_name) = name else { continue };
+        // Walk back over decorators.
+        let mut start = i;
+        while start > 0 {
+            let prev = lines[start - 1];
+            let prev_t = prev.trim_start();
+            if !prev_t.starts_with('@') {
+                break;
+            }
+            let prev_indent = prev.len() - prev_t.len();
+            if prev_indent != indent {
+                break;
+            }
+            start -= 1;
+        }
+        // Walk forward over indented body.
+        let mut end = i + 1;
+        while end < lines.len() {
+            let l = lines[end];
+            let lt = l.trim_start();
+            if lt.is_empty() || lt.starts_with('#') {
+                end += 1;
+                continue;
+            }
+            let li = l.len() - lt.len();
+            if li <= indent {
+                break;
+            }
+            end += 1;
+        }
+        // Back off trailing blank/comment-only lines so bounds
+        // align with intuitive "last body line." A user patching
+        // a function naturally specifies start..last-real-line.
+        let mut tight_end = end;
+        while tight_end > i + 1 {
+            let lt = lines[tight_end - 1].trim_start();
+            if lt.is_empty() || lt.starts_with('#') {
+                tight_end -= 1;
+            } else {
+                break;
+            }
+        }
+        if start == pstart && tight_end == pend {
+            return Some(fn_name);
+        }
+    }
+    None
+}
+
+/// Find the line range (start..end, half-open, 0-indexed) of the
+/// definition of `name` in `content`. Scans for `def NAME(`,
+/// `async def NAME(`, `class NAME(`, or `class NAME:` at any
+/// indent, then walks forward including indented body until the
+/// next non-empty, non-comment line at the SAME OR LESS indent.
+/// Decorator lines (`@foo`) immediately preceding the def at the
+/// same indent are included in the range.
+///
+/// Returns None if no matching definition is found.
+pub fn find_function_bounds(content: &str, name: &str) -> Option<(usize, usize)> {
+    let lines: Vec<&str> = content.lines().collect();
+    let patterns = [
+        format!("def {}(", name),
+        format!("async def {}(", name),
+        format!("class {}(", name),
+        format!("class {}:", name),
+    ];
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim_start();
+        let indent = line.len() - trimmed.len();
+        if !patterns.iter().any(|p| trimmed.starts_with(p)) {
+            continue;
+        }
+        // Walk back over @decorator lines at the same indent.
+        let mut start = i;
+        while start > 0 {
+            let prev = lines[start - 1];
+            let prev_trim = prev.trim_start();
+            if !prev_trim.starts_with('@') {
+                break;
+            }
+            let prev_indent = prev.len() - prev_trim.len();
+            if prev_indent != indent {
+                break;
+            }
+            start -= 1;
+        }
+        // Walk forward over indented body until a non-empty,
+        // non-comment line at SAME OR LESS indent terminates it.
+        let mut end = i + 1;
+        while end < lines.len() {
+            let l = lines[end];
+            let lt = l.trim_start();
+            if lt.is_empty() || lt.starts_with('#') {
+                end += 1;
+                continue;
+            }
+            let li = l.len() - lt.len();
+            if li <= indent {
+                break;
+            }
+            end += 1;
+        }
+        return Some((start, end));
+    }
+    None
+}
+
+async fn exec_replace_function(
+    ctx: &ExecCtx,
+    args: &ReplaceFunctionArgs,
+) -> Result<ToolResult, ToolError> {
+    let abs = resolve_workdir_path(&ctx.workdir, &args.path)?;
+    let existing = tokio::fs::read_to_string(&abs)
+        .await
+        .map_err(|e| ToolError::Filesystem {
+            primitive: "replace_function",
+            reason: format!("read {}: {e}", args.path),
+        })?;
+
+    let bounds = find_function_bounds(&existing, &args.name);
+    let Some((start, end)) = bounds else {
+        return Err(ToolError::InvalidArguments {
+            primitive: "replace_function",
+            reason: format!(
+                "no function or class named `{}` found in {}",
+                args.name, args.path
+            ),
+        });
+    };
+
+    let lines: Vec<&str> = existing.lines().collect();
+    let trailing_newline = existing.ends_with('\n');
+
+    // No auto-reindentation: see comment in exec_patch_file. Model
+    // is responsible for matching the existing indent; pre-write
+    // syntax check rejects mismatches so the model can recover on
+    // its next turn.
+    let mut new_lines: Vec<&str> = Vec::with_capacity(lines.len());
+    new_lines.extend_from_slice(&lines[..start]);
+    let body_lines: Vec<&str> = if args.new_body.is_empty() {
+        Vec::new()
+    } else {
+        let mut v: Vec<&str> = args.new_body.split('\n').collect();
+        if v.last().map(|s| s.is_empty()).unwrap_or(false) {
+            v.pop();
+        }
+        v
+    };
+    new_lines.extend(body_lines.iter().copied());
+    new_lines.extend_from_slice(&lines[end..]);
+    let mut result = new_lines.join("\n");
+    if trailing_newline {
+        result.push('\n');
+    }
+
+    // Pre-write syntax check on the full post-replace content.
+    if let Some(validator) = ctx.syntax_validator.as_ref() {
+        let path_str = args.path.as_str();
+        let handled = validator
+            .language_extensions()
+            .iter()
+            .any(|ext| path_str.ends_with(ext));
+        if handled {
+            let errors =
+                validator.check_file(std::path::Path::new(&args.path), &result);
+            if !errors.is_empty() {
+                let rendered = validator.render_errors(&errors);
+                let language = validator.language_id();
+                tracing::info!(
+                    path = %args.path,
+                    function = %args.name,
+                    language,
+                    error_count = errors.len(),
+                    "executor: pre-write syntax check rejected replace_function"
+                );
+                return Err(ToolError::SyntaxRejected {
+                    primitive: "replace_function",
+                    language: language.to_string(),
+                    rendered_errors: rendered,
+                });
+            }
+        }
+    }
+
+    tokio::fs::write(&abs, result.as_bytes())
+        .await
+        .map_err(|e| ToolError::Filesystem {
+            primitive: "replace_function",
+            reason: format!("write {}: {e}", args.path),
+        })?;
+
+    let lines_replaced = (end - start) as u32;
+    let lines_inserted = body_lines.len() as u32;
+    Ok(ToolResult::ok(json!({
+        "replaced": args.name,
+        "path": args.path,
         "lines_replaced": lines_replaced,
         "lines_inserted": lines_inserted,
         "bytes": result.len(),
@@ -671,6 +999,14 @@ async fn run_shell(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    // Put the shell into its OWN process group so we can kill the
+    // whole group (sh + its children like pytest) on timeout. Without
+    // this, kill_on_drop only kills the direct child (sh); grandchild
+    // pytest is reparented to init and keeps spinning. Observed 4.2
+    // 2026-05-23: pytest at 100% CPU for 30 min after bench's sh kill
+    // because pytest was the grandchild.
+    #[cfg(unix)]
+    command.process_group(0);
 
     let mut child = command.spawn().map_err(|e| ToolError::Subprocess {
         primitive,
@@ -701,10 +1037,32 @@ async fn run_shell(
             Ok((status_ok, tail))
         }
         Ok(Err(e)) => Err(e),
-        Err(_) => Err(ToolError::Timeout {
-            primitive,
-            secs: wall_cap.as_secs(),
-        }),
+        Err(_) => {
+            // Timeout fired. kill_on_drop SIGKILLs the direct sh
+            // child as the Child handle drops, but grandchildren
+            // (pytest spawned BY sh) would be reparented to init and
+            // keep running. Shell out to `kill -KILL -- -PGID` to
+            // kill the whole process group cleanly. Best-effort — sh
+            // may have already exited and reaped, in which case PGID
+            // refers to nothing and kill returns ESRCH.
+            #[cfg(unix)]
+            if let Some(pid) = child.id() {
+                let pgid_arg = format!("-{pid}");
+                let _ = std::process::Command::new("kill")
+                    .args(["-KILL", "--", &pgid_arg])
+                    .status();
+                tracing::warn!(
+                    primitive,
+                    pgid = pid,
+                    wall_cap_secs = wall_cap.as_secs(),
+                    "executor: subprocess timeout — killed process group"
+                );
+            }
+            Err(ToolError::Timeout {
+                primitive,
+                secs: wall_cap.as_secs(),
+            })
+        }
     }
 }
 
@@ -716,16 +1074,67 @@ fn shell_escape(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
+/// Heuristic: does this look like a unified-diff or a copy of the
+/// line-numbered file anchor rather than raw source?
+///
+/// Triggers when at least two non-empty lines in the first 20 begin
+/// (after optional whitespace) with `+`, `-`, `| `, or `<digit>:`/`<digit> |`.
+/// Tuned to be conservative — a single isolated `-` (negation) or
+/// `+` (addition operator at start) won't trigger.
+fn looks_like_diff(new_content: &str) -> bool {
+    let mut diffish = 0;
+    let mut sampled = 0;
+    for line in new_content.lines().take(20) {
+        if line.trim().is_empty() {
+            continue;
+        }
+        sampled += 1;
+        let t = line.trim_start();
+        // Pipe-column anchor copy: `| ...` (with or without leading digits).
+        if t.starts_with("| ") {
+            diffish += 1;
+            continue;
+        }
+        // Numbered-line prefix: `\d+:` or `\d+ |`.
+        let digits: String = t.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if !digits.is_empty() {
+            let after = &t[digits.len()..];
+            if after.starts_with(": ") || after.starts_with(" | ") {
+                diffish += 1;
+                continue;
+            }
+        }
+        // Unified-diff line markers. A leading `+` or `-` followed
+        // by ANY identifier or whitespace is diffish — `-x = 1` and
+        // `- x = 1` and `+ x = 1` and `+x = 1` are all diff-shaped.
+        // Excluded: `+/-` followed by an operator (e.g. `+= 1`,
+        // `-= 1`, `-1` digit literal at file-start is unusual but
+        // not pursued here — those would not normally appear at
+        // line-start in well-formed code).
+        let bs = t.as_bytes();
+        if (bs.first() == Some(&b'+') || bs.first() == Some(&b'-'))
+            && bs.len() >= 2
+            && (bs[1].is_ascii_alphabetic() || bs[1] == b'_' || bs[1] == b' ')
+        {
+            diffish += 1;
+        }
+    }
+    // At least 2 diffish lines OR >50% of sampled lines.
+    diffish >= 2 || (sampled >= 2 && diffish * 2 > sampled)
+}
+
 fn cap_tail(s: &str, limit: usize) -> String {
     if s.len() <= limit {
-        s.to_string()
-    } else {
-        let cut = s.len() - limit;
-        format!(
-            "... (truncated {cut} leading bytes) ...\n{}",
-            &s[cut..]
-        )
+        return s.to_string();
     }
+    // Walk forward from `s.len() - limit` to the next char boundary
+    // so we never slice mid-codepoint (em-dashes in pytest diff
+    // output, etc.).
+    let mut cut = s.len() - limit;
+    while cut < s.len() && !s.is_char_boundary(cut) {
+        cut += 1;
+    }
+    format!("... (truncated {cut} leading bytes) ...\n{}", &s[cut..])
 }
 
 #[cfg(test)]
@@ -918,6 +1327,112 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "alpha\nbeta\n");
     }
 
+    #[test]
+    fn looks_like_diff_detects_unified_diff_markers() {
+        // The exact 4.2 2026-05-23 failure shape: model emits
+        // diff-style content with `+/-` markers and `| N | ` line
+        // columns copied from the anchor display.
+        let diff = "| 54 | def tokenize(source):\n   |     result = []\n-     i = 0\n+     i = 0\n";
+        assert!(looks_like_diff(diff), "diff-like content must trip");
+    }
+
+    #[test]
+    fn looks_like_diff_detects_numbered_line_prefix() {
+        // Model copying anchor's `N: content` format into the patch.
+        let anchored = "54: def tokenize(source):\n55:     result = []\n";
+        assert!(looks_like_diff(anchored), "numbered-prefix copy must trip");
+    }
+
+    #[test]
+    fn looks_like_diff_does_not_trip_on_raw_python() {
+        let raw = "def tokenize(source):\n    result = []\n    i = 0\n    while i < len(source):\n        result.append(source[i])\n        i += 1\n    return result\n";
+        assert!(!looks_like_diff(raw), "raw Python must not trip");
+    }
+
+    #[test]
+    fn looks_like_diff_does_not_trip_on_single_negation() {
+        // `-x` (unary minus) at line start is legitimate Python.
+        let neg = "def f(x):\n    return -x\n";
+        assert!(!looks_like_diff(neg));
+    }
+
+    #[tokio::test]
+    async fn patch_file_rejects_diff_format_new_content() {
+        // Closes the 4.2-observed class: model emits unified-diff
+        // content instead of raw replacement. Pre-existing-content-
+        // check rejection short-circuits the file read so this
+        // works without an existing file in the workdir.
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("a.py"), "x = 1\n").unwrap();
+        let ctx = ExecCtx::new(tmp.path().to_path_buf());
+        let patch = Primitive::PatchFile(PatchFileArgs {
+            path: "a.py".into(),
+            start_line: 1,
+            end_line: 1,
+            new_content: "| 1 | x = 2\n-x = 1\n+x = 2".into(),
+        });
+        let err = execute(&ctx, &patch).await.unwrap_err();
+        match err {
+            ToolError::InvalidArguments { primitive, reason } => {
+                assert_eq!(primitive, "patch_file");
+                assert!(reason.contains("unified diff"));
+                assert!(reason.contains("raw replacement"));
+            }
+            other => panic!("expected InvalidArguments, got {other:?}"),
+        }
+        // File must be unchanged.
+        assert_eq!(std::fs::read_to_string(tmp.path().join("a.py")).unwrap(), "x = 1\n");
+    }
+
+    #[tokio::test]
+    async fn patch_file_redirects_whole_function_to_replace_function() {
+        // Closes class: model habitually uses patch_file even when
+        // the patch range is exactly a function's bounds. The
+        // structural redirect names replace_function in the error
+        // help so the model uses the right tool next attempt.
+        let tmp = tempfile::tempdir().unwrap();
+        let src = "def keep():\n    pass\n\ndef target():\n    return 1\n    return 2\n\ndef other():\n    pass\n";
+        std::fs::write(tmp.path().join("a.py"), src).unwrap();
+        let ctx = ExecCtx::new(tmp.path().to_path_buf());
+        // target() lives at lines 4-6 (1-indexed inclusive).
+        let patch = Primitive::PatchFile(PatchFileArgs {
+            path: "a.py".into(),
+            start_line: 4,
+            end_line: 6,
+            new_content: "def target():\n    return 42".into(),
+        });
+        let err = execute(&ctx, &patch).await.unwrap_err();
+        match err {
+            ToolError::InvalidArguments { primitive, reason } => {
+                assert_eq!(primitive, "patch_file");
+                assert!(reason.contains("target"));
+                assert!(reason.contains("replace_function"));
+            }
+            other => panic!("expected InvalidArguments redirect, got {other:?}"),
+        }
+        // File unchanged.
+        assert_eq!(std::fs::read_to_string(tmp.path().join("a.py")).unwrap(), src);
+    }
+
+    #[tokio::test]
+    async fn patch_file_partial_function_patch_not_redirected() {
+        // A patch that's INSIDE a function (subset of its bounds)
+        // is legitimate patch_file usage — should NOT be redirected.
+        let tmp = tempfile::tempdir().unwrap();
+        let src = "def foo():\n    x = 1\n    y = 2\n    return x + y\n";
+        std::fs::write(tmp.path().join("a.py"), src).unwrap();
+        let ctx = ExecCtx::new(tmp.path().to_path_buf());
+        // Just patch line 2.
+        let patch = Primitive::PatchFile(PatchFileArgs {
+            path: "a.py".into(),
+            start_line: 2,
+            end_line: 2,
+            new_content: "    x = 100".into(),
+        });
+        let r = execute(&ctx, &patch).await.unwrap();
+        assert!(r.ok);
+    }
+
     #[tokio::test]
     async fn patch_file_pre_check_rejects_broken_result() {
         // Replace a body line with English prose — full post-patch
@@ -952,6 +1467,74 @@ mod tests {
         assert!(matches!(err, ToolError::SyntaxRejected { .. }));
         // Original file must be intact.
         assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+    }
+
+    #[tokio::test]
+    async fn write_file_rejected_for_large_existing_file() {
+        // §4.2-derived invariant: existing files above the threshold
+        // must be edited via patch_file. The 4.2 smoke established
+        // that the model accumulates token-level corruption (escape
+        // confusion, language drift, lost whitespace) when emitting
+        // 5000+ tokens of structured Python in one shot. Forcing
+        // patch_file structurally removes the failing tool.
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("big.py");
+        let big_content = "x = 1\n".repeat(LARGE_FILE_REWRITE_THRESHOLD_LINES + 50);
+        std::fs::write(&path, &big_content).unwrap();
+        let ctx = ExecCtx::new(tmp.path().to_path_buf());
+        let write = Primitive::WriteFile(WriteFileArgs {
+            path: "big.py".into(),
+            content: "x = 2\n".repeat(50),
+        });
+        let err = execute(&ctx, &write).await.unwrap_err();
+        match err {
+            ToolError::WriteFileTooLarge { path: p, existing_lines, threshold } => {
+                assert_eq!(p, "big.py");
+                assert!(existing_lines > threshold);
+                assert_eq!(threshold, LARGE_FILE_REWRITE_THRESHOLD_LINES);
+            }
+            other => panic!("expected WriteFileTooLarge, got {other:?}"),
+        }
+        // File must be unchanged.
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), big_content);
+    }
+
+    #[tokio::test]
+    async fn write_file_allowed_for_new_file_of_any_size() {
+        // Net-new files have no patch_file alternative; the gate
+        // must not fire on initial author. Pins this so a future PR
+        // tightening the threshold doesn't accidentally block
+        // FromScratch tier where the agent's whole job is authoring
+        // a large file from nothing.
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = ExecCtx::new(tmp.path().to_path_buf());
+        let large_initial = "pub fn x() {}\n".repeat(LARGE_FILE_REWRITE_THRESHOLD_LINES + 50);
+        let write = Primitive::WriteFile(WriteFileArgs {
+            path: "fresh.rs".into(),
+            content: large_initial.clone(),
+        });
+        let r = execute(&ctx, &write).await.unwrap();
+        assert!(r.ok);
+        let landed = std::fs::read_to_string(tmp.path().join("fresh.rs")).unwrap();
+        assert_eq!(landed, large_initial);
+    }
+
+    #[tokio::test]
+    async fn write_file_allowed_for_existing_small_file() {
+        // Existing-but-small files (≤ threshold) can still be
+        // rewritten via write_file — patch_file isn't mandated, just
+        // preferred. A 50-line module rewrite is well within the
+        // model's reliable-generation range.
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("small.py");
+        std::fs::write(&path, "x = 1\n".repeat(50)).unwrap();
+        let ctx = ExecCtx::new(tmp.path().to_path_buf());
+        let write = Primitive::WriteFile(WriteFileArgs {
+            path: "small.py".into(),
+            content: "y = 2\n".repeat(60),
+        });
+        let r = execute(&ctx, &write).await.unwrap();
+        assert!(r.ok);
     }
 
     #[tokio::test]
