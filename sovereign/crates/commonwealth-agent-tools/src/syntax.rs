@@ -255,8 +255,18 @@ impl SyntaxValidator for PythonSyntaxValidator {
         use std::io::Write;
         use std::process::{Command, Stdio};
 
-        let mut child = match Command::new("python3")
+        // Wrap python3 in `timeout(1)` so a spinning / hung subprocess
+        // can never wedge the bench. Observed 2026-05-23: orphaned
+        // python3 subprocesses at 100% CPU caused the bench's
+        // wait_with_output() to futex_wait indefinitely. SIGTERM
+        // after 10s, SIGKILL after 10+1s. Syntax check should
+        // complete in <100ms on well-formed input, so 10s is a
+        // generous ceiling that never trips legitimately.
+        let mut child = match Command::new("timeout")
             .args([
+                "--kill-after=1",
+                "10",
+                "python3",
                 "-c",
                 "import ast, sys; ast.parse(sys.stdin.read())",
             ])
@@ -266,7 +276,7 @@ impl SyntaxValidator for PythonSyntaxValidator {
             .spawn()
         {
             Ok(c) => c,
-            Err(_) => return Vec::new(), // fail-open if python3 unavailable
+            Err(_) => return Vec::new(), // fail-open if timeout/python3 unavailable
         };
         if let Some(mut stdin) = child.stdin.take() {
             // Best-effort write; if the pipe closes early we'll still
@@ -277,6 +287,15 @@ impl SyntaxValidator for PythonSyntaxValidator {
             Ok(o) => o,
             Err(_) => return Vec::new(), // fail-open on subprocess death
         };
+        // timeout(1) exits 124 on SIGTERM-after-cap. Treat as fail-
+        // open: we couldn't determine if the content was valid, so
+        // let the write through and let cargo/pytest catch it later.
+        if output.status.code() == Some(124) {
+            tracing::warn!(
+                "PythonSyntaxValidator: timeout(10s) elapsed; fail-open"
+            );
+            return Vec::new();
+        }
         if output.status.success() {
             return Vec::new();
         }

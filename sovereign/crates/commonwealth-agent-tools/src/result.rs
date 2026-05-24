@@ -87,6 +87,22 @@ pub enum ToolError {
         language: String,
         rendered_errors: String,
     },
+    /// `write_file` was rejected because the target file already
+    /// exists with more lines than the structural threshold for
+    /// full-file rewrites. The model is being directed to
+    /// `patch_file` with small line ranges instead. Closes the
+    /// "long-output token-level corruption" class observed on
+    /// 4.2-mini-evaluator-python (2026-05-23): generating 5000+
+    /// tokens of valid Python in one shot accumulates errors
+    /// (drift into JS syntax, lost whitespace, escape confusion).
+    /// `patch_file` with ≤30-line ranges sidesteps the regime
+    /// where this corruption emerges.
+    #[error("write_file rejected: {path} has {existing_lines} lines (> {threshold}); use patch_file")]
+    WriteFileTooLarge {
+        path: String,
+        existing_lines: usize,
+        threshold: usize,
+    },
 }
 
 #[cfg(test)]
@@ -138,6 +154,74 @@ mod tests {
         assert!(s.contains("`write_file`"));
         assert!(s.contains("missing required field"));
         assert!(s.contains("parameter schema"));
+    }
+
+    #[test]
+    fn sticky_signature_collapses_varying_inputs_on_same_site() {
+        // v-darwin 4.2 pattern (2026-05-24): the model emitted 6
+        // consecutive replace_function attempts that each rendered
+        // SLIGHTLY different `new_body` text but all failed with
+        // `expected ':' at evaluator.py:94:25`. The old input-hash
+        // detector saw 6 different hashes and never fired. The
+        // signature must be IDENTICAL across these attempts so the
+        // bench harness's consecutive-equal counter can trip.
+        let a = ToolError::SyntaxRejected {
+            primitive: "replace_function",
+            language: "Python".to_string(),
+            rendered_errors: "error: expected ':'\n  --> evaluator.py:94:25\n   |\n94 |     if foo bar\n   |                         ^".into(),
+        };
+        let b = ToolError::SyntaxRejected {
+            primitive: "replace_function",
+            language: "Python".to_string(),
+            rendered_errors: "error: expected ':'\n  --> evaluator.py:94:25\n   |\n94 |     if quux baz\n   |                         ^\n   = note: while parsing if statement".into(),
+        };
+        assert_eq!(a.sticky_signature(), b.sticky_signature());
+        // And the signature must INCLUDE the site so two different
+        // sites produce different signatures (the model recovering at
+        // line 94 and then failing at line 110 should reset the
+        // counter).
+        let c = ToolError::SyntaxRejected {
+            primitive: "replace_function",
+            language: "Python".to_string(),
+            rendered_errors: "error: invalid syntax\n  --> evaluator.py:110:5".into(),
+        };
+        assert_ne!(a.sticky_signature(), c.sticky_signature());
+    }
+
+    #[test]
+    fn sticky_signature_differs_across_variants() {
+        // A SyntaxRejected and a Timeout should never coalesce — they
+        // are different failure classes even if they happen back to
+        // back. Pins that the variant tag is part of the signature.
+        let a = ToolError::SyntaxRejected {
+            primitive: "write_file",
+            language: "Python".to_string(),
+            rendered_errors: "error: invalid syntax\n  --> foo.py:1:1".into(),
+        };
+        let b = ToolError::Timeout {
+            primitive: "write_file",
+            secs: 120,
+        };
+        assert_ne!(a.sticky_signature(), b.sticky_signature());
+    }
+
+    #[test]
+    fn sticky_signature_handles_missing_site_gracefully() {
+        // If render_errors doesn't contain a parseable file:line, the
+        // signature must still be stable (so two such rejections
+        // collapse) and must NOT panic.
+        let a = ToolError::SyntaxRejected {
+            primitive: "patch_file",
+            language: "Rust".to_string(),
+            rendered_errors: "error: weird unparseable thing happened".into(),
+        };
+        let b = ToolError::SyntaxRejected {
+            primitive: "patch_file",
+            language: "Rust".to_string(),
+            rendered_errors: "error: weird unparseable thing happened (slightly different prose)".into(),
+        };
+        assert_eq!(a.sticky_signature(), b.sticky_signature());
+        assert!(a.sticky_signature().contains("<unknown>"));
     }
 
     #[test]
@@ -256,6 +340,114 @@ impl ToolError {
                  be valid {language} source code; do not include reasoning, \
                  narration, or English sentences outside of comments/docstrings."
             ),
+            ToolError::WriteFileTooLarge { path, existing_lines, threshold } => format!(
+                "error: write_file rejected for large existing file\n  \
+                 = reason: `{path}` already has {existing_lines} lines, above the {threshold}-line \
+                 threshold for full-file rewrites. Empirically the model accumulates \
+                 token-level corruption (spacing drift, escape confusion, wrong-language \
+                 syntax) when generating 5000+ tokens of valid source in one shot.\n  \
+                 = help: use `patch_file` instead. Pick a tight line range (≤ 30 lines) \
+                 around the buggy region, identify it from the line-numbered source \
+                 anchor at the top of this message, and replace only that block. \
+                 For the initial author of a NEW file, write_file is still the \
+                 right tool — this rejection only fires for existing large files."
+            ),
         }
     }
+
+    /// Stable fingerprint used by the bench harness's sticky-retry
+    /// detector. The signature must be CONTENT-INVARIANT — two
+    /// different attempts that fail the SAME way should produce the
+    /// SAME signature, even if the `new_body` or `new_content` text
+    /// varies. The v-darwin run (4.2-mini-evaluator, 2026-05-24)
+    /// showed 6 consecutive `expected ':' at evaluator.py:94:25`
+    /// rejections with subtly different inputs each time — the old
+    /// args-hash detector never fired because the inputs varied. The
+    /// signature-based detector fires correctly because the REJECTION
+    /// is identical.
+    ///
+    /// For `SyntaxRejected`, the signature extracts the first
+    /// `file:line:col` triple from `rendered_errors` (the error
+    /// SITE — where the broken character was found), discarding the
+    /// rest of the prose. For other variants, the signature is the
+    /// variant tag plus the primitive name (when present).
+    pub fn sticky_signature(&self) -> String {
+        match self {
+            ToolError::SyntaxRejected { primitive, language, rendered_errors } => {
+                let site = extract_file_line_col(rendered_errors)
+                    .unwrap_or_else(|| "<unknown>".to_string());
+                format!("SyntaxRejected:{primitive}:{language}:{site}")
+            }
+            ToolError::Timeout { primitive, .. } => format!("Timeout:{primitive}"),
+            ToolError::InvalidArguments { primitive, reason } => {
+                format!("InvalidArguments:{primitive}:{}", first_line(reason))
+            }
+            ToolError::WorkdirAccess(detail) => {
+                format!("WorkdirAccess:{}", first_line(detail))
+            }
+            ToolError::Filesystem { primitive, reason } => {
+                format!("Filesystem:{primitive}:{}", first_line(reason))
+            }
+            ToolError::Subprocess { primitive, reason } => {
+                format!("Subprocess:{primitive}:{}", first_line(reason))
+            }
+            ToolError::WriteFileTooLarge { path, .. } => {
+                format!("WriteFileTooLarge:{path}")
+            }
+        }
+    }
+}
+
+/// Extract the first `path:line:col` triple from a rendered error
+/// block. Matches the `path.ext:NN:MM` shape produced by pyflakes,
+/// rustc, and our own `SyntaxValidator::render_errors`.
+fn extract_file_line_col(s: &str) -> Option<String> {
+    // Look for "<word>.<ext>:N:M" or "<word>.<ext>:N" anywhere in s.
+    // Walk byte-by-byte rather than pulling in a regex dep.
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        // Find a likely path char run (alnum, _, -, ., /).
+        let start = i;
+        while i < bytes.len() && is_path_char(bytes[i]) {
+            i += 1;
+        }
+        let path = &s[start..i];
+        // Must contain a '.' (extension) and not be all dots.
+        if path.contains('.') && path.bytes().any(|b| b != b'.') && i < bytes.len() && bytes[i] == b':' {
+            // Optional :line[:col] suffix.
+            let mut j = i + 1;
+            let line_start = j;
+            while j < bytes.len() && bytes[j].is_ascii_digit() {
+                j += 1;
+            }
+            if j > line_start {
+                let mut suffix = format!("{path}:{}", &s[line_start..j]);
+                if j < bytes.len() && bytes[j] == b':' {
+                    let col_start = j + 1;
+                    let mut k = col_start;
+                    while k < bytes.len() && bytes[k].is_ascii_digit() {
+                        k += 1;
+                    }
+                    if k > col_start {
+                        suffix.push(':');
+                        suffix.push_str(&s[col_start..k]);
+                    }
+                }
+                return Some(suffix);
+            }
+        }
+        if i == start {
+            i += 1;
+        }
+    }
+    None
+}
+
+fn is_path_char(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_' || b == b'-' || b == b'.' || b == b'/'
+}
+
+fn first_line(s: &str) -> &str {
+    s.lines().next().unwrap_or("").trim()
 }

@@ -52,6 +52,9 @@ pub fn transition_after(
         (Role::Implementer, TransitionTrigger::Primitive(PrimitiveKind::PatchFile)) => {
             NextRole::Flip(Role::Evaluator)
         }
+        (Role::Implementer, TransitionTrigger::Primitive(PrimitiveKind::ReplaceFunction)) => {
+            NextRole::Flip(Role::Evaluator)
+        }
         (
             Role::Implementer,
             TransitionTrigger::Primitive(PrimitiveKind::HandoffToEvaluator),

@@ -1,0 +1,110 @@
+{
+  "agent": "native",
+  "model": "commonwealth/primary",
+  "judge_model": "commonwealth/primary",
+  "judge_trials": 3,
+  "run_trials": 1,
+  "started_at": "2026-05-24T04:49:21.138391323+00:00",
+  "finished_at": "2026-05-24T04:51:13.276263257+00:00",
+  "per_problem": [
+    {
+      "problem_id": "4.2-mini-evaluator-python",
+      "dim_a": {
+        "raw": 0,
+        "source": {
+          "kind": "auto",
+          "pass_fraction": 0.5,
+          "verify_exit_ok": false
+        },
+        "anchor_majority": null,
+        "anchor_per_trial": [],
+        "majority_reached": null
+      },
+      "dim_b": {
+        "raw": 0,
+        "source": {
+          "kind": "judge",
+          "trials": 3,
+          "coverage_mean": 0.0
+        },
+        "anchor_majority": 0,
+        "anchor_per_trial": [
+          0,
+          0,
+          0
+        ],
+        "majority_reached": true
+      },
+      "dim_c": {
+        "raw": 3,
+        "source": {
+          "kind": "hybrid",
+          "auto_score": 0,
+          "judge_score": 3,
+          "coverage_mean": 1.0
+        },
+        "anchor_majority": 3,
+        "anchor_per_trial": [
+          3,
+          3,
+          3
+        ],
+        "majority_reached": true
+      },
+      "total": 3,
+      "exit_reason": {
+        "kind": "sticky_retry",
+        "detail": {
+          "primitive": "patch_file",
+          "repeats": 3
+        }
+      },
+      "tokens": {
+        "input": 8580,
+        "output": 943
+      },
+      "wall_ms": 51610,
+      "tool_calls": [
+        {
+          "turn": 1,
+          "tool": "agent_plan",
+          "args_preview": "{\"plan\":\"The implementation requires five distinct fixes across tokenizer, parser, and evaluator stages. First, I will fix the tokenizer to handle two-character comparison operators (`<=`, `>=`, `==`) before single-character fallback (Bug #1). Second, I wi",
+          "ok": true,
+          "canonical_kind": "agent_plan"
+        },
+        {
+          "turn": 2,
+          "tool": "patch_file",
+          "args_preview": "{\"end_line\":92,\"new_content\":\"        if c == \\\"<\\\" and i + 1 < n and source[i + 1] == \\\">=\\\":\\n            tokens.append(Token(\\\"LE\\\", \\\"<=\\\", i))\\n            i += 2\\n            continue\\n        if c == \\\">\\\" and i + 1 < n:\\n            nxt = source[i ",
+          "ok": true,
+          "canonical_kind": "patch_file"
+        },
+        {
+          "turn": 3,
+          "tool": "patch_file",
+          "args_preview": "{\"end_line\":92,\"new_content\":\"        if c == \\\"<\\\" and i + 1 < n and source[i + 1] == \\\">=\\\":\\n            tokens.append(Token(\\\"LE\\\", \\\"<=\\\", i))\\n            i += 2\\n            continue\\n        if c == \\\">\\\" and i + 1 < n:\\n            nxt = source[i ",
+          "ok": true,
+          "canonical_kind": "patch_file"
+        },
+        {
+          "turn": 4,
+          "tool": "patch_file",
+          "args_preview": "{\"end_line\":92,\"new_content\":\"        if c == \\\"<\\\" and i + 1 < n and source[i + 1] == \\\">=\\\":\\n            tokens.append(Token(\\\"LE\\\", \\\"<=\\\", i))\\n            i += 2\\n            continue\\n        if c == \\\">\\\" and i + 1 < n:\\n            nxt = source[i ",
+          "ok": true,
+          "canonical_kind": "patch_file"
+        }
+      ],
+      "witness_summary": {
+        "verify_exit_ok": false,
+        "passed": 10,
+        "failed": 10,
+        "total": 20,
+        "pass_fraction": 0.5
+      },
+      "is_partial": true
+    }
+  ],
+  "grand_total": 3,
+  "max_total": 9,
+  "regression": null
+}

@@ -18,8 +18,9 @@
 //! Cross-agent reports compare honestly.
 
 use std::collections::hash_map::DefaultHasher;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
@@ -83,16 +84,20 @@ fn per_tenure_turn_cap(role: Role) -> u32 {
 /// the model can emit a content-only response that exhausts the
 /// budget before any tool call lands.
 ///
-/// 4096 accommodates code-writing turns: a full `write_file`
-/// envelope for a 3-4 KB lib.rs body lands around 1500-2500
-/// generated tokens (JSON-escaped string + envelope shape). 1024
-/// was too tight — observed on 3.2-lights-out (2026-05-22) cutting
-/// off mid-content, leaving partial JSON the daemon parser
-/// couldn't extract. The llguidance grammar-stop break is the
-/// real "stop on schema accept" mechanism; this cap is just a
-/// defensive ceiling against runaway content when grammar fails
-/// to bind.
-const PER_TURN_MAX_TOKENS: u64 = 4096;
+/// 8192 accommodates write_file envelopes for files up to ~260
+/// lines of Python (raised from 4096 on 2026-05-23 after the 4.2
+/// smoke surfaced output-side truncation: the model's full-file
+/// rewrite of a 282-line evaluator landed as 53 lines on disk
+/// because the response was cut off mid-stream, breaking the
+/// module and trapping the model in a rejected-rewrite loop).
+/// History: 1024 was too tight (3.2-lights-out, 2026-05-22);
+/// 4096 was enough for 100-line files but truncated on 260+
+/// (4.2-mini-evaluator, 2026-05-23). 8192 gives headroom without
+/// inviting runaway content: the llguidance grammar-stop break
+/// is the real "stop on schema accept" mechanism; this cap is
+/// just a defensive ceiling against runaway content when grammar
+/// fails to bind.
+const PER_TURN_MAX_TOKENS: u64 = 8192;
 /// Handoff_to_implementer events since the last `agent_plan`.
 /// When this threshold is hit, the next handoff routes back to
 /// Planner instead of Implementer — giving the model a chance to
@@ -235,9 +240,15 @@ async fn run_native_monolithic(
 
     let started = Instant::now();
     let mut exec_ctx = ExecCtx::new(workdir.path().to_path_buf())
-        .with_subprocess_wall_cap(Duration::from_secs(
-            ctx.wall_seconds_cap.saturating_mul(2).max(60),
-        ))
+        // Tight per-tool-call cap on build/smoke subprocess. Was
+        // `wall_seconds_cap × 2 ≈ 1 hour`, which let a single smoke
+        // call eat the entire bench wall when the model wrote an
+        // infinite loop (observed 4.2 2026-05-23: pytest spinning at
+        // 100% CPU for 30 min consuming the whole 1800s wall cap on
+        // ONE tool call). 120s is generous for well-formed code
+        // (typical smoke <5s) while still bounding pathological hangs
+        // at a fraction of the overall run budget.
+        .with_subprocess_wall_cap(Duration::from_secs(120))
         .with_build_cmd(runner.build_cmd.clone().unwrap_or_else(|| ctx.build_cmd.clone()))
         .with_verify_cmd(
             runner
@@ -586,9 +597,15 @@ async fn run_native_role_aware(
 
     let started = Instant::now();
     let mut exec_ctx = ExecCtx::new(workdir.path().to_path_buf())
-        .with_subprocess_wall_cap(Duration::from_secs(
-            ctx.wall_seconds_cap.saturating_mul(2).max(60),
-        ))
+        // Tight per-tool-call cap on build/smoke subprocess. Was
+        // `wall_seconds_cap × 2 ≈ 1 hour`, which let a single smoke
+        // call eat the entire bench wall when the model wrote an
+        // infinite loop (observed 4.2 2026-05-23: pytest spinning at
+        // 100% CPU for 30 min consuming the whole 1800s wall cap on
+        // ONE tool call). 120s is generous for well-formed code
+        // (typical smoke <5s) while still bounding pathological hangs
+        // at a fraction of the overall run budget.
+        .with_subprocess_wall_cap(Duration::from_secs(120))
         .with_build_cmd(runner.build_cmd.clone().unwrap_or_else(|| ctx.build_cmd.clone()))
         .with_verify_cmd(
             runner
@@ -639,6 +656,48 @@ async fn run_native_role_aware(
     // diagnostics) is no longer punished at turn 3 just because
     // the tool name repeats. Reset on every role flip.
     let mut tool_calls_in_tenure: u32 = 0;
+    // Per-edit rollback state. Closes class: "model fixes bug N,
+    // breaks previously-passing tests, has no way to recover except
+    // by overwriting again." With rollback: each edit is
+    // provisional until the next smoke confirms no regression.
+    // Regressions revert the file and seed the dossier with an
+    // explicit "your edit broke X — try a different approach" so
+    // the model can vary rather than retry the same path.
+    //
+    // `pre_edit_snapshot` holds the workdir contents BEFORE the
+    // most recent edit. `last_failed_set` holds the failing test
+    // names from the most recent smoke. Regression = a test name
+    // appears in `new_failed - last_failed`.
+    let mut pre_edit_snapshot: Option<HashMap<PathBuf, String>> = None;
+    let mut last_failed_set: Option<HashSet<String>> = None;
+    // Sticky-retry detector: WINDOWED count of recent rejection
+    // signatures. Fires when ≥ THRESHOLD of the last WINDOW
+    // rejections share a signature.
+    //
+    // History:
+    //   v-rollback (2026-05-23): hashed input args; missed v-darwin
+    //     because the model varied edit content slightly across
+    //     attempts (6 different hashes for 6 identical syntax errors).
+    //   v-sigsticky (2026-05-24 AM): switched to rejection SIGNATURE
+    //     and consecutive-counter; missed v-sigsticky because 7
+    //     smoke-timeout rejections were interleaved with successful
+    //     build calls that reset the counter.
+    //   v-windowed (2026-05-24 PM, current): track the last 5
+    //     rejection signatures regardless of whether successful
+    //     dispatches happened between them. Fire when 3 of those 5
+    //     match. Catches both prior patterns:
+    //       - consecutive identical rejections (v-darwin)
+    //       - rejections interleaved with successes (v-sigsticky)
+    //
+    // A successful dispatch does NOT reset the window — a model that
+    // alternates `build → smoke (timeout) → build → smoke (timeout)`
+    // is just as stuck as one that emits 3 rejections in a row.
+    // Successful events naturally age out of the 5-deep window as
+    // new rejections push them off.
+    const STICKY_RETRY_WINDOW: usize = 5;
+    const STICKY_RETRY_THRESHOLD: usize = 3;
+    let mut recent_rejection_signatures: std::collections::VecDeque<String> =
+        std::collections::VecDeque::with_capacity(STICKY_RETRY_WINDOW);
     // NOTE: user message is REBUILT each turn (inside the loop) so the
     // `## Workdir state` preamble reflects what files exist NOW. Was
     // built once here outside the loop pre-2026-05-22 — caused the
@@ -679,7 +738,22 @@ async fn run_native_role_aware(
         // that Implementer's "what files exist" signal matches reality
         // after each successful write (see note above the loop).
         let profile = default_profile_for(active_role);
-        let user_msg = format_initial_prompt(workdir.path(), &ctx.prompt);
+        // Promote any source-file declarations whose names appear in
+        // the Planner's pseudocode to full-body inline anchor
+        // (instead of outline). Lets the Implementer see exact
+        // function contents before patching, preventing the "model
+        // patches wider range than its pseudocode specified,
+        // truncating siblings" failure (4.2 v-pseudo).
+        let promoted_names = role_dossier
+            .pseudocode
+            .as_deref()
+            .map(extract_referenced_names)
+            .unwrap_or_default();
+        let user_msg = format_initial_prompt_with_promoted(
+            workdir.path(),
+            &ctx.prompt,
+            &promoted_names,
+        );
         let role_messages = build_role_messages(
             active_role,
             &profile,
@@ -1016,6 +1090,23 @@ async fn run_native_role_aware(
                 break 'outer ExitReason::Completed;
             }
 
+            // Per-edit snapshot: capture workdir BEFORE any mutating
+            // dispatch so we can rollback on regression. The
+            // snapshot is the "known good before this edit" — used
+            // only when the next smoke shows a previously-passing
+            // test now failing.
+            let is_edit = matches!(
+                kind,
+                PrimitiveKind::WriteFile
+                    | PrimitiveKind::PatchFile
+                    | PrimitiveKind::ReplaceFunction
+            );
+            let pending_snapshot = if is_edit {
+                Some(snapshot_workdir(workdir.path()))
+            } else {
+                None
+            };
+
             // Special-case the transition primitives: they don't
             // execute work, just update the dossier and trigger
             // transition. We still call into the executor to keep
@@ -1049,9 +1140,50 @@ async fn run_native_role_aware(
                     })
                     .to_string();
                     this_turn_tool_results.push(tool_result_message(&id, &body));
+                    // Windowed sticky-retry: push this signature onto
+                    // the recent-rejections window (capped at
+                    // STICKY_RETRY_WINDOW). If ≥ STICKY_RETRY_THRESHOLD
+                    // of the entries in the window share a signature,
+                    // the model is stuck on the same failure mode
+                    // even if it's making other (irrelevant) tool
+                    // calls in between. Fire StickyRetry.
+                    let sig = e.sticky_signature();
+                    if recent_rejection_signatures.len() == STICKY_RETRY_WINDOW {
+                        recent_rejection_signatures.pop_front();
+                    }
+                    recent_rejection_signatures.push_back(sig.clone());
+                    let matches_in_window = recent_rejection_signatures
+                        .iter()
+                        .filter(|s| **s == sig)
+                        .count();
+                    if matches_in_window >= STICKY_RETRY_THRESHOLD {
+                        tracing::warn!(
+                            problem = %problem_id,
+                            role = active_role.id(),
+                            primitive = kind.id(),
+                            signature = %sig,
+                            matches = matches_in_window,
+                            window = STICKY_RETRY_WINDOW,
+                            "native_runner: sticky-retry kill — signature recurred in window"
+                        );
+                        break 'outer ExitReason::StickyRetry {
+                            primitive: kind.id().to_string(),
+                            repeats: matches_in_window as u32,
+                        };
+                    }
                     continue;
                 }
             };
+            // Successful dispatch does NOT clear the rejection window.
+            // The window naturally ages as new rejections push old
+            // ones off; a model that alternates `build (ok) → smoke
+            // (timeout)` is just as stuck as one that emits
+            // back-to-back identical errors, so we measure both.
+            // Edit succeeded → keep the pre-edit snapshot live so
+            // the next smoke can rollback on regression.
+            if let Some(snap) = pending_snapshot {
+                pre_edit_snapshot = Some(snap);
+            }
             // Persist the real result content as a tool message so
             // the next turn (within this role) sees the full payload
             // — stdout_tail, pass/fail counts, etc. — instead of just
@@ -1069,12 +1201,18 @@ async fn run_native_role_aware(
             // class of workdir mutation, and repeated patches to
             // the same file without verification are the same kind
             // of thrash.
-            if matches!(kind, PrimitiveKind::WriteFile | PrimitiveKind::PatchFile) {
+            if matches!(
+                kind,
+                PrimitiveKind::WriteFile | PrimitiveKind::PatchFile | PrimitiveKind::ReplaceFunction
+            ) {
                 let path = match &canonical {
                     commonwealth_agent_tools::Primitive::WriteFile(args) => {
                         Some(args.path.as_str())
                     }
                     commonwealth_agent_tools::Primitive::PatchFile(args) => {
+                        Some(args.path.as_str())
+                    }
+                    commonwealth_agent_tools::Primitive::ReplaceFunction(args) => {
                         Some(args.path.as_str())
                     }
                     _ => None,
@@ -1116,6 +1254,54 @@ async fn run_native_role_aware(
                     .get("ok")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
+                // Rollback gate: compare smoke's failed_names to
+                // the prior smoke's failed_names. Any test newly
+                // failing (was passing before) means the most
+                // recent edit regressed it → restore the pre-edit
+                // snapshot and seed the dossier with an explicit
+                // "your edit broke X; try a different approach."
+                // Run only on Smoke (Build doesn't enumerate tests).
+                if matches!(kind, PrimitiveKind::Smoke) {
+                    let parsed = crate::witness::test_result_parser::parse_pytest_text(tail);
+                    let new_failed: HashSet<String> =
+                        parsed.failed_names.iter().cloned().collect();
+                    let regressed: Vec<String> = match &last_failed_set {
+                        Some(prev) => new_failed.difference(prev).cloned().collect(),
+                        None => Vec::new(),
+                    };
+                    if !regressed.is_empty() && pre_edit_snapshot.is_some() {
+                        let snap = pre_edit_snapshot.take().unwrap();
+                        if let Err(e) = restore_workdir(workdir.path(), &snap) {
+                            tracing::warn!(
+                                problem = %problem_id,
+                                error = %e,
+                                "native_runner: rollback failed to restore workdir"
+                            );
+                        } else {
+                            let sample: Vec<&str> = regressed
+                                .iter()
+                                .take(3)
+                                .map(|s| s.as_str())
+                                .collect();
+                            let msg = format!(
+                                "REGRESSION: your last edit broke {} previously-passing test(s) ({}). Workdir reverted to pre-edit state. Try a different approach for this fix.",
+                                regressed.len(),
+                                sample.join(", ")
+                            );
+                            role_dossier.set_diagnosis(msg.clone());
+                            tracing::info!(
+                                problem = %problem_id,
+                                role = active_role.id(),
+                                regressed_count = regressed.len(),
+                                "native_runner: rolled back edit after regression"
+                            );
+                        }
+                        // Don't update last_failed_set since we rolled back.
+                    } else {
+                        last_failed_set = Some(new_failed);
+                        pre_edit_snapshot = None; // edit accepted
+                    }
+                }
                 role_dossier.record_verification(kind, ok, tail);
                 if let VerifySignal::Kill { hash_repeats } =
                     verify_stuck.observe(ok, tail)
@@ -1174,6 +1360,9 @@ async fn run_native_role_aware(
                     PrimitiveKind::AgentPlan,
                 ) => {
                     role_dossier.set_plan(args.plan.clone());
+                    if let Some(items) = args.pseudocode.clone() {
+                        role_dossier.set_pseudocode(items);
+                    }
                 }
                 (
                     commonwealth_agent_tools::Primitive::HandoffToImplementer(args),
@@ -1548,33 +1737,81 @@ fn tool_result_message(tool_call_id: &str, content: &str) -> Value {
 }
 
 fn format_initial_prompt(workdir: &Path, problem_prompt: &str) -> String {
-    // Mirror pi runner's workdir-state preamble so the cross-agent
-    // comparison is apples-to-apples: same problem, same factual
-    // statement of what files exist. The line-numbered anchor block
-    // (added 2026-05-23 after the 4.1 smoke showed patch_file
-    // failing because the model couldn't ground-truth line numbers
-    // from the byte-size listing alone) lives immediately after
-    // the file listing — sink-adjacent position so RoPE + softmax
-    // dilution doesn't bury the structural info the Implementer
-    // needs to author correct patches.
+    format_initial_prompt_with_promoted(workdir, problem_prompt, &Default::default())
+}
+
+/// Variant that promotes named declarations from outline → inline.
+/// When the Planner emits pseudocode naming specific
+/// functions/classes, those declarations get their full body
+/// rendered in the anchor block (instead of just the signature)
+/// so the Implementer can see exact body content before patching.
+/// Closes the "model patches a wider range than its pseudocode
+/// specified, truncating the function" class observed on 4.2
+/// v-pseudo 2026-05-23.
+fn format_initial_prompt_with_promoted(
+    workdir: &Path,
+    problem_prompt: &str,
+    promoted_names: &std::collections::HashSet<String>,
+) -> String {
     let state = summarize_workdir(workdir);
-    let anchors = render_workdir_anchors(workdir);
+    let anchors = render_workdir_anchors_with_promoted(workdir, promoted_names);
     format!(
         "## Workdir state (factual, current state of `.`)\n{state}\n{anchors}\n---\n\n{problem_prompt}"
     )
 }
 
+/// Extract identifier-like words from each pseudocode entry.
+/// Heuristic: split on non-`[A-Za-z0-9_]` characters; keep tokens
+/// that start with an alpha/underscore. The model writes pseudocode
+/// like `"tokenize (lines 75-90): Replace..."` and `"Parser.parse_pow
+/// (lines 226-236): ..."`. We extract `tokenize`, `Parser`,
+/// `parse_pow`, `lines`, `Replace`, etc. — over-extraction is fine;
+/// only words that match actual declaration names in the source
+/// trigger promotion downstream.
+fn extract_referenced_names(pseudocode: &[String]) -> std::collections::HashSet<String> {
+    let mut names = std::collections::HashSet::new();
+    for entry in pseudocode {
+        for word in entry.split(|c: char| !c.is_ascii_alphanumeric() && c != '_') {
+            if word.is_empty() {
+                continue;
+            }
+            let first = word.chars().next().unwrap();
+            if first.is_ascii_alphabetic() || first == '_' {
+                names.insert(word.to_string());
+            }
+        }
+    }
+    names
+}
+
 /// Maximum number of lines per source file to render inline. Files
 /// above this cap get a function-signature outline instead of full
-/// content. Tuned to keep the typical Python or Rust module
-/// (100-200 lines) fully visible while keeping a 500-line module
-/// from dominating the prompt.
-const MAX_FILE_LINES_INLINE: usize = 150;
+/// content.
+///
+/// Bumped 150 → 500 on 2026-05-24 after the 4.2 isolation probe
+/// v2 (one-shot, full file shown each call) lifted Darwin's per-bug
+/// pass rate from 32% to 60% over the v1 forced-function-rewrite
+/// shape. The discriminator was inline body content: with line-
+/// numbered body visible, the model emits accurate `patch_lines`
+/// ranges and mirrors existing indentation/identifiers; in outline
+/// mode it has to reconstruct body content from memory and either
+/// hallucinates the wrong lines or fabricates names. The 4.2
+/// evaluator.py is 373 lines and is the canonical hot path; 500
+/// covers it plus typical real-world Python files.
+const MAX_FILE_LINES_INLINE: usize = 500;
 
 /// Hard cap on the total number of source-content lines rendered
 /// across all anchored files. Prevents many-file workdirs from
 /// blowing the prompt budget.
-const MAX_TOTAL_ANCHOR_LINES: usize = 500;
+///
+/// Bumped 500 → 1200 on 2026-05-24 to admit the workdir state
+/// after MAX_FILE_LINES_INLINE rose to 500: a typical scaffolded
+/// problem now has main-source-file (~400 lines) + test file
+/// (~200 lines) + headroom for additional helpers, all inline.
+/// At ~80 chars/line × 1200 lines × 0.25 tokens/char ≈ 24K input
+/// tokens of anchors — fits comfortably in the 32K context with
+/// system + dossier + chat history.
+const MAX_TOTAL_ANCHOR_LINES: usize = 1200;
 
 /// Render line-numbered content for source files in the workdir so
 /// the Implementer can use `patch_file` against ground-truth line
@@ -1594,6 +1831,58 @@ const MAX_TOTAL_ANCHOR_LINES: usize = 500;
 /// Returns an empty string when no source files are present (e.g.
 /// FromScratch tier before the first write).
 fn render_workdir_anchors(workdir: &Path) -> String {
+    render_workdir_anchors_with_promoted(workdir, &Default::default())
+}
+
+/// Extract the declaration NAME from a top-level line.
+/// `def foo(...)` → `Some("foo")`, `class Bar:` → `Some("Bar")`,
+/// `pub fn baz` → `Some("baz")`, etc. Returns None when the line
+/// isn't a recognized declaration.
+fn decl_name(line: &str) -> Option<&str> {
+    let s = line.trim_start();
+    let after = if let Some(r) = s.strip_prefix("async def ") {
+        r
+    } else if let Some(r) = s.strip_prefix("def ") {
+        r
+    } else if let Some(r) = s.strip_prefix("class ") {
+        r
+    } else if let Some(r) = s.strip_prefix("pub fn ") {
+        r
+    } else if let Some(r) = s.strip_prefix("pub(crate) fn ") {
+        r
+    } else if let Some(r) = s.strip_prefix("fn ") {
+        r
+    } else if let Some(r) = s.strip_prefix("pub struct ") {
+        r
+    } else if let Some(r) = s.strip_prefix("pub enum ") {
+        r
+    } else if let Some(r) = s.strip_prefix("pub trait ") {
+        r
+    } else if let Some(r) = s.strip_prefix("export default function ") {
+        r
+    } else if let Some(r) = s.strip_prefix("export function ") {
+        r
+    } else if let Some(r) = s.strip_prefix("function ") {
+        r
+    } else if let Some(r) = s.strip_prefix("export class ") {
+        r
+    } else {
+        return None;
+    };
+    let end = after
+        .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .unwrap_or(after.len());
+    if end == 0 {
+        None
+    } else {
+        Some(&after[..end])
+    }
+}
+
+fn render_workdir_anchors_with_promoted(
+    workdir: &Path,
+    promoted_names: &std::collections::HashSet<String>,
+) -> String {
     let mut files: Vec<(std::path::PathBuf, String)> = Vec::new();
     collect_source_files(workdir, workdir, 0, &mut files);
     if files.is_empty() {
@@ -1620,43 +1909,126 @@ fn render_workdir_anchors(workdir: &Path) -> String {
                 .len()
                 .min(MAX_TOTAL_ANCHOR_LINES.saturating_sub(total_lines_rendered));
             for (i, l) in lines.iter().take(take).enumerate() {
-                out.push_str(&format!("{:>4} | {}\n", i + 1, l));
+                // Use `:` separator (not `| `) — pipe visually
+                // suggests unified-diff format, which the model
+                // then copies into patch_file's new_content,
+                // emitting `| N | content` instead of raw
+                // replacement Python. Observed 4.2 2026-05-23.
+                out.push_str(&format!("{:>4}: {}\n", i + 1, l));
             }
             total_lines_rendered = total_lines_rendered.saturating_add(take);
         } else {
-            // Outline only — language-agnostic heuristic on common
-            // top-level constructs.
-            for (i, l) in lines.iter().enumerate() {
-                let s = l.trim_start();
-                let is_decl = s.starts_with("def ")
-                    || s.starts_with("async def ")
-                    || s.starts_with("class ")
-                    || s.starts_with("fn ")
-                    || s.starts_with("pub fn ")
-                    || s.starts_with("pub(crate) fn ")
-                    || s.starts_with("pub struct ")
-                    || s.starts_with("pub enum ")
-                    || s.starts_with("pub trait ")
-                    || s.starts_with("impl ")
-                    || s.starts_with("function ")
-                    || s.starts_with("export function ")
-                    || s.starts_with("export default function ")
-                    || s.starts_with("export class ")
-                    || s.starts_with("type ")
-                    || s.starts_with("interface ");
-                if is_decl {
-                    out.push_str(&format!("{:>4} | {}\n", i + 1, l));
+            // Outline mode — render each top-level declaration with
+            // its LINE EXTENT, computed as the line range from the
+            // declaration to the line BEFORE the next declaration
+            // (or EOF for the last). Extents are load-bearing for
+            // patch_file correctness: without them, the model
+            // estimates body ranges and patches that cross
+            // declaration boundaries, producing
+            // syntactically-broken merges (observed 2026-05-23 on
+            // 4.2 — every rejected patch targeted a range that
+            // spanned multiple declarations). Extents let the model
+            // patch within a single function's body with confidence.
+            let decl_lines: Vec<usize> = lines
+                .iter()
+                .enumerate()
+                .filter_map(|(i, l)| {
+                    let s = l.trim_start();
+                    let is_decl = s.starts_with("def ")
+                        || s.starts_with("async def ")
+                        || s.starts_with("class ")
+                        || s.starts_with("fn ")
+                        || s.starts_with("pub fn ")
+                        || s.starts_with("pub(crate) fn ")
+                        || s.starts_with("pub struct ")
+                        || s.starts_with("pub enum ")
+                        || s.starts_with("pub trait ")
+                        || s.starts_with("impl ")
+                        || s.starts_with("function ")
+                        || s.starts_with("export function ")
+                        || s.starts_with("export default function ")
+                        || s.starts_with("export class ")
+                        || s.starts_with("type ")
+                        || s.starts_with("interface ");
+                    if is_decl { Some(i) } else { None }
+                })
+                .collect();
+            for (k, &i) in decl_lines.iter().enumerate() {
+                let start = i + 1; // 1-indexed
+                let end = if k + 1 < decl_lines.len() {
+                    decl_lines[k + 1] // line BEFORE next decl
+                } else {
+                    lines.len() // EOF (1-indexed last line)
+                };
+                let l = lines[i];
+                // Promotion: when this declaration's name appears in
+                // the Planner's pseudocode, render its FULL body
+                // inline so the Implementer sees exact content
+                // before patching. Closes the "model patches a
+                // wider range than its pseudocode specified,
+                // truncating the function" class observed on 4.2
+                // v-pseudo 2026-05-23.
+                let name_promoted = decl_name(l)
+                    .map(|n| promoted_names.contains(n))
+                    .unwrap_or(false);
+                if name_promoted {
+                    let body_len = end - start + 1;
+                    let remaining = MAX_TOTAL_ANCHOR_LINES
+                        .saturating_sub(total_lines_rendered);
+                    let take = body_len.min(remaining);
+                    out.push_str(&format!(
+                        "{:>4}: {}  [lines {}-{}]  ← PROMOTED (named in pseudocode)\n",
+                        start, l, start, end
+                    ));
+                    for off in 1..take {
+                        let ln = start + off;
+                        if ln - 1 < lines.len() {
+                            out.push_str(&format!("{:>4}: {}\n", ln, lines[ln - 1]));
+                        }
+                    }
+                    total_lines_rendered = total_lines_rendered.saturating_add(take);
+                } else {
+                    out.push_str(&format!("{:>4}: {}  [lines {}-{}]\n", start, l, start, end));
                     total_lines_rendered = total_lines_rendered.saturating_add(1);
                 }
             }
             out.push_str(&format!(
-                "(outline only — full file is {} lines; use patch_file with the line numbers above)\n",
+                "(outline mode — full file is {} lines. Declarations named in your pseudocode are promoted to full body inline; others show signature + line extent only. patch_file ranges should stay WITHIN one declaration's extent.)\n",
                 lines.len()
             ));
         }
         out.push_str("```\n");
     }
     out
+}
+
+/// Snapshot every source file in the workdir so we can rollback if
+/// the next smoke regresses. Reads the same set the anchor renderer
+/// reads — language source files, not tests/build output.
+fn snapshot_workdir(workdir: &Path) -> HashMap<PathBuf, String> {
+    let mut files: Vec<(PathBuf, String)> = Vec::new();
+    collect_source_files(workdir, workdir, 0, &mut files);
+    files.into_iter().collect()
+}
+
+/// Restore source files from a snapshot. Any file in the current
+/// workdir whose path matches a snapshot entry is overwritten with
+/// the snapshot's content. Files that weren't in the snapshot are
+/// left as-is (the user-message workdir-state preamble still sees
+/// them, and the model can choose to delete them via write_file
+/// with empty content if needed).
+fn restore_workdir(
+    workdir: &Path,
+    snapshot: &HashMap<PathBuf, String>,
+) -> std::io::Result<()> {
+    for (rel, content) in snapshot {
+        let abs = workdir.join(rel);
+        if let Some(parent) = abs.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&abs, content.as_bytes())?;
+    }
+    Ok(())
 }
 
 const SOURCE_EXTENSIONS: &[&str] = &[".py", ".rs", ".go", ".ts", ".tsx"];
@@ -1806,6 +2178,28 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_and_restore_round_trip() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("a.py"), "x = 1\n").unwrap();
+        std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+        std::fs::write(tmp.path().join("src/b.py"), "y = 2\n").unwrap();
+
+        let snap = snapshot_workdir(tmp.path());
+        assert!(snap.contains_key(std::path::Path::new("a.py")));
+        assert!(snap.contains_key(std::path::Path::new("src/b.py")));
+
+        // Mutate both files.
+        std::fs::write(tmp.path().join("a.py"), "x = 999\n").unwrap();
+        std::fs::write(tmp.path().join("src/b.py"), "y = 999\n").unwrap();
+        assert_eq!(std::fs::read_to_string(tmp.path().join("a.py")).unwrap(), "x = 999\n");
+
+        // Restore.
+        restore_workdir(tmp.path(), &snap).unwrap();
+        assert_eq!(std::fs::read_to_string(tmp.path().join("a.py")).unwrap(), "x = 1\n");
+        assert_eq!(std::fs::read_to_string(tmp.path().join("src/b.py")).unwrap(), "y = 2\n");
+    }
+
+    #[test]
     fn anchors_render_inline_for_small_python_file() {
         // Closes class: "Implementer can't ground-truth file line
         // numbers for patch_file because workdir summary is
@@ -1822,19 +2216,90 @@ mod tests {
         let s = render_workdir_anchors(tmp.path());
         assert!(s.contains("Current source files"));
         assert!(s.contains("`mod.py` (5 lines)"));
-        assert!(s.contains("   1 | def foo():"));
-        assert!(s.contains("   2 |     return 1"));
-        assert!(s.contains("   4 | def bar():"));
+        assert!(s.contains("   1: def foo():"));
+        assert!(s.contains("   2:     return 1"));
+        assert!(s.contains("   4: def bar():"));
+    }
+
+    #[test]
+    fn extract_referenced_names_pulls_identifiers_from_pseudocode() {
+        let items = vec![
+            "tokenize (lines 75-90): Add two-char ops".to_string(),
+            "Parser.parse_pow: Recurse parse_pow on RHS".to_string(),
+            "evaluate function BinOp case: short-circuit".to_string(),
+        ];
+        let names = extract_referenced_names(&items);
+        assert!(names.contains("tokenize"));
+        assert!(names.contains("parse_pow"));
+        assert!(names.contains("Parser"));
+        assert!(names.contains("evaluate"));
+        assert!(names.contains("BinOp"));
+    }
+
+    #[test]
+    fn decl_name_python() {
+        assert_eq!(decl_name("def foo(x):"), Some("foo"));
+        assert_eq!(decl_name("    def bar():"), Some("bar"));
+        assert_eq!(decl_name("class Foo:"), Some("Foo"));
+        assert_eq!(decl_name("async def asyncfoo():"), Some("asyncfoo"));
+    }
+
+    #[test]
+    fn decl_name_rust() {
+        assert_eq!(decl_name("pub fn baz() {}"), Some("baz"));
+        assert_eq!(decl_name("fn quux() {}"), Some("quux"));
+        assert_eq!(decl_name("pub struct Thing"), Some("Thing"));
+    }
+
+    #[test]
+    fn anchors_promote_named_declarations_to_inline_body() {
+        // Closes class: model patches wider than pseudocode says
+        // because it can't see the function body in outline mode.
+        // Promotion shows the full body for named declarations so
+        // the model can replace the precise range.
+        let tmp = tempfile::tempdir().unwrap();
+        let mut content = String::new();
+        // 600 lines — above MAX_FILE_LINES_INLINE (500) so outline
+        // mode triggers and promotion has work to do.
+        for i in 0..600 {
+            if i == 0 {
+                content.push_str("def keep_me():\n");
+            } else if i == 1 {
+                content.push_str("    return 'preserved body line'\n");
+            } else if i == 2 {
+                content.push_str("    x = 1  # also in keep_me\n");
+            } else if i == 3 {
+                content.push_str("def other():\n");
+            } else {
+                content.push_str("    pass\n");
+            }
+        }
+        std::fs::write(tmp.path().join("big.py"), &content).unwrap();
+        let mut promoted = std::collections::HashSet::new();
+        promoted.insert("keep_me".to_string());
+        let s = render_workdir_anchors_with_promoted(tmp.path(), &promoted);
+        // Promoted: full body visible with line numbers.
+        assert!(s.contains("def keep_me():"));
+        assert!(s.contains("preserved body line"));
+        assert!(s.contains("x = 1  # also in keep_me"));
+        assert!(s.contains("PROMOTED"));
+        // Non-promoted (other and the rest): just signature.
+        assert!(s.contains("def other():"));
+        assert!(!s.contains("\n    pass"), "body of other() should NOT be inlined");
     }
 
     #[test]
     fn anchors_render_outline_for_large_file() {
         // Above the inline cap, render function/class signatures
-        // with line numbers only — the model can address regions
-        // by declaration line without paying for every body line.
+        // with line numbers AND line extents — the model needs the
+        // extent to know which range each function occupies and
+        // patch within (not across) declaration boundaries.
+        //
+        // Fixture is 600 lines (one decl every 10 lines) — above
+        // MAX_FILE_LINES_INLINE (500) so outline mode triggers.
         let tmp = tempfile::tempdir().unwrap();
         let mut content = String::new();
-        for i in 0..200 {
+        for i in 0..600 {
             if i % 10 == 0 {
                 content.push_str(&format!("def fn_{i}():\n"));
             } else {
@@ -1843,12 +2308,22 @@ mod tests {
         }
         std::fs::write(tmp.path().join("big.py"), &content).unwrap();
         let s = render_workdir_anchors(tmp.path());
-        assert!(s.contains("`big.py` (200 lines)"));
-        assert!(s.contains("outline only"));
+        assert!(s.contains("`big.py` (600 lines)"));
+        assert!(s.contains("outline mode"));
         assert!(s.contains("def fn_0()"));
-        assert!(s.contains("def fn_190()"));
+        assert!(s.contains("def fn_590()"));
+        // Extent annotation must be present so the model knows each
+        // declaration's body range.
+        assert!(s.contains("[lines 1-10]"));   // fn_0 → fn_10 next
+        assert!(s.contains("[lines 11-20]"));  // fn_10 → fn_20 next
+        // Last function (fn_590 at line 591) extends to EOF (600).
+        assert!(s.contains("[lines 591-600]"));
         // Body lines (`    pass`) must NOT appear in outline mode.
-        assert!(!s.contains("|     pass"));
+        assert!(!s.contains(":     pass"));
+        // Pipe separator must NOT appear — using `:` to avoid the
+        // model interpreting the anchor as unified-diff context
+        // (observed 4.2 2026-05-23).
+        assert!(!s.contains(" | def "));
     }
 
     #[test]
@@ -1878,19 +2353,22 @@ mod tests {
 
     #[test]
     fn anchors_caps_total_lines_across_many_files() {
-        // Cap is load-bearing: a workdir with 50 small files would
-        // otherwise dump 50 fenced blocks into every prompt. The
+        // Cap is load-bearing: a workdir with many small files would
+        // otherwise dump every one into every prompt. The
         // cap-exceeded marker should be emitted; later files are
         // dropped.
+        //
+        // Fixture: 30 files × 50 lines = 1500 lines, above the
+        // 1200-line MAX_TOTAL_ANCHOR_LINES cap.
         let tmp = tempfile::tempdir().unwrap();
-        for i in 0..20 {
+        for i in 0..30 {
             let body = "x = 1\n".repeat(50);
             std::fs::write(tmp.path().join(format!("f{i:02}.py")), &body).unwrap();
         }
         let s = render_workdir_anchors(tmp.path());
         assert!(
             s.contains("further source files omitted")
-                || s.matches("###").count() <= 11,
+                || s.matches("###").count() <= 25,
             "expected anchor cap to drop later files; got {} fenced blocks",
             s.matches("###").count()
         );

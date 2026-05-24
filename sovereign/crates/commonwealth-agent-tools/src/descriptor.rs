@@ -56,6 +56,18 @@ pub fn descriptor_for(kind: PrimitiveKind) -> Value {
                 "required": ["path", "start_line", "end_line", "new_content"]
             }),
         ),
+        PrimitiveKind::ReplaceFunction => (
+            "Replace the entire definition of a named function or class with `new_body`. Smaller output surface than `patch_file` (no line ranges to count — just emit the function body). PREFERRED for single-function bug fixes when you know the function name and want to rewrite its body cleanly. The post-replace full file is syntax-checked at the write boundary. `name` is a plain identifier (e.g. `tokenize`, not `Parser.tokenize`). `new_body` must start with the `def`/`class` line at the correct indent and include the full body.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Workdir-relative path. File must exist."},
+                    "name": {"type": "string", "description": "Function or class name to replace."},
+                    "new_body": {"type": "string", "description": "Full new definition: `def NAME(...):` or `class NAME(...):` + body. Match the original's indentation."}
+                },
+                "required": ["path", "name", "new_body"]
+            }),
+        ),
         PrimitiveKind::Build => (
             "Run the bench-bound build command in the workdir (cargo for Rust, go build for Go, tsc for TypeScript, no-op for Python). Reports pass/fail plus the command's output tail. Use after `write_file` to check your change typechecks before moving on.",
             json!({
@@ -84,12 +96,13 @@ pub fn descriptor_for(kind: PrimitiveKind) -> Value {
             }),
         ),
         PrimitiveKind::AgentPlan => (
-            "Emit the chunked plan. Use 3–6 sentences naming the data structures, the algorithm in one phrase, and the files to write. Optionally list `files_to_create` for net-new files. Available only to the Planner role; calling this hands off to the Implementer.",
+            "Emit the plan. `plan` is a 3-6 sentence high-level approach (data structures, algorithm, files to write). For problems with MULTIPLE distinct edits (bug-fix tasks, multi-feature implementations), ALSO fill `pseudocode` — a numbered list of every concrete change the Implementer will need to make, one entry per change, each naming the target (function/file/line-range) AND the approach. Example: \"1. tokenize (lines 75-77): add two-char lex for <=, >=, ==, != BEFORE the single-char fall-through\". The pseudocode list stays pinned in every Implementer turn so each patch can be informed by the full plan, not just the most recent diagnosis. Optionally list `files_to_create` for net-new files. Available only to the Planner role; calling this hands off to the Implementer.",
             json!({
                 "type": "object",
                 "properties": {
                     "plan": {"type": "string"},
-                    "files_to_create": {"type": "array", "items": {"type": "string"}}
+                    "files_to_create": {"type": "array", "items": {"type": "string"}},
+                    "pseudocode": {"type": "array", "items": {"type": "string"}, "description": "Numbered concrete change list; one entry per distinct edit."}
                 },
                 "required": ["plan"]
             }),

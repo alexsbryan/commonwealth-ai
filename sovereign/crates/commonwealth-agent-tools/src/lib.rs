@@ -41,7 +41,8 @@ pub mod syntax;
 
 pub use primitive::{
     AgentDoneArgs, AgentPlanArgs, HandoffToEvaluatorArgs, HandoffToImplementerArgs,
-    InspectIntent, PatchFileArgs, Primitive, PrimitiveKind, SmokeArgs, WriteFileArgs,
+    InspectIntent, PatchFileArgs, Primitive, PrimitiveKind, ReplaceFunctionArgs, SmokeArgs,
+    WriteFileArgs,
 };
 pub use result::{ToolError, ToolResult};
 pub use registry::Registry;
