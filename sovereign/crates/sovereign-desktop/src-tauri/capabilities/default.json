@@ -9,6 +9,7 @@
     "shell:default",
     "dialog:default",
     "dialog:allow-open",
+    "deep-link:default",
     {
       "identifier": "core:event:allow-emit",
       "allow": [{ "event": "*" }]

@@ -30,12 +30,25 @@ that must move together; bump them all in a single commit:
 
 | File | Field |
 |------|-------|
-| `sovereign/crates/sovereign-desktop/src-tauri/Cargo.toml` | `package.version` |
+| `Cargo.toml` (workspace root) | `workspace.package.version` |
 | `sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json` | `version` |
 | `sovereign/crates/sovereign-desktop/package.json` | `version` |
 
-A pre-flight script verifying these match is a good follow-up; not in
-v1.
+The desktop crate's `src-tauri/Cargo.toml` inherits via
+`version.workspace = true`; do NOT add a `version = "…"` line there —
+that would diverge from every other crate in the workspace. Bumping
+the workspace root version moves all 30+ crates in lockstep, which is
+the intended behaviour pre-1.0 (single repo-wide version).
+
+Verify the three are in sync before tagging:
+
+```sh
+scripts/check-desktop-version.sh            # compare all three
+scripts/check-desktop-version.sh 0.2.0      # also require an exact value
+```
+
+The script exits non-zero on any mismatch — wire it into the
+pre-release checklist below and CI gates that care.
 
 Tag format: `desktop-v<MAJOR>.<MINOR>.<PATCH>`. The CLI and daemon use
 their own tag prefixes (`cli-vX.Y.Z`, `daemon-vX.Y.Z`) so all three can
@@ -63,6 +76,8 @@ Run before tagging. None are automated — that's the next iteration.
       with `SOVEREIGN_TESSERACT_BIN` etc. set, confirm the offer
       surfaces and works end-to-end.
 - [ ] Versions bumped (see above).
+- [ ] `scripts/check-desktop-version.sh <new-version>` — exits 0 and
+      reports all three files at the expected value.
 - [ ] `CHANGELOG.md` entry written.
 
 ### 2. Cut the release
