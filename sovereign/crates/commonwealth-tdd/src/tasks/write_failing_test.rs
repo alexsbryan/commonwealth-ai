@@ -21,17 +21,43 @@ pub struct WriteFailingTestArgs {
 
 pub fn write_failing_test(args: WriteFailingTestArgs) -> Trial {
     let workdir_path = args.workdir.path();
+    let framework = detect_framework(workdir_path);
     let test_command = args
         .test_command
-        .unwrap_or_else(|| detect_framework(workdir_path).default_test_command().to_string());
-    let path_hint = args
-        .test_file_hint
-        .as_deref()
-        .map(|p| format!(" Suggested file path: `{p}`."))
-        .unwrap_or_default();
+        .unwrap_or_else(|| framework.default_test_command().to_string());
+    // Resolve the test file path: caller hint wins, otherwise the
+    // framework's convention. The prompt then MANDATES the model
+    // include the resolved path in its write_file action — without
+    // this the apply layer defaults to discover_source_file which
+    // finds the production source (calc.py, src/lib.rs) and the
+    // model ends up rewriting that instead of adding a new test
+    // file. GenerateOneFailing then rejects every candidate
+    // because total_tests didn't increase. Bug surfaced by the
+    // 2026-05-24 real-model BDD probe (synthesis stalled in 7s
+    // because every candidate clobbered calc.py with test code).
+    let resolved_test_path = args.test_file_hint.clone().unwrap_or_else(|| {
+        // Crude framework-default test path naming. The framework
+        // detector's default_test_path lives in the (deleted) red
+        // module; for now use simple conventions inline.
+        match framework {
+            crate::tasks::framework::Framework::Pytest => "tests/test_new_behavior.py".into(),
+            crate::tasks::framework::Framework::Cargo => "tests/new_behavior.rs".into(),
+            crate::tasks::framework::Framework::Vitest
+            | crate::tasks::framework::Framework::Jest => "tests/new_behavior.test.ts".into(),
+            crate::tasks::framework::Framework::GoTest => "new_behavior_test.go".into(),
+        }
+    });
     let prompt = format!(
-        "Write a SINGLE failing test that captures this behavior:\n\n  {}\n\nThe test will be run against the unchanged code. It MUST fail with an assertion-style error to count as discriminating — if it passes, the test isn't testing the new behavior and will be rejected.{}",
-        args.behavior, path_hint,
+        "Write a SINGLE failing test that captures this behavior:\n\n  {behavior}\n\n**CRITICAL: Use `write_file` with an explicit `path` field set to `{path}`.** Otherwise your test code will overwrite the production source instead of adding a new test file, which will fail the fitness check.\n\nThe shape your action MUST take:\n\n```json\n{{\"action\": \"write_file\", \"path\": \"{path}\"}}\n```\n\nfollowed by the test source in a fenced code block.\n\nThe test will be run against the unchanged code. It MUST fail with an assertion-style error to count as discriminating — if it passes, the test isn't testing the new behavior and will be rejected. Use idiomatic {framework_name} test conventions.",
+        behavior = args.behavior,
+        path = resolved_test_path,
+        framework_name = match framework {
+            crate::tasks::framework::Framework::Pytest => "pytest",
+            crate::tasks::framework::Framework::Cargo => "cargo test",
+            crate::tasks::framework::Framework::Vitest => "vitest",
+            crate::tasks::framework::Framework::Jest => "jest",
+            crate::tasks::framework::Framework::GoTest => "go test",
+        },
     );
     Trial {
         workdir: args.workdir,
