@@ -36,7 +36,9 @@ use std::path::Path;
 
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd};
 
-use super::markdown_types::{slugify, LinkKind, MarkdownChunkMetadata, MarkdownLink};
+use super::markdown_types::{
+    scan_wiki_links, slugify, LinkKind, MarkdownChunkMetadata, MarkdownLink,
+};
 use super::{ExtractedDoc, Extractor};
 use crate::error::{Error, Result};
 
@@ -303,11 +305,20 @@ impl<'a> Walker<'a> {
             .to_string();
         let outgoing_links = std::mem::take(&mut self.current.outgoing_links);
         let inline_code_spans = std::mem::take(&mut self.current.inline_code_spans);
+        // Wiki-links are scanned out of the section body post-walk
+        // because pulldown-cmark treats `[[…]]` as plain text. Empty
+        // for any section that doesn't use Obsidian syntax — the
+        // sidecar is free for non-vault corpora.
+        let wiki_links = scan_wiki_links(&body);
 
         if self.heading_stack.is_empty() {
             // Document preamble. Emit as a synthetic depth-0 section
             // only if there's actual prose to preserve.
-            if body.is_empty() && outgoing_links.is_empty() && inline_code_spans.is_empty() {
+            if body.is_empty()
+                && outgoing_links.is_empty()
+                && inline_code_spans.is_empty()
+                && wiki_links.is_empty()
+            {
                 return;
             }
             self.out.push(MarkdownSection {
@@ -319,6 +330,7 @@ impl<'a> Walker<'a> {
                     heading_anchor: String::new(),
                     outgoing_links,
                     inline_code_spans,
+                    wiki_links,
                 },
             });
             return;
@@ -337,6 +349,7 @@ impl<'a> Walker<'a> {
                 heading_anchor,
                 outgoing_links,
                 inline_code_spans,
+                wiki_links,
             },
         });
     }

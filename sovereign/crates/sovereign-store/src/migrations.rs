@@ -613,6 +613,54 @@ pub fn run_conv_tiered_migration(conn: &Connection) -> rusqlite::Result<()> {
     )
 }
 
+/// Vault-wide synthesis RAPTOR (spec
+/// `~/.claude/plans/let-s-get-into-raptor-wise-bachman.md`,
+/// "vault_themes" section). Mirrors `conv_raptor_nodes` but keyed at
+/// vault-scope: each row is one cross-note theme derived by clustering
+/// the per-note RAPTOR cluster summaries. Surfaces in the briefing as
+/// a "Vault themes" prompt block alongside the per-note conv-tiered
+/// briefing so the synth model gets both fine-grained note context AND
+/// cross-note synthesis context.
+///
+/// Independent table (not a level-N row inside `conv_raptor_nodes`)
+/// because the grouping key differs: `conv_raptor_nodes` is keyed by
+/// `(corpus_id, conv_uuid)` where `conv_uuid = source_doc_id` for the
+/// folder case (per-note); a vault-wide theme has NO single
+/// source_doc_id — its members are multiple notes. Forcing the
+/// per-note schema would require a sentinel conv_uuid and lose the
+/// JSON array of member notes.
+pub fn run_vault_themes_migration(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS vault_themes (
+            corpus_id              TEXT    NOT NULL,
+            theme_id               TEXT    NOT NULL,
+            summary                TEXT    NOT NULL,
+            -- Raw little-endian f32 bytes — same encoding as
+            -- conv_raptor_nodes.summary_embedding so retrieval-side
+            -- helpers can reuse the f32-blob decode path.
+            summary_embedding      BLOB    NOT NULL,
+            -- JSON array of source_doc_id strings — the notes whose
+            -- per-note RAPTOR cluster summaries clustered into this
+            -- theme. Empty array (`[]`) is forbidden by the synthesis
+            -- pass but the schema doesn't enforce it; readers should
+            -- skip themes with no members.
+            member_source_doc_ids_json TEXT NOT NULL,
+            -- Mean intra-cluster cosine of the per-note summaries that
+            -- mapped to this theme. Range [0, 1]; higher = the theme
+            -- collapses notes about a single coherent topic, lower =
+            -- the theme straddles loosely-related notes.
+            cluster_coherence      REAL    NOT NULL,
+            created_at             INTEGER NOT NULL,
+            PRIMARY KEY (corpus_id, theme_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_vault_themes_corpus
+            ON vault_themes(corpus_id);
+        ",
+    )
+}
+
 /// GliNER-extracted per-chunk entities (spec
 /// `sovereign/docs/specs/CONV_TIERED_PORT.md` §"Phase 1 — GliNER
 /// per-chunk entities"). Distinct from the LLM-extracted entities

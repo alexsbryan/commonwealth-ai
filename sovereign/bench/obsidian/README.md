@@ -1,7 +1,7 @@
 # Obsidian-vault bench eval
 
-Bench harness for tuning `obsidian_atlas` enrichment against Alex's
-real vault at `/Users/alexsbryan/Documents/Obsidian Vault`.
+Bench harness for scoring Phase-1 atlas atom extraction against
+Alex's real vault at `/Users/alexsbryan/Documents/Obsidian Vault`.
 
 ## Why this exists
 
@@ -13,13 +13,32 @@ system, market design, music criticism — heterogeneous topics, heavy
 on named institutions / mechanisms / dollar figures, often opening
 with conversational scaffolding ("Based on our discussion…").
 
-`obsidian_atlas` ships as a thin forwarding wrapper around
-`literary_atlas` (see
-`corpus-engine/src/enrichment/pipeline/pipelines/obsidian_atlas.rs`).
-This bench measures where literary-style prompting falls down on
-non-fiction vault prose; the bench output is the tuning signal that
-determines whether (and how) `obsidian_atlas` should diverge from
-its parent.
+The bench measures where literary-style prompting falls down on
+non-fiction vault prose.
+
+## Pipeline pairing (2026-05-23 vault port)
+
+The legacy `obsidian_atlas` pipeline was retired when live vault
+chat moved to the tiered RAPTOR + GLiNER surface (see
+`sovereign/docs/TIERED_RETRIEVAL.md` + `PROGRESSIVE_ENRICHMENT.md`).
+The tiered pipeline emits per-note RAPTOR trees and `chunk_entities`
+mentions instead of Phase-1 typed atoms; the 5 argumentative axes
+(`mechanism`, `named_position`, `evidence`, `opposition`,
+`concession`) drop to ~0 against the tiered output. v2 will add a
+typed-extension pass over RAPTOR summaries that restores these axes.
+
+**For bench scoring today**, pin the corpus to `literary_atlas`:
+```bash
+sovereign enrich init obsidian-vault --source "$VAULT" --pipeline literary_atlas --force
+sovereign enrich build obsidian-vault
+sovereign bench obsidian --report /tmp/r.json
+```
+
+**For live vault chat**, do nothing — registering the vault via
+`LocalCorpusManager::register` + ingest routes through
+`FolderTieredProvider` automatically. The bench corpus and the live
+corpus are independent SQLite namespaces; running one does not
+disturb the other.
 
 ## Files
 

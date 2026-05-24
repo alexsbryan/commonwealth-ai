@@ -18,10 +18,15 @@
 //!
 //!     export SOVEREIGN_OBSIDIAN_VAULT="/Users/alexsbryan/Documents/Obsidian Vault"
 //!
-//!     # one-time, per major content shift in the vault
+//!     # one-time, per major content shift in the vault.
+//!     # `obsidian_atlas` was retired when vault corpora moved to the
+//!     # tiered RAPTOR + GLiNER surface. The bench still scores Phase-1
+//!     # `atoms.json`, which only `literary_atlas` produces today, so the
+//!     # bench-scoring path stays on literary_atlas while live vault chat
+//!     # uses the tiered pipeline. v2 will restore tiered-side typed atoms.
 //!     sovereign enrich init obsidian-vault \
 //!         --source "$SOVEREIGN_OBSIDIAN_VAULT" \
-//!         --pipeline obsidian_atlas --force
+//!         --pipeline literary_atlas --force
 //!     sovereign enrich build obsidian-vault
 //!
 //!     # every prompt-tuning iteration

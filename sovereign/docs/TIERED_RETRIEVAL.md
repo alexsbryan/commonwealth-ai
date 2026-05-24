@@ -2,7 +2,7 @@
 
 A corpus-agnostic enrichment architecture that exposes retrieval capability in three progressive tiers, so users can begin querying *useful* answers within seconds of attach instead of waiting for the full enrichment pipeline to complete.
 
-> **Status:** Phase A (attached documents) shipped 2026-05-22. Phase B (port to other corpora) is the next sprint, scoped below.
+> **Status:** Phase A (attached documents) shipped 2026-05-22. Phase B port to conversations shipped 2026-05-23. Phase B port to Obsidian vaults shipped 2026-05-24 (per-note RAPTOR + GLiNER + vault-wide synthesis themes + incremental sweeper hooks; the legacy `obsidian_atlas` Phase-1+ pipeline was retired in the same commit).
 
 ## Why
 
@@ -149,7 +149,7 @@ The builders are corpus-agnostic by signature. The corpus-specific work per port
 |---|---|---|---|
 | Attached documents | `document_chunks` | shipped ✓ | `DocumentAssetManager::ingest` |
 | Conversations | `messages` + embeddings | New `conversation_skeleton` sidecar table; reuse `raptor_nodes` + `asset_motifs` with a `source_id` column already present | Run on conversation seal (when the conversation goes inactive past a threshold) |
-| Obsidian vault | Corpus-engine chunks per note | New `vault_skeleton` table per vault root; treat `[[wiki-links]]` parsed from markdown as pre-built entity-co-occurrence edges (skip the T2 LLM pass entirely for vaults — the user did the entity tagging by hand) | Run on vault sync; incremental per-note re-enrichment when a file changes |
+| Obsidian vault | Corpus-engine chunks per note | shipped 2026-05-24 ✓ — `[[wiki-links]]` parsed into `MarkdownChunkMetadata.wiki_links`, per-note RAPTOR via `FolderTieredProvider`, new `vault_themes` table for cross-note synthesis, incremental sweeper hook re-enriches only changed notes. `vault_skeleton` table NOT added — per-note `conv_skeletons` row keyed by `source_doc_id` was sufficient; `vault_themes` is the only schema add. | Vault sync via `LocalCorpusManager::ingest` (one-shot); incremental delta on watched-sweep via `CorpusEngine::reindex_changed_sources_tiered` |
 | Wikipedia corpus | Corpus-engine chunks per article | `WikipediaGraph` (already built, lives in `corpus-engine/src/wikipedia_graph.rs`) IS the T2 entity graph — just adapt the EntityGraph trait to read from it. T3 RAPTOR-on-corpus is the new work | Run on corpus ingest completion |
 | SEP (Stanford Encyclopedia of Philosophy) | Existing corpus index | SEP has its own atlas/atom infrastructure (`sovereign-tools::atlas_*`); the heaviest port — likely needs a translation layer between SEP's atom shape and our `RaptorNode` shape | Existing atlas-postinstall hook |
 

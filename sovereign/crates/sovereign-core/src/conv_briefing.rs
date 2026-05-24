@@ -49,7 +49,9 @@ use std::sync::Arc;
 
 use corpus_engine::ScoredChunk;
 
-use crate::conv_tiered::{ConvRaptorNodeRow, ConvSkeletonRow, ConvTieredReader};
+use crate::conv_tiered::{
+    ConvRaptorNodeRow, ConvSkeletonRow, ConvTieredReader, VaultThemeRow,
+};
 
 /// Display-category strings that route through the tiered (RAPTOR +
 /// chunk_entities + PPR) retrieval path. Watched folders join
@@ -57,7 +59,14 @@ use crate::conv_tiered::{ConvRaptorNodeRow, ConvSkeletonRow, ConvTieredReader};
 /// / chunk_entities tables under the same shape — `conv_uuid` keyed
 /// on `source_doc_id` in both cases (one RAPTOR tree per
 /// conversation export, one per file inside a watched folder).
-pub const TIERED_DISPLAY_CATEGORIES: &[&str] = &["conversation", "watched_folder"];
+///
+/// `"vault"` is the third category — Obsidian-style vault corpora,
+/// added when the vault port replaced the legacy `obsidian_atlas`
+/// pipeline with the tiered surface. Vault corpora reuse the
+/// watched-folder dispatch shape (one RAPTOR tree per note) but
+/// surface in the briefing as "Vault context" so the user sees the
+/// right label.
+pub const TIERED_DISPLAY_CATEGORIES: &[&str] = &["conversation", "watched_folder", "vault"];
 
 /// True if `cat` names a tiered-enrichment-bearing corpus category.
 /// Used by both `build_conv_tiered_briefings` and
@@ -308,6 +317,127 @@ pub async fn build_conv_tiered_briefings(
     }
 }
 
+/// Render the vault-wide synthesis briefing block — "Vault themes"
+/// surfacing cross-note clusters that intersect the retrieval hits.
+/// Returns an empty string when there are no vault-category hits OR
+/// when no themes intersect the hit set, so the caller can safely
+/// `.push_str(&out)` without checking.
+///
+/// Mechanism mirrors `build_conv_tiered_briefings`: scan chunks for
+/// vault-category corpora, collect the unique source_doc_ids hit per
+/// vault, fetch the corpus's `vault_themes` (already ordered by
+/// `cluster_coherence DESC` in storage), keep themes whose
+/// `member_source_doc_ids` intersect the hit set, cap render count
+/// to keep prompt budget bounded.
+///
+/// Stitches in alongside `ConvBriefingPayload.rendered` — the
+/// caller writes:
+///
+/// ```ignore
+/// let conv_block = build_conv_tiered_briefings(store, chunks, cats).await;
+/// let vault_block = build_vault_synthesis_briefings(store, chunks, cats).await;
+/// prompt.push_str(&conv_block.rendered);
+/// prompt.push_str(&vault_block);
+/// ```
+pub async fn build_vault_synthesis_briefings(
+    store: &Arc<dyn ConvTieredReader>,
+    chunks: &[ScoredChunk],
+    display_categories: Option<&HashMap<String, String>>,
+) -> String {
+    // Max themes rendered per corpus. Keeps the synthesis block from
+    // ballooning when a vault has dozens of marginally-related themes
+    // that all intersect a broad query. Tight first, broad later — the
+    // store already orders by cluster_coherence DESC.
+    const MAX_THEMES_PER_CORPUS: usize = 5;
+
+    let Some(display) = display_categories else {
+        return String::new();
+    };
+
+    // Collect (corpus_id -> set<source_doc_id>) for vault-category hits.
+    let mut vault_hits: HashMap<String, std::collections::HashSet<String>> =
+        HashMap::new();
+    for c in chunks {
+        let Some(category) = display.get(&c.corpus_id) else {
+            continue;
+        };
+        if category != "vault" {
+            continue;
+        }
+        let Some(source_doc) = c.source_doc_id.as_deref() else {
+            continue;
+        };
+        vault_hits
+            .entry(c.corpus_id.clone())
+            .or_default()
+            .insert(source_doc.to_string());
+    }
+    if vault_hits.is_empty() {
+        return String::new();
+    }
+
+    // For each vault corpus, fetch its themes + filter to those whose
+    // member notes intersect the hit set.
+    let mut matched: Vec<(String, VaultThemeRow, usize)> = Vec::new();
+    for (corpus_id, hit_notes) in &vault_hits {
+        let themes = match store.list_vault_themes_for_corpus(corpus_id).await {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        let mut taken = 0usize;
+        for theme in themes {
+            let members: Vec<String> =
+                serde_json::from_str(&theme.member_source_doc_ids_json)
+                    .unwrap_or_default();
+            let hit_overlap = members.iter().filter(|m| hit_notes.contains(*m)).count();
+            if hit_overlap == 0 {
+                continue;
+            }
+            matched.push((corpus_id.clone(), theme, hit_overlap));
+            taken += 1;
+            if taken >= MAX_THEMES_PER_CORPUS {
+                break;
+            }
+        }
+    }
+    if matched.is_empty() {
+        return String::new();
+    }
+
+    // Sort by hit-overlap DESC then coherence DESC so the themes the
+    // query lit up most strongly come first, ties broken by store
+    // ordering's coherence rank.
+    matched.sort_by(|a, b| {
+        b.2.cmp(&a.2)
+            .then_with(|| b.1.cluster_coherence.partial_cmp(&a.1.cluster_coherence)
+                .unwrap_or(std::cmp::Ordering::Equal))
+    });
+
+    let mut out = String::from("## Vault themes\n");
+    out.push_str(
+        "Cross-note themes recurring across the retrieved vault notes. Use \
+         these to ground synthesis in the vault's broader patterns, not just \
+         the specific notes hit:\n\n",
+    );
+    for (_corpus, theme, hit_overlap) in matched {
+        let member_count = serde_json::from_str::<Vec<String>>(
+            &theme.member_source_doc_ids_json,
+        )
+        .map(|v| v.len())
+        .unwrap_or(0);
+        out.push_str(&format!(
+            "- **{}** — {} hit note{} of {} member{}\n",
+            sanitize_overview(theme.summary.trim()),
+            hit_overlap,
+            plural(hit_overlap),
+            member_count,
+            plural(member_count),
+        ));
+    }
+    out.push('\n');
+    out
+}
+
 /// Pull the top leaf clusters (level 0) for one conv, ranked by
 /// cluster_coherence descending so the most-distinctive signposts
 /// surface first. Tiny convs return a single synthetic node — its
@@ -349,61 +479,34 @@ async fn fetch_signposts(
 /// Format the briefings into a prompt block. Deep mode renders bullets
 /// per cluster signpost; shallow mode renders one bullet per conv.
 ///
-/// Header text adapts to the briefings' source categories: pure
-/// conversation hits use "Conversation context"; pure watched-folder
-/// hits use "Watched folder context"; mixed hits use the combined
-/// "Conversation & watched folder context". The Deep-mode framing
-/// stays consistent because the rendering shape ("source title —
-/// hits across chunks") works uniformly for both source types.
+/// Header text adapts to the source categories present in the
+/// briefing set — pure-conversation hits read "Conversation context",
+/// pure-vault hits read "Vault context", mixed sets join the labels
+/// with `&`. Deep-mode framing stays uniform because the rendering
+/// shape ("source title — hits across chunks") works for every
+/// tiered source type.
 fn render_briefings(briefings: &[ConvBriefing], mode: BriefingMode) -> String {
     if briefings.is_empty() {
         return String::new();
     }
-    let has_conv = briefings.iter().any(|b| b.source_category == "conversation");
-    let has_folder = briefings.iter().any(|b| b.source_category == "watched_folder");
-    let header = match (has_conv, has_folder) {
-        (true, true) => "## Conversation & watched folder context",
-        (false, true) => "## Watched folder context",
-        _ => "## Conversation context",
-    };
-    let deep_intro = match (has_conv, has_folder) {
-        (true, true) => {
-            "These conversations and watched folders carry most of the \
-             retrieved chunks. Each is summarised with its top cluster \
-             signposts so you can ground responses in the source's own \
-             structure:\n\n"
-        }
-        (false, true) => {
-            "These watched folders carry most of the retrieved chunks. \
-             Each is summarised with its top cluster signposts so you \
-             can ground responses in the folder's own structure:\n\n"
-        }
-        _ => {
-            "These conversations carry most of the retrieved chunks. \
-             Each is summarised with its top cluster signposts so you \
-             can ground responses in the conversation's own structure:\n\n"
-        }
-    };
-    let shallow_intro = match (has_conv, has_folder) {
-        (true, true) => {
-            "Conversations and watched folders contributing to the \
-             retrieved chunks (ordered by hit count):\n\n"
-        }
-        (false, true) => {
-            "Watched folders contributing to the retrieved chunks \
-             (ordered by hit count):\n\n"
-        }
-        _ => {
-            "Conversations contributing to the retrieved chunks \
-             (ordered by hit count):\n\n"
-        }
-    };
+    let labels = source_labels_present(briefings);
+    let header = format!("## {} context", join_with_and(&labels.singular));
+    let deep_intro = format!(
+        "These {} carry most of the retrieved chunks. Each is summarised \
+         with its top cluster signposts so you can ground responses in \
+         the source's own structure:\n\n",
+        join_with_and(&labels.plural)
+    );
+    let shallow_intro = format!(
+        "{} contributing to the retrieved chunks (ordered by hit count):\n\n",
+        capitalise_first(&join_with_and(&labels.plural))
+    );
     let mut s = String::new();
-    s.push_str(header);
+    s.push_str(&header);
     s.push('\n');
     match mode {
         BriefingMode::Deep => {
-            s.push_str(deep_intro);
+            s.push_str(&deep_intro);
             for b in briefings {
                 s.push_str(&format!(
                     "**{}** — {} hit{} across {} chunk{}\n",
@@ -430,7 +533,7 @@ fn render_briefings(briefings: &[ConvBriefing], mode: BriefingMode) -> String {
             }
         }
         BriefingMode::Shallow => {
-            s.push_str(shallow_intro);
+            s.push_str(&shallow_intro);
             for b in briefings {
                 s.push_str(&format!(
                     "- **{}** — {} hit{} across {} chunk{}\n",
@@ -446,6 +549,76 @@ fn render_briefings(briefings: &[ConvBriefing], mode: BriefingMode) -> String {
         BriefingMode::Empty => {}
     }
     s
+}
+
+/// Singular + plural human labels for each source-category present in
+/// the briefing set. Keyed off the in-set categories so a brief that
+/// only contains vault hits doesn't drag the word "conversation" into
+/// the header. Order is stable: conversation → vault → watched folder
+/// → other (alphabetical), so a mixed brief reads
+/// "Conversation & vault context", not "Vault & conversation context".
+struct SourceLabels {
+    singular: Vec<&'static str>,
+    plural: Vec<&'static str>,
+}
+
+fn source_labels_present(briefings: &[ConvBriefing]) -> SourceLabels {
+    let mut seen: Vec<&str> = briefings
+        .iter()
+        .map(|b| b.source_category.as_str())
+        .collect();
+    seen.sort();
+    seen.dedup();
+    let ordering = |cat: &str| -> usize {
+        match cat {
+            "conversation" => 0,
+            "vault" => 1,
+            "watched_folder" => 2,
+            _ => 3,
+        }
+    };
+    seen.sort_by_key(|c| (ordering(c), *c));
+    let mut singular = Vec::new();
+    let mut plural = Vec::new();
+    for cat in seen {
+        let (s, p) = label_pair(cat);
+        singular.push(s);
+        plural.push(p);
+    }
+    SourceLabels { singular, plural }
+}
+
+fn label_pair(category: &str) -> (&'static str, &'static str) {
+    match category {
+        "conversation" => ("Conversation", "conversations"),
+        "vault" => ("Vault", "vaults"),
+        "watched_folder" => ("Watched folder", "watched folders"),
+        // Unknown categories shouldn't reach the renderer (gated by
+        // `is_tiered_category` upstream) but if one slips through,
+        // fall back to a neutral generic label rather than panicking.
+        _ => ("Source", "sources"),
+    }
+}
+
+fn join_with_and(parts: &[&str]) -> String {
+    match parts.len() {
+        0 => String::new(),
+        1 => parts[0].to_string(),
+        2 => format!("{} & {}", parts[0], parts[1]),
+        n => {
+            // 3+ items: Oxford-style comma list with `&` before the last.
+            let head = parts[..n - 1].join(", ");
+            format!("{}, & {}", head, parts[n - 1])
+        }
+    }
+}
+
+fn capitalise_first(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) => c.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
 }
 
 /// Briefings render conv titles inline; the threaded_turns chunker
@@ -525,6 +698,161 @@ mod tests {
         assert_eq!(BriefingMode::Deep.label(), "deep_top3");
         assert_eq!(BriefingMode::Shallow.label(), "shallow_top8");
         assert_eq!(BriefingMode::Empty.label(), "empty");
+    }
+
+    fn mk_briefing(category: &str) -> ConvBriefing {
+        ConvBriefing {
+            conv_uuid: "u".into(),
+            overview: "Untitled".into(),
+            hit_count: 1,
+            chunk_count: 1,
+            signposts: Vec::new(),
+            source_category: category.into(),
+        }
+    }
+
+    #[test]
+    fn vault_only_briefing_renders_vault_header() {
+        let briefings = vec![mk_briefing("vault")];
+        let out = render_briefings(&briefings, BriefingMode::Shallow);
+        assert!(out.starts_with("## Vault context"), "header was: {out}");
+        assert!(out.contains("Vaults contributing"), "intro was: {out}");
+    }
+
+    #[test]
+    fn mixed_categories_render_in_canonical_order() {
+        // Conversation comes before vault comes before watched_folder
+        // by source_labels_present's ordering, regardless of insertion
+        // order.
+        let briefings = vec![
+            mk_briefing("watched_folder"),
+            mk_briefing("vault"),
+            mk_briefing("conversation"),
+        ];
+        let out = render_briefings(&briefings, BriefingMode::Shallow);
+        assert!(
+            out.starts_with("## Conversation, Vault, & Watched folder context"),
+            "header was: {out}"
+        );
+    }
+
+    #[test]
+    fn unknown_category_falls_back_to_neutral_label() {
+        // Defensive: a category that slipped through (shouldn't happen
+        // because is_tiered_category gates upstream) renders neutrally
+        // instead of panicking.
+        let briefings = vec![mk_briefing("alien_corpus")];
+        let out = render_briefings(&briefings, BriefingMode::Shallow);
+        assert!(out.starts_with("## Source context"), "header was: {out}");
+    }
+
+    #[test]
+    fn vault_is_a_tiered_category() {
+        assert!(is_tiered_category("vault"));
+        assert!(is_tiered_category("conversation"));
+        assert!(is_tiered_category("watched_folder"));
+        assert!(!is_tiered_category("personal"));
+    }
+
+    /// Minimal `ConvTieredReader` for unit-testing the vault
+    /// synthesis briefing render path. Returns whatever themes the
+    /// test pre-loads; all other trait methods return empty results.
+    #[derive(Default)]
+    struct StubVaultReader {
+        themes: HashMap<String, Vec<VaultThemeRow>>,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::conv_tiered::ConvTieredReader for StubVaultReader {
+        async fn list_conv_skeletons_for_corpus(
+            &self,
+            _corpus_id: &str,
+            _conv_uuids: &[String],
+        ) -> crate::error::Result<Vec<ConvSkeletonRow>> {
+            Ok(Vec::new())
+        }
+        async fn list_conv_raptor_nodes(
+            &self,
+            _corpus_id: &str,
+            _conv_uuid: &str,
+        ) -> crate::error::Result<Vec<ConvRaptorNodeRow>> {
+            Ok(Vec::new())
+        }
+        async fn list_chunk_entities_for_conv(
+            &self,
+            _corpus_id: &str,
+            _conv_uuid: &str,
+        ) -> crate::error::Result<Vec<crate::conv_tiered::ChunkEntityRow>>
+        {
+            Ok(Vec::new())
+        }
+        async fn get_chunk_entity_progress(
+            &self,
+            _corpus_id: &str,
+        ) -> crate::error::Result<
+            Option<crate::conv_tiered::ChunkEntityProgressRow>,
+        > {
+            Ok(None)
+        }
+        async fn list_vault_themes_for_corpus(
+            &self,
+            corpus_id: &str,
+        ) -> crate::error::Result<Vec<VaultThemeRow>> {
+            Ok(self.themes.get(corpus_id).cloned().unwrap_or_default())
+        }
+    }
+
+    fn mk_vault_chunk(corpus: &str, note: &str) -> ScoredChunk {
+        mk_chunk(corpus, Some(note))
+    }
+
+    fn mk_theme(corpus: &str, theme_id: &str, summary: &str, members: &[&str], coherence: f32) -> VaultThemeRow {
+        VaultThemeRow {
+            corpus_id: corpus.into(),
+            theme_id: theme_id.into(),
+            summary: summary.into(),
+            summary_embedding: vec![0.0; 4],
+            member_source_doc_ids_json: serde_json::to_string(
+                &members.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+            )
+            .unwrap(),
+            cluster_coherence: coherence,
+            created_at: 0,
+        }
+    }
+
+    #[tokio::test]
+    async fn vault_synthesis_renders_intersecting_themes() {
+        let mut themes = HashMap::new();
+        themes.insert(
+            "vault-1".to_string(),
+            vec![
+                mk_theme("vault-1", "t0", "Markets vs commons", &["note-a", "note-b"], 0.9),
+                mk_theme("vault-1", "t1", "Unrelated theme", &["note-z"], 0.85),
+            ],
+        );
+        let reader: Arc<dyn ConvTieredReader> = Arc::new(StubVaultReader { themes });
+        let mut cats = HashMap::new();
+        cats.insert("vault-1".to_string(), "vault".to_string());
+        let chunks = vec![mk_vault_chunk("vault-1", "note-a")];
+        let out =
+            build_vault_synthesis_briefings(&reader, &chunks, Some(&cats)).await;
+        assert!(out.contains("## Vault themes"), "header missing: {out}");
+        assert!(out.contains("Markets vs commons"), "theme missing: {out}");
+        assert!(
+            !out.contains("Unrelated theme"),
+            "non-intersecting theme should not render: {out}"
+        );
+    }
+
+    #[tokio::test]
+    async fn vault_synthesis_returns_empty_with_no_vault_hits() {
+        let reader: Arc<dyn ConvTieredReader> = Arc::new(StubVaultReader::default());
+        let mut cats = HashMap::new();
+        cats.insert("conv-1".to_string(), "conversation".to_string());
+        let chunks = vec![mk_chunk("conv-1", Some("uuid"))];
+        let out = build_vault_synthesis_briefings(&reader, &chunks, Some(&cats)).await;
+        assert!(out.is_empty(), "non-vault hits should render nothing: {out}");
     }
 
     // Module-internal helper: deciding hit concentration given a chunk
