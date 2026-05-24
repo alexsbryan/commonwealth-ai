@@ -2512,19 +2512,17 @@ pub async fn list_corpora(
     let mut entries = Vec::new();
     for b in &builtins {
         let registry_entry = engine.registry().find_entry(&b.id);
-        // An index dir with zero committed chunks is an abandoned shell
-        // (e.g. a previous install that crashed before the first
-        // tier-2 flush). The recipe got far enough to write
-        // `_corpus_meta.json` but no chunks landed in LanceDB. Treating
-        // it as "installed" misleads the user into thinking the
-        // corpus is partially populated when in fact nothing is
-        // searchable. Filter those out so the row falls back to
-        // "not_installed" and the Install button reappears — the
-        // ingest pipeline will resume cleanly from `committed_iter_pos
-        // = 0` since the on-disk state is consistent.
+        // `installed_indexes()` already filters partial/abandoned-shell
+        // indices by `ingestion_in_progress=true` (a crashed install
+        // never reaches `mark_ingestion_complete()`). Any entry that
+        // survives that filter is semantically installed — including
+        // watcher-driven corpora like `wikipedia-newsworthy` whose
+        // steady state is chunk_count=0 until the first watcher tick.
+        // Re-introducing a `chunk_count > 0` gate here would hide
+        // those forever, leaving the layer chip stuck on "Add".
         let installed_info = installed
             .iter()
-            .find(|i| i.corpus_id == b.id && !i.is_shard && i.chunk_count > 0);
+            .find(|i| i.corpus_id == b.id && !i.is_shard);
         let is_installing = installing
             .get(&b.id)
             .is_some_and(|p| p.phase != "complete" && p.phase != "failed");
@@ -3564,6 +3562,98 @@ pub async fn lc_can_expand(corpus_id: String) -> Result<bool, String> {
         Err(_) => return Ok(false),
     };
     Ok(probe.scope.map(|s| s.expandable).unwrap_or(false))
+}
+
+/// Tauri command: read `/internal/enrichment/status?corpus_id=…` and
+/// surface the generic per-corpus enrichment progress (phase,
+/// fraction-complete, message, error) to any UI component that
+/// renders a corpus card. Works for every pipeline that writes
+/// `_enrichment_state.json` — watched folders, structural atlas
+/// post-install, conversation RAPTOR, future pipelines.
+#[tauri::command]
+pub async fn lc_enrichment_status(corpus_id: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/enrichment/status");
+    let resp = client
+        .get(&url)
+        .query(&[("corpus_id", corpus_id.as_str())])
+        .send()
+        .await
+        .map_err(|e| format!("GET /internal/enrichment/status: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/enrichment/status returned {status}: {body}"
+        ));
+    }
+    resp.json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("parse enrichment status body: {e}"))
+}
+
+/// Tauri command: ask the daemon to fire one watcher tick now,
+/// bypassing the 24h interval. Powers the "Run tick now" affordance
+/// under the Newsworthy chip — the only path operators have to
+/// recover from a stale snapshot or kick off the first portal ingest
+/// after this node becomes leader.
+#[tauri::command]
+pub async fn lc_newsworthy_tick() -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/newsworthy/tick");
+    let resp = client
+        .post(&url)
+        .send()
+        .await
+        .map_err(|e| format!("POST /internal/newsworthy/tick: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/newsworthy/tick returned {status}: {body}"
+        ));
+    }
+    resp.json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("parse newsworthy tick body: {e}"))
+}
+
+/// Tauri command: read `/internal/newsworthy/status` and surface it
+/// to the desktop. Powers the per-layer "watcher status" line under
+/// the Newsworthy chip in Settings → Knowledge — gives the user the
+/// glassbox view the layered-corpus UI was missing (role, last tick,
+/// tracked total, current leader). Returns the parsed JSON body as a
+/// `serde_json::Value` so the Svelte side can iterate the shape
+/// without a duplicated TypeScript schema; the backend route is the
+/// source of truth.
+#[tauri::command]
+pub async fn lc_newsworthy_status() -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/newsworthy/status");
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("GET /internal/newsworthy/status: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/newsworthy/status returned {status}: {body}"
+        ));
+    }
+    resp.json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("parse newsworthy status body: {e}"))
 }
 
 /// Tauri command: kick off the layered Wikipedia setup. Installs

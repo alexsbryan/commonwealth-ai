@@ -4901,13 +4901,48 @@ impl EmbeddedLlamaCpp {
         // this a non-issue; tighter hosts can opt out). Failure is
         // logged but non-fatal — the daemon still serves all callers
         // through `fast` as before.
+        //
+        // **Recurrent-arch gate (2026-05-24).** Models whose gguf
+        // architecture is recurrent (qwen*moe / mamba / deltanet /
+        // rwkv / ssm) need `with_n_rs_seq(>= n_seq_max)` on every
+        // context that issues a batched decode — the recurrent
+        // layers carry per-sequence state and a low `n_rs_seq`
+        // makes `ctx.decode(batch)` fail with `Decode Error -3:
+        // unknown` the first time a continuous-batched call lands.
+        // FastShort's `from_existing_model` constructor does not
+        // wire `n_rs_seq` (only the lazy primary slot's
+        // `ModelSlot::load` does), so we'd build a ctx that
+        // crashes on its first real request. Symptom observed on
+        // Qwen3.6-35B-A3B-Claude-4.7-Opus-Reasoning-Distilled-APEX-I-
+        // Compact (`qwen3moe` arch) in inner-work first turn,
+        // 2026-05-24. Refuse to construct FastShort for recurrent
+        // models — all callers route through `fast` (n_seq_max=1)
+        // and the speedup is forfeited rather than the daemon
+        // crashing the first time the model is touched.
+        //
+        // The right long-term fix is propagating `n_rs_seq` into
+        // `from_existing_model` so FastShort can serve recurrent
+        // models too; deferred until there's a bench fixture that
+        // covers this combo. Track at [[invariant_fast_short_recurrent_arch]].
         let fast_short_disabled = std::env::var("SOVEREIGN_FAST_SHORT_DISABLE")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
+        let fast_arch = read_gguf_arch(&fast.model);
+        let fast_short_unsafe_arch = is_recurrent_arch(&fast_arch);
         let (fast_short, fast_short_coalescer) = if fast_short_disabled {
             tracing::info!(
                 slot = "fast_short",
                 "skipped (SOVEREIGN_FAST_SHORT_DISABLE=1)"
+            );
+            (None, None)
+        } else if fast_short_unsafe_arch {
+            tracing::warn!(
+                slot = "fast_short",
+                arch = %fast_arch,
+                model_id = %fast.model_id,
+                "skipped — fast slot model has recurrent layers; FastShort \
+                 ctx would crash on first decode (n_rs_seq not propagated \
+                 through from_existing_model). All callers route to `fast`."
             );
             (None, None)
         } else {

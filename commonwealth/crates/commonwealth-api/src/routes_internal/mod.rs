@@ -19,13 +19,19 @@ mod corpus_collaborate;
 mod corpus_ingest;
 mod corpus_queue;
 mod corpus_sync;
+mod enrichment_status;
 mod gossip;
 mod knowledge;
 mod mesh_admin;
 mod model_files;
+mod newsworthy_status;
 mod pipeline_pause;
 
 pub use atlas_status::{atlas_status, AtlasStatusResponse};
+pub use enrichment_status::{enrichment_status, EnrichmentStatusResponse};
+pub use newsworthy_status::{
+    newsworthy_status, newsworthy_tick, NewsworthyStatusResponse, NewsworthyTickResponse,
+};
 pub use corpus_collaborate::{corpus_collaborate, CollaborateRequest};
 pub use corpus_ingest::{
     corpus_cancel, corpus_canonical_stream, corpus_expand, corpus_install, corpus_pause,

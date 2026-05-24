@@ -383,9 +383,26 @@ impl CorpusEngine {
         index.delete_chunks_by_source_doc(source_doc_id).await?;
 
         if chunk_records.is_empty() {
+            // Glassbox: a silent 0-chunk return looks identical to
+            // "reindex never ran" from the operator's view. Emit the
+            // same shape as the success path so log greps catch both.
+            // Distinct event name (`reindex.empty`) keeps the success
+            // counter clean for callers that only want positive
+            // landings, while ensuring failures-to-chunk are visible.
+            let elapsed_ms = t.elapsed().as_millis() as u64;
+            tracing::warn!(
+                corpus_id,
+                source_doc_id,
+                docs_extracted = docs.len(),
+                elapsed_ms,
+                "reindex.empty — extractor produced docs but chunker returned no chunks; \
+                 nothing committed. Common cause: an extractor that strips the document body \
+                 to whitespace (e.g. template-wrapped wikitext where the body lives inside a \
+                 `content=` arg the stripper drops wholesale)."
+            );
             return Ok(ReindexResult::Updated {
                 chunks_written: 0,
-                elapsed_ms: t.elapsed().as_millis() as u64,
+                elapsed_ms,
             });
         }
 

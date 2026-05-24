@@ -444,6 +444,90 @@ export async function startLayeredSetup(): Promise<string[]> {
   return invoke("lc_start_layered_setup");
 }
 
+/// Snapshot from the wikipedia-newsworthy watcher's most recent tick,
+/// plus the live leader election result. Returned shape mirrors
+/// `commonwealth_api::routes_internal::NewsworthyStatusResponse`.
+export interface NewsworthyTickStatus {
+  observed_at: number;
+  node_id_str: string;
+  role_leader: boolean;
+  corpus_installed: boolean;
+  tracked_total: number;
+  owned_total: number;
+  portal_ingested: boolean;
+  errors: number;
+  elapsed_ms: number;
+  tick_interval_secs: number;
+}
+export interface NewsworthyStatus {
+  last_tick: NewsworthyTickStatus | null;
+  /// Live install state — derived from the engine at request time,
+  /// not from the snapshot. Use this for "show install warning"
+  /// decisions; `last_tick.corpus_installed` is the install state at
+  /// last tick (can be hours stale).
+  local_corpus_installed: boolean;
+  leader_node_id: string | null;
+  installed_peer_count: number;
+  self_in_pool: boolean;
+}
+export async function newsworthyStatus(): Promise<NewsworthyStatus> {
+  return invoke("lc_newsworthy_status");
+}
+/// Fire one watcher tick now. The daemon queues the work and returns
+/// immediately; callers poll `newsworthyStatus()` and watch
+/// `last_tick.observed_at` to confirm the tick landed.
+export interface NewsworthyTickAck {
+  queued: boolean;
+  reason: string | null;
+}
+export async function newsworthyTickNow(): Promise<NewsworthyTickAck> {
+  return invoke("lc_newsworthy_tick");
+}
+
+/// Generic per-corpus enrichment progress. Returned shape mirrors
+/// `commonwealth_api::routes_internal::EnrichmentStatusResponse`.
+/// `state` is null when no pipeline has touched the corpus yet (no
+/// state file on disk). Renderable on any corpus card — watched
+/// folder cards, knowledge layer chips, etc.
+export type EnrichmentPhaseTag =
+  | "starting"
+  | "scanning"
+  | "entity_extraction"
+  | "raptor_leaves"
+  | "raptor_tree"
+  | "motif_extraction"
+  | "atom_extraction"
+  | "persisting"
+  | "complete"
+  | "failed"
+  | "stalled";
+
+export interface EnrichmentStateRow {
+  schema_version: number;
+  corpus_id: string;
+  pipeline_id?: string;
+  phase: EnrichmentPhaseTag;
+  step_current: number;
+  step_total: number;
+  message?: string;
+  started_at: number;
+  last_progress_at: number;
+  completed_at?: number;
+  error?: string;
+}
+
+export interface EnrichmentStatus {
+  corpus_id: string;
+  state: EnrichmentStateRow | null;
+  is_terminal: boolean;
+  is_stalled: boolean;
+  fraction_complete: number;
+}
+
+export async function enrichmentStatus(corpusId: string): Promise<EnrichmentStatus> {
+  return invoke("lc_enrichment_status", { corpusId });
+}
+
 export async function removeCorpus(corpusId: string): Promise<number> {
   return invoke("remove_corpus", { corpusId });
 }

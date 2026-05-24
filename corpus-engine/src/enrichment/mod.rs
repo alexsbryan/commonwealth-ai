@@ -21,7 +21,14 @@ pub mod pipeline;
 pub mod sep;
 pub mod skeleton;
 pub(crate) mod skeleton_parse;
+pub mod state;
 pub mod tiered;
+
+pub use state::{
+    sweep_stalled_states, CompositeSink, EnrichmentPhase, EnrichmentProgressSink,
+    EnrichmentState, EnrichmentStateFile, StateFileSink, ENRICHMENT_STATE_FILENAME,
+    STALL_THRESHOLD_SECS,
+};
 
 pub use atlas::{AtlasData, AtlasIngestion, AtlasIngestionConfig, AtlasIngestionRegistry};
 

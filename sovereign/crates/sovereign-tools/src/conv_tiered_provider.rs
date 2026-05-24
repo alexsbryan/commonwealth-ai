@@ -672,15 +672,115 @@ use sovereign_core::conv_tiered::ConvMotifRow;
 pub struct FolderTieredProvider {
     store: Arc<SqliteStateStore>,
     inference: Arc<dyn InferenceProvider>,
+    /// Resolves the index directory for a given corpus id. Required
+    /// for the generic `_enrichment_state.json` sink so the daemon
+    /// (and any restart's stall sweeper) can see progress without the
+    /// provider hard-coding `~/.sovereign/indexes/`. Set when
+    /// constructed from a daemon that knows its index root; left
+    /// `None` in unit tests that don't need durable state.
+    index_dir_resolver: Option<Arc<dyn IndexDirResolver>>,
+}
+
+/// Indirection so the provider can locate the per-corpus index dir
+/// without importing `corpus_engine::CorpusEngine` (which already
+/// depends on this crate via the conv tiered store).
+pub trait IndexDirResolver: Send + Sync {
+    fn resolve(&self, corpus_id: &str) -> Option<std::path::PathBuf>;
+}
+
+/// Concrete resolver that joins `corpus_id` onto a fixed root —
+/// what the daemon installs.
+pub struct StaticIndexDirResolver {
+    pub indexes_root: std::path::PathBuf,
+}
+
+impl IndexDirResolver for StaticIndexDirResolver {
+    fn resolve(&self, corpus_id: &str) -> Option<std::path::PathBuf> {
+        let canonical = self.indexes_root.join(corpus_id);
+        if canonical.exists() {
+            Some(canonical)
+        } else {
+            None
+        }
+    }
 }
 
 impl FolderTieredProvider {
     pub fn new(store: Arc<SqliteStateStore>, inference: Arc<dyn InferenceProvider>) -> Self {
-        Self { store, inference }
+        Self {
+            store,
+            inference,
+            index_dir_resolver: None,
+        }
+    }
+
+    /// Wire the per-corpus index-dir resolver so this provider
+    /// publishes `_enrichment_state.json` while it runs. Daemons
+    /// should always set this; tests can skip it.
+    pub fn with_index_dir_resolver(
+        mut self,
+        resolver: Arc<dyn IndexDirResolver>,
+    ) -> Self {
+        self.index_dir_resolver = Some(resolver);
+        self
     }
 
     pub fn into_handle(self) -> Arc<dyn TieredEnrichmentProvider> {
         Arc::new(self)
+    }
+
+    /// Stamp the `_enrichment_state.json` for a corpus to the given
+    /// phase. Best-effort: a missing resolver or write failure logs
+    /// but never short-circuits the enrichment body — the durable
+    /// outcome lives in the SQLite store regardless.
+    fn stamp_state(
+        &self,
+        corpus_id: &str,
+        phase: corpus_engine::enrichment::state::EnrichmentPhase,
+        step_current: u64,
+        step_total: u64,
+        message: Option<&str>,
+    ) {
+        let Some(resolver) = self.index_dir_resolver.as_ref() else {
+            return;
+        };
+        let Some(index_dir) = resolver.resolve(corpus_id) else {
+            return;
+        };
+        if let Err(e) = corpus_engine::enrichment::state::EnrichmentStateFile::stamp(
+            &index_dir,
+            corpus_id,
+            Some("folder_tiered"),
+            phase,
+            step_current,
+            step_total,
+            message,
+        ) {
+            tracing::warn!(
+                corpus = corpus_id,
+                phase = phase.label(),
+                error = %e,
+                "folder_tiered: enrichment state stamp failed"
+            );
+        }
+    }
+
+    fn fail_state(&self, corpus_id: &str, error: &str) {
+        let Some(resolver) = self.index_dir_resolver.as_ref() else {
+            return;
+        };
+        let Some(index_dir) = resolver.resolve(corpus_id) else {
+            return;
+        };
+        if let Err(e) = corpus_engine::enrichment::state::EnrichmentStateFile::fail(
+            &index_dir, corpus_id, error,
+        ) {
+            tracing::warn!(
+                corpus = corpus_id,
+                error = %e,
+                "folder_tiered: enrichment state fail-stamp failed"
+            );
+        }
     }
 }
 
@@ -694,8 +794,21 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
         embeddings: Vec<Vec<f32>>,
         bucket: ConvBucket,
     ) -> Result<()> {
+        use corpus_engine::enrichment::state::EnrichmentPhase;
         let chunk_count = chunks.len();
         let updated_at = Utc::now().timestamp();
+        // Publish the entry point so the UI flips off the
+        // indistinguishable "starting…" state the moment the
+        // provider claims the corpus. Without this stamp, daemons
+        // that restart mid-Scan look identical to daemons that never
+        // dispatched at all.
+        self.stamp_state(
+            corpus_id,
+            EnrichmentPhase::Scanning,
+            0,
+            chunk_count as u64,
+            Some(&format!("loaded {chunk_count} chunks; bucket {}", bucket.label())),
+        );
         // Folder corpora often have chunks tagged with the source file
         // name as `title`; reuse that as the overview when present,
         // otherwise stamp a stable "Folder: <id>" fallback so the
@@ -725,6 +838,24 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                 | ConvBucket::Medium
                 | ConvBucket::Large
                 | ConvBucket::LongTail => {
+                    // Coarse phase stamp before the LLM-heavy build.
+                    // build_atlas_artifacts is one big call today; we
+                    // can't surface per-leaf progress without
+                    // refactoring it. The Stalled sweeper at daemon
+                    // start treats a stuck RaptorLeaves phase as
+                    // interrupted, so even this coarse stamp is the
+                    // difference between "stuck forever" and "shows
+                    // 'interrupted, retry'".
+                    self.stamp_state(
+                        corpus_id,
+                        EnrichmentPhase::RaptorLeaves,
+                        0,
+                        chunk_count as u64,
+                        Some(&format!(
+                            "building RAPTOR tree over {chunk_count} chunks ({} bucket)",
+                            bucket.label()
+                        )),
+                    );
                     build_folder_artifacts(
                         corpus_id,
                         conv_uuid,
@@ -739,6 +870,13 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
 
         match result {
             Ok((nodes, motifs)) => {
+                self.stamp_state(
+                    corpus_id,
+                    EnrichmentPhase::Persisting,
+                    0,
+                    nodes.len() as u64,
+                    Some(&format!("saving {} RAPTOR nodes", nodes.len())),
+                );
                 if let Err(e) = self
                     .store
                     .save_conv_raptor_nodes(corpus_id, conv_uuid, &nodes)
@@ -754,6 +892,10 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                         updated_at,
                     )
                     .await;
+                    self.fail_state(
+                        corpus_id,
+                        &format!("save_conv_raptor_nodes: {e}"),
+                    );
                     return Err(Error::Database(format!(
                         "folder_tiered: save_conv_raptor_nodes({corpus_id}, {conv_uuid}): {e}"
                     )));
@@ -786,6 +928,17 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                     updated_at,
                 )
                 .await;
+                self.stamp_state(
+                    corpus_id,
+                    EnrichmentPhase::Complete,
+                    nodes.len() as u64,
+                    nodes.len() as u64,
+                    Some(&format!(
+                        "complete — {} nodes, {} motifs",
+                        nodes.len(),
+                        motifs.len()
+                    )),
+                );
                 Ok(())
             }
             Err(e) => {
@@ -799,6 +952,7 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                     updated_at,
                 )
                 .await;
+                self.fail_state(corpus_id, &e.to_string());
                 Err(e)
             }
         }

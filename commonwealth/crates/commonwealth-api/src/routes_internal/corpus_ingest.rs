@@ -749,7 +749,26 @@ pub async fn spawn_corpus_install_with_parameters(
                         build_structural_atlas, build_triage_candidates, effective_tier2_budget,
                         StructuralAtlasOutcome, TriageOutcome,
                     };
+                    use corpus_engine::enrichment::state::{
+                        EnrichmentPhase, EnrichmentStateFile,
+                    };
                     tracing::info!(corpus = %cid, "post-install: structural atlas — start");
+                    // Generic enrichment state stamp so every corpus's
+                    // post-install gets a row in
+                    // `_enrichment_state.json` and the desktop chip
+                    // can render "Extracting atoms" → "Saving" →
+                    // "complete". Daemon restart leaves a Stalled
+                    // entry for the sweeper to pick up.
+                    let corpus_index_dir = indexes.join(&cid);
+                    let _ = EnrichmentStateFile::stamp(
+                        &corpus_index_dir,
+                        &cid,
+                        Some("structural_atlas"),
+                        EnrichmentPhase::AtomExtraction,
+                        0,
+                        0,
+                        Some("walking chunks for structural atom extraction"),
+                    );
                     let atlas_ok = match build_structural_atlas(&cid, indexes.clone(), recipes).await {
                         StructuralAtlasOutcome::Built {
                             atoms_path,
@@ -763,6 +782,15 @@ pub async fn spawn_corpus_install_with_parameters(
                                 elapsed_s = elapsed_secs,
                                 "post-install: structural atlas — built"
                             );
+                            let _ = EnrichmentStateFile::stamp(
+                                &corpus_index_dir,
+                                &cid,
+                                Some("structural_atlas"),
+                                EnrichmentPhase::Complete,
+                                0,
+                                0,
+                                Some(&format!("structural atlas built in {elapsed_secs}s")),
+                            );
                             true
                         }
                         StructuralAtlasOutcome::AlreadyPresent { atoms_path } => {
@@ -771,6 +799,15 @@ pub async fn spawn_corpus_install_with_parameters(
                                 atoms = %atoms_path.display(),
                                 "post-install: structural atlas — already present"
                             );
+                            let _ = EnrichmentStateFile::stamp(
+                                &corpus_index_dir,
+                                &cid,
+                                Some("structural_atlas"),
+                                EnrichmentPhase::Complete,
+                                0,
+                                0,
+                                Some("structural atlas already present"),
+                            );
                             true
                         }
                         StructuralAtlasOutcome::Failed { reason } => {
@@ -778,6 +815,11 @@ pub async fn spawn_corpus_install_with_parameters(
                                 corpus = %cid,
                                 reason,
                                 "post-install: structural atlas — failed (atlas grounding stays off until rebuilt)"
+                            );
+                            let _ = EnrichmentStateFile::fail(
+                                &corpus_index_dir,
+                                &cid,
+                                &format!("structural atlas: {reason}"),
                             );
                             false
                         }
