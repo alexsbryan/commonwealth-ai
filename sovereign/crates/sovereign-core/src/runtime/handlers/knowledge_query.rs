@@ -329,6 +329,7 @@ impl Runtime {
         let hot_corpora = collect_hot_corpora(&context.conversation.messages);
         let per_corpus_overrides =
             build_per_corpus_k_overrides(&hot_corpora, KQ_PER_CORPUS_LIMIT);
+        let enabled_corpora_kq = context.conversation.enabled_corpora.as_deref();
         let mut chunks = self
             .search_corpus_indexes_with_overrides(
                 &embedding,
@@ -336,6 +337,7 @@ impl Runtime {
                 KQ_PER_CORPUS_LIMIT,
                 "KnowledgeQuery",
                 per_corpus_overrides.as_ref(),
+                enabled_corpora_kq,
             )
             .await;
 
@@ -419,11 +421,13 @@ impl Runtime {
                     .await
                     .unwrap_or_default();
                 let entity_chunks = self
-                    .search_corpus_indexes(
+                    .search_corpus_indexes_with_overrides(
                         &entity_emb,
                         entity,
                         entity_query_limit,
                         "EntityBoost",
+                        None,
+                        context.conversation.enabled_corpora.as_deref(),
                     )
                     .await;
                 entity_added += entity_chunks.len();
@@ -449,7 +453,11 @@ impl Runtime {
         //       cosine focused article on cross-corpus comparison
         //       questions. `None` registry / empty matches = no-op.
         let meta_atlas_hits = self
-            .meta_atlas_boost(&mut chunks, &entities)
+            .meta_atlas_boost(
+                &mut chunks,
+                &entities,
+                context.conversation.enabled_corpora.as_deref(),
+            )
             .await;
         if !meta_atlas_hits.is_empty() {
             let total_added: usize =
@@ -466,7 +474,12 @@ impl Runtime {
         //      and gives each side of a comparison its own focused pass.
         if let Some(sub_queries) = self.decompose_question(message, intent) {
             let added = self
-                .fan_out_decomposed_queries(&sub_queries, &mut chunks, "QueryDecomp")
+                .fan_out_decomposed_queries(
+                    &sub_queries,
+                    &mut chunks,
+                    "QueryDecomp",
+                    context.conversation.enabled_corpora.as_deref(),
+                )
                 .await;
             tracing::info!(
                 sub_queries = sub_queries.len(),
@@ -502,7 +515,12 @@ impl Runtime {
             // sometimes overrides the title in the embedding, pulling
             // off-article chunks. Reverted.
             let added = self
-                .fan_out_decomposed_queries(titles, &mut chunks, "TitleExpand")
+                .fan_out_decomposed_queries(
+                    titles,
+                    &mut chunks,
+                    "TitleExpand",
+                    context.conversation.enabled_corpora.as_deref(),
+                )
                 .await;
             tracing::info!(
                 titles = ?titles,
@@ -535,8 +553,15 @@ impl Runtime {
         //     the full design rationale (cosine seeds → BFS expand
         //     over typed edges → FTS-fetch source chunks via atom
         //     evidence previews).
-        self.apply_atlas_grounding(message, &embedding, &mut chunks, "KnowledgeQuery", scope)
-            .await;
+        self.apply_atlas_grounding(
+            message,
+            &embedding,
+            &mut chunks,
+            "KnowledgeQuery",
+            scope,
+            context.conversation.enabled_corpora.as_deref(),
+        )
+        .await;
         // Per-corpus snapshot RIGHT AFTER apply_atlas_grounding returns.
         // Paired with the graph-walk trace inside apply (which shows
         // what was pushed) and the post-truncate trace below — if
@@ -571,7 +596,11 @@ impl Runtime {
         //     citation between two named entities is exactly the
         //     bridge-concept signal a comparative answer needs.
         if let Some(neighbors) = self
-            .expand_via_wikipedia_graph(&chunks, message)
+            .expand_via_wikipedia_graph(
+                &chunks,
+                message,
+                context.conversation.enabled_corpora.as_deref(),
+            )
             .await
         {
             if !neighbors.is_empty() {

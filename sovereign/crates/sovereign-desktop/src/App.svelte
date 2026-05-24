@@ -401,7 +401,7 @@
         <div class="loading-mark">◈</div>
       </div>
       <h1>SOVEREIGN</h1>
-      <p class="loading-tagline">your ai</p>
+      <p class="loading-tagline">ai for the rest of us</p>
       {#if backendError}
         <p class="error">{backendError}</p>
       {:else}

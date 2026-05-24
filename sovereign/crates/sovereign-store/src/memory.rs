@@ -81,6 +81,7 @@ impl ConversationStore for InMemoryStateStore {
                 version: 0,
                 deleted_at: None,
                 skill_id: None,
+                enabled_corpora: None,
             });
 
         if let Some(convo) = convos.get_mut(&msg.conversation_id) {
@@ -126,6 +127,22 @@ impl ConversationStore for InMemoryStateStore {
                 Ok(())
             }
             None => Err(Error::NotFound(format!("Conversation {id}"))),
+        }
+    }
+
+    async fn set_conversation_enabled_corpora(
+        &self,
+        conversation_id: &str,
+        enabled_corpora: Option<Vec<String>>,
+    ) -> Result<()> {
+        let mut convos = self.conversations.write().await;
+        match convos.get_mut(conversation_id) {
+            Some(c) => {
+                c.enabled_corpora = enabled_corpora;
+                c.updated_at = now();
+                Ok(())
+            }
+            None => Err(Error::NotFound(format!("conversation {conversation_id}"))),
         }
     }
 

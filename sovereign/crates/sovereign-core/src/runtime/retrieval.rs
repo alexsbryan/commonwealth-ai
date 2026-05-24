@@ -45,6 +45,7 @@ impl Runtime {
         &self,
         chunks: &[corpus_engine::ScoredChunk],
         message: &str,
+        enabled_corpora: Option<&[String]>,
     ) -> Option<Vec<corpus_engine::ScoredChunk>> {
         if std::env::var("SOVEREIGN_GRAPH_NEIGHBOR_EXPAND").ok().as_deref() != Some("1") {
             return None;
@@ -144,11 +145,13 @@ impl Runtime {
         for title in candidate_titles {
             let title_emb = self.inference.embed_query(&title).await.unwrap_or_default();
             let hits = self
-                .search_corpus_indexes(
+                .search_corpus_indexes_with_overrides(
                     &title_emb,
                     &title,
                     GRAPH_NEIGHBOR_LIMIT,
                     "GraphExpand",
+                    None,
+                    enabled_corpora,
                 )
                 .await;
             for mut c in hits {
@@ -286,12 +289,20 @@ impl Runtime {
         sub_queries: &[String],
         chunks: &mut Vec<corpus_engine::ScoredChunk>,
         label: &str,
+        enabled_corpora: Option<&[String]>,
     ) -> usize {
         let mut added = 0usize;
         for sq in sub_queries {
             let emb = self.inference.embed_query(sq).await.unwrap_or_default();
             let hits = self
-                .search_corpus_indexes(&emb, sq, DECOMP_QUERY_LIMIT, label)
+                .search_corpus_indexes_with_overrides(
+                    &emb,
+                    sq,
+                    DECOMP_QUERY_LIMIT,
+                    label,
+                    None,
+                    enabled_corpora,
+                )
                 .await;
             added += hits.len();
             chunks.extend(hits);
@@ -815,6 +826,7 @@ impl Runtime {
         chunks: &mut Vec<corpus_engine::ScoredChunk>,
         label: &str,
         scope: Option<&str>,
+        enabled_corpora: Option<&[String]>,
     ) {
         if !atlas_grounding_enabled() {
             return;
@@ -965,11 +977,13 @@ impl Runtime {
                     // Article slug + passage preview as FTS query
                     // (see eval-side runner.rs comment). Title-bias
                     // pulls intended-article chunks into the pool.
-                    .search_corpus_indexes(
+                    .search_corpus_indexes_with_overrides(
                         &[],
                         &format!("{} {}", req.article_slug, req.passage_preview),
                         30,
                         "AtlasNavigate",
+                        None,
+                        enabled_corpora,
                     )
                     .await;
                 for hit in fts_hits {
@@ -1066,22 +1080,22 @@ impl Runtime {
             }
         }
     }
-    pub(crate) async fn search_corpus_indexes(
-        &self,
-        embedding: &[f32],
-        query_text: &str,
-        limit: usize,
-        label: &str,
-    ) -> Vec<corpus_engine::ScoredChunk> {
-        self.search_corpus_indexes_with_overrides(embedding, query_text, limit, label, None)
-            .await
-    }
-    /// Variant of `search_corpus_indexes` that accepts per-corpus K
-    /// overrides — used by hot-corpora affinity (pre-merge bias).
+    /// Search every installed knowledge/catalog corpus with optional
+    /// per-corpus K overrides (hot-corpora affinity pre-merge bias).
     /// When the conversation has already drawn many chunks from a
     /// corpus, we increase its candidate pool so the merge layer
     /// sees more of its top results. Per-corpus K defaults to
     /// `limit` for any corpus not in the override map.
+    ///
+    /// `enabled_corpora` is the user-controlled per-conversation
+    /// allow-list (`Conversation::enabled_corpora`). `None` means
+    /// "no filter — search every installed corpus" (the default
+    /// behavior). `Some(allow)` drops every index whose `corpus_id`
+    /// is absent from the allow-list, with one twist: an index whose
+    /// `parent_corpus_id` is in the list is kept (layer/satellite
+    /// corpora follow their parent). The filter applies AFTER the
+    /// existing kind/dim/sensitivity filters so they can short-circuit
+    /// without inspecting the allow-list.
     pub(crate) async fn search_corpus_indexes_with_overrides(
         &self,
         embedding: &[f32],
@@ -1089,6 +1103,7 @@ impl Runtime {
         limit: usize,
         label: &str,
         per_corpus_limits: Option<&HashMap<String, usize>>,
+        enabled_corpora: Option<&[String]>,
     ) -> Vec<corpus_engine::ScoredChunk> {
         let mut chunks = Vec::new();
         let engine = match &self.corpus_engine {
@@ -1237,6 +1252,20 @@ impl Runtime {
             );
         }
 
+        // Filter 4 — user-controlled per-conversation allow-list. Layer
+        // corpora (info.parent_corpus_id matches an allowed parent) are
+        // retained automatically so toggling Wikipedia ON enables
+        // Wikipedia + its newsworthy/recent-events layers in one click.
+        let eligible_pre_allow = eligible.len();
+        let eligible = apply_corpus_allow_list(eligible, enabled_corpora);
+        if eligible.len() < eligible_pre_allow {
+            tracing::info!(
+                eligible = eligible.len(),
+                allow_skipped = eligible_pre_allow - eligible.len(),
+                "{label}: corpus allow-list filtered index set"
+            );
+        }
+
         for info in &eligible {
             tracing::info!(
                 corpus = %info.corpus_id,
@@ -1339,6 +1368,7 @@ impl Runtime {
         kind_filter: Option<corpus_engine::CorpusKind>,
         name_match: Option<&str>,
         label: &str,
+        enabled_corpora: Option<&[String]>,
     ) -> Vec<corpus_engine::ScoredChunk> {
         let mut chunks = Vec::new();
         let engine = match &self.corpus_engine {
@@ -1380,6 +1410,11 @@ impl Runtime {
                 embedding.is_empty() || info.embedding_dimensions == embedding.len()
             })
             .collect();
+        // Per-conversation allow-list — drop indexes the user has
+        // toggled off. Layer corpora follow their parent's state.
+        // See `apply_corpus_allow_list` for the parent-aware filter
+        // contract.
+        let eligible = apply_corpus_allow_list(eligible, enabled_corpora);
 
         if eligible.is_empty() {
             tracing::info!(
@@ -1451,6 +1486,7 @@ impl Runtime {
         &self,
         chunks: &mut Vec<corpus_engine::ScoredChunk>,
         entities: &[String],
+        enabled_corpora: Option<&[String]>,
     ) -> Vec<MetaAtlasHitRecord> {
         let Some(index) = self.meta_atlas.as_ref() else {
             return Vec::new();
@@ -1506,6 +1542,7 @@ impl Runtime {
                         None,
                         Some(&anchor.corpus_id),
                         "MetaAtlasBoost",
+                        enabled_corpora,
                     )
                     .await;
                 let stability_tag = anchor
@@ -1986,12 +2023,14 @@ impl Runtime {
             let hot_corpora_dq = collect_hot_corpora(&context.conversation.messages);
             let per_corpus_overrides_dq =
                 build_per_corpus_k_overrides(&hot_corpora_dq, KQ_PER_CORPUS_LIMIT);
+            let enabled_corpora_dq = context.conversation.enabled_corpora.as_deref();
             let local_corpora_fut = self.search_corpus_indexes_with_overrides(
                 &corpus_embedding,
                 message,
                 KQ_PER_CORPUS_LIMIT,
                 &label,
                 per_corpus_overrides_dq.as_ref(),
+                enabled_corpora_dq,
             );
             let mesh_fut = async {
                 match &self.mesh_knowledge {
@@ -2102,8 +2141,15 @@ impl Runtime {
             // route and benefit equally from atlas grounding.
             // Same env override (`SOVEREIGN_ATLAS_GROUNDING=0`)
             // applies here.
-            self.apply_atlas_grounding(message, &corpus_embedding, &mut all_chunks, "DeepQuery", scope)
-                .await;
+            self.apply_atlas_grounding(
+                message,
+                &corpus_embedding,
+                &mut all_chunks,
+                "DeepQuery",
+                scope,
+                context.conversation.enabled_corpora.as_deref(),
+            )
+            .await;
 
             // Also search StateStore for corpus-type documents (used by test
             // harness and for corpora ingested directly into the store).
@@ -2155,11 +2201,13 @@ impl Runtime {
                     .await
                     .unwrap_or_default();
                 let entity_chunks = self
-                    .search_corpus_indexes(
+                    .search_corpus_indexes_with_overrides(
                         &entity_emb,
                         entity,
                         ENTITY_QUERY_LIMIT,
                         "EntityBoost",
+                        None,
+                        context.conversation.enabled_corpora.as_deref(),
                     )
                     .await;
                 entity_added += entity_chunks.len();
@@ -2181,7 +2229,11 @@ impl Runtime {
         // (the non-streaming surface is unused by the bench), but the
         // chunks they inject still survive the merge below.
         let _meta_atlas_hits = self
-            .meta_atlas_boost(&mut all_chunks, &entities)
+            .meta_atlas_boost(
+                &mut all_chunks,
+                &entities,
+                context.conversation.enabled_corpora.as_deref(),
+            )
             .await;
 
         // Optional question decomposition (gated by env flag). Catches
@@ -2190,7 +2242,12 @@ impl Runtime {
         // its own focused retrieval pass.
         if let Some(sub_queries) = self.decompose_question(message, intent) {
             let added = self
-                .fan_out_decomposed_queries(&sub_queries, &mut all_chunks, "QueryDecomp")
+                .fan_out_decomposed_queries(
+                    &sub_queries,
+                    &mut all_chunks,
+                    "QueryDecomp",
+                    context.conversation.enabled_corpora.as_deref(),
+                )
                 .await;
             tracing::info!(
                 sub_queries = sub_queries.len(),
@@ -2209,7 +2266,12 @@ impl Runtime {
             self.expand_question_to_titles(message, context).await;
         if let Some(titles) = &title_expand_titles_dq {
             let added = self
-                .fan_out_decomposed_queries(titles, &mut all_chunks, "TitleExpand")
+                .fan_out_decomposed_queries(
+                    titles,
+                    &mut all_chunks,
+                    "TitleExpand",
+                    context.conversation.enabled_corpora.as_deref(),
+                )
                 .await;
             tracing::info!(
                 titles = ?titles,
@@ -2254,7 +2316,11 @@ impl Runtime {
         // there's no FastFocused/PrimarySynthesis gate here — the
         // helper itself handles the env-flag opt-in.
         if let Some(neighbors) = self
-            .expand_via_wikipedia_graph(&all_chunks, message)
+            .expand_via_wikipedia_graph(
+                &all_chunks,
+                message,
+                context.conversation.enabled_corpora.as_deref(),
+            )
             .await
         {
             if !neighbors.is_empty() {
@@ -2705,5 +2771,110 @@ impl Runtime {
                 );
             }
         }
+    }
+}
+
+/// Apply the per-conversation corpus allow-list to a pool of
+/// `IndexInfo`. Each index passes when its `corpus_id` is in the
+/// allow-list OR its `parent_corpus_id` is. The parent-aware branch
+/// is what lets layer/satellite corpora (e.g. wikipedia-newsworthy
+/// under wikipedia) follow their parent's enabled state without the
+/// caller knowing the layer hierarchy. `None` is the no-filter
+/// signal — every index passes, bit-identical to pre-feature
+/// behavior.
+fn apply_corpus_allow_list(
+    indexes: Vec<corpus_engine::IndexInfo>,
+    allow: Option<&[String]>,
+) -> Vec<corpus_engine::IndexInfo> {
+    let Some(allow) = allow else {
+        return indexes;
+    };
+    let allow_set: std::collections::HashSet<&str> =
+        allow.iter().map(String::as_str).collect();
+    indexes
+        .into_iter()
+        .filter(|info| {
+            allow_set.contains(info.corpus_id.as_str())
+                || info
+                    .parent_corpus_id
+                    .as_deref()
+                    .map(|p| allow_set.contains(p))
+                    .unwrap_or(false)
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod allow_list_tests {
+    use super::apply_corpus_allow_list;
+
+    fn idx(id: &str, parent: Option<&str>) -> corpus_engine::IndexInfo {
+        corpus_engine::IndexInfo {
+            corpus_id: id.to_string(),
+            corpus_name: id.to_string(),
+            path: std::path::PathBuf::new(),
+            chunk_count: 0,
+            index_size_bytes: 0,
+            created_at: 0,
+            last_updated: 0,
+            embedding_model: String::new(),
+            embedding_dimensions: 0,
+            mesh_sharing: false,
+            query_sharing: false,
+            is_shard: false,
+            chunk_range: None,
+            chunks_expected: None,
+            resume_from: None,
+            enrichment_enabled: false,
+            enriched_chunks: None,
+            source_version: None,
+            update_manifest_url: None,
+            kind: corpus_engine::CorpusKind::Knowledge,
+            parent_corpus_id: parent.map(String::from),
+            vector_index_built: true,
+            canonical_fingerprint: None,
+            total_shards: None,
+            processed_shards: Vec::new(),
+            mutable_merge: None,
+            stream: None,
+            display: None,
+        }
+    }
+
+    #[test]
+    fn none_passes_everything() {
+        let pool = vec![idx("wikipedia", None), idx("sep", None)];
+        let out = apply_corpus_allow_list(pool.clone(), None);
+        assert_eq!(out.len(), 2);
+    }
+
+    #[test]
+    fn allow_list_filters_to_subset() {
+        let pool = vec![idx("wikipedia", None), idx("sep", None), idx("gutenberg", None)];
+        let allow = vec!["sep".to_string()];
+        let out = apply_corpus_allow_list(pool, Some(&allow));
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].corpus_id, "sep");
+    }
+
+    #[test]
+    fn parent_pulls_in_layers() {
+        let pool = vec![
+            idx("wikipedia", None),
+            idx("wikipedia-newsworthy", Some("wikipedia")),
+            idx("sep", None),
+        ];
+        let allow = vec!["wikipedia".to_string()];
+        let out = apply_corpus_allow_list(pool, Some(&allow));
+        let ids: Vec<_> = out.iter().map(|i| i.corpus_id.as_str()).collect();
+        assert_eq!(ids, vec!["wikipedia", "wikipedia-newsworthy"]);
+    }
+
+    #[test]
+    fn empty_allow_filters_everything() {
+        let pool = vec![idx("wikipedia", None), idx("sep", None)];
+        let allow: Vec<String> = vec![];
+        let out = apply_corpus_allow_list(pool, Some(&allow));
+        assert!(out.is_empty());
     }
 }

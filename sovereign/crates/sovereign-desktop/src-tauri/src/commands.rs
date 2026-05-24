@@ -44,6 +44,11 @@ pub struct ConversationDetail {
     pub messages: Vec<MessageEntry>,
     pub created_at: i64,
     pub updated_at: i64,
+    /// User-controlled corpus allow-list. `None` = "all installed
+    /// corpora" (default); `Some(vec)` = explicit subset. See
+    /// `sovereign_core::types::Conversation::enabled_corpora`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled_corpora: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
@@ -997,6 +1002,7 @@ pub async fn get_conversation(
             .collect(),
         created_at: convo.created_at,
         updated_at: convo.updated_at,
+        enabled_corpora: convo.enabled_corpora,
     })
 }
 
@@ -1039,6 +1045,34 @@ pub async fn rename_conversation(
     runtime
         .store
         .update_conversation_title(&conversation_id, &title)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let _ = app_handle.emit("conversations:changed", ());
+    Ok(())
+}
+
+/// Persist the per-conversation corpus allow-list — the user-toggled
+/// set of parent corpus_ids that retrieval is allowed to search for
+/// this conversation. `None` clears the column ("all installed"),
+/// `Some(vec)` writes the explicit subset. Layer/satellite corpora
+/// follow their parent at retrieval time, so the allow-list only
+/// needs parent ids. See `Conversation::enabled_corpora` for the
+/// full contract. Called by `CorpusFilterStrip.svelte` whenever the
+/// user toggles a chip.
+#[tauri::command]
+pub async fn set_conversation_enabled_corpora(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    conversation_id: String,
+    enabled_corpora: Option<Vec<String>>,
+) -> Result<(), String> {
+    let guard = require_runtime!(state);
+    let runtime = guard.as_ref().unwrap();
+
+    runtime
+        .store
+        .set_conversation_enabled_corpora(&conversation_id, enabled_corpora)
         .await
         .map_err(|e| e.to_string())?;
 

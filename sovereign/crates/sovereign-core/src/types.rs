@@ -980,6 +980,20 @@ pub struct Conversation {
     /// `None` for conversations predating the KnowledgeView migration.
     #[serde(default)]
     pub skill_id: Option<String>,
+    /// User-controlled allow-list of corpus IDs the conversation may
+    /// retrieve from. `None` means "all installed corpora" — the
+    /// default for fresh conversations and the implicit state for any
+    /// row predating this column. `Some(vec)` is an explicit subset:
+    /// only those corpus_ids (plus their layer/satellite children)
+    /// participate in retrieval and appear in the model's
+    /// `installed_corpora_display()` prompt.
+    ///
+    /// Stored as a JSON-encoded `Vec<String>` in the conversations
+    /// table; the column is `NULL` for rows predating the
+    /// `run_corpus_filter_migration` ALTER. Updated via
+    /// `ConversationStore::set_conversation_enabled_corpora`.
+    #[serde(default)]
+    pub enabled_corpora: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2989,6 +3003,7 @@ mod knowledge_view_digest_tests {
                 version: 0,
                 deleted_at: None,
                 skill_id: None,
+                enabled_corpora: None,
             },
             memories: vec![],
             working_memory: None,

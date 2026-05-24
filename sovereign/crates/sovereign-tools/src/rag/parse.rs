@@ -37,8 +37,13 @@ pub fn parse_file(path: &Path) -> Result<ParsedDocument> {
             })
         }
         "pdf" => {
-            let content = pdf_extract::extract_text(path)
-                .map_err(|e| Error::Storage(format!("Failed to extract PDF text from {source}: {e}")))?;
+            // Route through `safe_extract_pdf_text` so we (a) catch
+            // pdf-extract panics on malformed PDFs and (b) silence
+            // its raw `println!` glyph diagnostics. Without this the
+            // RAG pipeline floods stdout on the first non-trivial
+            // font.
+            let content = crate::local_corpus::extract_stage::safe_extract_pdf_text(path)
+                .map_err(|e| Error::Storage(format!("Failed to extract PDF text from {source}: {e:?}")))?;
             // Clean up common PDF extraction artifacts.
             let cleaned = content
                 .lines()

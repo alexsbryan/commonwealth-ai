@@ -185,13 +185,84 @@ pub enum SafeExtractError {
     Other(String),
 }
 
+/// Process-wide stdout silencer. RAII guard: on construction it
+/// `dup2`s `/dev/null` over fd 1 and saves the previous fd; on drop
+/// it restores. A static `Mutex` serialises concurrent silencers so
+/// two blocking tasks parsing PDFs in parallel don't race on the
+/// shared fd.
+///
+/// Scope is intentionally narrow — only used to suppress
+/// `pdf-extract`'s in-process `println!` noise. Tracing writes to
+/// stderr (daemon.err), so structured logs are unaffected.
+struct StdoutSilencer {
+    saved_fd: libc::c_int,
+    _guard: std::sync::MutexGuard<'static, ()>,
+}
+
+static STDOUT_SILENCE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+impl StdoutSilencer {
+    fn new() -> std::io::Result<Self> {
+        // Poisoned mutex is harmless — the previous holder only held
+        // the lock around a stdout swap, which has already been
+        // unwound. Drop the poison and proceed.
+        let guard = STDOUT_SILENCE_LOCK
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let devnull = std::fs::OpenOptions::new()
+            .write(true)
+            .open("/dev/null")?;
+        use std::os::fd::AsRawFd;
+        let stdout_fd: libc::c_int = 1;
+        // Flush any buffered stdout first so it lands in the real
+        // file, not /dev/null.
+        let _ = std::io::Write::flush(&mut std::io::stdout());
+        let saved_fd = unsafe { libc::dup(stdout_fd) };
+        if saved_fd < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        let rc = unsafe { libc::dup2(devnull.as_raw_fd(), stdout_fd) };
+        if rc < 0 {
+            let err = std::io::Error::last_os_error();
+            unsafe {
+                libc::close(saved_fd);
+            }
+            return Err(err);
+        }
+        Ok(StdoutSilencer {
+            saved_fd,
+            _guard: guard,
+        })
+    }
+}
+
+impl Drop for StdoutSilencer {
+    fn drop(&mut self) {
+        // Restore stdout. Failures here are unrecoverable but
+        // shouldn't panic — at worst stdout stays pointing at
+        // /dev/null until the process exits, which is preferable to
+        // unwinding through arbitrary call stacks.
+        let _ = std::io::Write::flush(&mut std::io::stdout());
+        unsafe {
+            libc::dup2(self.saved_fd, 1);
+            libc::close(self.saved_fd);
+        }
+    }
+}
+
 /// Call `pdf_extract::extract_text` inside `catch_unwind` so a panic
 /// in the PDF parser propagates as a typed error instead of
 /// unwinding the whole tokio blocking task.
+///
+/// Wraps the call in `silence_stdout` because `pdf-extract 0.7.12`
+/// uses raw `println!` for per-glyph diagnostics — a single mildly
+/// non-standard PDF emits tens of thousands of lines to stdout
+/// (launchd captures these in `daemon.out`).
 pub fn safe_extract_pdf_text(path: &Path) -> Result<String, SafeExtractError> {
     use std::panic::{catch_unwind, AssertUnwindSafe};
     let path_owned = path.to_path_buf();
     let result = catch_unwind(AssertUnwindSafe(move || {
+        let _silence = StdoutSilencer::new().ok();
         pdf_extract::extract_text(&path_owned)
     }));
     match result {

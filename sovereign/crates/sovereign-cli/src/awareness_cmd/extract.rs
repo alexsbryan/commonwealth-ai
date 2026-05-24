@@ -500,6 +500,7 @@ mod tests {
             version: 0,
             deleted_at: None,
             skill_id: None,
+            enabled_corpora: None,
         }
     }
 

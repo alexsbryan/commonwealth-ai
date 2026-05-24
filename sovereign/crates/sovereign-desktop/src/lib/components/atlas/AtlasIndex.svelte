@@ -6,7 +6,7 @@
   // callback (AtlasSurface), which switches the inner view to
   // `AtlasCorpusView` for that corpus.
 
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import {
     atlasGetChunkEntityProgress,
     atlasListConvCorpora,
@@ -94,14 +94,20 @@
     } finally {
       loading = false;
     }
-    return () => {
-      if (convPollIntervalId !== null) {
-        clearInterval(convPollIntervalId);
-      }
-      if (extractionPollIntervalId !== null) {
-        clearInterval(extractionPollIntervalId);
-      }
-    };
+  });
+
+  // Lifecycle: poll intervals are cleared in onDestroy rather than via
+  // onMount's return value. Svelte's onMount typing rejects a
+  // `Promise<() => void>` (the async + cleanup combo) — splitting into
+  // onMount(async) + onDestroy keeps the polls cleanly cancelable
+  // without fighting the type system.
+  onDestroy(() => {
+    if (convPollIntervalId !== null) {
+      clearInterval(convPollIntervalId);
+    }
+    if (extractionPollIntervalId !== null) {
+      clearInterval(extractionPollIntervalId);
+    }
   });
 
   async function refreshExtractionProgress() {

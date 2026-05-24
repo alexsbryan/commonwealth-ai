@@ -190,9 +190,6 @@
     padding: 2px 0;
     line-height: 1.4;
   }
-  .source-line {
-    /* Same visual weight as the previous flat rendering. */
-  }
   .ppr-bridge {
     margin-top: 2px;
     font-size: 0.72rem;

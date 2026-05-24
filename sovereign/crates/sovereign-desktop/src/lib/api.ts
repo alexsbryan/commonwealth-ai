@@ -179,6 +179,21 @@ export async function renameConversation(
   return invoke("rename_conversation", { conversationId, title });
 }
 
+/** Persist the per-conversation corpus allow-list. `null` clears the
+ *  field (= "all installed corpora", the default state). An explicit
+ *  array writes the subset; pass parent corpus_ids only — retrieval
+ *  expands each parent to include its layer/satellite children
+ *  automatically. Called by the chip-toggle UI on every click. */
+export async function setConversationEnabledCorpora(
+  conversationId: string,
+  enabledCorpora: string[] | null,
+): Promise<void> {
+  return invoke("set_conversation_enabled_corpora", {
+    conversationId,
+    enabledCorpora,
+  });
+}
+
 export async function searchMessages(query: string): Promise<SearchResult[]> {
   return invoke("search_messages", { query });
 }
