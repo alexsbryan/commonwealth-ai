@@ -1,19 +1,19 @@
 {
-  "agent": "native",
+  "agent": "search",
   "model": "commonwealth/primary",
   "judge_model": "commonwealth/primary",
   "judge_trials": 3,
   "run_trials": 1,
-  "started_at": "2026-05-24T04:49:21.138391323+00:00",
-  "finished_at": "2026-05-24T04:51:13.276263257+00:00",
+  "started_at": "2026-05-24T15:30:32.001650359+00:00",
+  "finished_at": "2026-05-24T15:37:18.057528274+00:00",
   "per_problem": [
     {
-      "problem_id": "4.2-mini-evaluator-python",
+      "problem_id": "3.2-lights-out",
       "dim_a": {
         "raw": 0,
         "source": {
           "kind": "auto",
-          "pass_fraction": 0.5,
+          "pass_fraction": 0.0,
           "verify_exit_ok": false
         },
         "anchor_majority": null,
@@ -36,75 +36,108 @@
         "majority_reached": true
       },
       "dim_c": {
-        "raw": 3,
+        "raw": 0,
         "source": {
           "kind": "hybrid",
           "auto_score": 0,
-          "judge_score": 3,
-          "coverage_mean": 1.0
+          "judge_score": 0,
+          "coverage_mean": 0.0
         },
-        "anchor_majority": 3,
+        "anchor_majority": 0,
         "anchor_per_trial": [
-          3,
-          3,
-          3
+          0,
+          0,
+          0
         ],
         "majority_reached": true
       },
-      "total": 3,
+      "total": 0,
       "exit_reason": {
-        "kind": "sticky_retry",
+        "kind": "search_stalled",
         "detail": {
-          "primitive": "patch_file",
-          "repeats": 3
+          "rounds_without_improvement": 3
         }
       },
       "tokens": {
-        "input": 8580,
-        "output": 943
+        "input": 19774,
+        "output": 16212
       },
-      "wall_ms": 51610,
-      "tool_calls": [
-        {
-          "turn": 1,
-          "tool": "agent_plan",
-          "args_preview": "{\"plan\":\"The implementation requires five distinct fixes across tokenizer, parser, and evaluator stages. First, I will fix the tokenizer to handle two-character comparison operators (`<=`, `>=`, `==`) before single-character fallback (Bug #1). Second, I wi",
-          "ok": true,
-          "canonical_kind": "agent_plan"
-        },
-        {
-          "turn": 2,
-          "tool": "patch_file",
-          "args_preview": "{\"end_line\":92,\"new_content\":\"        if c == \\\"<\\\" and i + 1 < n and source[i + 1] == \\\">=\\\":\\n            tokens.append(Token(\\\"LE\\\", \\\"<=\\\", i))\\n            i += 2\\n            continue\\n        if c == \\\">\\\" and i + 1 < n:\\n            nxt = source[i ",
-          "ok": true,
-          "canonical_kind": "patch_file"
-        },
-        {
-          "turn": 3,
-          "tool": "patch_file",
-          "args_preview": "{\"end_line\":92,\"new_content\":\"        if c == \\\"<\\\" and i + 1 < n and source[i + 1] == \\\">=\\\":\\n            tokens.append(Token(\\\"LE\\\", \\\"<=\\\", i))\\n            i += 2\\n            continue\\n        if c == \\\">\\\" and i + 1 < n:\\n            nxt = source[i ",
-          "ok": true,
-          "canonical_kind": "patch_file"
-        },
-        {
-          "turn": 4,
-          "tool": "patch_file",
-          "args_preview": "{\"end_line\":92,\"new_content\":\"        if c == \\\"<\\\" and i + 1 < n and source[i + 1] == \\\">=\\\":\\n            tokens.append(Token(\\\"LE\\\", \\\"<=\\\", i))\\n            i += 2\\n            continue\\n        if c == \\\">\\\" and i + 1 < n:\\n            nxt = source[i ",
-          "ok": true,
-          "canonical_kind": "patch_file"
-        }
-      ],
+      "wall_ms": 254903,
+      "tool_calls": [],
       "witness_summary": {
         "verify_exit_ok": false,
-        "passed": 10,
-        "failed": 10,
-        "total": 20,
-        "pass_fraction": 0.5
+        "passed": 0,
+        "failed": 12,
+        "total": 12,
+        "pass_fraction": 0.0
       },
       "is_partial": true
+    },
+    {
+      "problem_id": "3.2-lights-out-python",
+      "dim_a": {
+        "raw": 3,
+        "source": {
+          "kind": "auto",
+          "pass_fraction": 0.9166666666666666,
+          "verify_exit_ok": false
+        },
+        "anchor_majority": null,
+        "anchor_per_trial": [],
+        "majority_reached": null
+      },
+      "dim_b": {
+        "raw": 2,
+        "source": {
+          "kind": "judge",
+          "trials": 3,
+          "coverage_mean": 0.6666666666666666
+        },
+        "anchor_majority": 2,
+        "anchor_per_trial": [
+          2,
+          2,
+          2
+        ],
+        "majority_reached": true
+      },
+      "dim_c": {
+        "raw": 3,
+        "source": {
+          "kind": "hybrid",
+          "auto_score": 3,
+          "judge_score": 1,
+          "coverage_mean": 0.3333333333333333
+        },
+        "anchor_majority": 1,
+        "anchor_per_trial": [
+          1,
+          1,
+          1
+        ],
+        "majority_reached": true
+      },
+      "total": 8,
+      "exit_reason": {
+        "kind": "completed"
+      },
+      "tokens": {
+        "input": 9478,
+        "output": 4186
+      },
+      "wall_ms": 76334,
+      "tool_calls": [],
+      "witness_summary": {
+        "verify_exit_ok": false,
+        "passed": 11,
+        "failed": 1,
+        "total": 12,
+        "pass_fraction": 0.9166666666666666
+      },
+      "is_partial": false
     }
   ],
-  "grand_total": 3,
-  "max_total": 9,
+  "grand_total": 8,
+  "max_total": 18,
   "regression": null
 }
