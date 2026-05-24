@@ -172,6 +172,35 @@ pub struct EntityAggregateRow {
 
 /// Read-side handle the briefing builder calls to surface
 /// conv-tiered enrichment in retrieval prompts. The concrete impl on
+/// One vault-wide synthesis theme (`vault_themes` table, added with
+/// the vault port). Each row is the result of clustering all
+/// per-note RAPTOR cluster summaries in one vault into ~10-20
+/// cross-note themes. The briefing layer surfaces these as a
+/// "Vault themes" prompt block alongside the per-note conv-tiered
+/// briefing — gives the synth model cross-note synthesis context the
+/// per-note view alone doesn't carry.
+#[derive(Debug, Clone)]
+pub struct VaultThemeRow {
+    pub corpus_id: String,
+    pub theme_id: String,
+    pub summary: String,
+    /// Raw f32 embedding of the theme summary. Same encoding
+    /// (little-endian) as `ConvRaptorNodeRow::summary_embedding`.
+    pub summary_embedding: Vec<f32>,
+    /// JSON array of `source_doc_id` strings — the notes whose
+    /// per-note RAPTOR cluster summaries contributed to this theme.
+    /// Stored as JSON because vault note ids are arbitrary path
+    /// strings and the briefing fetch path projects them straight
+    /// into a `Vec<String>` for the `intersect(hit_source_doc_ids)`
+    /// check.
+    pub member_source_doc_ids_json: String,
+    /// Mean intra-cluster cosine of the per-note summaries that
+    /// mapped to this theme. Range [0, 1]. Briefing uses it to rank
+    /// themes when more than one matches the hit set.
+    pub cluster_coherence: f32,
+    pub created_at: i64,
+}
+
 /// `SqliteStateStore` ships in `sovereign-store::sqlite`.
 ///
 /// Future ports (vault, SEP, corpus-wide RAPTOR) either impl this
@@ -209,4 +238,14 @@ pub trait ConvTieredReader: Send + Sync {
         &self,
         corpus_id: &str,
     ) -> crate::error::Result<Option<ChunkEntityProgressRow>>;
+
+    /// All vault-wide synthesis themes for a corpus, ordered by
+    /// `cluster_coherence DESC` so the briefing picks the
+    /// most-coherent themes first when capping render count. Empty
+    /// when the vault-wide synthesis pass has not run yet — the
+    /// briefing falls through to per-note signposts only, no panic.
+    async fn list_vault_themes_for_corpus(
+        &self,
+        corpus_id: &str,
+    ) -> crate::error::Result<Vec<VaultThemeRow>>;
 }

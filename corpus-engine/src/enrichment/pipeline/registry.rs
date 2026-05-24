@@ -40,9 +40,12 @@ impl PipelineRegistry {
         r.register(super::pipelines::engineering_atlas::PIPELINE_ID, || {
             Arc::new(super::pipelines::engineering_atlas::EngineeringAtlasPipeline::new())
         });
-        r.register(super::pipelines::obsidian_atlas::PIPELINE_ID, || {
-            Arc::new(super::pipelines::obsidian_atlas::ObsidianAtlasPipeline::new())
-        });
+        // `obsidian_atlas` removed when the vault port replaced the
+        // legacy Phase-1+ pipeline with the tiered RAPTOR + GLiNER
+        // surface. Vault corpora now route through
+        // `FolderTieredProvider` instead of this registry. Operators
+        // who still want bench-scorable atoms.json output for a vault
+        // can pass `--pipeline literary_atlas` explicitly.
         r.register(super::pipelines::conversation_atlas::PIPELINE_ID, || {
             Arc::new(super::pipelines::conversation_atlas::ConversationAtlasPipeline::new())
         });
@@ -111,22 +114,16 @@ mod tests {
     }
 
     #[test]
-    fn builtin_registers_obsidian_atlas() {
+    fn obsidian_atlas_no_longer_registered() {
+        // The vault port removed the legacy obsidian_atlas forwarding
+        // wrapper in favour of the tiered surface. Operators wanting
+        // atoms.json against a vault should pass --pipeline literary_atlas
+        // explicitly.
         let r = PipelineRegistry::builtin();
-        let p = r
-            .get("obsidian_atlas")
-            .expect("obsidian_atlas should be registered as a builtin pipeline");
-        assert_eq!(p.id(), "obsidian_atlas");
-        // Vault pipeline is a thin forwarding wrapper around
-        // literary_atlas — it shares the same opt-ins until prompt
-        // divergence lands.
-        let lit = r
-            .get("literary_atlas")
-            .expect("literary_atlas should be registered");
-        assert_eq!(p.runs_configuration_phase(), lit.runs_configuration_phase());
-        assert_eq!(
-            p.runs_phase6_atlas_classifier(),
-            lit.runs_phase6_atlas_classifier()
+        assert!(
+            r.get("obsidian_atlas").is_none(),
+            "obsidian_atlas registry entry should be removed; \
+             vault corpora now flow through FolderTieredProvider"
         );
     }
 

@@ -640,6 +640,34 @@ overlap_chars = {overlap_chars}
         config.display_name
     );
 
+    // The `[display]` section routes the recipe into the tiered
+    // retrieval surface (GLiNER + per-source-doc RAPTOR + entity-walk
+    // rerank). `is_tiered_category` in `sovereign-core/src/conv_briefing.rs`
+    // gates on these category strings — without one, the recipe lands
+    // in the index but the daemon's FolderTieredProvider never picks
+    // it up.
+    //
+    // The `[enrichment] type = "tiered"` section routes the ingest
+    // through `corpus-engine::enrichment::tiered::run_tiered_enrichment`
+    // → `run_folder_tiered_enrichment`, which dispatches per-note
+    // GLiNER NER + per-note RAPTOR via `FolderTieredProvider`. Without
+    // it, ingest writes chunks but never invokes the tiered surface
+    // (legacy field-model engine wouldn't fit either — vault has no
+    // matching pipeline since `obsidian_atlas` was retired).
+    let (display, enrichment) = match &config.source_type {
+        LocalCorpusSourceType::ObsidianVault { .. } => (
+            "[display]\ncategory = \"vault\"\nicon = \"book-open\"\n\n",
+            "[enrichment]\nenabled = true\ntype = \"tiered\"\n\n",
+        ),
+        LocalCorpusSourceType::WatchedFolder(_) => (
+            "[display]\ncategory = \"watched_folder\"\nicon = \"folder\"\n\n",
+            "[enrichment]\nenabled = true\ntype = \"tiered\"\n\n",
+        ),
+        // DocumentFolder is one-shot drag-drop ingest — no daemon-side
+        // sweeper, no tiered enrichment. Stays uncategorised.
+        LocalCorpusSourceType::DocumentFolder => ("", ""),
+    };
+
     format!(
         r#"[corpus]
 id = "{id}"
@@ -663,13 +691,16 @@ title_field = "title"
 [index]
 fts = true
 vector = true
-"#,
+
+{display}{enrichment}"#,
         id = escape_toml(&config.id),
         display_name = escape_toml(&config.display_name),
         description = escape_toml(&description),
         scope = config.scope.as_recipe_str(),
         source_path = escape_toml(&jsonl_source.to_string_lossy()),
         chunk = chunk,
+        display = display,
+        enrichment = enrichment,
     )
 }
 
@@ -772,6 +803,74 @@ mod tests {
         assert!(cfg.id.starts_with("folder-"));
         assert!(!cfg.watcher.enabled);
         assert!(cfg.pre_scan.scanned_pdf_detection);
+    }
+
+    #[test]
+    fn vault_recipe_emits_vault_display_and_tiered_enrichment() {
+        // Routes the recipe into FolderTieredProvider's per-source-doc
+        // RAPTOR + GLiNER dispatch. Both [display] and [enrichment]
+        // are load-bearing: [display] flips the briefing-side gate,
+        // [enrichment] flips the ingest-side dispatch into the tiered
+        // runner. Without either, the daemon ingests the vault but no
+        // tiered enrichment fires (or it fires but never surfaces in
+        // chat).
+        let snap = PathBuf::from("/tmp/snapshots");
+        let cfg = LocalCorpusConfig::obsidian_vault(PathBuf::from("/tmp/my-vault"), snap);
+        let toml = recipe_toml(&cfg, &PathBuf::from("/tmp/staged.jsonl"));
+        assert!(
+            toml.contains("[display]\ncategory = \"vault\""),
+            "vault recipe did not emit [display] vault category. \
+             Full recipe:\n{toml}"
+        );
+        assert!(
+            toml.contains("[enrichment]\nenabled = true\ntype = \"tiered\""),
+            "vault recipe did not emit [enrichment] tiered block. \
+             Full recipe:\n{toml}"
+        );
+    }
+
+    #[test]
+    fn watched_folder_recipe_emits_watched_folder_display_and_tiered() {
+        let mut cfg = LocalCorpusConfig::document_folder(
+            PathBuf::from("/tmp/some-folder"),
+            "City council".into(),
+        );
+        cfg.source_type = LocalCorpusSourceType::WatchedFolder(
+            WatchedFolderConfig::default(),
+        );
+        let toml = recipe_toml(&cfg, &PathBuf::from("/tmp/staged.jsonl"));
+        assert!(
+            toml.contains("[display]\ncategory = \"watched_folder\""),
+            "watched-folder recipe did not emit [display] category. \
+             Full recipe:\n{toml}"
+        );
+        assert!(
+            toml.contains("[enrichment]\nenabled = true\ntype = \"tiered\""),
+            "watched-folder recipe did not emit [enrichment] tiered block. \
+             Full recipe:\n{toml}"
+        );
+    }
+
+    #[test]
+    fn document_folder_recipe_skips_display_and_enrichment() {
+        // Document folders are one-shot drag-drop ingest — no daemon
+        // sweeper, no tiered enrichment. They should NOT emit a tiered
+        // display category OR an enrichment block.
+        let cfg = LocalCorpusConfig::document_folder(
+            PathBuf::from("/tmp/folder"),
+            "Manuals".into(),
+        );
+        let toml = recipe_toml(&cfg, &PathBuf::from("/tmp/staged.jsonl"));
+        assert!(
+            !toml.contains("[display]"),
+            "document folder recipe leaked a [display] section. \
+             Full recipe:\n{toml}"
+        );
+        assert!(
+            !toml.contains("[enrichment]"),
+            "document folder recipe leaked an [enrichment] section. \
+             Full recipe:\n{toml}"
+        );
     }
 
     #[test]

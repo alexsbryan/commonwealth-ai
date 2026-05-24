@@ -988,11 +988,32 @@ async fn run_daemon(args: &[String]) -> i32 {
             match sovereign_store::sqlite::SqliteStateStore::open(&db_path) {
                 Ok(store) => {
                     let store_arc = Arc::new(store);
+                    // FolderTieredProvider is used for BOTH conv and
+                    // folder corpora. Its `enrich_conversation` accepts
+                    // an arbitrary `conv_uuid` (matches conv corpora's
+                    // chat-uuid grouping AND folder corpora's
+                    // source_doc_id grouping), and its
+                    // `finalize_corpus` override runs the vault-wide
+                    // synthesis pass — needed for vault_themes to
+                    // populate when ingest takes the folder-dispatch
+                    // path. Wiring ConvTieredProvider here meant
+                    // finalize_corpus resolved to the trait's no-op
+                    // default and the cross-note briefing block was
+                    // always empty.
+                    let indexes_root = data_dir.join("indexes");
+                    let resolver: Arc<
+                        dyn sovereign_tools::conv_tiered_provider::IndexDirResolver,
+                    > = Arc::new(
+                        sovereign_tools::conv_tiered_provider::StaticIndexDirResolver {
+                            indexes_root: indexes_root.clone(),
+                        },
+                    );
                     let prov =
-                        sovereign_tools::conv_tiered_provider::ConvTieredProvider::new(
+                        sovereign_tools::conv_tiered_provider::FolderTieredProvider::new(
                             store_arc,
                             Arc::clone(&provider),
-                        );
+                        )
+                        .with_index_dir_resolver(resolver);
                     Some(std::sync::Arc::new(prov))
                 }
                 Err(e) => {

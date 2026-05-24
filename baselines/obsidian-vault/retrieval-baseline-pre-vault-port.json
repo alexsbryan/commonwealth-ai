@@ -1,0 +1,1252 @@
+{
+  "bank_name": "obsidian-real-vault-v1",
+  "corpus": "watched-959ee8a8f330",
+  "limit": 10,
+  "started_at_unix": 1779634097,
+  "results": [
+    {
+      "question_id": "ostrom_valencia_water_court",
+      "category": "concept_lookup",
+      "question": "What is the Tribunal de las Aguas, and what role does Ostrom give it in\nher analysis of long-running commons?\n",
+      "retrieved": [
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.03306011,
+          "snippet": "couldn't make agreements, couldn't monitor each other, couldn't punish defectors, and had no stake in the pasture beyond next week. Under those assumptions, yes, tragedy follows. But those assumptions describe almost no real commons that has ever existed.  Ostrom looked at the world. She studied fisheries in Maine and Turkey, irrigation systems in Spain and the Philippines, forests in Japan and Nepal, groundwater basins in California. What she found, case after case, were communities managing shared resources sustainably—sometimes for centuries—without privatizing them and without centralized …"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ostrom Summary",
+          "url": null,
+          "score": 0.032522473,
+          "snippet": "Ostrom Summary  other. The Tribunal didn't replace the canal-level communities; it handled what they couldn't handle themselves. Spanish state law recognized the Tribunal's authority without trying to absorb or micromanage it. Each level did what it was suited to do.  This last point—the nesting—explains why the systems were robust. Pure local governance is vulnerable to external shocks and powerful outsiders. Pure centralized control can't adapt to local variation and loses the knowledge that only people on the ground possess. The successful commons Ostrom studied solved this by building upwa…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ostrom Summary",
+          "url": null,
+          "score": 0.032291666,
+          "snippet": "Ostrom Summary  couldn't make agreements, couldn't monitor each other, couldn't punish defectors, and had no stake in the pasture beyond next week. Under those assumptions, yes, tragedy follows. But those assumptions describe almost no real commons that has ever existed.  Ostrom looked at the world. She studied fisheries in Maine and Turkey, irrigation systems in Spain and the Philippines, forests in Japan and Nepal, groundwater basins in California. What she found, case after case, were communities managing shared resources sustainably—sometimes for centuries—without privatizing them and with…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.032002047,
+          "snippet": "other. The Tribunal didn't replace the canal-level communities; it handled what they couldn't handle themselves. Spanish state law recognized the Tribunal's authority without trying to absorb or micromanage it. Each level did what it was suited to do.  This last point—the nesting—explains why the systems were robust. Pure local governance is vulnerable to external shocks and powerful outsiders. Pure centralized control can't adapt to local variation and loses the knowledge that only people on the ground possess. The successful commons Ostrom studied solved this by building upward from local in…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ostrom Summary",
+          "url": null,
+          "score": 0.031009614,
+          "snippet": "Ostrom Summary  or states, private property or regulation—omits a third possibility that has worked, empirically, across wildly different cultures and resource types: communities governing themselves through institutions they built to fit their circumstances.  Ostrom won the Nobel Prize in Economics for this work in 2009, the first woman to do so. The honor was deserved, but there's an irony in it. Economics as a discipline had long treated her findings as a curiosity, a footnote to the main story of markets and governments. Her Nobel was a kind of acknowledgment that the footnote might be the…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ostrom Summary",
+          "url": null,
+          "score": 0.03079839,
+          "snippet": "Ostrom Summary  century. Farmers who violate water rules are brought before judges who are themselves elected irrigators. Disputes are adjudicated on the spot, orally, with no appeals. Fines are graduated to the severity of the offense. The whole thing takes minutes.  What Ostrom recognized in Valencia, and in the other successful cases she studied, was a recurring institutional logic. Boundaries were clearly defined—you knew who had rights and who didn't. Rules were adapted to local conditions rather than imposed from outside. The people who had to follow the rules participated in making them…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.030309988,
+          "snippet": "or states, private property or regulation—omits a third possibility that has worked, empirically, across wildly different cultures and resource types: communities governing themselves through institutions they built to fit their circumstances.  Ostrom won the Nobel Prize in Economics for this work in 2009, the first woman to do so. The honor was deserved, but there's an irony in it. Economics as a discipline had long treated her findings as a curiosity, a footnote to the main story of markets and governments. Her Nobel was a kind of acknowledgment that the footnote might be the main text, that…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ostrom Summary",
+          "url": null,
+          "score": 0.030303031,
+          "snippet": "Ostrom Summary  Your textbook tells you a story, and like many good stories, it has the quality of seeming obviously true once you've heard it. A pasture lies open to all. Each herder calculates that adding one more cow brings him the full benefit while spreading the cost of overgrazing across everyone else. Every herder reasons identically. The pasture collapses. The lesson: common property is doomed by the very rationality of those who use it. You need either privatization—divide the pasture into plots and let owners bear the consequences of their own choices—or state regulation, someone wit…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.029198635,
+          "snippet": "century. Farmers who violate water rules are brought before judges who are themselves elected irrigators. Disputes are adjudicated on the spot, orally, with no appeals. Fines are graduated to the severity of the offense. The whole thing takes minutes.  What Ostrom recognized in Valencia, and in the other successful cases she studied, was a recurring institutional logic. Boundaries were clearly defined—you knew who had rights and who didn't. Rules were adapted to local conditions rather than imposed from outside. The people who had to follow the rules participated in making them. Monitoring was…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.029198635,
+          "snippet": "Your textbook tells you a story, and like many good stories, it has the quality of seeming obviously true once you've heard it. A pasture lies open to all. Each herder calculates that adding one more cow brings him the full benefit while spreading the cost of overgrazing across everyone else. Every herder reasons identically. The pasture collapses. The lesson: common property is doomed by the very rationality of those who use it. You need either privatization—divide the pasture into plots and let owners bear the consequences of their own choices—or state regulation, someone with authority stan…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Ostrom Summary"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "Valencia",
+          "water court",
+          "Thursday",
+          "cathedral",
+          "irrigators",
+          "elected"
+        ],
+        "missing": [],
+        "total_expected": 6,
+        "ratio": 1.0
+      },
+      "embed_ms": 335,
+      "search_ms": 254,
+      "corpora_hit": [
+        "watched-959ee8a8f330"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "ostrom_nested_governance",
+      "category": "concept_lookup",
+      "question": "Why does the author argue that nested governance structures explain why\nOstrom's commons are robust, and what counter-example illustrates the\npoint?\n",
+      "retrieved": [
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ostrom Summary",
+          "url": null,
+          "score": 0.033333335,
+          "snippet": "Ostrom Summary  other. The Tribunal didn't replace the canal-level communities; it handled what they couldn't handle themselves. Spanish state law recognized the Tribunal's authority without trying to absorb or micromanage it. Each level did what it was suited to do.  This last point—the nesting—explains why the systems were robust. Pure local governance is vulnerable to external shocks and powerful outsiders. Pure centralized control can't adapt to local variation and loses the knowledge that only people on the ground possess. The successful commons Ostrom studied solved this by building upwa…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.032786883,
+          "snippet": "other. The Tribunal didn't replace the canal-level communities; it handled what they couldn't handle themselves. Spanish state law recognized the Tribunal's authority without trying to absorb or micromanage it. Each level did what it was suited to do.  This last point—the nesting—explains why the systems were robust. Pure local governance is vulnerable to external shocks and powerful outsiders. Pure centralized control can't adapt to local variation and loses the knowledge that only people on the ground possess. The successful commons Ostrom studied solved this by building upward from local in…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ostrom Summary",
+          "url": null,
+          "score": 0.031280547,
+          "snippet": "Ostrom Summary  or states, private property or regulation—omits a third possibility that has worked, empirically, across wildly different cultures and resource types: communities governing themselves through institutions they built to fit their circumstances.  Ostrom won the Nobel Prize in Economics for this work in 2009, the first woman to do so. The honor was deserved, but there's an irony in it. Economics as a discipline had long treated her findings as a curiosity, a footnote to the main story of markets and governments. Her Nobel was a kind of acknowledgment that the footnote might be the…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ostrom Summary",
+          "url": null,
+          "score": 0.031257633,
+          "snippet": "Ostrom Summary  Your textbook tells you a story, and like many good stories, it has the quality of seeming obviously true once you've heard it. A pasture lies open to all. Each herder calculates that adding one more cow brings him the full benefit while spreading the cost of overgrazing across everyone else. Every herder reasons identically. The pasture collapses. The lesson: common property is doomed by the very rationality of those who use it. You need either privatization—divide the pasture into plots and let owners bear the consequences of their own choices—or state regulation, someone wit…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ostrom Summary",
+          "url": null,
+          "score": 0.031009614,
+          "snippet": "Ostrom Summary  century. Farmers who violate water rules are brought before judges who are themselves elected irrigators. Disputes are adjudicated on the spot, orally, with no appeals. Fines are graduated to the severity of the offense. The whole thing takes minutes.  What Ostrom recognized in Valencia, and in the other successful cases she studied, was a recurring institutional logic. Boundaries were clearly defined—you knew who had rights and who didn't. Rules were adapted to local conditions rather than imposed from outside. The people who had to follow the rules participated in making them…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.03079839,
+          "snippet": "couldn't make agreements, couldn't monitor each other, couldn't punish defectors, and had no stake in the pasture beyond next week. Under those assumptions, yes, tragedy follows. But those assumptions describe almost no real commons that has ever existed.  Ostrom looked at the world. She studied fisheries in Maine and Turkey, irrigation systems in Spain and the Philippines, forests in Japan and Nepal, groundwater basins in California. What she found, case after case, were communities managing shared resources sustainably—sometimes for centuries—without privatizing them and without centralized …"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.030076887,
+          "snippet": "Your textbook tells you a story, and like many good stories, it has the quality of seeming obviously true once you've heard it. A pasture lies open to all. Each herder calculates that adding one more cow brings him the full benefit while spreading the cost of overgrazing across everyone else. Every herder reasons identically. The pasture collapses. The lesson: common property is doomed by the very rationality of those who use it. You need either privatization—divide the pasture into plots and let owners bear the consequences of their own choices—or state regulation, someone with authority stan…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ostrom Summary",
+          "url": null,
+          "score": 0.016129032,
+          "snippet": "Ostrom Summary  couldn't make agreements, couldn't monitor each other, couldn't punish defectors, and had no stake in the pasture beyond next week. Under those assumptions, yes, tragedy follows. But those assumptions describe almost no real commons that has ever existed.  Ostrom looked at the world. She studied fisheries in Maine and Turkey, irrigation systems in Spain and the Philippines, forests in Japan and Nepal, groundwater basins in California. What she found, case after case, were communities managing shared resources sustainably—sometimes for centuries—without privatizing them and with…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015625,
+          "snippet": "or states, private property or regulation—omits a third possibility that has worked, empirically, across wildly different cultures and resource types: communities governing themselves through institutions they built to fit their circumstances.  Ostrom won the Nobel Prize in Economics for this work in 2009, the first woman to do so. The honor was deserved, but there's an irony in it. Economics as a discipline had long treated her findings as a curiosity, a footnote to the main story of markets and governments. Her Nobel was a kind of acknowledgment that the footnote might be the main text, that…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.014705882,
+          "snippet": "incentives. The literature acknowledges this. Mas-Colell, Whinston, and Green's graduate textbook — the standard reference — states this limitation plainly. So the theoretical escape valve is one the theory itself recognizes cannot be opened.  What you're left with in practice is the First Welfare Theorem operating alone: markets are efficient given whatever endowments happen to exist. And \"whatever endowments happen to exist\" is shaped by history, inheritance, colonialism, legal regimes, political power — none of which the model represents. The model takes them as exogenous parameters and the…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Ostrom Summary"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "local",
+          "centralized",
+          "Soviet",
+          "Aral",
+          "Moscow",
+          "knowledge"
+        ],
+        "missing": [],
+        "total_expected": 6,
+        "ratio": 1.0
+      },
+      "embed_ms": 51,
+      "search_ms": 25,
+      "corpora_hit": [
+        "watched-959ee8a8f330"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "hardin_vs_ostrom_method",
+      "category": "argument_reconstruction",
+      "question": "What is the methodological contrast the author draws between Hardin's\n1968 paper and Ostrom's body of work?\n",
+      "retrieved": [
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ostrom Summary",
+          "url": null,
+          "score": 0.032795697,
+          "snippet": "Ostrom Summary  Your textbook tells you a story, and like many good stories, it has the quality of seeming obviously true once you've heard it. A pasture lies open to all. Each herder calculates that adding one more cow brings him the full benefit while spreading the cost of overgrazing across everyone else. Every herder reasons identically. The pasture collapses. The lesson: common property is doomed by the very rationality of those who use it. You need either privatization—divide the pasture into plots and let owners bear the consequences of their own choices—or state regulation, someone wit…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ostrom Summary",
+          "url": null,
+          "score": 0.03181818,
+          "snippet": "Ostrom Summary  or states, private property or regulation—omits a third possibility that has worked, empirically, across wildly different cultures and resource types: communities governing themselves through institutions they built to fit their circumstances.  Ostrom won the Nobel Prize in Economics for this work in 2009, the first woman to do so. The honor was deserved, but there's an irony in it. Economics as a discipline had long treated her findings as a curiosity, a footnote to the main story of markets and governments. Her Nobel was a kind of acknowledgment that the footnote might be the…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.031318814,
+          "snippet": "Your textbook tells you a story, and like many good stories, it has the quality of seeming obviously true once you've heard it. A pasture lies open to all. Each herder calculates that adding one more cow brings him the full benefit while spreading the cost of overgrazing across everyone else. Every herder reasons identically. The pasture collapses. The lesson: common property is doomed by the very rationality of those who use it. You need either privatization—divide the pasture into plots and let owners bear the consequences of their own choices—or state regulation, someone with authority stan…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ostrom Summary",
+          "url": null,
+          "score": 0.031280547,
+          "snippet": "Ostrom Summary  other. The Tribunal didn't replace the canal-level communities; it handled what they couldn't handle themselves. Spanish state law recognized the Tribunal's authority without trying to absorb or micromanage it. Each level did what it was suited to do.  This last point—the nesting—explains why the systems were robust. Pure local governance is vulnerable to external shocks and powerful outsiders. Pure centralized control can't adapt to local variation and loses the knowledge that only people on the ground possess. The successful commons Ostrom studied solved this by building upwa…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.016393442,
+          "snippet": "or states, private property or regulation—omits a third possibility that has worked, empirically, across wildly different cultures and resource types: communities governing themselves through institutions they built to fit their circumstances.  Ostrom won the Nobel Prize in Economics for this work in 2009, the first woman to do so. The honor was deserved, but there's an irony in it. Economics as a discipline had long treated her findings as a curiosity, a footnote to the main story of markets and governments. Her Nobel was a kind of acknowledgment that the footnote might be the main text, that…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015873017,
+          "snippet": "to institutions that wanted legitimacy, useful to a distribution of income that wanted to appear natural.  She would not be surprised that her critique was marginalized. She understood that ideas survive or perish based on their compatibility with power.  But she might be surprised—and perhaps hopeful—at where we stand now. The tools that made equilibrium attractive have been superseded. The financial crisis of 2008 vindicated warnings the mainstream had ignored. Inequality has returned as a central concern, and the old frameworks have no good explanation for it. A new generation is asking que…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015873017,
+          "snippet": "other. The Tribunal didn't replace the canal-level communities; it handled what they couldn't handle themselves. Spanish state law recognized the Tribunal's authority without trying to absorb or micromanage it. Each level did what it was suited to do.  This last point—the nesting—explains why the systems were robust. Pure local governance is vulnerable to external shocks and powerful outsiders. Pure centralized control can't adapt to local variation and loses the knowledge that only people on the ground possess. The successful commons Ostrom studied solved this by building upward from local in…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015625,
+          "snippet": "incentives. The literature acknowledges this. Mas-Colell, Whinston, and Green's graduate textbook — the standard reference — states this limitation plainly. So the theoretical escape valve is one the theory itself recognizes cannot be opened.  What you're left with in practice is the First Welfare Theorem operating alone: markets are efficient given whatever endowments happen to exist. And \"whatever endowments happen to exist\" is shaped by history, inheritance, colonialism, legal regimes, political power — none of which the model represents. The model takes them as exogenous parameters and the…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "The Turkey Trot",
+          "url": null,
+          "score": 0.015625,
+          "snippet": "The Turkey Trot  acres. They had a plan that they’d already used in fifty cities: mixed-use residential and retail. The renderings showed young professionals with dogs. The cars weren’t in the renderings, but they would be necessary to drive to jobs over an hour away.  Meggan Whitfield attended the community meeting — taking a break from grading papers, still in her family's house, with four generations of Turkey Trots behind her. She sat in the third row with her hands flat on her knees, wondering what her great grandmother Doris would think. The developer spoke for forty minutes. Again they …"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Joan Robinson",
+          "url": null,
+          "score": 0.015384615,
+          "snippet": "Joan Robinson  If you cannot derive wages and profits from marginal products, then distribution is a matter of bargaining power, institutions, social norms. The question \"why have wages stagnated while productivity grew?\" would have had ready answers, not puzzles.  Macroeconomics would have retained its Keynesian radicalism. The neoclassical synthesis that Robinson despised—which grafted Keynes onto equilibrium foundations and assumed economies naturally return to full employment—would not have dominated. The instability of investment, the possibility of prolonged stagnation, the role of finan…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Ostrom Summary"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "thought experiment",
+          "model",
+          "data",
+          "empirical",
+          "Hardin never studied"
+        ],
+        "missing": [],
+        "total_expected": 5,
+        "ratio": 1.0
+      },
+      "embed_ms": 36,
+      "search_ms": 25,
+      "corpora_hit": [
+        "watched-959ee8a8f330"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "nfl_three_failures",
+      "category": "argument_reconstruction",
+      "question": "What are the three failure modes the author identifies in 'The Rules\nAre the Game,' using the NFL as the worked example?\n",
+      "retrieved": [
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "The Rules Are The game",
+          "url": null,
+          "score": 0.032291666,
+          "snippet": "The Rules Are The game  you build one.  The worst teams pick first in the draft. That is not charity. That is engineering. It keeps the league competitive, because a league where the outcome is predetermined is not a competition. It is an exhibition. Nobody watches exhibitions.  Television revenue gets split across all thirty-two teams. That is how Green Bay — a hundred thousand people in Wisconsin — competes with New York and Dallas and Los Angeles. Not because the league is being generous. Because Green Bay being competitive makes the entire product valuable.  Same rulebook. Same field. Same…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "The Rules Are The game",
+          "url": null,
+          "score": 0.032291666,
+          "snippet": "The Rules Are The game  independence. Do not eliminate oversight. Fix it.  Where good infrastructure has been enclosed inside extractive structures — separate them. Keep the useful mechanics. Remove the monopolistic shell. Do not add complexity to the enclosure. Break it open.  Where nobody is responsible for the total burden on participants — build the table. Create the forum where the cumulative load is visible, measured, and negotiable. Do not centralize control. Reconcile the pieces.  And where the structure itself is missing a leg — rebuild it. Organized labor is not a historical relic. I…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.031318814,
+          "snippet": "independence. Do not eliminate oversight. Fix it.  Where good infrastructure has been enclosed inside extractive structures — separate them. Keep the useful mechanics. Remove the monopolistic shell. Do not add complexity to the enclosure. Break it open.  Where nobody is responsible for the total burden on participants — build the table. Create the forum where the cumulative load is visible, measured, and negotiable. Do not centralize control. Reconcile the pieces.  And where the structure itself is missing a leg — rebuild it. Organized labor is not a historical relic. It is the third side of a…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "The Rules Are The game",
+          "url": null,
+          "score": 0.031257633,
+          "snippet": "The Rules Are The game  Three failure modes — capture, enclosure, fragmentation — the diagnostic core_ - _Segment 3 (4–5 min): Three-sided table, co-determination — the structural prescription_ - _Segment 4 (3–4 min): Synthesis and close — the systems perspective_  _Each segment ends on a beat that stands alone and pulls toward the next._"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "The Rules Are The game",
+          "url": null,
+          "score": 0.031024532,
+          "snippet": "The Rules Are The game  It has been occupied by the people it was supposed to constrain. And it now functions to entrench their advantage while maintaining the appearance of a level field.  **[Lean in.]**  That is capture. And it is happening in the real economy right now.  The Securities and Exchange Commission was built to referee the financial markets. Over time, the people running it increasingly came from the firms it was supposed to oversee — and returned to those firms after their government service. The same revolving door. The same people cycling between writing the rules, enforcing t…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "The Rules Are The game",
+          "url": null,
+          "score": 0.016393442,
+          "snippet": "The Rules Are The game  # The Rules Are the Game  ### Spoken Word Performance Script  _The Econoclast Project_  ---  _Performance notes: You are someone who has been inside the machine — studied the math, written the code, played the game — and you are calmly describing what you saw. The authority comes from precision, not intensity. You are not angry. You are clear. You are diagnosing, not rallying. Pauses are marked with [beat]. Postural resets are marked with [breath]. [Lean in] means tighten the delivery — quieter, more direct. If it sounds like performing, slow down._  ---  **[Settled. St…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.016129032,
+          "snippet": "you build one.  The worst teams pick first in the draft. That is not charity. That is engineering. It keeps the league competitive, because a league where the outcome is predetermined is not a competition. It is an exhibition. Nobody watches exhibitions.  Television revenue gets split across all thirty-two teams. That is how Green Bay — a hundred thousand people in Wisconsin — competes with New York and Dallas and Los Angeles. Not because the league is being generous. Because Green Bay being competitive makes the entire product valuable.  Same rulebook. Same field. Same officials. Every Sunday…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "The Rules Are The game",
+          "url": null,
+          "score": 0.016129032,
+          "snippet": "The Rules Are The game  the total. There is no table where a working person can sit down and say: the cumulative burden is too much. Each agency sees its own slice. Nobody sees the whole.  **[Beat.]**  The fix for fragmentation is different from both capture and enclosure.  You do not solve fragmentation by deregulating — removing individual obligations does not address the fact that no one is managing the total. You do not solve it by centralizing everything under one authority — that is how you get capture. You solve fragmentation by building a table. A forum where the cumulative burden on p…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "The Rules Are The game",
+          "url": null,
+          "score": 0.015384615,
+          "snippet": "The Rules Are The game  a version operating in the American economy right now. And each one requires its own intervention.  **[Breath. New section.]**  **The first failure is capture.**  **[Measured.]**  Take the NFL I just described — the one that works — and corrupt it.  The salary cap still exists on paper. But a few wealthy franchises discover that if they create subsidiary entities in jurisdictions outside the league's oversight, they can employ players who do not count against the cap. Technically legal. Most teams cannot afford the legal architecture to do this.  The draft still exists.…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015151516,
+          "snippet": "It has been occupied by the people it was supposed to constrain. And it now functions to entrench their advantage while maintaining the appearance of a level field.  **[Lean in.]**  That is capture. And it is happening in the real economy right now.  The Securities and Exchange Commission was built to referee the financial markets. Over time, the people running it increasingly came from the firms it was supposed to oversee — and returned to those firms after their government service. The same revolving door. The same people cycling between writing the rules, enforcing the rules, and profiting …"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "The Rules Are The game"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "capture",
+          "rigged",
+          "rules",
+          "officials",
+          "subsidiary",
+          "appearance"
+        ],
+        "missing": [],
+        "total_expected": 6,
+        "ratio": 1.0
+      },
+      "embed_ms": 29,
+      "search_ms": 26,
+      "corpora_hit": [
+        "watched-959ee8a8f330"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "nfl_salary_cap_function",
+      "category": "concept_lookup",
+      "question": "Why does the author treat the NFL salary cap as evidence that Americans\n'understand mechanism design intuitively'?\n",
+      "retrieved": [
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "The Rules Are The game",
+          "url": null,
+          "score": 0.03306011,
+          "snippet": "The Rules Are The game  you build one.  The worst teams pick first in the draft. That is not charity. That is engineering. It keeps the league competitive, because a league where the outcome is predetermined is not a competition. It is an exhibition. Nobody watches exhibitions.  Television revenue gets split across all thirty-two teams. That is how Green Bay — a hundred thousand people in Wisconsin — competes with New York and Dallas and Los Angeles. Not because the league is being generous. Because Green Bay being competitive makes the entire product valuable.  Same rulebook. Same field. Same…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.031778056,
+          "snippet": "you build one.  The worst teams pick first in the draft. That is not charity. That is engineering. It keeps the league competitive, because a league where the outcome is predetermined is not a competition. It is an exhibition. Nobody watches exhibitions.  Television revenue gets split across all thirty-two teams. That is how Green Bay — a hundred thousand people in Wisconsin — competes with New York and Dallas and Los Angeles. Not because the league is being generous. Because Green Bay being competitive makes the entire product valuable.  Same rulebook. Same field. Same officials. Every Sunday…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.031746034,
+          "snippet": "the field. The salary cap, the draft, revenue sharing, the uniform rulebook. This is what works. This is genuine competitive design, and Americans love the product it creates.  Level two: the league as a business. And at that level, the NFL is a cartel.  It has a legal antitrust exemption. It suppresses competing leagues. It controls how many franchises exist to inflate valuations. The commissioner does not work for the game. He works for the owners. The salary cap — the same mechanism that creates competitive balance on the field — is also, from the ownership side, a wage ceiling agreed upon …"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "The Rules Are The game",
+          "url": null,
+          "score": 0.03125,
+          "snippet": "The Rules Are The game  # The Rules Are the Game  ### Spoken Word Performance Script  _The Econoclast Project_  ---  _Performance notes: You are someone who has been inside the machine — studied the math, written the code, played the game — and you are calmly describing what you saw. The authority comes from precision, not intensity. You are not angry. You are clear. You are diagnosing, not rallying. Pauses are marked with [beat]. Postural resets are marked with [breath]. [Lean in] means tighten the delivery — quieter, more direct. If it sounds like performing, slow down._  ---  **[Settled. St…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "The Rules Are The game",
+          "url": null,
+          "score": 0.016666668,
+          "snippet": "The Rules Are The game  a version operating in the American economy right now. And each one requires its own intervention.  **[Breath. New section.]**  **The first failure is capture.**  **[Measured.]**  Take the NFL I just described — the one that works — and corrupt it.  The salary cap still exists on paper. But a few wealthy franchises discover that if they create subsidiary entities in jurisdictions outside the league's oversight, they can employ players who do not count against the cap. Technically legal. Most teams cannot afford the legal architecture to do this.  The draft still exists.…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.016129032,
+          "snippet": "a version operating in the American economy right now. And each one requires its own intervention.  **[Breath. New section.]**  **The first failure is capture.**  **[Measured.]**  Take the NFL I just described — the one that works — and corrupt it.  The salary cap still exists on paper. But a few wealthy franchises discover that if they create subsidiary entities in jurisdictions outside the league's oversight, they can employ players who do not count against the cap. Technically legal. Most teams cannot afford the legal architecture to do this.  The draft still exists. But wealthy teams hire …"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "The Rules Are The game",
+          "url": null,
+          "score": 0.016129032,
+          "snippet": "The Rules Are The game  the field. The salary cap, the draft, revenue sharing, the uniform rulebook. This is what works. This is genuine competitive design, and Americans love the product it creates.  Level two: the league as a business. And at that level, the NFL is a cartel.  It has a legal antitrust exemption. It suppresses competing leagues. It controls how many franchises exist to inflate valuations. The commissioner does not work for the game. He works for the owners. The salary cap — the same mechanism that creates competitive balance on the field — is also, from the ownership side, a w…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015384615,
+          "snippet": "# The Rules Are the Game  ### Spoken Word Performance Script  _The Econoclast Project_  ---  _Performance notes: You are someone who has been inside the machine — studied the math, written the code, played the game — and you are calmly describing what you saw. The authority comes from precision, not intensity. You are not angry. You are clear. You are diagnosing, not rallying. Pauses are marked with [beat]. Postural resets are marked with [breath]. [Lean in] means tighten the delivery — quieter, more direct. If it sounds like performing, slow down._  ---  **[Settled. Still. Direct to camera.]*…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "The Rules Are The game",
+          "url": null,
+          "score": 0.015151516,
+          "snippet": "The Rules Are The game  It has been occupied by the people it was supposed to constrain. And it now functions to entrench their advantage while maintaining the appearance of a level field.  **[Lean in.]**  That is capture. And it is happening in the real economy right now.  The Securities and Exchange Commission was built to referee the financial markets. Over time, the people running it increasingly came from the firms it was supposed to oversee — and returned to those firms after their government service. The same revolving door. The same people cycling between writing the rules, enforcing t…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015151516,
+          "snippet": "NFL. No cartel. No single league. Dozens of domestic competitions, open entry through promotion and relegation — finish last and your club drops a division, win the lower division and you rise. It is structurally open in a way the NFL never has been.  But without the NFL's internal balance mechanisms — no salary cap, no draft, no revenue sharing — money determines outcomes the way money always does when nothing pushes back.  Real Madrid. Bayern Munich. Decades of dominance built on tradition and brand. You can at least tell a story about earned excellence.  Then sovereign wealth arrived. An oi…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "The Rules Are The game"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "salary cap",
+          "draft",
+          "revenue sharing",
+          "Green Bay",
+          "competitive",
+          "designed"
+        ],
+        "missing": [],
+        "total_expected": 6,
+        "ratio": 1.0
+      },
+      "embed_ms": 31,
+      "search_ms": 24,
+      "corpora_hit": [
+        "watched-959ee8a8f330"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "ai_rent_concentration",
+      "category": "argument_reconstruction",
+      "question": "According to the author's AI Bullcase, where does the deepest rent in\nthe AI stack sit, and why?\n",
+      "retrieved": [
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ai Bullcase",
+          "url": null,
+          "score": 0.03306011,
+          "snippet": "Ai Bullcase  before competitors, vertical integration into custom silicon to claw back NVIDIA's margin, and turning around and renting the compute to enterprise customers at markup. They're more like a leveraged bet on AI demand than a structural rent collector.  Then the **AI labs** themselves (OpenAI, Anthropic, etc.), where the value capture is most uncertain because the models are getting commoditized faster than the underlying hardware.  The pattern: rent concentration is roughly proportional to how hard it is to build the second one. ASML is uncopyable in any reasonable timeframe. A new …"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ai Bullcase",
+          "url": null,
+          "score": 0.016666668,
+          "snippet": "Ai Bullcase  **Where the pool concentrates**  The investment doesn't pool evenly across the AI stack — it puddles at the points of deepest monopoly. Going from raw inputs up:  The absolute deepest rent sits at **ASML**, which is the sole producer of EUV lithography machines. There is no second source. Every leading-edge chip in every AI accelerator on the planet was patterned by their machines. That's not market power, it's a structural monopoly on the technology gate.  One layer up, **TSMC** has effective monopoly on leading-edge logic foundry. Samsung is years behind on yields, Intel Foundry…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.016393442,
+          "snippet": "before competitors, vertical integration into custom silicon to claw back NVIDIA's margin, and turning around and renting the compute to enterprise customers at markup. They're more like a leveraged bet on AI demand than a structural rent collector.  Then the **AI labs** themselves (OpenAI, Anthropic, etc.), where the value capture is most uncertain because the models are getting commoditized faster than the underlying hardware.  The pattern: rent concentration is roughly proportional to how hard it is to build the second one. ASML is uncopyable in any reasonable timeframe. A new HBM fab is 3-…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Historical arc",
+          "url": null,
+          "score": 0.016129032,
+          "snippet": "Historical arc  value rises sharply as AI commodifies because their data feeds the AI systems that compete with the open ecosystem. Healthcare incumbents in particular are sitting on data moats they may not yet realize they own.  **The distribution and interface layer**  Even when underlying capability is free, the platforms that connect capability to users remain enclosed. Apple controls the iOS app ecosystem and is going to extract rents from every AI application that wants to reach 1.5 billion premium users. Google controls Android and search distribution. Amazon controls e-commerce and AWS…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.016129032,
+          "snippet": "**Where the pool concentrates**  The investment doesn't pool evenly across the AI stack — it puddles at the points of deepest monopoly. Going from raw inputs up:  The absolute deepest rent sits at **ASML**, which is the sole producer of EUV lithography machines. There is no second source. Every leading-edge chip in every AI accelerator on the planet was patterned by their machines. That's not market power, it's a structural monopoly on the technology gate.  One layer up, **TSMC** has effective monopoly on leading-edge logic foundry. Samsung is years behind on yields, Intel Foundry is a questio…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015873017,
+          "snippet": "engineering: at flagship-model capability, six more months of model work returns less than six months of memory or tool orchestration polish. At 7B-model capability, no amount of product polish gets you to ChatGPT because the ceiling is the constraint.  Knowing which layer binds for your users is the actual product decision. For Sovereign, sitting in the 30B-class range, the ceiling is rarely the binding constraint for most everyday work — which means the highest-leverage engineering is almost always in the product layer (latency masking, KnowledgeView calibration, tool orchestration polish, t…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Historical arc",
+          "url": null,
+          "score": 0.015873017,
+          "snippet": "Historical arc  bottlenecks — banking (the Fuggers, then the Rothschilds), joint stock companies (VOC, EIC), colonial monopolies, eventually industrial production. The form of concentration changed; the fact of it didn't.  **The synthesis that takes both seriously**  What this suggests for AI: the optimistic case is real but partial. The democratization of intelligence at the application layer means the kind of total cognitive enclosure that the most pessimistic AI scenarios envision probably can't happen. Open weights provide a permanent escape valve. Distributed innovation by smaller actors …"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015625,
+          "snippet": "Countries building sovereign AI capacity (can run inference on local infrastructure)  The US/hyperscaler dominance may weaken in an inference world as compute distributes globally.  ---  ## The Honest Uncertainty  This thesis could be wrong. Specifically:  1. **Scaling may not be over**: New architectures, better data efficiency, or synthetic data breakthroughs could restart the scaling curve.      2. **Inference may be harder to commoditize**: CUDA ecosystem lock-in might extend to inference. Nvidia's software moat may be deeper than the hardware story suggests.      3. **Training may remain …"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ai Bullcase",
+          "url": null,
+          "score": 0.015625,
+          "snippet": "Ai Bullcase  fast.  The lithography rent doesn't compress in this scenario. It compresses only if leading-edge demand structurally falls — which would require AI being a much bigger disappointment than just a normal cyclical correction.  **The honest caveat**  There's a graveyard of analysts who've called the top of AI capex since 2023. The base rate for being wrong about cycle timing is high, and the specific pattern here — a small number of buyers with multi-trillion-dollar prizes on the line, locked in a Prisoner's Dilemma where stopping first means losing — is unusually resistant to the no…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015384615,
+          "snippet": "pressure; the benefit is that two genuinely different workloads stop fighting for the same slot. On a 128GB Strix Halo this is trivially fine; on a 32GB laptop it's an explicit trade. Worth surfacing as a configurable choice rather than baked into Main.  A fourth that's coming whether you want it or not: **Reasoner** as a thinking-mode tier. DeepSeek R1 (and distillations), Qwen3 with thinking, the next wave of reasoning-optimized open weights. These have different sampling (often temperature 0.7+), different output shapes (long thinking traces then a final answer), different latency profiles …"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "AI Bullcase"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "ASML",
+          "EUV",
+          "lithography",
+          "monopoly",
+          "no second source",
+          "TSMC"
+        ],
+        "missing": [],
+        "total_expected": 6,
+        "ratio": 1.0
+      },
+      "embed_ms": 29,
+      "search_ms": 25,
+      "corpora_hit": [
+        "watched-959ee8a8f330"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "ai_cycle_timing",
+      "category": "numerical_fact",
+      "question": "What time window does the author bracket for the AI capex cycle to turn,\nand which layer is most exposed to the cycle?\n",
+      "retrieved": [
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ai Econ Modeling",
+          "url": null,
+          "score": 0.032795697,
+          "snippet": "Ai Econ Modeling  Iran war resolves with Hormuz reopening, oil drops to $70s, AI ROI starts showing up in enterprise software revenue, hyperscaler FCF stabilizes as growth catches capex. Market grinds higher with AI tower leadership reasserting. Memory cycle turn delayed.  Base case (~45%): Iran war drags on at reduced intensity, oil stays $80-90, AI capex continues with component inflation persisting, hyperscaler multiples compress, energy and defense outperform, broader index treads water. Memory cycle turns in 2027 as supply lands. The \"rent extraction window\" closes.  Bear case (~30%): Ira…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.03175403,
+          "snippet": "Iran war resolves with Hormuz reopening, oil drops to $70s, AI ROI starts showing up in enterprise software revenue, hyperscaler FCF stabilizes as growth catches capex. Market grinds higher with AI tower leadership reasserting. Memory cycle turn delayed.  Base case (~45%): Iran war drags on at reduced intensity, oil stays $80-90, AI capex continues with component inflation persisting, hyperscaler multiples compress, energy and defense outperform, broader index treads water. Memory cycle turns in 2027 as supply lands. The \"rent extraction window\" closes.  Bear case (~30%): Iran war escalates or…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ai Bullcase",
+          "url": null,
+          "score": 0.031544957,
+          "snippet": "Ai Bullcase  fast.  The lithography rent doesn't compress in this scenario. It compresses only if leading-edge demand structurally falls — which would require AI being a much bigger disappointment than just a normal cyclical correction.  **The honest caveat**  There's a graveyard of analysts who've called the top of AI capex since 2023. The base rate for being wrong about cycle timing is high, and the specific pattern here — a small number of buyers with multi-trillion-dollar prizes on the line, locked in a Prisoner's Dilemma where stopping first means losing — is unusually resistant to the no…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ai Bullcase",
+          "url": null,
+          "score": 0.029850746,
+          "snippet": "Ai Bullcase  before competitors, vertical integration into custom silicon to claw back NVIDIA's margin, and turning around and renting the compute to enterprise customers at markup. They're more like a leveraged bet on AI demand than a structural rent collector.  Then the **AI labs** themselves (OpenAI, Anthropic, etc.), where the value capture is most uncertain because the models are getting commoditized faster than the underlying hardware.  The pattern: rent concentration is roughly proportional to how hard it is to build the second one. ASML is uncopyable in any reasonable timeframe. A new …"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.016666668,
+          "snippet": "fast.  The lithography rent doesn't compress in this scenario. It compresses only if leading-edge demand structurally falls — which would require AI being a much bigger disappointment than just a normal cyclical correction.  **The honest caveat**  There's a graveyard of analysts who've called the top of AI capex since 2023. The base rate for being wrong about cycle timing is high, and the specific pattern here — a small number of buyers with multi-trillion-dollar prizes on the line, locked in a Prisoner's Dilemma where stopping first means losing — is unusually resistant to the normal mean-rev…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ai Econ Modeling",
+          "url": null,
+          "score": 0.016393442,
+          "snippet": "Ai Econ Modeling  race + Asia tensions = sustained defense spending pressure regardless of US administration.  Compute infrastructure (ASML, TSMC, memory): rents continue, stock action choppy as expectations bar rises. Probably modest outperformance with high volatility.  Hyperscalers: dangerous setup. Strong revenue, deteriorating cash flow, multiple compression risk. Watch the credit spreads on their bond issuance — when those widen, the equity follows.  NVIDIA: most exposed to hyperscaler capex stress. If hyperscalers signal any pullback, NVIDIA's revenue concentration becomes a problem. Cu…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015873017,
+          "snippet": "model has to be there first. That's why the right way to read the four-year gap between ReAct (2022) and Cowork (2026) is: most of those years went into Layer 1, and the upper layers were built once Layer 1 was solid enough to make them worth building.  One honest qualifier: the layers I've drawn are useful but somewhat arbitrary slicing. Someone else might collapse 3 and 4, or split 1 into capability versus alignment. The point isn't the taxonomy — it's that there are several roughly independent dimensions of mastery, all of which must be sufficient at the same time, and that \"the loop\" is th…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Ai Bullcase",
+          "url": null,
+          "score": 0.015873017,
+          "snippet": "Ai Bullcase  position above it.  **On the oversupply question**  Yes, there's a point where the bid triggers oversupply, but the path is uneven across the layers and the timing is mostly bracketed between 2027 and 2030. Three layers, three different stories.  _At the memory layer_, the cycle will almost certainly turn. Memory has historically had brutal boom-bust cycles every 3-5 years. The reason this one looks different is that supply growth is unusually constrained (cleanroom space, HBM yield ramps, EUV bottleneck) while demand growth is unusually fast. But the response is being built right…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015625,
+          "snippet": "race + Asia tensions = sustained defense spending pressure regardless of US administration.  Compute infrastructure (ASML, TSMC, memory): rents continue, stock action choppy as expectations bar rises. Probably modest outperformance with high volatility.  Hyperscalers: dangerous setup. Strong revenue, deteriorating cash flow, multiple compression risk. Watch the credit spreads on their bond issuance — when those widen, the equity follows.  NVIDIA: most exposed to hyperscaler capex stress. If hyperscalers signal any pullback, NVIDIA's revenue concentration becomes a problem. Custom silicon ramp …"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Historical arc",
+          "url": null,
+          "score": 0.015384615,
+          "snippet": "Historical arc  a business that wouldn't have been possible in any prior gilded age, where you'd have needed to own the productive infrastructure, not just rent it. The space for non-frontier but capable AI deployment by mid-sized actors is real and probably durable.  What the democratization doesn't do is prevent the concentration we've been discussing at the infrastructure and energy layers. Those bottlenecks remain, and the rents remain, and the political economy of compute control remains roughly as we've described. The two patterns coexist: concentration at the substrate, democratization …"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "AI Bullcase"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "2027",
+          "2030",
+          "memory",
+          "HBM",
+          "demand",
+          "ROI"
+        ],
+        "missing": [],
+        "total_expected": 6,
+        "ratio": 1.0
+      },
+      "embed_ms": 28,
+      "search_ms": 25,
+      "corpora_hit": [
+        "watched-959ee8a8f330"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "pbm_three_firm_concentration",
+      "category": "numerical_fact",
+      "question": "What share of US prescription volume do the three largest pharmacy\nbenefit managers control, and what enabling regulation gave them their\nprotected market?\n",
+      "retrieved": [
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Pharmacy Benefit",
+          "url": null,
+          "score": 0.033333335,
+          "snippet": "Pharmacy Benefit  today. Early PBMs like Pharmaceutical Card System (founded 1968) and PAID Prescriptions (1965) provided electronic claims adjudication, plastic benefit cards, and pharmacy network management. Their original value proposition was administrative efficiency.  The critical institutional mutation occurred through two enabling conditions. **ERISA (1974) created a protected national market** by exempting self-insured employer plans from state insurance regulation—allowing PBMs to operate across state lines without regulatory patchwork. Simultaneously, the 1987 introduction of real-t…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.03226646,
+          "snippet": "today. Early PBMs like Pharmaceutical Card System (founded 1968) and PAID Prescriptions (1965) provided electronic claims adjudication, plastic benefit cards, and pharmacy network management. Their original value proposition was administrative efficiency.  The critical institutional mutation occurred through two enabling conditions. **ERISA (1974) created a protected national market** by exempting self-insured employer plans from state insurance regulation—allowing PBMs to operate across state lines without regulatory patchwork. Simultaneously, the 1987 introduction of real-time electronic cla…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Pharmacy Benefit",
+          "url": null,
+          "score": 0.03201844,
+          "snippet": "Pharmacy Benefit  # Reverse-engineering the PBM equilibrium: a forensic mechanism design analysis  The Pharmacy Benefit Manager industry represents one of American healthcare's most successful institutional arbitrage operations. **Three vertically-integrated firms now control 80% of 6.6 billion annual prescriptions**, extracting value through a self-reinforcing system of information asymmetry, rebate structures, and vertical foreclosure. The observed institutional form—consolidated, opaque, vertically integrated—is precisely what mechanism design predicts when middlemen control information flo…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.031513646,
+          "snippet": "# Reverse-engineering the PBM equilibrium: a forensic mechanism design analysis  The Pharmacy Benefit Manager industry represents one of American healthcare's most successful institutional arbitrage operations. **Three vertically-integrated firms now control 80% of 6.6 billion annual prescriptions**, extracting value through a self-reinforcing system of information asymmetry, rebate structures, and vertical foreclosure. The observed institutional form—consolidated, opaque, vertically integrated—is precisely what mechanism design predicts when middlemen control information flows between parties…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.031257633,
+          "snippet": "with \"high entry barriers.\" UnitedHealth assembled OptumRx through the **$12.8 billion acquisition of Catamaran** in 2015. Market concentration data tells the story: the Big Three's combined share rose from approximately 52% in 2004 to over 80% by 2024.  **Vertical integration (2018)** completed the foreclosure. CVS acquired Aetna for **$78 billion** (including debt), while Cigna purchased Express Scripts for **$67 billion**. These deals were explicitly defensive—CVS cited Amazon's potential healthcare entry—but their structural effect was to create closed ecosystems controlling insurance, pha…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Pharmacy Benefit",
+          "url": null,
+          "score": 0.031054404,
+          "snippet": "Pharmacy Benefit  with \"high entry barriers.\" UnitedHealth assembled OptumRx through the **$12.8 billion acquisition of Catamaran** in 2015. Market concentration data tells the story: the Big Three's combined share rose from approximately 52% in 2004 to over 80% by 2024.  **Vertical integration (2018)** completed the foreclosure. CVS acquired Aetna for **$78 billion** (including debt), while Cigna purchased Express Scripts for **$67 billion**. These deals were explicitly defensive—CVS cited Amazon's potential healthcare entry—but their structural effect was to create closed ecosystems controll…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Pharmacy Benefit",
+          "url": null,
+          "score": 0.030117754,
+          "snippet": "Pharmacy Benefit  or skipping medications due to cost**. The information asymmetry is total: patients cannot observe rebate amounts, cannot compare actual net prices, and face formulary restrictions that may prioritize PBM revenue over therapeutic appropriateness.  ---  ## Lock-in mechanisms and equilibrium stability  The equilibrium persists through multiple reinforcing lock-in mechanisms. **Switching costs** bind each party: plans face multi-year contracts and implementation complexity; pharmacies face termination notice requirements and retroactive DIR uncertainty; manufacturers face formul…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Pharmacy Benefit",
+          "url": null,
+          "score": 0.030076887,
+          "snippet": "Pharmacy Benefit  to ascertain.\" The individually rational response—accepting below-cost reimbursement rather than facing exclusion—drives collective margin erosion. The result: **38.9% of independent pharmacies closed between 2010-2021**, versus 21.9% of chains.  **Manufacturers play a formulary access game where non-participation means market death.** Refusing rebates triggers formulary exclusion; patients then pay full list price, killing demand. The feedback loop creates escalation: each competitor must match or exceed rivals' rebate offers to maintain position. No manufacturer can unilate…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Pharmacy Benefit",
+          "url": null,
+          "score": 0.015151516,
+          "snippet": "Pharmacy Benefit  for **$4 billion**. The FTC intervened, forcing firewalls and eventually divestiture by the early 2000s. But the precedent was set: PBMs had become valuable enough to warrant billion-dollar acquisitions. The question was who would capture that value.  The modern rebate structure emerged from litigation rather than deliberate design. A 1994 settlement of Robinson-Patman Act claims forced manufacturers to shift from volume-based discounts (which favored large purchasers over small pharmacies) to **retrospective rebates tied to market share performance**. This legal accident cre…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.014705882,
+          "snippet": "or skipping medications due to cost**. The information asymmetry is total: patients cannot observe rebate amounts, cannot compare actual net prices, and face formulary restrictions that may prioritize PBM revenue over therapeutic appropriateness.  ---  ## Lock-in mechanisms and equilibrium stability  The equilibrium persists through multiple reinforcing lock-in mechanisms. **Switching costs** bind each party: plans face multi-year contracts and implementation complexity; pharmacies face termination notice requirements and retroactive DIR uncertainty; manufacturers face formulary exclusion pena…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Pharmacy Benefit"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "6.6 billion",
+          "ERISA",
+          "1974",
+          "self-insured"
+        ],
+        "missing": [],
+        "total_expected": 5,
+        "ratio": 0.8
+      },
+      "embed_ms": 34,
+      "search_ms": 26,
+      "corpora_hit": [
+        "watched-959ee8a8f330"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "pbm_spread_pricing",
+      "category": "concept_lookup",
+      "question": "What is 'spread pricing' as the author describes it, and why does the\nmechanism rely on information asymmetry between plans and pharmacies?\n",
+      "retrieved": [
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.03306011,
+          "snippet": "identical medications.  ---  ## Extraction mechanisms as revealed preference  The specific value capture tools PBMs deploy reveal the implicit objective function. Each mechanism exploits the information asymmetry inherent in the PBM's structural position.  **Spread pricing** is pure arbitrage on opacity. PBMs charge health plans more for medications than they reimburse dispensing pharmacies, retaining the difference. Ohio's Medicaid program discovered PBMs had extracted **$224.8 million annually** through spreads; Maryland found **$72 million**; Virginia **$29 million**. The FTC documented **$…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Pharmacy Benefit",
+          "url": null,
+          "score": 0.032051284,
+          "snippet": "Pharmacy Benefit  identical medications.  ---  ## Extraction mechanisms as revealed preference  The specific value capture tools PBMs deploy reveal the implicit objective function. Each mechanism exploits the information asymmetry inherent in the PBM's structural position.  **Spread pricing** is pure arbitrage on opacity. PBMs charge health plans more for medications than they reimburse dispensing pharmacies, retaining the difference. Ohio's Medicaid program discovered PBMs had extracted **$224.8 million annually** through spreads; Maryland found **$72 million**; Virginia **$29 million**. The …"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.031778056,
+          "snippet": "to ascertain.\" The individually rational response—accepting below-cost reimbursement rather than facing exclusion—drives collective margin erosion. The result: **38.9% of independent pharmacies closed between 2010-2021**, versus 21.9% of chains.  **Manufacturers play a formulary access game where non-participation means market death.** Refusing rebates triggers formulary exclusion; patients then pay full list price, killing demand. The feedback loop creates escalation: each competitor must match or exceed rivals' rebate offers to maintain position. No manufacturer can unilaterally cut list pri…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Pharmacy Benefit",
+          "url": null,
+          "score": 0.03175403,
+          "snippet": "Pharmacy Benefit  to ascertain.\" The individually rational response—accepting below-cost reimbursement rather than facing exclusion—drives collective margin erosion. The result: **38.9% of independent pharmacies closed between 2010-2021**, versus 21.9% of chains.  **Manufacturers play a formulary access game where non-participation means market death.** Refusing rebates triggers formulary exclusion; patients then pay full list price, killing demand. The feedback loop creates escalation: each competitor must match or exceed rivals' rebate offers to maintain position. No manufacturer can unilate…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Pharmacy Benefit",
+          "url": null,
+          "score": 0.03036577,
+          "snippet": "Pharmacy Benefit  on asymmetry dominates the business model. The consolidation cascade follows logically: scale increases information advantage and bargaining power, while vertical integration captures additional margins and forecloses exit options for dependent parties.  **The equilibrium persists because no individual actor can unilaterally defect profitably.** Pharmacies cannot refuse networks; manufacturers cannot refuse rebates; plans cannot efficiently self-provide; patients cannot observe the game. Only external intervention—transparency mandates, vertical divestiture requirements, or M…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Pharmacy Benefit",
+          "url": null,
+          "score": 0.016129032,
+          "snippet": "Pharmacy Benefit  preemption, but 2024's PCMA v. Mulready decision reaffirmed that network arrangement and coverage mandates are preempted. The result is a regulatory patchwork that sophisticated actors can navigate around.  ---  ## Cui bono: following the value flows  The distributional evidence confirms the mechanism design prediction. **Value flows to the vertically integrated conglomerates.** PBM-affiliated pharmacies retained **$7.3 billion** above acquisition costs on specialty generics alone from 2017-2022. Reported PBM margins of 4-7% obscure true economics; adjusted for pass-through r…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015873017,
+          "snippet": "# Reverse-engineering the PBM equilibrium: a forensic mechanism design analysis  The Pharmacy Benefit Manager industry represents one of American healthcare's most successful institutional arbitrage operations. **Three vertically-integrated firms now control 80% of 6.6 billion annual prescriptions**, extracting value through a self-reinforcing system of information asymmetry, rebate structures, and vertical foreclosure. The observed institutional form—consolidated, opaque, vertically integrated—is precisely what mechanism design predicts when middlemen control information flows between parties…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Pharmacy Benefit",
+          "url": null,
+          "score": 0.015625,
+          "snippet": "Pharmacy Benefit  objective function revealed through observed outcomes is: maximize revenue extracted from opacity in multi-party transactions while maintaining the appearance of providing administrative value to justify intermediation.  The mechanism design produced:  - Consolidation to monopolistic competition (Big Three at 80%) - Vertical integration to foreclose alternatives (PBM-insurer-pharmacy combinations) - Information asymmetry as the core competitive advantage (spread pricing, rebate opacity, proprietary MAC lists) - Lock-in through switching costs, network effects, and contractual…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015151516,
+          "snippet": "or skipping medications due to cost**. The information asymmetry is total: patients cannot observe rebate amounts, cannot compare actual net prices, and face formulary restrictions that may prioritize PBM revenue over therapeutic appropriateness.  ---  ## Lock-in mechanisms and equilibrium stability  The equilibrium persists through multiple reinforcing lock-in mechanisms. **Switching costs** bind each party: plans face multi-year contracts and implementation complexity; pharmacies face termination notice requirements and retroactive DIR uncertainty; manufacturers face formulary exclusion pena…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Pharmacy Benefit",
+          "url": null,
+          "score": 0.015151516,
+          "snippet": "Pharmacy Benefit  or skipping medications due to cost**. The information asymmetry is total: patients cannot observe rebate amounts, cannot compare actual net prices, and face formulary restrictions that may prioritize PBM revenue over therapeutic appropriateness.  ---  ## Lock-in mechanisms and equilibrium stability  The equilibrium persists through multiple reinforcing lock-in mechanisms. **Switching costs** bind each party: plans face multi-year contracts and implementation complexity; pharmacies face termination notice requirements and retroactive DIR uncertainty; manufacturers face formul…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Pharmacy Benefit"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "arbitrage",
+          "opacity",
+          "Ohio",
+          "Medicaid",
+          "$224.8 million",
+          "$1.4 billion"
+        ],
+        "missing": [],
+        "total_expected": 6,
+        "ratio": 1.0
+      },
+      "embed_ms": 28,
+      "search_ms": 26,
+      "corpora_hit": [
+        "watched-959ee8a8f330"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "jacobs_four_generators",
+      "category": "concept_lookup",
+      "question": "What are the four generators of diversity Jane Jacobs identifies, and\nwhy does the author claim no Sun Belt city scores well by her metrics?\n",
+      "retrieved": [
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Jane Jacobs Urban Ranking",
+          "url": null,
+          "score": 0.033333335,
+          "snippet": "Jane Jacobs Urban Ranking  neighborhoods to generate real Jacobsian vitality yet.  **Noe Valley** has the walkable corridor and residential density, but she'd flag its increasing economic homogeneity as a warning sign of that self-destruction dynamic.  **Oakland second tier:**  **Rockridge** along College Ave is pleasant and walkable, but Jacobs might find it a bit too tidy — it functions more as a suburban village main street than a genuinely complex urban district. Limited building-age variety, and the residential blocks behind it are fairly uniform.  **Old Oakland / downtown core** has magn…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Jane Jacobs Urban Ranking",
+          "url": null,
+          "score": 0.032522473,
+          "snippet": "Jane Jacobs Urban Ranking  across both cities' second tiers: they tend to nail two or three of Jacobs' conditions but miss the others. What separates the top tier is having all four generators working simultaneously.  **The easy targets first — then the more interesting ones.**  **Phoenix and its peers** (Las Vegas, most of the Inland Empire) are the purest anti-Jacobs environments in America. Superblocks, single-use zoning enforced at massive scale, no building-age variety because everything was built within a narrow window, and population density that's spread thin across enormous footprints…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Jane Jacobs Urban Ranking",
+          "url": null,
+          "score": 0.031778056,
+          "snippet": "Jane Jacobs Urban Ranking  Good push on the parks point — and it actually reveals something important about Jacobs that's often misunderstood.  **Jacobs was skeptical of parks, not enthusiastic about them.** She devoted a full chapter of _Death and Life_ to arguing that parks don't uplift neighborhoods — neighborhoods uplift parks. A park surrounded by diverse, active uses thrives; one surrounded by dead frontage becomes dangerous. Parks aren't among her four generators of diversity. So the Tenderloin's sparse greenery wouldn't hurt its score in her framework. She'd look instead at whether its…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Jane Jacobs Urban Ranking",
+          "url": null,
+          "score": 0.031054404,
+          "snippet": "Jane Jacobs Urban Ranking  in an ocean of exactly what she warned against. The BeltLine is an interesting corrective attempt, but Jacobs would likely be skeptical of it as a top-down megaproject trying to manufacture what should emerge organically.  **The Sunbelt sprawl tier:**  Charlotte, Jacksonville, San Antonio, and most of the fast-growing Southern and Western metros share the same problem — they were built almost entirely during the period Jacobs was critiquing, using the exact planning principles she opposed. Wide arterials, separated uses, cul-de-sac residential pods, commercial strips…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.031024532,
+          "snippet": "across both cities' second tiers: they tend to nail two or three of Jacobs' conditions but miss the others. What separates the top tier is having all four generators working simultaneously.  **The easy targets first — then the more interesting ones.**  **Phoenix and its peers** (Las Vegas, most of the Inland Empire) are the purest anti-Jacobs environments in America. Superblocks, single-use zoning enforced at massive scale, no building-age variety because everything was built within a narrow window, and population density that's spread thin across enormous footprints. Jacobs' four generators a…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.031024532,
+          "snippet": "neighborhoods to generate real Jacobsian vitality yet.  **Noe Valley** has the walkable corridor and residential density, but she'd flag its increasing economic homogeneity as a warning sign of that self-destruction dynamic.  **Oakland second tier:**  **Rockridge** along College Ave is pleasant and walkable, but Jacobs might find it a bit too tidy — it functions more as a suburban village main street than a genuinely complex urban district. Limited building-age variety, and the residential blocks behind it are fairly uniform.  **Old Oakland / downtown core** has magnificent old building stock …"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.031009614,
+          "snippet": "Good push on the parks point — and it actually reveals something important about Jacobs that's often misunderstood.  **Jacobs was skeptical of parks, not enthusiastic about them.** She devoted a full chapter of _Death and Life_ to arguing that parks don't uplift neighborhoods — neighborhoods uplift parks. A park surrounded by diverse, active uses thrives; one surrounded by dead frontage becomes dangerous. Parks aren't among her four generators of diversity. So the Tenderloin's sparse greenery wouldn't hurt its score in her framework. She'd look instead at whether its few small parks (Boeddeker…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Jane Jacobs Urban Ranking",
+          "url": null,
+          "score": 0.030550372,
+          "snippet": "Jane Jacobs Urban Ranking  almost a case study. A walkable New England city that was essentially vivisected by highway planners and urban renewal in the 1950s-60s, leaving a downtown cut off from its neighborhoods by infrastructure moats.  **The uncomfortable structural point:**  There's a strong racial dimension here that Jacobs herself didn't fully reckon with. The cities and neighborhoods most thoroughly destroyed by mid-century planning were overwhelmingly Black neighborhoods. \"Urban renewal\" was called \"Negro removal\" for a reason. The worst Jacobsian cities aren't just failures of planni…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.029198635,
+          "snippet": "almost a case study. A walkable New England city that was essentially vivisected by highway planners and urban renewal in the 1950s-60s, leaving a downtown cut off from its neighborhoods by infrastructure moats.  **The uncomfortable structural point:**  There's a strong racial dimension here that Jacobs herself didn't fully reckon with. The cities and neighborhoods most thoroughly destroyed by mid-century planning were overwhelmingly Black neighborhoods. \"Urban renewal\" was called \"Negro removal\" for a reason. The worst Jacobsian cities aren't just failures of planning theory — they're artifac…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.014705882,
+          "snippet": "in an ocean of exactly what she warned against. The BeltLine is an interesting corrective attempt, but Jacobs would likely be skeptical of it as a top-down megaproject trying to manufacture what should emerge organically.  **The Sunbelt sprawl tier:**  Charlotte, Jacksonville, San Antonio, and most of the fast-growing Southern and Western metros share the same problem — they were built almost entirely during the period Jacobs was critiquing, using the exact planning principles she opposed. Wide arterials, separated uses, cul-de-sac residential pods, commercial strips accessible only by car. Th…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Jane Jacobs Urban Ranking"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "short blocks",
+          "building-age",
+          "mixed-use",
+          "density",
+          "Phoenix",
+          "single-use",
+          "superblock"
+        ],
+        "missing": [],
+        "total_expected": 7,
+        "ratio": 1.0
+      },
+      "embed_ms": 29,
+      "search_ms": 24,
+      "corpora_hit": [
+        "watched-959ee8a8f330"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "jacobs_racial_blindspot",
+      "category": "argument_reconstruction",
+      "question": "What is the racial dimension the author argues Jacobs herself did not\nfully reckon with?\n",
+      "retrieved": [
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Jane Jacobs Urban Ranking",
+          "url": null,
+          "score": 0.033333335,
+          "snippet": "Jane Jacobs Urban Ranking  almost a case study. A walkable New England city that was essentially vivisected by highway planners and urban renewal in the 1950s-60s, leaving a downtown cut off from its neighborhoods by infrastructure moats.  **The uncomfortable structural point:**  There's a strong racial dimension here that Jacobs herself didn't fully reckon with. The cities and neighborhoods most thoroughly destroyed by mid-century planning were overwhelmingly Black neighborhoods. \"Urban renewal\" was called \"Negro removal\" for a reason. The worst Jacobsian cities aren't just failures of planni…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.032522473,
+          "snippet": "almost a case study. A walkable New England city that was essentially vivisected by highway planners and urban renewal in the 1950s-60s, leaving a downtown cut off from its neighborhoods by infrastructure moats.  **The uncomfortable structural point:**  There's a strong racial dimension here that Jacobs herself didn't fully reckon with. The cities and neighborhoods most thoroughly destroyed by mid-century planning were overwhelmingly Black neighborhoods. \"Urban renewal\" was called \"Negro removal\" for a reason. The worst Jacobsian cities aren't just failures of planning theory — they're artifac…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Jane Jacobs Urban Ranking",
+          "url": null,
+          "score": 0.031099323,
+          "snippet": "Jane Jacobs Urban Ranking  in an ocean of exactly what she warned against. The BeltLine is an interesting corrective attempt, but Jacobs would likely be skeptical of it as a top-down megaproject trying to manufacture what should emerge organically.  **The Sunbelt sprawl tier:**  Charlotte, Jacksonville, San Antonio, and most of the fast-growing Southern and Western metros share the same problem — they were built almost entirely during the period Jacobs was critiquing, using the exact planning principles she opposed. Wide arterials, separated uses, cul-de-sac residential pods, commercial strips…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Jane Jacobs Urban Ranking",
+          "url": null,
+          "score": 0.03079839,
+          "snippet": "Jane Jacobs Urban Ranking  neighborhoods to generate real Jacobsian vitality yet.  **Noe Valley** has the walkable corridor and residential density, but she'd flag its increasing economic homogeneity as a warning sign of that self-destruction dynamic.  **Oakland second tier:**  **Rockridge** along College Ave is pleasant and walkable, but Jacobs might find it a bit too tidy — it functions more as a suburban village main street than a genuinely complex urban district. Limited building-age variety, and the residential blocks behind it are fairly uniform.  **Old Oakland / downtown core** has magn…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.030090498,
+          "snippet": "Good push on the parks point — and it actually reveals something important about Jacobs that's often misunderstood.  **Jacobs was skeptical of parks, not enthusiastic about them.** She devoted a full chapter of _Death and Life_ to arguing that parks don't uplift neighborhoods — neighborhoods uplift parks. A park surrounded by diverse, active uses thrives; one surrounded by dead frontage becomes dangerous. Parks aren't among her four generators of diversity. So the Tenderloin's sparse greenery wouldn't hurt its score in her framework. She'd look instead at whether its few small parks (Boeddeker…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Jane Jacobs Urban Ranking",
+          "url": null,
+          "score": 0.030076887,
+          "snippet": "Jane Jacobs Urban Ranking  across both cities' second tiers: they tend to nail two or three of Jacobs' conditions but miss the others. What separates the top tier is having all four generators working simultaneously.  **The easy targets first — then the more interesting ones.**  **Phoenix and its peers** (Las Vegas, most of the Inland Empire) are the purest anti-Jacobs environments in America. Superblocks, single-use zoning enforced at massive scale, no building-age variety because everything was built within a narrow window, and population density that's spread thin across enormous footprints…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Beyond GDP",
+          "url": null,
+          "score": 0.016129032,
+          "snippet": "Beyond GDP  secure populations are more productive. Nordic countries have high D1-D5 scores and competitive economies. The tradeoff is less stark than often presented.  ### Progressive Objections  **\"This is too incremental; it doesn't address systemic issues.\"**  Response: The pathway is ambitious over 20-30 year horizon—Nordic-level equality, universal healthcare, transformed criminal justice, rebuilt social fabric. The incrementalism is strategic recognition that US political system requires sustained coalition-building. Revolutionary approaches have repeatedly failed in American context; i…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Jane Jacobs Urban Ranking",
+          "url": null,
+          "score": 0.015873017,
+          "snippet": "Jane Jacobs Urban Ranking  Good push on the parks point — and it actually reveals something important about Jacobs that's often misunderstood.  **Jacobs was skeptical of parks, not enthusiastic about them.** She devoted a full chapter of _Death and Life_ to arguing that parks don't uplift neighborhoods — neighborhoods uplift parks. A park surrounded by diverse, active uses thrives; one surrounded by dead frontage becomes dangerous. Parks aren't among her four generators of diversity. So the Tenderloin's sparse greenery wouldn't hurt its score in her framework. She'd look instead at whether its…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015625,
+          "snippet": "to institutions that wanted legitimacy, useful to a distribution of income that wanted to appear natural.  She would not be surprised that her critique was marginalized. She understood that ideas survive or perish based on their compatibility with power.  But she might be surprised—and perhaps hopeful—at where we stand now. The tools that made equilibrium attractive have been superseded. The financial crisis of 2008 vindicated warnings the mainstream had ignored. Inequality has returned as a central concern, and the old frameworks have no good explanation for it. A new generation is asking que…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015625,
+          "snippet": "secure populations are more productive. Nordic countries have high D1-D5 scores and competitive economies. The tradeoff is less stark than often presented.  ### Progressive Objections  **\"This is too incremental; it doesn't address systemic issues.\"**  Response: The pathway is ambitious over 20-30 year horizon—Nordic-level equality, universal healthcare, transformed criminal justice, rebuilt social fabric. The incrementalism is strategic recognition that US political system requires sustained coalition-building. Revolutionary approaches have repeatedly failed in American context; incremental a…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Jane Jacobs Urban Ranking"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "Black neighborhoods",
+          "urban renewal",
+          "Negro removal",
+          "Fillmore",
+          "Rondo",
+          "Black Bottom"
+        ],
+        "missing": [],
+        "total_expected": 6,
+        "ratio": 1.0
+      },
+      "embed_ms": 35,
+      "search_ms": 25,
+      "corpora_hit": [
+        "watched-959ee8a8f330"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "lvt_progressive_structure",
+      "category": "numerical_fact",
+      "question": "What rate structure does the author propose for a progressive land\nvalue tax, and why is the five-year rolling average load-bearing?\n",
+      "retrieved": [
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.03306011,
+          "snippet": "Based on our discussion, here's the distilled proposal:  ---  ## Land Value Tax: Core Framework  **What's taxed:** The unimproved value of land only—not buildings, renovations, or other improvements.  **Valuation method:** Five-year rolling average of assessed land value, updated annually. No single year's market movement produces sudden tax shocks.  **Rate structure:** Progressive tiers based on land value:  |Land Value|Marginal Rate| |---|---| |First $200K|0.2%| |$200K–$1M|0.5%| |$1M–$5M|1.2%| |$5M–$20M|2.0%| |$20M+|3.0%|  _(Rates illustrative—actual calibration requires revenue-neutrality a…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Lvt",
+          "url": null,
+          "score": 0.03306011,
+          "snippet": "Lvt  Based on our discussion, here's the distilled proposal:  ---  ## Land Value Tax: Core Framework  **What's taxed:** The unimproved value of land only—not buildings, renovations, or other improvements.  **Valuation method:** Five-year rolling average of assessed land value, updated annually. No single year's market movement produces sudden tax shocks.  **Rate structure:** Progressive tiers based on land value:  |Land Value|Marginal Rate| |---|---| |First $200K|0.2%| |$200K–$1M|0.5%| |$1M–$5M|1.2%| |$5M–$20M|2.0%| |$20M+|3.0%|  _(Rates illustrative—actual calibration requires revenue-neutral…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Lvt",
+          "url": null,
+          "score": 0.032258064,
+          "snippet": "Lvt  simplicity advocates:** No means-testing, no primary residence audits, no income verification, no deferral lien administration. The formula handles everything.  ---  ## Political Positioning  This framework draws support across typical divides:  - **Economic efficiency** (conservative/libertarian appeal): No deadweight loss, no distortion of productive activity, encourages highest-and-best-use of land - **Wealth taxation that works** (progressive appeal): Targets an asset class that can't flee to offshore accounts—land stays where it is - **Anti-speculation** (populist appeal): Penalizes …"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.031746034,
+          "snippet": "simplicity advocates:** No means-testing, no primary residence audits, no income verification, no deferral lien administration. The formula handles everything.  ---  ## Political Positioning  This framework draws support across typical divides:  - **Economic efficiency** (conservative/libertarian appeal): No deadweight loss, no distortion of productive activity, encourages highest-and-best-use of land - **Wealth taxation that works** (progressive appeal): Targets an asset class that can't flee to offshore accounts—land stays where it is - **Anti-speculation** (populist appeal): Penalizes land …"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015625,
+          "snippet": "is a utility—like roads or the electrical grid. Private profit-seeking exists only where genuine risk-bearing or service provision occurs.  ---  ## Now the Distortions Become Visible  Against this baseline, the current system's rents stand out:  |Current Feature|vs. First-Principles Design|Nature of Distortion| |---|---|---| |Multiple competing exchanges + dark pools|Single matching venue|Fragmentation enables information asymmetries, PFOF, complexity| |Continuous trading|Batch auctions|Creates speed race with zero social value| |Proprietary data feeds|Free public data|Artificial scarcity of b…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "The Recipe Agent",
+          "url": null,
+          "score": 0.015625,
+          "snippet": "The Recipe Agent  the maintainer pulls the project state directly.)  ---  ## 7. Agent prompt structure  The recipe agent's system prompt has the following load-bearing sections. (Exact wording is implementation, not requirement; the _structure_ is the requirement.)  - **Role framing:** The agent's job is to help a domain expert build a corpus through conversation, web research, and the recipe-author tools. The partner provides domain judgment; the agent provides technical authoring. - **Situated context** (loaded per session): the project charter, the most recent decisions, outstanding issues,…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015384615,
+          "snippet": "is a utility—like roads or the electrical grid. Private profit-seeking exists only where genuine risk-bearing or service provision occurs.  ---  ## Now the Distortions Become Visible  Against this baseline, the current system's rents stand out:  |Current Feature|vs. First-Principles Design|Nature of Distortion| |---|---|---| |Multiple competing exchanges + dark pools|Single matching venue|Fragmentation enables information asymmetries, PFOF, complexity| |Continuous trading|Batch auctions|Creates speed race with zero social value| |Proprietary data feeds|Free public data|Artificial scarcity of b…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Historical arc",
+          "url": null,
+          "score": 0.015384615,
+          "snippet": "Historical arc  Let me trace where this actually goes.  **The fundamental migration**  When the cognitive layer commodifies, value migrates to the layers cognition can't replicate or generate. There are five of these, and capital is already visibly relocating to each.  The physical reality layer. AI cognition can plan a manufacturing process, but it can't manufacture. It can design a molecule, but it can't synthesize it without lab capacity. It can route a logistics network, but the trucks, ships, and warehouses still need to exist. As cognitive abundance grows, scarce physical assets — energy…"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": null,
+          "url": null,
+          "score": 0.015151516,
+          "snippet": "integration work and the early ones likely deliver 3-5x on their own. The bigger structural moves (smaller Phase 1 model, merging 1/1b, Tier-2 triage) come after measurement validates the simpler wins haven't already gotten you to acceptable throughput.  The thing I'd be most careful about: the +29pp recall lift on the Wikipedia bank is the artifact justifying this whole subsystem's existence. Every quality-risk optimization needs to be validated against an eval bank before it ships, not after. The eval surfaces described in the doc (`atlas-eval`, `eval run --with-atlas`, `schema-report`) are …"
+        },
+        {
+          "corpus_id": "watched-959ee8a8f330",
+          "title": "Stock Buybacks",
+          "url": null,
+          "score": 0.015151516,
+          "snippet": "Stock Buybacks  The policy question—whether this represents a misallocation of capital versus a legitimate return of cash to shareholders who can redeploy it—is genuinely contested. But the incentive structure you're pointing at is real and well-documented.  This is the right question, and it forces us to identify what actually constrains the loop.  ## The Arbitrage Spread as the Core Signal  The buyback remains \"accretive\" as long as:  **Earnings Yield > After-Tax Cost of Debt**  So the mechanics break when:  1. **Stock price rises enough** that earnings yield compresses below debt cost 2. **…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "LVT"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "five-year",
+          "rolling",
+          "tier",
+          "shock"
+        ],
+        "missing": [],
+        "total_expected": 6,
+        "ratio": 0.6666667
+      },
+      "embed_ms": 28,
+      "search_ms": 25,
+      "corpora_hit": [
+        "watched-959ee8a8f330"
+      ],
+      "vector_eligible": true
+    }
+  ]
+}

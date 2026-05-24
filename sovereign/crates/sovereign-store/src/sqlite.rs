@@ -80,6 +80,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Conv tiered migration failed: {e}")))?;
         migrations::run_chunk_entities_migration(&conn)
             .map_err(|e| Error::Storage(format!("Chunk entities migration failed: {e}")))?;
+        migrations::run_vault_themes_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Vault themes migration failed: {e}")))?;
         migrations::run_surface_skill_backfill(&conn)
             .map_err(|e| Error::Storage(format!("Surface-skill backfill failed: {e}")))?;
 
@@ -328,6 +330,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Conv tiered migration failed: {e}")))?;
         migrations::run_chunk_entities_migration(&conn)
             .map_err(|e| Error::Storage(format!("Chunk entities migration failed: {e}")))?;
+        migrations::run_vault_themes_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Vault themes migration failed: {e}")))?;
         migrations::run_surface_skill_backfill(&conn)
             .map_err(|e| Error::Storage(format!("Surface-skill backfill failed: {e}")))?;
 
@@ -2435,6 +2439,15 @@ impl ConvTieredReader for SqliteStateStore {
     > {
         SqliteStateStore::get_chunk_entity_progress(self, corpus_id).await
     }
+
+    async fn list_vault_themes_for_corpus(
+        &self,
+        corpus_id: &str,
+    ) -> sovereign_core::error::Result<
+        Vec<sovereign_core::conv_tiered::VaultThemeRow>,
+    > {
+        SqliteStateStore::list_vault_themes_for_corpus(self, corpus_id).await
+    }
 }
 
 //
@@ -2644,6 +2657,157 @@ impl SqliteStateStore {
             out.push(row.map_err(map_db)?);
         }
         Ok(out)
+    }
+
+    /// Wipe every RAPTOR node for a single source_doc inside a
+    /// corpus, without touching the rest of the vault. Used by the
+    /// incremental sweeper: when a note's chunk set changes, the
+    /// caller wants to drop the stale RAPTOR before
+    /// `save_conv_raptor_nodes` re-writes it. Returns the number of
+    /// rows actually deleted so the caller can log a skipped-doc
+    /// short-circuit.
+    pub async fn delete_conv_raptor_nodes_for_source(
+        &self,
+        corpus_id: &str,
+        source_doc_id: &str,
+    ) -> Result<usize> {
+        let conn = self.conn.lock().await;
+        let deleted = conn
+            .execute(
+                "DELETE FROM conv_raptor_nodes
+                 WHERE corpus_id = ?1 AND conv_uuid = ?2",
+                rusqlite::params![corpus_id, source_doc_id],
+            )
+            .map_err(map_db)?;
+        Ok(deleted)
+    }
+
+    /// All `conv_uuid`s for a corpus whose `conv_skeletons.state` is
+    /// `'Ready'`. Used by the vault-wide synthesis pass to enumerate
+    /// the per-note RAPTOR trees that should feed the cross-note
+    /// theme clustering. Returns deterministically-ordered uuids
+    /// (`ORDER BY conv_uuid ASC`) so the synthesis input is stable
+    /// across re-runs.
+    pub async fn list_ready_source_doc_ids_for_corpus(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Vec<String>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT conv_uuid
+                 FROM conv_skeletons
+                 WHERE corpus_id = ?1 AND state = 'Ready'
+                 ORDER BY conv_uuid ASC",
+            )
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map(rusqlite::params![corpus_id], |r| r.get::<_, String>(0))
+            .map_err(map_db)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.map_err(map_db)?);
+        }
+        Ok(out)
+    }
+
+    /// Atomically replace the vault-wide synthesis themes for one
+    /// corpus. Like `save_conv_raptor_nodes`, the entire prior theme
+    /// set is deleted in the same transaction so a re-synthesis pass
+    /// observably swaps the briefing's "Vault themes" block as one
+    /// commit — never partial.
+    pub async fn save_vault_themes(
+        &self,
+        corpus_id: &str,
+        themes: &[sovereign_core::conv_tiered::VaultThemeRow],
+    ) -> Result<()> {
+        let mut conn = self.conn.lock().await;
+        let tx = conn.transaction().map_err(map_db)?;
+        tx.execute(
+            "DELETE FROM vault_themes WHERE corpus_id = ?1",
+            rusqlite::params![corpus_id],
+        )
+        .map_err(map_db)?;
+        for theme in themes {
+            tx.execute(
+                "INSERT INTO vault_themes
+                    (corpus_id, theme_id, summary, summary_embedding,
+                     member_source_doc_ids_json, cluster_coherence,
+                     created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                rusqlite::params![
+                    theme.corpus_id,
+                    theme.theme_id,
+                    theme.summary,
+                    encode_f32_vec(&theme.summary_embedding),
+                    theme.member_source_doc_ids_json,
+                    theme.cluster_coherence,
+                    theme.created_at,
+                ],
+            )
+            .map_err(map_db)?;
+        }
+        tx.commit().map_err(map_db)?;
+        Ok(())
+    }
+
+    /// All vault-wide synthesis themes for one corpus, ordered by
+    /// `cluster_coherence DESC`. Empty when the synthesis pass has
+    /// not run yet — caller (the briefing layer) treats empty as
+    /// "no vault-wide block, fall through to per-note signposts".
+    pub async fn list_vault_themes_for_corpus(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Vec<sovereign_core::conv_tiered::VaultThemeRow>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT corpus_id, theme_id, summary, summary_embedding,
+                        member_source_doc_ids_json, cluster_coherence,
+                        created_at
+                 FROM vault_themes
+                 WHERE corpus_id = ?1
+                 ORDER BY cluster_coherence DESC, theme_id ASC",
+            )
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map(rusqlite::params![corpus_id], |r| {
+                Ok(sovereign_core::conv_tiered::VaultThemeRow {
+                    corpus_id: r.get(0)?,
+                    theme_id: r.get(1)?,
+                    summary: r.get(2)?,
+                    summary_embedding: decode_f32_vec(
+                        r.get::<_, Vec<u8>>(3)?.as_slice(),
+                    ),
+                    member_source_doc_ids_json: r.get(4)?,
+                    cluster_coherence: r.get(5)?,
+                    created_at: r.get(6)?,
+                })
+            })
+            .map_err(map_db)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.map_err(map_db)?);
+        }
+        Ok(out)
+    }
+
+    /// Wipe every vault-wide theme for a corpus. Called by the
+    /// disable-enrichment teardown path so the briefing stops
+    /// referencing themes that no longer reflect the current vault
+    /// state.
+    pub async fn delete_vault_themes_for_corpus(
+        &self,
+        corpus_id: &str,
+    ) -> Result<usize> {
+        let conn = self.conn.lock().await;
+        let deleted = conn
+            .execute(
+                "DELETE FROM vault_themes WHERE corpus_id = ?1",
+                rusqlite::params![corpus_id],
+            )
+            .map_err(map_db)?;
+        Ok(deleted)
     }
 
     /// Bulk read for `(state, overview, chunk_count)` triples across

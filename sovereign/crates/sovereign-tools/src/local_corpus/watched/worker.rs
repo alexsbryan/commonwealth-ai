@@ -586,6 +586,50 @@ impl Worker {
         // for the same `last_writeback_unix`.
         state.save(&self.state_dir(&corpus_id))?;
 
+        // 11d. Tiered incremental re-enrichment. For vault + watched-
+        // folder corpora that route through `FolderTieredProvider`
+        // (recipe emits `[display] category = "vault"` or
+        // `"watched_folder"`), re-run GLiNER over new/changed chunks
+        // and re-run per-source RAPTOR for only the touched notes.
+        // Always fires for these source kinds — the engine's
+        // `reindex_changed_sources_tiered` no-ops cleanly when the
+        // extractor / provider isn't installed, so a daemon without
+        // tiered wiring stays unaffected.
+        //
+        // Skipped for `DocumentFolder` (one-shot drag-drop) — those
+        // never enter the worker anyway, but defensive in case the
+        // reconcile-kind logic ever extends.
+        if matches!(
+            reconcile_kind,
+            ReconcileKind::ObsidianVault | ReconcileKind::WatchedFolder
+        ) {
+            let touched_basenames = diff
+                .added
+                .iter()
+                .chain(diff.modified.iter())
+                .filter_map(|rel| {
+                    // source_doc_id is set to the file basename by
+                    // `extract_stage::source_id_for` — convert each
+                    // diff entry's relative path to its basename so
+                    // the per-source RAPTOR rows match.
+                    std::path::Path::new(rel)
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .map(|s| s.to_string())
+                })
+                .collect::<Vec<_>>();
+            if !touched_basenames.is_empty() {
+                tracing::info!(
+                    corpus_id = %corpus_id,
+                    touched = touched_basenames.len(),
+                    "watched_folder:tiered_incremental_start"
+                );
+                self.engine
+                    .reindex_changed_sources_tiered(&corpus_id, &touched_basenames)
+                    .await;
+            }
+        }
+
         self.emit(WatchedFolderEvent::SweepCompleted {
             corpus_id: corpus_id.clone(),
             applied: summary.clone(),

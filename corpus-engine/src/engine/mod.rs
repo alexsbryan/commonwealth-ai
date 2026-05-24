@@ -560,6 +560,53 @@ impl CorpusEngine {
         self.chunk_entity_extractor.as_ref()
     }
 
+    /// Fire the incremental tiered hooks for a per-sweep delta. Used
+    /// by the watched-folder sweeper after `apply_watched_diff` lands
+    /// a set of added/modified notes: re-runs GLiNER over the
+    /// new/changed chunks and re-runs the per-source RAPTOR
+    /// (`reenrich_sources` on the provider, which also re-fires the
+    /// vault-wide synthesis pass).
+    ///
+    /// `source_doc_ids` is the union of changed source_doc ids
+    /// (additions + modifications). Empty list is a no-op — saves
+    /// the sweeper from having to guard. Best-effort throughout:
+    /// individual extractor / provider failures log and are swallowed
+    /// so the sweep keeps making forward progress; the next full
+    /// re-enrichment recovers any skipped state.
+    pub async fn reindex_changed_sources_tiered(
+        &self,
+        corpus_id: &str,
+        source_doc_ids: &[String],
+    ) {
+        if source_doc_ids.is_empty() {
+            return;
+        }
+        let index_path = self.index_dir.join(corpus_id);
+        if let Some(extractor) = self.chunk_entity_extractor.as_ref() {
+            if let Err(e) = extractor
+                .extract_delta_for_corpus(corpus_id, &index_path)
+                .await
+            {
+                tracing::warn!(
+                    corpus = corpus_id,
+                    error = %e,
+                    "tiered incremental: chunk-entity delta extraction failed; continuing"
+                );
+            }
+        }
+        if let Some(provider) = self.tiered_provider.as_ref() {
+            if let Err(e) = provider.reenrich_sources(corpus_id, source_doc_ids).await
+            {
+                tracing::warn!(
+                    corpus = corpus_id,
+                    docs = source_doc_ids.len(),
+                    error = %e,
+                    "tiered incremental: reenrich_sources failed; continuing"
+                );
+            }
+        }
+    }
+
     /// Provide a batch embedding function for high-throughput corpus ingest.
     /// When set, the ingest pipeline embeds chunks in batches rather than
     /// one-at-a-time, yielding 5-10x throughput improvement.

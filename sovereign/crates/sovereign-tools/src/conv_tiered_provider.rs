@@ -820,6 +820,272 @@ impl FolderTieredProvider {
             );
         }
     }
+
+    /// Re-run per-source RAPTOR for only the source_doc_ids supplied.
+    /// Called by the watched-folder sweeper after `apply_watched_diff`
+    /// lands new chunks: instead of rebuilding the whole vault's
+    /// RAPTOR forest (cost grows linearly with vault size), we
+    /// re-enrich only the notes whose chunk set changed.
+    ///
+    /// Cheap-on-unchanged: the RAPTOR checkpoint inside
+    /// `enrich_conversation` hashes the input chunk-id set + embedding
+    /// dim. When the hash matches the prior run's checkpoint, the
+    /// per-cluster LLM summarisation short-circuits (`Resume` rather
+    /// than `Fresh`). So a sweeper that fires this for a note that
+    /// only had a whitespace edit pays the cost of one Lance read +
+    /// one checkpoint compare, no LLM work.
+    ///
+    /// After per-doc work completes the synthesis pass re-runs so
+    /// `vault_themes` reflects the post-edit state.
+    pub async fn reenrich_changed_sources(
+        &self,
+        corpus_id: &str,
+        source_doc_ids: &[String],
+    ) -> Result<()> {
+        use corpus_engine::enrichment::tiered::ConvBucket;
+        use corpus_engine::enrichment::tiered::TieredEnrichmentProvider;
+        use corpus_engine::index::CorpusIndex;
+
+        if source_doc_ids.is_empty() {
+            return Ok(());
+        }
+        let Some(resolver) = self.index_dir_resolver.as_ref() else {
+            tracing::warn!(
+                corpus = corpus_id,
+                "folder_tiered: reenrich_changed_sources called without index_dir_resolver; skipping"
+            );
+            return Ok(());
+        };
+        let Some(index_path) = resolver.resolve(corpus_id) else {
+            tracing::warn!(
+                corpus = corpus_id,
+                "folder_tiered: reenrich_changed_sources could not resolve index dir; skipping"
+            );
+            return Ok(());
+        };
+
+        let index = CorpusIndex::open(&index_path).await.map_err(|e| {
+            Error::Database(format!(
+                "folder_tiered: open corpus index for incremental reenrich ({corpus_id}): {e}"
+            ))
+        })?;
+
+        let mut reenriched = 0usize;
+        let mut skipped_empty = 0usize;
+        for doc_id in source_doc_ids {
+            let rows = match index.chunks_for_source_doc_with_embeddings(doc_id).await {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::warn!(
+                        corpus = corpus_id,
+                        doc = %doc_id,
+                        error = %e,
+                        "folder_tiered: incremental reenrich chunk fetch failed; skipping doc"
+                    );
+                    continue;
+                }
+            };
+            if rows.is_empty() {
+                // Deleted note — wipe its sidecar RAPTOR + themes
+                // references will be reconciled next finalize.
+                let _ = self
+                    .store
+                    .delete_conv_raptor_nodes_for_source(corpus_id, doc_id)
+                    .await;
+                skipped_empty += 1;
+                continue;
+            }
+            let (chunks, embeddings): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
+            let bucket = ConvBucket::classify(chunks.len());
+            if let Err(e) = self
+                .enrich_conversation(corpus_id, doc_id, chunks, embeddings, bucket)
+                .await
+            {
+                tracing::warn!(
+                    corpus = corpus_id,
+                    doc = %doc_id,
+                    error = %e,
+                    "folder_tiered: incremental enrich_conversation failed for source_doc"
+                );
+                continue;
+            }
+            reenriched += 1;
+        }
+
+        tracing::info!(
+            corpus = corpus_id,
+            reenriched,
+            skipped_empty,
+            "folder_tiered: incremental reenrich done; re-running vault synthesis"
+        );
+
+        // Re-fire synthesis so vault_themes reflects post-edit state.
+        // finalize_corpus tolerates failure (best-effort logging).
+        let _ = self.finalize_corpus(corpus_id).await;
+        Ok(())
+    }
+
+    /// Vault-wide RAPTOR synthesis pass. Implementation behind
+    /// `finalize_corpus`. Public-ish (crate-private) so unit tests
+    /// can exercise the synthesis output without going through the
+    /// trait surface.
+    ///
+    /// Algorithm:
+    /// 1. Enumerate all source_doc_ids whose `conv_skeletons.state`
+    ///    is Ready for this corpus.
+    /// 2. For each, fetch level-0 RAPTOR leaves; flatten into a
+    ///    cross-vault input list of `(content, embedding)` pairs.
+    ///    Track which source_doc each input came from.
+    /// 3. Below the minimum-input-count gate (<8 leaves total across
+    ///    the vault), skip — there isn't enough cross-note signal to
+    ///    cluster usefully. Empty `vault_themes` is the right answer.
+    /// 4. Run `build_raptor_atlas` over the flattened input. The
+    ///    builder ascends levels until the cluster count drops to
+    ///    `<= 4`; we take the highest level as the "themes".
+    /// 5. For each theme node, project its `evidence_chunk_ids`
+    ///    (which index back into our flattened input order) through
+    ///    the source-doc sidecar to recover the contributing notes.
+    /// 6. Persist as `VaultThemeRow`s.
+    ///
+    /// Returns the number of themes persisted (or 0 on a no-op skip).
+    pub(crate) async fn run_vault_synthesis(
+        &self,
+        corpus_id: &str,
+    ) -> Result<usize> {
+        use crate::raptor_atlas::{build_raptor_atlas, ChunkInput};
+        use sovereign_core::conv_tiered::VaultThemeRow;
+
+        // Bound below which synthesis is pointless. 8 = a vault with
+        // <2 notes (typical 4-5 leaves each) or one single
+        // many-clustered note — neither has cross-note structure to
+        // synthesise.
+        const MIN_LEAVES_FOR_SYNTHESIS: usize = 8;
+
+        let source_doc_ids = self
+            .store
+            .list_ready_source_doc_ids_for_corpus(corpus_id)
+            .await
+            .map_err(|e| {
+                Error::Database(format!(
+                    "vault_synthesis: list ready source_doc_ids ({corpus_id}): {e}"
+                ))
+            })?;
+        if source_doc_ids.is_empty() {
+            tracing::debug!(
+                corpus = corpus_id,
+                "vault_synthesis: no Ready conv_skeletons; skipping"
+            );
+            // Wipe any stale themes from a prior state where docs
+            // were ready but have since been removed.
+            let _ = self.store.delete_vault_themes_for_corpus(corpus_id).await;
+            return Ok(0);
+        }
+
+        let mut chunks: Vec<ChunkInput> = Vec::new();
+        let mut embeddings: Vec<Vec<f32>> = Vec::new();
+        // Sidecar mapping: index into `chunks` -> source_doc_id that
+        // contributed it. Used after RAPTOR returns to project
+        // evidence_chunk_ids (which are u32 indices in 0..chunks.len())
+        // back to the originating notes.
+        let mut source_for_input: Vec<String> = Vec::new();
+        for doc_id in &source_doc_ids {
+            let nodes = match self
+                .store
+                .list_conv_raptor_nodes(corpus_id, doc_id)
+                .await
+            {
+                Ok(n) => n,
+                Err(e) => {
+                    tracing::warn!(
+                        corpus = corpus_id,
+                        doc = %doc_id,
+                        error = %e,
+                        "vault_synthesis: per-doc raptor fetch failed; excluding from synthesis"
+                    );
+                    continue;
+                }
+            };
+            for node in nodes.iter().filter(|n| n.level == 0) {
+                let next_id = chunks.len() as u32;
+                chunks.push(ChunkInput {
+                    chunk_id: next_id,
+                    content: node.summary.clone(),
+                });
+                embeddings.push(node.summary_embedding.clone());
+                source_for_input.push(doc_id.clone());
+            }
+        }
+
+        if chunks.len() < MIN_LEAVES_FOR_SYNTHESIS {
+            tracing::debug!(
+                corpus = corpus_id,
+                leaves = chunks.len(),
+                min = MIN_LEAVES_FOR_SYNTHESIS,
+                "vault_synthesis: too few level-0 leaves across vault; skipping"
+            );
+            let _ = self.store.delete_vault_themes_for_corpus(corpus_id).await;
+            return Ok(0);
+        }
+
+        tracing::info!(
+            corpus = corpus_id,
+            notes = source_doc_ids.len(),
+            leaves = chunks.len(),
+            "vault_synthesis: building cross-note RAPTOR tree"
+        );
+
+        let nodes = build_raptor_atlas(
+            &self.inference,
+            &chunks,
+            &embeddings,
+            DocumentTypeTag::Unknown,
+        )
+        .await
+        .map_err(|e| {
+            Error::Database(format!(
+                "vault_synthesis: build_raptor_atlas ({corpus_id}): {e}"
+            ))
+        })?;
+
+        let max_level = nodes.iter().map(|n| n.level).max().unwrap_or(0);
+        let now = Utc::now().timestamp();
+        let themes: Vec<VaultThemeRow> = nodes
+            .iter()
+            .filter(|n| n.level == max_level)
+            .enumerate()
+            .map(|(idx, node)| {
+                let mut members: Vec<String> = node
+                    .evidence_chunk_ids
+                    .iter()
+                    .filter_map(|cid| source_for_input.get(*cid as usize).cloned())
+                    .collect();
+                members.sort();
+                members.dedup();
+                VaultThemeRow {
+                    corpus_id: corpus_id.to_string(),
+                    theme_id: format!("theme-{idx:03}"),
+                    summary: node.summary.clone(),
+                    summary_embedding: node.summary_embedding.clone(),
+                    member_source_doc_ids_json: serde_json::to_string(&members)
+                        .unwrap_or_else(|_| "[]".to_string()),
+                    cluster_coherence: node.cluster_coherence,
+                    created_at: now,
+                }
+            })
+            .filter(|t| t.member_source_doc_ids_json != "[]")
+            .collect();
+
+        let theme_count = themes.len();
+        self.store
+            .save_vault_themes(corpus_id, &themes)
+            .await
+            .map_err(|e| {
+                Error::Database(format!(
+                    "vault_synthesis: save_vault_themes ({corpus_id}): {e}"
+                ))
+            })?;
+        Ok(theme_count)
+    }
 }
 
 #[async_trait]
@@ -1003,6 +1269,39 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                 .await;
                 self.fail_state(corpus_id, &e.to_string());
                 Err(e)
+            }
+        }
+    }
+
+    /// After every per-source `enrich_conversation` for this corpus
+    /// has settled, run the vault-wide synthesis pass: cluster the
+    /// per-note level-0 RAPTOR summaries into ~10-20 cross-note
+    /// themes and persist them to `vault_themes`. The retrieval
+    /// briefing surfaces these alongside per-note signposts to give
+    /// the synth model "what does my whole vault say about X"
+    /// context the per-note view alone doesn't carry.
+    ///
+    /// Best-effort: a failure here only kills the cross-note briefing
+    /// block — the per-note tiered retrieval surface is fully
+    /// functional regardless. We log + return Ok unless the failure
+    /// is catastrophic enough to indicate a bug worth bubbling.
+    async fn finalize_corpus(&self, corpus_id: &str) -> Result<()> {
+        match self.run_vault_synthesis(corpus_id).await {
+            Ok(theme_count) => {
+                tracing::info!(
+                    corpus = corpus_id,
+                    themes = theme_count,
+                    "folder_tiered: vault synthesis complete"
+                );
+                Ok(())
+            }
+            Err(e) => {
+                tracing::warn!(
+                    corpus = corpus_id,
+                    error = %e,
+                    "folder_tiered: vault synthesis failed; cross-note briefing block will be empty until next enrichment"
+                );
+                Ok(())
             }
         }
     }

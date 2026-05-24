@@ -1579,13 +1579,40 @@ impl CorpusEngine {
                         // `index.info()` summary.
                         'enrichment: {
                         if enrichment_config.enrichment_type == "tiered" {
-                            crate::enrichment::tiered::run_tiered_enrichment(
-                                &recipe,
-                                index_path,
-                                self.tiered_provider(),
-                                self.chunk_entity_extractor(),
-                            )
-                            .await?;
+                            // Two tiered variants: the conv-grouping
+                            // one (`run_tiered_enrichment`) buckets
+                            // chunks by `conv_uuid` (per the conv
+                            // corpora schema), and the folder-grouping
+                            // one (`run_folder_tiered_enrichment`)
+                            // buckets by `source_doc_id` (one bag per
+                            // file, what watched-folder and vault
+                            // corpora produce). Pick by recipe's
+                            // display.category — vault + watched
+                            // folders take the folder variant.
+                            let display_category = recipe
+                                .display
+                                .as_ref()
+                                .and_then(|d| d.category.as_deref())
+                                .unwrap_or("");
+                            let is_folder_shape =
+                                matches!(display_category, "vault" | "watched_folder");
+                            if is_folder_shape {
+                                crate::enrichment::tiered::run_folder_tiered_enrichment(
+                                    &recipe.corpus.id,
+                                    index_path,
+                                    self.tiered_provider(),
+                                    self.chunk_entity_extractor(),
+                                )
+                                .await?;
+                            } else {
+                                crate::enrichment::tiered::run_tiered_enrichment(
+                                    &recipe,
+                                    index_path,
+                                    self.tiered_provider(),
+                                    self.chunk_entity_extractor(),
+                                )
+                                .await?;
+                            }
                             break 'enrichment;
                         }
 

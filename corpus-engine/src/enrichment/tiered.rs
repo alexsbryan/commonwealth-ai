@@ -114,6 +114,36 @@ pub trait TieredEnrichmentProvider: Send + Sync {
         embeddings: Vec<Vec<f32>>,
         bucket: ConvBucket,
     ) -> Result<()>;
+
+    /// Called once after every per-source `enrich_conversation` for a
+    /// corpus has completed (success or failure). Implementations use
+    /// this to run cross-source synthesis work that depends on the
+    /// full per-source set being persisted — e.g. the vault-wide
+    /// RAPTOR theme synthesis in `FolderTieredProvider`. The default
+    /// is a no-op so providers that don't need finalization (the
+    /// conversation provider) inherit it for free without a change.
+    ///
+    /// Errors here are logged by the dispatcher but do not bubble up
+    /// to the corpus ingest as fatal — the per-source enrichment is
+    /// the load-bearing output; finalization is a briefing-only
+    /// enhancement.
+    async fn finalize_corpus(&self, _corpus_id: &str) -> Result<()> {
+        Ok(())
+    }
+
+    /// Re-run per-source enrichment for only the source_doc_ids
+    /// supplied. Used by the watched-folder sweeper to do incremental
+    /// re-enrichment after `apply_watched_diff` lands a delta.
+    /// Default no-op so the conv provider inherits a sensible
+    /// fallback; `FolderTieredProvider` overrides to do per-doc work
+    /// + a finalize pass.
+    async fn reenrich_sources(
+        &self,
+        _corpus_id: &str,
+        _source_doc_ids: &[String],
+    ) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Size bucket for a single conversation; drives the slot routing
@@ -527,6 +557,23 @@ pub async fn run_folder_tiered_enrichment(
         failed,
         "tiered enrichment (folder): per-doc dispatch finished"
     );
+
+    // Cross-source synthesis hook. For the conv provider this is the
+    // default no-op; for the folder provider (vault corpora) it runs
+    // the vault-wide RAPTOR pass that produces `vault_themes` rows
+    // for the cross-note briefing block. Errors here are logged but
+    // do not bubble up — the per-source enrichment is the
+    // load-bearing output, finalization is a briefing-only
+    // enhancement (synthesis briefing degrades to per-source-only
+    // gracefully on empty `vault_themes`).
+    if let Err(e) = provider.finalize_corpus(&corpus_id).await {
+        tracing::warn!(
+            corpus = %corpus_id,
+            error = %e,
+            "tiered enrichment (folder): finalize_corpus failed; continuing without cross-source synthesis"
+        );
+    }
+
     Ok(plan)
 }
 
