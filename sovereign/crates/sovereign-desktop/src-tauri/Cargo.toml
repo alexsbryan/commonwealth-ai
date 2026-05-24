@@ -33,6 +33,11 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-deep-link = "2"
+# Auto-update via signed manifest. Endpoint configured in tauri.conf.json
+# (`plugins.updater.endpoints`); the manifest is served from the landing
+# site at svrnme.sh, which queries GitHub Releases for the latest desktop-v*
+# tag. See RELEASING.md §"Auto-updates" for the keypair + secret setup.
+tauri-plugin-updater = "2"
 reqwest = { workspace = true, features = ["stream"] }
 arc-swap = { workspace = true }
 futures = { workspace = true }

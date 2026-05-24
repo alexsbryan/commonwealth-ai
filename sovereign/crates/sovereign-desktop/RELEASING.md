@@ -286,24 +286,124 @@ Not worth doing for v1.
 
 ---
 
-## Auto-updates — Phase 3 (deferred)
+## Auto-updates
 
-Tauri ships `tauri-plugin-updater`. When ready:
+Wired via `tauri-plugin-updater`. Architecture:
 
-1. Generate an updater key pair (`cargo tauri signer generate`).
-2. Add the public key to `tauri.conf.json` `plugins.updater.pubkey`.
-3. CI: sign each release artifact with the private key, upload the
-   `.sig` files alongside.
-4. Host an updater manifest at a stable URL pointing at the latest
-   release artifacts and signatures. GitHub Releases works as the
-   backing store; the manifest can be a static file at
-   `sovereign.dev/updater/desktop-latest.json`.
-5. Add `tauri-plugin-updater` as a desktop dep, wire the in-app
-   "Check for updates" affordance.
+```
+   desktop app                svrnme.sh                    GitHub Releases
+  +------------+          +----------------+              +-------------+
+  | updater    |  -- 1 -> | api/desktop/   |  --- 2 --->  | desktop-v*  |
+  | plugin     |          | updater (Edge) |              | latest tag  |
+  | (embedded  |          |                |              | + assets    |
+  |  pubkey)   |  <- 4 -- | manifest JSON  |  <-- 3 ---   | + .sig files|
+  +------------+          +----------------+              +-------------+
+       |                                                         ^
+       | -------------- 5: download artifact + .sig --------------|
+       |                                                         |
+       | 6: verify signature against embedded pubkey, install, restart
+```
 
-The private key MUST live in repo secrets and never on a developer
-laptop. Lose it and you can't ship updates to existing installs without
-forcing a fresh download.
+1. Plugin polls `https://svrnme.sh/api/desktop/updater/{target}/{version}`
+2. Edge fn queries GitHub Releases for the latest `desktop-v*` tag
+3. Reads the per-platform artifact + its `.sig` sidecar from the release
+4. Returns 204 (up-to-date) or 200 + manifest JSON
+5. On `Some(update)`, plugin downloads the artifact + signature
+6. Plugin verifies the sig against the pubkey baked into the app at
+   build time. Verified → install + restart. Unverified → reject.
+
+### One-time setup (do this BEFORE cutting any updater-capable release)
+
+The pubkey is embedded in the app at build time, so v0.1.0 must ship
+with the real pubkey, OR it will be unable to consume any future
+signed update. If you cut v0.1.0 with the empty placeholder
+(`plugins.updater.pubkey: ""` in tauri.conf.json), every user who
+installed v0.1.0 will need to manually download v0.2.0 once — the
+upgrade path only auto-engages from v0.2.0 onwards.
+
+#### Generate the keypair
+
+On your local machine, never in CI:
+
+```sh
+cargo tauri signer generate -w ~/.tauri/sovereign-updater.key
+```
+
+This prints two things:
+- A **password** prompt — pick a strong one, save it in a password
+  manager. You'll paste it into GitHub secrets.
+- A **base64-encoded public key** — copy it.
+
+#### Wire the pubkey into the app
+
+Edit `sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json`,
+replace `plugins.updater.pubkey: ""` with the base64 public key from
+the previous step.
+
+#### Wire the private key + password into CI
+
+Repo Settings → Secrets and variables → Actions → New repository
+secret. Add two:
+
+| Secret name | Value |
+|---|---|
+| `TAURI_UPDATER_PRIVATE_KEY` | Contents of `~/.tauri/sovereign-updater.key` (the entire base64 blob) |
+| `TAURI_UPDATER_PRIVATE_KEY_PASSWORD` | The password you set during generate |
+
+`.github/workflows/desktop-release.yml` reads these as
+`TAURI_SIGNING_PRIVATE_KEY` + `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+env vars during `cargo tauri build`, which writes `.sig` files next
+to each updater artifact.
+
+#### Wire the GitHub repo into the manifest endpoint
+
+The Vercel project for svrnme.sh needs two env vars (Project →
+Settings → Environment Variables):
+
+| Env var | Value | Required |
+|---|---|---|
+| `GITHUB_OWNER` | repo owner (e.g. `alexbryan01`) | yes |
+| `GITHUB_REPO` | repo name (e.g. `commonwealth-ai`) | yes |
+| `GITHUB_TOKEN` | a `repo`-scoped PAT for higher rate limit | optional but recommended once install base grows past ~60 daily-active updaters |
+
+Redeploy svrnme.sh after setting them.
+
+### Per-release flow (after one-time setup is done)
+
+Identical to the regular release flow. The signing keys are pulled
+from secrets automatically; no manual signer steps. After publishing
+the GitHub Release:
+
+1. Latest tag is now visible to the manifest endpoint within ~60s
+   (Edge cache TTL).
+2. Existing installs hit "Check for updates" → see the new version
+   → confirm → download + verify + restart.
+
+### The private key is load-bearing
+
+If you lose it:
+- You can generate a new keypair, but every existing install will
+  refuse the new signature.
+- The only recovery is shipping a manually-distributed installer
+  with the new pubkey baked in, which users have to find on their
+  own (the in-app updater won't help — it's signing-locked to the
+  old key).
+
+Back it up. The password manager entry holding it is the most
+load-bearing artifact of the release process.
+
+### Things this doesn't do (intentionally)
+
+- **No background install.** Updates apply only when the user clicks
+  through the in-app prompt. Quieter is better for "tool you own."
+- **No staged rollout.** Every user who polls sees the manifest as
+  soon as the GitHub Release leaves draft state. If you want
+  staged ramp, gate the `releases.find()` call in `api/desktop/updater.js`
+  on a percentage by hashing the target+IP+version.
+- **No rollback channel.** If a release is bad, mark it as draft on
+  GitHub → manifest endpoint stops serving it → no new installs
+  upgrade. Users who already upgraded need a fresh download to roll
+  back; there's no downgrade path in the updater plugin itself.
 
 ---
 

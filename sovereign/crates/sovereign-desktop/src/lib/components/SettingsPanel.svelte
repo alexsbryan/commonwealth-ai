@@ -26,6 +26,7 @@
   import ConnectSection from "./ConnectSection.svelte";
   import ModelSelector from "../setup/ModelSelector.svelte";
   import RecipeTestingPanel from "./RecipeTestingPanel.svelte";
+  import UpdatesSection from "./UpdatesSection.svelte";
 
   interface Props {
     onClose: () => void;
@@ -45,7 +46,8 @@
     | "tools"
     | "connect"
     | "paths"
-    | "recipes";
+    | "recipes"
+    | "about";
   let activeTab: Tab = $state("models");
 
   let config: DesktopConfig | null = $state(null);
@@ -340,6 +342,7 @@
     { id: "connect",         label: "Connect",          keywords: ["codex", "openai", "api", "external", "connect", "claude", "endpoint"] },
     { id: "paths",           label: "Paths",            keywords: ["path", "directory", "folder", "data dir", "skills dir"] },
     { id: "recipes",         label: "Recipes",          keywords: ["recipe", "corpus", "acquire", "pipeline", "toml", "author", "workspace", "authoring"] },
+    { id: "about",           label: "About",            keywords: ["about", "version", "update", "updates", "upgrade", "check", "release"] },
   ];
 
   let visibleTabs = $derived.by(() => {
@@ -1125,6 +1128,15 @@
               </label>
             </div>
           {/if}
+        </section>
+      {/if}
+
+      <!-- ──────────── ABOUT (version + updater) ──────────── -->
+      {#if activeTab === "about"}
+        <section class="doc-section">
+          <h2 class="doc-h2">About</h2>
+          <p class="doc-intro">Version info and update controls. Updates are signed and served from <code>svrnme.sh</code>; the app verifies each release against a key embedded at build time before installing.</p>
+          <UpdatesSection />
         </section>
       {/if}
 

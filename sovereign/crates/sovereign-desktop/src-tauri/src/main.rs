@@ -19,6 +19,7 @@ mod state;
 mod supervisor;
 mod supervisor_setup;
 mod tray;
+mod update_commands;
 
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -73,6 +74,9 @@ fn main() -> ExitCode {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
+        // Auto-update via signed manifest from svrnme.sh.
+        // Endpoint + pubkey configured in tauri.conf.json.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         // Eagerly warm the primary chat slot whenever the user
         // foregrounds the app. The 35B Q6 we ship by default takes
         // 10–20s to load on Metal, much longer on CPU; without
@@ -483,6 +487,8 @@ fn main() -> ExitCode {
             enrich_commands::enrich_get_starter_questions,
             enrich_commands::is_first_run,
             enrich_commands::mark_first_run_complete,
+            update_commands::check_for_update,
+            update_commands::install_update,
         ])
         .run(tauri::generate_context!())
         .expect("error running Sovereign");

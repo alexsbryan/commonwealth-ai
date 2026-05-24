@@ -1638,3 +1638,32 @@ export interface CrashReportInfo {
 export async function prepareCrashReport(): Promise<CrashReportInfo> {
   return invoke("prepare_crash_report");
 }
+
+// ─── Auto-updater ────────────────────────────────────────────
+// Backed by tauri-plugin-updater. Manifest served from svrnme.sh,
+// which queries GitHub Releases for the latest desktop-v* tag.
+// See sovereign/crates/sovereign-desktop/RELEASING.md §Auto-updates.
+
+export interface UpdateInfo {
+  /** Version available on the server (e.g. "0.2.0"). */
+  version: string;
+  /** Version the running app reports (e.g. "0.1.0"). */
+  current_version: string;
+  /** ISO-8601 publish date, when the server provides one. */
+  date: string | null;
+  /** Release notes already stripped of markdown by the manifest endpoint. */
+  body: string | null;
+}
+
+/** Polls the updater endpoint. Returns `null` when up to date OR on
+ *  any endpoint glitch (the backend soft-fails so transient network
+ *  errors don't surface as scary dialogs). */
+export async function checkForUpdate(): Promise<UpdateInfo | null> {
+  return invoke("check_for_update");
+}
+
+/** Downloads, verifies, installs, and restarts into the available
+ *  update. Errors propagate so the UI can surface a retry path. */
+export async function installUpdate(): Promise<void> {
+  return invoke("install_update");
+}
