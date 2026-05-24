@@ -1,0 +1,60 @@
+[package]
+name = "commonwealth-tdd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "TDD-machine backend: red-green-refactor solver loop for any harness that calls it (HTTP, MCP, Pi extension)."
+
+# This crate is the workflow backend the design doc
+# `sovereign/docs/TDD_MACHINE_DESIGN.md` describes. It hosts three
+# `SolverProvider` impls (`tdd_red`, `tdd_green`, `tdd_refactor`)
+# behind a single `SolverRegistry`. The HTTP + MCP transports in
+# `sovereign-server` dispatch through that registry; the Pi
+# extension (`@svrnmesh/pi-tdd`) calls the HTTP routes.
+#
+# Bottom of the dep graph for the TDD surface: depends on
+# `commonwealth-agent-tools` (executor + primitives) so it can apply
+# model-emitted edits to candidate workdirs, but does NOT depend on
+# sovereign-core, sovereign-server, or any inference crate — those
+# call into the registry, not the other way around.
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# Edit application (Primitive + ExecCtx + ToolError) — same surface
+# the bench's search runner already uses; staying on a shared
+# executor means the TDD machine and the bench can never drift in
+# how an EditAction maps to a write.
+commonwealth-agent-tools = { workspace = true }
+
+# Wire types + async glue
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+# Edit parsing (JSON action header + source block) — same regex
+# patterns as bench's `runners::shared`; will be lifted into this
+# crate during the 7b port. Workspace dep per ARCH §8.1.
+regex = { workspace = true }
+
+# HTTP transport for the production ChatBackend impl. The
+# Deterministic mock used by unit tests requires no transport.
+reqwest = { workspace = true }
+
+# Workdir snapshot scratch space. The `Workdir` newtype itself
+# doesn't need tempfile, but the solver loop allocates per-candidate
+# scratch dirs under a parent TempDir (same pattern as bench's
+# search runner).
+tempfile = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tempfile = { workspace = true }
+# Lets `tests/scaffold_e2e.rs` render the tracing events the
+# solver loop emits — the glassbox principle (§9.1) is only useful
+# if the events are visible when an engineer runs the test suite.
+tracing-subscriber = { workspace = true }

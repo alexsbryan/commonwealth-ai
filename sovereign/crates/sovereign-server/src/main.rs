@@ -5,6 +5,7 @@ mod config;
 mod routes;
 mod routes_documents;
 mod routes_mcp;
+mod routes_tdd;
 mod startup;
 mod tenant;
 mod ws;
@@ -521,13 +522,29 @@ async fn main() {
         .route("/v1/search", post(routes::search))
         .route("/v1/conversations/{id}/stream", get(ws::ws_handler))
         .merge(routes_documents::document_router())
+        .merge(routes_tdd::tdd_router())
         .layer(middleware::from_fn(auth::auth_middleware))
         .layer(Extension(auth_state));
+
+    // Build the TDD ChatBackend once at startup. Provider URL =
+    // the server's own bind address by default — the daemon hosts
+    // chat completions and the solver loop posts to them. Operators
+    // who run an external provider (Anthropic, OpenAI-compat
+    // backend) can override via SOVEREIGN_TDD_PROVIDER_URL until
+    // the dedicated config section lands.
+    let tdd_provider_url = std::env::var("SOVEREIGN_TDD_PROVIDER_URL")
+        .unwrap_or_else(|_| format!("http://{}", config.server.bind));
+    let tdd_backend: Arc<dyn commonwealth_tdd::ChatBackend> =
+        Arc::new(commonwealth_tdd::ReqwestChatBackend::new(
+            format!("{tdd_provider_url}/v1"),
+        ));
+    let tdd_state = routes_tdd::TddState(Arc::clone(&tdd_backend));
 
     let app = authed
         .merge(routes_mcp::mcp_router())
         .layer(Extension(Arc::clone(&runtime)))
         .layer(Extension(approval))
+        .layer(Extension(tdd_state))
         .layer(CorsLayer::permissive());
 
     // Startup UX — mesh peer count from Commonwealth (non-fatal if daemon

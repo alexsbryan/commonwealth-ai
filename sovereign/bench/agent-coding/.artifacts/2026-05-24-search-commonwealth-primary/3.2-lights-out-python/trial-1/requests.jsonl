@@ -1,0 +1,1 @@
+{"turn":0,"request":{"candidates":["<parse-failed>@T0.7=err","<parse-failed>@T0.4=err","rewrite solve@T0.2=3p/0f","rewrite solve@T0.9=1p/2f"],"search_round":0},"response":{"failed_after":0,"passing_after":3,"winner":"rewrite solve@T0.2"},"elapsed_ms":0}

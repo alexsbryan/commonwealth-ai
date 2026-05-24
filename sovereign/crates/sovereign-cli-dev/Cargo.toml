@@ -54,8 +54,8 @@ arc-swap = { workspace = true }
 dirs = "5"
 chrono = { workspace = true }
 sha2 = { workspace = true }
-regex = "1"
-tempfile = "3"
+regex = { workspace = true }
+tempfile = { workspace = true }
 which = "7"
 hostname = { workspace = true }
 # `atos_cmd::run` reads SQLite directly for one query (open-feature

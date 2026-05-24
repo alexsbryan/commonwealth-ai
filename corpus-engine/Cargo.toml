@@ -81,11 +81,11 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 sevenz-rust2 = { version = "0.21", default-features = false, features = ["bzip2", "util"] }
 
 # Text
-regex = "1"
+regex = { workspace = true }
 glob = "0.3"
 
 # Misc
-tempfile = "3"
+tempfile = { workspace = true }
 
 # Hashing
 blake3 = "1"
@@ -189,7 +189,7 @@ treesitter = [
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
-tempfile = "3"
+tempfile = { workspace = true }
 # In-process HTTP fake for the http_api acquirer e2e tests. Pinned
 # at 0.6 (current stable as of 2026-04). Used only in tests.
 wiremock = "0.6"

@@ -1901,6 +1901,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "commonwealth-tdd"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "commonwealth-agent-tools",
+ "regex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "commonwealth-test-harness"
 version = "0.1.0"
 dependencies = [
@@ -10221,6 +10238,7 @@ dependencies = [
  "chrono",
  "clap",
  "commonwealth-agent-tools",
+ "commonwealth-tdd",
  "futures",
  "regex",
  "reqwest 0.12.28",
@@ -10636,6 +10654,7 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
+ "commonwealth-tdd",
  "corpus-engine",
  "corpus-engine-notes",
  "corpus-engine-scip",
@@ -10648,6 +10667,7 @@ dependencies = [
  "sovereign-inference",
  "sovereign-store",
  "sovereign-tools",
+ "tempfile",
  "tokio",
  "toml 0.8.2",
  "tower",

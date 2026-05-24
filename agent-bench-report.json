@@ -2,77 +2,11 @@
   "agent": "search",
   "model": "commonwealth/primary",
   "judge_model": "commonwealth/primary",
-  "judge_trials": 3,
-  "run_trials": 1,
-  "started_at": "2026-05-24T15:30:32.001650359+00:00",
-  "finished_at": "2026-05-24T15:37:18.057528274+00:00",
+  "judge_trials": 0,
+  "run_trials": 3,
+  "started_at": "2026-05-24T20:37:57.145916477+00:00",
+  "finished_at": "2026-05-24T20:42:14.587699243+00:00",
   "per_problem": [
-    {
-      "problem_id": "3.2-lights-out",
-      "dim_a": {
-        "raw": 0,
-        "source": {
-          "kind": "auto",
-          "pass_fraction": 0.0,
-          "verify_exit_ok": false
-        },
-        "anchor_majority": null,
-        "anchor_per_trial": [],
-        "majority_reached": null
-      },
-      "dim_b": {
-        "raw": 0,
-        "source": {
-          "kind": "judge",
-          "trials": 3,
-          "coverage_mean": 0.0
-        },
-        "anchor_majority": 0,
-        "anchor_per_trial": [
-          0,
-          0,
-          0
-        ],
-        "majority_reached": true
-      },
-      "dim_c": {
-        "raw": 0,
-        "source": {
-          "kind": "hybrid",
-          "auto_score": 0,
-          "judge_score": 0,
-          "coverage_mean": 0.0
-        },
-        "anchor_majority": 0,
-        "anchor_per_trial": [
-          0,
-          0,
-          0
-        ],
-        "majority_reached": true
-      },
-      "total": 0,
-      "exit_reason": {
-        "kind": "search_stalled",
-        "detail": {
-          "rounds_without_improvement": 3
-        }
-      },
-      "tokens": {
-        "input": 19774,
-        "output": 16212
-      },
-      "wall_ms": 254903,
-      "tool_calls": [],
-      "witness_summary": {
-        "verify_exit_ok": false,
-        "passed": 0,
-        "failed": 12,
-        "total": 12,
-        "pass_fraction": 0.0
-      },
-      "is_partial": true
-    },
     {
       "problem_id": "3.2-lights-out-python",
       "dim_a": {
@@ -90,13 +24,11 @@
         "raw": 2,
         "source": {
           "kind": "judge",
-          "trials": 3,
+          "trials": 1,
           "coverage_mean": 0.6666666666666666
         },
         "anchor_majority": 2,
         "anchor_per_trial": [
-          2,
-          2,
           2
         ],
         "majority_reached": true
@@ -111,8 +43,6 @@
         },
         "anchor_majority": 1,
         "anchor_per_trial": [
-          1,
-          1,
           1
         ],
         "majority_reached": true
@@ -122,10 +52,10 @@
         "kind": "completed"
       },
       "tokens": {
-        "input": 9478,
-        "output": 4186
+        "input": 0,
+        "output": 0
       },
-      "wall_ms": 76334,
+      "wall_ms": 43568,
       "tool_calls": [],
       "witness_summary": {
         "verify_exit_ok": false,
@@ -137,7 +67,56 @@
       "is_partial": false
     }
   ],
+  "per_problem_trials": [
+    {
+      "problem_id": "3.2-lights-out-python",
+      "n": 3,
+      "per_trial": [
+        {
+          "trial": 0,
+          "total": 9,
+          "dim_a": 3,
+          "dim_b": 3,
+          "dim_c": 3,
+          "exit_reason": {
+            "kind": "completed"
+          },
+          "tokens_out": 0,
+          "wall_ms": 77041
+        },
+        {
+          "trial": 1,
+          "total": 8,
+          "dim_a": 3,
+          "dim_b": 2,
+          "dim_c": 3,
+          "exit_reason": {
+            "kind": "completed"
+          },
+          "tokens_out": 0,
+          "wall_ms": 43568
+        },
+        {
+          "trial": 2,
+          "total": 8,
+          "dim_a": 3,
+          "dim_b": 2,
+          "dim_c": 3,
+          "exit_reason": {
+            "kind": "completed"
+          },
+          "tokens_out": 0,
+          "wall_ms": 99532
+        }
+      ],
+      "mean_total": 8.333333333333334,
+      "stdev_total": 0.4714045207910317,
+      "mean_dim_a": 3.0,
+      "mean_dim_b": 2.3333333333333335,
+      "mean_dim_c": 3.0
+    }
+  ],
   "grand_total": 8,
-  "max_total": 18,
+  "max_total": 9,
   "regression": null
 }
