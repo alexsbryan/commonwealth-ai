@@ -31,6 +31,13 @@ jobs:
   build:
     name: build / ${{ matrix.platform.name }}
     runs-on: ${{ matrix.platform.runner }}
+    # Updater signing secrets (TAURI_UPDATER_PRIVATE_KEY +
+    # TAURI_UPDATER_PRIVATE_KEY_PASSWORD) are scoped to the `prod`
+    # environment, so the job must claim it to access them. Without
+    # this line, secrets.TAURI_UPDATER_* resolve to empty strings and
+    # Tauri's bundler silently skips producing .sig sidecars,
+    # breaking the updater chain.
+    environment: prod
     strategy:
       fail-fast: false
       matrix:
