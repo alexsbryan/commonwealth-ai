@@ -27,6 +27,7 @@ pub mod analysis;
 pub mod atoms;
 pub mod atoms_delta;
 pub mod axis_catalog;
+pub mod citation;
 pub mod cross_corpus;
 pub mod doc_to_atoms;
 pub mod edges;
@@ -46,6 +47,7 @@ pub use atoms::{
     AtomEnvelope, AtomId, AtomType, AtomsFile, ChunkRef, Claim, Configuration, Entity, Event,
     Question, Relation, ResolutionStatus, SectionPosition, SectionRange, State,
 };
+pub use citation::{apply_citation, SourceCitation};
 pub use axis_catalog::{
     all_axes, axes_for_mode, axis_by_key, AtomKind, GatingField, TypedAxis, AXIS_CATALOG,
 };

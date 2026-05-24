@@ -42,6 +42,7 @@ pub mod rag;
 pub mod recipe_author;
 pub mod search;
 pub mod shell;
+pub mod typed_call;
 pub mod typed_extension;
 pub mod web;
 

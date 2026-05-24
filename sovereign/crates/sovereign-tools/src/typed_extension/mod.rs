@@ -28,13 +28,14 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use corpus_engine::enrichment::atlas::atoms::{
-    AtomId, ChunkRef, Claim, Entity, Opposition, Position,
+    AtomId, Claim, Entity, Opposition, Position,
 };
 use corpus_engine::enrichment::atlas::edges::Edge;
 use corpus_engine::enrichment::atlas::resolution::{
     resolve_type_extensions, TypeExtensionResolveOutput,
 };
 use corpus_engine::enrichment::atlas::writer::write_atlas_full;
+use corpus_engine::enrichment::atlas::SourceCitation;
 use corpus_engine::enrichment::pipeline::atlas::{
     EnrichmentDepth, SectionExtraction, TypeExtension,
 };
@@ -200,7 +201,7 @@ pub async fn run_typed_extension(
     // edge endpoint. Without this lookup the resolver leaves
     // previews as `None` and atoms ground only at chunk granularity,
     // not at verbatim-sentence granularity.
-    let mut citations: HashMap<String, pass::SourceCitation> = HashMap::new();
+    let mut citations: HashMap<String, SourceCitation> = HashMap::new();
     for leaf in &leaves {
         pass_a_calls += 1;
         match pass::pass_a_one_leaf(corpus_id, leaf, inference).await {
@@ -274,7 +275,7 @@ pub async fn run_typed_extension(
     // we're walking the atoms, also project every `ChunkRef` through
     // the `citations` lookup so `passage_preview` carries the
     // verbatim source sentence (glassbox source recovery — see
-    // `pass::SourceCitation` doc for the rationale).
+    // `SourceCitation` doc for the rationale).
     let (entities, positions, oppositions, claims, edges) =
         content_hash_remap(corpus_id, resolved, &citations);
 
@@ -393,9 +394,18 @@ pub async fn run_typed_extension(
 /// through it.
 fn content_hash_remap(
     corpus_id: &str,
-    resolved: TypeExtensionResolveOutput,
-    citations: &HashMap<String, pass::SourceCitation>,
+    mut resolved: TypeExtensionResolveOutput,
+    citations: &HashMap<String, SourceCitation>,
 ) -> (Vec<Entity>, Vec<Position>, Vec<Opposition>, Vec<Claim>, Vec<Edge>) {
+    // Apply primary-source citations to every ChunkRef the resolver
+    // emitted BEFORE the content-hash rewrite. The walk is a single
+    // call into corpus-engine atlas's lifted helper — no inline
+    // repetition of the per-collection iteration.
+    corpus_engine::enrichment::atlas::resolution::apply_citations_to_resolved(
+        &mut resolved,
+        citations,
+    );
+
     let TypeExtensionResolveOutput {
         new_entities,
         entity_qualifier_updates: _, // we don't have existing entities; resolver only emits these
@@ -416,7 +426,6 @@ fn content_hash_remap(
             AtomId::entity_content_hash(&entity.canonical_name, &entity.entity_type, corpus_id);
         id_remap.insert(entity.id.clone(), new_id.clone());
         entity.id = new_id;
-        apply_citation(&mut entity.first_appearance, citations);
         entities_out.push(entity);
     }
 
@@ -427,7 +436,6 @@ fn content_hash_remap(
             AtomId::position_content_hash(&position.canonical_name, &position.stance, corpus_id);
         id_remap.insert(position.id.clone(), new_id.clone());
         position.id = new_id;
-        apply_citation(&mut position.first_appearance, citations);
         positions_out.push(position);
     }
 
@@ -438,7 +446,6 @@ fn content_hash_remap(
             AtomId::opposition_content_hash(&opposition.canonical_label, corpus_id);
         id_remap.insert(opposition.id.clone(), new_id.clone());
         opposition.id = new_id;
-        apply_citation(&mut opposition.first_appearance, citations);
         oppositions_out.push(opposition);
     }
 
@@ -453,9 +460,6 @@ fn content_hash_remap(
         );
         id_remap.insert(claim.id.clone(), new_id.clone());
         claim.id = new_id;
-        for evidence_ref in claim.evidence.iter_mut() {
-            apply_citation(evidence_ref, citations);
-        }
         claims_out.push(claim);
     }
 
@@ -463,9 +467,7 @@ fn content_hash_remap(
     // the remap are kept as-is — those come from fuzzy-merge edges
     // pointing at existing atoms (none in this pass) and so wouldn't
     // appear here, but defensive pass-through keeps the function
-    // total even if resolver shape evolves. Edge-level ChunkRefs get
-    // the same passage_preview treatment so a downstream reader
-    // walking edges back to source lands on the verbatim sentence too.
+    // total even if resolver shape evolves.
     let edges_out: Vec<Edge> = new_edges
         .into_iter()
         .map(|mut edge| {
@@ -475,44 +477,11 @@ fn content_hash_remap(
             if let Some(new) = id_remap.get(&edge.target) {
                 edge.target = new.clone();
             }
-            for evidence_ref in edge.evidence.iter_mut() {
-                apply_citation(evidence_ref, citations);
-            }
             edge
         })
         .collect();
 
     (entities_out, positions_out, oppositions_out, claims_out, edges_out)
-}
-
-/// Project a resolver-emitted `ChunkRef` through the `citations`
-/// lookup. The resolver writes `ChunkRef::new(section_id, None)` for
-/// every atom + edge endpoint it builds; this walk replaces the
-/// (None) preview with the verbatim source sentence the Pass A/B
-/// call attached to that section_id.
-///
-/// No-op when:
-/// - The section_id isn't in the citations map (shouldn't happen for
-///   atoms this pass produced, but kept defensive for future
-///   resolver shape changes).
-/// - The citation has no verbatim preview available (RAPTOR didn't
-///   build any quote_spans for the originating leaf — atom still
-///   grounds at chunk granularity via the section_id, just without
-///   the sentence-level handle).
-///
-/// The chunk_id itself is left untouched — Pass A/B already encoded
-/// the source chunk handle into the section_id when a quote_span was
-/// available (`chunk:<u32>` form), so it propagates correctly through
-/// the resolver's `ChunkRef::new(section_id, ...)` calls.
-fn apply_citation(target: &mut ChunkRef, citations: &HashMap<String, pass::SourceCitation>) {
-    if target.passage_preview.is_some() {
-        return; // already populated upstream — never clobber
-    }
-    if let Some(citation) = citations.get(&target.chunk_id) {
-        if let Some(preview) = citation.passage_preview.as_ref() {
-            target.passage_preview = Some(preview.clone());
-        }
-    }
 }
 
 /// Helper used by both passes: wrap an `ArgumentativeExtension` in a
