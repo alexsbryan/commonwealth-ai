@@ -1,10 +1,13 @@
 <script lang="ts">
+  import { onMount, onDestroy } from "svelte";
   import {
     lcWatchPause,
     lcWatchResume,
     lcWatchConfirmDeletion,
     lcWatchRemove,
     lcWatchSyncNow,
+    enrichmentStatus,
+    type EnrichmentStatus,
   } from "../../api";
   import type {
     WatchedFolderListEntry,
@@ -24,6 +27,72 @@
 
   let actionInflight: string | null = $state(null);
   let actionError: string | null = $state(null);
+
+  /// Per-corpus enrichment progress, populated by the generic
+  /// `/internal/enrichment/status` route. `null` = no state file yet
+  /// (pipeline hasn't run); `undefined` = not loaded for this corpus
+  /// yet. Polled at 5s while non-terminal, 30s while terminal so the
+  /// UI catches "stalled" transitions without thrashing the daemon.
+  let enrichment: Record<string, EnrichmentStatus | null> = $state({});
+  let enrichmentPollHandle: number | null = null;
+
+  async function refreshEnrichmentFor(corpusId: string) {
+    try {
+      enrichment[corpusId] = await enrichmentStatus(corpusId);
+    } catch (e) {
+      // Best-effort — a failed probe shouldn't take down the list.
+      console.warn("enrichmentStatus failed for", corpusId, e);
+    }
+  }
+
+  async function refreshAllEnrichment() {
+    await Promise.all(corpora.map((c) => refreshEnrichmentFor(c.corpus_id)));
+  }
+
+  onMount(async () => {
+    await refreshAllEnrichment();
+    enrichmentPollHandle = window.setInterval(refreshAllEnrichment, 5_000);
+  });
+  onDestroy(() => {
+    if (enrichmentPollHandle !== null) window.clearInterval(enrichmentPollHandle);
+  });
+
+  function enrichmentLabel(s: EnrichmentStatus | null | undefined): string | null {
+    if (!s || !s.state) return null;
+    const st = s.state;
+    if (st.phase === "complete") return null; // hide once done
+    if (st.phase === "failed")
+      return `Enrichment failed${st.error ? ` — ${st.error}` : ""}`;
+    if (st.phase === "stalled")
+      return "Enrichment interrupted (daemon restart) — click Sync now to retry";
+    const base = phaseHuman(st.phase);
+    if (st.step_total > 0)
+      return `${base} (${st.step_current} / ${st.step_total})`;
+    return base;
+  }
+
+  function phaseHuman(phase: string): string {
+    switch (phase) {
+      case "starting":
+        return "Starting enrichment";
+      case "scanning":
+        return "Reading chunks";
+      case "entity_extraction":
+        return "Extracting entities";
+      case "raptor_leaves":
+        return "Summarising chunks (RAPTOR leaves)";
+      case "raptor_tree":
+        return "Building RAPTOR tree";
+      case "motif_extraction":
+        return "Indexing motifs";
+      case "atom_extraction":
+        return "Extracting atoms";
+      case "persisting":
+        return "Saving";
+      default:
+        return phase;
+    }
+  }
 
   async function pause(id: string) {
     actionInflight = id;
@@ -183,6 +252,33 @@
           </p>
         {/if}
 
+        {#if enrichmentLabel(enrichment[entry.corpus_id])}
+          {@const es = enrichment[entry.corpus_id]}
+          {@const stalled = es?.is_stalled === true}
+          {@const failed = es?.state?.phase === "failed"}
+          <div
+            class="enrich"
+            class:enrich-warn={stalled}
+            class:enrich-err={failed}
+            data-testid="enrichment-progress"
+          >
+            <div class="enrich-row">
+              <span class="enrich-label">{enrichmentLabel(es)}</span>
+              {#if es?.state?.message}
+                <span class="enrich-message">{es.state.message}</span>
+              {/if}
+            </div>
+            {#if !stalled && !failed && es && es.fraction_complete > 0}
+              <div class="enrich-bar">
+                <div
+                  class="enrich-fill"
+                  style="width: {(es.fraction_complete * 100).toFixed(1)}%"
+                ></div>
+              </div>
+            {/if}
+          </div>
+        {/if}
+
         <div class="actions">
           {#if onOpenDetail}
             <button
@@ -253,6 +349,49 @@
     text-align: center;
     color: var(--lk-ink-faded);
     font-size: var(--lk-size-meta);
+  }
+  .enrich {
+    margin-top: 6px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 0.72rem;
+    color: var(--lk-ink-faded, var(--text-muted));
+  }
+  .enrich-warn {
+    border-color: rgba(255, 200, 80, 0.4);
+    background: rgba(255, 200, 80, 0.08);
+    color: var(--warning, #e6a817);
+  }
+  .enrich-err {
+    border-color: rgba(255, 90, 90, 0.4);
+    background: rgba(255, 90, 90, 0.08);
+    color: var(--error, #e25a5a);
+  }
+  .enrich-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: baseline;
+  }
+  .enrich-label {
+    font-weight: 500;
+  }
+  .enrich-message {
+    opacity: 0.85;
+  }
+  .enrich-bar {
+    margin-top: 4px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .enrich-fill {
+    height: 100%;
+    background: var(--accent-light, #c9a84c);
+    transition: width 250ms ease;
   }
   .list {
     margin: 0;

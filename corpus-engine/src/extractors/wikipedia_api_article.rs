@@ -194,7 +194,16 @@ fn build_docs(
         .map(|n| n as usize)
         .unwrap_or(wikitext.len());
     let lead_raw = wikitext.get(..lead_end.min(wikitext.len())).unwrap_or("");
-    let lead = strip_wikitext(lead_raw);
+    // Portal:Current_events daily pages wrap their entire body in a
+    // `{{Current events|year=Y|month=M|day=D|content=<bullets>}}`
+    // template. `strip_wikitext` strips templates wholesale, so the
+    // standard lead path produced an empty lead (no chunks) for these
+    // pages. Detect the template and use its `content=` arg as the
+    // chunkable body so the `portal_event_bullet` chunker actually
+    // sees the bullets that follow it.
+    let preprocessed_for_lead =
+        extract_current_events_content(lead_raw).unwrap_or_else(|| lead_raw.to_string());
+    let lead = strip_wikitext(&preprocessed_for_lead);
     if lead.len() >= MIN_SECTION_TEXT {
         let meta = WikipediaChunkMetadata {
             section_name: "Lead".into(),
@@ -333,6 +342,59 @@ fn build_docs(
 ///     separately as section metadata
 ///   - drop HTML tags, file embeds, and category links
 ///
+/// Unwrap `{{Current events|year=Y|month=M|day=D|content=<body>}}`
+/// templates used by `Portal:Current_events/YYYY_Month_DD` pages.
+/// Returns `Some(content)` when the entire input is a single
+/// top-level `Current events` template invocation — the bullets are
+/// inside `content=`, and the standard wikitext stripper would
+/// otherwise drop them along with the template wrapper.
+///
+/// Conservative: only fires when the input's first non-whitespace
+/// span is the literal `{{Current events`. Anything else returns
+/// `None` and the caller falls back to the standard lead path.
+fn extract_current_events_content(input: &str) -> Option<String> {
+    let trimmed = input.trim_start();
+    let rest = trimmed.strip_prefix("{{Current events")?;
+    // Walk forward to locate the matching `}}`, then find the
+    // `|content=` argument inside the template. Using `find` rather
+    // than a real parser is OK because portal pages have one
+    // template invocation and `content=` is unambiguous within it.
+    let close = find_matching_template_close(rest)?;
+    let body = &rest[..close];
+    // `|content=` may be followed by `\n` or the bullets directly.
+    let needle = "|content=";
+    let pos = body.find(needle)?;
+    let content_start = pos + needle.len();
+    Some(body[content_start..].trim().to_string())
+}
+
+/// Given the body of a `{{Template|...` invocation (slice starts
+/// AFTER the opening `{{...`), return the byte offset of the
+/// matching `}}` — handling `{{nested}}` arguments. Returns `None`
+/// when the close isn't found.
+fn find_matching_template_close(s: &str) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let mut depth: i32 = 1; // we're already inside one `{{`
+    let mut i = 0;
+    while i + 1 < bytes.len() {
+        if bytes[i] == b'{' && bytes[i + 1] == b'{' {
+            depth += 1;
+            i += 2;
+            continue;
+        }
+        if bytes[i] == b'}' && bytes[i + 1] == b'}' {
+            depth -= 1;
+            if depth == 0 {
+                return Some(i);
+            }
+            i += 2;
+            continue;
+        }
+        i += 1;
+    }
+    None
+}
+
 /// Not perfect — wikitext is irregular — but good enough that
 /// vector retrieval finds the right sections.
 fn strip_wikitext(input: &str) -> String {

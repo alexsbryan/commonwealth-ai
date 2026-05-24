@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { listCorpora, installCorpus, removeCorpus, pauseCorpus, buildCorpusIndex, getCorpusHealth, retryEnrichmentFailures, expandCorpus, canExpandCorpus, startLayeredSetup } from "../api";
+  import { listCorpora, installCorpus, removeCorpus, pauseCorpus, buildCorpusIndex, getCorpusHealth, retryEnrichmentFailures, expandCorpus, canExpandCorpus, startLayeredSetup, newsworthyStatus, newsworthyTickNow, type NewsworthyStatus } from "../api";
   import { corpusProgressStore } from "../stores/corpusProgress.svelte";
   import type { CorpusEntry, CorpusHealthDetail } from "../types";
 
@@ -16,6 +16,57 @@
   let building: Set<string> = $state(new Set());
   let unlistenBuildComplete: UnlistenFn | null = null;
   let unlistenBuildError: UnlistenFn | null = null;
+
+  /// Watcher state for `wikipedia-newsworthy`. Polled when a corpus
+  /// has Newsworthy as a child layer, so the chip can render a
+  /// glassbox status line (role, last tick, tracked count) instead
+  /// of leaving the user guessing whether the daemon is doing
+  /// anything.
+  let newsworthy: NewsworthyStatus | null = $state(null);
+  let newsworthyPollHandle: number | null = null;
+
+  async function refreshNewsworthy() {
+    try {
+      newsworthy = await newsworthyStatus();
+    } catch (e) {
+      console.warn("newsworthyStatus failed:", e);
+    }
+  }
+
+  let tickInFlight = $state(false);
+  async function runNewsworthyTickNow() {
+    if (tickInFlight) return;
+    tickInFlight = true;
+    try {
+      await newsworthyTickNow();
+      // Poll for snapshot refresh — tick runs async. Watcher
+      // publishes once after portal ingest (fast) and again after
+      // step-B fetches (can take minutes at the 1 req/s MediaWiki
+      // rate). Watch both: stop polling when observed_at advances
+      // OR five minutes pass — whichever first. The per-poll cost
+      // is one cheap KV scan, so 1.5s cadence over 5 min is fine.
+      const before = newsworthy?.last_tick?.observed_at ?? 0;
+      const start = Date.now();
+      while (Date.now() - start < 5 * 60_000) {
+        await new Promise((r) => setTimeout(r, 1500));
+        await refreshNewsworthy();
+        if ((newsworthy?.last_tick?.observed_at ?? 0) > before) break;
+      }
+    } catch (e) {
+      console.warn("newsworthyTickNow failed:", e);
+    } finally {
+      tickInFlight = false;
+    }
+  }
+
+  function formatRelativeAgo(unixSecs: number): string {
+    const now = Math.floor(Date.now() / 1000);
+    const diff = Math.max(0, now - unixSecs);
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+  }
 
   const tiers: { id: string; name: string; desc: string }[] = [
     { id: "essential", name: "Essential", desc: "Wikipedia" },
@@ -66,6 +117,11 @@
   onMount(async () => {
     await refresh();
     await corpusProgressStore.init();
+    // Newsworthy is the only watcher-driven corpus today; poll its
+    // status modestly so the chip's secondary line stays fresh.
+    // Cheap read — daemon route is a pair of KV scans.
+    await refreshNewsworthy();
+    newsworthyPollHandle = window.setInterval(refreshNewsworthy, 30_000);
     // The store handles incoming progress events; we still want to
     // refetch the full corpus list on terminal transitions so
     // `corpora.status` reflects the new installed/not_installed state.
@@ -102,6 +158,7 @@
   onDestroy(() => {
     if (unlistenBuildComplete) unlistenBuildComplete();
     if (unlistenBuildError) unlistenBuildError();
+    if (newsworthyPollHandle !== null) window.clearInterval(newsworthyPollHandle);
   });
 
   async function refresh() {
@@ -415,38 +472,94 @@
                   progress[layer.id].phase !== "complete" &&
                   progress[layer.id].phase !== "failed")}
               {@const layerInstalled = layer.status === "installed"}
-              <button
-                type="button"
-                class="layer-chip"
-                class:installed={layerInstalled}
-                class:installing={layerInProgress}
-                class:available={!layerInstalled && !layerInProgress}
-                data-testid="layer-chip"
-                data-layer-id={layer.id}
-                data-layer-status={layerInProgress ? "installing" : layer.status}
-                disabled={layerInProgress}
-                aria-pressed={layerInstalled}
-                aria-label="{layerInstalled
-                  ? `Remove ${layer.name} layer`
-                  : layerInProgress
-                    ? `${layer.name} layer is installing`
-                    : `Add ${layer.name} layer`}"
-                title={layer.description}
-                onclick={() =>
-                  layerInstalled ? handleRemove(layer.id) : handleInstall(layer.id)}
-              >
-                <span class="layer-dot" aria-hidden="true"></span>
-                <span class="layer-name">{layer.name}</span>
-                <span class="layer-action" aria-hidden="true">
-                  {#if layerInstalled}
-                    Remove
-                  {:else if layerInProgress}
-                    Installing…
-                  {:else}
-                    Add
-                  {/if}
-                </span>
-              </button>
+              <div class="layer-chip-wrap">
+                <button
+                  type="button"
+                  class="layer-chip"
+                  class:installed={layerInstalled}
+                  class:installing={layerInProgress}
+                  class:available={!layerInstalled && !layerInProgress}
+                  data-testid="layer-chip"
+                  data-layer-id={layer.id}
+                  data-layer-status={layerInProgress ? "installing" : layer.status}
+                  disabled={layerInProgress}
+                  aria-pressed={layerInstalled}
+                  aria-label="{layerInstalled
+                    ? `Remove ${layer.name} layer`
+                    : layerInProgress
+                      ? `${layer.name} layer is installing`
+                      : `Add ${layer.name} layer`}"
+                  title={layer.description}
+                  onclick={() =>
+                    layerInstalled ? handleRemove(layer.id) : handleInstall(layer.id)}
+                >
+                  <span class="layer-dot" aria-hidden="true"></span>
+                  <span class="layer-name">{layer.name}</span>
+                  <span class="layer-action" aria-hidden="true">
+                    {#if layerInstalled}
+                      Remove
+                    {:else if layerInProgress}
+                      Installing…
+                    {:else}
+                      Add
+                    {/if}
+                  </span>
+                </button>
+                {#if layer.id === "wikipedia-newsworthy" && layerInstalled && newsworthy}
+                  {@const lt = newsworthy.last_tick}
+                  {@const selfIsLeader =
+                    newsworthy.self_in_pool &&
+                    newsworthy.leader_node_id === lt?.node_id_str}
+                  {@const installWarnLive =
+                    !newsworthy.local_corpus_installed &&
+                    newsworthy.installed_peer_count === 0}
+                  <div class="layer-status" data-testid="newsworthy-status">
+                    {#if lt}
+                      {#if selfIsLeader}
+                        <span class="status-role status-leader" title="This node fetches Portal:Current_events on each tick and writes the daily page into the wikipedia-newsworthy corpus. Followers refresh tracked articles into the parent `wikipedia` corpus.">
+                          you are leader
+                        </span>
+                      {:else if newsworthy.leader_node_id}
+                        <span class="status-role" title="Election picks the lowest NodeId among peers that have wikipedia-newsworthy installed. The leader writes the daily portal page; this node is a follower and will refresh tracked articles into the parent wikipedia corpus when there are any.">
+                          follower · leader {newsworthy.leader_node_id.slice(0, 16)}…
+                        </span>
+                      {:else}
+                        <span class="status-role status-warn" title="No online peer has wikipedia-newsworthy installed. Daily portal ingest is paused mesh-wide until at least one node installs it.">
+                          no leader — no peer has it installed
+                        </span>
+                      {/if}
+                      <span class="status-sep">·</span>
+                      <span title="Time since the watcher's last completed tick. Default interval is 24h; use 'Run tick now' to bypass.">
+                        last tick {formatRelativeAgo(lt.observed_at)}
+                      </span>
+                      <span class="status-sep">·</span>
+                      <span title="Articles tracked under the 30-day rolling window. Leader writes this set after each portal ingest.">
+                        {lt.tracked_total} tracked
+                      </span>
+                      {#if installWarnLive}
+                        <span class="status-warn">
+                          · install incomplete locally — click Add again to repair
+                        </span>
+                      {/if}
+                      {#if selfIsLeader && !lt.portal_ingested && lt.tracked_total === 0}
+                        <button
+                          type="button"
+                          class="tick-now-btn"
+                          disabled={tickInFlight}
+                          onclick={runNewsworthyTickNow}
+                          title="Fire one watcher tick now. Fetches yesterday's Portal:Current_events, writes it to wikipedia-newsworthy, seeds the tracked-article set."
+                        >
+                          {tickInFlight ? "Running tick…" : "Run tick now →"}
+                        </button>
+                      {/if}
+                    {:else}
+                      <span class="status-pending">
+                        watcher starting — first tick lands within ~15 min
+                      </span>
+                    {/if}
+                  </div>
+                {/if}
+              </div>
             {/each}
           </div>
         {/if}
@@ -802,6 +915,56 @@
   }
   .layer-chip:disabled {
     cursor: progress;
+  }
+  .layer-chip-wrap {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .layer-status {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    padding: 0 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    line-height: 1.2;
+  }
+  .layer-status .status-role {
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+  .layer-status .status-sep {
+    opacity: 0.6;
+  }
+  .layer-status .status-warn {
+    color: var(--warning, #e6a817);
+  }
+  .layer-status .status-pending {
+    color: var(--text-muted);
+    font-style: italic;
+  }
+  .layer-status .status-leader {
+    color: var(--accent-light);
+  }
+  .tick-now-btn {
+    font: inherit;
+    font-size: 0.68rem;
+    color: var(--accent-light);
+    background: transparent;
+    border: 1px solid rgba(201, 168, 76, 0.4);
+    border-radius: 999px;
+    padding: 1px 8px;
+    margin-left: 4px;
+    cursor: pointer;
+  }
+  .tick-now-btn:hover:not(:disabled) {
+    background: rgba(201, 168, 76, 0.12);
+  }
+  .tick-now-btn:disabled {
+    cursor: progress;
+    opacity: 0.6;
   }
 
   /* States */

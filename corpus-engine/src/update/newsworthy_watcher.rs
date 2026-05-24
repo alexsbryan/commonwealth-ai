@@ -56,6 +56,48 @@ pub const APP_ID_PORTAL: &str = "wikipedia-newsworthy:portal";
 /// Expires under the host's existing 7-day retention GC.
 pub const APP_ID_JOB: &str = "wikipedia-newsworthy:job";
 
+/// MeshStore namespace for the per-node tick-status snapshot. Single
+/// key `last_tick` carrying [`TickStatusSnapshot`] JSON, overwritten
+/// at the end of every tick. Read by `/internal/newsworthy/status`
+/// (and the desktop Newsworthy chip) to give operators a real surface
+/// for "is the watcher running, am I leader, what did the last tick
+/// do?" — the watcher's whole point is invisible background work, so
+/// without this snapshot users have no way to verify it.
+pub const APP_ID_STATUS: &str = "wikipedia-newsworthy:status";
+pub const STATUS_KEY_LAST_TICK: &str = "last_tick";
+
+/// Persistent snapshot of the most recent watcher tick. Lives at
+/// `(APP_ID_STATUS, STATUS_KEY_LAST_TICK)` in the host's KV store.
+/// Stable JSON shape — the desktop chip reads this verbatim.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TickStatusSnapshot {
+    /// Unix seconds at which this tick completed.
+    pub observed_at: i64,
+    /// Display node id of the watcher that wrote the snapshot.
+    pub node_id_str: String,
+    /// Was this node leader on the tick we just ran?
+    pub role_leader: bool,
+    /// Tick reached the local-install gate cleanly (false when we
+    /// skipped because the corpus isn't installed locally).
+    pub corpus_installed: bool,
+    /// Tracked-article count visible at tick end. Steady-state once
+    /// the leader has populated the set from at least one portal page.
+    pub tracked_total: usize,
+    /// Articles this node owns under rendezvous hashing at tick end.
+    pub owned_total: usize,
+    /// Was a Portal:Current_events page ingested this tick (always
+    /// false on followers; false on leader when the revid was
+    /// unchanged from the last marker).
+    pub portal_ingested: bool,
+    /// Error count from the tick body.
+    pub errors: usize,
+    /// Tick wall-clock duration.
+    pub elapsed_ms: u64,
+    /// Configured interval between ticks. Lets the chip render
+    /// "next tick in ~N min" without round-tripping config.
+    pub tick_interval_secs: u64,
+}
+
 /// Adapter the watcher uses to reach mesh state without depending on
 /// `commonwealth-state` directly. Sovereign-mesh provides the concrete
 /// `MeshNewsworthyHost` impl backed by `MeshStore` + the discovery
@@ -529,6 +571,7 @@ impl WikipediaNewsworthyWatcher {
     pub fn spawn(
         self: Arc<Self>,
         mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
+        mut force_tick_rx: tokio::sync::mpsc::Receiver<()>,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             // First-tick jitter: avoids a thundering-herd ingest when
@@ -553,36 +596,45 @@ impl WikipediaNewsworthyWatcher {
             let mut interval = tokio::time::interval(self.config.tick_interval);
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {
-                tokio::select! {
-                    _ = interval.tick() => {
-                        match self.tick(Utc::now()).await {
-                            Ok(report) => tracing::info!(
-                                node = %self.host.self_node_id_str(),
-                                role = if report.role_leader { "leader" } else { "follower" },
-                                tracked = report.tracked_total,
-                                owned = report.owned_total,
-                                fetched = report.fetched,
-                                rev_checked = report.rev_checked,
-                                refreshed = report.refreshed,
-                                stale_marked = report.stale_marked,
-                                errors = report.errors,
-                                portal_ingested = report.portal_ingested,
-                                elapsed_ms = report.elapsed_ms,
-                                "newsworthy.tick",
-                            ),
-                            Err(e) => tracing::error!(
-                                node = %self.host.self_node_id_str(),
-                                error = %e,
-                                "newsworthy.tick_failed",
-                            ),
-                        }
-                    }
+                let trigger = tokio::select! {
+                    _ = interval.tick() => Some("interval"),
+                    _ = force_tick_rx.recv() => Some("force"),
                     _ = shutdown_rx.changed() => {
                         tracing::info!(
                             node = %self.host.self_node_id_str(),
                             "newsworthy.watcher_shutdown"
                         );
                         return;
+                    }
+                };
+                if let Some(trigger) = trigger {
+                    if trigger == "force" {
+                        tracing::info!(
+                            node = %self.host.self_node_id_str(),
+                            "newsworthy.tick_forced — operator-triggered via /internal/newsworthy/tick"
+                        );
+                    }
+                    match self.tick(Utc::now()).await {
+                        Ok(report) => tracing::info!(
+                            node = %self.host.self_node_id_str(),
+                            trigger = trigger,
+                            role = if report.role_leader { "leader" } else { "follower" },
+                            tracked = report.tracked_total,
+                            owned = report.owned_total,
+                            fetched = report.fetched,
+                            rev_checked = report.rev_checked,
+                            refreshed = report.refreshed,
+                            stale_marked = report.stale_marked,
+                            errors = report.errors,
+                            portal_ingested = report.portal_ingested,
+                            elapsed_ms = report.elapsed_ms,
+                            "newsworthy.tick",
+                        ),
+                        Err(e) => tracing::error!(
+                            node = %self.host.self_node_id_str(),
+                            error = %e,
+                            "newsworthy.tick_failed",
+                        ),
                     }
                 }
             }
@@ -618,6 +670,32 @@ impl WikipediaNewsworthyWatcher {
                 report.elapsed_ms = 0;
                 return Ok(report);
             }
+        }
+
+        // ── Local-install gate ────────────────────────────────────
+        //
+        // The watcher spawns whenever a CorpusEngine handle is on the
+        // daemon — independent of whether this node has actually
+        // installed `wikipedia-newsworthy`. A non-installed node has
+        // no on-disk index for `reindex_by_source_doc_id` to write to;
+        // leader-elected ticks would error and follower ticks would
+        // do nothing useful. Skip the tick entirely so the watcher
+        // reports `not_installed` instead of running a no-op or
+        // erroring on every interval.
+        let installed = self.engine.installed_indexes().await.unwrap_or_default();
+        let corpus_present = installed
+            .iter()
+            .any(|i| i.corpus_id == self.config.corpus_id && !i.is_shard);
+        if !corpus_present {
+            tracing::info!(
+                corpus_id = %self.config.corpus_id,
+                "newsworthy.tick_skipped_not_installed — this node has not installed the watcher's corpus; skipping until install lands"
+            );
+            let mut report = TickReport::default();
+            report.role_leader = self.host.is_leader().await;
+            report.elapsed_ms = 0;
+            self.publish_status(&report, false, now);
+            return Ok(report);
         }
 
         let started = std::time::Instant::now();
@@ -659,6 +737,17 @@ impl WikipediaNewsworthyWatcher {
             }
         }
         report.owned_total = owned.len();
+
+        // Intermediate publish so the desktop chip sees portal-ingest
+        // results immediately, not after the (potentially multi-minute)
+        // per-article fetch loop completes. Without this the operator
+        // who clicked "Run tick now" thinks nothing happened — the
+        // snapshot's `tracked_total` stays at the pre-tick value for
+        // the full duration of the article fan-out. `elapsed_ms` here
+        // is partial; the final publish at end-of-tick overwrites with
+        // the complete number.
+        report.elapsed_ms = started.elapsed().as_millis() as u64;
+        self.publish_status(&report, true, now);
 
         let (to_fetch, to_check): (Vec<_>, Vec<_>) = owned
             .into_iter()
@@ -796,7 +885,39 @@ impl WikipediaNewsworthyWatcher {
             self.host.on_chunks_committed_with_docs(&committed);
         }
 
+        self.publish_status(&report, true, now);
         Ok(report)
+    }
+
+    /// Persist a `TickStatusSnapshot` so the daemon's
+    /// `/internal/newsworthy/status` route + desktop chip have a
+    /// stable surface to read. Best-effort: a write failure logs but
+    /// never aborts the tick.
+    fn publish_status(&self, report: &TickReport, corpus_installed: bool, now: DateTime<Utc>) {
+        let snapshot = TickStatusSnapshot {
+            observed_at: now.timestamp(),
+            node_id_str: self.host.self_node_id_str(),
+            role_leader: report.role_leader,
+            corpus_installed,
+            tracked_total: report.tracked_total,
+            owned_total: report.owned_total,
+            portal_ingested: report.portal_ingested,
+            errors: report.errors,
+            elapsed_ms: report.elapsed_ms,
+            tick_interval_secs: self.config.tick_interval.as_secs(),
+        };
+        match serde_json::to_vec(&snapshot) {
+            Ok(bytes) => {
+                if let Err(e) = self.host.store_set(APP_ID_STATUS, STATUS_KEY_LAST_TICK, bytes)
+                {
+                    tracing::warn!(
+                        error = %e,
+                        "newsworthy.status_publish_failed — status chip will lag until next tick succeeds"
+                    );
+                }
+            }
+            Err(e) => tracing::warn!(error = %e, "newsworthy.status_serialise_failed"),
+        }
     }
 
     /// Leader-only daily portal-page ingest. Returns `true` when an
@@ -837,7 +958,8 @@ impl WikipediaNewsworthyWatcher {
         // Index this portal page into wikipedia-newsworthy. The same
         // reindex_by_source_doc_id API works because each page is one
         // logical document keyed by date.
-        self.engine
+        let reindex_result = self
+            .engine
             .reindex_by_source_doc_id(
                 &self.config.corpus_id,
                 &date_iso,
@@ -846,6 +968,10 @@ impl WikipediaNewsworthyWatcher {
                 &ChunkerConfig::PortalEventBullet { max_chars: 2048 },
             )
             .await?;
+        let chunks_written = match reindex_result {
+            crate::engine::reindex::ReindexResult::Updated { chunks_written, .. } => chunks_written,
+            _ => 0,
+        };
 
         // Pull outbound links straight from the parsed JSON via the
         // chunker's wikilink helper — this avoids re-reading the index
@@ -853,25 +979,63 @@ impl WikipediaNewsworthyWatcher {
         let links = collect_outbound_links_from_parsed(&parsed);
         let added = self.upsert_tracked(&links, now)?;
 
-        let marker = PortalMarker {
-            date_iso: date_iso.clone(),
-            last_fetched_revid: observed_revid,
-            fetched_at: now.timestamp(),
-        };
-        self.host.store_set(
-            APP_ID_PORTAL,
-            &marker_key,
-            serde_json::to_vec(&marker).map_err(|e| Error::Extraction(format!("portal marker: {e}")))?,
-        )?;
+        // Glassbox guard: if we extracted links but committed zero
+        // chunks the portal page reached MediaWiki but the
+        // extractor/chunker pipeline lost the body. Surface as a warn
+        // so it's visible in the daemon log + bench tooling; without
+        // this the tick reports `portal_ingested=true` even when the
+        // corpus stays empty, which is exactly the symptom that
+        // surfaced on Portal:Current_events template-wrapped pages.
+        if chunks_written == 0 && !links.is_empty() {
+            tracing::warn!(
+                date = %date_iso,
+                revid = observed_revid,
+                new_links = links.len(),
+                "newsworthy.portal_link_chunk_mismatch — extracted links from portal JSON \
+                 but reindex committed 0 chunks; the wikipedia-newsworthy corpus stays \
+                 empty for this date even though tracked set advanced. Check the extractor's \
+                 wikitext-template handling."
+            );
+        }
+
+        // Only write the date marker when chunks actually landed. If
+        // we marked the page as fetched at revid=N with 0 chunks, a
+        // later tick with the same revid would short-circuit
+        // (`observed_revid > 0 && prev.last_fetched_revid == observed_revid`)
+        // and never get a chance to retry after the extractor is
+        // fixed. Skipping the marker write on empty commits forces a
+        // retry on every leader tick until at least one chunk lands.
+        if chunks_written > 0 || observed_revid == 0 {
+            let marker = PortalMarker {
+                date_iso: date_iso.clone(),
+                last_fetched_revid: observed_revid,
+                fetched_at: now.timestamp(),
+            };
+            self.host.store_set(
+                APP_ID_PORTAL,
+                &marker_key,
+                serde_json::to_vec(&marker)
+                    .map_err(|e| Error::Extraction(format!("portal marker: {e}")))?,
+            )?;
+        }
 
         tracing::info!(
             date = %date_iso,
             revid = observed_revid,
             new_links = links.len(),
             new_tracked = added,
+            chunks_written,
             "newsworthy.portal_ingested"
         );
-        Ok(Some(date_iso))
+        // Only report a portal as ingested when the chunks actually
+        // landed. The leader_step's caller uses this to decide whether
+        // to dispatch atlas rebuilds + window sweeps; a 0-chunk write
+        // doesn't earn those.
+        if chunks_written == 0 {
+            Ok(None)
+        } else {
+            Ok(Some(date_iso))
+        }
     }
 
     fn load_tracked(&self) -> Result<Vec<TrackedArticle>> {

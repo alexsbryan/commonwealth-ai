@@ -17,10 +17,12 @@
 //! the trait keeps `corpus-engine` free of any Commonwealth dependency
 //! per the architectural seam in §6 of `SYSTEM_OVERVIEW.md`.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use bytes::Bytes;
 use commonwealth_api::state::AppState;
+use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind};
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::NodeStatus;
 use commonwealth_core::partition;
@@ -30,11 +32,21 @@ use corpus_engine::update::newsworthy_watcher::{CommittedDocs, NewsworthyHost};
 
 pub struct MeshNewsworthyHost {
     app_state: AppState,
+    /// The corpus this watcher is responsible for. Used to restrict
+    /// leader/owner election to peers that have advertised the corpus
+    /// in their most recent `StorageSnapshot` ledger event — without
+    /// this gate, the lowest-NodeId peer wins leadership even when
+    /// they haven't installed the corpus, leaving the leader role
+    /// orphaned and no chunks ever ingested.
+    target_corpus_id: String,
 }
 
 impl MeshNewsworthyHost {
-    pub fn new(app_state: AppState) -> Self {
-        Self { app_state }
+    pub fn new(app_state: AppState, target_corpus_id: impl Into<String>) -> Self {
+        Self {
+            app_state,
+            target_corpus_id: target_corpus_id.into(),
+        }
     }
 
     fn mesh_store(&self) -> &Arc<MeshStore> {
@@ -58,6 +70,101 @@ impl MeshNewsworthyHost {
             .map(|(id, _)| *id)
             .collect()
     }
+
+    /// Intersection of `online_members()` and the set of peers whose
+    /// most recent gossiped `StorageSnapshot` contains
+    /// `self.target_corpus_id`. Self is included whenever the local
+    /// engine reports the corpus installed (no need to wait a full
+    /// `STORAGE_SNAPSHOT_INTERVAL` round-trip to see our own
+    /// advertisement land in the ledger).
+    ///
+    /// If the local engine has the corpus and the ledger walk yields
+    /// nothing else, the return is `[self]` and the watcher runs as
+    /// solo leader — the right behaviour when peers haven't yet
+    /// installed or haven't gossiped since boot. Fallback semantics
+    /// here matter: the alternative (returning all online members on
+    /// ledger error) would re-introduce the bug we're fixing — a
+    /// peer with the lowest NodeId but no install winning the leader
+    /// role and silently doing nothing.
+    async fn online_members_holding_target(&self) -> Vec<NodeId> {
+        let online = self.online_members().await;
+        if online.is_empty() {
+            return Vec::new();
+        }
+
+        let self_id = self.self_node_id();
+        let mut holders: Vec<NodeId> = Vec::new();
+
+        // Self: check local engine directly — fastest source of truth.
+        if let Some(engine) = self.app_state.inner.corpus_engine.clone() {
+            match engine.installed_indexes().await {
+                Ok(list) => {
+                    if list
+                        .iter()
+                        .any(|i| i.corpus_id == self.target_corpus_id && !i.is_shard)
+                    {
+                        holders.push(self_id);
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "newsworthy.host: installed_indexes failed; excluding self from leader pool"
+                    );
+                }
+            }
+        }
+
+        // Peers: walk the contribution ledger for the latest
+        // StorageSnapshot per node, accept those whose snapshot lists
+        // `target_corpus_id`. Snapshots are gossiped hourly, so a
+        // freshly-installed peer may not show up for up to an hour —
+        // acceptable for a daily watcher tick.
+        let events: Vec<LedgerEvent> = match self.app_state.inner.contribution_emitter.events()
+        {
+            Ok(ev) => ev,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "newsworthy.host: contribution_emitter.events failed; \
+                     leader pool falls back to self-only"
+                );
+                return holders;
+            }
+        };
+
+        let mut latest_per_node: HashMap<NodeId, (&LedgerEvent, &Vec<(String, f64)>)> =
+            HashMap::new();
+        for ev in &events {
+            if ev.node_id == self_id {
+                continue; // self handled above
+            }
+            if let LedgerEventKind::StorageSnapshot { corpora } = &ev.kind {
+                let entry = latest_per_node.entry(ev.node_id);
+                match entry {
+                    std::collections::hash_map::Entry::Vacant(v) => {
+                        v.insert((ev, corpora));
+                    }
+                    std::collections::hash_map::Entry::Occupied(mut o) => {
+                        if ev.timestamp > o.get().0.timestamp {
+                            o.insert((ev, corpora));
+                        }
+                    }
+                }
+            }
+        }
+
+        for (node_id, (_, corpora)) in latest_per_node {
+            if !online.contains(&node_id) {
+                continue;
+            }
+            if corpora.iter().any(|(id, _)| id == &self.target_corpus_id) {
+                holders.push(node_id);
+            }
+        }
+
+        holders
+    }
 }
 
 #[async_trait::async_trait]
@@ -67,13 +174,13 @@ impl NewsworthyHost for MeshNewsworthyHost {
     }
 
     async fn is_leader(&self) -> bool {
-        let online = self.online_members().await;
-        partition::is_leader(self.self_node_id(), &online)
+        let pool = self.online_members_holding_target().await;
+        partition::is_leader(self.self_node_id(), &pool)
     }
 
     async fn is_owner_of(&self, partition_key: &str) -> bool {
-        let online = self.online_members().await;
-        partition::is_owner(self.self_node_id(), partition_key, &online)
+        let pool = self.online_members_holding_target().await;
+        partition::is_owner(self.self_node_id(), partition_key, &pool)
     }
 
     fn store_get(&self, app_id: &str, key: &str) -> CorpusResult<Option<Vec<u8>>> {

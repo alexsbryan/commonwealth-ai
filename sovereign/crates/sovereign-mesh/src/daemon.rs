@@ -1654,6 +1654,30 @@ impl EmbeddedDaemon {
         });
         info!("StorageSnapshot loop started");
 
+        // Stall sweep — any non-terminal `_enrichment_state.json`
+        // older than STALL_THRESHOLD_SECS is rewritten as `Stalled`
+        // so the desktop chip transitions out of "starting" / "RAPTOR
+        // leaves" and into "interrupted, click to retry". Cheap walk
+        // of the indexes dir; runs once per daemon start and adds
+        // ~tens of milliseconds at most.
+        if let Some(engine) = corpus_engine.clone() {
+            let indexes_dir = engine.index_dir().to_path_buf();
+            match corpus_engine::enrichment::state::sweep_stalled_states(&indexes_dir) {
+                Ok(corpora) if !corpora.is_empty() => {
+                    info!(
+                        count = corpora.len(),
+                        corpora = ?corpora,
+                        "enrichment_stall_sweep: marked previously-running enrichments as Stalled"
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(
+                    error = %e,
+                    "enrichment_stall_sweep failed; UI may show stale 'starting' until next manual retry"
+                ),
+            }
+        }
+
         // ── wikipedia-newsworthy freshness daemon ─────────────────
         // Spawned only when a CorpusEngine handle is available — the
         // watcher's whole point is reindexing into the parent
@@ -1663,10 +1687,13 @@ impl EmbeddedDaemon {
         // shutdown channel pattern as RetentionGc/storage-snapshot so
         // it terminates cleanly on `EmbeddedDaemon::stop`.
         if let Some(engine) = corpus_engine.clone() {
+            let newsworthy_config =
+                corpus_engine::update::newsworthy_watcher::NewsworthyConfig::default();
             let host: std::sync::Arc<
                 dyn corpus_engine::update::newsworthy_watcher::NewsworthyHost,
             > = std::sync::Arc::new(crate::newsworthy_host::MeshNewsworthyHost::new(
                 app_state.clone(),
+                newsworthy_config.corpus_id.clone(),
             ));
             let mw_client: std::sync::Arc<
                 dyn corpus_engine::update::newsworthy_watcher::MediaWikiClient,
@@ -1682,11 +1709,22 @@ impl EmbeddedDaemon {
                     host,
                     engine,
                     mw_client,
-                    corpus_engine::update::newsworthy_watcher::NewsworthyConfig::default(),
+                    newsworthy_config,
                 ),
             );
             let (newsworthy_shutdown_tx, newsworthy_shutdown_rx) =
                 tokio::sync::watch::channel(false);
+            // Operator-triggered tick channel. Capacity 4 is plenty —
+            // ticks coalesce on the watcher side (one in flight at a
+            // time), so a burst of /internal/newsworthy/tick POSTs
+            // collapses to "one extra tick after the current one
+            // finishes". Sender is published on AppState so the route
+            // handler can fire without holding a watcher handle.
+            let (newsworthy_force_tick_tx, newsworthy_force_tick_rx) =
+                tokio::sync::mpsc::channel::<()>(4);
+            if let Ok(mut slot) = app_state.inner.newsworthy_force_tick.try_write() {
+                *slot = Some(newsworthy_force_tick_tx);
+            }
             // Wrap `watcher.spawn` in another `tokio::spawn` so the
             // sender is moved INTO the wrapping task's async block
             // (mirroring the storage-snapshot loop above). Earlier
@@ -1703,7 +1741,8 @@ impl EmbeddedDaemon {
             // for the daemon's lifetime under normal operation.
             tokio::spawn(async move {
                 let _hold_shutdown_tx = newsworthy_shutdown_tx;
-                let handle = watcher.spawn(newsworthy_shutdown_rx);
+                let handle =
+                    watcher.spawn(newsworthy_shutdown_rx, newsworthy_force_tick_rx);
                 let _ = handle.await;
             });
             info!("WikipediaNewsworthyWatcher started");

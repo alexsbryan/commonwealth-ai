@@ -173,6 +173,29 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/corpus/status",
             get(routes_internal::corpus_status),
         )
+        // Watcher liveness for the `wikipedia-newsworthy` freshness
+        // daemon. Read-only; surfaces the most recent tick + the
+        // current leader so the desktop chip can answer "is this
+        // working?" without operators tailing daemon logs.
+        // Generic per-corpus enrichment progress. Reads
+        // `_enrichment_state.json` written by any pipeline that
+        // adopts EnrichmentProgressSink — folder tiered, structural
+        // atlas postinstall, conversation RAPTOR, future pipelines.
+        .route(
+            "/internal/enrichment/status",
+            get(routes_internal::enrichment_status),
+        )
+        .route(
+            "/internal/newsworthy/status",
+            get(routes_internal::newsworthy_status),
+        )
+        // Operator-triggered tick — fires one watcher pass immediately
+        // so users don't have to wait up to 24h to see a snapshot
+        // refresh after install/leader-election state changes.
+        .route(
+            "/internal/newsworthy/tick",
+            axum::routing::post(routes_internal::newsworthy_tick),
+        )
         // Phase 6 canonical-sync: peers fetch this node's canonical
         // index for `<corpus_id>` as a streaming tar.zst. Loopback-
         // gated like the other internal routes; the auth path is the

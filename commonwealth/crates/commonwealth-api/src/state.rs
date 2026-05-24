@@ -228,6 +228,16 @@ pub struct AppStateInner {
     /// terminal phase (`Complete`) overwrites them or an explicit
     /// cancel wipes the corpus.
     pub corpus_progress: RwLock<HashMap<String, corpus_engine::IngestProgress>>,
+    /// Operator-triggered tick channel for the `wikipedia-newsworthy`
+    /// freshness watcher. Installed by the embedded daemon when (and
+    /// only when) the watcher spawns; `None` in tests and on daemons
+    /// without a corpus engine. The `POST /internal/newsworthy/tick`
+    /// route grabs this sender to fire one tick on demand, bypassing
+    /// the 24h interval — the only path operators have to recover
+    /// from a stale snapshot or kick off the first portal ingest
+    /// after becoming leader.
+    pub newsworthy_force_tick:
+        RwLock<Option<tokio::sync::mpsc::Sender<()>>>,
     /// Current inference availability (0.0–1.0). Written by sovereign-server's
     /// ActivityReporter via POST /internal/node/activity; read by gossip each
     /// round to populate NodeCapabilities.inference_availability. Default 1.0.
@@ -559,6 +569,7 @@ impl AppState {
                 app_port_map: AppPortMap::new(),
                 active_ingests: RwLock::new(HashSet::new()),
                 corpus_progress: RwLock::new(HashMap::new()),
+                newsworthy_force_tick: RwLock::new(None),
                 local_inference_availability: RwLock::new(1.0_f32),
                 local_inference_capable: std::sync::atomic::AtomicBool::new(false),
                 on_mesh_mutation: None,

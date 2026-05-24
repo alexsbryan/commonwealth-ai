@@ -1042,11 +1042,20 @@ async fn run_daemon(args: &[String]) -> i32 {
         match sovereign_store::sqlite::SqliteStateStore::open(&db_path) {
             Ok(store) => {
                 let store_arc = Arc::new(store);
+                let indexes_root = data_dir.join("indexes");
+                let resolver: Arc<
+                    dyn sovereign_tools::conv_tiered_provider::IndexDirResolver,
+                > = Arc::new(
+                    sovereign_tools::conv_tiered_provider::StaticIndexDirResolver {
+                        indexes_root: indexes_root.clone(),
+                    },
+                );
                 let folder_prov =
                     sovereign_tools::conv_tiered_provider::FolderTieredProvider::new(
                         store_arc,
                         Arc::clone(&provider),
-                    );
+                    )
+                    .with_index_dir_resolver(resolver);
                 let folder_prov_arc: Arc<
                     dyn corpus_engine::enrichment::tiered::TieredEnrichmentProvider,
                 > = Arc::new(folder_prov);

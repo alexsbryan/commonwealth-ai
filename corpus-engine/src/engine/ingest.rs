@@ -203,9 +203,18 @@ impl CorpusEngine {
             let started = Instant::now();
             let corpus_id = recipe.corpus.id.clone();
             let canonical = self.index_dir.join(&corpus_id);
-            if !canonical.exists() {
+            // Watcher-driven recipes have no chunks at install time — the
+            // watcher writes them on its first tick. We still mark
+            // ingestion complete so `installed_indexes()` returns the
+            // corpus (it filters partials by `ingestion_in_progress`),
+            // the desktop chip flips off "Add", and the mesh
+            // StorageSnapshot loop advertises this node as a holder of
+            // the corpus. Without this flip the index is invisible to
+            // every downstream surface despite being semantically
+            // installed; chunks=0 is the steady state, not a partial.
+            let idx = if !canonical.exists() {
                 std::fs::create_dir_all(canonical.parent().unwrap_or(&self.index_dir))?;
-                let _idx = CorpusIndex::create_with_sharing(
+                let idx = CorpusIndex::create_with_sharing(
                     &canonical,
                     &recipe.corpus.id,
                     &recipe.corpus.name,
@@ -222,11 +231,21 @@ impl CorpusEngine {
                     path = %canonical.display(),
                     "ingest: created empty index for watcher-driven recipe"
                 );
+                idx
             } else {
                 tracing::info!(
                     corpus_id = %corpus_id,
                     path = %canonical.display(),
                     "ingest: watcher-driven recipe — canonical index already present, no-op"
+                );
+                CorpusIndex::open(&canonical).await?
+            };
+            if !CorpusIndex::is_ingestion_complete(&canonical) {
+                idx.mark_ingestion_complete()?;
+                tracing::info!(
+                    corpus_id = %corpus_id,
+                    "ingest: marked watcher-driven index as ingestion-complete \
+                     (steady state for this driver kind)"
                 );
             }
             return Ok(IngestResult {
