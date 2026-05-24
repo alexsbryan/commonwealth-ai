@@ -28,6 +28,7 @@ chrono = { workspace = true }
 reqwest = { workspace = true }
 sha2 = { workspace = true }
 tempfile = "3"
+regex = "1"
 commonwealth-agent-tools = { workspace = true }
 
 [dev-dependencies]

@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::runner::AgentRunner;
-use crate::runners::{MockAgentRunner, NativeRunner, PiRunner};
+use crate::runners::{BareMetalRunner, MockAgentRunner, NativeRunner, PiRunner, SearchRunner};
 
 type RunnerFactory = Box<dyn Fn() -> Arc<dyn AgentRunner> + Send + Sync>;
 
@@ -41,6 +41,14 @@ impl AgentRunnerRegistry {
         r.register("native-monolithic", || {
             Arc::new(NativeRunner::monolithic())
         });
+        // 2026-05-24: validated as bench's strongest agent shape —
+        // parallel candidate generation with monotonic-improvement
+        // gating, no role split, no defensive parsing. See search.rs
+        // module doc + the wildcard-rebuild session notes.
+        r.register("search", || Arc::new(SearchRunner::new()));
+        // Minimum-ceremony baseline; ships alongside search so
+        // operators can A/B "is orchestration earning its keep here".
+        r.register("bare-metal", || Arc::new(BareMetalRunner::new()));
         r.register("mock", || Arc::new(MockAgentRunner::canned()));
         r
     }
@@ -90,6 +98,24 @@ mod tests {
         assert!(r.get("native").is_some());
         assert!(r.get("native-monolithic").is_some());
         assert!(r.get("mock").is_some());
+    }
+
+    #[test]
+    fn builtin_registers_search_and_bare_metal() {
+        // The 2026-05-24 wildcard rebuild added these as
+        // first-class options. `search` is the validated new
+        // primary; `bare-metal` is the baseline. Future PRs may
+        // flip the bench's default `--agent` to search; that
+        // change should be guarded by a separate test.
+        let r = AgentRunnerRegistry::builtin();
+        let ids = r.agent_ids();
+        assert!(ids.contains(&"search"), "expected `search` in {ids:?}");
+        assert!(
+            ids.contains(&"bare-metal"),
+            "expected `bare-metal` in {ids:?}"
+        );
+        assert!(r.get("search").is_some());
+        assert!(r.get("bare-metal").is_some());
     }
 
     #[test]
