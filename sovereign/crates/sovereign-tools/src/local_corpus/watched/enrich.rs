@@ -255,8 +255,11 @@ struct JobHandle {
 /// (`FolderTieredProvider` in `conv_tiered_provider.rs`) so a single
 /// daemon-side instance can serve both paths. The driver doesn't
 /// distinguish — it routes `corpus_id` + `index_path` into
-/// `run_folder_tiered_enrichment` which calls into the provider
-/// with `conv_uuid = corpus_id`.
+/// `run_folder_tiered_enrichment` which iterates the index's
+/// per-`source_doc_id` groups and fires the provider once per doc
+/// with `conv_uuid = source_doc_id`. Each document becomes its own
+/// RAPTOR tree + signpost set; the folder is no longer collapsed
+/// into a single bag.
 #[derive(Clone)]
 pub struct TieredDeps {
     pub tiered_provider:
@@ -558,9 +561,11 @@ impl EnrichmentDriver {
             on_state(AssetState::MultiHopReady);
 
             // T3: RAPTOR tree + motif index. Persistence happens
-            // inside the provider's enrich_conversation; the runner
-            // collapses all chunks into one bag and calls the
-            // provider once with conv_uuid = corpus_id. Pass
+            // inside the provider's enrich_conversation. The runner
+            // iterates per `source_doc_id` and calls the provider
+            // once per document (`conv_uuid = source_doc_id`) so
+            // heterogeneous folders produce one RAPTOR tree per
+            // file rather than a single mixed-topic bag. Pass
             // `None` for the entity_extractor because we already
             // ran the delta above.
             match corpus_engine::enrichment::tiered::run_folder_tiered_enrichment(

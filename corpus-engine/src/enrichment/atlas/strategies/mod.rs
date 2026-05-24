@@ -9,4 +9,5 @@
 // part of the same feature bundle.
 #[cfg(feature = "treesitter")]
 pub mod code_walk;
+pub mod newsworthy_events;
 pub mod structure_first;

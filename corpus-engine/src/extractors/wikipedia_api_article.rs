@@ -484,6 +484,13 @@ fn strip_wikitext(input: &str) -> String {
         }
         // Drop residual HTML tags on the line.
         let cleaned = strip_html_tags(&transformed);
+        // Drop wikitext bold/italic apostrophe markup before the
+        // leading-marker trim so multi-quote runs collapse cleanly:
+        // `'''''bold italic'''''` (5) → strip first; `'''bold'''` (3)
+        // → strip second; `''italic''` (2) → strip third. Pure markup,
+        // no semantic content — surfacing it in atom descriptions
+        // reads as "raw wikitext leaked through."
+        let cleaned = strip_apostrophe_emphasis(&cleaned);
         // Drop leading wikitext list / table / quote markers.
         let stripped = cleaned
             .trim_start_matches(|c: char| matches!(c, '*' | '#' | ':' | ';' | '|'))
@@ -495,6 +502,41 @@ fn strip_wikitext(input: &str) -> String {
     }
 
     out.trim().to_string()
+}
+
+/// Strip wikitext bold/italic apostrophe markup. Wikitext uses runs
+/// of single-quotes: `''italic''`, `'''bold'''`, `'''''both'''''`.
+/// The markup carries no semantic content for atom descriptions —
+/// the inner text already conveys it — so we drop the apostrophes
+/// wholesale rather than translating to a different emphasis syntax.
+fn strip_apostrophe_emphasis(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let chars: Vec<char> = input.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '\'' {
+            let start = i;
+            while i < chars.len() && chars[i] == '\'' {
+                i += 1;
+            }
+            let run = i - start;
+            // Runs of 2/3/5 quotes are emphasis markers — drop them.
+            // A lone `'` is an apostrophe in normal English ("don't",
+            // possessives) and must survive; a run of 4 is wikitext
+            // for `'` + `'''` (an apostrophe then a bold-open), so
+            // emit one literal `'` and treat the remaining 3 as
+            // markup. Anything longer than 5 is malformed; treat as
+            // emphasis (drop all) — the rendered Wikipedia output
+            // does the same.
+            if run == 1 || run == 4 {
+                out.push('\'');
+            }
+        } else {
+            out.push(chars[i]);
+            i += 1;
+        }
+    }
+    out
 }
 
 fn find_double_close(cs: &[char], start: usize) -> Option<usize> {
@@ -578,6 +620,35 @@ fn strip_html_tags(input: &str) -> String {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn strips_bold_and_italic_apostrophe_runs() {
+        // Portal:Current_events headers use bold (`'''X'''`); article
+        // bodies sprinkle italics. Both must vanish from atom
+        // descriptions while leaving normal apostrophes intact.
+        let input = "'''Armed conflicts''' include the ''2026 Iran war''. Don't lose the apostrophe.";
+        let out = strip_apostrophe_emphasis(input);
+        assert_eq!(
+            out,
+            "Armed conflicts include the 2026 Iran war. Don't lose the apostrophe."
+        );
+    }
+
+    #[test]
+    fn handles_bold_italic_combined_five_quote_run() {
+        let input = "Both '''''bold-italic''''' at once.";
+        let out = strip_apostrophe_emphasis(input);
+        assert_eq!(out, "Both bold-italic at once.");
+    }
+
+    #[test]
+    fn four_apostrophe_run_keeps_one_literal_quote() {
+        // `''''X'''` = literal apostrophe + bold-open. Wikipedia's
+        // renderer treats it that way; we mirror.
+        let input = "''''X'''";
+        let out = strip_apostrophe_emphasis(input);
+        assert_eq!(out, "'X");
+    }
 
     fn write_response(json: &str) -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();

@@ -4,6 +4,7 @@ pub mod conv_tiered_provider;
 #[cfg(feature = "gliner-ner")]
 pub mod gliner_ner;
 pub mod raptor_atlas;
+pub mod raptor_checkpoint;
 pub mod entity_graph;
 pub mod atlas_postinstall;
 pub mod atlas_status;

@@ -36,6 +36,11 @@ use sovereign_core::error::Result;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::*;
 
+use crate::raptor_checkpoint::{
+    CheckpointDecision, LevelClustering, RaptorCheckpointHandle,
+};
+use corpus_engine::enrichment::state::{EnrichmentPhase, EnrichmentProgressSink};
+
 /// Target average number of input items per leaf cluster. With 1006
 /// Conrad chunks this produces ~50 leaf clusters; with 200 chunks
 /// it produces ~10. Below ~40 items we drop to a flat tree (single
@@ -70,6 +75,18 @@ const MAX_QUOTE_SPANS_PER_NODE: usize = 5;
 /// useful quotable signpost. Short spans don't anchor much.
 const MIN_QUOTE_SPAN_CHARS: usize = 40;
 
+/// Legacy entry point — no checkpoint, no progress sink. Forwards to
+/// [`build_raptor_atlas_with_checkpoint`] so call sites that don't
+/// need resume semantics keep working unchanged.
+pub async fn build_raptor_atlas(
+    inference: &Arc<dyn InferenceProvider>,
+    chunks: &[ChunkInput],
+    embeddings: &[Vec<f32>],
+    doc_type: DocumentTypeTag,
+) -> Result<Vec<RaptorNode>> {
+    build_raptor_atlas_with_checkpoint(inference, chunks, embeddings, doc_type, None, None).await
+}
+
 /// Build the full RAPTOR atlas from a document's chunks + their
 /// pre-computed embeddings. Returns the flat node list (leaves first,
 /// then intermediate, then root) ready for `save_raptor_nodes`.
@@ -77,11 +94,35 @@ const MIN_QUOTE_SPAN_CHARS: usize = 40;
 /// `chunks` and `embeddings` must be the same length and indexed
 /// pari passu. Caller is responsible for chunk-id assignment via
 /// `chunk.index`.
-pub async fn build_raptor_atlas(
+///
+/// ## Checkpoint
+///
+/// When `checkpoint` is `Some(handle)`:
+///   - On entry, a `completed` manifest short-circuits the build and
+///     returns the previously-built nodes.
+///   - At level 0, the clustering decision is persisted before any
+///     LLM call. On a restart, the same clustering is reloaded so
+///     cluster identity is stable across attempts.
+///   - Each per-cluster `RaptorNode` is written immediately after the
+///     LLM returns. On restart, cached nodes are loaded from disk and
+///     the LLM call is skipped — the difference between hours of
+///     re-work and minutes of catch-up.
+///
+/// When `progress` is `Some(sink)`:
+///   - The sink receives `RaptorLeaves(done / total)` ticks after
+///     every per-leaf completion (cached or freshly summarized) so
+///     the desktop chip moves under the user's eyes.
+///
+/// Tree-level (non-leaf) recursion is NOT checkpointed today — those
+/// passes are short (≤ 10 calls total) and re-doing them is cheap
+/// compared to the leaves dominating wall time.
+pub async fn build_raptor_atlas_with_checkpoint(
     inference: &Arc<dyn InferenceProvider>,
     chunks: &[ChunkInput],
     embeddings: &[Vec<f32>],
     doc_type: DocumentTypeTag,
+    checkpoint: Option<&RaptorCheckpointHandle>,
+    progress: Option<&Arc<dyn EnrichmentProgressSink>>,
 ) -> Result<Vec<RaptorNode>> {
     if chunks.len() != embeddings.len() {
         return Err(sovereign_core::error::Error::Storage(format!(
@@ -94,9 +135,79 @@ pub async fn build_raptor_atlas(
         return Ok(Vec::new());
     }
 
+    // ── Checkpoint decide ────────────────────────────────────
+    //
+    // If a previous attempt finished, return its nodes verbatim — no
+    // LLM calls. If it crashed mid-build, the clustering + per-leaf
+    // RaptorNodes already on disk feed back in below, and only the
+    // missing leaves get summarized this attempt.
+    if let Some(handle) = checkpoint {
+        match handle.decide() {
+            CheckpointDecision::Resume(ref manifest) if manifest.completed_at.is_some() => {
+                let cached = handle.load_all_nodes()?;
+                tracing::info!(
+                    cached_nodes = cached.len(),
+                    "raptor_atlas: completed checkpoint found; skipping LLM build"
+                );
+                return Ok(cached);
+            }
+            CheckpointDecision::StaleAndReset => {
+                tracing::info!(
+                    "raptor_atlas: input hash changed since last attempt; \
+                     wiping checkpoint and starting fresh"
+                );
+                handle.reset();
+                let _ = handle.ensure_manifest();
+            }
+            CheckpointDecision::Resume(_) => {
+                tracing::info!(
+                    "raptor_atlas: resuming partial checkpoint — clustering + \
+                     completed per-leaf nodes will be reused"
+                );
+                let _ = handle.ensure_manifest();
+            }
+            CheckpointDecision::Fresh => {
+                let _ = handle.ensure_manifest();
+            }
+        }
+    }
+
     // ── Level 0 — cluster raw chunks ─────────────────────────
-    let k_leaves = target_k(chunks.len(), LEAF_TARGET_CLUSTER_SIZE);
-    let leaf_assignments = kmeans_cluster(embeddings, k_leaves, /* max_iters = */ 40);
+    //
+    // Clustering is persisted on first run so subsequent attempts see
+    // the same cluster→member mapping. Without this, kmeans's random
+    // init produces different clusters on retry and the cached
+    // per-cluster nodes would no longer match the live cluster
+    // identities.
+    let (k_leaves, leaf_assignments) = match checkpoint
+        .and_then(|h| h.read_clustering(0).ok().flatten())
+    {
+        Some(c) => {
+            tracing::debug!(
+                level = 0,
+                k = c.k,
+                "raptor_atlas: reusing persisted clustering"
+            );
+            (c.k as usize, c.assignments.into_iter().map(|a| a as usize).collect())
+        }
+        None => {
+            let k = target_k(chunks.len(), LEAF_TARGET_CLUSTER_SIZE);
+            let assignments = kmeans_cluster(embeddings, k, /* max_iters = */ 40);
+            if let Some(handle) = checkpoint {
+                let record = LevelClustering {
+                    k: k as u32,
+                    assignments: assignments.iter().map(|a| *a as u32).collect(),
+                };
+                if let Err(e) = handle.write_clustering(0, &record) {
+                    tracing::warn!(
+                        error = %e,
+                        "raptor_atlas: persist clustering failed; retry won't be deterministic"
+                    );
+                }
+            }
+            (k, assignments)
+        }
+    };
 
     let mut leaf_inputs: Vec<LeafSummarizationInput> = Vec::with_capacity(k_leaves);
     for cluster_idx in 0..k_leaves {
@@ -129,12 +240,27 @@ pub async fn build_raptor_atlas(
         });
     }
 
-    // Fan leaf summaries across the mesh.
-    let leaf_nodes = summarize_clusters_buffered(
-        inference,
-        leaf_inputs
-            .into_iter()
-            .map(|inp| ClusterSummarizationInput {
+    // ── Per-leaf checkpoint: short-circuit cached, summarize the rest.
+    //
+    // For each cluster_idx we either (a) lift the persisted RaptorNode
+    // off disk and skip the LLM call entirely, or (b) include it in
+    // `inputs_to_summarize` for the buffered fan-out. Cached and
+    // freshly-summarized results are merged back in `cluster_idx`
+    // order so the rest of the tree-building code sees a contiguous
+    // `leaf_nodes` vec exactly as before.
+    let total_clusters = leaf_inputs.len();
+    let mut cached_results: Vec<Option<RaptorNode>> = vec![None; total_clusters];
+    let mut to_summarize: Vec<(usize, ClusterSummarizationInput)> = Vec::new();
+    for (cluster_idx, inp) in leaf_inputs.into_iter().enumerate() {
+        if let Some(handle) = checkpoint {
+            if let Ok(Some(cached)) = handle.read_cluster_node(0, cluster_idx) {
+                cached_results[cluster_idx] = Some(cached);
+                continue;
+            }
+        }
+        to_summarize.push((
+            cluster_idx,
+            ClusterSummarizationInput {
                 level: 0,
                 member_descriptors: inp
                     .member_indices
@@ -155,11 +281,51 @@ pub async fn build_raptor_atlas(
                 quote_spans: inp.quote_spans,
                 centroid_embedding: inp.centroid,
                 cluster_coherence: inp.coherence,
-            })
-            .collect(),
+            },
+        ));
+    }
+    let already_cached = total_clusters - to_summarize.len();
+    if already_cached > 0 {
+        tracing::info!(
+            cached = already_cached,
+            remaining = to_summarize.len(),
+            total = total_clusters,
+            "raptor_atlas: leaf-level checkpoint hit; skipping LLM for cached leaves"
+        );
+    }
+    if let Some(sink) = progress {
+        sink.report(
+            EnrichmentPhase::RaptorLeaves,
+            already_cached as u64,
+            total_clusters as u64,
+            Some(&format!(
+                "summarising leaves ({already_cached}/{total_clusters} done)"
+            )),
+        )
+        .await;
+    }
+
+    // Fan the uncached leaves across the mesh, persisting + emitting
+    // progress after each completion so the chip moves under the
+    // user's eyes and a daemon restart leaves the just-finished leaves
+    // on disk for the next attempt.
+    let freshly_summarized = summarize_clusters_buffered_with_checkpoint(
+        inference,
+        to_summarize,
         doc_type.clone(),
+        checkpoint,
+        progress,
+        already_cached,
+        total_clusters,
     )
     .await;
+    for (cluster_idx, node) in freshly_summarized {
+        if cluster_idx < cached_results.len() {
+            cached_results[cluster_idx] = Some(node);
+        }
+    }
+
+    let leaf_nodes: Vec<RaptorNode> = cached_results.into_iter().flatten().collect();
 
     let mut all_nodes: Vec<RaptorNode> = leaf_nodes.clone();
 
@@ -270,6 +436,41 @@ pub async fn build_raptor_atlas(
         }
     }
 
+    // Persist any non-leaf nodes the tree-level passes produced so a
+    // future `load_all_nodes()` returns them too. Levels >0 aren't
+    // checkpointed per-cluster during the in-build loop (the tree is
+    // short), but the final mark_complete read at restart wouldn't
+    // include them unless we write them here.
+    if let Some(handle) = checkpoint {
+        for node in &all_nodes {
+            if node.level == 0 {
+                continue;
+            }
+            // Use the node's index within its level as the cluster_idx
+            // for the on-disk filename. Walk the level group on demand.
+            let same_level_predecessors = all_nodes
+                .iter()
+                .take_while(|n| !std::ptr::eq(*n, node))
+                .filter(|n| n.level == node.level)
+                .count();
+            if let Err(e) =
+                handle.write_cluster_node(node.level, same_level_predecessors, node)
+            {
+                tracing::warn!(
+                    level = node.level,
+                    error = %e,
+                    "raptor_atlas: persist non-leaf node failed"
+                );
+            }
+        }
+        if let Err(e) = handle.mark_complete() {
+            tracing::warn!(
+                error = %e,
+                "raptor_atlas: mark_complete failed; next restart will re-summarize tree layers"
+            );
+        }
+    }
+
     tracing::info!(
         nodes = all_nodes.len(),
         leaves = all_nodes.iter().filter(|n| n.level == 0).count(),
@@ -278,6 +479,64 @@ pub async fn build_raptor_atlas(
     );
 
     Ok(all_nodes)
+}
+
+/// Per-cluster-aware variant of `summarize_clusters_buffered`.
+/// Persists each freshly-summarized `RaptorNode` to the checkpoint
+/// (when provided) immediately on completion + emits a progress tick
+/// through the optional sink. Returns `(cluster_idx, RaptorNode)`
+/// pairs so the caller can place each result back in its slot.
+async fn summarize_clusters_buffered_with_checkpoint(
+    inference: &Arc<dyn InferenceProvider>,
+    inputs: Vec<(usize, ClusterSummarizationInput)>,
+    doc_type: DocumentTypeTag,
+    checkpoint: Option<&RaptorCheckpointHandle>,
+    progress: Option<&Arc<dyn EnrichmentProgressSink>>,
+    already_cached: usize,
+    total_clusters: usize,
+) -> Vec<(usize, RaptorNode)> {
+    let inference = Arc::clone(inference);
+    let doc_type = doc_type.clone();
+    let mut stream = stream::iter(inputs)
+        .map(|(cluster_idx, input)| {
+            let inf = Arc::clone(&inference);
+            let dt = doc_type.clone();
+            async move {
+                let node = summarize_one_cluster(&inf, input, dt).await;
+                (cluster_idx, node)
+            }
+        })
+        .buffered(SUMMARIZE_BUFFER);
+
+    let mut out: Vec<(usize, RaptorNode)> = Vec::new();
+    let mut completed = already_cached;
+    while let Some((cluster_idx, maybe_node)) = stream.next().await {
+        if let Some(node) = maybe_node {
+            if let Some(handle) = checkpoint {
+                if let Err(e) = handle.write_cluster_node(0, cluster_idx, &node) {
+                    tracing::warn!(
+                        cluster_idx,
+                        error = %e,
+                        "raptor_atlas: persist leaf failed; this leaf will re-summarize on retry"
+                    );
+                } else {
+                    let _ = handle.touch();
+                }
+            }
+            out.push((cluster_idx, node));
+        }
+        completed += 1;
+        if let Some(sink) = progress {
+            sink.report(
+                EnrichmentPhase::RaptorLeaves,
+                completed as u64,
+                total_clusters as u64,
+                Some(&format!("summarising leaves ({completed}/{total_clusters})")),
+            )
+            .await;
+        }
+    }
+    out
 }
 
 /// Compute the target number of clusters for an input layer.

@@ -765,6 +765,44 @@ impl FolderTieredProvider {
         }
     }
 
+    /// Build the per-cluster RAPTOR checkpoint and the
+    /// state-file-backed progress sink for one enrich call, when the
+    /// daemon wired an index-dir resolver. Returns `(None, None)` for
+    /// resolver-less paths (unit tests) — the build path tolerates
+    /// missing checkpoints + sinks by skipping the durable bits.
+    fn build_checkpoint_and_sink(
+        &self,
+        corpus_id: &str,
+        chunks: &[EnrichmentChunkRow],
+        embeddings: &[Vec<f32>],
+    ) -> (
+        Option<crate::raptor_checkpoint::RaptorCheckpointHandle>,
+        Option<Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink>>,
+    ) {
+        let Some(resolver) = self.index_dir_resolver.as_ref() else {
+            return (None, None);
+        };
+        let Some(index_dir) = resolver.resolve(corpus_id) else {
+            return (None, None);
+        };
+        let chunk_ids: Vec<u32> = chunks.iter().map(|c| c.id as u32).collect();
+        let embedding_dim = embeddings.first().map(|e| e.len()).unwrap_or(0);
+        let input_hash =
+            crate::raptor_checkpoint::RaptorCheckpointHandle::compute_input_hash(
+                &chunk_ids,
+                embedding_dim,
+            );
+        let checkpoint =
+            crate::raptor_checkpoint::RaptorCheckpointHandle::at(&index_dir, input_hash);
+        let sink: Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink> =
+            Arc::new(corpus_engine::enrichment::state::StateFileSink::new(
+                index_dir,
+                corpus_id.to_string(),
+                Some("folder_tiered".into()),
+            ));
+        (Some(checkpoint), Some(sink))
+    }
+
     fn fail_state(&self, corpus_id: &str, error: &str) {
         let Some(resolver) = self.index_dir_resolver.as_ref() else {
             return;
@@ -856,6 +894,15 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                             bucket.label()
                         )),
                     );
+                    // Construct the per-cluster checkpoint handle +
+                    // progress sink if we know where the index dir is.
+                    // The handle is shaped against the input chunk IDs
+                    // + embedding dim so re-runs after the chunk set
+                    // changes invalidate cleanly.
+                    let (checkpoint_owned, progress_sink_owned) = self
+                        .build_checkpoint_and_sink(corpus_id, &chunks, embeddings.as_slice());
+                    let checkpoint_ref = checkpoint_owned.as_ref();
+                    let progress_ref = progress_sink_owned.as_ref();
                     build_folder_artifacts(
                         corpus_id,
                         conv_uuid,
@@ -863,6 +910,8 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                         &embeddings,
                         self.inference.clone(),
                         updated_at,
+                        checkpoint_ref,
+                        progress_ref,
                     )
                     .await
                 }
@@ -970,6 +1019,8 @@ async fn build_folder_artifacts(
     embeddings: &[Vec<f32>],
     inference: Arc<dyn InferenceProvider>,
     updated_at: i64,
+    checkpoint: Option<&crate::raptor_checkpoint::RaptorCheckpointHandle>,
+    progress: Option<&Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink>>,
 ) -> std::result::Result<(Vec<ConvRaptorNodeRow>, Vec<ConvMotifRow>), Error> {
     let raptor_chunks: Vec<ChunkInput> = chunks
         .iter()
@@ -979,11 +1030,13 @@ async fn build_folder_artifacts(
         })
         .collect();
 
-    let (nodes, motifs) = crate::document_asset::build_atlas_artifacts(
+    let (nodes, motifs) = crate::document_asset::build_atlas_artifacts_with_checkpoint(
         &inference,
         &raptor_chunks,
         embeddings,
         DocumentTypeTag::Unknown,
+        checkpoint,
+        progress,
     )
     .await
     .map_err(|e| {

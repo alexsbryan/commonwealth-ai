@@ -54,9 +54,9 @@ use crate::conv_tiered::{ConvRaptorNodeRow, ConvSkeletonRow, ConvTieredReader};
 /// Display-category strings that route through the tiered (RAPTOR +
 /// chunk_entities + PPR) retrieval path. Watched folders join
 /// conversations on this list because both populate the conv_raptor_*
-/// / chunk_entities tables under the same shape (conv_uuid keyed on
-/// the source identifier — `conv_uuid` for conversation corpora,
-/// `corpus_id` itself for watched folders).
+/// / chunk_entities tables under the same shape — `conv_uuid` keyed
+/// on `source_doc_id` in both cases (one RAPTOR tree per
+/// conversation export, one per file inside a watched folder).
 pub const TIERED_DISPLAY_CATEGORIES: &[&str] = &["conversation", "watched_folder"];
 
 /// True if `cat` names a tiered-enrichment-bearing corpus category.
@@ -68,20 +68,22 @@ pub fn is_tiered_category(cat: &str) -> bool {
 }
 
 /// For a tiered category, return the conv_uuid key used to bucket
-/// chunks into per-source graphs. Conversations use `source_doc_id`
-/// (one graph per conversation); watched folders collapse all
-/// chunks under `corpus_id` (one graph per folder) because
-/// individual files don't carry meaningful entity-co-occurrence
-/// boundaries — the folder is the unit of context.
+/// chunks into per-source graphs. Both conversations and watched
+/// folders key by `source_doc_id`: conversation corpora put one
+/// chat export per source_doc; watched-folder corpora put one
+/// file per source_doc. The per-doc shape keeps RAPTOR trees and
+/// PPR entity graphs scoped to a single topic source rather than
+/// collapsing heterogeneous files into one bag.
+///
+/// `_corpus_id` is retained in the signature for future categories
+/// that need it (and for symmetry with call sites that already
+/// pass it); the watched-folder branch no longer reads it.
 pub fn tiered_group_key<'a>(
-    category: &str,
-    corpus_id: &'a str,
+    _category: &str,
+    _corpus_id: &'a str,
     source_doc_id: Option<&'a str>,
 ) -> Option<&'a str> {
-    match category {
-        "watched_folder" => Some(corpus_id),
-        _ => source_doc_id,
-    }
+    source_doc_id
 }
 
 /// Renderable briefing for a single conversation. Carries the parts
