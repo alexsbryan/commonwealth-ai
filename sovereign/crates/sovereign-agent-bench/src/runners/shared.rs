@@ -307,26 +307,60 @@ impl TestRunResult {
 
 // ── source file discovery ─────────────────────────────────────────
 
-/// Find the primary source file in the agent's workdir. Returns the
-/// first .py / .rs / .ts file at the workdir root that isn't named
-/// "test_*". Returns None when no candidate is present.
+/// Find the primary source file in the agent's workdir. Walks up
+/// to 3 levels deep skipping common test / build directories.
+/// Returns the workdir-relative path (e.g. `"src/lib.rs"` for Rust
+/// scaffolds, `"evaluator.py"` for flat Python scaffolds). None
+/// when no candidate is present.
 pub fn discover_source_file(workdir: &Path) -> Option<String> {
     let exts = [".py", ".rs", ".ts", ".tsx", ".go"];
-    let entries = std::fs::read_dir(workdir).ok()?;
-    let mut hits: Vec<PathBuf> = entries
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
-        .map(|e| e.path())
-        .filter(|p| {
-            let n = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
-            !n.starts_with("test_")
-                && exts.iter().any(|ext| n.ends_with(ext))
-        })
-        .collect();
-    hits.sort();
+    let mut hits: Vec<PathBuf> = Vec::new();
+    walk_for_sources(workdir, workdir, 0, &exts, &mut hits);
+    // Prefer files at shallower depth, then alphabetically.
+    hits.sort_by_key(|p| (p.components().count(), p.clone()));
     hits.into_iter()
         .next()
-        .and_then(|p| p.file_name().map(|s| s.to_string_lossy().into_owned()))
+        .map(|p| p.to_string_lossy().into_owned())
+}
+
+fn walk_for_sources(root: &Path, dir: &Path, depth: usize, exts: &[&str], out: &mut Vec<PathBuf>) {
+    if depth > 3 {
+        return;
+    }
+    const SKIP: &[&str] = &[
+        "target", "node_modules", ".git", "__pycache__", ".pytest_cache",
+        "tests", "test", "dist", "build", "vendor",
+    ];
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut entries: Vec<_> = rd.flatten().collect();
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if SKIP.iter().any(|s| *s == name_str) {
+            continue;
+        }
+        let p = entry.path();
+        let Ok(ft) = entry.file_type() else { continue };
+        if ft.is_dir() {
+            walk_for_sources(root, &p, depth + 1, exts, out);
+            continue;
+        }
+        if !ft.is_file() {
+            continue;
+        }
+        let n = name_str.as_ref();
+        if n.starts_with("test_") {
+            continue;
+        }
+        if exts.iter().any(|ext| n.ends_with(ext)) {
+            if let Ok(rel) = p.strip_prefix(root) {
+                out.push(rel.to_path_buf());
+            }
+        }
+    }
 }
 
 // ── prompt rendering ──────────────────────────────────────────────
@@ -540,6 +574,29 @@ if c == "<"
         std::fs::write(tmp.path().join("config_applier.py"), "pass\n").unwrap();
         let f = discover_source_file(tmp.path()).expect("should find file");
         assert_eq!(f, "config_applier.py");
+    }
+
+    #[test]
+    fn discover_source_file_finds_rust_src_lib() {
+        // Rust scaffolds keep source under src/. Discovery must
+        // recurse to find lib.rs and return the workdir-relative
+        // path (not just the bare filename).
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
+        std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+        std::fs::write(tmp.path().join("src/lib.rs"), "pub fn x() {}\n").unwrap();
+        let f = discover_source_file(tmp.path()).expect("should find lib.rs");
+        assert_eq!(f, "src/lib.rs");
+    }
+
+    #[test]
+    fn discover_source_file_skips_tests_subdir() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("tests")).unwrap();
+        std::fs::write(tmp.path().join("tests/test_x.py"), "pass\n").unwrap();
+        std::fs::write(tmp.path().join("evaluator.py"), "pass\n").unwrap();
+        let f = discover_source_file(tmp.path()).expect("should skip tests/");
+        assert_eq!(f, "evaluator.py");
     }
 
     #[test]
