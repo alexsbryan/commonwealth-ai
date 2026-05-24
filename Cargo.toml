@@ -40,6 +40,9 @@ members = [
     "sovereign/crates/sovereign-work-atlas",
     "sovereign/crates/sovereign-agent-bench",
     "sovereign/crates/commonwealth-agent-tools",
+    # TDD-machine backend (red-green-refactor solver registry).
+    # See sovereign/docs/TDD_MACHINE_DESIGN.md.
+    "sovereign/crates/commonwealth-tdd",
 
     # Commonwealth — symmetric mesh daemon.
     "commonwealth/crates/commonwealth-core",
@@ -81,6 +84,7 @@ sovereign-pipeline = { path = "sovereign/crates/sovereign-pipeline" }
 sovereign-work-atlas = { path = "sovereign/crates/sovereign-work-atlas" }
 sovereign-agent-bench = { path = "sovereign/crates/sovereign-agent-bench" }
 commonwealth-agent-tools = { path = "sovereign/crates/commonwealth-agent-tools" }
+commonwealth-tdd = { path = "sovereign/crates/commonwealth-tdd" }
 commonwealth-core = { path = "commonwealth/crates/commonwealth-core" }
 commonwealth-discovery = { path = "commonwealth/crates/commonwealth-discovery" }
 commonwealth-inference = { path = "commonwealth/crates/commonwealth-inference" }
@@ -141,6 +145,16 @@ arc-swap = "1.7"
 
 # Networking helpers
 hostname = "0.4"
+
+# Text utilities — hoisted 2026-05-24 so the eight crates that each
+# declared `regex = "1"` track one version. Used heavily in bench's
+# search runner output parsing and now by `commonwealth-tdd`.
+regex = "1"
+
+# Filesystem scratch space — used by every test that needs an
+# isolated workdir (bench candidate snapshots, commonwealth-tdd
+# workdir gate tests, atos lifecycle tests, …).
+tempfile = "3"
 
 # Persistence
 rusqlite = { version = "0.35", features = ["bundled"] }

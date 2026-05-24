@@ -199,6 +199,7 @@ async fn mcp_sse(
 async fn mcp_message(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(tdd): Extension<crate::routes_tdd::TddState>,
     Json(req): Json<JsonRpcRequest>,
 ) -> impl IntoResponse {
     if !is_localhost(&peer) {
@@ -215,8 +216,8 @@ async fn mcp_message(
 
     let id = req.id.clone();
     let response = match req.method.as_str() {
-        "tools/list" => handle_tools_list(&runtime.tools, id),
-        "tools/call" => handle_tools_call(&runtime.tools, req.params, id).await,
+        "tools/list" => handle_tools_list_with_tdd(&runtime.tools, id),
+        "tools/call" => handle_tools_call_with_tdd(&runtime.tools, &tdd, req.params, id).await,
         "initialize" => {
             // Some clients send initialize as a regular message rather
             // than via the POST /mcp handshake. Accept both.
@@ -399,6 +400,164 @@ fn call_tool_text(text: impl Into<String>, is_error: bool) -> Value {
         }],
         "isError": is_error,
     })
+}
+
+// ─── TDD-machine tool (collapsed surface) ──────────────────────
+//
+// The four pre-2026-05-24 solvers (`tdd_red`, `tdd_green`,
+// `tdd_refactor`, `tdd_multi_file_refactor`) collapsed into a
+// single unified `tdd_solve` tool. The polarity argument flips the
+// fitness predicate; the prompt argument carries move-shape
+// guidance; the test_command argument defines "done." Per-task
+// convenience tools (split_file etc.) can land as thin wrappers in
+// a follow-up — they all dispatch to the same `run_trial`.
+
+const TDD_TOOL_NAMES: &[&str] = &["tdd_solve"];
+
+fn tdd_tool_descriptors() -> Vec<Value> {
+    vec![serde_json::json!({
+        "name": "tdd_solve",
+        "description": "Run a TDD solver trial. Parallel-candidate search with monotonic improvement gating, validated 2026-05-24 (median 20/20 on 4.2-mini-evaluator, 92% PASS_AS_RED, multi-file 97→78 lines). One tool, two polarities: `maximize_passing` for any goal where 'more tests pass' is the gradient (bug fix, refactor, multi-file split via a structural test); `generate_one_failing` for the Red phase. Requires a clean git workdir (set force=true to override the uncommitted-changes check).",
+        "inputSchema": {
+            "type": "object",
+            "required": ["workdir", "model", "prompt", "test_command", "polarity"],
+            "properties": {
+                "workdir": {"type": "string", "description": "Absolute path to the project root."},
+                "force": {"type": "boolean", "description": "Bypass the uncommitted-changes check (system-path refusal stays in effect)."},
+                "model": {"type": "string", "description": "Daemon model id, e.g. commonwealth/primary."},
+                "prompt": {"type": "string", "description": "User-facing intent + move-shape guidance. The model sees this verbatim each round."},
+                "test_command": {"type": "string", "description": "Shell command that runs the project's tests. Defines the fitness signal."},
+                "polarity": {
+                    "type": "object",
+                    "description": "Fitness predicate. {kind: 'maximize_passing'} for the default; {kind: 'generate_one_failing', test_name_hint?: string} for Red.",
+                    "required": ["kind"]
+                }
+            }
+        }
+    })]
+}
+
+fn handle_tools_list_with_tdd(registry: &ToolRegistry, id: Value) -> JsonRpcResponse {
+    // Render the existing registry tools, then append TDD tool
+    // descriptors. The MCP spec's `tools` field is just a list, so
+    // append is the natural composition.
+    let descriptors = registry.descriptors();
+    let mut tools = render_tools_list(&descriptors);
+    tools.extend(tdd_tool_descriptors());
+    JsonRpcResponse::result(id, serde_json::json!({ "tools": tools }))
+}
+
+async fn handle_tools_call_with_tdd(
+    registry: &ToolRegistry,
+    tdd: &crate::routes_tdd::TddState,
+    params: Option<Value>,
+    id: Value,
+) -> JsonRpcResponse {
+    // Pre-check: is this a TDD tool name? If so, route to the solver
+    // registry. Otherwise fall through to the standard handler.
+    let is_tdd = params
+        .as_ref()
+        .and_then(|p| p.get("name"))
+        .and_then(|v| v.as_str())
+        .map(|n| TDD_TOOL_NAMES.contains(&n))
+        .unwrap_or(false);
+    if is_tdd {
+        let name = params
+            .as_ref()
+            .and_then(|p| p.get("name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        return dispatch_tdd_tool(tdd, &name, params, id).await;
+    }
+    handle_tools_call(registry, params, id).await
+}
+
+async fn dispatch_tdd_tool(
+    tdd: &crate::routes_tdd::TddState,
+    name: &str,
+    params: Option<Value>,
+    id: Value,
+) -> JsonRpcResponse {
+    use commonwealth_tdd::{run_trial, Polarity, Trial, TrialConfig, Workdir};
+    use std::sync::Arc;
+
+    debug_assert_eq!(name, "tdd_solve", "only tdd_solve routes here today");
+
+    let arguments = params
+        .as_ref()
+        .and_then(|p| p.get("arguments"))
+        .cloned()
+        .unwrap_or(Value::Object(Default::default()));
+
+    let workdir_str = match arguments.get("workdir").and_then(|v| v.as_str()) {
+        Some(s) => s.to_string(),
+        None => {
+            return JsonRpcResponse::result(
+                id,
+                call_tool_text("missing required field: workdir", true),
+            );
+        }
+    };
+    let force = arguments.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
+    let model = arguments
+        .get("model")
+        .and_then(|v| v.as_str())
+        .unwrap_or("commonwealth/primary")
+        .to_string();
+    let prompt = arguments
+        .get("prompt")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Drive the failing tests to passing.")
+        .to_string();
+    let test_command = match arguments.get("test_command").and_then(|v| v.as_str()) {
+        Some(s) => s.to_string(),
+        None => {
+            return JsonRpcResponse::result(
+                id,
+                call_tool_text("missing required field: test_command", true),
+            );
+        }
+    };
+
+    // Polarity: optional with default MaximizePassing.
+    let polarity = match arguments.get("polarity") {
+        None => Polarity::MaximizePassing,
+        Some(v) => match v.get("kind").and_then(|k| k.as_str()) {
+            Some("maximize_passing") => Polarity::MaximizePassing,
+            Some("generate_one_failing") => Polarity::GenerateOneFailing {
+                test_name_hint: v.get("test_name_hint").and_then(|h| h.as_str()).map(String::from),
+            },
+            other => {
+                return JsonRpcResponse::result(
+                    id,
+                    call_tool_text(format!("unknown polarity kind: {other:?}"), true),
+                );
+            }
+        },
+    };
+
+    let workdir = match Workdir::check_safe(workdir_str.into(), force) {
+        Ok(w) => w,
+        Err(e) => {
+            return JsonRpcResponse::result(
+                id,
+                call_tool_text(format!("workdir refused: {e}"), true),
+            );
+        }
+    };
+
+    let trial = Trial {
+        workdir,
+        model,
+        prompt,
+        test_command,
+        polarity,
+        config: TrialConfig::default(),
+    };
+    let result = run_trial(trial, Arc::clone(&tdd.0)).await;
+    let text = serde_json::to_string_pretty(&result).unwrap_or_default();
+    JsonRpcResponse::result(id, call_tool_text(text, false))
 }
 
 // ─── Tests ────────────────────────────────────────────────────

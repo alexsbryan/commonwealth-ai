@@ -1915,6 +1915,96 @@ typed-fence operation.
 **Plans:** PR 1 — `~/.claude/plans/autonomous-loop-tick-tingly-clock.md`.
 PR 2 — `~/.claude/plans/role-layer-multilang.md`.
 
+### 4.19 TDD machine — `commonwealth-tdd`
+
+Unified solver loop for any TDD-shaped workflow. Lives in
+`sovereign/crates/commonwealth-tdd/` and exposes one function:
+[`run_trial`] takes a [`Trial`] and returns a [`TrialResult`]. Two
+transports: HTTP at `POST /v1/solve` and MCP tool `tdd_solve`.
+Both live in `sovereign-server`. End-user-facing doc at
+`sovereign/docs/TDD_MACHINE.md`; design at
+`sovereign/docs/TDD_MACHINE_DESIGN.md`.
+
+**Collapsed surface (2026-05-24):** the pre-collapse design had
+four solvers (RedSolver / GreenSolver / RefactorSolver /
+MultiFileSolver). All four collapsed into one `run_trial` — the
+fitness predicate flips with [`Polarity`]:
+
+- `MaximizePassing` — accept when `passed` strictly increases.
+  Covers everything that was Green / Refactor / MultiFile.
+- `GenerateOneFailing` — accept when exactly one new failing test
+  appeared and no previously-passing regressed. The Red polarity.
+
+**Architectural pattern — solver loop:** parallel candidate
+generation at varied temperatures, monotonic-improvement gating,
+fitness function judges, no defensive parsing. The validated loop
+machinery is unchanged across the collapse — only the framing
+unified.
+
+**Workdir safety (§7.1).** `Workdir` typed token, only
+constructible via `Workdir::check_safe(path, force)`. Refuses
+`SystemPath` (never bypassable), `NotAGitRepo` (never bypassable),
+and `UncommittedChanges` (bypassable with `force=true`).
+
+**Modules:**
+
+- `workdir.rs` — `Workdir` + `DirtyWorkdir`. 8 unit tests cover
+  every refusal class.
+- `backend.rs` — `ChatBackend` trait + `ReqwestChatBackend` (prod) +
+  `DeterministicChatBackend` (test mock per §12.4).
+- `types.rs` — `Trial`, `TrialResult`, `TrialStatus`, `Polarity`,
+  `TrialConfig`, `TestSummary`, `RoundSummary`.
+- `trial.rs` — `run_trial` function. The validated 2026-05-24 loop
+  with a polarity-aware acceptance predicate.
+- `shared/` — `EditAction` (with optional `WriteFile.path` so the
+  model can route writes to new files for Red and extract-style
+  refactors) + parser, executor `apply_edit`, `snapshot_dir`,
+  per-language `run_tests` + `parse_test_output` (libtest /
+  go-json / vitest / pytest), source-file discovery, line-numbered
+  render.
+- `tasks/` — convenience wrappers. Each task is a thin function
+  that materializes a structural goal as a test (when needed) and
+  supplies move-shape guidance in the prompt, then returns a
+  `Trial` the caller hands to `run_trial`:
+    - `make_failing_tests_pass` — the Green-equivalent default.
+    - `write_failing_test` — sets `GenerateOneFailing` polarity.
+    - `split_file` — generates `tests/test_max_file_size.py` as
+      the structural test, then runs the trial.
+
+**Test surface (validated 2026-05-24, post-collapse):** 53 tests in
+the crate (40 unit + 6 trial integration + 4 tasks integration + 3
+workdir-gate). Plus 3 HTTP route tests + 3 bench adapter tests.
+Bench adapter (`sovereign-agent-bench::runners::search`) is now a
+~200-line shim that calls `run_trial` with `Polarity::MaximizePassing`.
+
+**Bench problem:** `sovereign/bench/agent-coding/problems/3.3-calc-split-python/`
+ships as the multi-file probe target. Discoverable via
+`sovereign-agent-bench list`; driven via the `probe_multi_file`
+example binary that wraps `tasks::split_file`.
+
+**Validation status:**
+
+- **Green polarity** — median 20/20 on 4.2-mini-evaluator (5-bug
+  cascading) vs role-loop's 0-3/9. Also 8/12 on lights-out
+  (Darwin-36B) via the bench adapter (2026-05-24).
+- **Red polarity** — 92% PASS_AS_RED across N=25 (2026-05-24
+  prototype). Polarity now lives in the unified `Trial`.
+- **Multi-file via `tasks::split_file`** — 97 → 78 max line count
+  with 6/6 tests still passing (Darwin-36B, 122s, 2026-05-24).
+  Honest stall after the model couldn't squeeze further.
+
+**Collapsed-from previous-design:** RedSolver, GreenSolver,
+RefactorSolver, MultiFileSolver, RefactorTarget, MultiFileTarget,
+SolverProvider, SolverRegistry, per-phase result/status enums — all
+collapsed into the unified surface. Structural goals are encoded
+as tests now (the user writes a test that asserts the desired
+state; the loop's MaximizePassing polarity drives toward it),
+which is why per-phase metric machinery disappeared.
+
+**Pi extension** (`@svrnmesh/pi-tdd`): deferred — needs npm scope
+claim. The HTTP route is callable today; Pi integration is one
+TypeScript package away.
+
 ---
 
 ## 5. Commonwealth — The Coordination Daemon

@@ -106,7 +106,7 @@ blake3 = "1"
 walkdir = "2"
 # Atomic config-file writes (write-to-temp + rename) in
 # `local_corpus::manager`.
-tempfile = "3"
+tempfile = { workspace = true }
 # YAML parsing for Obsidian frontmatter merge (M5 write-back). Uses
 # `indexmap` internally so key order round-trips.
 serde_yaml = "0.9"
@@ -147,7 +147,7 @@ orp = { version = "0.9", optional = true }
 # feeding chunk text to GliNER — otherwise "assistant" gets tagged
 # as a Person in every chunk. Production dep regardless of feature
 # because `regex` is small and probably needed elsewhere soon.
-regex = "1"
+regex = { workspace = true }
 
 [features]
 default = []
@@ -164,7 +164,7 @@ gliner-ner = ["dep:gline-rs", "dep:orp"]
 zip = { version = "2", default-features = false, features = ["deflate"] }
 uuid = { workspace = true }
 futures = { workspace = true }
-tempfile = "3"
+tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 filetime = "0.2"
 # axum is the HTTP stub harness for `notes::diff_extract_backend`

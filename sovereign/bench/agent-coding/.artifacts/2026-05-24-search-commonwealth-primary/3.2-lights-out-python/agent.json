@@ -1,0 +1,15 @@
+{
+  "tokens_input": 0,
+  "tokens_output": 0,
+  "wall_ms": 299852,
+  "exit_reason": {
+    "detail": {
+      "rounds_without_improvement": 3
+    },
+    "kind": "search_stalled"
+  },
+  "tool_calls": [],
+  "stderr_tail": "",
+  "final_assistant_text": "Search summary: 2/3 tests passing after 4 rounds.\n",
+  "raw_line_count": 0
+}

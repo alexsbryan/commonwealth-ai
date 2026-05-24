@@ -27,10 +27,15 @@ clap = { workspace = true }
 chrono = { workspace = true }
 reqwest = { workspace = true }
 sha2 = { workspace = true }
-tempfile = "3"
-regex = "1"
+tempfile = { workspace = true }
+regex = { workspace = true }
 commonwealth-agent-tools = { workspace = true }
+# TDD-machine backend — the `search` runner is now a thin adapter
+# over `commonwealth_tdd::SolverRegistry`. Lifting the loop into
+# commonwealth-tdd 2026-05-24 was phase 7b of the TDD machine
+# rollout (see `sovereign/docs/TDD_MACHINE_DESIGN.md`).
+commonwealth-tdd = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = { workspace = true }
 tokio = { workspace = true }

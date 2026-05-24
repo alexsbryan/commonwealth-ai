@@ -8,6 +8,10 @@ sovereign-core = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }
+# TDD-machine backend — HTTP + MCP transports dispatch through this
+# crate's SolverRegistry. See sovereign/docs/TDD_MACHINE_DESIGN.md
+# phase 7e.
+commonwealth-tdd = { workspace = true }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 corpus-engine-notes = { workspace = true }
 corpus-engine-scip = { workspace = true }
@@ -27,3 +31,7 @@ futures = { workspace = true }
 arc-swap = { workspace = true }
 reqwest = { workspace = true }
 chrono = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tower = { workspace = true, features = ["util"] }
