@@ -84,6 +84,7 @@ impl Runtime {
                 kind_filter,
                 name_match.as_deref(),
                 "MetalingualQuery",
+                context.conversation.enabled_corpora.as_deref(),
             )
             .await;
 

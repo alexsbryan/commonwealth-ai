@@ -84,6 +84,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Vault themes migration failed: {e}")))?;
         migrations::run_surface_skill_backfill(&conn)
             .map_err(|e| Error::Storage(format!("Surface-skill backfill failed: {e}")))?;
+        migrations::run_corpus_filter_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Corpus filter migration failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -150,6 +152,7 @@ impl SqliteStateStore {
         let limit_i = limit as i64;
         let offset_i = offset as i64;
         let map_row = |row: &rusqlite::Row<'_>| -> rusqlite::Result<Conversation> {
+            let enabled_corpora_json: Option<String> = row.get(5)?;
             Ok(Conversation {
                 id: row.get(0)?,
                 title: row.get(1)?,
@@ -159,13 +162,15 @@ impl SqliteStateStore {
                 version: 0,
                 deleted_at: None,
                 skill_id: row.get(4)?,
+                enabled_corpora: enabled_corpora_json
+                    .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok()),
             })
         };
         let rows: Vec<Conversation> = match surface_skill_id {
             Some(id) => {
                 let mut stmt = conn
                     .prepare(
-                        "SELECT id, title, created_at, updated_at, skill_id \
+                        "SELECT id, title, created_at, updated_at, skill_id, enabled_corpora \
                          FROM conversations \
                          WHERE skill_id = ?1 AND deleted_at IS NULL \
                          ORDER BY updated_at DESC LIMIT ?2 OFFSET ?3",
@@ -180,7 +185,7 @@ impl SqliteStateStore {
             None => {
                 let mut stmt = conn
                     .prepare(
-                        "SELECT id, title, created_at, updated_at, skill_id \
+                        "SELECT id, title, created_at, updated_at, skill_id, enabled_corpora \
                          FROM conversations \
                          WHERE skill_id IS NULL AND deleted_at IS NULL \
                          ORDER BY updated_at DESC LIMIT ?1 OFFSET ?2",
@@ -334,6 +339,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Vault themes migration failed: {e}")))?;
         migrations::run_surface_skill_backfill(&conn)
             .map_err(|e| Error::Storage(format!("Surface-skill backfill failed: {e}")))?;
+        migrations::run_corpus_filter_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Corpus filter migration failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -456,9 +463,9 @@ impl ConversationStore for SqliteStateStore {
     async fn get_conversation(&self, id: &str) -> Result<Conversation> {
         let conn = self.conn.lock().await;
 
-        let (title, created_at, updated_at, skill_id) = conn
+        let (title, created_at, updated_at, skill_id, enabled_corpora_json) = conn
             .query_row(
-                "SELECT title, created_at, updated_at, skill_id FROM conversations WHERE id = ?1 AND deleted_at IS NULL",
+                "SELECT title, created_at, updated_at, skill_id, enabled_corpora FROM conversations WHERE id = ?1 AND deleted_at IS NULL",
                 rusqlite::params![id],
                 |row| {
                     Ok((
@@ -466,6 +473,7 @@ impl ConversationStore for SqliteStateStore {
                         row.get::<_, i64>(1)?,
                         row.get::<_, i64>(2)?,
                         row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?,
                     ))
                 },
             )
@@ -516,6 +524,8 @@ impl ConversationStore for SqliteStateStore {
             version: 0,
             deleted_at: None,
             skill_id,
+            enabled_corpora: enabled_corpora_json
+                .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok()),
         })
     }
 
@@ -524,7 +534,7 @@ impl ConversationStore for SqliteStateStore {
 
         let mut stmt = conn
             .prepare(
-                "SELECT id, title, created_at, updated_at, skill_id
+                "SELECT id, title, created_at, updated_at, skill_id, enabled_corpora
                  FROM conversations
                  WHERE deleted_at IS NULL
                    AND (skill_id IS NULL OR skill_id != 'inner-work')
@@ -534,6 +544,7 @@ impl ConversationStore for SqliteStateStore {
 
         let convos: Vec<Conversation> = stmt
             .query_map(rusqlite::params![limit as i64, offset as i64], |row| {
+                let enabled_corpora_json: Option<String> = row.get(5)?;
                 Ok(Conversation {
                     id: row.get(0)?,
                     title: row.get(1)?,
@@ -543,6 +554,8 @@ impl ConversationStore for SqliteStateStore {
                     version: 0,
                     deleted_at: None,
                     skill_id: row.get(4)?,
+                    enabled_corpora: enabled_corpora_json
+                        .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok()),
                 })
             })
             .map_err(map_db)?
@@ -643,6 +656,31 @@ impl ConversationStore for SqliteStateStore {
             rusqlite::params![conversation_id, skill_id],
         )
         .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn set_conversation_enabled_corpora(
+        &self,
+        conversation_id: &str,
+        enabled_corpora: Option<Vec<String>>,
+    ) -> Result<()> {
+        let encoded = match enabled_corpora {
+            Some(ref ids) => Some(serde_json::to_string(ids).map_err(|e| {
+                Error::Storage(format!("encode enabled_corpora: {e}"))
+            })?),
+            None => None,
+        };
+        let conn = self.conn.lock().await;
+        let rows = conn
+            .execute(
+                "UPDATE conversations SET enabled_corpora = ?2 \
+                 WHERE id = ?1 AND deleted_at IS NULL",
+                rusqlite::params![conversation_id, encoded],
+            )
+            .map_err(map_db)?;
+        if rows == 0 {
+            return Err(Error::NotFound(format!("conversation {conversation_id}")));
+        }
         Ok(())
     }
 }

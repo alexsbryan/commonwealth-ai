@@ -126,6 +126,7 @@ fn empty_context(conv_id: &str) -> ConversationContext {
             version: 0,
             deleted_at: None,
             skill_id: None,
+            enabled_corpora: None,
         },
         memories: vec![],
         working_memory: None,

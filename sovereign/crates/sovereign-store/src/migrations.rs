@@ -775,3 +775,26 @@ pub fn run_surface_skill_backfill(conn: &Connection) -> rusqlite::Result<()> {
     }
     Ok(())
 }
+
+/// User-controlled per-conversation corpus allow-list. Adds
+/// `enabled_corpora` (JSON-encoded `Vec<String>`) to `conversations`.
+///
+/// Semantics: `NULL` (the column default and the value on every
+/// pre-migration row) means "all installed corpora participate in
+/// retrieval" — bit-identical to pre-feature behavior. A non-NULL
+/// JSON array is an explicit allow-list of corpus_ids; the chat
+/// retrieval path intersects installed corpora with this list (after
+/// expanding each parent ID to include its layer/satellite children)
+/// before fanning out searches. The model's `installed_corpora_display`
+/// prompt also reflects the filtered set so the LLM doesn't promise
+/// data it can't search.
+///
+/// Updated via `ConversationStore::set_conversation_enabled_corpora`
+/// from the desktop chip-toggle UI; nothing in the runtime sets it
+/// automatically.
+pub fn run_corpus_filter_migration(conn: &Connection) -> rusqlite::Result<()> {
+    let _ = conn.execute_batch(
+        "ALTER TABLE conversations ADD COLUMN enabled_corpora TEXT",
+    );
+    Ok(())
+}

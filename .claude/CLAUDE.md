@@ -196,17 +196,17 @@ The workspace-level `status` field answers "is the watcher idle and clean across
 2. **Pre-commit / pre-push** — plain `lint_status` (no flags). Workspace-wide:
    - `fresh_passing` → clean, keep going
    - `fresh_failing` → errors are already in the response, fix them
-   - `stale` → watcher queued but run not done yet; call again in ~15s
+   - `stale` → watcher queued but run not done yet; call again in ~15s. **If `watcher_active: false` AND `age_seconds` is large (hours+), the watcher isn't really running — fall back to `cargo check` or `scripts/sovereign-lint.sh` via Bash.** Same for an `age_seconds` older than your most recent edit by more than a few minutes.
    - `running` → check again in ~15s (or use `--changed` to get a per-file answer against the *prior* completed run while this one finishes)
-   - `never_run` → watcher not configured; **only then** fall back to `cargo check` via Bash
+   - `never_run` → watcher not configured; fall back to `cargo check` via Bash
 
 **Decision tree — "do tests pass?"**
 1. `test_status`
    - `fresh_passing` → safe to proceed
    - `fresh_failing` → failures are in the response
-   - `stale` → call `run_tests` (returns immediately), then poll `test_status` every ~30s
+   - `stale` → call `run_tests` (returns immediately), then poll `test_status` every ~30s. **If `watcher_active: false` AND the report is hours old, fall back to `scripts/sovereign-test.sh` directly.**
    - `running` → poll `test_status` every ~30s
-   - `never_run` → watcher not configured; **only then** fall back to `cargo test` via Bash
+   - `never_run` → watcher not configured; fall back to `cargo test` via Bash
 
 **Only call `get_lint_output` / `get_run_output`** when `output_truncated: true` in the status response. The errors are already in `lint_status` / `test_status` for the common case.
 

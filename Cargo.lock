@@ -10830,6 +10830,7 @@ dependencies = [
  "image",
  "lancedb",
  "lettre",
+ "libc",
  "mail-parser",
  "notify",
  "orp",

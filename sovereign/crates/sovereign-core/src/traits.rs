@@ -549,6 +549,25 @@ pub trait ConversationStore: Send + Sync {
     ) -> Result<()> {
         Ok(())
     }
+
+    /// Persist the user-controlled per-conversation corpus allow-list.
+    /// `None` clears the column ("all installed corpora", the default
+    /// state); `Some(vec)` writes the explicit subset. Empty vec is
+    /// structurally valid (stored as `[]`) and means "search nothing"
+    /// — desktop UI is expected to guard against sending in that
+    /// state, but the store does not.
+    ///
+    /// Default impl is a no-op so existing `ConversationStore`
+    /// implementations (test doubles, in-memory stores) keep
+    /// compiling. Real backends override.
+    #[allow(unused_variables)]
+    async fn set_conversation_enabled_corpora(
+        &self,
+        conversation_id: &str,
+        enabled_corpora: Option<Vec<String>>,
+    ) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[async_trait]

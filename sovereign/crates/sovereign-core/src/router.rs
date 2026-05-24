@@ -2088,6 +2088,7 @@ mod tests {
                 version: 0,
                 deleted_at: None,
                 skill_id: None,
+                enabled_corpora: None,
             },
             memories: vec![],
             working_memory: Some(WorkingMemory {
@@ -2130,6 +2131,7 @@ mod tests {
                 version: 0,
                 deleted_at: None,
                 skill_id: None,
+                enabled_corpora: None,
             },
             memories: vec![],
             working_memory: None,

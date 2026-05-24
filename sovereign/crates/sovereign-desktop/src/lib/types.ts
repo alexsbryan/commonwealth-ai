@@ -27,6 +27,13 @@ export interface ConversationDetail {
   messages: MessageEntry[];
   created_at: number;
   updated_at: number;
+  /** User-controlled per-conversation corpus allow-list. `null` (the
+   *  default for fresh / legacy conversations) means "all installed
+   *  corpora participate in retrieval". An explicit array restricts
+   *  retrieval + the model's prompt list to those parent corpus_ids;
+   *  layer/satellite corpora follow their parent. Updated via
+   *  `setConversationEnabledCorpora`. */
+  enabled_corpora?: string[] | null;
 }
 
 export interface MessageEntry {

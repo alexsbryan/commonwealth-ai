@@ -55,6 +55,13 @@ lancedb = { workspace = true }
 arrow-array = { workspace = true }
 # Document parsing (RAG pipeline)
 pdf-extract = "0.7"
+# `pdf-extract 0.7.12` writes "unknown glyph name" / "Unicode mismatch"
+# diagnostics with raw `println!` (lib.rs:461,479) — bypasses our
+# tracing layer and floods launchd's `daemon.out` (5MB+ per few hours
+# on a small folder). `safe_extract_pdf_text` swaps stdout to
+# `/dev/null` around the call via `libc::dup2` so the noise can't
+# escape. Unix-only; the daemon does not build for Windows.
+libc = "0.2"
 # HTML body-text extraction for `.html` / `.htm` / `.mhtml` watched
 # folders. Same version as `corpus-engine`'s recipe-driven HTML
 # extractor so the workspace resolves a single `scraper`.

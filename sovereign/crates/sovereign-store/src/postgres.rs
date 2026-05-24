@@ -213,6 +213,12 @@ impl PostgresStateStore {
             -- from a Propose-tier commit.
             ALTER TABLE routing_log ADD COLUMN IF NOT EXISTS was_redirected BOOLEAN NOT NULL DEFAULT FALSE;
             ALTER TABLE routing_log ADD COLUMN IF NOT EXISTS redirect_to TEXT;
+
+            -- Per-conversation corpus allow-list (mirror of
+            -- run_corpus_filter_migration on SQLite). NULL means "all
+            -- installed corpora participate in retrieval" — the
+            -- default and the value on every pre-migration row.
+            ALTER TABLE conversations ADD COLUMN IF NOT EXISTS enabled_corpora JSONB;
             "#,
             )
             .await
@@ -271,7 +277,8 @@ impl ConversationStore for PostgresStateStore {
 
         let row = client
             .query_opt(
-                "SELECT id, title, created_at, updated_at FROM conversations WHERE id = $1",
+                "SELECT id, title, created_at, updated_at, skill_id, enabled_corpora \
+                 FROM conversations WHERE id = $1",
                 &[&id],
             )
             .await
@@ -302,6 +309,9 @@ impl ConversationStore for PostgresStateStore {
             })
             .collect();
 
+        let enabled_corpora: Option<serde_json::Value> = row.get("enabled_corpora");
+        let enabled_corpora = enabled_corpora
+            .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok());
         Ok(Conversation {
             id: row.get("id"),
             title: row.get("title"),
@@ -310,7 +320,8 @@ impl ConversationStore for PostgresStateStore {
             updated_at: row.get("updated_at"),
             version: 0,
             deleted_at: None,
-            skill_id: None,
+            skill_id: row.get("skill_id"),
+            enabled_corpora,
         })
     }
 
@@ -319,7 +330,7 @@ impl ConversationStore for PostgresStateStore {
 
         let rows = client
             .query(
-                "SELECT id, title, created_at, updated_at, skill_id FROM conversations \
+                "SELECT id, title, created_at, updated_at, skill_id, enabled_corpora FROM conversations \
                  WHERE deleted_at IS NULL \
                    AND (skill_id IS NULL OR skill_id != 'inner-work') \
                  ORDER BY updated_at DESC LIMIT $1 OFFSET $2",
@@ -330,15 +341,20 @@ impl ConversationStore for PostgresStateStore {
 
         Ok(rows
             .iter()
-            .map(|r| Conversation {
-                id: r.get("id"),
-                title: r.get("title"),
-                messages: vec![],
-                created_at: r.get("created_at"),
-                updated_at: r.get("updated_at"),
-                version: 0,
-                deleted_at: None,
-                skill_id: r.get("skill_id"),
+            .map(|r| {
+                let enabled_corpora: Option<serde_json::Value> = r.get("enabled_corpora");
+                Conversation {
+                    id: r.get("id"),
+                    title: r.get("title"),
+                    messages: vec![],
+                    created_at: r.get("created_at"),
+                    updated_at: r.get("updated_at"),
+                    version: 0,
+                    deleted_at: None,
+                    skill_id: r.get("skill_id"),
+                    enabled_corpora: enabled_corpora
+                        .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok()),
+                }
             })
             .collect())
     }
@@ -416,6 +432,30 @@ impl ConversationStore for PostgresStateStore {
             )
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn set_conversation_enabled_corpora(
+        &self,
+        conversation_id: &str,
+        enabled_corpora: Option<Vec<String>>,
+    ) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let encoded: Option<serde_json::Value> = enabled_corpora
+            .map(|ids| serde_json::Value::Array(
+                ids.into_iter().map(serde_json::Value::String).collect(),
+            ));
+        let rows = client
+            .execute(
+                "UPDATE conversations SET enabled_corpora = $2 \
+                 WHERE id = $1 AND deleted_at IS NULL",
+                &[&conversation_id, &encoded],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        if rows == 0 {
+            return Err(Error::NotFound(format!("conversation {conversation_id}")));
+        }
         Ok(())
     }
 }

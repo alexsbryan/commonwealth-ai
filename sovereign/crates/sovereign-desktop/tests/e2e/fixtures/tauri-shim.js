@@ -80,6 +80,14 @@
       };
     },
     rename_conversation: () => undefined,
+    // Per-conversation corpus allow-list write. Records the most
+    // recent payload so specs can assert what the chip toggle sent.
+    // Returns void; the desktop emits `conversations:changed` after
+    // success (not modeled here — tests poll the recorded payload).
+    set_conversation_enabled_corpora: (args) => {
+      window.__sovereign_test__._lastEnabledCorpora = args;
+      return undefined;
+    },
     detect_bootstrap: () => ({
       daemon_running: false,
       client_port: 9741,

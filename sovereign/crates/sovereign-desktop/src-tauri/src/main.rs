@@ -336,6 +336,7 @@ fn main() -> ExitCode {
             commands::get_conversation,
             commands::delete_conversation,
             commands::rename_conversation,
+            commands::set_conversation_enabled_corpora,
             commands::search_messages,
             commands::submit_approval,
             commands::submit_input,

@@ -29,6 +29,7 @@ pub async fn build_context(
             version: 0,
             deleted_at: None,
             skill_id: None,
+            enabled_corpora: None,
         },
         Err(e) => return Err(e),
     };
@@ -47,7 +48,16 @@ pub async fn build_context(
         .await
         .unwrap_or_default();
 
-    let installed_corpora = store
+    // Apply the conversation's per-turn corpus allow-list, if any.
+    // `None` (the default for fresh + legacy conversations) means
+    // "all installed corpora" — bit-identical to pre-feature behavior.
+    // `Some(allow)` restricts the prompt-side display + the retrieval
+    // filter to just the corpus_ids in the allow-list. Layer/satellite
+    // expansion happens at retrieval time (where IndexInfo carries
+    // `parent_corpus_id`); here we only do the parent-level
+    // intersection that drives the model's "installed corpora" prompt
+    // list. See `Conversation::enabled_corpora` docs.
+    let all_installed: Vec<String> = store
         .list_corpus_states()
         .await
         .unwrap_or_default()
@@ -55,6 +65,17 @@ pub async fn build_context(
         .filter(|s| s.deleted_at.is_none())
         .map(|s| s.corpus_id)
         .collect();
+    let installed_corpora: Vec<String> = match &conversation.enabled_corpora {
+        Some(allow) => {
+            let allow_set: std::collections::HashSet<&str> =
+                allow.iter().map(String::as_str).collect();
+            all_installed
+                .into_iter()
+                .filter(|id| allow_set.contains(id.as_str()))
+                .collect()
+        }
+        None => all_installed,
+    };
 
     // Check for an active document session in this conversation.
     let document_session = store

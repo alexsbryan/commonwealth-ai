@@ -10,7 +10,6 @@
     searchWeb,
     getConversation,
     createConversation,
-    listCorpora,
     ingestDocument,
     askDocument,
     getDocumentAsset,
@@ -24,7 +23,6 @@
     TaskStep,
     ApprovalRequestPayload,
     UserInputRequestPayload,
-    CorpusEntry,
     MessageChunkPayload,
     MessageCompletePayload,
     ErrorPayload,
@@ -52,6 +50,7 @@
   import ClarificationCard from "./ClarificationCard.svelte";
   import NarrationChip from "./NarrationChip.svelte";
   import CorpusProgressBanner from "./CorpusProgressBanner.svelte";
+  import CorpusFilterStrip from "./CorpusFilterStrip.svelte";
   import AttachmentBanner from "./AttachmentBanner.svelte";
   import DocumentPicker from "./DocumentPicker.svelte";
   import PassageContextChip from "./reading/PassageContextChip.svelte";
@@ -182,6 +181,14 @@
   let inputText = $state("");
   let messagesContainer: HTMLDivElement;
 
+  // Per-conversation corpus allow-list, hydrated from the
+  // Conversation row each time hydrateConversation runs. `null` is
+  // the sentinel "no filter — all installed corpora participate";
+  // an array is an explicit subset. The CorpusFilterStrip reads this
+  // and writes back through its own Tauri call. Tracked here only so
+  // the strip can stay reactive across conversation switches.
+  let enabledCorpora = $state<string[] | null>(null);
+
   // Document attachment (picker / legacy ingest). Kept local: nothing
   // else in the app reads it, and it's discarded at send time.
   let attachment = $state<{
@@ -311,6 +318,20 @@
     !attachedAsset &&
       !attachment &&
       inputText.length > MAX_TURN_MESSAGE_CHARS,
+  );
+
+  // Send-guard: when the user has explicitly muted every parent corpus
+  // (selected = empty array, distinct from `null` which means "all
+  // enabled"), retrieval has nothing to search. Disable Send + surface
+  // an inline hint rather than letting the turn go and produce a
+  // sources-empty answer. Attached-document flows bypass the chat
+  // retrieval path entirely (map-reduce on the attached file), so the
+  // guard is skipped when one is present.
+  let allSourcesMuted = $derived(
+    !attachedAsset &&
+      !attachment &&
+      Array.isArray(enabledCorpora) &&
+      enabledCorpora.length === 0,
   );
 
   // PR6b — routing state is stored in a singleton (routingStore)
@@ -621,12 +642,14 @@
         conversationId: targetId,
         messages: detail.messages,
       });
+      enabledCorpora = detail.enabled_corpora ?? null;
       scrollToBottom();
     } catch {
       // Fetch failed (commonly: brand-new conversation that
       // create_conversation minted but didn't persist). The
       // eager HYDRATE above already left the chat empty +
       // bound to `targetId`, so there's nothing to do.
+      enabledCorpora = null;
     }
   }
 
@@ -974,18 +997,7 @@
         <div class="empty-glow"></div>
         <div class="empty-mark">◈</div>
         <h2>SOVEREIGN</h2>
-        <p class="empty-sub">Your AI. Your data. Your mesh.</p>
-        {#await listCorpora() then corpora}
-          {#if corpora.filter((c: CorpusEntry) => c.status === "installed").length > 0}
-            <div class="kb-tags">
-              {#each corpora.filter((c: CorpusEntry) => c.status === "installed") as corpus}
-                <span class="kb-tag">{corpus.name}</span>
-              {/each}
-            </div>
-          {/if}
-        {:catch}
-          <!-- silently ignore if corpus listing fails -->
-        {/await}
+        <p class="empty-sub">ai for the rest of us</p>
 
         {#if starters.length > 0}
           <div class="empty-starters">
@@ -1099,6 +1111,18 @@
     {/if}
   </div>
 
+  <!-- Persistent corpus picker — between the messages list and the
+       input area so the user can mute Wikipedia mid-thread without
+       leaving the chat. Re-uses CorpusFilterStrip (also rendered in
+       the empty state) so the visual + state model is identical from
+       first paint through every turn. -->
+  <CorpusFilterStrip
+    conversationId={activeConversationId ?? null}
+    initialEnabled={enabledCorpora}
+    ensureConversation={ensureConversation}
+    onChange={(next) => (enabledCorpora = next)}
+  />
+
   <div class="input-area">
     <PassageContextChip />
     {#if attachedAsset}
@@ -1178,13 +1202,23 @@
       <button
         class="send-btn"
         onclick={handleSend}
-        disabled={!inputText.trim() || inputIsOversized}
-        title={inputIsOversized ? OVERSIZE_MESSAGE_HINT : ""}
+        disabled={!inputText.trim() || inputIsOversized || allSourcesMuted}
+        title={inputIsOversized
+          ? OVERSIZE_MESSAGE_HINT
+          : allSourcesMuted
+            ? "Enable at least one source to ask a question."
+            : ""}
       >
         Send
       </button>
     {/if}
     </div>
+    {#if allSourcesMuted}
+      <div class="oversize-hint" role="status">
+        <span class="oversize-mark">!</span>
+        <span>Enable at least one source above to ask a question.</span>
+      </div>
+    {/if}
     {#if inputIsOversized}
       <div class="oversize-hint" role="status">
         <span class="oversize-mark">!</span>
@@ -1279,25 +1313,6 @@
     letter-spacing: 0.05em;
     margin-bottom: 20px;
     position: relative;
-  }
-
-  .kb-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    justify-content: center;
-    position: relative;
-  }
-
-  .kb-tag {
-    font-size: 0.67rem;
-    padding: 3px 10px;
-    border: 1px solid var(--border-mid);
-    border-radius: 100px;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-    letter-spacing: 0.04em;
-    background: var(--bg-surface);
   }
 
   /* ── Starter chips + build indicator in empty state ── */
