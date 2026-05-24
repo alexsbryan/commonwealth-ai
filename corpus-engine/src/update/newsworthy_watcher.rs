@@ -440,10 +440,24 @@ impl MediaWikiClient for HttpMediaWikiClient {
                 response.status()
             )));
         }
-        response
-            .text()
+        // Decode as UTF-8 explicitly rather than relying on reqwest's
+        // `.text()` charset detection. The MediaWiki Action API always
+        // returns UTF-8 (Content-Type: application/json; charset=utf-8),
+        // but a missing or quirky charset header has historically led
+        // reqwest to fall back to a different decoder and double-encode
+        // non-ASCII bytes (en-dash `–` U+2013 → mojibake `â\x80\x93`).
+        // Forcing UTF-8 here removes that footgun for the whole portal
+        // / refresh / fetch pipeline that goes through this client.
+        let bytes = response
+            .bytes()
             .await
-            .map_err(|e| Error::Extraction(format!("MediaWiki body: {e}")))
+            .map_err(|e| Error::Extraction(format!("MediaWiki body: {e}")))?;
+        String::from_utf8(bytes.to_vec()).map_err(|e| {
+            Error::Extraction(format!(
+                "MediaWiki body for {page}: invalid UTF-8 at byte {}",
+                e.utf8_error().valid_up_to()
+            ))
+        })
     }
 
     async fn batch_revisions(&self, titles: &[String]) -> Result<Vec<RevisionRecord>> {

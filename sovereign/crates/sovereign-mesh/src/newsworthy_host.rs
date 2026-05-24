@@ -332,13 +332,30 @@ impl NewsworthyHost for MeshNewsworthyHost {
             );
         }
 
-        if !incremental_enabled {
-            // Flag off — defer to the legacy full-rebuild path.
-            let legacy: Vec<(String, &'static str)> = committed
+        // Portal-role corpora MUST go through `apply_incremental` even
+        // when the global incremental flag is off — the legacy
+        // full-rebuild path runs `structure_first`, which collapses a
+        // portal page into one Entity-of-type-article and produces a
+        // useless atlas surface. Per-bullet extraction only lives on the
+        // incremental path today (see `apply_incremental`'s `role =
+        // "portal"` branch). Refresh-role work (the parent wikipedia
+        // corpus) keeps the old fallback because structure_first is
+        // correct for it and a full rebuild over millions of articles
+        // is intentionally gated behind the env flag.
+        let (incremental_work, legacy_work): (Vec<_>, Vec<_>) = committed
+            .iter()
+            .cloned()
+            .partition(|c| incremental_enabled || c.role == "portal");
+
+        if !legacy_work.is_empty() {
+            let legacy: Vec<(String, &'static str)> = legacy_work
                 .iter()
                 .map(|c| (c.corpus_id.clone(), c.role))
                 .collect();
             self.on_chunks_committed(&legacy);
+        }
+
+        if incremental_work.is_empty() {
             return;
         }
 
@@ -350,7 +367,7 @@ impl NewsworthyHost for MeshNewsworthyHost {
             return;
         };
         let indexes_dir = engine.index_dir().to_path_buf();
-        let work = committed.to_vec();
+        let work = incremental_work;
         tokio::spawn(async move {
             for c in &work {
                 let outcome = apply_incremental(
@@ -363,10 +380,58 @@ impl NewsworthyHost for MeshNewsworthyHost {
                 .await;
                 match outcome {
                     Ok(()) => {}
+                    Err(reason) if c.role == "portal" => {
+                        // Portal-role fallback: wipe + rebuild via the
+                        // per-bullet strategy. The legacy
+                        // `rebuild_structural_atlas` path runs
+                        // structure_first, which would re-write the
+                        // single-Entity-of-type-article garbage. The
+                        // wipe path here handles the common bailout
+                        // (atoms.json carries pre-migration
+                        // sequential-id atoms) by clearing the atlas
+                        // dir so the next apply_incremental sees a
+                        // clean slate it can populate with
+                        // content-hash atoms via newsworthy_events.
+                        tracing::warn!(
+                            corpus_id = %c.corpus_id,
+                            role = %c.role,
+                            doc_count = c.doc_ids.len(),
+                            reason,
+                            "newsworthy.atlas_portal_wipe_and_rebuild — incremental bailed for portal corpus; wiping atlas + retrying with newsworthy_events"
+                        );
+                        if let Err(e) = wipe_atlas_dir(&indexes_dir, &c.corpus_id) {
+                            tracing::warn!(
+                                corpus_id = %c.corpus_id,
+                                error = %e,
+                                "newsworthy.atlas_portal_wipe_failed — atlas stays at last known state"
+                            );
+                            continue;
+                        }
+                        // Retry on the clean slate. Second failure is
+                        // logged; no further fallback for portal
+                        // because the legacy path is structurally
+                        // wrong for this corpus shape.
+                        let retry = apply_incremental(
+                            engine.clone(),
+                            indexes_dir.clone(),
+                            c.corpus_id.clone(),
+                            c.role,
+                            c.doc_ids.clone(),
+                        )
+                        .await;
+                        if let Err(e) = retry {
+                            tracing::warn!(
+                                corpus_id = %c.corpus_id,
+                                role = %c.role,
+                                error = %e,
+                                "newsworthy.atlas_portal_retry_failed — atlas left empty until next tick"
+                            );
+                        }
+                    }
                     Err(reason) => {
-                        // Incremental path bailed — fall back to the
-                        // legacy full-rebuild for this corpus so the
-                        // atlas doesn't stagnate.
+                        // Refresh-role (parent wikipedia) fallback —
+                        // structure_first IS correct here, so the
+                        // legacy full-rebuild remains the right path.
                         tracing::warn!(
                             corpus_id = %c.corpus_id,
                             role = %c.role,
@@ -425,6 +490,7 @@ async fn apply_incremental(
     doc_ids: Vec<String>,
 ) -> Result<(), String> {
     use corpus_engine::enrichment::atlas::atoms_delta::apply_atom_delta;
+    use corpus_engine::enrichment::atlas::strategies::newsworthy_events::extract_atoms_for_portal_chunks;
     use corpus_engine::enrichment::atlas::strategies::structure_first::{
         aggregate_articles_from_chunks, extract_atoms_for_articles, StructureFirstConfig,
     };
@@ -471,16 +537,45 @@ async fn apply_incremental(
         .map_err(|e| format!("chunks_by_source_doc_ids({} ids): {e}", doc_ids.len()))?;
     let chunk_count = chunks.len();
 
-    // Aggregate + extract.
-    let agg = aggregate_articles_from_chunks(&chunks);
-    let cfg = StructureFirstConfig {
-        source_corpus_id: corpus_id.clone(),
-        ..Default::default()
+    // Strategy dispatch keyed off the watcher-supplied role.
+    //
+    // `portal` → wikipedia-newsworthy daily Portal:Current_events pages.
+    //   Each chunk IS a single event bullet — extract per-bullet Event
+    //   atoms + wikilink Entity placeholders via `newsworthy_events`.
+    //
+    // `refresh` → the parent `wikipedia` corpus's tracked-window
+    //   articles. Each chunk is a section of a real article — keep the
+    //   structure_first one-Entity-per-article shape.
+    //
+    // Any future role falls back to structure_first; new roles should
+    // add their dispatch branch here together with the extractor that
+    // matches the corpus's chunk shape.
+    let (delta_atoms, delta_edges, articles_count) = if role == "portal" {
+        let delta = extract_atoms_for_portal_chunks(&chunks, &corpus_id);
+        let event_count = delta
+            .atoms_delta
+            .upserted_docs
+            .iter()
+            .filter(|(d, _)| d != "_placeholders")
+            .map(|(_, atoms)| atoms.len())
+            .sum::<usize>();
+        (delta.atoms_delta, delta.edges, event_count)
+    } else {
+        let agg = aggregate_articles_from_chunks(&chunks);
+        let cfg = StructureFirstConfig {
+            source_corpus_id: corpus_id.clone(),
+            ..Default::default()
+        };
+        let delta = extract_atoms_for_articles(&agg.articles, &corpus_id, &cfg);
+        (delta.atoms_delta, delta.edges, agg.articles.len())
     };
-    let delta = extract_atoms_for_articles(&agg.articles, &corpus_id, &cfg);
+    // edges already live inside delta_atoms.added_edges; drop the
+    // separate handle to silence dead-code warnings on the `portal`
+    // branch where we don't apply edges twice.
+    let _ = delta_edges;
 
     // Apply.
-    let summary = apply_atom_delta(&atlas_dir, delta.atoms_delta)
+    let summary = apply_atom_delta(&atlas_dir, delta_atoms)
         .map_err(|e| format!("apply_atom_delta({}): {e}", atlas_dir.display()))?;
 
     // Meta-atlas: refresh anchors for this corpus only.
@@ -503,7 +598,7 @@ async fn apply_incremental(
         role = %role,
         doc_count = doc_ids.len(),
         chunk_count,
-        articles_aggregated = agg.articles.len(),
+        articles_aggregated = articles_count,
         atoms_before = summary.atoms_before,
         atoms_after = summary.atoms_after,
         atoms_added = summary.atoms_added,
@@ -514,5 +609,40 @@ async fn apply_incremental(
         atoms_before_query = atoms_before,
         "newsworthy.atlas_incremental_complete"
     );
+    Ok(())
+}
+
+/// Delete every file inside the corpus's atlas dir, leaving the
+/// directory itself in place. Used by the portal-role fallback when
+/// `apply_incremental` bails on a sequential-id atoms.json or any
+/// other unrecoverable pre-existing-shape error: a clean slate lets
+/// the next `apply_incremental` pass populate the atlas via the
+/// per-bullet `newsworthy_events` strategy with content-hash ids,
+/// which is the shape every downstream reader expects.
+///
+/// `Ok(())` is returned when the dir didn't exist (nothing to wipe)
+/// or when every file was removed. Any walk/IO error short-circuits
+/// — the caller logs and skips the retry rather than rebuilding on
+/// a half-wiped directory.
+fn wipe_atlas_dir(
+    indexes_dir: &std::path::Path,
+    corpus_id: &str,
+) -> Result<(), String> {
+    use corpus_engine::enrichment::atlas::writer::ATLAS_DIRNAME;
+    let atlas_dir = indexes_dir.join(corpus_id).join(ATLAS_DIRNAME);
+    if !atlas_dir.exists() {
+        return Ok(());
+    }
+    let entries = std::fs::read_dir(&atlas_dir)
+        .map_err(|e| format!("read_dir {}: {e}", atlas_dir.display()))?;
+    for entry in entries {
+        let entry =
+            entry.map_err(|e| format!("read_dir entry {}: {e}", atlas_dir.display()))?;
+        let path = entry.path();
+        if path.is_file() {
+            std::fs::remove_file(&path)
+                .map_err(|e| format!("remove_file {}: {e}", path.display()))?;
+        }
+    }
     Ok(())
 }

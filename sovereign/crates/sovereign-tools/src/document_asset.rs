@@ -28,7 +28,7 @@ use sovereign_core::types::*;
 
 use crate::rag::chunk::{chunk_text, TextChunk};
 use crate::rag::parse::parse_file;
-use crate::raptor_atlas::{build_raptor_atlas, ChunkInput};
+use crate::raptor_atlas::ChunkInput;
 
 /// Concurrency cap for parallel per-batch LLM calls in the T2 entity
 /// extraction phase. The mesh load balancer sees `buffered(6)` simultaneous
@@ -2109,15 +2109,39 @@ pub(crate) async fn build_atlas_artifacts(
     embeddings: &[Vec<f32>],
     doc_type: DocumentTypeTag,
 ) -> Result<(Vec<RaptorNode>, Vec<AssetMotif>)> {
+    build_atlas_artifacts_with_checkpoint(
+        inference, chunks, embeddings, doc_type, None, None,
+    )
+    .await
+}
+
+/// Checkpoint-aware variant. Most callers should reach this directly
+/// — the legacy wrapper exists only for paths that don't have a
+/// per-corpus index dir to drop the checkpoint into.
+pub(crate) async fn build_atlas_artifacts_with_checkpoint(
+    inference: &Arc<dyn InferenceProvider>,
+    chunks: &[ChunkInput],
+    embeddings: &[Vec<f32>],
+    doc_type: DocumentTypeTag,
+    checkpoint: Option<&crate::raptor_checkpoint::RaptorCheckpointHandle>,
+    progress: Option<&Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink>>,
+) -> Result<(Vec<RaptorNode>, Vec<AssetMotif>)> {
     if chunks.is_empty() {
         return Ok((Vec::new(), Vec::new()));
     }
 
     // RAPTOR tree — the long sub-phase. Errors propagate so callers
     // can transition state to Failed.
-    let nodes = build_raptor_atlas(inference, chunks, embeddings, doc_type.clone())
-        .await
-        .map_err(|e| Error::Execution(format!("build_raptor_atlas: {e}")))?;
+    let nodes = crate::raptor_atlas::build_raptor_atlas_with_checkpoint(
+        inference,
+        chunks,
+        embeddings,
+        doc_type.clone(),
+        checkpoint,
+        progress,
+    )
+    .await
+    .map_err(|e| Error::Execution(format!("build_raptor_atlas: {e}")))?;
 
     // Motif index — best-effort. Convert ChunkInput → TextChunk for
     // the existing motif extractor.
