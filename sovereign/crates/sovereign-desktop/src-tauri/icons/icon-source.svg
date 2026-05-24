@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sovereign desktop app icon . "Crinkled Gold" (B1).
+
+  An asymmetric pentagon of worked gold leaf. Sixteen triangular
+  facets in a single hue (oklch _ _ 85), partitioned to suggest
+  the geometry of foil that has been crumpled, smoothed, and
+  pressed flat . the metaphor: this intelligence has been shaped
+  by hand, not stamped from a die.
+
+  No backdrop. The silhouette is the icon. Works on Fedora/GNOME
+  and any tile-less launcher; floats with distinction on the
+  macOS Dock against neighboring rounded-rect tiles.
+
+  No facet boundaries. Adjacent polygons meet color-to-color, so
+  the surface reads as material rather than as low-poly render.
+
+  Light source: upper-left (consistent with every other gradient
+  in the brand). Specular highlight on facet 3 (the upper-left
+  corner facet, smallest and closest to the implied light); deep
+  shadow pools in the valley between the two fold concentrations
+  (facets 10, 11) and at the lower-right corner farthest from
+  light (facet 12).
+
+  Color anchors, in OKLCH, all hue 85 (gold) except the shadow
+  which shifts to hue 80 (slightly warmer/oranger, the way real
+  gold reads in low light):
+
+    specular   . oklch(0.94 0.080 85)  . #F5E2B0
+    highlight  . oklch(0.88 0.130 85)  . #F0CC85
+    mid-light  . oklch(0.82 0.135 85)  . #DFC068  (app token accent-light)
+    mid        . oklch(0.72 0.130 85)  . #C9A84C  (app token accent)
+    mid-shade  . oklch(0.62 0.130 85)  . #A88838
+    shadow     . oklch(0.50 0.115 80)  . #876122  (warmer hue shift)
+
+  Pentagon vertices (clockwise from top apex):
+    V1 (490, 160)   top, offset 22px left of center
+    V2 (830, 350)   wide right shoulder
+    V3 (700, 830)   lower right (tucked in vs. V2)
+    V4 (240, 860)   lower left foot (30px below V3 . tilted base)
+    V5 (170, 410)   left shoulder (60px above V2 . asymmetric)
+
+  Interior fold concentrations + bridge points:
+    A (450, 380)    upper concentration
+    B (520, 650)    lower concentration
+    C (650, 470)    right bridge (subdivides upper-right region)
+    D (310, 410)    left bridge (subdivides upper-left region)
+
+  Edge midpoints (shared vertices, used as facet anchors):
+    M1 (660, 255)   midpoint V1-V2
+    M2 (765, 590)   midpoint V2-V3
+    M3 (470, 845)   midpoint V3-V4
+    M4 (205, 635)   midpoint V4-V5
+    M5 (330, 285)   midpoint V5-V1
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1024 1024"
+     width="1024"
+     height="1024">
+
+  <!-- Upper-left cluster: brightest, catching the light source -->
+  <polygon points="450,380 310,410 330,285" fill="#DFC068"/>  <!-- 1: A-D-M5 -->
+  <polygon points="450,380 170,410 310,410" fill="#F0CC85"/>  <!-- 2: A-V5-D -->
+  <polygon points="310,410 170,410 330,285" fill="#F5E2B0"/>  <!-- 3: D-V5-M5 .. specular -->
+
+  <!-- Top crown: mid-light, around V1 apex -->
+  <polygon points="450,380 490,160 330,285" fill="#DFC068"/>  <!-- 4: A-V1-M5 -->
+  <polygon points="450,380 660,255 490,160" fill="#DFC068"/>  <!-- 5: A-M1-V1 -->
+
+  <!-- Right shoulder cluster: mid tones, around V2 -->
+  <polygon points="450,380 830,350 660,255" fill="#C9A84C"/>  <!-- 6: A-V2-M1 -->
+  <polygon points="450,380 650,470 830,350" fill="#C9A84C"/>  <!-- 7: A-C-V2 -->
+  <polygon points="450,380 765,590 650,470" fill="#C9A84C"/>  <!-- 8: A-M2-C -->
+  <polygon points="650,470 830,350 765,590" fill="#C9A84C"/>  <!-- 9: C-V2-M2 -->
+
+  <!-- The valley: spine facets, deep shadow where the fold pools -->
+  <polygon points="450,380 520,650 765,590" fill="#876122"/>  <!-- 10: A-B-M2 -->
+  <polygon points="450,380 205,635 520,650" fill="#876122"/>  <!-- 11: A-M4-B -->
+
+  <!-- Lower-right: shadow at V3 (farthest from light), grading -->
+  <polygon points="520,650 765,590 700,830" fill="#876122"/>  <!-- 12: B-M2-V3 -->
+  <polygon points="520,650 700,830 470,845" fill="#A88838"/>  <!-- 13: B-V3-M3 -->
+
+  <!-- Lower-left: mid-shade at V4 -->
+  <polygon points="520,650 470,845 240,860" fill="#A88838"/>  <!-- 14: B-M3-V4 -->
+  <polygon points="520,650 240,860 205,635" fill="#A88838"/>  <!-- 15: B-V4-M4 -->
+
+  <!-- Left flank: mid, transitioning from lit V5 down to shadow at M4 -->
+  <polygon points="450,380 170,410 205,635" fill="#C9A84C"/>  <!-- 16: A-V5-M4 -->
+
+</svg>

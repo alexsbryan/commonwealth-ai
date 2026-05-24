@@ -52,6 +52,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify version consistency
+        # Cheap pre-flight: refuse to spend 30+ minutes building a tag whose
+        # three version files (Cargo.toml / tauri.conf.json / package.json)
+        # disagree. Derives the expected value from the tag itself when it
+        # matches desktop-vX.Y.Z; otherwise just checks the three agree.
+        shell: bash
+        run: |
+          ref="${GITHUB_REF#refs/tags/}"
+          if [[ "$ref" == desktop-v* ]]; then
+            expected="${ref#desktop-v}"
+            scripts/check-desktop-version.sh "$expected"
+          else
+            scripts/check-desktop-version.sh
+          fi
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -60,10 +75,9 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            sovereign
-            corpus-engine
-            commonwealth
+          # Single Cargo workspace at the repo root (post-monorepo, 2026-05).
+          # Targeting "." picks up the only Cargo.lock/target pair that exists.
+          workspaces: "."
           key: desktop-release-${{ matrix.platform.target }}
 
       - name: Install Tauri CLI
@@ -139,14 +153,18 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.platform.name }}
+          # Cargo's workspace target dir is at the repo root (single workspace,
+          # post-monorepo). Bundles live under target/<triple>/release/bundle/.
           path: |
-            sovereign/target/${{ matrix.platform.target }}/release/bundle/dmg/*.dmg
-            sovereign/target/${{ matrix.platform.target }}/release/bundle/macos/*.app.tar.gz
-            sovereign/target/${{ matrix.platform.target }}/release/bundle/appimage/*.AppImage
-            sovereign/target/${{ matrix.platform.target }}/release/bundle/deb/*.deb
-            sovereign/target/${{ matrix.platform.target }}/release/bundle/msi/*.msi
-            sovereign/target/${{ matrix.platform.target }}/release/bundle/nsis/*.exe
-          if-no-files-found: warn
+            target/${{ matrix.platform.target }}/release/bundle/dmg/*.dmg
+            target/${{ matrix.platform.target }}/release/bundle/macos/*.app.tar.gz
+            target/${{ matrix.platform.target }}/release/bundle/appimage/*.AppImage
+            target/${{ matrix.platform.target }}/release/bundle/deb/*.deb
+            target/${{ matrix.platform.target }}/release/bundle/msi/*.msi
+            target/${{ matrix.platform.target }}/release/bundle/nsis/*.exe
+          # Fail loudly — a green build with no installers attached is the worst
+          # failure mode (it silently produces an empty draft Release).
+          if-no-files-found: error
 
   publish:
     name: publish to GitHub Release
@@ -160,9 +178,22 @@ jobs:
         id: resolve
         shell: bash
         run: |
+          # Prefer explicit workflow_dispatch input. Otherwise we must be
+          # on a tag push — `refs/tags/desktop-vX.Y.Z`. Refuse to proceed
+          # if the ref isn't a tag (e.g. workflow_dispatch on `main` with
+          # no input), because otherwise we'd create a Release tagged
+          # `main` and confuse everyone.
           tag="${{ inputs.tag }}"
           if [[ -z "$tag" ]]; then
-            tag="${GITHUB_REF##*/}"
+            if [[ "$GITHUB_REF" != refs/tags/* ]]; then
+              echo "::error::No tag input and ref is not a tag ($GITHUB_REF). Re-run with the tag input set." >&2
+              exit 1
+            fi
+            tag="${GITHUB_REF##refs/tags/}"
+          fi
+          if [[ "$tag" != desktop-v* ]]; then
+            echo "::error::Tag '$tag' does not match desktop-v* pattern." >&2
+            exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
