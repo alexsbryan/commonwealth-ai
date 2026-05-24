@@ -255,6 +255,7 @@ mod tests {
             },
             data: sovereign_core::setup_config::DataSection::default(),
             watched_folders: Default::default(),
+            memory: Default::default(),
         };
         let mode = BootstrapMode::Local { source: ConfigSource::CliSetup(cfg) };
         let snap = BootstrapSnapshot::from(&mode);

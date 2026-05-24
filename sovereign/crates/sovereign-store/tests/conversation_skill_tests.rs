@@ -99,6 +99,7 @@ async fn memory_source_conversation_id_round_trips() {
         deleted_at: None,
         source_conversation_id: Some("conv-source".to_string()),
         source_skill_id: None,
+        ..Default::default()
     };
     store.save_memory(&mem).await.unwrap();
 
@@ -140,6 +141,7 @@ async fn legacy_memory_without_source_conversation_id_reads_as_none() {
         deleted_at: None,
         source_conversation_id: None,
         source_skill_id: None,
+        ..Default::default()
     };
     store.save_memory(&mem).await.unwrap();
 
@@ -162,6 +164,7 @@ fn mem_with_skill(id: &str, content: &str, skill: Option<&str>) -> Memory {
         deleted_at: None,
         source_conversation_id: None,
         source_skill_id: skill.map(|s| s.to_string()),
+        ..Default::default()
     }
 }
 

@@ -42,6 +42,22 @@ pub struct SetupConfig {
     /// hosts that don't want sweeps running unattended.
     #[serde(default)]
     pub watched_folders: WatchedFoldersSection,
+    /// Rolling-summary memory compaction (see
+    /// `crate::memory_compaction`). Default values are inner-work-
+    /// tuned (threshold=6, batch=3, async); operators on other
+    /// surfaces can `mode = "disabled"` to opt out until their own
+    /// benches exist.
+    #[serde(default)]
+    pub memory: MemorySection,
+}
+
+/// `[memory]` top-level section. Currently only nests
+/// `[memory.compaction]`; future memory-layer knobs (retention,
+/// decay tuning, scope-wall overrides) belong here too.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MemorySection {
+    #[serde(default)]
+    pub compaction: crate::memory_compaction::CompactionConfig,
 }
 
 /// Absolute paths to the loaded GGUF models. Two slots are
@@ -665,6 +681,7 @@ embed = "/models/embed.gguf"
             daemon: DaemonSection::default(),
             data: DataSection::default(),
             watched_folders: WatchedFoldersSection::default(),
+            memory: Default::default(),
         };
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("config.toml");

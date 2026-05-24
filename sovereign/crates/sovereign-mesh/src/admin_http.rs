@@ -254,6 +254,7 @@ mod tests {
             daemon: DaemonSection::default(),
             data: DataSection::default(),
             watched_folders: Default::default(),
+            memory: Default::default(),
         };
         cfg.save_to(&path).unwrap();
         path

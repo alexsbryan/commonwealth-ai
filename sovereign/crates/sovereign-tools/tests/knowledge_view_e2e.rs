@@ -111,6 +111,7 @@ fn mem(id: &str, content: &str, conv_id: Option<&str>) -> Memory {
         deleted_at: None,
         source_conversation_id: conv_id.map(|s| s.to_string()),
         source_skill_id: None,
+        ..Default::default()
     }
 }
 

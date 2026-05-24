@@ -74,6 +74,7 @@ fn mem(id: &str) -> Memory {
         deleted_at: None,
         source_conversation_id: None,
         source_skill_id: None,
+        ..Default::default()
     }
 }
 

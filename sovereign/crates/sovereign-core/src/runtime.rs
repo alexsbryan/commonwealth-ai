@@ -508,6 +508,13 @@ pub struct Runtime {
     /// and `kind="todo"` notes anchored to `working_memory.current_goal`
     /// (or honestly anchorless when no situated goal is loaded).
     pub note_store: Option<Arc<corpus_engine_notes::NoteStore>>,
+    /// Optional rolling-summary compaction worker. When present,
+    /// `end_conversation` notifies it after writing extracted
+    /// memories so a conversation that crossed the threshold gets
+    /// its oldest memories folded into a `MemoryKind::Summary` in
+    /// the background. `None` preserves the pre-2026-05-23
+    /// uncompacted behaviour exactly.
+    pub compaction: Option<Arc<crate::memory_compaction::CompactionWorker>>,
     /// Read-side handle for conversation tiered-retrieval enrichment
     /// (`conv_skeletons` / `conv_raptor_nodes` / `conv_motifs`). Spec
     /// `sovereign/docs/specs/CONV_TIERED_PORT.md`. When present, the
@@ -670,6 +677,7 @@ impl Runtime {
             corpus_engine: None,
             wikipedia_graph: None,
             note_store: None,
+            compaction: None,
             conv_tiered_reader: None,
             mesh_knowledge: None,
             landscape_digests: None,
@@ -811,6 +819,21 @@ impl Runtime {
     /// reply rather than dropping the commitment silently.
     pub fn with_note_store(mut self, store: Arc<corpus_engine_notes::NoteStore>) -> Self {
         self.note_store = Some(store);
+        self
+    }
+
+    /// Install the rolling-summary compaction worker. The daemon
+    /// bootstrap constructs the worker via
+    /// [`crate::memory_compaction::CompactionWorker::spawn`] (which
+    /// starts the background drain task) and hands the resulting
+    /// `Arc` here. The CLI eval path leaves `None`; `end_conversation`
+    /// then skips the enqueue and the pre-compaction shape is
+    /// preserved exactly.
+    pub fn with_compaction(
+        mut self,
+        worker: Arc<crate::memory_compaction::CompactionWorker>,
+    ) -> Self {
+        self.compaction = Some(worker);
         self
     }
 
@@ -983,6 +1006,14 @@ impl Runtime {
                 mem,
             )
             .await?;
+        }
+
+        // Save-time hook for rolling-summary compaction. Fire-and-
+        // forget — the worker re-checks the threshold before doing
+        // real work, so over-enqueuing is harmless. Pre-2026-05-23
+        // path (no worker wired) skips the notification.
+        if let Some(worker) = &self.compaction {
+            worker.maybe_enqueue(conversation_id);
         }
 
         // Pull a fresh entity inventory from the LandscapeDigestProvider

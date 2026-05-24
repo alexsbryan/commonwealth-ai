@@ -492,6 +492,53 @@ pub fn run_inner_work_memory_wall_migrations(conn: &Connection) -> rusqlite::Res
     Ok(())
 }
 
+/// Rolling-summary memory compaction (2026-05-23). Adds three columns
+/// to `memories` so the compaction worker can:
+///
+/// - distinguish raw extractions from mechanical distillations
+///   (`kind` — `'raw' | 'summary'`);
+/// - record which raw rows a summary collapsed (`source_memory_ids` —
+///   JSON array of ids); and
+/// - mark a raw row as folded into a newer summary
+///   (`superseded_by` — fk into `memories(id)`, no FK constraint to
+///   keep rebuilds cheap).
+///
+/// All three columns are nullable / default-empty. Existing rows
+/// surface as `kind = 'raw'`, `source_memory_ids = '[]'`,
+/// `superseded_by = NULL` — the implicit pre-compaction shape.
+/// Retrieval paths filter `superseded_by IS NULL` so superseded rows
+/// stop appearing in recall; the body stays for `sovereign memory
+/// expand <summary-id>` provenance walks.
+///
+/// The retrieval-filter index is partial on `superseded_by IS NULL`
+/// because every witness turn hits the path; the bursty insert cost
+/// is fine. The `source_conversation_id` lookup the worker runs
+/// piggybacks on the existing scope index — no new index for that.
+pub fn run_memory_compaction_migrations(conn: &Connection) -> rusqlite::Result<()> {
+    let _ = conn.execute_batch(
+        "ALTER TABLE memories ADD COLUMN kind TEXT NOT NULL DEFAULT 'raw'",
+    );
+    let _ = conn.execute_batch(
+        "ALTER TABLE memories ADD COLUMN source_memory_ids TEXT NOT NULL DEFAULT '[]'",
+    );
+    let _ = conn.execute_batch(
+        "ALTER TABLE memories ADD COLUMN superseded_by TEXT",
+    );
+    let _ = conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_memories_superseded_by
+         ON memories(superseded_by)",
+    );
+    // The compaction worker enumerates non-superseded memories per
+    // conversation; an index that combines the two columns makes
+    // that scan cheap even on a populated store.
+    let _ = conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_memories_conv_active
+         ON memories(source_conversation_id)
+         WHERE superseded_by IS NULL AND deleted_at IS NULL",
+    );
+    Ok(())
+}
+
 /// Conversation tiered-retrieval port (Phase B; spec
 /// `sovereign/docs/specs/CONV_TIERED_PORT.md`).
 ///

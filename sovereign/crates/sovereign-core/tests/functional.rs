@@ -221,6 +221,7 @@ async fn deleted_memory_excluded_from_retrieval() {
         deleted_at: None,
         source_conversation_id: None,
         source_skill_id: None,
+        ..Default::default()
     };
     h.store.save_memory(&mem).await.unwrap();
     assert_eq!(h.store.get_all_memories().await.unwrap().len(), 1);

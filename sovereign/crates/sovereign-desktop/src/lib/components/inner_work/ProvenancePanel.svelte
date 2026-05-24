@@ -245,8 +245,26 @@
               <li>
                 <span class="memory-meta">
                   #{i + 1} · {fmtRelative(mem.created_at)}
+                  {#if mem.kind === "summary"}
+                    · <span class="kind-tag" title="Mechanical distillation of {mem.source_memory_ids?.length ?? 0} earlier entries by the compaction worker.">
+                      summary of {mem.source_memory_ids?.length ?? 0}
+                    </span>
+                  {/if}
                 </span>
                 <p class="memory-body">{memorySnippet(mem)}</p>
+                {#if mem.kind === "summary" && mem.source_memory_ids && mem.source_memory_ids.length > 0}
+                  <details class="memory-sources">
+                    <summary>folded source ids</summary>
+                    <ul>
+                      {#each mem.source_memory_ids as src_id}
+                        <li><code>{src_id}</code></li>
+                      {/each}
+                    </ul>
+                    <p class="hint">
+                      Run <code>sovereign memory expand {mem.id}</code> to print the originals.
+                    </p>
+                  </details>
+                {/if}
                 <div class="memory-actions">
                   <button
                     type="button"
@@ -535,6 +553,41 @@
     display: flex;
     gap: 0.5em;
     margin-top: 0.4em;
+  }
+
+  /* Compaction-summary tag in the recalled-memory meta strip. Faint
+     so it doesn't pull focus from the recall content itself; the
+     `details` block below carries the load-bearing affordance. */
+  .kind-tag {
+    color: var(--inner-ink-faint);
+    font-variant: normal;
+    letter-spacing: 0;
+  }
+
+  .memory-sources {
+    margin-top: 0.4em;
+    font-size: 0.85em;
+    color: var(--inner-ink-muted);
+  }
+
+  .memory-sources summary {
+    cursor: pointer;
+    color: var(--inner-ink-faint);
+  }
+
+  .memory-sources ul {
+    margin: 0.3em 0 0;
+    padding-left: 1.4em;
+  }
+
+  .memory-sources code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.92em;
+  }
+
+  .memory-sources .hint {
+    margin: 0.4em 0 0;
+    font-style: italic;
   }
 
   /* Per-memory invalidation buttons. Quiet by default; only the

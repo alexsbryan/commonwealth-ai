@@ -469,6 +469,7 @@ mod tests {
             version: 0,
             deleted_at: None,
             source_conversation_id: None,
+            ..Default::default()
         }
     }
 

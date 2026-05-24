@@ -270,6 +270,13 @@ export interface RecalledMemoryProv {
   id: string;
   content: string;
   created_at: number;
+  /// `"raw"` for an extraction; `"summary"` for a row written by the
+  /// compaction worker. Optional for backward compat: rows persisted
+  /// before the compaction-fields wiring will not carry this.
+  kind?: "raw" | "summary";
+  /// For summaries: the ids of the source `Raw` memories this row
+  /// folded. Empty (or missing) on raw memories.
+  source_memory_ids?: string[];
 }
 
 export interface HistoryEntryProv {

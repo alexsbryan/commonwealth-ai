@@ -620,6 +620,50 @@ pub trait MemoryStore: Send + Sync {
             .filter(|m| matches_scope(m, scope))
             .collect())
     }
+
+    /// All memories whose `source_conversation_id` matches and which
+    /// have not been superseded. Used by the rolling-summary
+    /// compaction worker to enumerate candidates per conversation.
+    /// Returns memories ordered by `created_at` ascending so the
+    /// caller can pick "oldest M" deterministically.
+    ///
+    /// Default impl loads everything and filters in-process so
+    /// existing impls compile without a server-side override; the
+    /// production sqlite/postgres impls override for efficiency.
+    async fn list_memories_for_conversation(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Vec<Memory>> {
+        let mut all = self.get_all_memories().await?;
+        all.retain(|m| {
+            m.source_conversation_id.as_deref() == Some(conversation_id)
+                && m.superseded_by.is_none()
+                && m.deleted_at.is_none()
+        });
+        all.sort_by_key(|m| m.created_at);
+        Ok(all)
+    }
+
+    /// Mark `memory_id` as folded into `summary_id`. Called by the
+    /// compaction worker after a new Summary row has been saved.
+    /// Subsequent retrieval excludes the superseded memory; the body
+    /// is preserved so `sovereign memory expand <summary-id>` can
+    /// walk the chain.
+    ///
+    /// Idempotent: marking a row already superseded by the same
+    /// summary is a no-op. Marking with a different summary id
+    /// overwrites — last-writer-wins, matching the single-threaded
+    /// compaction worker contract.
+    async fn mark_superseded(
+        &self,
+        memory_id: &str,
+        summary_id: &str,
+    ) -> Result<()> {
+        let _ = (memory_id, summary_id);
+        Err(crate::error::Error::NotImplemented(
+            "mark_superseded not implemented for this store".into(),
+        ))
+    }
 }
 
 /// In-process scope filter. Used by the default impls above and as

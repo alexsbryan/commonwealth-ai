@@ -119,6 +119,13 @@
     /// pulls focus"). On complete we prefer `full_text` from the
     /// completion event over the buffered chunks for accuracy.
     buffer: string;
+    /// Set when the witness stream errored before producing a reply.
+    /// The surface renders this in place of the witness slot so the
+    /// writer sees a visible non-response instead of silently empty
+    /// space. Pre-2026-05-23 this was console.warn-only; an inner-work
+    /// session that overflowed the witness's context window looked
+    /// indistinguishable from a daemon hang.
+    error: string | null;
   };
 
   function newClientId(): string {
@@ -126,6 +133,23 @@
       globalThis.crypto?.randomUUID?.() ??
       `t-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
     );
+  }
+
+  /// Render a raw inference-layer error message as a short line the
+  /// writer can act on without leaving the surface. The witness slot
+  /// is one italic line under the user's paragraph — long technical
+  /// strings would dominate the column.
+  ///
+  /// Match shape: the context-overflow case is the dominant cause of
+  /// silent witness drop today (entries grow per-turn as memories
+  /// accumulate), so it gets a tailored "start a new entry" hint.
+  /// Everything else collapses to a generic non-blaming line; the
+  /// raw message lives in `console.warn` for triage.
+  function humanizeWitnessError(raw: string): string {
+    if (raw.includes("Prompt too long")) {
+      return "This entry has grown past the witness's window — start a new entry to continue.";
+    }
+    return "The witness couldn't respond. Try again, or keep writing.";
   }
 
   let turns: Turn[] = $state([]);
@@ -666,13 +690,18 @@
     unlistenError = await listen<ErrorPayload>("message-error", (event) => {
       // Drop any pending witness text — design brief: no half-paragraph
       // stranded in the document. The user's prose stays as a settled
-      // paragraph; the marginalia simply doesn't appear. The user can
-      // try again or keep writing.
+      // paragraph; the marginalia is replaced with a single faint line
+      // surfacing why the witness didn't speak. Pre-2026-05-23 this was
+      // console.warn-only — a witness whose system prompt overflowed
+      // the context window looked indistinguishable from a daemon hang,
+      // and the user typed into a surface that appeared frozen.
       console.warn("inner-work: stream error:", event.payload.message);
+      const friendly = humanizeWitnessError(event.payload.message);
       for (const t of turns) {
         if (t.pending) {
           t.pending = false;
           t.witness_text = null;
+          t.error = friendly;
         }
       }
     });
@@ -815,6 +844,7 @@
       message_id: null,
       pending: true,
       buffer: "",
+      error: null,
     };
     turns = [...turns, turn];
 
@@ -993,6 +1023,7 @@
           message_id: m.id,
           pending: false,
           buffer: "",
+          error: null,
         });
         pendingUser = null;
       } else {
@@ -1010,6 +1041,7 @@
         message_id: null,
         pending: false,
         buffer: "",
+        error: null,
       });
     }
     return result;
@@ -1081,6 +1113,8 @@
               </div>
             {:else if turn.witness_text}
               <blockquote class="witness">{turn.witness_text}</blockquote>
+            {:else if turn.error}
+              <p class="witness-error" role="status">{turn.error}</p>
             {/if}
           </article>
         {/each}
@@ -1415,6 +1449,20 @@
     height: 1em;
     display: flex;
     align-items: center;
+  }
+
+  /* Same column geometry as `.witness` so the slot doesn't shift when
+     a witness reply is replaced by an error line. Color and weight
+     pull back toward `--inner-ink-faint` — the error is information,
+     not an alarm; the surface stays quiet. */
+  .witness-error {
+    margin: 0.8em 0 0;
+    padding: 0 0 0 1.25em;
+    border-left: 1.5px dashed var(--inner-rule);
+    color: var(--inner-ink-faint);
+    font-style: italic;
+    font-size: 0.92em;
+    animation: witness-arrive 700ms ease-out both;
   }
 
   .composing-dot {

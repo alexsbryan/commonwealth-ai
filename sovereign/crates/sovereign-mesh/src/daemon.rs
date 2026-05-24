@@ -2091,6 +2091,7 @@ mod tests {
             daemon: DaemonSection::default(),
             data: DataSection::default(),
             watched_folders: Default::default(),
+            memory: Default::default(),
         };
 
         register_local_model_slots(&app_state, &cfg, node_id);
