@@ -2,6 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
   "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/api/desktop/updater/:target/:current_version",
+      "destination": "/api/desktop/updater?target=:target&current_version=:current_version"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
