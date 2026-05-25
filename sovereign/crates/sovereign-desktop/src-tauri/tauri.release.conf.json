@@ -8,6 +8,9 @@
       "binaries/tessdata/*",
       "binaries/pdfium/*"
     ],
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
     "linux": {
       "deb": {
         "depends": ["libvulkan1"]

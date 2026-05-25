@@ -588,6 +588,23 @@ pub trait ConversationStore: Send + Sync {
     ) -> Result<()> {
         Ok(())
     }
+
+    /// Create an empty conversation row if one doesn't already exist
+    /// (INSERT OR IGNORE semantics). Needed by surfaces that must set
+    /// per-conversation state — `skill_id`, `enabled_corpora` — *before*
+    /// the first message is processed (the desktop "new chat" flow, and
+    /// the eval harness's per-corpus isolation mode). A no-op default
+    /// keeps test doubles / in-memory stores compiling; real backends
+    /// override.
+    #[allow(unused_variables)]
+    async fn insert_empty_conversation(
+        &self,
+        id: &str,
+        created_at: i64,
+        surface_skill_id: Option<&str>,
+    ) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[async_trait]

@@ -172,15 +172,15 @@ jobs:
           # step (this run: shell is otherwise discarded). See
           # feedback_macos_sdkroot_for_bindgen.
           echo "SDKROOT=$(xcrun --show-sdk-path)" >> "$GITHUB_ENV"
-          # MACOSX_DEPLOYMENT_TARGET: llama-cpp-sys-4 builds ggml via the
-          # cmake crate, which forwards the `cc` crate's flags as
-          # CMAKE_C/CXX_FLAGS. When this var is unset, cc defaults to
-          # -mmacosx-version-min=10.13 — too low for ggml-backend-dl.cpp's
-          # std::filesystem (introduced 10.15). Setting it in the process env
-          # here is the reliable path (cc reads the env directly); the root
-          # .cargo/config.toml [env] also sets it for plain `cargo build`,
-          # but a CI run showed cc still emitting 10.13, so we pin it here too.
-          echo "MACOSX_DEPLOYMENT_TARGET=10.15" >> "$GITHUB_ENV"
+          # NOTE: the macOS deployment target is deliberately NOT set here.
+          # ggml-backend-dl.cpp uses std::filesystem (needs macOS 10.15), but
+          # `cargo tauri build` injects MACOSX_DEPLOYMENT_TARGET from the Tauri
+          # config's bundle.macOS.minimumSystemVersion (see tauri-build's
+          # build script) and that OVERRIDES anything we export to $GITHUB_ENV
+          # — a CI run confirmed cc still emitted -mmacosx-version-min=10.13
+          # (Tauri's default) despite a 10.15 pin here. The real fix is
+          # bundle.macOS.minimumSystemVersion = "10.15" in
+          # src-tauri/tauri.release.conf.json.
 
       - name: Windows build deps (protoc)
         if: matrix.platform.runner == 'windows-2022'
