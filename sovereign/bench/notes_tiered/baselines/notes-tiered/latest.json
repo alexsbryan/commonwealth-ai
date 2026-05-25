@@ -1,0 +1,190 @@
+{
+  "target_k": 5,
+  "embed_weight": 0.5,
+  "daemon_url": "http://127.0.0.1:9741",
+  "daemon_reachable": false,
+  "total_queries": 8,
+  "audit_baseline_total_correct": 5,
+  "baseline_total_correct": 6,
+  "semantic_total_correct": 0,
+  "by_failure_class": {
+    "exact_token": {
+      "queries": 1,
+      "expected_total": 2,
+      "baseline_correct": 2,
+      "semantic_correct": 0
+    },
+    "paraphrase": {
+      "queries": 2,
+      "expected_total": 6,
+      "baseline_correct": 3,
+      "semantic_correct": 0
+    },
+    "stem": {
+      "queries": 3,
+      "expected_total": 5,
+      "baseline_correct": 0,
+      "semantic_correct": 0
+    },
+    "synonym": {
+      "queries": 1,
+      "expected_total": 2,
+      "baseline_correct": 0,
+      "semantic_correct": 0
+    },
+    "tokenization": {
+      "queries": 1,
+      "expected_total": 1,
+      "baseline_correct": 1,
+      "semantic_correct": 0
+    }
+  },
+  "queries": [
+    {
+      "id": "q1_eos_bypass",
+      "query": "EOS bypass",
+      "failure_class": "paraphrase",
+      "expected": [
+        "n1"
+      ],
+      "baseline_hits": [
+        "n1"
+      ],
+      "semantic_hits": [],
+      "audit_baseline": 0,
+      "baseline_correct": 1,
+      "semantic_correct": 0,
+      "delta_vs_audit": 1,
+      "baseline_latency_ms": 0.160834,
+      "semantic_latency_ms": 0.0
+    },
+    {
+      "id": "q2_wiki_dedup_paraphrase",
+      "query": "why is dedup off for wikipedia",
+      "failure_class": "synonym",
+      "expected": [
+        "n3",
+        "n4"
+      ],
+      "baseline_hits": [],
+      "semantic_hits": [],
+      "audit_baseline": 0,
+      "baseline_correct": 0,
+      "semantic_correct": 0,
+      "delta_vs_audit": 0,
+      "baseline_latency_ms": 0.090375,
+      "semantic_latency_ms": 0.0
+    },
+    {
+      "id": "q3_wiki_regression",
+      "query": "wiki dedup regression",
+      "failure_class": "stem",
+      "expected": [
+        "n3"
+      ],
+      "baseline_hits": [],
+      "semantic_hits": [],
+      "audit_baseline": 0,
+      "baseline_correct": 0,
+      "semantic_correct": 0,
+      "delta_vs_audit": 0,
+      "baseline_latency_ms": 0.0645,
+      "semantic_latency_ms": 0.0
+    },
+    {
+      "id": "q4_empty_bytes_eos",
+      "query": "empty bytes token EOS bypass",
+      "failure_class": "tokenization",
+      "expected": [
+        "n1"
+      ],
+      "baseline_hits": [
+        "n1"
+      ],
+      "semantic_hits": [],
+      "audit_baseline": 0,
+      "baseline_correct": 1,
+      "semantic_correct": 0,
+      "delta_vs_audit": 1,
+      "baseline_latency_ms": 0.108542,
+      "semantic_latency_ms": 0.0
+    },
+    {
+      "id": "q5_regress",
+      "query": "regress",
+      "failure_class": "stem",
+      "expected": [
+        "n3",
+        "n5"
+      ],
+      "baseline_hits": [],
+      "semantic_hits": [],
+      "audit_baseline": 1,
+      "baseline_correct": 0,
+      "semantic_correct": 0,
+      "delta_vs_audit": -1,
+      "baseline_latency_ms": 0.047208,
+      "semantic_latency_ms": 0.0
+    },
+    {
+      "id": "q6_tokenize",
+      "query": "tokenize",
+      "failure_class": "stem",
+      "expected": [
+        "n6",
+        "n7"
+      ],
+      "baseline_hits": [],
+      "semantic_hits": [],
+      "audit_baseline": 0,
+      "baseline_correct": 0,
+      "semantic_correct": 0,
+      "delta_vs_audit": 0,
+      "baseline_latency_ms": 0.04629200000000001,
+      "semantic_latency_ms": 0.0
+    },
+    {
+      "id": "q7_speculative_decoding",
+      "query": "speculative decoding",
+      "failure_class": "paraphrase",
+      "expected": [
+        "n8",
+        "n9",
+        "n10",
+        "n11",
+        "n12"
+      ],
+      "baseline_hits": [
+        "n8",
+        "n9"
+      ],
+      "semantic_hits": [],
+      "audit_baseline": 2,
+      "baseline_correct": 2,
+      "semantic_correct": 0,
+      "delta_vs_audit": 0,
+      "baseline_latency_ms": 0.07179200000000001,
+      "semantic_latency_ms": 0.0
+    },
+    {
+      "id": "q8_reranker",
+      "query": "reranker",
+      "failure_class": "exact_token",
+      "expected": [
+        "n13",
+        "n14"
+      ],
+      "baseline_hits": [
+        "n14",
+        "n13"
+      ],
+      "semantic_hits": [],
+      "audit_baseline": 2,
+      "baseline_correct": 2,
+      "semantic_correct": 0,
+      "delta_vs_audit": 0,
+      "baseline_latency_ms": 0.057624999999999996,
+      "semantic_latency_ms": 0.0
+    }
+  ]
+}

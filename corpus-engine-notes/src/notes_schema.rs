@@ -613,6 +613,43 @@ PRAGMA user_version = 9;
 COMMIT;
 ";
 
+// ─── Schema migration v9 → v10 (T2 entity-graph: note_entities) ─────
+
+/// Applied to databases at `user_version = 9`. Adds the T2 tier
+/// entity-extraction surface — one row per `(note_id, entity,
+/// kind)` tuple — so the related-notes lookup
+/// (`NoteStore::read_notes_related`) has a graph to traverse.
+///
+/// Mirrors the `chunk_entities` shape in `corpus-engine` so the
+/// PPR utilities under `sovereign-tools::entity_graph` can wrap
+/// this table without translation (per `PROGRESSIVE_ENRICHMENT.md`
+/// step 2). Two indexes — one each by entity and by kind — cover
+/// the two access patterns ("who else mentions X" and "what are
+/// the Tech/Person/Org seeds I've ever written about").
+///
+/// Pure additive — no notes.kind CHECK change, no FTS5 rebuild.
+/// Idempotent: gated by `PRAGMA user_version < 10`.
+pub(crate) const MIGRATION_V10: &str = "
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS note_entities (
+    note_id    TEXT    NOT NULL
+        REFERENCES notes(id) ON DELETE CASCADE,
+    entity     TEXT    NOT NULL,
+    kind       TEXT    NOT NULL,
+    salience   REAL    NOT NULL DEFAULT 1.0,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (note_id, entity, kind)
+);
+
+CREATE INDEX IF NOT EXISTS idx_note_entities_entity ON note_entities(entity);
+CREATE INDEX IF NOT EXISTS idx_note_entities_kind   ON note_entities(kind);
+
+PRAGMA user_version = 10;
+
+COMMIT;
+";
+
 // ─── Schema migration v2 → v3 (ATOS note kinds: uncertainty,
 //     postmortem_pointer, redteam_finding) ─────────────────────────────────
 

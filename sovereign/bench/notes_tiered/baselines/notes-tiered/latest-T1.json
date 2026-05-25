@@ -1,0 +1,238 @@
+{
+  "target_k": 5,
+  "embed_weight": 0.5,
+  "daemon_url": "http://127.0.0.1:9741",
+  "daemon_reachable": true,
+  "total_queries": 8,
+  "audit_baseline_total_correct": 5,
+  "baseline_total_correct": 6,
+  "semantic_total_correct": 13,
+  "by_failure_class": {
+    "exact_token": {
+      "queries": 1,
+      "expected_total": 2,
+      "baseline_correct": 2,
+      "semantic_correct": 2
+    },
+    "paraphrase": {
+      "queries": 2,
+      "expected_total": 6,
+      "baseline_correct": 3,
+      "semantic_correct": 4
+    },
+    "stem": {
+      "queries": 3,
+      "expected_total": 5,
+      "baseline_correct": 0,
+      "semantic_correct": 4
+    },
+    "synonym": {
+      "queries": 1,
+      "expected_total": 2,
+      "baseline_correct": 0,
+      "semantic_correct": 2
+    },
+    "tokenization": {
+      "queries": 1,
+      "expected_total": 1,
+      "baseline_correct": 1,
+      "semantic_correct": 1
+    }
+  },
+  "queries": [
+    {
+      "id": "q1_eos_bypass",
+      "query": "EOS bypass",
+      "failure_class": "paraphrase",
+      "expected": [
+        "n1"
+      ],
+      "baseline_hits": [
+        "n1"
+      ],
+      "semantic_hits": [
+        "n2",
+        "n1",
+        "n9",
+        "n10",
+        "n12"
+      ],
+      "audit_baseline": 0,
+      "baseline_correct": 1,
+      "semantic_correct": 1,
+      "delta_vs_audit": 1,
+      "baseline_latency_ms": 0.195334,
+      "semantic_latency_ms": 24.500999999999998
+    },
+    {
+      "id": "q2_wiki_dedup_paraphrase",
+      "query": "why is dedup off for wikipedia",
+      "failure_class": "synonym",
+      "expected": [
+        "n3",
+        "n4"
+      ],
+      "baseline_hits": [],
+      "semantic_hits": [
+        "n3",
+        "n4",
+        "n14",
+        "n10",
+        "n13"
+      ],
+      "audit_baseline": 0,
+      "baseline_correct": 0,
+      "semantic_correct": 2,
+      "delta_vs_audit": 0,
+      "baseline_latency_ms": 0.099583,
+      "semantic_latency_ms": 23.513833
+    },
+    {
+      "id": "q3_wiki_regression",
+      "query": "wiki dedup regression",
+      "failure_class": "stem",
+      "expected": [
+        "n3"
+      ],
+      "baseline_hits": [],
+      "semantic_hits": [
+        "n3",
+        "n4",
+        "n14",
+        "n5",
+        "n12"
+      ],
+      "audit_baseline": 0,
+      "baseline_correct": 0,
+      "semantic_correct": 1,
+      "delta_vs_audit": 0,
+      "baseline_latency_ms": 0.07358300000000001,
+      "semantic_latency_ms": 25.740292
+    },
+    {
+      "id": "q4_empty_bytes_eos",
+      "query": "empty bytes token EOS bypass",
+      "failure_class": "tokenization",
+      "expected": [
+        "n1"
+      ],
+      "baseline_hits": [
+        "n1"
+      ],
+      "semantic_hits": [
+        "n1",
+        "n2",
+        "n6",
+        "n9",
+        "n7"
+      ],
+      "audit_baseline": 0,
+      "baseline_correct": 1,
+      "semantic_correct": 1,
+      "delta_vs_audit": 1,
+      "baseline_latency_ms": 0.134042,
+      "semantic_latency_ms": 23.256124999999997
+    },
+    {
+      "id": "q5_regress",
+      "query": "regress",
+      "failure_class": "stem",
+      "expected": [
+        "n3",
+        "n5"
+      ],
+      "baseline_hits": [],
+      "semantic_hits": [
+        "n14",
+        "n3",
+        "n12",
+        "n13",
+        "n6"
+      ],
+      "audit_baseline": 1,
+      "baseline_correct": 0,
+      "semantic_correct": 1,
+      "delta_vs_audit": -1,
+      "baseline_latency_ms": 0.07037500000000001,
+      "semantic_latency_ms": 22.920291
+    },
+    {
+      "id": "q6_tokenize",
+      "query": "tokenize",
+      "failure_class": "stem",
+      "expected": [
+        "n6",
+        "n7"
+      ],
+      "baseline_hits": [],
+      "semantic_hits": [
+        "n6",
+        "n3",
+        "n7",
+        "n1",
+        "n13"
+      ],
+      "audit_baseline": 0,
+      "baseline_correct": 0,
+      "semantic_correct": 2,
+      "delta_vs_audit": 0,
+      "baseline_latency_ms": 0.067583,
+      "semantic_latency_ms": 23.580958
+    },
+    {
+      "id": "q7_speculative_decoding",
+      "query": "speculative decoding",
+      "failure_class": "paraphrase",
+      "expected": [
+        "n8",
+        "n9",
+        "n10",
+        "n11",
+        "n12"
+      ],
+      "baseline_hits": [
+        "n8",
+        "n9"
+      ],
+      "semantic_hits": [
+        "n8",
+        "n6",
+        "n9",
+        "n10",
+        "n1"
+      ],
+      "audit_baseline": 2,
+      "baseline_correct": 2,
+      "semantic_correct": 3,
+      "delta_vs_audit": 0,
+      "baseline_latency_ms": 0.099208,
+      "semantic_latency_ms": 22.872125
+    },
+    {
+      "id": "q8_reranker",
+      "query": "reranker",
+      "failure_class": "exact_token",
+      "expected": [
+        "n13",
+        "n14"
+      ],
+      "baseline_hits": [
+        "n14",
+        "n13"
+      ],
+      "semantic_hits": [
+        "n14",
+        "n13",
+        "n3",
+        "n6",
+        "n5"
+      ],
+      "audit_baseline": 2,
+      "baseline_correct": 2,
+      "semantic_correct": 2,
+      "delta_vs_audit": 0,
+      "baseline_latency_ms": 0.084417,
+      "semantic_latency_ms": 23.439917
+    }
+  ]
+}

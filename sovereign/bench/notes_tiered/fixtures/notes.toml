@@ -1,0 +1,154 @@
+# Notes fixture for the notes_tiered bench.
+#
+# Synthesised from the 2026-05-25 audit table in
+# `sovereign/docs/specs/NOTES_TIERED.md` (the "Problem (measured)"
+# section). Each note here exercises a specific FTS5 failure mode
+# that the audit surfaced — synonym mismatch, stem mismatch,
+# paraphrase miss — so the T1 semantic blend can be measured
+# against a baseline whose recall is known to be poor.
+#
+# These notes are FIXTURES, not the literal 38 notes from the
+# audit session (those live in `~/.sovereign/notes.db` of the
+# operator running the audit). The fixture proxies the audit
+# pattern: same FTS5 misses, same expected T1 wins, but
+# committable + reproducible across machines.
+#
+# Schema: each `[[notes]]` entry feeds directly into
+# `NoteStore::write_note_full_v9(...)`.
+
+[bank]
+name = "notes-tiered-v0"
+description = """
+12-note fixture covering the 8 audit query patterns from the
+2026-05-25 NoteStore retrieval audit (NOTES_TIERED.md). Includes
+the synonym pairs (wiki ↔ wikipedia), stem variants (regress ↔
+regresses, tokenize ↔ tokenizer), and paraphrase classes (EOS
+bypass / empty-bytes / force_continue, speculative decoding)
+that FTS5 alone misses.
+
+Authored 2026-05-25 as scaffolding for the notes_tiered bench.
+"""
+
+# ── EOS bypass / empty-bytes (paraphrase class) ─────────────────────
+
+[[notes]]
+id = "n1"
+kind = "invariant"
+content = "Decoder must accept every emitted token; naive EOS check via byte length skips empty-bytes tokens. Use force_continue=true to bypass."
+symbols = ["embedded.rs", "decoder"]
+files = ["sovereign/crates/sovereign-core/src/embedded.rs"]
+session_id = "audit-2026-05-25"
+
+[[notes]]
+id = "n2"
+kind = "decision"
+content = "Pointer: EOS handling investigation lives in notes-pre-may-25"
+symbols = []
+files = []
+session_id = "audit-2026-05-25"
+
+# ── wikipedia / wiki dedup (synonym class) ──────────────────────────
+
+[[notes]]
+id = "n3"
+kind = "invariant"
+content = "wiki corpus must skip dedup pass — character ngram overlap on Wikipedia article titles regresses fact_recall by 8pt"
+symbols = ["dedup"]
+files = ["corpus-engine/src/enrichment/dedup.rs"]
+session_id = "audit-2026-05-25"
+
+[[notes]]
+id = "n4"
+kind = "decision"
+content = "dedup config defaults to off for the wiki bench corpus; on for everything else"
+symbols = ["dedup_config"]
+files = []
+session_id = "audit-2026-05-25"
+
+# ── regress / regresses (stem class) ───────────────────────────────
+
+[[notes]]
+id = "n5"
+kind = "attempt"
+content = "v36 augmentation pass: marathon win but fact-recall regresses on 6 of 13 threads — reverted"
+symbols = []
+files = []
+session_id = "audit-2026-05-25"
+
+# ── tokenize / tokenizer (stem class) ──────────────────────────────
+
+[[notes]]
+id = "n6"
+kind = "invariant"
+content = "chat_template lookup must retry on BuffSizeError; tokenizer 8KB cap truncated Gemma 4 template silently"
+symbols = ["tokenizer", "chat_template"]
+files = ["sovereign/crates/sovereign-core/src/embedded.rs"]
+session_id = "audit-2026-05-25"
+
+[[notes]]
+id = "n7"
+kind = "decision"
+content = "minijinja tokenizer shim adds Python-shape methods (.get/.split/.startswith) without pulling pycompat"
+symbols = ["tokenizer"]
+files = []
+session_id = "audit-2026-05-25"
+
+# ── speculative decoding (verbatim — 5 notes, 3 share the phrase) ──
+
+[[notes]]
+id = "n8"
+kind = "decision"
+content = "speculative decoding adopted for the MTP gym; 1.10x daemon decode speedup at warm"
+symbols = ["MTP"]
+files = []
+session_id = "audit-2026-05-25"
+
+[[notes]]
+id = "n9"
+kind = "invariant"
+content = "tools-bearing gym fixtures skip the MTP / speculative decoding path entirely — gate at embedded.rs:701"
+symbols = ["MTP", "tools"]
+files = ["sovereign/crates/sovereign-core/src/embedded.rs"]
+session_id = "audit-2026-05-25"
+
+[[notes]]
+id = "n10"
+kind = "attempt"
+content = "tried draft-model speculation with smaller draft; Phase B needed for codex speedup, not Phase A"
+symbols = ["draft_model"]
+files = []
+session_id = "audit-2026-05-25"
+
+[[notes]]
+id = "n11"
+kind = "decision"
+content = "MTP speedup measured warm tok/s 46.5 → 51 via the daemon-decode draft path"
+symbols = ["MTP"]
+files = []
+session_id = "audit-2026-05-25"
+
+[[notes]]
+id = "n12"
+kind = "todo"
+content = "investigate draft-model latency under structured-output constraint — current gym has no SD coverage there"
+symbols = []
+files = []
+session_id = "audit-2026-05-25"
+
+# ── reranker (exact-token, both should hit) ────────────────────────
+
+[[notes]]
+id = "n13"
+kind = "decision"
+content = "reranker pass after BM25 chunk retrieval; uses qwen-rerank-0.6b under the embed slot"
+symbols = ["reranker"]
+files = ["sovereign/crates/sovereign-core/src/runtime.rs"]
+session_id = "audit-2026-05-25"
+
+[[notes]]
+id = "n14"
+kind = "invariant"
+content = "reranker latency budget 50ms p95; if breached, fall back to BM25-only ranking"
+symbols = ["reranker"]
+files = []
+session_id = "audit-2026-05-25"

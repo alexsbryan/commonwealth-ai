@@ -32,6 +32,7 @@ pub async fn run(args: &[String]) -> i32 {
     match args.first().map(String::as_str) {
         Some("add") => cmd_add(&args[1..]).await,
         Some("promote") => crate::dev_bin::exec("atos-status-promote", &args[1..]),
+        Some("migrate-from") => cmd_migrate_from(&args[1..]).await,
         _ => {
             // Default + filter flags: forward to the canonical
             // reflection view (without the deprecation banner —
@@ -206,6 +207,155 @@ async fn cmd_add(args: &[String]) -> i32 {
     0
 }
 
+/// `sovereign notes migrate-from <path>` — merge a stray local
+/// `notes.db` into the canonical store (`~/.sovereign/notes.db`).
+///
+/// Use case: pre-unification, some CLI surfaces opened a
+/// project-local `<repo>/.sovereign/notes.db`. After
+/// registry.rs was aligned to the canonical home path, those
+/// local DBs become orphans. This command merges them in,
+/// content_hash-deduplicating so re-running is idempotent.
+///
+/// Usage:
+///   sovereign notes migrate-from /path/to/notes.db
+///   sovereign notes migrate-from /path/to/notes.db --target /alt/notes.db
+async fn cmd_migrate_from(args: &[String]) -> i32 {
+    if args.is_empty() {
+        eprintln!(
+            "notes migrate-from: requires a source path. \
+             Example: sovereign notes migrate-from \
+             /Users/<you>/dev/<repo>/.sovereign/notes.db"
+        );
+        return 2;
+    }
+    let mut source: Option<PathBuf> = None;
+    let mut target: Option<PathBuf> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--target" => {
+                i += 1;
+                target = args.get(i).map(PathBuf::from);
+            }
+            other if !other.starts_with("--") => {
+                source = Some(PathBuf::from(other));
+            }
+            other => {
+                eprintln!("notes migrate-from: unknown flag {other:?}");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+    let Some(source) = source else {
+        eprintln!("notes migrate-from: source path required");
+        return 2;
+    };
+    if !source.exists() {
+        eprintln!("notes migrate-from: {} does not exist", source.display());
+        return 1;
+    }
+    let canonical_root = crate::util::dirs::sovereign_root();
+    let target = target.unwrap_or_else(|| canonical_root.join("notes.db"));
+    if source == target {
+        eprintln!(
+            "notes migrate-from: source and target are the same path ({})",
+            source.display()
+        );
+        return 2;
+    }
+
+    // Open the source as a read-only NoteStore so its v0→v10
+    // migrations fire if needed (gives us the `content_hash`
+    // column required for cross-DB dedup). Then scan its full
+    // contents and ingest_remote_notes into the canonical store
+    // for idempotent content-hash dedup, supersedes-chain
+    // preservation, and fork detection.
+    let source_store = match NoteStore::open(&source) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!(
+                "notes migrate-from: cannot open source {}: {e}",
+                source.display()
+            );
+            return 1;
+        }
+    };
+    let target_store = match NoteStore::open(&target) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!(
+                "notes migrate-from: cannot open target {}: {e}",
+                target.display()
+            );
+            return 1;
+        }
+    };
+
+    // Pull every global, non-private, non-tombstoned note from
+    // source. Use `events_for_content_hashes` after gathering ids
+    // — gives us full embeddings + entities so the migration also
+    // ports T1/T2 artifacts in one pass.
+    let source_hashes = match source_store
+        .content_hash_digest()
+        .await
+    {
+        Ok(digest) => {
+            let mut all = Vec::new();
+            for (bucket, _) in digest {
+                match source_store.content_hashes_in_bucket(bucket).await {
+                    Ok(mut h) => all.append(&mut h),
+                    Err(e) => {
+                        eprintln!(
+                            "notes migrate-from: scan bucket {:02x}: {e}",
+                            bucket
+                        );
+                    }
+                }
+            }
+            all
+        }
+        Err(e) => {
+            eprintln!("notes migrate-from: digest source: {e}");
+            return 1;
+        }
+    };
+    if source_hashes.is_empty() {
+        println!(
+            "notes migrate-from: source has no migratable global notes (private/feature/session scopes stay local)"
+        );
+        return 0;
+    }
+
+    let events = match source_store.events_for_content_hashes(&source_hashes).await {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("notes migrate-from: events_for_content_hashes: {e}");
+            return 1;
+        }
+    };
+    let total = events.len();
+    let report = match target_store.ingest_remote_notes(events).await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("notes migrate-from: ingest into target: {e}");
+            return 1;
+        }
+    };
+
+    println!(
+        "notes migrate-from: source={src} target={tgt}\n  scanned: {total}\n  inserted: {ins}\n  deduplicated: {dup}\n  tombstoned: {tomb}\n  forked: {fork}\n  rejected: {rej}",
+        src = source.display(),
+        tgt = target.display(),
+        ins = report.inserted,
+        dup = report.deduplicated,
+        tomb = report.tombstoned,
+        fork = report.forked,
+        rej = report.rejected,
+    );
+    0
+}
+
 const HELP: crate::util::help::Help = crate::util::help::Help {
     command: "sovereign notes",
     summary: "Read and write durable working notes (the audit's primary input).",
@@ -214,6 +364,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
             "sovereign notes                           30-day reflection view (default)\n\
              sovereign notes add --kind <k> -m \"...\"   Append a note\n\
              sovereign notes promote <id> --to <s>     Promote scope\n\
+             sovereign notes migrate-from <path>       Merge a stray local notes.db into ~/.sovereign/notes.db\n\
              sovereign notes --since 7d --tool <name>  Reflection filters",
         ),
         crate::util::help::HelpSection::Notes(
