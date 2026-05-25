@@ -25,8 +25,18 @@ Cut a release:
 
 ## Versioning
 
-Semantic versioning. The desktop app's version lives in three places
-that must move together; bump them all in a single commit:
+Semantic versioning. The desktop app's version lives in three files
+that must move together. Use the bump script — it edits all three and
+verifies they agree:
+
+```sh
+scripts/bump-desktop-version.sh 0.2.0       # set to an explicit version
+scripts/bump-desktop-version.sh patch       # 0.1.0 -> 0.1.1
+scripts/bump-desktop-version.sh minor       # 0.1.0 -> 0.2.0
+scripts/bump-desktop-version.sh major       # 0.1.0 -> 1.0.0
+```
+
+The script writes the new version into:
 
 | File | Field |
 |------|-------|
@@ -34,21 +44,26 @@ that must move together; bump them all in a single commit:
 | `sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json` | `version` |
 | `sovereign/crates/sovereign-desktop/package.json` | `version` |
 
+then runs `check-desktop-version.sh` to confirm the trio matches, then
+prints the suggested `git add` / `commit` / `tag` / `push` lines.
+Nothing is committed automatically — releasing is a deliberate act.
+
 The desktop crate's `src-tauri/Cargo.toml` inherits via
 `version.workspace = true`; do NOT add a `version = "…"` line there —
 that would diverge from every other crate in the workspace. Bumping
 the workspace root version moves all 30+ crates in lockstep, which is
 the intended behaviour pre-1.0 (single repo-wide version).
 
-Verify the three are in sync before tagging:
+If you only want to verify (no edit), use the check script directly:
 
 ```sh
 scripts/check-desktop-version.sh            # compare all three
 scripts/check-desktop-version.sh 0.2.0      # also require an exact value
 ```
 
-The script exits non-zero on any mismatch — wire it into the
-pre-release checklist below and CI gates that care.
+`check-desktop-version.sh` is also wired into the CI workflow's first
+step, so a tag whose three files disagree fails in seconds instead of
+after a 30-minute build matrix.
 
 Tag format: `desktop-v<MAJOR>.<MINOR>.<PATCH>`. The CLI and daemon use
 their own tag prefixes (`cli-vX.Y.Z`, `daemon-vX.Y.Z`) so all three can
@@ -75,18 +90,25 @@ Run before tagging. None are automated — that's the next iteration.
 - [ ] If you touched OCR: run a folder containing a real scanned PDF
       with `SOVEREIGN_TESSERACT_BIN` etc. set, confirm the offer
       surfaces and works end-to-end.
-- [ ] Versions bumped (see above).
-- [ ] `scripts/check-desktop-version.sh <new-version>` — exits 0 and
-      reports all three files at the expected value.
+- [ ] Versions bumped via `scripts/bump-desktop-version.sh <new-version>`
+      (the script writes the three files and runs the consistency
+      check internally — no separate verification needed).
 - [ ] `CHANGELOG.md` entry written.
 
 ### 2. Cut the release
 
 ```sh
-git commit -am "chore(desktop): release v0.1.0"
-git tag desktop-v0.1.0
-git push origin main desktop-v0.1.0
+scripts/bump-desktop-version.sh 0.2.0       # or: patch | minor | major
+git add Cargo.toml \
+        sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json \
+        sovereign/crates/sovereign-desktop/package.json
+git commit -m "chore(desktop): release v0.2.0"
+git tag desktop-v0.2.0
+git push origin main desktop-v0.2.0
 ```
+
+The bump script prints these exact lines at the end of its run, so
+you can copy from its output instead of typing them.
 
 The push of the tag is what kicks off
 `.github/workflows/desktop-release.yml`. If you forget to push the
