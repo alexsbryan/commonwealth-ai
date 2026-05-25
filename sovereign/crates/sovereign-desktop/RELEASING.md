@@ -84,6 +84,20 @@ Run before tagging. None are automated — that's the next iteration.
 - [ ] `npm run check` (in `sovereign/crates/sovereign-desktop/`) — zero
       Svelte/TS errors.
 - [ ] `cargo check -p sovereign-desktop` — clean build, no new warnings.
+- [ ] Tauri Rust/JS version alignment. The `@tauri-apps/*` packages in
+      `package.json` are pinned with `~X.Y.0` (patch-only) so the
+      lockfile stays in lockstep with Cargo's resolved Tauri versions.
+      If `cargo update` bumps `tauri` from `2.11.x` → `2.12.x`,
+      `tauri-bundler` will fail early with `Found version mismatched
+      Tauri packages`. The fix:
+      1. Read the Rust-side resolved version from `Cargo.lock`
+         (e.g. `tauri = "2.12.3"`)
+      2. Edit `sovereign/crates/sovereign-desktop/package.json` to
+         match the new minor (e.g. `"@tauri-apps/api": "~2.12.0"`)
+      3. Run `npm install` to refresh `package-lock.json`
+      4. Commit both files together
+      Routine patch bumps (`2.11.1` → `2.11.2`) require no action;
+      `npm install` picks them up automatically within the `~` range.
 - [ ] Manual smoke test on your dev machine: launch the app, drop a
       folder, confirm ingest completes, ask one question, confirm
       response. Five-minute test.
