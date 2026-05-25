@@ -68,23 +68,23 @@
   .starters {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 10px;
   }
   .starters.muted {
     opacity: 0.78;
   }
   .starters-heading {
     margin: 0;
-    font-size: 0.82em;
+    font-size: 0.78em;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.14em;
     color: var(--text-secondary, var(--text-primary));
   }
   .starters-sub {
     margin: 0 0 4px;
     font-size: 0.82em;
     color: var(--text-muted, var(--text-secondary));
-    line-height: 1.4;
+    line-height: 1.5;
   }
   .chip-row {
     list-style: none;
@@ -92,26 +92,64 @@
     padding: 0;
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 10px;
   }
+  /* Lifted from the page background with a tinted lavender wash +
+     a stroke ~2 steps brighter than `--border-mid`. The previous
+     `var(--border)` (#1E1832) was visually identical to the
+     surrounding bg-secondary surface and read as no border at all.
+     Combined with the wash we now have a real "chip" silhouette
+     without leaning on a saturated outline. */
+  /* Hard-cornered terminal chip. Flat fill, 1px lavender stroke,
+     monospace label. A leading `>` glyph sells the prompt register
+     and gives the chip an asymmetric left edge — distinct, no pill
+     softness. */
   .chip {
+    position: relative;
     background: transparent;
-    border: 1px solid var(--border, #333);
+    border: 1px solid var(--border-bright, #3D3364);
     color: var(--text-primary, #eee);
-    padding: 6px 12px;
-    border-radius: 999px;
-    font-size: 0.88em;
-    line-height: 1.3;
+    padding: 12px 16px 12px 32px;
+    border-radius: 2px;
+    font-size: 0.86rem;
+    font-family: var(--font-mono);
+    font-weight: 400;
+    line-height: 1.5;
+    letter-spacing: 0.01em;
     text-align: left;
     cursor: pointer;
     max-width: 540px;
-    transition: background 160ms ease, border-color 160ms ease;
+    transition:
+      background 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease,
+      box-shadow 160ms ease;
+  }
+  .chip::before {
+    content: ">";
+    position: absolute;
+    left: 14px;
+    top: 12px;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-weight: 600;
+    line-height: 1.5;
+    transition: color 160ms ease, transform 160ms ease;
   }
   .chip:hover,
   .chip:focus-visible {
-    background: color-mix(in oklab, var(--accent, #c4a46a) 10%, transparent);
+    background: var(--accent-glow);
     border-color: var(--accent, #c4a46a);
+    color: var(--accent-light, #DFC068);
+    box-shadow:
+      inset 2px 0 0 var(--accent),
+      0 0 14px -4px rgba(201, 168, 76, 0.35);
     outline: none;
+  }
+  .chip:hover::before,
+  .chip:focus-visible::before {
+    color: var(--accent-light);
+    transform: translateX(1px);
   }
   .starters.muted .chip {
     color: var(--text-secondary, var(--text-primary));

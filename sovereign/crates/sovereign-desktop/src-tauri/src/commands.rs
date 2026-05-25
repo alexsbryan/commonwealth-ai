@@ -241,6 +241,14 @@ pub struct HardwareInfo {
     pub system_ram_gb: f64,
     pub gpu_available: bool,
     pub gpu_name: Option<String>,
+    /// Discrete GPU VRAM in GB. `None` on unified-memory systems (Apple
+    /// Silicon) or when no GPU is present; UI should fall back to
+    /// `system_ram_gb` for tier selection.
+    pub gpu_memory_gb: Option<f64>,
+    /// True on Apple Silicon (M-series). Determines whether the model
+    /// recommender buckets by `system_ram_gb` (unified) or `gpu_memory_gb`
+    /// (discrete VRAM).
+    pub is_unified_memory: bool,
 }
 
 #[tauri::command]
@@ -251,10 +259,16 @@ pub async fn detect_hardware() -> Result<HardwareInfo, String> {
     .await
     .map_err(|e| format!("Hardware detection failed: {e}"))?;
 
+    let gpu_memory_gb = profile
+        .gpu_memory_bytes
+        .map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0));
+
     Ok(HardwareInfo {
         system_ram_gb: profile.system_ram_gb(),
         gpu_available: profile.gpu_available,
         gpu_name: profile.gpu_name,
+        gpu_memory_gb,
+        is_unified_memory: profile.is_unified_memory,
     })
 }
 

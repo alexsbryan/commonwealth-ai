@@ -7,7 +7,6 @@
     sendMessageStream,
     resumeSession,
     cancelStream,
-    searchWeb,
     getConversation,
     createConversation,
     ingestDocument,
@@ -40,7 +39,6 @@
   import { MAX_TURN_MESSAGE_CHARS, OVERSIZE_MESSAGE_HINT } from "../types";
   import { WordBufferedStream } from "../stream-buffer";
   import { chatMachine } from "../machines/chat.machine";
-  import { insightStore } from "../stores/insights.svelte";
   import { routingStore } from "../stores/routing.svelte";
   import MessageBubble from "./MessageBubble.svelte";
   import TaskProgress from "./TaskProgress.svelte";
@@ -61,7 +59,6 @@
     taskSteps: TaskStep[];
     onClearTask: () => void;
     onOpenSettings?: () => void;
-    onToggleInsights?: () => void;
     onConversationCreated?: (id: string) => void;
   }
 
@@ -70,7 +67,6 @@
     taskSteps,
     onClearTask,
     onOpenSettings,
-    onToggleInsights,
     onConversationCreated,
   }: Props = $props();
 
@@ -968,54 +964,6 @@
     }
   }
 
-  async function handleSearch() {
-    const text = inputText.trim();
-    if (!text || isLoading) return;
-
-    const convoId = await ensureConversation();
-
-    send({
-      type: "ASSISTANT_MESSAGE_RECEIVED",
-      message: {
-        id: crypto.randomUUID(),
-        role: "user",
-        content: text,
-        created_at: Math.floor(Date.now() / 1000),
-      },
-    });
-    inputText = "";
-    attachment = null;
-    docOpInFlight = true;
-    onClearTask();
-    scrollToBottom();
-
-    try {
-      const response = await searchWeb(text, convoId);
-      send({
-        type: "ASSISTANT_MESSAGE_RECEIVED",
-        message: {
-          id: response.message_id,
-          role: "assistant",
-          content: response.content,
-          created_at: Math.floor(Date.now() / 1000),
-        },
-      });
-    } catch (e) {
-      send({
-        type: "ASSISTANT_MESSAGE_RECEIVED",
-        message: {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: `Search error: ${e}`,
-          created_at: Math.floor(Date.now() / 1000),
-        },
-      });
-    } finally {
-      docOpInFlight = false;
-      scrollToBottom();
-    }
-  }
-
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -1257,29 +1205,6 @@
       rows="1"
       disabled={isLoading}
     ></textarea>
-    <button
-      class="search-btn"
-      onclick={handleSearch}
-      disabled={isLoading || !inputText.trim()}
-      title="Search the web"
-    >
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.5"/>
-        <line x1="11" y1="11" x2="14.5" y2="14.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-    </button>
-    {#if onToggleInsights}
-      <button
-        class="insights-toggle-btn"
-        onclick={onToggleInsights}
-        title="Toggle insights panel"
-      >
-        &#x25C8;
-        {#if insightStore.count > 0}
-          <span class="insights-badge">{insightStore.count}</span>
-        {/if}
-      </button>
-    {/if}
     {#if isLoading}
       <!-- PR6 — Stop button replaces Send while a stream is in
            flight. Gives the user a visible way to bail on a turn
@@ -1384,35 +1309,38 @@
   }
 
   .empty-mark {
-    font-size: 2.8rem;
+    font-size: 3.2rem;
     color: var(--accent);
     line-height: 1;
     filter: drop-shadow(0 0 14px rgba(201, 168, 76, 0.45));
-    margin-bottom: 16px;
+    margin-bottom: 22px;
     animation: empty-breathe 3.5s ease-in-out infinite;
     position: relative;
   }
 
   .empty-state h2 {
-    font-size: 1.1rem;
-    font-weight: 700;
-    letter-spacing: 0.22em;
+    font-family: var(--font-mono);
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: 0.36em;
     color: var(--text-secondary);
-    margin-bottom: 10px;
+    margin-bottom: 14px;
     position: relative;
   }
 
   .empty-sub {
-    font-size: 0.8rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
     color: var(--text-muted);
-    letter-spacing: 0.05em;
-    margin-bottom: 20px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin-bottom: 36px;
     position: relative;
   }
 
   /* ── Starter chips + build indicator in empty state ── */
   .empty-starters {
-    margin-top: 24px;
+    margin-top: 8px;
     max-width: 640px;
     text-align: left;
     position: relative;
@@ -1420,45 +1348,59 @@
   .starters-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 6px;
+    gap: 12px;
+    margin-bottom: 14px;
+    /* A faint hairline running through the heading row anchors the
+       label + cycle button as a horizon line above the chips. Keeps
+       the gold accent button feeling load-bearing rather than
+       decorative. */
+    padding-left: 2px;
   }
   .starters-label {
-    font-size: 0.82em;
+    font-size: 0.74rem;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.18em;
     color: var(--text-secondary, var(--text-primary));
+    font-family: var(--font-mono);
   }
-  /* Tiny shuffle affordance. Default state stays out of the way
-     (muted text color, no background); hover and active surface the
-     gold accent the rest of the app uses. The icon itself rotates
-     360° on click — the wrapper button stays static so focus rings
-     and click targets don't whirl with it. */
+  /* Subtle shuffle affordance. Rests with a faint amethyst frame so
+     it reads as "there's something here" — the previous transparent-
+     until-hover version disappeared on the dark surface. Hover
+     surfaces gold; click spins the icon 360°. */
   .starters-cycle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 26px;
+    height: 26px;
     padding: 0;
-    border: none;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--text-muted);
+    border: 1px solid var(--border-bright);
+    /* Sharp pill no more — match the terminal geometry of every
+       chrome element. */
+    border-radius: 2px;
+    background: var(--lavender-glow);
+    color: var(--text-secondary);
     cursor: pointer;
-    transition: color 160ms ease, background 160ms ease, transform 160ms ease;
+    transition:
+      color 180ms ease,
+      background 180ms ease,
+      border-color 180ms ease,
+      transform 180ms ease,
+      box-shadow 180ms ease;
   }
   .starters-cycle:hover,
   .starters-cycle:focus-visible {
     color: var(--accent-light);
     background: var(--accent-dim);
+    border-color: var(--accent);
+    box-shadow: 0 0 10px rgba(201, 168, 76, 0.25);
     outline: none;
   }
   .starters-cycle:active {
     transform: scale(0.92);
   }
   .starters-cycle svg {
-    transition: transform 320ms cubic-bezier(0.4, 1.4, 0.5, 1);
+    transition: transform 360ms cubic-bezier(0.4, 1.4, 0.5, 1);
   }
   .starters-cycle.spinning svg {
     transform: rotate(360deg);
@@ -1490,8 +1432,15 @@
   .input-area {
     display: flex;
     flex-direction: column;
-    padding: 12px 20px 16px;
-    border-top: 1px solid var(--border-mid);
+    /* More vertical air than the previous 12/16 — the textarea +
+       button row needs to look like a deliberate console, not a
+       compressed footer. */
+    padding: 16px 24px 20px;
+    /* No border-top here — the CorpusFilterStrip sitting directly
+       above owns the single hairline that separates the chrome
+       bundle (strip + input-area) from the messages list. Two
+       borders stacked read as a double-rule and broke the
+       "deliberate console" silhouette. */
     background: var(--bg-secondary);
     /* Paint containment — tells the browser this subtree's
        layout/style/paint cannot affect the messages column above
@@ -1504,30 +1453,46 @@
 
   .input-row {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     align-items: flex-end;
     /* Same reasoning — keystrokes only invalidate this row, not
        the surrounding banners or hints. */
     contain: layout paint style;
   }
 
+  /* All input-row chrome buttons share one square footprint so the
+     row reads as a single aligned baseline regardless of which
+     buttons happen to be visible (attach / search / insights / send /
+     stop). Setting both `height` and `min-height` is load-bearing —
+     `align-self: flex-end` with mismatched intrinsic heights was the
+     source of the visible misalignment. */
+  .attach-btn,
+  .send-btn,
+  .stop-btn {
+    height: 42px;
+    min-height: 42px;
+    box-sizing: border-box;
+    align-self: flex-end;
+  }
+
   .attach-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
-    background: transparent;
+    width: 42px;
+    background: var(--bg-surface);
     border: 1px solid var(--border-mid);
-    border-radius: var(--radius);
+    /* 2px corners across all chrome — reads as terminal, not pill. */
+    border-radius: 2px;
     color: var(--text-muted);
     cursor: pointer;
     flex-shrink: 0;
-    transition: border-color 0.15s, color 0.15s;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
   }
   .attach-btn:hover:not(:disabled) {
     border-color: var(--accent);
     color: var(--accent);
+    background: var(--accent-glow);
   }
   .attach-btn:disabled {
     opacity: 0.4;
@@ -1547,16 +1512,25 @@
 
   textarea {
     flex: 1;
-    padding: 10px 14px;
+    /* Padding tuned so single-line content lands at exactly 42px
+       total (matches the chrome buttons). Math: content
+       0.88rem * line-height 1.5 ≈ 21px + 2 × 9px padding + 2 × 1px
+       border = 41px box-sizing border-box. The 1px slack lives in
+       the line-box rounding — visually flush with the button row. */
+    padding: 9px 14px;
     background: var(--bg-input);
     border: 1px solid var(--border-mid);
-    border-radius: var(--radius-lg);
+    /* Hard corner matches the chrome buttons. */
+    border-radius: 2px;
     resize: none;
     outline: none;
+    height: 42px;
     min-height: 42px;
     max-height: 120px;
     line-height: 1.5;
     color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.84rem;
     transition: border-color 0.2s, box-shadow 0.2s;
   }
 
@@ -1569,82 +1543,25 @@
     box-shadow: 0 0 0 2px var(--accent-glow);
   }
 
-  .search-btn {
-    padding: 10px;
-    background: var(--bg-surface);
-    color: var(--text-muted);
-    border: 1px solid var(--border-mid);
-    border-radius: var(--radius);
-    align-self: flex-end;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    /* Specific transitions only — `transition: all` causes WebKitGTK
-       to track every animatable property and ran a paint cycle for
-       this button (and its siblings) on every keystroke in the
-       adjacent textarea, even though no property was actually
-       changing. The `disabled` flip just snaps now. */
-    transition: background 0.2s, border-color 0.2s, color 0.2s;
-  }
-
-  .search-btn:hover:not(:disabled) {
-    background: var(--sky-dim);
-    border-color: var(--sky);
-    color: var(--sky);
-  }
-
-  .search-btn:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-  }
-
-  .insights-toggle-btn {
-    padding: 10px;
-    background: var(--bg-surface);
-    color: var(--amber);
-    border: 1px solid var(--border-mid);
-    border-radius: var(--radius);
-    align-self: flex-end;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 14px;
-    cursor: pointer;
-    /* See .search-btn — specific transitions only. */
-    transition: background 0.2s, border-color 0.2s;
-    position: relative;
-  }
-
-  .insights-toggle-btn:hover {
-    border-color: var(--amber);
-    background: rgba(186, 117, 23, 0.06);
-  }
-
-  .insights-badge {
-    font-size: 9px;
-    font-family: var(--font-mono);
-    background: var(--accent-glow);
-    border: 0.5px solid color-mix(in srgb, var(--amber) 40%, transparent);
-    border-radius: 999px;
-    padding: 0 4px;
-    color: var(--amber);
-  }
-
   .send-btn {
-    padding: 10px 20px;
+    padding: 0 24px;
     background: var(--accent);
     color: var(--bg-root);
-    border-radius: var(--radius);
-    font-weight: 700;
-    font-size: 0.82rem;
-    letter-spacing: 0.05em;
-    align-self: flex-end;
-    transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+    border: 1px solid var(--accent);
+    border-radius: 2px;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 0.78rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    transition: background 0.2s, box-shadow 0.2s, transform 0.15s,
+                border-color 0.2s;
   }
 
   .send-btn:hover:not(:disabled) {
     background: var(--accent-light);
-    box-shadow: 0 0 18px var(--accent-dim);
+    border-color: var(--accent-light);
+    box-shadow: 0 0 22px var(--accent-dim);
     transform: translateY(-1px);
   }
 
@@ -1659,16 +1576,17 @@
 
   /* ── Stop button (PR6) ── */
   .stop-btn {
-    padding: 9px 20px;
+    padding: 0 24px;
     background: transparent;
     color: var(--text-primary);
     border: 1px solid var(--text-primary);
-    border-radius: var(--radius);
-    font-family: var(--font-sans);
-    font-weight: 500;
-    font-size: 0.9rem;
+    border-radius: 2px;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 0.78rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
     cursor: pointer;
-    align-self: flex-end;
     transition: background 0.15s, color 0.15s;
   }
   .stop-btn:hover {
@@ -1681,15 +1599,17 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-top: 6px;
-    padding: 8px 12px;
+    margin-top: 8px;
+    padding: 10px 14px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-mid);
-    border-left: 3px solid var(--accent);
-    border-radius: var(--radius);
-    font-size: 0.82rem;
+    border-left: 2px solid var(--accent);
+    border-radius: 2px;
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    letter-spacing: 0.04em;
     color: var(--text-secondary);
-    line-height: 1.45;
+    line-height: 1.5;
   }
   .oversize-mark {
     display: inline-flex;
@@ -1708,12 +1628,15 @@
     margin-left: auto;
     flex-shrink: 0;
     padding: 5px 12px;
-    font-size: 0.8rem;
-    font-weight: 500;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
     background: transparent;
     color: var(--accent);
     border: 1px solid var(--accent);
-    border-radius: var(--radius);
+    border-radius: 2px;
     cursor: pointer;
   }
   .oversize-attach-btn:hover:not(:disabled) {
