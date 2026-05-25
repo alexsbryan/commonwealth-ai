@@ -25,6 +25,7 @@
   import ReadingSurface from "./lib/components/reading/ReadingSurface.svelte";
   import AtomPanel from "./lib/components/reading/AtomPanel.svelte";
   import AtlasSurface from "./lib/components/atlas/AtlasSurface.svelte";
+  import BrandMark from "./lib/components/BrandMark.svelte";
   import { readingSession } from "./lib/stores/readingSession.svelte";
   import { atlasNavigation } from "./lib/stores/atlasNavigation.svelte";
   import { readingNavigation } from "./lib/stores/readingNavigation.svelte";
@@ -395,10 +396,22 @@
     <div class="loading-ambient"></div>
     <div class="loading-content">
       <div class="mark-wrap" aria-hidden="true">
-        <div class="ring ring-1"></div>
-        <div class="ring ring-2"></div>
-        <div class="ring ring-3"></div>
-        <div class="loading-mark">◈</div>
+        <!-- Pentagon-shaped pulse rings, matching the brand mark's
+             actual silhouette (V1-V5 vertices from icon-source.svg).
+             Replaces the prior circular rings, which felt borrowed
+             when the mark itself is asymmetric. Three staggered
+             outlines expand from the icon's centroid, fading as
+             they reach ~2.2× scale. Stroke is lavender (the brand's
+             "signal travels" hue) at low alpha so the gold mark
+             stays the eye's anchor. -->
+        <svg class="pulse-pent" viewBox="0 0 1024 1024" preserveAspectRatio="xMidYMid meet">
+          <polygon class="pent pent-1" points="490,160 830,350 700,830 240,860 170,410" />
+          <polygon class="pent pent-2" points="490,160 830,350 700,830 240,860 170,410" />
+          <polygon class="pent pent-3" points="490,160 830,350 700,830 240,860 170,410" />
+        </svg>
+        <div class="loading-mark">
+          <BrandMark size={72} />
+        </div>
       </div>
       <h1>SOVEREIGN</h1>
       <p class="loading-tagline">ai for the rest of us</p>
@@ -571,33 +584,52 @@
     z-index: 1;
   }
 
-  /* ── Expanding rings — mesh signal broadcast ── */
+  /* ── Pentagon-shaped pulse — mesh signal broadcast.
+        Sized to host BrandMark at 72px plus enough headroom for
+        the outline to expand ~2.2× without clipping. Overflow
+        visible by default; left commented for posterity. ──     */
   .mark-wrap {
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 90px;
-    height: 90px;
+    width: 96px;
+    height: 96px;
     margin-bottom: 22px;
   }
 
-  /* Lavender rings expanding from the gold center mark */
-  .ring {
+  /* Inline SVG holding the three staggered pentagon outlines.
+     viewBox matches icon-source.svg so the polygon coordinates
+     line up with the gold mark sitting on top. Sized to the
+     wrap; outlines transform-origin against the icon's centroid
+     (470,540) — the visual center of the asymmetric pentagon. */
+  .pulse-pent {
     position: absolute;
-    border-radius: 50%;
-    border: 1px solid rgba(155, 135, 196, 0.40);
-    width: 50px;
-    height: 50px;
-    animation: ring-expand 3s ease-out infinite;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
   }
+  .pent {
+    fill: none;
+    stroke: rgba(155, 135, 196, 0.42);
+    stroke-width: 14;
+    stroke-linejoin: round;
+    /* transform-box: fill-box re-anchors the polygon's
+       transform-origin to its own bbox; combined with
+       transform-origin: center, the pentagon scales from its
+       geometric center rather than the SVG viewBox origin. */
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: pent-expand 3s ease-out infinite;
+  }
+  .pent-2 { animation-delay: 1s; }
+  .pent-3 { animation-delay: 2s; }
 
-  .ring-2 { animation-delay: 1s; }
-  .ring-3 { animation-delay: 2s; }
-
-  @keyframes ring-expand {
+  @keyframes pent-expand {
     0%   { transform: scale(1);   opacity: 0.55; }
-    100% { transform: scale(3.2); opacity: 0; }
+    100% { transform: scale(2.2); opacity: 0; }
   }
 
   /* ── Attach-mode badge ── */
@@ -640,10 +672,13 @@
   }
 
   .loading-mark {
-    font-size: 2.8rem;
-    color: var(--accent);
+    /* Hosts the BrandMark SVG. The bare SVG carries its own
+       drop-shadow; we layer a stronger gold glow here for the
+       splash hero and run the breathe animation on the wrapper so
+       the rings + mark pulse together. */
+    display: inline-flex;
     line-height: 1;
-    filter: drop-shadow(0 0 16px rgba(201, 168, 76, 0.55));
+    filter: drop-shadow(0 0 22px rgba(201, 168, 76, 0.45));
     animation: mark-breathe 2.8s ease-in-out infinite;
     position: relative;
     z-index: 1;
