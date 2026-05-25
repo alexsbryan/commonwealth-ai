@@ -146,10 +146,14 @@ impl Runtime {
             step_summaries.join("\n\n")
         );
 
-        let synthesis_system = self.build_primary_system_message(
-            "Synthesize the given step results into a clear, comprehensive answer.",
-            context,
+        let budget_note = crate::runtime::build_response_length_directive(
+            self.inference_config.max_tokens,
         );
+        let synthesis_base = format!(
+            "Synthesize the given step results into a clear, comprehensive \
+             answer.\n\n{budget_note}"
+        );
+        let synthesis_system = self.build_primary_system_message(&synthesis_base, context);
 
         let synthesis = self
             .inference

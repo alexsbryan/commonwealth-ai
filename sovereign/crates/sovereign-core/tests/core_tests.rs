@@ -1495,3 +1495,164 @@ async fn await_user_info_yields_empty_on_skip() {
         other => panic!("expected empty Text, got {other:?}"),
     }
 }
+
+// ─── Cutoff legibility E2E (cutoff-chip plumbing) ────────────────
+//
+// Pins the wire: when a non-streaming inference call returns
+// `CompletionResponse { finish_reason: Some(Length), completion_tokens
+// : Some(N), .. }`, the desktop chat surface sees
+// `provenance.finish_reason == "length"` + `completion_tokens == N`
+// on the persisted message metadata. The desktop cutoff chip in
+// `AssistantMessage.svelte` reads exactly that — these tests are the
+// guard that the wire stays intact under future refactors of
+// `simple.rs::handle_message` / `ResponseProvenance` serialization.
+
+struct TruncatingMockInference {
+    response_text: String,
+    finish_reason: Option<FinishReason>,
+    completion_tokens: Option<u32>,
+}
+
+#[async_trait]
+impl InferenceProvider for TruncatingMockInference {
+    async fn complete(&self, _request: &CompletionRequest) -> Result<CompletionResponse> {
+        Ok(CompletionResponse {
+            text: self.response_text.clone(),
+            tokens_used: self.completion_tokens.map(|c| c as usize).unwrap_or(10),
+            prompt_tokens: 0,
+            model_id: "truncating-mock".to_string(),
+            latency_ms: 1,
+            oicp_meta: None,
+            finish_reason: self.finish_reason.clone(),
+            completion_tokens: self.completion_tokens,
+        })
+    }
+
+    async fn complete_stream(
+        &self,
+        _request: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+        Err(Error::NotImplemented("mock".to_string()))
+    }
+
+    async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+        Err(Error::NotImplemented("mock".to_string()))
+    }
+
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            max_context_tokens: 2048,
+            supports_structured_output: false,
+            relative_speed: Speed::Fast,
+            relative_reasoning: Depth::Shallow,
+        }
+    }
+}
+
+fn build_runtime_with_finish(
+    response: &str,
+    finish_reason: Option<FinishReason>,
+    completion_tokens: Option<u32>,
+) -> (Runtime, Arc<MockStore>) {
+    let store = Arc::new(MockStore::new());
+    let runtime = Runtime::new(
+        Arc::new(TruncatingMockInference {
+            response_text: response.to_string(),
+            finish_reason,
+            completion_tokens,
+        }),
+        Box::new(PassthroughRouter),
+        Box::new(NoOpPlanner),
+        Arc::new(ToolRegistry::new()),
+        store.clone(),
+        Arc::new(SkillRegistry::new()),
+        Arc::new(AutoApprovalChannel),
+        sovereign_core::types::InferenceConfig::default(),
+    );
+    (runtime, store)
+}
+
+/// Length truncation flows from `CompletionResponse.finish_reason`
+/// through the simple handler into `metadata.provenance.finish_reason`
+/// as the OpenAI-compatible lowercase string the frontend reads.
+#[tokio::test]
+async fn cutoff_length_finish_reason_surfaces_in_provenance() {
+    let (runtime, store) = build_runtime_with_finish(
+        "...cut off mid-sentenc",
+        Some(FinishReason::Length),
+        Some(2047),
+    );
+    runtime.handle_message("Tell me everything", "c1").await.unwrap();
+
+    let msgs = store.messages.read().await;
+    let assistant_msg = &msgs[1];
+    let metadata = assistant_msg.metadata.as_ref().expect("metadata present");
+    let provenance = &metadata["provenance"];
+    assert_eq!(
+        provenance["finish_reason"],
+        serde_json::Value::String("length".to_string()),
+        "Length truncation must surface as lowercase 'length' for the cutoff chip"
+    );
+    assert_eq!(
+        provenance["completion_tokens"], serde_json::Value::from(2047),
+        "completion_tokens from provider must reach provenance"
+    );
+    // max_tokens_budget comes from inference_config.max_tokens (default 2048).
+    assert_eq!(
+        provenance["max_tokens_budget"],
+        serde_json::Value::from(2048),
+        "max_tokens_budget must reflect the runtime's configured cap"
+    );
+}
+
+/// Sibling test: clean Stop does NOT light up the chip. Negative
+/// control — without this, a regression that hardcodes Length would
+/// pass the truncation test while breaking the chip's specificity.
+#[tokio::test]
+async fn cutoff_clean_stop_does_not_signal_length() {
+    let (runtime, store) = build_runtime_with_finish(
+        "complete answer.",
+        Some(FinishReason::Stop),
+        Some(50),
+    );
+    runtime.handle_message("Short question?", "c1").await.unwrap();
+
+    let msgs = store.messages.read().await;
+    let metadata = msgs[1].metadata.as_ref().unwrap();
+    let provenance = &metadata["provenance"];
+    assert_eq!(
+        provenance["finish_reason"],
+        serde_json::Value::String("stop".to_string()),
+        "Stop reason must surface as 'stop' so the chip doesn't render on clean exits"
+    );
+    assert_ne!(
+        provenance["finish_reason"],
+        serde_json::Value::String("length".to_string()),
+    );
+}
+
+/// Provider that doesn't track finish_reason (older test stubs,
+/// remote APIs that don't expose it) must round-trip as
+/// `null`/absent. The chip's `if cutoffInfo` guard reads this as
+/// "don't render" — same outcome as `Stop`, but the metadata stays
+/// honest about not knowing rather than synthesising a value.
+#[tokio::test]
+async fn cutoff_missing_finish_reason_serializes_absent() {
+    let (runtime, store) = build_runtime_with_finish(
+        "best-effort answer",
+        None,
+        None,
+    );
+    runtime.handle_message("question", "c1").await.unwrap();
+
+    let msgs = store.messages.read().await;
+    let metadata = msgs[1].metadata.as_ref().unwrap();
+    let provenance = &metadata["provenance"];
+    // `#[serde(skip_serializing_if = "Option::is_none")]` on the
+    // ResponseProvenance field omits the key entirely when None.
+    assert!(
+        provenance.get("finish_reason").is_none()
+            || provenance["finish_reason"] == serde_json::Value::Null,
+        "finish_reason must be absent when provider didn't supply one, got: {provenance:?}"
+    );
+}

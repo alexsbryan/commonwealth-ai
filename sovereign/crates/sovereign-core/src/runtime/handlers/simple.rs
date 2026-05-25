@@ -106,12 +106,22 @@ impl Runtime {
                     now = c.current_claim,
                 ));
             }
+            // Witness path uses a fixed 2048 budget; the compact
+            // relational system message it just built doesn't carry
+            // the budget directive that `prepare_knowledge_context`
+            // splices for the non-witness path. Splice it here so the
+            // model knows the budget it actually has, not the larger
+            // configured one.
+            let witness_budget = 2048usize;
+            let budget_note =
+                crate::runtime::build_response_length_directive(witness_budget);
+            s.push_str(&format!("\n\n{budget_note}"));
             kc.system = s;
             // Mirror the Expressive relational budget: 2048 tokens
             // covers the planning-trace-then-close shape on the 9B,
             // and `enable_thinking: false` is the empirical setting
             // that triggers the auto-`</think>` close on Qwen3.5-vOP.
-            (2048, Some(false))
+            (witness_budget, Some(false))
         } else {
             (self.inference_config.max_tokens, None)
         };

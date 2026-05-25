@@ -491,17 +491,30 @@ struct ModelSlot {
 /// Current millis-since-epoch as `u64`. Saturates at 0 if the
 /// system clock is set before 1970 (impossible in practice;
 /// guarded so we never panic).
-/// Classify why a non-streaming `generate_sync` call stopped emitting
-/// tokens. `generate_sync` itself only returns `(text, prompt_tokens,
-/// completion_tokens)` — the loop's `while n_generated < max_tokens`
-/// + `is_eog_token` predicate is the source of truth, but threading
-/// a `FinishReason` enum back through every decode variant (MTP,
-/// single-token, jump-forward, structured-output, MTP-fallback) is a
-/// large surface change. Compute it here from the observed counts:
-/// if completion_tokens hit the request's `max_tokens` budget, the
-/// loop exited on length; otherwise it exited on EOS. The only false
-/// positive is the vanishing edge where EOS lands at exactly the
-/// budget boundary — accept that vs. the surgery cost.
+/// Outcome of one `generate_sync` call. Replaces the prior 3-tuple
+/// `(text, prompt_tokens, completion_tokens)` return so callers can
+/// see WHY generation stopped without re-deriving it from a counts
+/// comparison. The single-token loop tracks `finish_reason` from its
+/// actual exit branches (EOS → Stop, budget exhausted → Length); MTP
+/// + batched paths still synthesise it from `finish_reason_from_counts`
+/// until their own loops are threaded too.
+#[derive(Debug, Clone)]
+pub(crate) struct GenerationOutcome {
+    pub text: String,
+    pub prompt_tokens: usize,
+    pub completion_tokens: usize,
+    pub finish_reason: FinishReason,
+}
+
+/// Synthesise `FinishReason` from observed token counts. Real source
+/// of truth is the decode loop's exit branch (EOS vs `n_generated >=
+/// max_tokens`); this helper is the fallback for variants that haven't
+/// been migrated to return the typed reason directly (MTP +
+/// generate_sync_batched as of 2026-05-25). The only false positive
+/// is the vanishing edge where EOS lands at exactly the budget
+/// boundary. Single-token path uses its real exit-branch signal
+/// instead — see `GenerationOutcome` construction at the end of the
+/// single-token loop in `generate_sync`.
 fn finish_reason_from_counts(request: &CompletionRequest, completion_tokens: usize) -> FinishReason {
     match request.max_tokens {
         Some(budget) if completion_tokens >= budget => FinishReason::Length,
@@ -1108,7 +1121,7 @@ impl ModelSlot {
         slot_ctx: &mut SlotContext,
         request: &CompletionRequest,
         quirks: &ModelQuirks,
-    ) -> Result<(String, usize, usize)> {
+    ) -> Result<GenerationOutcome> {
         // **MTP dispatch (Phase A widened 2026-05-17).** Route to
         // MTP when the slot has a draft context AND the request has
         // no tools. Tools stay gated out because the tool-call
@@ -1161,7 +1174,21 @@ impl ModelSlot {
             // `SOVEREIGN_MTP_QUARANTINE_DISABLE=1` to opt out
             // (debugging MTP-stability work).
             match Self::generate_sync_mtp(model, model_id, slot_ctx, request, quirks) {
-                Ok(r) => return Ok(r),
+                Ok((text, prompt_tokens, completion_tokens)) => {
+                    // MTP loop hasn't been threaded for typed FinishReason
+                    // yet — synthesise via the counts helper. Migrating
+                    // MTP would require touching the draft+verify loop's
+                    // exit branches; deferred until the verify-side
+                    // acceptance-rate work settles.
+                    let finish_reason =
+                        finish_reason_from_counts(request, completion_tokens);
+                    return Ok(GenerationOutcome {
+                        text,
+                        prompt_tokens,
+                        completion_tokens,
+                        finish_reason,
+                    });
+                }
                 Err(e) => {
                     let msg = e.to_string();
                     // The three error sites that signal "MTP draft side
@@ -1522,6 +1549,15 @@ impl ModelSlot {
         let mut jump_fwd_max: usize = 0;
         let mut jump_fwd_bytes_n: usize = 0;
 
+        // Real finish_reason tracking — replaces the chars-per-token
+        // heuristic the runtime used to do post-hoc. Default to Length
+        // (the `while n_generated < max_tokens` predicate is the exit
+        // condition when the loop body doesn't break early). EOS path
+        // overwrites with Stop. Set this AFTER each potential exit
+        // branch — leaving it Length on a clean budget exhaustion is
+        // the correct answer.
+        let mut exit_reason: FinishReason = FinishReason::Length;
+
         while n_generated < max_tokens {
             if Instant::now() > deadline {
                 let elapsed = started_at.elapsed().as_secs();
@@ -1557,6 +1593,7 @@ impl ModelSlot {
             sampler.accept(token);
 
             if model.is_eog_token(token) {
+                exit_reason = FinishReason::Stop;
                 break;
             }
 
@@ -1980,10 +2017,16 @@ impl ModelSlot {
             jump_fwd_max,
             jump_fwd_bytes_n,
             jump_fwd_ratio = format!("{jump_fwd_ratio:.3}"),
+            finish_reason = exit_reason.as_openai_str(),
             "inference: end-of-generation"
         );
 
-        Ok((output, tokens.len(), n_generated))
+        Ok(GenerationOutcome {
+            text: output,
+            prompt_tokens: tokens.len(),
+            completion_tokens: n_generated,
+            finish_reason: exit_reason,
+        })
     }
 
     /// **MTP speculative-decoding loop (Phase A).** Direct port of the
@@ -5981,7 +6024,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut *ctx_lock, &request, &quirks)
                 }));
-                let (text, prompt_tokens, completion_tokens) = match result {
+                let outcome: GenerationOutcome = match result {
                     Ok(Ok(r)) => r,
                     Ok(Err(e)) => {
                         tracing::warn!(slot = %slot_label_owned, error = %e, "inference error");
@@ -6000,16 +6043,15 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     }
                 };
                 let latency_ms = start.elapsed().as_millis() as u64;
-                let finish_reason = finish_reason_from_counts(&request, completion_tokens);
                 Ok(CompletionResponse {
-                    text,
-                    tokens_used: prompt_tokens + completion_tokens,
-                    prompt_tokens,
+                    text: outcome.text,
+                    tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
+                    prompt_tokens: outcome.prompt_tokens,
                     model_id: slot.model_id.clone(),
                     latency_ms,
                     oicp_meta: None,
-                    finish_reason: Some(finish_reason),
-                    completion_tokens: Some(completion_tokens as u32),
+                    finish_reason: Some(outcome.finish_reason),
+                    completion_tokens: Some(outcome.completion_tokens as u32),
                 })
             })
             .await
@@ -6098,7 +6140,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                             &quirks,
                         )
                     }));
-                    let (text, prompt_tokens, completion_tokens) = match result {
+                    let outcome: GenerationOutcome = match result {
                         Ok(Ok(r)) => r,
                         Ok(Err(e)) => {
                             tracing::warn!(
@@ -6123,17 +6165,15 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         }
                     };
                     let latency_ms = start.elapsed().as_millis() as u64;
-                    let finish_reason =
-                        finish_reason_from_counts(&request, completion_tokens);
                     Ok(CompletionResponse {
-                        text,
-                        tokens_used: prompt_tokens + completion_tokens,
-                        prompt_tokens,
+                        text: outcome.text,
+                        tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
+                        prompt_tokens: outcome.prompt_tokens,
                         model_id: slot.model_id.clone(),
                         latency_ms,
                         oicp_meta: None,
-                        finish_reason: Some(finish_reason),
-                        completion_tokens: Some(completion_tokens as u32),
+                        finish_reason: Some(outcome.finish_reason),
+                        completion_tokens: Some(outcome.completion_tokens as u32),
                     })
                 })
                 .await
@@ -6231,7 +6271,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut *ctx_lock, &request, &quirks)
                 }));
 
-                let (text, prompt_tokens, completion_tokens) = match result {
+                let outcome: GenerationOutcome = match result {
                     Ok(Ok(r)) => r,
                     Ok(Err(e)) => {
                         tracing::warn!(slot = slot_label, error = %e, "inference error");
@@ -6250,19 +6290,18 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 *last_use.blocking_lock() = Some(Instant::now());
 
-                let finish_reason = finish_reason_from_counts(&request, completion_tokens);
                 Ok((CompletionResponse {
-                    text,
-                    tokens_used: prompt_tokens + completion_tokens,
-                    prompt_tokens,
+                    text: outcome.text,
+                    tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
+                    prompt_tokens: outcome.prompt_tokens,
                     // `slot` may have been dropped on the fresh-ctx
                     // path; use the model_id cloned before the
                     // branch.
                     model_id: model_id.clone(),
                     latency_ms,
                     oicp_meta: None,
-                    finish_reason: Some(finish_reason),
-                    completion_tokens: Some(completion_tokens as u32),
+                    finish_reason: Some(outcome.finish_reason),
+                    completion_tokens: Some(outcome.completion_tokens as u32),
                 }, slot_label))
             })
             .await
@@ -6309,7 +6348,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut *ctx_lock, &request, &quirks)
                 }));
 
-                let (text, prompt_tokens, completion_tokens) = match result {
+                let outcome: GenerationOutcome = match result {
                     Ok(Ok(r)) => r,
                     Ok(Err(e)) => {
                         tracing::warn!(slot = "fast", error = %e, "inference error");
@@ -6325,17 +6364,16 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 };
 
                 let latency_ms = start.elapsed().as_millis() as u64;
-                let finish_reason = finish_reason_from_counts(&request, completion_tokens);
 
                 Ok(CompletionResponse {
-                    text,
-                    tokens_used: prompt_tokens + completion_tokens,
-                    prompt_tokens,
+                    text: outcome.text,
+                    tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
+                    prompt_tokens: outcome.prompt_tokens,
                     model_id: slot.model_id.clone(),
                     latency_ms,
                     oicp_meta: None,
-                    finish_reason: Some(finish_reason),
-                    completion_tokens: Some(completion_tokens as u32),
+                    finish_reason: Some(outcome.finish_reason),
+                    completion_tokens: Some(outcome.completion_tokens as u32),
                 })
             })
             .await
