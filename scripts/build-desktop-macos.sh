@@ -99,6 +99,13 @@ fi
 export SDKROOT="${SDKROOT:-$(xcrun --show-sdk-path)}"
 log "SDKROOT: $SDKROOT"
 
+# ggml-backend-dl.cpp uses std::filesystem (introduced macOS 10.15); the cc
+# crate that llama-cpp-sys-4's cmake build leans on defaults lower. Export so
+# it reaches the build script's compiler invocation (matches CI + the root
+# .cargo/config.toml [env]).
+export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-10.15}"
+log "MACOSX_DEPLOYMENT_TARGET: $MACOSX_DEPLOYMENT_TARGET"
+
 # ─── Homebrew deps ────────────────────────────────────────────────────
 if ! command -v brew >/dev/null 2>&1; then
     log "Homebrew not installed. Install from https://brew.sh and retry."

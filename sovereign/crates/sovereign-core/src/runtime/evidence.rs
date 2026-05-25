@@ -21,6 +21,8 @@
 
 use corpus_engine::ScoredChunk;
 
+use crate::types::Intent;
+
 /// Minimum token length for a query word to count toward title-match
 /// or content-coverage. Short tokens like "the", "and", "can", "you"
 /// are ignored regardless. Stopwords are dropped on top of this floor
@@ -386,6 +388,81 @@ pub(crate) fn route_from_evidence(shape: &EvidenceShape) -> SynthesisRoute {
     }
 
     SynthesisRoute::PrimarySynthesis
+}
+
+/// Which cohesion expander a knowledge turn should run after evidence-
+/// shape routing. Three mutually-exclusive strategies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ExpansionStrategy {
+    /// Pull the whole dominant document — the turn landed decisively on
+    /// one source and wants depth, not breadth.
+    DominantSource,
+    /// Pull a few chunks from each of the top-N distinct sources — the
+    /// turn needs breadth across several articles.
+    TopSources,
+    /// Initial retrieval already has the right shape; expand nothing.
+    NoExpansion,
+}
+
+/// Decide the cohesion-expansion strategy for a knowledge turn —
+/// **intent-aware** by design.
+///
+/// `route_from_evidence` answers "which slot" (Fast vs Primary) from
+/// shape alone. This answers "which expander", and shape alone is *not*
+/// enough: a `ComparisonQuery` is a contrast across ≥2 subjects, so it
+/// must never collapse onto a single dominant source — even when the
+/// evidence shape looks concentrated. On a cross-corpus index that
+/// happens constantly: one dense article (e.g. SEP's
+/// `einstein-philscience`) wins source-dominance for an "Einstein vs
+/// Newton" query and the dominant-source expander then strips the
+/// comparison down to one side. The 2026-05-25 synth audit caught
+/// exactly this — comparative wiki questions scored 2/11 sources
+/// because dominant-source expansion collapsed them onto SEP. See
+/// `docs/RERANK_EXPERIMENT.md` for the SEP-vs-wiki single-source-vs-
+/// breadth structural split this guards against.
+///
+/// Returns the strategy plus a short grep-friendly reason for the
+/// `retrieval_audit` glassbox trace.
+pub(crate) fn decide_expansion_strategy(
+    intent: &Intent,
+    route: SynthesisRoute,
+    shape: &EvidenceShape,
+) -> (ExpansionStrategy, &'static str) {
+    // Comparisons are the one intent that structurally needs breadth
+    // regardless of how concentrated the pool looks.
+    let needs_breadth = matches!(intent, Intent::ComparisonQuery);
+
+    // Depth: a clearly-dominant single source — but never for a
+    // comparison, which would defeat the contrast.
+    if matches!(route, SynthesisRoute::FastFocused)
+        && shape.top_source_repeat_count >= EVIDENCE_MIN_TOP_SOURCE_REPEAT
+        && !needs_breadth
+    {
+        return (ExpansionStrategy::DominantSource, "fast_single_source");
+    }
+
+    // Breadth: multi-source synthesis (Primary route) OR any comparison,
+    // as long as ≥2 distinct sources are actually present to spread over.
+    if (matches!(route, SynthesisRoute::PrimarySynthesis) || needs_breadth)
+        && shape.distinct_sources >= 2
+    {
+        let reason = if needs_breadth {
+            "comparison_breadth"
+        } else {
+            "multi_source_synthesis"
+        };
+        return (ExpansionStrategy::TopSources, reason);
+    }
+
+    // Nothing to expand. Distinguish a comparison that lacked the ≥2
+    // distinct sources to spread over (a retrieval-recall problem worth
+    // seeing in the trace) from an ordinary concentrated/weak turn.
+    let reason = if needs_breadth {
+        "comparison_single_source_pool"
+    } else {
+        "no_expansion"
+    };
+    (ExpansionStrategy::NoExpansion, reason)
 }
 
 /// Heading-aware chunkers (and many extractors) prepend the document
@@ -842,5 +919,82 @@ mod evidence_shape_tests {
         let shape = compute_evidence_shape(&chunks, "tell me about the scheduler design");
         assert!(shape.title_match);
         assert!(!shape.is_off_target());
+    }
+}
+
+#[cfg(test)]
+mod expansion_strategy_tests {
+    use super::{
+        build_test_evidence_shape, decide_expansion_strategy, ExpansionStrategy, SynthesisRoute,
+    };
+    use crate::types::Intent;
+
+    #[test]
+    fn comparison_never_collapses_onto_dominant_source() {
+        // Concentrated pool (top source repeats 4×, title match) that
+        // WOULD trigger dominant-source expansion for a normal query.
+        // A comparison must instead spread across its distinct sources.
+        // This is the 2026-05-25 wiki regression guard: comparative
+        // questions were collapsing onto a single dense SEP article and
+        // scoring 0 of the compared wiki sources. See RERANK_EXPERIMENT.md.
+        let shape = build_test_evidence_shape(10, 3, true, 4);
+        let (strategy, reason) = decide_expansion_strategy(
+            &Intent::ComparisonQuery,
+            SynthesisRoute::FastFocused,
+            &shape,
+        );
+        assert_eq!(strategy, ExpansionStrategy::TopSources);
+        assert_eq!(reason, "comparison_breadth");
+    }
+
+    #[test]
+    fn comparison_with_single_source_pool_expands_nothing() {
+        // Only one distinct source present — no breadth to spread over.
+        // Better to expand nothing than to collapse depth-first.
+        let shape = build_test_evidence_shape(6, 1, true, 4);
+        let (strategy, reason) = decide_expansion_strategy(
+            &Intent::ComparisonQuery,
+            SynthesisRoute::FastFocused,
+            &shape,
+        );
+        assert_eq!(strategy, ExpansionStrategy::NoExpansion);
+        assert_eq!(reason, "comparison_single_source_pool");
+    }
+
+    #[test]
+    fn concentrated_non_comparison_still_takes_dominant_source() {
+        // The fix must NOT regress the single-source-lookup case.
+        let shape = build_test_evidence_shape(10, 2, true, 3);
+        let (strategy, _) = decide_expansion_strategy(
+            &Intent::KnowledgeQuery,
+            SynthesisRoute::FastFocused,
+            &shape,
+        );
+        assert_eq!(strategy, ExpansionStrategy::DominantSource);
+    }
+
+    #[test]
+    fn multi_source_primary_takes_top_sources() {
+        let shape = build_test_evidence_shape(10, 4, false, 1);
+        let (strategy, reason) = decide_expansion_strategy(
+            &Intent::KnowledgeQuery,
+            SynthesisRoute::PrimarySynthesis,
+            &shape,
+        );
+        assert_eq!(strategy, ExpansionStrategy::TopSources);
+        assert_eq!(reason, "multi_source_synthesis");
+    }
+
+    #[test]
+    fn weak_non_comparison_fast_focused_expands_nothing() {
+        // FastFocused but below the repeat floor and single-source:
+        // no dominant signal, nothing to spread — expand nothing.
+        let shape = build_test_evidence_shape(4, 1, false, 1);
+        let (strategy, _) = decide_expansion_strategy(
+            &Intent::KnowledgeQuery,
+            SynthesisRoute::FastFocused,
+            &shape,
+        );
+        assert_eq!(strategy, ExpansionStrategy::NoExpansion);
     }
 }

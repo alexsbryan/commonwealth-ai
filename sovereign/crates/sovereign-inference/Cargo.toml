@@ -54,7 +54,18 @@ llguidance = { workspace = true }
 # includes MTP (Multi-Token Prediction) via upstream PR #22673 — our
 # reason for moving off llama-cpp-2 0.1.146. See `crate::llama` for
 # the migration shim that absorbs the API shape changes.
-llama-cpp-4 = { version = "0.2.57", features = ["metal"] }
+#
+# default-features = false drops the vendored default `openmp` on macOS.
+# Apple clang ships no OpenMP runtime, so the `openmp` feature makes
+# llama-cpp-sys-4 hunt for a Homebrew libomp and build ggml with
+# -DGGML_OPENMP=ON — which then links libomp.dylib, a NON-self-contained
+# runtime dep the .app would have to bundle (the same -dylib trap the
+# static-link cutover closed; see [[project_desktop_linux_build_deps]]).
+# ggml's native pthread threadpool covers CPU ops without it, and Metal
+# does the real work. We re-add `mtmd` (the other half of the vendored
+# default). Linux keeps openmp below — libgomp is a standard system lib
+# there, so it's a packageable dep, not a bundling problem.
+llama-cpp-4 = { version = "0.2.57", default-features = false, features = ["metal", "mtmd"] }
 llama-cpp-sys-4 = "0.2.57"
 
 [target.'cfg(target_os = "linux")'.dependencies]

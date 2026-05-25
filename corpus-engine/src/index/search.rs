@@ -658,6 +658,40 @@ impl CorpusIndex {
         }
 
         let after = reranked.len();
+
+        // Multi-article diversity (glassbox, OPT-IN). The regressed bench
+        // metric is title-coverage — how many DISTINCT sources reach the
+        // top-K. Counting distinct sources separates two failure modes
+        // that look identical in the final score: "the right articles
+        // never entered the candidate pool" (recall) vs "the rerank/atlas
+        // blend collapsed them out of top-K" (diversity collapse).
+        //
+        // Cost discipline: every line of this is gated on the
+        // `retrieval_audit` target being enabled. In production (target
+        // off) we pay ONE atomic level-check + a zero-cost closure
+        // literal — the HashSet passes and title clones never run. They
+        // only execute when an investigator sets `retrieval_audit=info`.
+        // No added allocation on the hot retrieval path otherwise.
+        let audit_on =
+            tracing::enabled!(target: "retrieval_audit", tracing::Level::INFO);
+        let source_key = |c: &ScoredChunk| -> String {
+            c.source_doc_id
+                .clone()
+                .or_else(|| c.title.clone())
+                .unwrap_or_else(|| format!("__chunk_{:?}", c.chunk_id))
+        };
+        // Distinct sources in the pre-truncate scored pool (vs the
+        // post-truncate top-K below) is the collapse-vs-recall tell.
+        let pool_distinct_sources = if audit_on {
+            reranked
+                .iter()
+                .map(&source_key)
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+        } else {
+            0
+        };
+
         reranked.truncate(limit);
 
         tracing::debug!(
@@ -675,6 +709,33 @@ impl CorpusIndex {
             min_score = ?config.min_score,
             "CorpusIndex::search_with_rerank complete"
         );
+
+        // Sibling event on the shared `retrieval_audit` target so the
+        // bench post-mortem can read per-corpus diversity. `returned_titles`
+        // is the exact set the title-coverage metric scores against.
+        if audit_on {
+            let returned_distinct_sources = reranked
+                .iter()
+                .map(&source_key)
+                .collect::<std::collections::HashSet<_>>()
+                .len();
+            let returned_titles: Vec<String> = reranked
+                .iter()
+                .map(|c| c.title.clone().unwrap_or_default())
+                .collect();
+            tracing::info!(
+                target: "retrieval_audit",
+                event = "rerank_diversity",
+                corpus = %self.corpus_id,
+                pool_chunks = before,
+                pool_distinct_sources,
+                returned_chunks = reranked.len(),
+                returned_distinct_sources,
+                atlas_active,
+                returned_titles = ?returned_titles,
+                "retrieval_audit: rerank_diversity"
+            );
+        }
         Ok(reranked)
     }
 

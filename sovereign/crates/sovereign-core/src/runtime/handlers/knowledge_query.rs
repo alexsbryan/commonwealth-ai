@@ -836,30 +836,48 @@ impl Runtime {
         // coverage of the dominant article. The cost is occasional
         // displacement of title-expand chunks (T2/T7/T8 v22) but
         // the net is +19pt fact, +22pt src vs baseline.
-        let single_source_expansion = matches!(route, SynthesisRoute::FastFocused)
-            && shape.top_source_repeat_count >= EVIDENCE_MIN_TOP_SOURCE_REPEAT;
+        // Which expander to run. Intent-aware: comparisons take breadth,
+        // never the single-dominant-source collapse (which would strip a
+        // contrast down to one side — see `decide_expansion_strategy`).
+        let (expansion_strategy, expansion_reason) =
+            decide_expansion_strategy(intent, route, &shape);
+        tracing::info!(
+            target: "retrieval_audit",
+            event = "expansion_decision",
+            intent = ?intent,
+            route = ?route,
+            strategy = ?expansion_strategy,
+            reason = expansion_reason,
+            top_source_repeat = shape.top_source_repeat_count,
+            distinct_sources = shape.distinct_sources,
+            "retrieval_audit: expansion_decision"
+        );
         let expansion_kind: &'static str;
-        let (mut chunks, knowledge_char_budget, expansion_fired) = if single_source_expansion {
-            expansion_kind = "dominant_source";
-            let (expanded, _from_source, _grounding, _dropped) =
-                self.expand_from_dominant_source(chunks, &shape).await;
-            (expanded, EXPANDED_KNOWLEDGE_CHARS, true)
-        } else if matches!(route, SynthesisRoute::PrimarySynthesis) && shape.distinct_sources >= 2 {
-            let (expanded, sources_expanded, _total) =
-                self.expand_from_top_sources(chunks).await;
-            // Only count as "fired" when the expander actually pulled
-            // from ≥ 2 sources — otherwise we're back to the initial
-            // chunk set and the prompt budget should reflect that.
-            if sources_expanded >= 2 {
-                expansion_kind = "top_sources";
+        let (mut chunks, knowledge_char_budget, expansion_fired) = match expansion_strategy {
+            ExpansionStrategy::DominantSource => {
+                expansion_kind = "dominant_source";
+                let (expanded, _from_source, _grounding, _dropped) =
+                    self.expand_from_dominant_source(chunks, &shape).await;
                 (expanded, EXPANDED_KNOWLEDGE_CHARS, true)
-            } else {
-                expansion_kind = "top_sources_noop";
-                (expanded, MAX_KNOWLEDGE_CHARS, false)
             }
-        } else {
-            expansion_kind = "none";
-            (chunks, MAX_KNOWLEDGE_CHARS, false)
+            ExpansionStrategy::TopSources => {
+                let (expanded, sources_expanded, _total) =
+                    self.expand_from_top_sources(chunks).await;
+                // Only count as "fired" when the expander actually pulled
+                // from ≥ 2 sources — otherwise we're back to the initial
+                // chunk set and the prompt budget should reflect that.
+                if sources_expanded >= 2 {
+                    expansion_kind = "top_sources";
+                    (expanded, EXPANDED_KNOWLEDGE_CHARS, true)
+                } else {
+                    expansion_kind = "top_sources_noop";
+                    (expanded, MAX_KNOWLEDGE_CHARS, false)
+                }
+            }
+            ExpansionStrategy::NoExpansion => {
+                expansion_kind = "none";
+                (chunks, MAX_KNOWLEDGE_CHARS, false)
+            }
         };
 
         // Naturalistic audit — post-expansion composition. After the
@@ -902,7 +920,8 @@ impl Runtime {
                 event = "post_expansion",
                 kind = expansion_kind,
                 fired = expansion_fired,
-                single_source_expansion,
+                single_source_expansion = expansion_kind == "dominant_source",
+                reason = expansion_reason,
                 total = chunks.len(),
                 by_corpus = ?corpus_pairs,
                 top5_articles = ?article_top,
