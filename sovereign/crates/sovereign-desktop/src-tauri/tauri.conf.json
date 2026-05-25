@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicoverbruggen/tauri-v2-schema/main/src/tauri-conf.schema.json",
   "productName": "Sovereign",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "identifier": "com.sovereign.desktop",
   "build": {
     "frontendDist": "../dist",
