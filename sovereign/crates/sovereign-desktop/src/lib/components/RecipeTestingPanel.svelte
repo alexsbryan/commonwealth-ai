@@ -329,7 +329,7 @@
   }
 
   .tab-intro code {
-    font-family: monospace;
+    font-family: var(--font-mono);
     background: var(--bg-surface);
     padding: 1px 4px;
     border-radius: 3px;
@@ -672,7 +672,7 @@
     flex: 1;
     min-width: 0;
     font-size: 0.75rem;
-    font-family: monospace;
+    font-family: var(--font-mono);
     color: var(--text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -724,7 +724,7 @@
   .report-text {
     margin: 0;
     padding: 12px 14px;
-    font-family: monospace;
+    font-family: var(--font-mono);
     font-size: 0.72rem;
     line-height: 1.55;
     color: var(--text-secondary);

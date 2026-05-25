@@ -1200,7 +1200,7 @@
     overflow: hidden;
     color: var(--inner-ink);
     background: oklch(98% 0.006 250);
-    font-family: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: var(--inner-font-sans);
     font-size: clamp(1.0625rem, 1.5vw + 0.5rem, 1.25rem);
     line-height: 1.7;
     letter-spacing: -0.005em;
@@ -1350,7 +1350,7 @@
     display: inline-block;
     padding: 0 4px;
     margin: 0 1px;
-    font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+    font-family: var(--inner-font-mono);
     font-size: 0.85em;
     color: var(--inner-ink-muted);
     background: oklch(from var(--inner-bg-cool) calc(l - 0.03) c h);

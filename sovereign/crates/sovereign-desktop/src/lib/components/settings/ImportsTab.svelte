@@ -892,7 +892,7 @@
   .path-hint {
     font-size: 0.72rem;
     color: var(--text-muted, #888);
-    font-family: ui-monospace, monospace;
+    font-family: var(--font-mono);
   }
   .gliner-error {
     margin: 0;

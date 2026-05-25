@@ -228,7 +228,7 @@
   }
 
   .muted.code {
-    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-family: var(--font-mono);
     background: var(--bg-input);
     padding: 6px 10px;
     border-radius: var(--radius);
@@ -237,7 +237,7 @@
   }
 
   code {
-    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-family: var(--font-mono);
     font-size: 0.78rem;
   }
 

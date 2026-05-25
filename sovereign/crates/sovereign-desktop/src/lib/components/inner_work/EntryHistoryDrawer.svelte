@@ -244,7 +244,7 @@
     transform: translateX(-100%);
     transition: transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
     box-shadow: 0 0 0 1px var(--inner-rule), 4px 0 18px oklch(15% 0.005 250 / 0.06);
-    font-family: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: var(--inner-font-sans);
   }
 
   .drawer.open .panel {

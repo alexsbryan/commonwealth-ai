@@ -47,7 +47,7 @@
     padding: 0.6rem 0.7rem;
     border-radius: 4px;
     overflow-x: auto;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--font-mono);
     font-size: 0.74rem;
     line-height: 1.4;
     color: var(--fg, #e6e6e8);

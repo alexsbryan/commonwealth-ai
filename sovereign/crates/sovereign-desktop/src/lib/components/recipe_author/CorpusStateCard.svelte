@@ -75,7 +75,7 @@
     margin: 0;
   }
   code {
-    font-family: ui-monospace, monospace;
+    font-family: var(--font-mono);
     font-size: 0.78rem;
   }
   .path {

@@ -581,7 +581,7 @@
   }
 
   .memory-sources code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--inner-font-mono);
     font-size: 0.92em;
   }
 
@@ -638,7 +638,7 @@
     padding: 0.75em 1em;
     background: oklch(from var(--inner-bg-cool) calc(l - 0.025) c h);
     border-radius: 4px;
-    font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+    font-family: var(--inner-font-mono);
     font-size: 0.82em;
     line-height: 1.55;
     color: var(--inner-ink);
@@ -674,7 +674,7 @@
     display: inline-block;
     padding: 0 4px;
     margin: 0 1px;
-    font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+    font-family: var(--inner-font-mono);
     font-size: 0.85em;
     color: var(--inner-ink-muted);
     background: oklch(from var(--inner-bg-cool) calc(l - 0.03) c h);
