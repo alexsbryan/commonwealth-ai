@@ -590,6 +590,7 @@ fn upsert_local_registry_entry(
         mesh_sharing: recipe.corpus.mesh_sharing,
         prebuilt: None,
         parent_corpus_id: recipe.corpus.parent_corpus_id.clone(),
+        catalog_status: None,
     });
     snapshot.generated_at = rfc3339_now();
 

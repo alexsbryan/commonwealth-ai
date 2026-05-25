@@ -68,12 +68,23 @@
     return `${Math.floor(diff / 86400)}d ago`;
   }
 
-  const tiers: { id: string; name: string; desc: string }[] = [
-    { id: "essential", name: "Essential", desc: "Wikipedia" },
-    { id: "research", name: "Research", desc: "Wikipedia + scholarly sources" },
-    { id: "technical", name: "Technical", desc: "Wikipedia + Stack Exchange" },
-    { id: "full", name: "Full", desc: "All knowledge bases" },
-  ];
+  // Catalog tier comes from `registry_snapshot.toml::catalog_status`
+  // — the registry is the single source of truth so the UI never
+  // grows a parallel allowlist. Anything missing the field defaults
+  // to "preview" (under Coming soon, install disabled) so newly-
+  // registered recipes don't accidentally surface as featured.
+  function catalogTier(c: CorpusEntry): "featured" | "preview" | "hidden" {
+    switch (c.catalog_status) {
+      case "featured":
+      case "hidden":
+        return c.catalog_status;
+      case "preview":
+      case null:
+      case undefined:
+      default:
+        return "preview";
+    }
+  }
 
   // The backend (`list_corpora` Tauri command) returns the full catalog
   // from `corpus_engine::builtin_corpora()` — there's no longer a fallback
@@ -100,7 +111,24 @@
   let isPartition = (id: string): boolean =>
     /^.+-partition-(?:node-[0-9a-f]+|self)$/.test(id);
   let topLevelCorpora = $derived(
-    corpora.filter((c) => !c.parent_corpus_id && !isPartition(c.id)),
+    corpora.filter(
+      (c) =>
+        !c.parent_corpus_id &&
+        !isPartition(c.id) &&
+        catalogTier(c) !== "hidden",
+    ),
+  );
+  let featuredCorpora = $derived(
+    topLevelCorpora.filter((c) => catalogTier(c) === "featured"),
+  );
+  // Coming-soon rail: every other top-level recipe, sorted by name.
+  // Install actions render as disabled so users can see what's on the
+  // roadmap without crashing into half-built ingest pipelines.
+  let comingSoonCorpora = $derived(
+    topLevelCorpora
+      .filter((c) => catalogTier(c) === "preview")
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name)),
   );
   // Group children by parent_corpus_id so each parent row can render
   // its layers in a sub-panel.
@@ -256,14 +284,6 @@
     }
   }
 
-  async function installTier(tierId: string) {
-    const tierCorpora = corpora.filter(
-      (c) => c.tiers.includes(tierId) && c.status === "not_installed",
-    );
-    for (const c of tierCorpora) {
-      await handleInstall(c.id);
-    }
-  }
 
   async function toggleHealth(id: string) {
     if (expanded.has(id)) {
@@ -348,20 +368,7 @@
 </script>
 
 <div class="knowledge-status">
-  {#if corpora.length > 0 && installedCount === 0 && !anyInstalling}
-    <div class="tier-banner">
-      <p class="tier-prompt">Nothing installed yet. Pick a tier to get going:</p>
-      <div class="tier-buttons">
-        {#each tiers as tier}
-          <button class="tier-btn" onclick={() => installTier(tier.id)}>
-            {tier.name}
-          </button>
-        {/each}
-      </div>
-    </div>
-  {/if}
-
-  {#each topLevelCorpora as corpus}
+  {#each featuredCorpora as corpus}
     {@const inProgress =
       corpus.status === "installing" ||
       (progress[corpus.id] &&
@@ -458,8 +465,9 @@
               Starting…
             {/if}
           {:else}
-            ~{corpus.size_compressed_gb} GB download · ~{corpus.size_indexed_gb} GB indexed
-            <div class="corpus-blurb">{corpus.description}</div>
+            <span title={corpus.description}>
+              ~{corpus.size_compressed_gb} GB download · ~{corpus.size_indexed_gb} GB indexed
+            </span>
           {/if}
         </div>
         {#if childrenByParent[corpus.id]?.length}
@@ -472,96 +480,105 @@
                   progress[layer.id].phase !== "complete" &&
                   progress[layer.id].phase !== "failed")}
               {@const layerInstalled = layer.status === "installed"}
-              <div class="layer-chip-wrap">
-                <button
-                  type="button"
-                  class="layer-chip"
-                  class:installed={layerInstalled}
-                  class:installing={layerInProgress}
-                  class:available={!layerInstalled && !layerInProgress}
-                  data-testid="layer-chip"
-                  data-layer-id={layer.id}
-                  data-layer-status={layerInProgress ? "installing" : layer.status}
-                  disabled={layerInProgress}
-                  aria-pressed={layerInstalled}
-                  aria-label="{layerInstalled
-                    ? `Remove ${layer.name} layer`
-                    : layerInProgress
-                      ? `${layer.name} layer is installing`
-                      : `Add ${layer.name} layer`}"
-                  title={layer.description}
-                  onclick={() =>
-                    layerInstalled ? handleRemove(layer.id) : handleInstall(layer.id)}
-                >
-                  <span class="layer-dot" aria-hidden="true"></span>
-                  <span class="layer-name">{layer.name}</span>
-                  <span class="layer-action" aria-hidden="true">
-                    {#if layerInstalled}
-                      Remove
-                    {:else if layerInProgress}
-                      Installing…
-                    {:else}
-                      Add
-                    {/if}
-                  </span>
-                </button>
-                {#if layer.id === "wikipedia-newsworthy" && layerInstalled && newsworthy}
-                  {@const lt = newsworthy.last_tick}
-                  {@const selfIsLeader =
-                    newsworthy.self_in_pool &&
-                    newsworthy.leader_node_id === lt?.node_id_str}
-                  {@const installWarnLive =
-                    !newsworthy.local_corpus_installed &&
-                    newsworthy.installed_peer_count === 0}
-                  <div class="layer-status" data-testid="newsworthy-status">
-                    {#if lt}
-                      {#if selfIsLeader}
-                        <span class="status-role status-leader" title="This node fetches Portal:Current_events on each tick and writes the daily page into the wikipedia-newsworthy corpus. Followers refresh tracked articles into the parent `wikipedia` corpus.">
-                          you are leader
-                        </span>
-                      {:else if newsworthy.leader_node_id}
-                        <span class="status-role" title="Election picks the lowest NodeId among peers that have wikipedia-newsworthy installed. The leader writes the daily portal page; this node is a follower and will refresh tracked articles into the parent wikipedia corpus when there are any.">
-                          follower · leader {newsworthy.leader_node_id.slice(0, 16)}…
-                        </span>
-                      {:else}
-                        <span class="status-role status-warn" title="No online peer has wikipedia-newsworthy installed. Daily portal ingest is paused mesh-wide until at least one node installs it.">
-                          no leader — no peer has it installed
-                        </span>
-                      {/if}
-                      <span class="status-sep">·</span>
-                      <span title="Time since the watcher's last completed tick. Default interval is 24h; use 'Run tick now' to bypass.">
-                        last tick {formatRelativeAgo(lt.observed_at)}
-                      </span>
-                      <span class="status-sep">·</span>
-                      <span title="Articles tracked under the 30-day rolling window. Leader writes this set after each portal ingest.">
-                        {lt.tracked_total} tracked
-                      </span>
-                      {#if installWarnLive}
-                        <span class="status-warn">
-                          · install incomplete locally — click Add again to repair
-                        </span>
-                      {/if}
-                      {#if selfIsLeader && !lt.portal_ingested && lt.tracked_total === 0}
-                        <button
-                          type="button"
-                          class="tick-now-btn"
-                          disabled={tickInFlight}
-                          onclick={runNewsworthyTickNow}
-                          title="Fire one watcher tick now. Fetches yesterday's Portal:Current_events, writes it to wikipedia-newsworthy, seeds the tracked-article set."
-                        >
-                          {tickInFlight ? "Running tick…" : "Run tick now →"}
-                        </button>
-                      {/if}
-                    {:else}
-                      <span class="status-pending">
-                        watcher starting — first tick lands within ~15 min
-                      </span>
-                    {/if}
-                  </div>
-                {/if}
-              </div>
+              <button
+                type="button"
+                class="layer-chip"
+                class:installed={layerInstalled}
+                class:installing={layerInProgress}
+                class:available={!layerInstalled && !layerInProgress}
+                data-testid="layer-chip"
+                data-layer-id={layer.id}
+                data-layer-status={layerInProgress ? "installing" : layer.status}
+                disabled={layerInProgress}
+                aria-pressed={layerInstalled}
+                aria-label="{layerInstalled
+                  ? `Remove ${layer.name} layer`
+                  : layerInProgress
+                    ? `${layer.name} layer is installing`
+                    : `Add ${layer.name} layer`}"
+                title={layer.description}
+                onclick={() =>
+                  layerInstalled ? handleRemove(layer.id) : handleInstall(layer.id)}
+              >
+                <span class="layer-dot" aria-hidden="true"></span>
+                <span class="layer-name">{layer.name}</span>
+                <span class="layer-action" aria-hidden="true">
+                  {#if layerInstalled}
+                    Remove
+                  {:else if layerInProgress}
+                    Installing…
+                  {:else}
+                    Add
+                  {/if}
+                </span>
+              </button>
             {/each}
           </div>
+
+          <!-- Per-layer status detail. Lives outside `.corpus-layers`
+               so the chips row stays uniform horizontally — pre-fix,
+               an installed newsworthy chip was a tall stacked column
+               (chip + status block) while siblings stayed single-line
+               and the `align-items: center` row centred them against
+               the taller wrap, pushing them visually lower. Status
+               now drops underneath the row at its own rhythm. -->
+          {#each childrenByParent[corpus.id] as layer}
+            {#if layer.id === "wikipedia-newsworthy" && layer.status === "installed" && newsworthy}
+              {@const lt = newsworthy.last_tick}
+              {@const selfIsLeader =
+                newsworthy.self_in_pool &&
+                newsworthy.leader_node_id === lt?.node_id_str}
+              {@const installWarnLive =
+                !newsworthy.local_corpus_installed &&
+                newsworthy.installed_peer_count === 0}
+              <div class="layer-status" data-testid="newsworthy-status">
+                <span class="layer-status-label">Newsworthy</span>
+                {#if lt}
+                  {#if selfIsLeader}
+                    <span class="status-role status-leader" title="This node fetches Portal:Current_events on each tick and writes the daily page into the wikipedia-newsworthy corpus. Followers refresh tracked articles into the parent `wikipedia` corpus.">
+                      you are leader
+                    </span>
+                  {:else if newsworthy.leader_node_id}
+                    <span class="status-role" title="Election picks the lowest NodeId among peers that have wikipedia-newsworthy installed. The leader writes the daily portal page; this node is a follower and will refresh tracked articles into the parent wikipedia corpus when there are any.">
+                      follower · leader {newsworthy.leader_node_id.slice(0, 16)}…
+                    </span>
+                  {:else}
+                    <span class="status-role status-warn" title="No online peer has wikipedia-newsworthy installed. Daily portal ingest is paused mesh-wide until at least one node installs it.">
+                      no leader — no peer has it installed
+                    </span>
+                  {/if}
+                  <span class="status-sep">·</span>
+                  <span title="Time since the watcher's last completed tick. Default interval is 24h; use 'Run tick now' to bypass.">
+                    last tick {formatRelativeAgo(lt.observed_at)}
+                  </span>
+                  <span class="status-sep">·</span>
+                  <span title="Articles tracked under the 30-day rolling window. Leader writes this set after each portal ingest.">
+                    {lt.tracked_total} tracked
+                  </span>
+                  {#if installWarnLive}
+                    <span class="status-warn">
+                      · install incomplete locally — click Add again to repair
+                    </span>
+                  {/if}
+                  {#if selfIsLeader && !lt.portal_ingested && lt.tracked_total === 0}
+                    <button
+                      type="button"
+                      class="tick-now-btn"
+                      disabled={tickInFlight}
+                      onclick={runNewsworthyTickNow}
+                      title="Fire one watcher tick now. Fetches yesterday's Portal:Current_events, writes it to wikipedia-newsworthy, seeds the tracked-article set."
+                    >
+                      {tickInFlight ? "Running tick…" : "Run tick now →"}
+                    </button>
+                  {/if}
+                {:else}
+                  <span class="status-pending">
+                    watcher starting — first tick lands within ~15 min
+                  </span>
+                {/if}
+              </div>
+            {/if}
+          {/each}
         {/if}
       </div>
 
@@ -619,6 +636,35 @@
     </div>
   {/each}
 
+  {#if comingSoonCorpora.length > 0}
+    <div class="coming-soon-section" data-testid="coming-soon-section">
+      <h4 class="coming-soon-title">Coming soon</h4>
+      <p class="coming-soon-blurb">Recipes on the bench. Hover any one for details.</p>
+      <div class="coming-soon-grid">
+        {#each comingSoonCorpora as corpus}
+          <div
+            class="cs-card"
+            aria-disabled="true"
+            title={corpus.description}
+          >
+            <div class="cs-card-head">
+              <span class="dot"></span>
+              <span class="cs-card-name">{corpus.name}</span>
+              {#if corpus.enrichment_enabled}
+                <span class="cs-enrich" title="Includes claim/relationship enrichment when ready">✦</span>
+              {/if}
+            </div>
+            <div class="cs-card-meta">
+              {corpus.size_indexed_gb < 1
+                ? `${Math.round(corpus.size_indexed_gb * 1024)} MB`
+                : `${corpus.size_indexed_gb} GB`} indexed
+            </div>
+          </div>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
 </div>
 
 <style>
@@ -627,33 +673,77 @@
     flex-direction: column;
     gap: 8px;
   }
-  .tier-banner {
-    padding: 12px 16px;
-    background: var(--bg-surface);
+  .coming-soon-section {
+    margin-top: 20px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--border);
+  }
+  .coming-soon-title {
+    font-size: 0.66rem;
+    font-weight: 600;
+    color: var(--lavender);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin: 0 0 4px;
+  }
+  .coming-soon-blurb {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin: 0 0 10px;
+    line-height: 1.5;
+  }
+  /* Two-column grid of compact cards. Replaces the dense full-width
+     vertical stack that listed every preview recipe with its full
+     description — at 11 entries that scrolled forever. Cards show
+     name + size only; full description lives in the tooltip. */
+  .coming-soon-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .cs-card {
+    padding: 8px 10px;
+    background: var(--bg-secondary);
     border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    margin-bottom: 8px;
+    border-radius: var(--radius);
+    opacity: 0.7;
+    transition: opacity 120ms ease, border-color 120ms ease;
+    cursor: help;
+    min-width: 0;
   }
-  .tier-prompt {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    margin-bottom: 8px;
+  .cs-card:hover {
+    opacity: 1;
+    border-color: var(--border-mid);
   }
-  .tier-buttons {
+  .cs-card-head {
     display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-  .tier-btn {
-    padding: 4px 14px;
+    align-items: center;
+    gap: 6px;
     font-size: 0.8rem;
     font-weight: 500;
-    background: var(--accent);
-    color: var(--text-on-accent);
-    border-radius: var(--radius);
+    color: var(--text-secondary);
+    min-width: 0;
   }
-  .tier-btn:hover {
-    background: var(--accent-hover);
+  .cs-card-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cs-enrich {
+    color: var(--accent-light);
+    font-size: 0.78rem;
+    flex-shrink: 0;
+  }
+  .cs-card-meta {
+    margin-top: 2px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+  .action-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
   }
   .corpus-row {
     display: flex;
@@ -862,15 +952,6 @@
     margin-left: 6px;
     white-space: nowrap;
   }
-  .corpus-blurb {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    margin-top: 2px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   /* ── Layers panel — sub-corpora rendered under their parent's row.
         e.g. Wikipedia carries Simple English (Layer 0) and Newsworthy
         (Layer 2) as toggleable chips. The whole chip is the
@@ -916,20 +997,31 @@
   .layer-chip:disabled {
     cursor: progress;
   }
-  .layer-chip-wrap {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-  }
+  /* Status block sits on its own row beneath the layer chips so the
+     chips row stays uniform regardless of which layer is installed.
+     Subtle muted indent communicates "this is detail about a chip
+     above" without nesting visually inside it. */
   .layer-status {
-    font-size: 0.68rem;
+    margin: 6px 0 0 12px;
+    padding: 6px 10px;
+    font-size: 0.7rem;
     color: var(--text-muted);
-    padding: 0 4px;
+    background: var(--bg-secondary);
+    border-left: 2px solid var(--border-mid);
+    border-radius: 4px;
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
-    line-height: 1.2;
+    gap: 6px;
+    align-items: baseline;
+    line-height: 1.4;
+  }
+  .layer-status-label {
+    font-size: 0.62rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-right: 2px;
   }
   .layer-status .status-role {
     color: var(--text-secondary);

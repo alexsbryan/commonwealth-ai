@@ -105,11 +105,11 @@
   ] as const;
 
   const TOOL_OPTS = [
-    { id: "shell",            label: "Shell",            desc: "Run shell commands on your machine. Sandboxed, and you approve each one." },
+    { id: "shell",            label: "Shell",            desc: "Run shell commands on this machine. You approve each one before it runs." },
     { id: "search",           label: "Web search",       desc: "Direct queries to whichever search provider you chose under Web Search." },
     { id: "web_fetch",        label: "Web fetch",        desc: "Read a specific URL the model wants to cite." },
     { id: "document",         label: "Document",         desc: "Read attached files and ingested documents passage by passage." },
-    { id: "knowledge_lookup", label: "Knowledge lookup", desc: "One look across your library, memory, and notes." },
+    { id: "knowledge_lookup", label: "Knowledge lookup", desc: "One deliberate sweep across your library, memory, and notes — plus web when Auto-escalate is on. Separate from the routine library search the assistant already does on every turn." },
   ] as const;
   function toggleTool(id: string) {
     if (!config) return;
@@ -486,8 +486,9 @@
       {#if activeTab === "models" && config}
 
         <section class="doc-section">
+          <span class="section-eyebrow">roles &middot; slots &middot; behaviour</span>
           <h2 class="doc-h2">Models</h2>
-          <p class="doc-intro">Four jobs, up to four models. Pick the file for each — Sovereign loads them only when something needs them.</p>
+          <p class="doc-intro">Four jobs, up to four models. Pick a file for each — Sovereign loads them only when something needs them.</p>
 
           {#if attachedToDaemon}
             <div class="doc-note">
@@ -539,9 +540,12 @@
           <div class="slot-list">
 
             <!-- Quick responder -->
-            <div class="slot-item" class:slot-item--open={activeSlot === "fast"}>
+            <div class="slot-item" class:slot-item--open={activeSlot === "fast"} data-role="fast">
               <button class="slot-item-row" onclick={() => toggleSlot("fast")} aria-expanded={activeSlot === "fast"}>
-                <span class="slot-item-role">Quick responder</span>
+                <span class="slot-item-role">
+                  Quick responder
+                  <span class="slot-item-sub">Short turns, instant replies</span>
+                </span>
                 <span class="slot-item-file">
                   {#if config.model_path}
                     {modelFileName(config.model_path)}
@@ -569,9 +573,12 @@
             </div>
 
             <!-- Main responder -->
-            <div class="slot-item" class:slot-item--open={activeSlot === "reasoning"}>
+            <div class="slot-item" class:slot-item--open={activeSlot === "reasoning"} data-role="primary">
               <button class="slot-item-row" onclick={() => toggleSlot("reasoning")} aria-expanded={activeSlot === "reasoning"}>
-                <span class="slot-item-role">Main responder</span>
+                <span class="slot-item-role">
+                  Main responder
+                  <span class="slot-item-sub">Research, long writing, deep analysis</span>
+                </span>
                 <span class="slot-item-file">
                   {#if config.primary_model_path}
                     {modelFileName(config.primary_model_path)}
@@ -599,9 +606,12 @@
             </div>
 
             <!-- Knowledge embedder -->
-            <div class="slot-item" class:slot-item--open={activeSlot === "embed"}>
+            <div class="slot-item" class:slot-item--open={activeSlot === "embed"} data-role="embed">
               <button class="slot-item-row" onclick={() => toggleSlot("embed")} aria-expanded={activeSlot === "embed"}>
-                <span class="slot-item-role">Knowledge embedder</span>
+                <span class="slot-item-role">
+                  Knowledge embedder
+                  <span class="slot-item-sub">Makes your library searchable</span>
+                </span>
                 <span class="slot-item-file">
                   {#if config.embed_model_path}
                     {modelFileName(config.embed_model_path)}
@@ -648,9 +658,12 @@
             </div>
 
             <!-- Code specialist -->
-            <div class="slot-item" class:slot-item--open={activeSlot === "code"}>
+            <div class="slot-item" class:slot-item--open={activeSlot === "code"} data-role="code">
               <button class="slot-item-row" onclick={() => toggleSlot("code")} aria-expanded={activeSlot === "code"}>
-                <span class="slot-item-role">Code specialist</span>
+                <span class="slot-item-role">
+                  Code specialist
+                  <span class="slot-item-sub">Optional — routes programming turns</span>
+                </span>
                 <span class="slot-item-file">
                   {#if config.code_model_path}
                     {modelFileName(config.code_model_path)}
@@ -864,7 +877,7 @@
                 </span>
               </div>
               <div class="cfg-entry-edit cfg-entry-edit--always">
-                <p class="cfg-entry-question">The full set of tools the assistant is allowed to reach for. It still picks which ones make sense each turn — this is the outer fence.</p>
+                <p class="cfg-entry-question">The full set of tools the assistant is allowed to invoke deliberately. The assistant still picks which ones make sense each turn — this is the outer fence. Library search the assistant does on its own (the "Wikipedia answered me" path) is separate and not gated here.</p>
                 {#each TOOL_OPTS as opt}
                   <label class="cfg-toggle-row">
                     <input
@@ -891,18 +904,13 @@
       {#if activeTab === "knowledge"}
         <section class="doc-section">
           <h2 class="doc-h2">Knowledge</h2>
-          <p class="doc-intro">Every source Sovereign can search lives on this machine. Install curated libraries from the catalog, or point it at your own folders and notes.</p>
+          <p class="doc-intro">Everything Sovereign searches lives on this machine.</p>
 
           <!-- Catalog corpora first — Wikipedia, SEP, etc. The wider
                reference universe sits above personal local sources
                so the user sees what's available before what they've
                added. -->
           <h3 class="doc-h3">Catalog libraries</h3>
-          <p class="doc-body">
-            Curated references — Wikipedia, Stanford Encyclopedia of
-            Philosophy, Stack Exchange — installable in one click.
-            Lives at <code class="path-inline">~/.sovereign/indexes/</code>.
-          </p>
           <KnowledgeStatus />
 
           <div class="doc-divider"></div>
@@ -915,20 +923,11 @@
                rhythm. The inner component drops its own h1/lede
                when `embedded` is set so headings don't stack. -->
           <h3 class="doc-h3">Your folders &amp; vaults</h3>
-          <p class="doc-body">
-            Point Sovereign at a folder of documents or an Obsidian
-            vault. Files never leave your computer.
-          </p>
           <div class="lk-embed">
             <LocalKnowledgeSection embedded {onOpenChatWithSeed} {onDropToChat} />
           </div>
 
-          <!-- Storage budget — directly related to what's installed -->
-          <div class="doc-divider"></div>
           <h3 class="doc-h3">Disk budget</h3>
-          <p class="doc-body">
-            How much disk Sovereign may use for installed libraries. Once you hit the ceiling, new installs are turned away — what's already installed stays put.
-          </p>
 
           {#if storageBudget}
             <div class="cfg-entry" class:cfg-entry--open={editingStorageBudget}>
@@ -1014,12 +1013,8 @@
 
           <!-- KnowledgeView — feature toggle, below the status facts -->
           {#if config}
-            <div class="doc-divider"></div>
             <h3 class="doc-h3">KnowledgeView</h3>
-            <p class="doc-body">
-              Builds a quiet map of recurring questions and tensions across your notes and conversations. The assistant reads it before answering, so it remembers what you've been working through. Everything stays on this machine.
-            </p>
-
+            <div class="surface-card">
             <div class="cfg-entry cfg-entry--toggle">
               <label class="cfg-toggle-row">
                 <input
@@ -1029,19 +1024,17 @@
                   class="cfg-checkbox"
                 />
                 <span class="cfg-toggle-body">
-                  <span class="cfg-toggle-label">Enable KnowledgeView</span>
-                  <span class="cfg-toggle-sub">Takes effect after a restart. Off means every session starts fresh.</span>
+                  <span class="cfg-toggle-label">Build a recurring-themes map across notes and conversations</span>
+                  <span class="cfg-toggle-sub">Read before every answer. Restart to apply.</span>
                 </span>
               </label>
             </div>
+            </div>
 
             <!-- Background ingest — operational controls, after features -->
-            <div class="doc-divider"></div>
             <h3 class="doc-h3">Background ingest</h3>
-            <p class="doc-body">
-              Large libraries can pin the GPU for hours. Throttle the duty cycle if you want the rest of the machine usable while it runs.
-            </p>
 
+            <div class="surface-card">
             <div class="cfg-entry">
               <div class="cfg-entry-display cfg-entry-display--static">
                 <span class="cfg-entry-name">Throttle</span>
@@ -1086,6 +1079,7 @@
                   <span class="cfg-toggle-sub">Stops handing work to peers and stops accepting theirs. Anything already running on this machine keeps going. Untick to rejoin — no restart needed.</span>
                 </span>
               </label>
+            </div>
             </div>
 
             {#if ingestStatusMessage}
@@ -1140,55 +1134,73 @@
            provider + API key are operator concerns that don't
            belong to any single mode. -->
       {#if activeTab === "tools" && config}
+        {@const provider = config.search_backend.provider}
+        {@const needsKey = provider !== "duckduckgo"}
+        {@const hasKey = !!config.search_backend.api_key}
         <section class="doc-section">
           <h2 class="doc-h2">Web search</h2>
           <p class="doc-intro">
             Queries go straight to whichever provider you pick — never through us. Comes up when the model needs something it can't find locally.
           </p>
 
-          <div class="cfg-entry">
-            <div class="cfg-entry-display cfg-entry-display--static">
-              <span class="cfg-entry-name">Provider</span>
-              <span class="cfg-entry-current">
-                <span class="cfg-entry-val">
-                  {config.search_backend.provider === 'duckduckgo' ? 'DuckDuckGo' : config.search_backend.provider === 'brave' ? 'Brave Search' : 'Tavily'}
-                </span>
-                {#if config.search_backend.provider === 'duckduckgo'}
-                  <span class="cfg-entry-tech">free · no key required</span>
-                {/if}
-              </span>
-            </div>
-            <div class="cfg-entry-edit cfg-entry-edit--always">
-              <select
-                class="cfg-select"
-                bind:value={config.search_backend.provider}
-                onchange={() => markDirty('search_provider')}
-                aria-label="Search provider"
+          <h3 class="doc-h3">Provider</h3>
+          <div class="provider-grid" role="radiogroup" aria-label="Search provider">
+            {#each [
+              { id: "duckduckgo", name: "DuckDuckGo", tag: "free",      hint: "Zero-config. No account, no key." },
+              { id: "brave",      name: "Brave Search", tag: "needs key", hint: "Independent index. Generous free tier." },
+              { id: "tavily",     name: "Tavily",     tag: "needs key", hint: "LLM-tuned results with snippets." },
+            ] as opt}
+              {@const selected = provider === opt.id}
+              <button
+                type="button"
+                class="provider-card"
+                class:provider-card--active={selected}
+                role="radio"
+                aria-checked={selected}
+                onclick={() => {
+                  config!.search_backend.provider = opt.id;
+                  markDirty('search_provider');
+                }}
               >
-                <option value="duckduckgo">DuckDuckGo — free, no key needed</option>
-                <option value="brave">Brave Search</option>
-                <option value="tavily">Tavily</option>
-              </select>
-              {#if config.search_backend.provider !== "duckduckgo"}
-                <div class="inline-field" style="margin-top: 8px;">
-                  <span class="inline-field-label">API key</span>
-                  <input
-                    class="cfg-text-input"
-                    type="password"
-                    value={config.search_backend.api_key ?? ""}
-                    oninput={(e) => {
-                      config!.search_backend.api_key = (e.target as HTMLInputElement).value || null;
-                      markDirty('search_api_key');
-                    }}
-                    aria-label="Search API key"
-                  />
-                </div>
-                <p class="cfg-caution" style="margin-top: 6px;">
-                  Saved in plain text inside <code class="path-inline">config.toml</code>. Use a key you can rotate if it ever gets exposed.
-                </p>
-              {/if}
-            </div>
+                <span class="provider-card-head">
+                  <span class="provider-card-name">{opt.name}</span>
+                  <span class="provider-card-tag provider-card-tag--{opt.tag === 'free' ? 'free' : 'paid'}">
+                    {opt.tag}
+                  </span>
+                </span>
+                <span class="provider-card-hint">{opt.hint}</span>
+              </button>
+            {/each}
           </div>
+
+          {#if needsKey}
+            <h3 class="doc-h3">API key</h3>
+            <div class="surface-card">
+              <div class="cfg-entry">
+                <div class="cfg-entry-edit cfg-entry-edit--always">
+                  <div class="inline-field">
+                    <input
+                      class="cfg-text-input"
+                      type="password"
+                      placeholder="paste your {provider === 'brave' ? 'Brave' : 'Tavily'} API key"
+                      value={config.search_backend.api_key ?? ""}
+                      oninput={(e) => {
+                        config!.search_backend.api_key = (e.target as HTMLInputElement).value || null;
+                        markDirty('search_api_key');
+                      }}
+                      aria-label="Search API key"
+                    />
+                    {#if hasKey}
+                      <span class="provider-card-tag provider-card-tag--free" aria-hidden="true">saved</span>
+                    {/if}
+                  </div>
+                  <p class="cfg-caution" style="margin-top: 8px;">
+                    Saved in plain text inside <code class="path-inline">config.toml</code>. Use a key you can rotate if it ever gets exposed.
+                  </p>
+                </div>
+              </div>
+            </div>
+          {/if}
         </section>
 
       {:else if activeTab === "tools"}
@@ -1589,6 +1601,42 @@
     margin: 22px 0 4px;
   }
 
+  /* ── Section eyebrow — small accent label above each h3 / h2.
+        Sans uppercase matches the existing `.doc-h3` eyebrow voice;
+        serif in this system is reserved for assistant utterance,
+        not UI chrome. Adds rhythm without inventing a parallel
+        type treatment. ── */
+  .section-eyebrow {
+    display: block;
+    font-family: var(--font-sans);
+    font-size: 0.66rem;
+    font-weight: 600;
+    color: var(--lavender);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin: 24px 0 -2px;
+  }
+  .section-eyebrow:first-child {
+    margin-top: 0;
+    margin-bottom: 4px;
+  }
+
+  /* ── Surface card — soft contained block for Knowledge sub-
+        sections (Disk budget, KnowledgeView, Background ingest).
+        Replaces the flat-list rhythm with a card-on-substrate
+        composition so each control reads as its own object. ── */
+  .surface-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px 18px;
+    margin-top: 10px;
+  }
+  .surface-card :global(.cfg-entry) {
+    border-bottom: none;
+    border-top: none;
+  }
+
   /* Inline file-path code style — matches the doc-body voice without
      pulling in monospace's heavier weight. Used for the
      `~/.sovereign/indexes/` reference in the Catalog corpora lede. */
@@ -1617,17 +1665,34 @@
   .lk-embed :global(.lk-section .head) {
     display: none;
   }
+  /* Each plate inside the embedded local-knowledge section reads as
+     a Settings surface-card — same `bg-secondary` substrate, same
+     border, same radius, same rhythm as KnowledgeView and Background
+     ingest. Drops the inner plate-head bottom rule (the rule was
+     useful in the standalone view where each plate sat on a hero-
+     headed page, but here the outer h3 already names the section
+     and a nested rule reads as borrowed chrome). */
   .lk-embed :global(.lk-section .plate) {
-    margin-top: 18px;
+    margin-top: 10px;
+    padding: 14px 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
     animation: none;
   }
   .lk-embed :global(.lk-section .plate:first-of-type) {
-    margin-top: 0;
+    margin-top: 10px;
   }
   .lk-embed :global(.lk-section .plate-head) {
-    border-bottom-color: var(--border);
-    padding-bottom: 6px;
+    border-bottom: none;
+    padding-bottom: 0;
     margin-bottom: 10px;
+  }
+  .lk-embed :global(.lk-section .plate.plate-add) {
+    /* Override the LocalKnowledgeSection's dashed-gold-gradient
+       fallback so the Add plate sits flush with its siblings. */
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
   }
 
   .doc-loading {
@@ -1664,15 +1729,17 @@
     gap: 2px;
   }
   .budget-meter-label {
-    font-size: 0.78rem;
+    font-family: var(--font-sans);
+    font-size: 0.66rem;
     font-weight: 600;
-    letter-spacing: 0.04em;
-    color: var(--text-muted);
+    letter-spacing: 0.12em;
     text-transform: uppercase;
+    color: var(--text-muted);
   }
   .budget-meter-figure {
     font-size: 0.95rem;
     color: var(--text-primary);
+    font-feature-settings: "tnum" 1;
   }
   .budget-meter-figure strong {
     font-weight: 600;
@@ -1736,11 +1803,33 @@
     border-radius: var(--radius-lg);
     overflow: hidden;
     margin-bottom: 4px;
+    background: var(--bg-primary);
   }
 
   .slot-item {
     border-bottom: 1px solid var(--border);
+    position: relative;
   }
+
+  /* State-colored left rail. Each slot role gets its own accent so
+     the four rows read as distinct surfaces rather than a uniform
+     stack: gold for the always-loaded Quick responder, lavender for
+     the on-demand Main responder, growth for the embedder (the slot
+     that makes your library searchable), muted for the optional
+     Code specialist. The rail brightens when the slot is open. */
+  .slot-item::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: var(--border-mid);
+    transition: background 140ms ease;
+  }
+  .slot-item[data-role="fast"]::before     { background: var(--accent); }
+  .slot-item[data-role="primary"]::before  { background: var(--lavender); }
+  .slot-item[data-role="embed"]::before    { background: var(--growth); }
+  .slot-item[data-role="code"]::before     { background: var(--border-bright); }
+  .slot-item--open::before { filter: brightness(1.25); }
 
   .slot-item:last-child {
     border-bottom: none;
@@ -1748,11 +1837,11 @@
 
   .slot-item-row {
     display: flex;
-    align-items: baseline;
-    gap: 10px;
+    align-items: center;
+    gap: 12px;
     width: 100%;
     text-align: left;
-    padding: 11px 14px;
+    padding: 14px 16px 14px 19px;
     background: none;
     border: none;
     cursor: pointer;
@@ -1761,19 +1850,31 @@
   }
 
   .slot-item-row:hover {
-    background: rgba(155, 135, 196, 0.04);
+    background: rgba(155, 135, 196, 0.05);
   }
 
   .slot-item--open .slot-item-row {
-    background: rgba(201, 168, 76, 0.04);
+    background: rgba(201, 168, 76, 0.05);
   }
 
   .slot-item-role {
-    font-size: 0.84rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    min-width: 140px;
+    font-family: var(--font-sans);
+    font-size: 0.88rem;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    color: var(--text-primary);
+    min-width: 150px;
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .slot-item-sub {
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    letter-spacing: 0.005em;
   }
 
   .slot-item-file {
@@ -1810,12 +1911,21 @@
   }
 
   .slot-item-meta {
-    font-size: 0.67rem;
-    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    font-family: var(--font-sans);
+    font-weight: 600;
     color: var(--text-muted);
-    letter-spacing: 0.04em;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     flex-shrink: 0;
+    padding: 2px 8px;
+    border: 1px solid var(--border-mid);
+    border-radius: 999px;
+    background: var(--bg-secondary);
   }
+  .slot-item[data-role="fast"] .slot-item-meta    { border-color: rgba(201, 168, 76, 0.35); color: var(--accent-light); }
+  .slot-item[data-role="primary"] .slot-item-meta { border-color: rgba(155, 135, 196, 0.35); color: var(--lavender-light); }
+  .slot-item[data-role="embed"] .slot-item-meta   { border-color: rgba(121, 196, 120, 0.35); color: var(--growth); }
 
   .slot-item-chevron {
     font-size: 0.7rem;
@@ -2006,6 +2116,94 @@
     font-size: 0.76rem;
     color: var(--text-muted);
     line-height: 1.45;
+  }
+
+  /* ── Web Search provider cards ───────────────────────────────── */
+  .provider-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 4px 0 4px;
+  }
+  .provider-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 14px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius-lg);
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    color: var(--text-primary);
+    transition: border-color 140ms ease, background 140ms ease, transform 80ms ease;
+    min-width: 0;
+  }
+  .provider-card:hover {
+    border-color: var(--lavender);
+    background: var(--lavender-glow);
+  }
+  .provider-card:focus-visible {
+    outline: 2px solid var(--lavender);
+    outline-offset: 2px;
+  }
+  .provider-card--active {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+  .provider-card--active:hover {
+    border-color: var(--accent-light);
+    background: var(--accent-dim);
+  }
+  .provider-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+  }
+  .provider-card-name {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.005em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .provider-card--active .provider-card-name {
+    color: var(--accent-light);
+  }
+  .provider-card-tag {
+    flex-shrink: 0;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 1px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--border-mid);
+    color: var(--text-muted);
+    background: var(--bg-input);
+  }
+  .provider-card-tag--free {
+    color: var(--growth);
+    border-color: rgba(121, 196, 120, 0.4);
+    background: rgba(121, 196, 120, 0.10);
+  }
+  .provider-card-tag--paid {
+    color: var(--lavender-light);
+    border-color: rgba(155, 135, 196, 0.4);
+    background: var(--lavender-dim);
+  }
+  .provider-card-hint {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .provider-card--active .provider-card-hint {
+    color: var(--text-secondary);
   }
 
   /* ── Preset selector ─────────────────────────────────────────── */

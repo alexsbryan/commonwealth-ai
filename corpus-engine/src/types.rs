@@ -469,6 +469,12 @@ pub struct BuiltinCorpus {
     /// parent row. `None` for top-level corpora.
     #[serde(default)]
     pub parent_corpus_id: Option<String>,
+    /// Catalog presentation tier — `"featured" | "preview" | "hidden"`.
+    /// Mirrors `RegistryEntry::catalog_status`. `None` defaults to
+    /// `"preview"` on the desktop side so newly-registered recipes
+    /// land under "Coming soon" until explicitly promoted.
+    #[serde(default)]
+    pub catalog_status: Option<String>,
 }
 
 // ─── Corpus Spec ────────────────────────────────────────

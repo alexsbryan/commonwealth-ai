@@ -80,6 +80,25 @@ pub struct RegistryEntry {
     /// the picker.
     #[serde(default)]
     pub parent_corpus_id: Option<String>,
+    /// Catalog presentation tier — controls how (and whether) the
+    /// desktop's Knowledge tab surfaces this recipe. Curation lives
+    /// in the registry snapshot so the UI doesn't grow a parallel
+    /// allowlist that drifts whenever a recipe matures.
+    ///
+    ///   - `"featured"` — robustly built end-to-end. Shown as a normal
+    ///     install row.
+    ///   - `"preview"` (default) — recipe declared but ingest pipeline
+    ///     isn't ready for everyday users. Shown under "Coming soon"
+    ///     with the install button disabled.
+    ///   - `"hidden"` — never shown in the catalog picker. Used for
+    ///     dev/internal corpora (e.g. `alignment`) and recipes that
+    ///     are installed automatically by another surface (e.g.
+    ///     `conversations-anthropic`, installed by Settings → Imports).
+    ///
+    /// Layers (`parent_corpus_id` set) ignore this field — they
+    /// always render under the parent's row as toggleable chips.
+    #[serde(default)]
+    pub catalog_status: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -286,6 +305,7 @@ impl RecipeRegistry {
                 license: e.license.clone(),
                 mesh_sharing: e.mesh_sharing,
                 parent_corpus_id: e.parent_corpus_id.clone(),
+                catalog_status: e.catalog_status.clone(),
             })
             .collect()
     }

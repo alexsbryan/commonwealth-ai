@@ -334,24 +334,11 @@
   .lk-section--embedded {
     padding: 0;
   }
-  /* The Add affordance reads first in embedded mode. Give it a
-     subtle stamp-wash background so it stands apart from the
-     listing plates without shouting. */
-  .lk-section--embedded :global(.plate.plate-add) {
-    padding: 14px 16px 16px;
-    border: 1px dashed var(--lk-rule);
-    border-radius: 6px;
-    background: linear-gradient(
-      180deg,
-      var(--lk-stamp-glow, transparent) 0%,
-      transparent 100%
-    );
-  }
-  .lk-section--embedded :global(.plate.plate-add .plate-head) {
-    border-bottom: none;
-    padding-bottom: 0;
-    margin-bottom: 8px;
-  }
+  /* Embedded mode overrides live on the consumer side
+     (SettingsPanel.svelte → `.lk-embed :global(.plate*)`) so the
+     surface-card pattern stays unified across the Knowledge tab.
+     Keeping them here would duplicate rules with the same specificity
+     and produce source-order fights. */
 
   .head {
     margin-bottom: 28px;
