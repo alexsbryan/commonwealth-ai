@@ -509,6 +509,110 @@ PRAGMA user_version = 8;
 COMMIT;
 ";
 
+// ─── Schema migration v8 → v9 (Tiered retrieval + mesh propagation) ─────────
+
+/// Applied to databases at `user_version = 8`. Lands the additive
+/// surface for the tiered-retrieval-over-NoteStore port (T1 embeddings)
+/// and mesh-wide propagation (per
+/// `sovereign/docs/specs/NOTES_TIERED.md` + the
+/// `~/.claude/plans/let-s-work-on-this-compiled-whale.md` plan).
+///
+/// Five new columns on `notes`:
+///
+/// - `private INTEGER NOT NULL DEFAULT 0` — opt-out flag. Private
+///   notes never enter the mesh wire (`app_id = "notes-private"` is
+///   structurally `GOSSIP_EXCLUDED`).
+/// - `origin_node_id TEXT` — node that authored the note. NULL for
+///   pre-v9 rows + locally-authored rows whose author wasn't
+///   recorded; non-NULL after first ingest from a peer. Carries
+///   authorship across toolbx `node_id` rotation — the
+///   `content_hash` is what dedupes, this field is informational.
+/// - `tombstone INTEGER NOT NULL DEFAULT 0` — soft-delete flag for
+///   propagation. Tombstoned notes still exist locally (so the
+///   `supersedes` chain can land later edits) but are filtered out
+///   of the audit display and the propagation delta scan. Tombstone
+///   wins regardless of edit `updated_at`.
+/// - `content_hash TEXT` — deterministic id over
+///   `kind || US || content || US || scope || US || COALESCE(feature_id,'') || US || session_id`
+///   (where US is 0x1F). Stable across `origin_node_id` rotation;
+///   primary key on the gossip wire; idempotent insert on collision.
+///   Backfilled by `NoteStore::open` in Rust post-migration (SQLite
+///   has no built-in cryptographic hash) — see
+///   `notes::backfill_content_hashes`.
+/// - `fork_of TEXT` — set when a remote-ingested note has the same
+///   `supersedes` target as a locally-known note that's also
+///   superseded by a sibling. Points to the sibling head. Reader
+///   surfaces forks; no silent LWW collapse. Knowledge notes are
+///   not source code merges — losing an edit because the other
+///   peer's clock was 200ms ahead would be a high-cost failure
+///   mode.
+///
+/// Two new tables:
+///
+/// - `note_embeddings` — one row per note with a computed T1
+///   embedding. ON DELETE CASCADE so cleanup is automatic.
+/// - `note_propagation_watermark` — one row per peer tracking the
+///   last note id this peer was successfully shipped. Drives the
+///   per-round delta query so a 10k-note backlog catches up across
+///   multiple gossip rounds instead of a full re-ship every round.
+///
+/// Three new indexes:
+///
+/// - `idx_notes_propagation` — `(scope, private, created_at DESC)`
+///   partial index that the delta scan uses (`WHERE private=0 AND
+///   tombstone=0 AND scope='global' AND created_at > ?`).
+/// - `idx_notes_content_hash` — partial index on content_hash for
+///   the propagation-receive dedup lookup.
+/// - `idx_notes_fork_of` — partial index on fork_of for the
+///   resolve-fork operator action's "find all forks" scan.
+///
+/// Pure additive — no `notes.kind` CHECK constraint change, so no
+/// rename-recreate-copy dance, no FTS5 rebuild. Same shape as
+/// `MIGRATION_V6` (the prior plain-`ADD COLUMN` migration).
+/// Idempotent: gated by `PRAGMA user_version < 9` in
+/// `NoteStore::open`.
+pub(crate) const MIGRATION_V9: &str = "
+BEGIN;
+
+ALTER TABLE notes ADD COLUMN private        INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE notes ADD COLUMN origin_node_id TEXT;
+ALTER TABLE notes ADD COLUMN tombstone      INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE notes ADD COLUMN content_hash   TEXT;
+ALTER TABLE notes ADD COLUMN fork_of        TEXT;
+
+CREATE TABLE IF NOT EXISTS note_embeddings (
+    note_id    TEXT    PRIMARY KEY
+        REFERENCES notes(id) ON DELETE CASCADE,
+    embedding  BLOB    NOT NULL,
+    model_id   TEXT    NOT NULL,
+    dim        INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS note_propagation_watermark (
+    peer_node_id         TEXT    PRIMARY KEY,
+    last_sent_created_at INTEGER NOT NULL,
+    last_sent_note_id    TEXT    NOT NULL,
+    last_acked_at        INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_notes_propagation
+    ON notes(scope, private, created_at DESC)
+    WHERE private = 0 AND tombstone = 0;
+
+CREATE INDEX IF NOT EXISTS idx_notes_content_hash
+    ON notes(content_hash)
+    WHERE content_hash IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_notes_fork_of
+    ON notes(fork_of)
+    WHERE fork_of IS NOT NULL;
+
+PRAGMA user_version = 9;
+
+COMMIT;
+";
+
 // ─── Schema migration v2 → v3 (ATOS note kinds: uncertainty,
 //     postmortem_pointer, redteam_finding) ─────────────────────────────────
 

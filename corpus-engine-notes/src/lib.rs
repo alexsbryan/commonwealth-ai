@@ -43,5 +43,9 @@ mod notes_schema;
 pub mod project_docs;
 
 pub use error::{Error, Result};
-pub use notes::{NoteRow, NoteScope, NoteSource, NoteStore, ScopeFilter, ToolCallLogRow};
+pub use notes::{
+    EmbedFn, ExportedNoteEmbedding, ExportedNoteEntity, ExportedNoteRow,
+    IngestRemoteReport, NotePropagationEvent, NoteRow, NoteScope, NoteSource, NoteStore,
+    PropagationSinkFn, ScopeFilter, ToolCallLogRow,
+};
 pub use project_docs::{find_markdown_files, DocResult, ProjectDocsStore};

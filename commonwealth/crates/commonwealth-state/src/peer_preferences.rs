@@ -190,11 +190,20 @@ impl PeerPreferenceStore {
 ///   never write Public records to this namespace and never write
 ///   Private records to `work-atlas`; both halves of the contract
 ///   are pinned by `Privacy::app_id()` returning a hardcoded literal.
+/// - `notes-private` — Per-note opt-out for the NoteStore mesh
+///   propagation surface (see `corpus-engine-notes`). The store
+///   only writes propagation events to `notes` when
+///   `scope=global && !private`; private notes route to
+///   `notes-private` and never enter the wire. Symmetric to the
+///   work-atlas pattern.
 ///
 /// Each entry is pinned by a test that asserts `is_gossip_excluded`
 /// returns `true` for it.
-pub const GOSSIP_EXCLUDED_APP_IDS: &[&str] =
-    &[PEER_PREFERENCES_APP_ID, "work-atlas-private"];
+pub const GOSSIP_EXCLUDED_APP_IDS: &[&str] = &[
+    PEER_PREFERENCES_APP_ID,
+    "work-atlas-private",
+    "notes-private",
+];
 
 /// Returns true when the given `app_id` is excluded from gossip
 /// replication. Centralized helper so the gossip path doesn't have
@@ -312,5 +321,17 @@ mod tests {
     #[test]
     fn gossip_excludes_work_atlas_private_app_id() {
         assert!(is_gossip_excluded("work-atlas-private"));
+    }
+
+    /// **Structural invariant pin** for the NoteStore mesh
+    /// propagation surface (see `corpus-engine-notes`). Per-note
+    /// `private` writes route to `notes-private`; the structural
+    /// gossip filter is what guarantees those records never leave
+    /// the local node. Public notes ride `app_id="notes"` and
+    /// must continue to gossip.
+    #[test]
+    fn gossip_excludes_notes_private_app_id() {
+        assert!(is_gossip_excluded("notes-private"));
+        assert!(!is_gossip_excluded("notes"));
     }
 }

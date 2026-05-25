@@ -29,18 +29,565 @@
 //! `tokio::sync::Mutex`. All operations are microsecond-fast; no
 //! `spawn_blocking` is needed.
 
+use std::future::Future;
 use std::path::Path;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, Connection};
+use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 
 use crate::error::{Error, Result};
 use crate::notes_schema::{
     MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6,
-    MIGRATION_V7, MIGRATION_V8, SCHEMA_NEW,
+    MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, SCHEMA_NEW,
 };
+
+/// Propagation event shipped on the mesh wire for a single note.
+///
+/// The full unit of propagation: note row + T1 embedding (if
+/// present) + T2 entities (empty until T2 lands) + the propagation
+/// metadata (`tombstone`, `updated_at`, `private`). Identified
+/// uniquely by `content_hash` — stable across `origin_node_id`
+/// rotation, idempotent on re-delivery, the same on every peer.
+///
+/// Wire format chosen so:
+/// - Two peers writing semantically identical notes produce
+///   byte-identical events keyed by the same `content_hash`.
+///   Dedup on receive is a `SELECT WHERE content_hash = ?`.
+/// - The reader can apply embeddings + entities in the same SQL
+///   transaction as the note row.
+/// - A `tombstone=true` event with the same `content_hash` as a
+///   prior note marks it deleted; LWW on `updated_at` is the
+///   tiebreak, but a tombstone always wins (per Step 6b).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct NotePropagationEvent {
+    pub content_hash: String,
+    pub note: ExportedNoteRow,
+    pub embedding: Option<ExportedNoteEmbedding>,
+    /// Empty until T2 lands; the wire field is provisioned now so
+    /// T2 ships as a data change, not a schema change.
+    #[serde(default)]
+    pub entities: Vec<ExportedNoteEntity>,
+    pub tombstone: bool,
+    pub updated_at: i64,
+}
+
+/// Note row carried on the propagation wire. Mirrors the
+/// `NoteRow` shape (minus rowid + retirement metadata, which is
+/// node-local lifecycle state) plus the v9 propagation fields.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ExportedNoteRow {
+    pub id: String,
+    pub kind: String,
+    pub content: String,
+    pub symbols: Vec<String>,
+    pub files: Vec<String>,
+    pub session_id: String,
+    pub created_at: i64,
+    pub scope: String,
+    pub feature_id: Option<String>,
+    pub related_entity: Option<String>,
+    pub source: String,
+    pub supersedes: Option<String>,
+    pub payload_json: Option<String>,
+    pub origin_node_id: Option<String>,
+}
+
+/// T1 embedding wire payload. Carries the LE-encoded BLOB along
+/// with the model id + dim so a peer that's running a different
+/// embed model can fall back to recomputing rather than blending
+/// incompatible vectors.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ExportedNoteEmbedding {
+    pub model_id: String,
+    pub dim: i64,
+    pub embedding: Vec<u8>,
+}
+
+/// T2 entity wire payload (one row per (entity, kind) tuple
+/// extracted from the note's content). Empty until GLiNER
+/// extraction lands.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ExportedNoteEntity {
+    pub entity: String,
+    pub kind: String,
+}
+
+/// Fire-and-forget callback the daemon installs to publish
+/// propagation events. The closure adapts the event into whatever
+/// transport the caller owns (most commonly
+/// `MeshStore::put(app_id="notes", key=content_hash, value=event)`,
+/// occasionally a channel for tests).
+///
+/// Sync because `MeshStore` writes are SQLite + LWW — microsecond
+/// fast. NoteStore stays dep-free per `ARCH §5.4` — the closure
+/// hides the transport.
+pub type PropagationSinkFn = Arc<dyn Fn(&NotePropagationEvent) + Send + Sync>;
+
+/// Result of [`NoteStore::ingest_remote_notes`] — counts so the
+/// gossip layer can log convergence progress.
+#[derive(Debug, Default, Clone)]
+pub struct IngestRemoteReport {
+    /// Events that inserted a new note locally.
+    pub inserted: usize,
+    /// Events whose `content_hash` already existed; idempotent skip.
+    pub deduplicated: usize,
+    /// Events that marked an existing note as a tombstone.
+    pub tombstoned: usize,
+    /// Events that flagged a concurrent-supersedes fork (set
+    /// `fork_of` on insert; preserves both siblings).
+    pub forked: usize,
+    /// Events that were rejected for structural reasons (private
+    /// flag on the wire, scope != global, etc).
+    pub rejected: usize,
+}
+
+/// Embedding function injected by the caller.
+///
+/// Sovereign passes its local Embed slot (a closure over a daemon
+/// inference client). Commonwealth passes an HTTP client wrapping
+/// `/v1/embeddings`. Tests pass a deterministic mock that returns
+/// a fixed vector keyed on the input text. NoteStore stays
+/// dependency-free of any concrete embed transport per
+/// `ARCH §5.4` (parameterise on data, not source identity) — the
+/// caller wires the closure once and the store handles persistence,
+/// blending, and soft-fail.
+///
+/// Shape mirrors `corpus_engine::types::EmbedFn` exactly so call
+/// sites that already produce one can share the same `Arc` between
+/// the document corpus and the note store.
+///
+/// The future is `'static`; the closure copies `&str` internally
+/// rather than borrowing across the await point.
+pub type EmbedFn = Arc<
+    dyn Fn(&str) -> Pin<Box<dyn Future<Output = Result<Vec<f32>>> + Send>> + Send + Sync,
+>;
+
+/// Unit separator (0x1F) used between fields in [`content_hash`]
+/// preimage. Outside the printable-ASCII range, so user content
+/// can't collide with a delimiter the way `'|'` or `':'` would.
+pub(crate) const HASH_FIELD_SEP: char = '\u{1F}';
+
+/// Compute the content hash that identifies a note across peers.
+///
+/// Stable across `origin_node_id` rotation (toolbx container
+/// rebuilds): hash inputs are content + scoping fields only, not
+/// the node id. Two peers writing the same `(kind, content, scope,
+/// feature_id, session_id)` produce the same hash, so the dedup
+/// on receive is idempotent.
+///
+/// We salt with `HASH_FIELD_SEP` between fields so adversarial
+/// content can't tunnel a forged delimiter (e.g. `"a\u{1F}b"` in
+/// content would still hash distinctly from a real `kind="a"
+/// content="b"` because of the field-position prefix bytes).
+///
+/// SHA-256 over UTF-8 bytes, hex-encoded lowercase. Output is 64
+/// hex chars. Deterministic, no salt, no clock dependency.
+pub(crate) fn compute_content_hash(
+    kind: &str,
+    content: &str,
+    scope: &str,
+    feature_id: Option<&str>,
+    session_id: &str,
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(kind.as_bytes());
+    hasher.update([HASH_FIELD_SEP as u8]);
+    hasher.update(content.as_bytes());
+    hasher.update([HASH_FIELD_SEP as u8]);
+    hasher.update(scope.as_bytes());
+    hasher.update([HASH_FIELD_SEP as u8]);
+    hasher.update(feature_id.unwrap_or("").as_bytes());
+    hasher.update([HASH_FIELD_SEP as u8]);
+    hasher.update(session_id.as_bytes());
+    let digest = hasher.finalize();
+    let mut out = String::with_capacity(64);
+    for byte in digest {
+        out.push_str(&format!("{:02x}", byte));
+    }
+    out
+}
+
+/// FNV-1a 64-bit hash over a slice of `&str`s. Used by the
+/// reconciliation digest to summarise each 8-bit bucket of
+/// content hashes into one cheap u64. Not cryptographic — the
+/// guarantee we need is "two peers with identical hash lists
+/// produce identical digests", and FNV gives that with much less
+/// code than SHA. Iteration order is the caller's responsibility
+/// (`content_hash_digest` sorts before calling).
+pub(crate) fn fnv1a_64_strings(parts: &[&str]) -> u64 {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for p in parts {
+        for byte in p.as_bytes() {
+            hash ^= *byte as u64;
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        // Use 0x1F separator so a hash list `["abc"]` and `["a","bc"]`
+        // produce distinct digests.
+        hash ^= 0x1F;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+/// Parse the bucket id (first hex byte) out of a `content_hash`.
+/// Returns `None` for malformed hashes — the caller drops these
+/// from the digest rather than panicking.
+pub(crate) fn parse_bucket_id(content_hash: &str) -> Option<u8> {
+    if content_hash.len() < 2 {
+        return None;
+    }
+    u8::from_str_radix(&content_hash[..2], 16).ok()
+}
+
+/// Read the blend weight from `SOVEREIGN_NOTES_EMBED_WEIGHT`,
+/// clamped to `[0.0, 1.0]`. Unset → default `0.5`.
+///
+/// A weight of `0.0` is the operator-facing kill-switch for the
+/// semantic blend; baseline FTS5-only behaviour resumes
+/// byte-identical.
+pub(crate) fn read_embed_weight_env() -> f32 {
+    std::env::var("SOVEREIGN_NOTES_EMBED_WEIGHT")
+        .ok()
+        .and_then(|s| s.parse::<f32>().ok())
+        .map(|w| w.clamp(0.0, 1.0))
+        .unwrap_or(0.5)
+}
+
+/// Min/max bounds over a candidate pool, used to normalise blend
+/// inputs into `[0.0, 1.0]`. Degenerate pools (single element, or
+/// all-equal) normalise everyone to `0.5` so the dimension
+/// contributes equally — preferable to NaN or division-by-zero.
+pub(crate) struct MinMax {
+    min: f64,
+    max: f64,
+}
+
+impl MinMax {
+    pub(crate) fn from_slice(values: &[f64]) -> Self {
+        let mut min = f64::INFINITY;
+        let mut max = f64::NEG_INFINITY;
+        for v in values {
+            if *v < min {
+                min = *v;
+            }
+            if *v > max {
+                max = *v;
+            }
+        }
+        Self { min, max }
+    }
+
+    pub(crate) fn normalise(&self, value: f64) -> f64 {
+        let span = self.max - self.min;
+        if span.abs() < 1e-9 {
+            0.5
+        } else {
+            ((value - self.min) / span).clamp(0.0, 1.0)
+        }
+    }
+}
+
+/// Cosine similarity between two embedding vectors. Returns `0.0`
+/// on dimension mismatch (we treat dim-mismatch as "incompatible
+/// model, no signal" rather than panicking — see content_hash
+/// invariant about LE-encoded BLOB reproducibility).
+pub(crate) fn cosine_sim(a: &[f32], b: &[f32]) -> f64 {
+    if a.is_empty() || a.len() != b.len() {
+        return 0.0;
+    }
+    let mut dot = 0.0_f64;
+    let mut na = 0.0_f64;
+    let mut nb = 0.0_f64;
+    for (x, y) in a.iter().zip(b.iter()) {
+        let xf = *x as f64;
+        let yf = *y as f64;
+        dot += xf * yf;
+        na += xf * xf;
+        nb += yf * yf;
+    }
+    let denom = na.sqrt() * nb.sqrt();
+    if denom < 1e-9 {
+        0.0
+    } else {
+        dot / denom
+    }
+}
+
+/// FTS5 candidate pool: top-`pool_size` notes ranked by BM25.
+/// Returns `(NoteRow, bm25_rank)` — bm25 returns "lower is
+/// better"; the caller flips the sign before min-max
+/// normalisation.
+fn fetch_bm25_pool(
+    conn: &Connection,
+    query: &str,
+    symbols: &[String],
+    files: &[String],
+    kinds: &[String],
+    pool_size: usize,
+    include_retired: bool,
+) -> Result<Vec<(NoteRow, f64)>> {
+    let (where_extra, bound) = build_filter_clause(symbols, files, kinds);
+    let retired_clause = if include_retired {
+        ""
+    } else {
+        "AND n.retired_at IS NULL"
+    };
+    let sql = format!(
+        "WITH ranked AS (
+            SELECT rowid, bm25(notes_fts) AS rank
+            FROM notes_fts
+            WHERE notes_fts MATCH ?
+        )
+        SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
+               n.created_at, n.tool_name, n.retired_at, n.retired_by,
+               n.scope, n.feature_id, n.promoted_from, n.related_entity,
+               n.source, n.supersedes, n.payload_json,
+               r.rank AS bm25_rank
+        FROM notes n
+        JOIN ranked r ON r.rowid = n.rowid
+        WHERE 1=1 {retired_clause} {where_extra}
+        ORDER BY r.rank
+        LIMIT ?"
+    );
+    let mut params_owned: Vec<rusqlite::types::Value> = Vec::new();
+    params_owned.push(rusqlite::types::Value::Text(query.to_string()));
+    params_owned.extend(bound.into_iter());
+    params_owned.push(rusqlite::types::Value::Integer(pool_size as i64));
+    let mut stmt = conn.prepare(&sql).map_err(sqlite_err)?;
+    let mapped = stmt
+        .query_map(rusqlite::params_from_iter(params_owned), |row| {
+            let note = map_note_row(row)?;
+            let rank: f64 = row.get(17)?;
+            Ok((note, rank))
+        })
+        .map_err(sqlite_err)?;
+    let mut out = Vec::new();
+    for r in mapped {
+        out.push(r.map_err(sqlite_err)?);
+    }
+    Ok(out)
+}
+
+/// Cosine candidate pool: every non-retired note with an
+/// embedding row, scored by cosine against `query_vec`, top-N
+/// retained. The full embedding scan is in-process — at ≤10k
+/// notes with 768-dim fp32 this is microseconds and the SQLite
+/// alternative (loading all blobs then scanning) is no faster.
+fn fetch_cosine_pool(
+    conn: &Connection,
+    symbols: &[String],
+    files: &[String],
+    kinds: &[String],
+    pool_size: usize,
+    include_retired: bool,
+    query_vec: &[f32],
+) -> Result<Vec<(NoteRow, f64)>> {
+    let (where_extra, bound) = build_filter_clause(symbols, files, kinds);
+    let retired_clause = if include_retired {
+        ""
+    } else {
+        "AND n.retired_at IS NULL"
+    };
+    let sql = format!(
+        "SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
+                n.created_at, n.tool_name, n.retired_at, n.retired_by,
+                n.scope, n.feature_id, n.promoted_from, n.related_entity,
+                n.source, n.supersedes, n.payload_json,
+                e.embedding
+         FROM notes n
+         JOIN note_embeddings e ON e.note_id = n.id
+         WHERE 1=1 {retired_clause} {where_extra}"
+    );
+    let mut stmt = conn.prepare(&sql).map_err(sqlite_err)?;
+    let mapped = stmt
+        .query_map(rusqlite::params_from_iter(bound), |row| {
+            let note = map_note_row(row)?;
+            let bytes: Vec<u8> = row.get(17)?;
+            Ok((note, bytes))
+        })
+        .map_err(sqlite_err)?;
+    let mut scored: Vec<(NoteRow, f64)> = Vec::new();
+    for r in mapped {
+        let (note, bytes) = r.map_err(sqlite_err)?;
+        let vec = match embedding_from_le_bytes(&bytes) {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(
+                    target = "notes",
+                    note_id = %note.id,
+                    error = %e,
+                    "notes: corrupt embedding blob; skipping"
+                );
+                continue;
+            }
+        };
+        let cos = cosine_sim(query_vec, &vec);
+        scored.push((note, cos));
+    }
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(pool_size);
+    Ok(scored)
+}
+
+/// Shared WHERE-clause builder for the candidate-pool fetches.
+/// Mirrors the inline clause in `read_notes_scoped` (lines
+/// ~1139-1175) so the SQL filter pushdown semantics are identical
+/// between the baseline and semantic paths.
+fn build_filter_clause(
+    symbols: &[String],
+    files: &[String],
+    kinds: &[String],
+) -> (String, Vec<rusqlite::types::Value>) {
+    let mut where_extra = String::new();
+    let mut bound: Vec<rusqlite::types::Value> = Vec::new();
+    if !kinds.is_empty() {
+        where_extra.push_str(" AND n.kind IN (");
+        for (i, k) in kinds.iter().enumerate() {
+            if i > 0 {
+                where_extra.push(',');
+            }
+            where_extra.push('?');
+            bound.push(rusqlite::types::Value::Text(k.clone()));
+        }
+        where_extra.push(')');
+    }
+    if !symbols.is_empty() {
+        where_extra.push_str(
+            " AND EXISTS (SELECT 1 FROM json_each(n.symbols) WHERE value IN (",
+        );
+        for (i, s) in symbols.iter().enumerate() {
+            if i > 0 {
+                where_extra.push(',');
+            }
+            where_extra.push('?');
+            bound.push(rusqlite::types::Value::Text(s.clone()));
+        }
+        where_extra.push_str("))");
+    }
+    if !files.is_empty() {
+        where_extra.push_str(" AND EXISTS (SELECT 1 FROM json_each(n.files) WHERE value IN (");
+        for (i, f) in files.iter().enumerate() {
+            if i > 0 {
+                where_extra.push(',');
+            }
+            where_extra.push('?');
+            bound.push(rusqlite::types::Value::Text(f.clone()));
+        }
+        where_extra.push_str("))");
+    }
+    (where_extra, bound)
+}
+
+/// Pack a `Vec<f32>` embedding into a little-endian byte string
+/// for SQLite BLOB storage. SQLite is endian-agnostic; we pick LE
+/// explicitly so the on-disk format is reproducible across hosts
+/// (an `ARM64 Mac` + a `x86_64 Linux toolbx peer` must produce
+/// byte-identical BLOBs for the same vector, otherwise the
+/// content_hash dedup on the gossip wire breaks).
+///
+/// Round-trips via [`embedding_from_le_bytes`].
+pub(crate) fn embedding_to_le_bytes(vec: &[f32]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(vec.len() * 4);
+    for f in vec {
+        out.extend_from_slice(&f.to_le_bytes());
+    }
+    out
+}
+
+/// Decode a LE-byte blob back into a `Vec<f32>`. Returns
+/// [`Error::Io`] on length mismatch (blob length not a multiple
+/// of 4).
+pub(crate) fn embedding_from_le_bytes(bytes: &[u8]) -> Result<Vec<f32>> {
+    if bytes.len() % 4 != 0 {
+        return Err(Error::Io(std::io::Error::other(format!(
+            "embedding_from_le_bytes: blob length {} is not a multiple of 4",
+            bytes.len()
+        ))));
+    }
+    let mut out = Vec::with_capacity(bytes.len() / 4);
+    for chunk in bytes.chunks_exact(4) {
+        let arr: [u8; 4] = chunk.try_into().expect("chunks_exact(4) yields 4-byte chunks");
+        out.push(f32::from_le_bytes(arr));
+    }
+    Ok(out)
+}
+
+/// Post-migration backfill: compute `content_hash` for every row
+/// where it's NULL. Runs once on first open after v9 lands; on
+/// subsequent opens the predicate matches nothing and the call is
+/// a no-op.
+///
+/// SQLite has no built-in cryptographic hash, so the backfill
+/// happens in Rust. Wrapped in one transaction so a crash midway
+/// leaves either every row hashed or none — never half (so a
+/// follow-up open re-runs the whole pass).
+fn backfill_content_hashes(conn: &Connection) -> Result<()> {
+    let needs_backfill: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM notes WHERE content_hash IS NULL",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(sqlite_err)?;
+    if needs_backfill == 0 {
+        return Ok(());
+    }
+
+    let mut rows: Vec<(String, String, String, String, Option<String>, String)> = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, kind, content, scope, feature_id, session_id
+                   FROM notes
+                  WHERE content_hash IS NULL",
+            )
+            .map_err(sqlite_err)?;
+        let mapped = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, String>(5)?,
+                ))
+            })
+            .map_err(sqlite_err)?;
+        for r in mapped {
+            rows.push(r.map_err(sqlite_err)?);
+        }
+    }
+
+    conn.execute_batch("BEGIN").map_err(sqlite_err)?;
+    let result: Result<()> = (|| {
+        let mut update = conn
+            .prepare("UPDATE notes SET content_hash = ?1 WHERE id = ?2")
+            .map_err(sqlite_err)?;
+        for (id, kind, content, scope, feature_id, session_id) in &rows {
+            let hash =
+                compute_content_hash(kind, content, scope, feature_id.as_deref(), session_id);
+            update.execute(params![hash, id]).map_err(sqlite_err)?;
+        }
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = conn.execute_batch("ROLLBACK");
+        result?;
+    }
+    conn.execute_batch("COMMIT").map_err(sqlite_err)?;
+
+    tracing::info!(
+        target = "notes",
+        backfilled = rows.len(),
+        "notes: content_hash backfill complete"
+    );
+    Ok(())
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -225,6 +772,25 @@ pub struct ToolCallLogRow {
 /// SQLite + FTS5 store for agent working notes.
 pub struct NoteStore {
     conn: Arc<Mutex<Connection>>,
+    /// Optional T1 embedding hook. When set, [`write_note_full`]
+    /// computes an embedding inside the write transaction and
+    /// persists it to `note_embeddings`. When `None`, T1 is
+    /// disabled for this store — writes still succeed,
+    /// embedding-less, and the semantic-blend read path silently
+    /// falls back to FTS5-only ranking.
+    embed_fn: Option<EmbedFn>,
+    /// Optional mesh-propagation sink. When set, every `scope=global
+    /// && !private` write fires the sink with the corresponding
+    /// [`NotePropagationEvent`]. `None` keeps notes node-local
+    /// (the pre-v9 default). The caller (most commonly the
+    /// sovereign daemon) wires this to `MeshStore::put` under
+    /// `app_id="notes"`.
+    propagation_sink: Option<PropagationSinkFn>,
+    /// Node id stamped on outbound propagation events as the
+    /// `origin_node_id`. Optional because the store can run
+    /// dependency-free in tests / CLI tools that don't have a
+    /// mesh identity. Set via [`NoteStore::with_origin_node_id`].
+    origin_node_id: Option<String>,
 }
 
 impl NoteStore {
@@ -368,9 +934,73 @@ impl NoteStore {
             })?;
         }
 
+        // v8 → v9: Tiered-retrieval + mesh-propagation surface.
+        // Additive only — five new columns on `notes`, two new
+        // tables (`note_embeddings`, `note_propagation_watermark`),
+        // three new indexes. No CHECK constraint change, so no
+        // rename-recreate, no FTS5 rebuild. After the SQL fires,
+        // backfill `content_hash` for pre-v9 rows in Rust (SQLite
+        // has no built-in cryptographic hash).
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap_or(0);
+        if version < 9 {
+            conn.execute_batch(MIGRATION_V9).map_err(|e| {
+                Error::Io(std::io::Error::other(format!("NoteStore migrate v9: {e}")))
+            })?;
+            backfill_content_hashes(&conn)?;
+        }
+
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
+            embed_fn: None,
+            propagation_sink: None,
+            origin_node_id: None,
         })
+    }
+
+    /// Builder: attach an [`EmbedFn`] so writes compute and persist
+    /// T1 embeddings, and reads can blend semantic similarity into
+    /// the FTS5 BM25 ranking. Idempotent — calling twice replaces
+    /// the prior closure.
+    ///
+    /// Per `ARCH §5.4` the store stays primitive: it takes a
+    /// closure, not a daemon handle. The caller owns the
+    /// transport (local Embed slot, HTTP client, mock) and
+    /// adapts it into the [`EmbedFn`] shape.
+    pub fn with_embed_fn(mut self, embed_fn: EmbedFn) -> Self {
+        self.embed_fn = Some(embed_fn);
+        self
+    }
+
+    /// Whether T1 embeddings are enabled on this store. Useful
+    /// for diagnostics and for skipping embed-dependent tests
+    /// against a NoteStore opened without `with_embed_fn`.
+    pub fn has_embed_fn(&self) -> bool {
+        self.embed_fn.is_some()
+    }
+
+    /// Builder: attach a [`PropagationSinkFn`] so global,
+    /// non-private writes fan out to the mesh. The sink fires
+    /// AFTER the local write commits — peers only see notes that
+    /// landed locally, never half-committed state.
+    pub fn with_propagation_sink(mut self, sink: PropagationSinkFn) -> Self {
+        self.propagation_sink = Some(sink);
+        self
+    }
+
+    /// Builder: stamp outbound propagation events with this node's
+    /// id. When unset, events carry `origin_node_id = None` and
+    /// peers reconcile by `content_hash` alone (the toolbx
+    /// node-rotation-safe path).
+    pub fn with_origin_node_id(mut self, node_id: impl Into<String>) -> Self {
+        self.origin_node_id = Some(node_id.into());
+        self
+    }
+
+    /// Whether propagation is wired on this store.
+    pub fn has_propagation_sink(&self) -> bool {
+        self.propagation_sink.is_some()
     }
 
     // ── Note writes ────────────────────────────────────────────────────────
@@ -536,6 +1166,43 @@ impl NoteStore {
         supersedes: Option<&str>,
         payload_json: Option<&str>,
     ) -> Result<String> {
+        self.write_note_full_v9(
+            kind,
+            content,
+            symbols,
+            files,
+            session_id,
+            scope,
+            feature_id,
+            related_entity,
+            source,
+            supersedes,
+            payload_json,
+            false,
+        )
+        .await
+    }
+
+    /// v9 write path that exposes the per-note `private` flag.
+    /// Private notes are persisted locally but never enter the
+    /// mesh wire (the `propagation_sink` is skipped). `false` is
+    /// equivalent to [`write_note_full`] and is the safe default.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn write_note_full_v9(
+        &self,
+        kind: &str,
+        content: &str,
+        symbols: Vec<String>,
+        files: Vec<String>,
+        session_id: &str,
+        scope: NoteScope,
+        feature_id: Option<&str>,
+        related_entity: Option<&str>,
+        source: NoteSource,
+        supersedes: Option<&str>,
+        payload_json: Option<&str>,
+        private: bool,
+    ) -> Result<String> {
         if scope == NoteScope::Feature && feature_id.is_none() {
             return Err(Error::InvalidInput(
                 "write_note_full: scope='feature' requires feature_id".into(),
@@ -546,19 +1213,700 @@ impl NoteStore {
         let symbols_json = serde_json::to_string(&symbols).unwrap_or_else(|_| "[]".to_string());
         let files_json = serde_json::to_string(&files).unwrap_or_else(|_| "[]".to_string());
 
+        // Content hash identifies the note across peers; stable
+        // across `origin_node_id` rotation. Computed before
+        // locking so the cheap hash doesn't block other writers.
+        let content_hash = compute_content_hash(
+            kind,
+            content,
+            scope.as_str(),
+            feature_id,
+            session_id,
+        );
+
+        // T1: compute the embedding outside the connection mutex.
+        // The Embed slot can be local (microseconds) or HTTP
+        // (tens of milliseconds); holding the SQLite lock across
+        // a network round-trip starves other writers and gives
+        // nothing back — we just need both rows to land in one
+        // SQL transaction. Soft-fail per `ARCH §9`: a note with
+        // no embedding is strictly better than no note.
+        let embedding: Option<(Vec<f32>, String)> = match &self.embed_fn {
+            Some(embed) => match embed(content).await {
+                Ok(vec) => {
+                    let model_id =
+                        std::env::var("SOVEREIGN_EMBED_MODEL_ID").unwrap_or_else(|_| {
+                            "qwen-embedding-0.6b".to_string()
+                        });
+                    Some((vec, model_id))
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        target = "notes",
+                        error = %e,
+                        note_id = %id,
+                        "notes: embed_fn failed; persisting note without T1 embedding"
+                    );
+                    None
+                }
+            },
+            None => None,
+        };
+
+        let conn = self.conn.lock().await;
+        conn.execute_batch("BEGIN").map_err(sqlite_err)?;
+        let txn_result: Result<()> = (|| {
+            conn.execute(
+                "INSERT INTO notes (
+                    id, kind, content, symbols, files, session_id,
+                    created_at, updated_at, scope, feature_id,
+                    related_entity, source, supersedes, payload_json,
+                    content_hash, private, origin_node_id
+                )
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                params![
+                    id, kind, content, symbols_json, files_json, session_id, now,
+                    scope.as_str(), feature_id, related_entity,
+                    source.as_str(), supersedes, payload_json,
+                    content_hash,
+                    private as i64,
+                    self.origin_node_id.as_deref()
+                ],
+            )
+            .map_err(sqlite_err)?;
+            if let Some((vec, model_id)) = &embedding {
+                let dim = vec.len() as i64;
+                let bytes = embedding_to_le_bytes(vec);
+                conn.execute(
+                    "INSERT INTO note_embeddings (
+                        note_id, embedding, model_id, dim, created_at
+                    ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![id, &bytes[..], model_id, dim, now],
+                )
+                .map_err(sqlite_err)?;
+                tracing::debug!(
+                    target = "notes",
+                    note_id = %id,
+                    dim,
+                    model = %model_id,
+                    "notes: embedding persisted"
+                );
+            }
+            bump_notes_version(&conn)?;
+            Ok(())
+        })();
+        match txn_result {
+            Ok(()) => {
+                conn.execute_batch("COMMIT").map_err(sqlite_err)?;
+                drop(conn);
+
+                // Sink only fires for global, non-private notes —
+                // session/feature scope stays node-local; private
+                // notes are structurally excluded from gossip even
+                // if a future caller wires the sink to the
+                // non-private app_id. Fire AFTER commit so peers
+                // only see notes that landed locally.
+                if !private && scope == NoteScope::Global {
+                    if let Some(sink) = &self.propagation_sink {
+                        let event = NotePropagationEvent {
+                            content_hash: content_hash.clone(),
+                            note: ExportedNoteRow {
+                                id: id.clone(),
+                                kind: kind.to_string(),
+                                content: content.to_string(),
+                                symbols,
+                                files,
+                                session_id: session_id.to_string(),
+                                created_at: now,
+                                scope: scope.as_str().to_string(),
+                                feature_id: feature_id.map(str::to_string),
+                                related_entity: related_entity.map(str::to_string),
+                                source: source.as_str().to_string(),
+                                supersedes: supersedes.map(str::to_string),
+                                payload_json: payload_json.map(str::to_string),
+                                origin_node_id: self.origin_node_id.clone(),
+                            },
+                            embedding: embedding.map(|(vec, model_id)| ExportedNoteEmbedding {
+                                model_id,
+                                dim: vec.len() as i64,
+                                embedding: embedding_to_le_bytes(&vec),
+                            }),
+                            entities: Vec::new(),
+                            tombstone: false,
+                            updated_at: now,
+                        };
+                        sink(&event);
+                    }
+                }
+                Ok(id)
+            }
+            Err(e) => {
+                let _ = conn.execute_batch("ROLLBACK");
+                Err(e)
+            }
+        }
+    }
+
+    /// Mark a note tombstoned (soft-delete for propagation).
+    /// Tombstoned notes survive in the local table — the
+    /// `supersedes` chain may still land later edits — but are
+    /// filtered out of the audit display and the delta scan, and
+    /// the tombstone propagates so peers converge.
+    ///
+    /// Tombstone wins over any concurrent edit per the Step 6b
+    /// conflict-resolution policy: a later `updated_at` on an
+    /// edit does NOT resurrect a tombstoned note. To recover a
+    /// tombstoned note, call again with `tombstone = false`.
+    pub async fn set_note_tombstone(&self, note_id: &str, tombstone: bool) -> Result<()> {
+        let now = unix_now();
+        let (content_hash, scope, private_flag) = {
+            let conn = self.conn.lock().await;
+            conn.execute(
+                "UPDATE notes
+                    SET tombstone = ?1,
+                        updated_at = ?2
+                  WHERE id = ?3",
+                params![tombstone as i64, now, note_id],
+            )
+            .map_err(sqlite_err)?;
+            // Fetch the propagation fields for the sink event.
+            let row: Result<(String, String, i64)> = conn
+                .query_row(
+                    "SELECT content_hash, scope, private FROM notes WHERE id = ?",
+                    params![note_id],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .map_err(sqlite_err);
+            row?
+        };
+
+        // Propagate the tombstone via the same sink. Skip if scope
+        // != global or private, mirroring write_note_full_v9.
+        if !tombstone || private_flag != 0 || scope != "global" {
+            return Ok(());
+        }
+        if let Some(sink) = &self.propagation_sink {
+            // Tombstone wire format: same content_hash + a stub
+            // ExportedNoteRow + tombstone=true. Peers receiving
+            // this hit the tombstone branch in ingest_remote_notes
+            // and update the row in place; they don't need the
+            // full content to apply a tombstone.
+            let event = NotePropagationEvent {
+                content_hash,
+                note: ExportedNoteRow {
+                    id: note_id.to_string(),
+                    kind: String::new(),
+                    content: String::new(),
+                    symbols: Vec::new(),
+                    files: Vec::new(),
+                    session_id: String::new(),
+                    created_at: now,
+                    scope: scope.clone(),
+                    feature_id: None,
+                    related_entity: None,
+                    source: String::new(),
+                    supersedes: None,
+                    payload_json: None,
+                    origin_node_id: self.origin_node_id.clone(),
+                },
+                embedding: None,
+                entities: Vec::new(),
+                tombstone: true,
+                updated_at: now,
+            };
+            sink(&event);
+        }
+        Ok(())
+    }
+
+    /// Whether a note carries an active tombstone. `false` for
+    /// unknown ids. Lookup helper for callers that need to render
+    /// tombstone state separately from the row body.
+    pub async fn is_note_tombstoned(&self, note_id: &str) -> Result<bool> {
+        let conn = self.conn.lock().await;
+        let row: rusqlite::Result<i64> = conn.query_row(
+            "SELECT tombstone FROM notes WHERE id = ?",
+            params![note_id],
+            |r| r.get(0),
+        );
+        match row {
+            Ok(v) => Ok(v != 0),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false),
+            Err(other) => Err(sqlite_err(other)),
+        }
+    }
+
+    /// Apply a batch of [`NotePropagationEvent`]s received from
+    /// peers. Idempotent (dedup by `content_hash`), tombstone-wins,
+    /// fork-preserving (per Step 6b). Returns counts so the
+    /// caller can log convergence progress.
+    ///
+    /// Filters at the boundary:
+    /// - `scope != "global"` events are rejected (peers shouldn't
+    ///   send anything but global notes anyway; this is belt-and-
+    ///   braces). The transport-level `app_id="notes-private"`
+    ///   gossip exclusion is the structural privacy guarantee.
+    /// - Identical `content_hash` → idempotent INSERT OR IGNORE.
+    /// - Tombstone → apply regardless of timestamp ordering.
+    /// - Concurrent supersedes (same `supersedes` target as a
+    ///   locally-known sibling) → set `fork_of` on the inserted
+    ///   row, preserving both branches.
+    ///
+    /// All applied changes land in a single SQL transaction so
+    /// partial application can't leave torn state.
+    pub async fn ingest_remote_notes(
+        &self,
+        events: Vec<NotePropagationEvent>,
+    ) -> Result<IngestRemoteReport> {
+        let mut report = IngestRemoteReport::default();
+        if events.is_empty() {
+            return Ok(report);
+        }
+        let conn = self.conn.lock().await;
+        conn.execute_batch("BEGIN").map_err(sqlite_err)?;
+        let txn: Result<()> = (|| {
+            for ev in &events {
+                if ev.note.scope != "global" {
+                    report.rejected += 1;
+                    continue;
+                }
+                // Look up any existing row with this content_hash.
+                let existing: Option<(String, i64)> = conn
+                    .query_row(
+                        "SELECT id, tombstone FROM notes WHERE content_hash = ? LIMIT 1",
+                        params![ev.content_hash],
+                        |r| Ok((r.get(0)?, r.get(1)?)),
+                    )
+                    .ok();
+
+                if let Some((existing_id, existing_tomb)) = existing {
+                    if ev.tombstone && existing_tomb == 0 {
+                        // Tombstone-wins: apply the soft-delete
+                        // regardless of `updated_at`.
+                        conn.execute(
+                            "UPDATE notes
+                                SET tombstone = 1,
+                                    updated_at = ?1
+                              WHERE id = ?2",
+                            params![ev.updated_at, existing_id],
+                        )
+                        .map_err(sqlite_err)?;
+                        report.tombstoned += 1;
+                        tracing::debug!(
+                            target = "notes",
+                            content_hash = %ev.content_hash,
+                            "notes: ingest applied tombstone"
+                        );
+                    } else {
+                        // Idempotent — same hash already present.
+                        report.deduplicated += 1;
+                    }
+                    continue;
+                }
+
+                if ev.tombstone {
+                    // Tombstone for an unknown note — insert a
+                    // stub row carrying the tombstone so a later
+                    // arrival of the actual write can be shadowed
+                    // by it. Without this, the tombstone would
+                    // disappear and a stale write could resurrect.
+                    conn.execute(
+                        "INSERT INTO notes (
+                            id, kind, content, symbols, files, session_id,
+                            created_at, updated_at, scope, source,
+                            content_hash, tombstone, origin_node_id
+                        ) VALUES (?1, 'todo', '', '[]', '[]', '', ?2, ?2, 'global', 'agent', ?3, 1, ?4)",
+                        params![
+                            ev.note.id,
+                            ev.updated_at,
+                            ev.content_hash,
+                            ev.note.origin_node_id
+                        ],
+                    )
+                    .map_err(sqlite_err)?;
+                    report.tombstoned += 1;
+                    continue;
+                }
+
+                // Check for concurrent-supersedes fork: if this
+                // event supersedes a base note that a locally-
+                // known note also supersedes, the new note becomes
+                // a sibling fork rather than a silent collapse.
+                let fork_of: Option<String> = if let Some(superseded) = &ev.note.supersedes {
+                    conn.query_row(
+                        "SELECT id FROM notes
+                          WHERE supersedes = ?1
+                            AND content_hash <> ?2
+                          LIMIT 1",
+                        params![superseded, ev.content_hash],
+                        |r| r.get::<_, String>(0),
+                    )
+                    .ok()
+                } else {
+                    None
+                };
+
+                let symbols_json = serde_json::to_string(&ev.note.symbols)
+                    .unwrap_or_else(|_| "[]".to_string());
+                let files_json = serde_json::to_string(&ev.note.files)
+                    .unwrap_or_else(|_| "[]".to_string());
+                conn.execute(
+                    "INSERT INTO notes (
+                        id, kind, content, symbols, files, session_id,
+                        created_at, updated_at, scope, feature_id,
+                        related_entity, source, supersedes, payload_json,
+                        content_hash, origin_node_id, fork_of
+                    )
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                    params![
+                        ev.note.id,
+                        ev.note.kind,
+                        ev.note.content,
+                        symbols_json,
+                        files_json,
+                        ev.note.session_id,
+                        ev.note.created_at,
+                        ev.note.scope,
+                        ev.note.feature_id,
+                        ev.note.related_entity,
+                        ev.note.source,
+                        ev.note.supersedes,
+                        ev.note.payload_json,
+                        ev.content_hash,
+                        ev.note.origin_node_id,
+                        fork_of.clone(),
+                    ],
+                )
+                .map_err(sqlite_err)?;
+                report.inserted += 1;
+                if fork_of.is_some() {
+                    report.forked += 1;
+                    tracing::info!(
+                        target = "notes",
+                        content_hash = %ev.content_hash,
+                        sibling = ?fork_of,
+                        "notes: ingest preserved concurrent-supersedes fork"
+                    );
+                }
+
+                if let Some(emb) = &ev.embedding {
+                    conn.execute(
+                        "INSERT INTO note_embeddings (
+                            note_id, embedding, model_id, dim, created_at
+                        ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                        params![
+                            ev.note.id,
+                            &emb.embedding[..],
+                            emb.model_id,
+                            emb.dim,
+                            ev.note.created_at
+                        ],
+                    )
+                    .map_err(sqlite_err)?;
+                }
+            }
+            bump_notes_version(&conn)?;
+            Ok(())
+        })();
+        match txn {
+            Ok(()) => {
+                conn.execute_batch("COMMIT").map_err(sqlite_err)?;
+                tracing::debug!(
+                    target = "notes",
+                    inserted = report.inserted,
+                    deduplicated = report.deduplicated,
+                    tombstoned = report.tombstoned,
+                    forked = report.forked,
+                    rejected = report.rejected,
+                    "notes: ingest_remote_notes complete"
+                );
+                Ok(report)
+            }
+            Err(e) => {
+                let _ = conn.execute_batch("ROLLBACK");
+                Err(e)
+            }
+        }
+    }
+
+    /// Per-round propagation delta: notes for `peer_node_id` that
+    /// landed locally since the last successful ACK. Bounded by
+    /// `limit` (cap 200 in production; large catch-ups span
+    /// multiple rounds).
+    ///
+    /// Filters mirror Step 5's restraint: `scope='global' AND
+    /// private=0 AND tombstone=0`. Tombstones are propagated via
+    /// the separate sink-on-tombstone path so they don't show up
+    /// here — peers learn deletion from the same wire they
+    /// learned the note from.
+    ///
+    /// Returns events with full embeddings + entities attached
+    /// (one query for the note rows + one for the embeddings,
+    /// joined in-process).
+    pub async fn notes_delta_since(
+        &self,
+        peer_node_id: &str,
+        limit: usize,
+    ) -> Result<Vec<NotePropagationEvent>> {
+        let conn = self.conn.lock().await;
+        let watermark: i64 = conn
+            .query_row(
+                "SELECT last_sent_created_at FROM note_propagation_watermark
+                   WHERE peer_node_id = ?",
+                params![peer_node_id],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+
+        let cap = limit.min(500);
+        let mut stmt = conn
+            .prepare(
+                "SELECT n.id, n.kind, n.content, n.symbols, n.files,
+                        n.session_id, n.created_at, n.scope, n.feature_id,
+                        n.related_entity, n.source, n.supersedes,
+                        n.payload_json, n.origin_node_id, n.content_hash,
+                        n.updated_at,
+                        e.embedding, e.model_id, e.dim
+                   FROM notes n
+              LEFT JOIN note_embeddings e ON e.note_id = n.id
+                  WHERE n.scope = 'global'
+                    AND n.private = 0
+                    AND n.tombstone = 0
+                    AND n.created_at > ?1
+                    AND n.content_hash IS NOT NULL
+               ORDER BY n.created_at ASC, n.id ASC
+                  LIMIT ?2",
+            )
+            .map_err(sqlite_err)?;
+        let rows = stmt
+            .query_map(params![watermark, cap as i64], |row| {
+                let symbols_json: String = row.get(3)?;
+                let files_json: String = row.get(4)?;
+                let symbols: Vec<String> = serde_json::from_str(&symbols_json).unwrap_or_default();
+                let files: Vec<String> = serde_json::from_str(&files_json).unwrap_or_default();
+                let embedding_bytes: Option<Vec<u8>> = row.get(16)?;
+                let embedding_model: Option<String> = row.get(17)?;
+                let embedding_dim: Option<i64> = row.get(18)?;
+                let embedding = match (embedding_bytes, embedding_model, embedding_dim) {
+                    (Some(b), Some(m), Some(d)) => Some(ExportedNoteEmbedding {
+                        model_id: m,
+                        dim: d,
+                        embedding: b,
+                    }),
+                    _ => None,
+                };
+                Ok(NotePropagationEvent {
+                    content_hash: row.get(14)?,
+                    note: ExportedNoteRow {
+                        id: row.get(0)?,
+                        kind: row.get(1)?,
+                        content: row.get(2)?,
+                        symbols,
+                        files,
+                        session_id: row.get(5)?,
+                        created_at: row.get(6)?,
+                        scope: row.get(7)?,
+                        feature_id: row.get(8)?,
+                        related_entity: row.get(9)?,
+                        source: row.get(10)?,
+                        supersedes: row.get(11)?,
+                        payload_json: row.get(12)?,
+                        origin_node_id: row.get(13)?,
+                    },
+                    embedding,
+                    entities: Vec::new(),
+                    tombstone: false,
+                    updated_at: row.get(15)?,
+                })
+            })
+            .map_err(sqlite_err)?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(sqlite_err)?);
+        }
+        Ok(out)
+    }
+
+    /// Persist the propagation watermark for `peer_node_id`. Call
+    /// after a successful gossip round so the next round only
+    /// ships the delta beyond this point. The store records both
+    /// the `created_at` bound and the last note id — the id
+    /// disambiguates within-second ties.
+    pub async fn set_propagation_watermark(
+        &self,
+        peer_node_id: &str,
+        last_sent_created_at: i64,
+        last_sent_note_id: &str,
+    ) -> Result<()> {
+        let now = unix_now();
         let conn = self.conn.lock().await;
         conn.execute(
-            "INSERT INTO notes (id, kind, content, symbols, files, session_id, created_at, updated_at, scope, feature_id, related_entity, source, supersedes, payload_json)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-            params![
-                id, kind, content, symbols_json, files_json, session_id, now,
-                scope.as_str(), feature_id, related_entity, source.as_str(), supersedes, payload_json
-            ],
+            "INSERT INTO note_propagation_watermark (
+                peer_node_id, last_sent_created_at, last_sent_note_id, last_acked_at
+            ) VALUES (?1, ?2, ?3, ?4)
+            ON CONFLICT(peer_node_id) DO UPDATE SET
+                last_sent_created_at = excluded.last_sent_created_at,
+                last_sent_note_id    = excluded.last_sent_note_id,
+                last_acked_at        = excluded.last_acked_at",
+            params![peer_node_id, last_sent_created_at, last_sent_note_id, now],
         )
         .map_err(sqlite_err)?;
-        bump_notes_version(&conn)?;
+        Ok(())
+    }
 
-        Ok(id)
+    /// Bucketed content-hash digest for reconciliation. Bucket id
+    /// is the first two hex chars of `content_hash` (256 buckets).
+    /// Each bucket's value is FNV-1a-64 over the
+    /// lexicographically-sorted hashes that fall inside it.
+    ///
+    /// Cheap on the wire (~2KB for 256 u64 buckets) and answers
+    /// "do peer A and peer B agree on every note?" with one
+    /// round-trip. Per-bucket disagreement triggers the wider
+    /// pull via [`content_hashes_in_bucket`].
+    ///
+    /// The Phase-A reconciliation path lives at this granularity
+    /// to keep the digest stable across small note arrivals — a
+    /// single note write only mutates one bucket, so a peer's
+    /// digest diff isolates the change cheaply.
+    pub async fn content_hash_digest(&self) -> Result<std::collections::BTreeMap<u8, u64>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT content_hash FROM notes
+                  WHERE scope = 'global'
+                    AND private = 0
+                    AND content_hash IS NOT NULL
+               ORDER BY content_hash ASC",
+            )
+            .map_err(sqlite_err)?;
+        let hashes: Vec<String> = stmt
+            .query_map([], |r| r.get::<_, String>(0))
+            .map_err(sqlite_err)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(sqlite_err)?;
+        let mut by_bucket: std::collections::BTreeMap<u8, Vec<&str>> = Default::default();
+        for h in &hashes {
+            let Some(bucket) = parse_bucket_id(h) else {
+                continue;
+            };
+            by_bucket.entry(bucket).or_default().push(h.as_str());
+        }
+        let mut digest = std::collections::BTreeMap::new();
+        for (bucket, list) in by_bucket {
+            digest.insert(bucket, fnv1a_64_strings(&list));
+        }
+        Ok(digest)
+    }
+
+    /// Return every `content_hash` in `bucket`. Called when a
+    /// peer's digest disagrees with ours on this bucket — both
+    /// sides exchange lists, diff, pull missing.
+    pub async fn content_hashes_in_bucket(&self, bucket: u8) -> Result<Vec<String>> {
+        let conn = self.conn.lock().await;
+        // Hex prefix: bucket 0x3A → "3a". Two lowercase hex chars
+        // pinned by content_hash output format (compute_content_hash).
+        let prefix = format!("{:02x}", bucket);
+        let pattern = format!("{}%", prefix);
+        let mut stmt = conn
+            .prepare(
+                "SELECT content_hash FROM notes
+                  WHERE scope = 'global'
+                    AND private = 0
+                    AND content_hash LIKE ?1
+               ORDER BY content_hash ASC",
+            )
+            .map_err(sqlite_err)?;
+        let out = stmt
+            .query_map(params![pattern], |r| r.get::<_, String>(0))
+            .map_err(sqlite_err)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(sqlite_err)?;
+        Ok(out)
+    }
+
+    /// Pull full propagation events for a specific set of
+    /// `content_hash`es — the second leg of the reconciliation
+    /// dance after bucket diff. Returns events in the same order
+    /// as `hashes`.
+    pub async fn events_for_content_hashes(
+        &self,
+        hashes: &[String],
+    ) -> Result<Vec<NotePropagationEvent>> {
+        if hashes.is_empty() {
+            return Ok(Vec::new());
+        }
+        let conn = self.conn.lock().await;
+        let mut placeholders = String::new();
+        for i in 0..hashes.len() {
+            if i > 0 {
+                placeholders.push(',');
+            }
+            placeholders.push('?');
+        }
+        let sql = format!(
+            "SELECT n.id, n.kind, n.content, n.symbols, n.files,
+                    n.session_id, n.created_at, n.scope, n.feature_id,
+                    n.related_entity, n.source, n.supersedes,
+                    n.payload_json, n.origin_node_id, n.content_hash,
+                    n.updated_at, n.tombstone,
+                    e.embedding, e.model_id, e.dim
+               FROM notes n
+          LEFT JOIN note_embeddings e ON e.note_id = n.id
+              WHERE n.content_hash IN ({placeholders})"
+        );
+        let mut stmt = conn.prepare(&sql).map_err(sqlite_err)?;
+        let bound: Vec<rusqlite::types::Value> = hashes
+            .iter()
+            .map(|s| rusqlite::types::Value::Text(s.clone()))
+            .collect();
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(bound), |row| {
+                let symbols_json: String = row.get(3)?;
+                let files_json: String = row.get(4)?;
+                let symbols: Vec<String> = serde_json::from_str(&symbols_json).unwrap_or_default();
+                let files: Vec<String> = serde_json::from_str(&files_json).unwrap_or_default();
+                let tombstone: i64 = row.get(16)?;
+                let embedding_bytes: Option<Vec<u8>> = row.get(17)?;
+                let embedding_model: Option<String> = row.get(18)?;
+                let embedding_dim: Option<i64> = row.get(19)?;
+                let embedding = match (embedding_bytes, embedding_model, embedding_dim) {
+                    (Some(b), Some(m), Some(d)) => Some(ExportedNoteEmbedding {
+                        model_id: m,
+                        dim: d,
+                        embedding: b,
+                    }),
+                    _ => None,
+                };
+                Ok(NotePropagationEvent {
+                    content_hash: row.get(14)?,
+                    note: ExportedNoteRow {
+                        id: row.get(0)?,
+                        kind: row.get(1)?,
+                        content: row.get(2)?,
+                        symbols,
+                        files,
+                        session_id: row.get(5)?,
+                        created_at: row.get(6)?,
+                        scope: row.get(7)?,
+                        feature_id: row.get(8)?,
+                        related_entity: row.get(9)?,
+                        source: row.get(10)?,
+                        supersedes: row.get(11)?,
+                        payload_json: row.get(12)?,
+                        origin_node_id: row.get(13)?,
+                    },
+                    embedding,
+                    entities: Vec::new(),
+                    tombstone: tombstone != 0,
+                    updated_at: row.get(15)?,
+                })
+            })
+            .map_err(sqlite_err)?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(sqlite_err)?);
+        }
+        Ok(out)
     }
 
     /// Persist a reflection note at global scope. Back-compat wrapper.
@@ -938,6 +2286,164 @@ impl NoteStore {
             .collect();
 
         out.truncate(cap);
+        Ok(out)
+    }
+
+    /// Semantic-blend variant of [`read_notes_scoped`].
+    ///
+    /// Returns the same NoteRow shape but ranks the candidate pool
+    /// using a min-max normalised blend of:
+    /// - BM25 rank (from FTS5, when `query` is set), and
+    /// - cosine similarity between the query embedding and each
+    ///   note's `note_embeddings` row.
+    ///
+    /// The blend weight is `embed_weight ∈ [0.0, 1.0]`, read from
+    /// the `SOVEREIGN_NOTES_EMBED_WEIGHT` env var (default 0.5):
+    /// - `0.0` → byte-identical to [`read_notes_scoped`] (cosine
+    ///   disabled, this method short-circuits to the existing
+    ///   path). The cluster-blend invariant from
+    ///   `CLUSTER_SCORE_BLEND.md`.
+    /// - `1.0` → cosine-only ranking, FTS5 rank ignored.
+    /// - `0.5` (default) → equal mix.
+    ///
+    /// Soft-fail per `ARCH §9`: when `embed_fn` is unset OR
+    /// `semantic_query` is `None` OR the embed call errors, we
+    /// fall back to the existing FTS5-only path silently. The
+    /// caller never has to know whether T1 is wired.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn read_notes_scoped_semantic(
+        &self,
+        query: Option<&str>,
+        symbols: &[String],
+        files: &[String],
+        kinds: &[String],
+        limit: usize,
+        include_retired: bool,
+        scope_filter: &ScopeFilter,
+        semantic_query: Option<&str>,
+    ) -> Result<Vec<NoteRow>> {
+        let weight = read_embed_weight_env();
+
+        // Fast path: any of these conditions short-circuits to the
+        // FTS5-only baseline. Weight=0 is the canonical
+        // byte-identical-to-baseline invariant — even a microsecond
+        // of cosine compute is forbidden here, because tests
+        // assert byte equivalence.
+        if weight == 0.0 || semantic_query.is_none() || self.embed_fn.is_none() {
+            return self
+                .read_notes_scoped(query, symbols, files, kinds, limit, include_retired, scope_filter)
+                .await;
+        }
+        let sem_q = semantic_query.unwrap();
+        let embed_fn = self.embed_fn.clone().expect("checked above");
+
+        // Compute query embedding outside the lock; soft-fail on
+        // error (drop to baseline).
+        let query_vec = match embed_fn(sem_q).await {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(
+                    target = "notes",
+                    error = %e,
+                    "notes: semantic query embed failed; falling back to FTS5-only"
+                );
+                return self
+                    .read_notes_scoped(
+                        query, symbols, files, kinds, limit, include_retired, scope_filter,
+                    )
+                    .await;
+            }
+        };
+
+        // Over-fetch candidate pool: 10x the requested limit, capped
+        // at 200, capped further by the SQLite per-statement bound.
+        // The candidate union must be wide enough that cosine-only
+        // winners aren't pre-truncated by BM25 (and vice versa).
+        let cap = limit.min(100);
+        let pool_size = (limit.saturating_mul(10)).clamp(100, 500);
+
+        // Pull the BM25 candidate pool (when query set) and the
+        // cosine candidate pool from `note_embeddings` separately,
+        // then union by note_id. Both pools respect the
+        // scope/kind/symbol/file/retired filters.
+        let (bm25_pool, cosine_pool) = {
+            let conn = self.conn.lock().await;
+            let bm25 = if let Some(q) = query.filter(|s| !s.is_empty()) {
+                fetch_bm25_pool(
+                    &conn,
+                    q,
+                    symbols,
+                    files,
+                    kinds,
+                    pool_size,
+                    include_retired,
+                )?
+            } else {
+                Vec::new()
+            };
+            let cosine = fetch_cosine_pool(
+                &conn,
+                symbols,
+                files,
+                kinds,
+                pool_size,
+                include_retired,
+                &query_vec,
+            )?;
+            (bm25, cosine)
+        };
+
+        // Union by note id; remember which scores were observed in
+        // each pool. Missing-in-pool → score stays None and that
+        // dimension contributes 0 to the blend after normalisation.
+        use std::collections::HashMap;
+        let mut blended: HashMap<String, (NoteRow, Option<f64>, Option<f64>)> = HashMap::new();
+        for (row, rank) in bm25_pool {
+            blended.entry(row.id.clone()).or_insert((row, Some(rank), None)).1 = Some(rank);
+        }
+        for (row, cos) in cosine_pool {
+            blended
+                .entry(row.id.clone())
+                .and_modify(|slot| slot.2 = Some(cos))
+                .or_insert((row, None, Some(cos)));
+        }
+
+        // Min-max normalise per-dimension. BM25 is "lower is better"
+        // — invert by negating before normalising. Cosine is
+        // "higher is better" — use directly. Both end up on [0.0,
+        // 1.0] where 1.0 is "best in this pool".
+        let bm25_vals: Vec<f64> = blended
+            .values()
+            .filter_map(|(_, r, _)| r.map(|x| -x))
+            .collect();
+        let cosine_vals: Vec<f64> = blended.values().filter_map(|(_, _, c)| *c).collect();
+        let bm25_minmax = MinMax::from_slice(&bm25_vals);
+        let cosine_minmax = MinMax::from_slice(&cosine_vals);
+
+        let mut scored: Vec<(NoteRow, f64)> = blended
+            .into_iter()
+            .map(|(_, (row, bm, cos))| {
+                let bm_norm = bm.map(|x| bm25_minmax.normalise(-x)).unwrap_or(0.0);
+                let cos_norm = cos.map(|x| cosine_minmax.normalise(x)).unwrap_or(0.0);
+                let blended = (1.0 - weight as f64) * bm_norm + (weight as f64) * cos_norm;
+                (row, blended)
+            })
+            .collect();
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        let mut out: Vec<NoteRow> = scored
+            .into_iter()
+            .map(|(row, _)| row)
+            .filter(|n| scope_matches(n, scope_filter))
+            .collect();
+        out.truncate(cap);
+
+        tracing::debug!(
+            target = "notes",
+            blend_weight = weight,
+            pool_total = out.len(),
+            "notes: semantic blend applied"
+        );
         Ok(out)
     }
 
@@ -2893,12 +4399,15 @@ mod tests {
             "payload_json must survive the v7→v8 rename-recreate"
         );
 
-        // user_version is now 8.
+        // user_version is at the current head after open. NoteStore
+        // advances through every available migration; v9 lands the
+        // tiered-retrieval + propagation surface additively, so
+        // opening a v7 fixture leaves the DB at v9.
         let conn = Connection::open(&db_path).unwrap();
         let v: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 8);
+        assert!(v >= 8, "v7→v8 migration must have fired, got {v}");
 
         // The new kind is admitted by the rebuilt CHECK.
         let id = store
@@ -3009,5 +4518,422 @@ mod tests {
         assert!(NoteSource::Committed.priority() > NoteSource::Extracted.priority());
         assert!(NoteSource::Extracted.priority() > NoteSource::Inferred.priority());
         assert!(NoteSource::Inferred.priority() > NoteSource::Observed.priority());
+    }
+
+    // ── v9 migration + T1 (tiered retrieval) tests ─────────────────────
+
+    /// `content_hash` is deterministic over the canonical input
+    /// tuple and stable across node_id rotation. Two peers writing
+    /// the same `(kind, content, scope, feature_id, session_id)`
+    /// must produce byte-identical hashes — that's the propagation
+    /// dedup primary key.
+    #[test]
+    fn content_hash_is_deterministic_over_canonical_inputs() {
+        let h1 = compute_content_hash(
+            "decision",
+            "use BTreeMap for ordered iteration",
+            "global",
+            None,
+            "sess-1",
+        );
+        let h2 = compute_content_hash(
+            "decision",
+            "use BTreeMap for ordered iteration",
+            "global",
+            None,
+            "sess-1",
+        );
+        assert_eq!(h1, h2);
+        assert_eq!(h1.len(), 64, "SHA-256 hex digest is 64 chars");
+
+        // Changing any field changes the hash.
+        let diff_kind = compute_content_hash(
+            "attempt",
+            "use BTreeMap for ordered iteration",
+            "global",
+            None,
+            "sess-1",
+        );
+        let diff_session = compute_content_hash(
+            "decision",
+            "use BTreeMap for ordered iteration",
+            "global",
+            None,
+            "sess-2",
+        );
+        let diff_feature = compute_content_hash(
+            "decision",
+            "use BTreeMap for ordered iteration",
+            "feature",
+            Some("feat-x"),
+            "sess-1",
+        );
+        assert_ne!(h1, diff_kind);
+        assert_ne!(h1, diff_session);
+        assert_ne!(h1, diff_feature);
+
+        // Field separator prevents content-tunneling: 'foobar' as
+        // (kind="foo", content="bar") must not collide with
+        // (kind="f", content="oobar"). Both share the prefix bytes
+        // until the separator differs, so SHA-256 diverges.
+        let tunnel_a = compute_content_hash("foo", "bar", "global", None, "s");
+        let tunnel_b = compute_content_hash("f", "oobar", "global", None, "s");
+        assert_ne!(tunnel_a, tunnel_b);
+    }
+
+    /// Migration v9 lands additively: pre-v9 rows survive, new
+    /// columns appear with their defaults, and `content_hash` is
+    /// backfilled in Rust post-migration.
+    #[tokio::test]
+    async fn migrates_v8_to_v9_preserving_existing_rows() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("notes.db");
+
+        // Hand-construct a v8 DB with one pre-v9 row by replaying
+        // the same inline schema the v7→v8 test uses, plus the v8
+        // CHECK update + `user_version = 8`. Replaying migrations
+        // by chaining the consts doesn't work — `MIGRATION_V1`
+        // assumes an existing `notes` table to rename.
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch(
+                "BEGIN;
+                 CREATE TABLE notes (
+                     id            TEXT    PRIMARY KEY,
+                     kind          TEXT    NOT NULL CHECK(kind IN (
+                         'decision','attempt','invariant','todo','reflection',
+                         'uncertainty','postmortem_pointer','redteam_finding',
+                         'deviation','commitment','follow_up','goal',
+                         'research_finding','capability_request','recipe_issue',
+                         'checkpoint','checkpoint_restored','deferred_question',
+                         'tool_decision'
+                     )),
+                     content       TEXT    NOT NULL,
+                     symbols       TEXT    NOT NULL DEFAULT '[]',
+                     files         TEXT    NOT NULL DEFAULT '[]',
+                     session_id    TEXT    NOT NULL,
+                     created_at    INTEGER NOT NULL,
+                     updated_at    INTEGER NOT NULL,
+                     tool_name     TEXT,
+                     retired_at    INTEGER,
+                     retired_by    TEXT,
+                     scope         TEXT    NOT NULL DEFAULT 'global'
+                                   CHECK(scope IN ('global','feature','session')),
+                     feature_id    TEXT,
+                     promoted_from TEXT,
+                     related_entity TEXT,
+                     source        TEXT    NOT NULL DEFAULT 'agent',
+                     supersedes    TEXT,
+                     payload_json  TEXT
+                 );
+                 CREATE VIRTUAL TABLE notes_fts USING fts5(
+                     content, kind, content='notes', content_rowid='rowid'
+                 );
+                 CREATE TRIGGER notes_fts_ai AFTER INSERT ON notes BEGIN
+                     INSERT INTO notes_fts(rowid, content, kind)
+                         VALUES (new.rowid, new.content, new.kind);
+                 END;
+                 CREATE TRIGGER notes_fts_ad BEFORE DELETE ON notes BEGIN
+                     INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+                         VALUES ('delete', old.rowid, old.content, old.kind);
+                 END;
+                 CREATE TRIGGER notes_fts_au AFTER UPDATE ON notes BEGIN
+                     INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+                         VALUES ('delete', old.rowid, old.content, old.kind);
+                     INSERT INTO notes_fts(rowid, content, kind)
+                         VALUES (new.rowid, new.content, new.kind);
+                 END;
+                 CREATE TABLE meta_counters (key TEXT PRIMARY KEY, val INTEGER NOT NULL);
+                 INSERT INTO meta_counters(key, val) VALUES ('notes_version', 0);
+                 CREATE TABLE note_digest_cache (
+                     scope_hash    TEXT    PRIMARY KEY,
+                     digest_text   TEXT    NOT NULL,
+                     notes_version INTEGER NOT NULL,
+                     created_at    INTEGER NOT NULL
+                 );
+                 CREATE TABLE tool_call_log (
+                     id         TEXT    PRIMARY KEY,
+                     session_id TEXT    NOT NULL,
+                     tool_name  TEXT    NOT NULL,
+                     outcome    TEXT    NOT NULL,
+                     called_at  INTEGER NOT NULL
+                 );
+                 INSERT INTO notes (
+                     id, kind, content, session_id, created_at, updated_at,
+                     scope, source
+                 ) VALUES (
+                     'pre-v9', 'decision', 'v8 row',
+                     'sess-old', 1000, 1000, 'global', 'agent'
+                 );
+                 PRAGMA user_version = 8;
+                 COMMIT;",
+            )
+            .unwrap();
+            let v: i64 = conn
+                .query_row("PRAGMA user_version", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(v, 8, "fixture should be at v8");
+        }
+
+        // Open through NoteStore — runs MIGRATION_V9 + backfill.
+        let store = NoteStore::open(&db_path).unwrap();
+        let conn = store.conn.lock().await;
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, 9, "post-migration user_version should be 9");
+
+        // Pre-v9 row still there.
+        let row: (String, String, i64, i64, Option<String>, Option<i64>, Option<String>) = conn
+            .query_row(
+                "SELECT id, content, private, tombstone, origin_node_id, NULL, content_hash
+                   FROM notes WHERE id = 'pre-v9'",
+                [],
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get::<_, Option<i64>>(5)?,
+                        r.get(6)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert_eq!(row.1, "v8 row");
+        assert_eq!(row.2, 0, "private defaults to 0");
+        assert_eq!(row.3, 0, "tombstone defaults to 0");
+        assert_eq!(row.4, None, "origin_node_id starts NULL");
+        let backfilled_hash = row.6.expect("backfill populates content_hash");
+        let expected_hash = compute_content_hash(
+            "decision",
+            "v8 row",
+            "global",
+            None,
+            "sess-old",
+        );
+        assert_eq!(backfilled_hash, expected_hash);
+
+        // New tables exist.
+        let embed_table: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                   WHERE type='table' AND name='note_embeddings'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(embed_table, 1, "note_embeddings table created");
+        let watermark_table: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                   WHERE type='table' AND name='note_propagation_watermark'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(watermark_table, 1, "note_propagation_watermark table created");
+
+        // Indexes exist.
+        let prop_idx: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                   WHERE type='index' AND name='idx_notes_propagation'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(prop_idx, 1);
+    }
+
+    /// Re-opening a v9 DB is a no-op: no errors, no double-fire,
+    /// backfill query matches zero rows on the second open.
+    #[tokio::test]
+    async fn v9_migration_is_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("notes.db");
+        let s1 = NoteStore::open(&db_path).unwrap();
+        drop(s1);
+        // Second open should silently no-op.
+        let s2 = NoteStore::open(&db_path).unwrap();
+        let conn = s2.conn.lock().await;
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, 9);
+    }
+
+    /// New notes written through `write_note_full` carry a
+    /// `content_hash`, and the hash matches the
+    /// `compute_content_hash` invariant.
+    #[tokio::test]
+    async fn write_note_full_sets_content_hash() {
+        let store = make_store().await;
+        let id = store
+            .write_note(
+                "invariant",
+                "EOS bypass needs force_continue",
+                vec!["embedded.rs".into()],
+                vec![],
+                "sess-1",
+            )
+            .await
+            .unwrap();
+        let conn = store.conn.lock().await;
+        let hash: String = conn
+            .query_row(
+                "SELECT content_hash FROM notes WHERE id = ?",
+                params![id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let expected = compute_content_hash(
+            "invariant",
+            "EOS bypass needs force_continue",
+            "global",
+            None,
+            "sess-1",
+        );
+        assert_eq!(hash, expected);
+    }
+
+    /// `with_embed_fn` causes `write_note_full` to persist a
+    /// `note_embeddings` row in the same transaction.
+    #[tokio::test]
+    async fn write_note_with_embed_fn_persists_embedding() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("notes.db");
+        // Mock embed_fn that returns a fixed 4-dim vector keyed on
+        // input length — deterministic, dependency-free.
+        let embed: EmbedFn = Arc::new(|text: &str| {
+            let len = text.len() as f32;
+            let v = vec![len, len + 1.0, len + 2.0, len + 3.0];
+            Box::pin(async move { Ok(v) })
+        });
+        let store = NoteStore::open(&db_path).unwrap().with_embed_fn(embed);
+        assert!(store.has_embed_fn());
+
+        let id = store
+            .write_note("decision", "hello world", vec![], vec![], "sess-1")
+            .await
+            .unwrap();
+        let conn = store.conn.lock().await;
+        let (bytes, dim, model): (Vec<u8>, i64, String) = conn
+            .query_row(
+                "SELECT embedding, dim, model_id FROM note_embeddings WHERE note_id = ?",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(dim, 4);
+        assert!(!model.is_empty());
+        let decoded = embedding_from_le_bytes(&bytes).unwrap();
+        assert_eq!(decoded, vec![11.0, 12.0, 13.0, 14.0]); // "hello world".len() == 11
+    }
+
+    /// `read_notes_scoped_semantic` with `weight=0.0` returns the
+    /// exact same rows in the exact same order as
+    /// `read_notes_scoped`. This is the canonical
+    /// "no-cost-when-off" invariant from `CLUSTER_SCORE_BLEND.md`.
+    #[tokio::test]
+    async fn semantic_blend_weight_zero_is_byte_identical_to_baseline() {
+        // SAFETY: env vars are process-global; this test sets and
+        // restores SOVEREIGN_NOTES_EMBED_WEIGHT serially. The test
+        // suite does not run write_note_full concurrently with this
+        // weight reset; if added later, wrap with a serial guard.
+        unsafe {
+            std::env::set_var("SOVEREIGN_NOTES_EMBED_WEIGHT", "0.0");
+        }
+        let store = make_store().await;
+        for (kind, content) in [
+            ("decision", "use BTreeMap for ordered iteration"),
+            ("invariant", "EOS bypass needs force_continue"),
+            ("attempt", "tried mocking the database but it broke prod"),
+        ] {
+            store
+                .write_note(kind, content, vec![], vec![], "s1")
+                .await
+                .unwrap();
+        }
+        let baseline = store
+            .read_notes_scoped(
+                Some("BTreeMap"),
+                &[],
+                &[],
+                &[],
+                10,
+                false,
+                &ScopeFilter::default(),
+            )
+            .await
+            .unwrap();
+        let blended = store
+            .read_notes_scoped_semantic(
+                Some("BTreeMap"),
+                &[],
+                &[],
+                &[],
+                10,
+                false,
+                &ScopeFilter::default(),
+                Some("any semantic query — should be ignored at weight=0"),
+            )
+            .await
+            .unwrap();
+        let baseline_ids: Vec<_> = baseline.iter().map(|n| &n.id).collect();
+        let blended_ids: Vec<_> = blended.iter().map(|n| &n.id).collect();
+        assert_eq!(baseline_ids, blended_ids);
+        unsafe {
+            std::env::remove_var("SOVEREIGN_NOTES_EMBED_WEIGHT");
+        }
+    }
+
+    /// MinMax normalisation collapses a degenerate (all-equal)
+    /// pool to `0.5`, not NaN. The blend invariant requires every
+    /// candidate score lands on `[0.0, 1.0]`.
+    #[test]
+    fn min_max_normalise_handles_degenerate_pool() {
+        let mm = MinMax::from_slice(&[3.0, 3.0, 3.0]);
+        assert_eq!(mm.normalise(3.0), 0.5);
+
+        let mm = MinMax::from_slice(&[1.0, 5.0, 9.0]);
+        assert_eq!(mm.normalise(1.0), 0.0);
+        assert_eq!(mm.normalise(9.0), 1.0);
+        assert_eq!(mm.normalise(5.0), 0.5);
+        // Out-of-pool values clamp to [0, 1].
+        assert_eq!(mm.normalise(100.0), 1.0);
+        assert_eq!(mm.normalise(-100.0), 0.0);
+    }
+
+    /// `cosine_sim` returns 0.0 on dim mismatch (no signal) and
+    /// 1.0 on identical vectors.
+    #[test]
+    fn cosine_sim_handles_edges() {
+        let v = vec![1.0_f32, 0.0, 0.0, 0.0];
+        assert!((cosine_sim(&v, &v) - 1.0).abs() < 1e-6);
+
+        let orthogonal = vec![0.0_f32, 1.0, 0.0, 0.0];
+        assert!(cosine_sim(&v, &orthogonal).abs() < 1e-6);
+
+        let mismatch_dim = vec![1.0_f32, 0.0];
+        assert_eq!(cosine_sim(&v, &mismatch_dim), 0.0);
+
+        let zero = vec![0.0_f32, 0.0, 0.0, 0.0];
+        assert_eq!(cosine_sim(&zero, &v), 0.0);
+    }
+
+    /// `embedding_to_le_bytes` round-trips through
+    /// `embedding_from_le_bytes` byte-identically. The on-disk
+    /// format is endian-pinned so a Mac and a Linux toolbx peer
+    /// agree on the BLOB bytes for the same vector.
+    #[test]
+    fn embedding_le_bytes_roundtrip() {
+        let v = vec![1.5_f32, -2.25, 0.0, 99999.0];
+        let bytes = embedding_to_le_bytes(&v);
+        assert_eq!(bytes.len(), v.len() * 4);
+        let decoded = embedding_from_le_bytes(&bytes).unwrap();
+        assert_eq!(decoded, v);
     }
 }
