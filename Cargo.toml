@@ -57,7 +57,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.4"
 edition = "2021"
 # Pre-monorepo: corpus-engine + commonwealth shipped Apache-2.0;
 # sovereign shipped MIT. One license under one repo from now on —
