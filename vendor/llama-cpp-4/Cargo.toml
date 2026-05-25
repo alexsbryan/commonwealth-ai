@@ -46,10 +46,19 @@ features = [
 [features]
 blas = ["llama-cpp-sys-4/blas"]
 cuda = ["llama-cpp-sys-4/cuda"]
+# NOTE (sovereign vendor divergence): upstream's `default` includes
+# `dynamic-link`, which makes llama-cpp-sys-4 build ggml/llama as SHARED
+# libraries (libggml-base.so.0 … libmtmd.so.0). That produces binaries
+# with DT_NEEDED entries on libs that ship in no distro and live in the
+# build's hashed CMake-cache dir — breaking both daemon relocatability
+# and the desktop .deb/.rpm/AppImage (linuxdeploy can't resolve them).
+# We static-link instead, so every sovereign binary is self-contained.
+# Re-enable `dynamic-link` explicitly per-consumer if you ever need the
+# shared-lib layout. (See RELEASING.md "Could not find dependency:
+# libggml-base.so.0" and [[project_desktop_linux_build_deps]].)
 default = [
     "openmp",
     "mtmd",
-    "dynamic-link",
 ]
 dynamic-link = ["llama-cpp-sys-4/dynamic-link"]
 ggml = []

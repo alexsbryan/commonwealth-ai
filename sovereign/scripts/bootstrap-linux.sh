@@ -11,7 +11,6 @@
 #   ./scripts/bootstrap-linux.sh --backend=rocm
 #   ./scripts/bootstrap-linux.sh --backend=vulkan
 #   ./scripts/bootstrap-linux.sh --no-sudo       # skip package install (caller handled it)
-#   ./scripts/bootstrap-linux.sh --revert-cargo  # undo the Vulkan Cargo.toml swap
 #
 # What it does:
 #   1. Preflights the container image for two known kyuz0 vulkan-radv
@@ -19,7 +18,7 @@
 #      prints a host-side `podman exec` fix if either is detected.
 #   2. Detects the GPU backend from the toolbox (or honours --backend).
 #   3. Installs Rust (via rustup if no system toolchain, + rustfmt which
-#      llama-cpp-sys-2's bindgen needs), clang/libclang, cmake, binutils,
+#      llama-cpp-sys-4's bindgen needs), clang/libclang, cmake, binutils,
 #      mold (workspace .cargo/config.toml forces `-fuse-ld=mold` on Linux —
 #      clang errors with `invalid linker name` if mold isn't on PATH),
 #      protobuf, OpenSSL, the GTK/WebKit deps Tauri 2 needs for
@@ -30,13 +29,16 @@
 #      runtime linker finds libamdhip64 without LD_LIBRARY_PATH, and
 #      /etc/profile.d/sovereign-rocm.sh so new shells have
 #      ROCM_PATH / HIP_PATH / PATH / CMAKE_PREFIX_PATH pre-set.
-#   5. Rewrites the `llama-cpp-2` backend feature in
-#      crates/sovereign-inference/Cargo.toml to match the resolved backend
-#      (rocm ↔ vulkan, leaving llguidance and friends alone). The repo
-#      default is "rocm"; the vulkan swap is a LOCAL EDIT — don't commit
-#      it. `--revert-cargo` puts it back to the rocm default.
-#   6. Wipes target/*/build/llama-cpp-sys-2-* if the previous build used
+#   5. Wipes target/*/build/llama-cpp-sys-4-* if the previous build used
 #      a different backend, so cmake reconfigures from scratch.
+#
+# The GPU backend is no longer selected by editing Cargo.toml. As of the
+# llama-cpp-4 migration it is cfg-gated and committed in
+# crates/sovereign-inference/Cargo.toml (metal on macOS, vulkan on Linux —
+# ROCm was dropped after the gfx1151 A3B-MoE crash, see
+# https://github.com/ggml-org/llama.cpp/issues/20176). This script installs
+# the backend's *build* deps but makes no Cargo.toml edit, so there is
+# nothing to revert.
 #
 # --no-sudo mode is for when you've already installed system packages
 # from the host via `podman exec --user root <container> dnf install ...`
@@ -50,11 +52,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-INFERENCE_TOML="$REPO_ROOT/crates/sovereign-inference/Cargo.toml"
 BACKEND_MARKER="$REPO_ROOT/target/.sovereign-backend"
 
 BACKEND="auto"
-REVERT_CARGO=0
 NO_SUDO=0
 
 ROCM_PATH="${ROCM_PATH:-/opt/rocm}"
@@ -66,7 +66,6 @@ parse_args() {
     for arg in "$@"; do
         case "$arg" in
             --backend=rocm|--backend=vulkan|--backend=auto) BACKEND="${arg#--backend=}" ;;
-            --revert-cargo) REVERT_CARGO=1 ;;
             --no-sudo) NO_SUDO=1 ;;
             -h|--help)
                 sed -n '2,/^set -/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//;/^set -/d'
@@ -203,7 +202,7 @@ ensure_rust() {
         # shellcheck source=/dev/null
         . "$HOME/.cargo/env"
     fi
-    # llama-cpp-sys-2's bindgen pipes its output through rustfmt; rustup's
+    # llama-cpp-sys-4's bindgen pipes its output through rustfmt; rustup's
     # minimal profile omits it. Without it the build errors with
     # "'rustfmt' is not installed for the toolchain".
     if ! command -v rustfmt >/dev/null 2>&1; then
@@ -217,11 +216,15 @@ install_fedora_common() {
     # but not a working target; see preflight_image_quirks).
     # mold: workspace .cargo/config.toml forces `-fuse-ld=mold` on Linux;
     # clang fails with `invalid linker name` if the binary isn't on PATH.
+    # bzip2-devel: provides /usr/lib64/libbz2.so (the link symlink) that
+    # the `bzip2-sys` crate needs (`-lbz2`); the runtime libbz2.so.1 alone
+    # isn't enough and mold dies with `library not found: bz2` linking
+    # sovereign-eval. Not pulled transitively by any other -devel here.
     sudo dnf install -y \
         clang clang-devel \
         cmake gcc gcc-c++ pkg-config binutils mold \
         protobuf-compiler protobuf-devel \
-        openssl-devel \
+        openssl-devel bzip2-devel \
         webkit2gtk4.1-devel gtk3-devel libsoup3-devel librsvg2-devel \
         libayatana-appindicator-gtk3
 }
@@ -250,7 +253,7 @@ install_ubuntu_common() {
         clang libclang-dev \
         cmake build-essential pkg-config mold \
         protobuf-compiler libprotobuf-dev \
-        libssl-dev \
+        libssl-dev libbz2-dev \
         libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev librsvg2-dev \
         libayatana-appindicator3-1
 }
@@ -291,46 +294,7 @@ EOF
     fi
 }
 
-# Swap the llama-cpp-2 feature in sovereign-inference/Cargo.toml.
-# Idempotent: no-op if already the target backend.
-swap_inference_backend() {
-    local want="$1"
-    [[ -f "$INFERENCE_TOML" ]] || die "missing $INFERENCE_TOML"
-
-    local have
-    have="$(awk '/^\[target\..cfg\(target_os = "linux"\).\.dependencies\]/{flag=1;next} flag && /^llama-cpp-2/{print; exit}' "$INFERENCE_TOML")"
-    case "$have" in
-        *'"rocm"'*)   current="rocm" ;;
-        *'"vulkan"'*) current="vulkan" ;;
-        *) die "couldn't parse llama-cpp-2 feature in $INFERENCE_TOML — manual edit?" ;;
-    esac
-
-    if [[ "$current" == "$want" ]]; then
-        return
-    fi
-
-    echo "== Swapping sovereign-inference Linux backend: $current → $want =="
-    # Match the Linux [target] block only, to avoid touching the macOS metal line.
-    # The features list contains the backend plus other features (e.g. llguidance),
-    # so we locate the line under the linux header and swap the rocm/vulkan token
-    # within it — tolerant of order and additional features.
-    python3 - "$INFERENCE_TOML" "$want" <<'PY'
-import re, sys, pathlib
-path, want = pathlib.Path(sys.argv[1]), sys.argv[2]
-src = path.read_text()
-header = '[target.\'cfg(target_os = "linux")\'.dependencies]'
-m = re.search(re.escape(header) + r'\s*\n(llama-cpp-2 = \{[^\n]*\})', src)
-if not m:
-    sys.exit("couldn't find Linux llama-cpp-2 line under " + header)
-line = m.group(1)
-new_line, n = re.subn(r'"(rocm|vulkan)"', f'"{want}"', line)
-if n != 1:
-    sys.exit(f"expected exactly one rocm/vulkan token in features list, found {n}")
-path.write_text(src[:m.start(1)] + new_line + src[m.end(1):])
-PY
-}
-
-# Wipe llama-cpp-sys-2 build dirs if the last backend differed.
+# Wipe llama-cpp-sys-4 build dirs if the last backend differed.
 # Lance/etc. are backend-neutral, so we do NOT blow away all of target/.
 wipe_llama_cache_if_backend_changed() {
     local want="$1"
@@ -339,8 +303,8 @@ wipe_llama_cache_if_backend_changed() {
     [[ -f "$BACKEND_MARKER" ]] && prev="$(cat "$BACKEND_MARKER")"
 
     if [[ "$prev" != "" && "$prev" != "$want" ]]; then
-        echo "== Backend changed ($prev → $want); wiping llama-cpp-sys-2 build cache =="
-        rm -rf "$REPO_ROOT"/target/*/build/llama-cpp-sys-2-* 2>/dev/null || true
+        echo "== Backend changed ($prev → $want); wiping llama-cpp-sys-4 build cache =="
+        rm -rf "$REPO_ROOT"/target/*/build/llama-cpp-sys-4-* 2>/dev/null || true
     fi
     echo "$want" > "$BACKEND_MARKER"
 }
@@ -357,20 +321,8 @@ warn_stale_rocm_env() {
     fi
 }
 
-revert_cargo_swap() {
-    # Put the Linux feature back to "rocm" (repo default). Idempotent.
-    swap_inference_backend rocm
-    echo "Reverted crates/sovereign-inference/Cargo.toml to the rocm default."
-    echo "If git status is now clean, you're good to commit."
-}
-
 main() {
     parse_args "$@"
-
-    if (( REVERT_CARGO )); then
-        revert_cargo_swap
-        return
-    fi
 
     preflight_image_quirks
 
@@ -399,10 +351,8 @@ main() {
         else
             configure_rocm_runtime
         fi
-        swap_inference_backend rocm
     else
         warn_stale_rocm_env
-        swap_inference_backend vulkan
     fi
 
     wipe_llama_cache_if_backend_changed "$resolved"
@@ -424,13 +374,9 @@ to pick up ROCM_PATH / HIP_PATH, then:
 EOF
     else
         cat <<EOF
-A local edit was applied to crates/sovereign-inference/Cargo.toml to
-pick the Vulkan backend for llama-cpp-2. Do NOT commit it — the repo
-default stays rocm. Undo with:
-
-  ./scripts/bootstrap-linux.sh --revert-cargo
-
-Then:
+The Vulkan backend is already selected (cfg-gated + committed in
+crates/sovereign-inference/Cargo.toml) — no Cargo.toml edit was made, so
+git status stays clean. Just build:
 
   cargo build --release
 

@@ -445,31 +445,69 @@ load-bearing artifact of the release process.
 
 ## Local rehearsal
 
-To run the same build the workflow will run, locally:
+Two driver scripts run the same build the GitHub Actions workflow runs,
+locally — so you can iterate on Tauri config / `.cargo/config.toml` /
+llama-cpp-sys-4 linkage / Vulkan bundling without 30-minute round-trips
+through CI.
+
+### Linux
+
+Containerized (mirrors the `ubuntu-22.04` runner with Vulkan SDK +
+mold + Tauri + Node 20 + tesseract pre-installed):
 
 ```sh
-# 1. Stage binaries for your host
-scripts/fetch-desktop-binaries.sh
+scripts/build-desktop-linux.sh                  # unsigned, ~10min first run
+scripts/build-desktop-linux.sh --rebuild        # force container image rebuild
+scripts/build-desktop-linux.sh --shell          # drop into the container at /work
 
-# 2. Make sure you have system tesseract for v1
-brew install tesseract            # macOS
-sudo apt install tesseract-ocr    # Linux x86_64
-
-# 3. Copy tesseract into place (CI does this — see workflow steps)
-HOST="$(rustc -vV | awk '/^host:/ { print $2 }')"
-cp "$(brew --prefix tesseract)/bin/tesseract" \
-   sovereign/crates/sovereign-desktop/src-tauri/binaries/tesseract-${HOST}
-
-# 4. Build
-cd sovereign/crates/sovereign-desktop
-cargo tauri build --config src-tauri/tauri.release.conf.json
-
-# 5. Inspect bundles
-ls -la ../../../target/${HOST}/release/bundle/*/
+# With updater signing:
+TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/sovereign-updater.key)" \
+TAURI_SIGNING_PRIVATE_KEY_PASSWORD=... \
+    scripts/build-desktop-linux.sh
 ```
 
-For dev iteration WITHOUT the release-config overlay, set the env
-vars from `binaries/README.md` and run `cargo tauri dev` as usual.
+Outputs land at `target-container-linux/x86_64-unknown-linux-gnu/release/bundle/`
+(a separate target dir from your host's `target/` so container compiles
+don't stomp on host compiles). Container image: `sovereign-desktop-linux-build:latest`.
+Containerfile lives in `sovereign/crates/sovereign-desktop/containerfiles/`.
+
+Runtime: `podman` preferred (Fedora native, rootless), `docker` fallback.
+
+### macOS
+
+Runs natively on the Mac — GitHub's `macos-14` / `macos-13` runners use
+real Apple hardware (Apple's license forbids virtualizing macOS on
+non-Apple hardware, so containers are not an option).
+
+```sh
+scripts/build-desktop-macos.sh                  # host-arch default
+scripts/build-desktop-macos.sh --target x86_64-apple-darwin
+scripts/build-desktop-macos.sh --universal      # universal2 binary
+
+# With updater signing (same env vars as Linux):
+TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/sovereign-updater.key)" \
+TAURI_SIGNING_PRIVATE_KEY_PASSWORD=... \
+    scripts/build-desktop-macos.sh
+```
+
+The script auto-installs Homebrew deps (`tesseract`, `lld`),
+ensures `SDKROOT` is set per `[[feedback_macos_sdkroot_for_bindgen]]`,
+stages tesseract into `binaries/`, fetches PDFium + tessdata, and runs
+`cargo tauri build`. Outputs at `target/<triple>/release/bundle/`.
+
+### Windows
+
+Not containerizable locally on Fedora/macOS — Tauri's MSI bundler is
+Windows-only. Push the tag and let GitHub Actions handle Windows
+specifically (the `windows-2022` matrix step is unrelated to the
+Linux/macOS Vulkan/Metal mess, so it tends to be reliable).
+
+### Dev iteration WITHOUT the release-config overlay
+
+For `cargo tauri dev` rather than `cargo tauri build`, set the env
+vars from `binaries/README.md` and run `cargo tauri dev` as usual —
+the dev path uses the base `tauri.conf.json` which has no `externalBin`
+entries, so it works without staging binaries.
 
 ---
 
@@ -505,6 +543,62 @@ EV cert (Phase 2).
 
 `sudo apt install libfuse2` on the user's machine. Modern distros have
 moved to FUSE 3; AppImage still uses 2.
+
+### Linux build fails: `Could not find dependency: libggml-base.so.0`
+
+You'll only see this if `dynamic-link` has been re-enabled on
+`llama-cpp-4`. By default the project **static-links** ggml/llama (the
+vendored `llama-cpp-4` drops `dynamic-link` from its `default`
+features), so the binary has no `libggml*.so` / `libllama*.so`
+`DT_NEEDED` entries at all — every installer (`.deb`, `.rpm`, AppImage)
+is self-contained, and `linuxdeploy`'s dependency walk only sees
+packageable system libs (`libvulkan.so.1`, GTK, …).
+
+If you turn `dynamic-link` back on, `llama-cpp-sys-4` emits shared libs
+(`libggml-base.so.0` … `libmtmd.so.0`) into its hashed CMake-cache dir
+(`target/<triple>/llama-cmake-cache/<hash>/{build/bin,lib}/`), which is
+on no standard search path — so `linuxdeploy` can't find them and
+aborts. To make that path work you'd need to `cargo tauri build
+--no-bundle` first, then put that dir on `LD_LIBRARY_PATH` before the
+bundling pass (linuxdeploy then copies them into `AppDir/usr/lib/` and
+patches the binary RUNPATH to `$ORIGIN/../lib`) — **and** separately
+co-package them into the `.deb`/`.rpm` (those bundlers skip the
+dependency walk, so they'd build but not launch). Static-linking
+sidesteps all of this; prefer it.
+
+Verify a build is self-contained (no ggml/llama in the dynamic deps):
+
+```sh
+readelf -d target/<triple>/release/sovereign-desktop | grep -E 'NEEDED.*(ggml|llama|mtmd)'
+# → no output when static-linked
+```
+
+### deb/rpm installs but won't launch: `libvulkan.so.1: cannot open`
+
+The Vulkan backend still dynamically links the **system** loader
+`libvulkan.so.1` (only ggml/llama are static). Tauri doesn't auto-detect
+it, so `tauri.release.conf.json` declares it explicitly:
+`bundle.linux.deb.depends = ["libvulkan1"]` and
+`bundle.linux.rpm.depends = ["vulkan-loader"]`. apt/dnf then pull the
+loader on install. The AppImage bundles `libvulkan.so.1` directly, so
+it's unaffected. (The GTK/webkit deps are auto-added: deb gets
+`libwebkit2gtk-4.1-0`/`libgtk-3-0`/`libappindicator3-1`, rpm auto-detects
+the sonames.)
+
+> **Inspecting a `.deb` on Fedora:** `dpkg-deb` is absent, so it silently
+> reads nothing. Use `ar x foo.deb && tar -xf control.tar.* && cat control`
+> to see the real `Depends`.
+
+### Linux build fails: `'spv' has not been declared` / `glslc` not found
+
+Vulkan build tooling missing. The Linux backend forces
+`-DGGML_VULKAN=ON`, so the build needs `glslc` (from `shaderc`), the
+SPIR-V headers (`spirv-headers` — ggml-vulkan.cpp `#include`s
+`<spirv/unified1/spirv.hpp>` for the `spv::` namespace), and
+`libvulkan-dev`. Stock Ubuntu 22.04 has none of `glslc`/`shaderc`/
+`spirv-headers`, so both the Containerfile and the CI Linux apt step
+register **LunarG's Vulkan SDK apt repo** and install
+`libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc`.
 
 ### Tesseract OCR not available on the bundled installer
 
