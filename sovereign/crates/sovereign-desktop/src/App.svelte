@@ -485,7 +485,6 @@
               {taskSteps}
               onClearTask={clearTaskState}
               onOpenSettings={() => (view = "settings")}
-              onToggleInsights={() => (showInsights = !showInsights)}
               onConversationCreated={handleConversationCreated}
             />
           </main>

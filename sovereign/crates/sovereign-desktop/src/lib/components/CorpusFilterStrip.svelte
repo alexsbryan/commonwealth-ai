@@ -179,48 +179,34 @@
 
 <style>
   .corpus-filter-strip {
+    /* Wrap to as many rows as the corpora demand instead of single-
+       row horizontal scroll. Truncated names ("Stanford E…") were
+       worse than a second row — corpus identity is load-bearing on
+       this surface. Wraps grow vertically; in practice 2 rows is
+       the typical max. */
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
-    overflow-x: auto;
-    /* Hide scrollbar — fade-mask hints at overflow instead. */
-    scrollbar-width: none;
-    /* Edge fade signals more content off-screen without claiming
-       layout space for a scrollbar. */
-    mask-image: linear-gradient(
-      to right,
-      transparent 0,
-      black 16px,
-      black calc(100% - 16px),
-      transparent 100%
-    );
-    -webkit-mask-image: linear-gradient(
-      to right,
-      transparent 0,
-      black 16px,
-      black calc(100% - 16px),
-      transparent 100%
-    );
-    padding: 8px 20px;
+    padding: 10px 24px;
     flex-shrink: 0;
     border-top: 1px solid var(--border-mid);
     background: var(--bg-secondary);
   }
-  .corpus-filter-strip::-webkit-scrollbar {
-    display: none;
-  }
 
   .kb-tag {
-    /* Enabled = gold accent. Reads as active + clickable; matches the
-       app's `--accent` token used by the empty-state SOVEREIGN mark
-       and the setup-flow active states. Disabled drops back to the
-       muted-text/border palette below. */
-    font-size: 0.67rem;
-    padding: 3px 10px;
+    /* Compact mono tag. Smaller than the 0.7rem first pass so two
+       rows hold ~6-8 chips without crowding; full corpus names
+       always render (no ellipsis). Enabled = gold rule; disabled
+       drops to a muted neutral. */
+    font-size: 0.62rem;
+    padding: 4px 9px;
     border: 1px solid var(--accent);
-    border-radius: 100px;
+    border-radius: 2px;
     color: var(--accent-light);
     font-family: var(--font-mono);
-    letter-spacing: 0.04em;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     background: var(--accent-dim);
     cursor: pointer;
     flex-shrink: 0;
@@ -235,12 +221,12 @@
   .kb-tag:hover:not(.disabled) {
     border-color: var(--accent-hover);
     color: var(--accent-light);
-    box-shadow: 0 0 12px rgba(201, 168, 76, 0.35);
+    box-shadow: 0 0 10px rgba(201, 168, 76, 0.32);
   }
   .kb-tag.disabled {
     border-color: var(--border-mid);
     color: var(--text-muted);
-    background: var(--bg-surface);
+    background: transparent;
     opacity: 0.55;
     text-decoration: line-through;
     text-decoration-thickness: 1px;
@@ -251,10 +237,11 @@
     opacity: 0.75;
   }
   .kb-tag-label {
+    /* No truncation — full corpus name reads, the strip wraps a row
+       to make room. Truncated names ("Stanford E…") lose the
+       affordance value: the chip exists so the user can recognize
+       what they're toggling. */
     display: inline-block;
-    max-width: 14ch;
-    overflow: hidden;
-    text-overflow: ellipsis;
     vertical-align: bottom;
   }
 </style>

@@ -409,6 +409,10 @@ export interface HardwareInfo {
   system_ram_gb: number;
   gpu_available: boolean;
   gpu_name: string | null;
+  /** Discrete GPU VRAM in GB. Null on unified-memory (Apple Silicon) or no GPU. */
+  gpu_memory_gb: number | null;
+  /** True on Apple Silicon (M-series). Drives unified-vs-discrete tiering. */
+  is_unified_memory: boolean;
 }
 
 // ─── Knowledge Base ─────────────────────────────────────────
