@@ -683,6 +683,18 @@ impl ConversationStore for SqliteStateStore {
         }
         Ok(())
     }
+
+    async fn insert_empty_conversation(
+        &self,
+        id: &str,
+        created_at: i64,
+        surface_skill_id: Option<&str>,
+    ) -> Result<()> {
+        // Delegate to the inherent method so the INSERT OR IGNORE SQL
+        // has a single source of truth. Explicit path avoids resolving
+        // back to this trait method.
+        SqliteStateStore::insert_empty_conversation(self, id, created_at, surface_skill_id).await
+    }
 }
 
 #[async_trait]

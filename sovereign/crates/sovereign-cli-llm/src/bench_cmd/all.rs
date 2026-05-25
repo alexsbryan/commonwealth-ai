@@ -89,6 +89,14 @@ const HELP: Help = Help {
                  per question. Mutually exclusive with --synth. Baselines stored at \
                  `baselines/<bench>-routing/`.",
             ),
+            (
+                "--isolate",
+                "Per-corpus isolation (with --synth). Scopes each bank's retrieval to its target \
+                 corpus so the run measures that corpus's INTEGRITY in isolation (does it hold + \
+                 retrieve the facts its queries need?) rather than its performance amid \
+                 cross-corpus competition. The unscoped --synth run remains the cross-corpus UX \
+                 measure. Baselines stored at `baselines/<bench>-synth-isolated/`.",
+            ),
         ]),
         HelpSection::Notes(
             "Enrichment lane reads ~/.sovereign/indexes/<corpus>/atlas/atoms.json directly. \
@@ -190,6 +198,12 @@ struct Opts {
     /// stored at `baselines/<bench>-routing/` to keep separate
     /// from retrieval and synth modes.
     routing_only: bool,
+    /// Per-corpus isolation (synth only). Passes `--isolate` to
+    /// `eval run`, scoping each bank's retrieval to its target corpus
+    /// to measure that corpus's integrity in isolation rather than its
+    /// performance amid cross-corpus competition. Baselines stored at
+    /// `baselines/<bench>-synth-isolated/`.
+    isolate: bool,
 }
 
 impl Default for Opts {
@@ -204,6 +218,7 @@ impl Default for Opts {
             retrieval_limit: 30,
             synth: false,
             routing_only: false,
+            isolate: false,
         }
     }
 }
@@ -221,6 +236,8 @@ fn baseline_bench(
     }
     let suffix = if opts.routing_only {
         "-routing"
+    } else if opts.synth && opts.isolate {
+        "-synth-isolated"
     } else if opts.synth {
         "-synth"
     } else {
@@ -622,6 +639,9 @@ async fn run_retrieval(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
     if opts.synth {
         cmd_args.push("--synth");
     }
+    if opts.isolate {
+        cmd_args.push("--isolate");
+    }
     let status = Command::new(&exe).args(&cmd_args).status();
 
     match status {
@@ -860,6 +880,10 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
             }
             "--routing-only" => {
                 opts.routing_only = true;
+                i += 1;
+            }
+            "--isolate" => {
+                opts.isolate = true;
                 i += 1;
             }
             other if other.starts_with("--") => {

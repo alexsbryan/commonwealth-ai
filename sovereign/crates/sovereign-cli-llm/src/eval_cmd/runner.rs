@@ -1673,6 +1673,7 @@ pub async fn run_bank_synth(
     session: &ChatSession,
     bank: &EvalBank,
     judge: bool,
+    isolate: bool,
 ) -> Result<EvalRun, String> {
     let started_at_unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1686,9 +1687,29 @@ pub async fn run_bank_synth(
     // failure. Misconfigured (no corpus AND no chat model) bootstraps
     // already failed in `build_session` upstream.
 
+    // Per-corpus isolation: scope retrieval to the bank's target corpus
+    // so the run measures THAT corpus's integrity (does it hold +
+    // retrieve the facts its queries need?) rather than its performance
+    // amid cross-corpus competition. Empty target = can't scope; warn
+    // and fall back to unscoped.
+    let isolate_corpora: Option<Vec<String>> = if isolate {
+        if bank.bank.corpus.is_empty() {
+            eprintln!("warn: --isolate set but bank declares no target corpus; running unscoped");
+            None
+        } else {
+            eprintln!(
+                "isolation mode — retrieval scoped to corpus `{}`",
+                bank.bank.corpus
+            );
+            Some(vec![bank.bank.corpus.clone()])
+        }
+    } else {
+        None
+    };
+
     let mut results = Vec::with_capacity(bank.questions.len());
     for q in &bank.questions {
-        let result = run_question_synth(session, q, judge).await;
+        let result = run_question_synth(session, q, judge, isolate_corpora.as_deref()).await;
         results.push(result);
     }
 
@@ -1704,9 +1725,40 @@ pub async fn run_bank_synth(
     })
 }
 
-async fn run_question_synth(session: &ChatSession, q: &Question, judge: bool) -> EvalResult {
+async fn run_question_synth(
+    session: &ChatSession,
+    q: &Question,
+    judge: bool,
+    isolate_corpora: Option<&[String]>,
+) -> EvalResult {
     let conversation_id = uuid::Uuid::new_v4().to_string();
     let t_wall = Instant::now();
+
+    // Per-corpus isolation: seed the conversation's corpus allow-list
+    // BEFORE the turn. `handle_message_stream` → `build_context` loads
+    // `enabled_corpora` and the retrieval fan-out (Filter 4) honors it;
+    // `save_message`'s upsert preserves the column (ON CONFLICT updates
+    // only `updated_at`). Best-effort — a seeding failure just falls
+    // back to unscoped retrieval rather than voiding the question.
+    if let Some(corpora) = isolate_corpora {
+        let created_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        if let Err(e) = session
+            .store
+            .insert_empty_conversation(&conversation_id, created_at, None)
+            .await
+        {
+            eprintln!("  warn: isolate seed (insert) failed for {}: {e}", q.id);
+        } else if let Err(e) = session
+            .store
+            .set_conversation_enabled_corpora(&conversation_id, Some(corpora.to_vec()))
+            .await
+        {
+            eprintln!("  warn: isolate seed (scope) failed for {}: {e}", q.id);
+        }
+    }
 
     // 1. Drive the same path the desktop chat surface uses. Failures
     //    here become an empty-row result so one model-side error

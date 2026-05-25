@@ -2277,7 +2277,7 @@ impl Runtime {
         // ranking. Records are not threaded through KnowledgeContext
         // (the non-streaming surface is unused by the bench), but the
         // chunks they inject still survive the merge below.
-        let _meta_atlas_hits = self
+        let meta_atlas_hits = self
             .meta_atlas_boost(
                 &mut all_chunks,
                 &entities,
@@ -2414,8 +2414,48 @@ impl Runtime {
         // are by-classifier "REASONING" — but the expander returns
         // initial unchanged when fewer than 2 distinct titled sources
         // appear, so it's safe to call unconditionally.
-        let (mut all_chunks, _sources_expanded, _total_fetched) =
+        let (mut all_chunks, sources_expanded, _total_fetched) =
             self.expand_from_top_sources(all_chunks).await;
+
+        // DeepQuery/Simple glassbox (opt-in). This path has no
+        // evidence-shape `turn_summary` (that lives in the KQ planner),
+        // so DeepQuery turns — multi_article_synthesis, causal_reasoning,
+        // contested — were invisible to the retrieval audit. Emit the
+        // FINAL composition (post sort + truncate + top-sources expand +
+        // graph one-hop) so cross-corpus dilution is diagnosable here:
+        // `final_by_corpus` answers "did the target corpus survive the
+        // merge, or did SEP/catalog/fetched crowd it out?" — the thing
+        // the pre-merge `merged_pool` event can't show. Gated on the
+        // `retrieval_audit` target so production pays only a level-check.
+        if tracing::enabled!(target: "retrieval_audit", tracing::Level::INFO) {
+            use std::collections::{HashMap, HashSet};
+            let mut by_corpus: HashMap<String, usize> = HashMap::new();
+            let mut seen: HashSet<String> = HashSet::new();
+            for c in &all_chunks {
+                *by_corpus.entry(c.corpus_id.clone()).or_insert(0) += 1;
+                seen.insert(
+                    c.source_doc_id
+                        .clone()
+                        .or_else(|| c.title.clone())
+                        .unwrap_or_default(),
+                );
+            }
+            let mut corpus_pairs: Vec<(String, usize)> = by_corpus.into_iter().collect();
+            corpus_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+            let query_preview: String = message.chars().take(80).collect();
+            tracing::info!(
+                target: "retrieval_audit",
+                event = "deep_turn_summary",
+                intent = ?intent,
+                query = %query_preview,
+                final_chunks = all_chunks.len(),
+                distinct_sources = seen.len(),
+                final_by_corpus = ?corpus_pairs,
+                sources_expanded,
+                meta_atlas_hits = meta_atlas_hits.len(),
+                "retrieval_audit: deep_turn_summary"
+            );
+        }
 
         // Count mesh hits that survived dedupe so the search_method
         // label reflects what's actually in the prompt.

@@ -69,6 +69,7 @@ const RUN_HELP: Help = Help {
             ("--bank <path>",  "Path to the bank TOML (e.g. sovereign-recipes/wikipedia/eval/wikipedia_questions.toml)."),
             ("--synth",        "Drive each question through the full chat pipeline (routing → retrieval → synthesis). Slower, but exercises the model + routing layers."),
             ("--routing-only", "Call the classifier per question and score the routing decision against `expected_intent` (or category default). Skips retrieval and synthesis — fast iteration loop for tuning the classifier prompt."),
+            ("--isolate",      "Per-corpus isolation (with --synth). Seeds each question's conversation with enabled_corpora=[bank.corpus] so retrieval is scoped to the bank's target corpus alone — measures corpus integrity without cross-corpus dilution."),
             ("--limit <N>",    "Top-N chunks to retrieve per question (retrieval mode only; default: 10)."),
             ("--inspect",      "Print missing facts/sources + top retrieved chunks per question."),
             ("--no-judge",     "Skip the LLM-as-judge \"instructor mode\" pass under --synth. Default: judge runs alongside the strict scorer to catch paraphrased coverage."),
@@ -205,6 +206,14 @@ struct RunArgs {
     /// ~Nx wall time per iteration; multi-judge costs ~+Nx10s per
     /// thread (~6min for N=3 on the 13-thread bank).
     judge_trials: usize,
+    /// Per-corpus isolation mode (synth only). Seeds each question's
+    /// conversation with `enabled_corpora = [bank.corpus]` so retrieval
+    /// is scoped to the bank's target corpus alone — measuring that
+    /// corpus's *integrity* (does it hold + retrieve the facts its
+    /// queries need?) without cross-corpus dilution. Off by default:
+    /// the unscoped run is the cross-corpus UX, scored on answer
+    /// quality.
+    isolate: bool,
 }
 
 impl Default for RunArgs {
@@ -229,6 +238,7 @@ impl Default for RunArgs {
             threads: false,
             thread_id_filter: None,
             judge_trials: 1,
+            isolate: false,
         }
     }
 }
@@ -287,6 +297,9 @@ async fn cmd_run(args: &[String]) -> i32 {
             }
             "--routing-only" => {
                 a.routing_only = true;
+            }
+            "--isolate" => {
+                a.isolate = true;
             }
             "--no-judge" => {
                 a.no_judge = true;
@@ -621,7 +634,7 @@ async fn cmd_run(args: &[String]) -> i32 {
                  retrieval, not the eval runner's chunk search)."
             );
         }
-        match runner::run_bank_synth(&session, &bank, !a.no_judge).await {
+        match runner::run_bank_synth(&session, &bank, !a.no_judge, a.isolate).await {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("error: {e}");
