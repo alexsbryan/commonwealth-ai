@@ -101,9 +101,24 @@ jobs:
         working-directory: sovereign/crates/sovereign-desktop
         run: npm ci
 
-      - name: Linux system deps (AppImage / .deb)
+      - name: Linux system deps (AppImage / .deb + Vulkan backend)
         if: matrix.platform.runner == 'ubuntu-22.04'
         run: |
+          # Vulkan build tooling is NOT on the stock ubuntu-22.04 runner
+          # and stock Ubuntu apt has no `glslc`/`shaderc`/`spirv-headers`.
+          # sovereign-inference forces llama-cpp-4's `vulkan` feature on
+          # Linux, so llama-cpp-sys-4 builds ggml with -DGGML_VULKAN=ON and
+          # needs: glslc (ggml-vulkan's vulkan-shaders-gen), the SPIR-V
+          # headers (ggml-vulkan.cpp #includes <spirv/unified1/spirv.hpp>
+          # for the `spv::` namespace), and libvulkan.so to link against.
+          # LunarG's apt repo provides all three. (Mirrors
+          # containerfiles/Containerfile.linux-build — keep them in sync.)
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl gnupg
+          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
+          curl -fsSL https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list \
+            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan-jammy.list >/dev/null
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
@@ -111,7 +126,30 @@ jobs:
             librsvg2-dev \
             patchelf \
             libfuse2 \
-            tesseract-ocr
+            tesseract-ocr \
+            mold \
+            libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
+          # `mold` is required by .cargo/config.toml's
+          # x86_64-unknown-linux-gnu rustflags. Without it, every
+          # crate's link step errors with
+          # `clang: error: invalid linker name in argument '-fuse-ld=mold'`.
+          # The repo's config is keyed on linker speed for local dev;
+          # CI just needs the binary on PATH.
+          #
+          # AppImage bundling also shells out to xdg-mime /
+          # glib-compile-schemas / gdk-pixbuf-query-loaders / rsvg-convert;
+          # the runner image already ships those (xdg-utils, libglib2.0-bin,
+          # libgdk-pixbuf2.0-bin, librsvg2-bin). The minimal build container
+          # installs them explicitly — see the Containerfile.
+
+      - name: macOS linker (lld)
+        if: startsWith(matrix.platform.runner, 'macos')
+        run: |
+          # .cargo/config.toml's *-apple-darwin rustflags pass
+          # `-fuse-ld=lld`, which clang routes to LLVM's lld. macos-14
+          # and macos-13 runners don't ship lld; the Homebrew LLVM
+          # formula provides it.
+          brew install lld
 
       - name: Stage Tesseract (macOS)
         if: startsWith(matrix.platform.runner, 'macos')
@@ -161,6 +199,12 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY_PASSWORD }}
         run: |
+          # ggml/llama are static-linked into the binary (the vendored
+          # llama-cpp-4 drops `dynamic-link` from its defaults), so the
+          # bundle is self-contained — no libggml*.so / libllama*.so to
+          # locate or co-package, and linuxdeploy's AppImage dependency walk
+          # only sees packageable system libs (libvulkan.so.1, GTK, …). A
+          # single build pass produces all installers.
           cargo tauri build \
             --target ${{ matrix.platform.target }} \
             --config src-tauri/tauri.release.conf.json

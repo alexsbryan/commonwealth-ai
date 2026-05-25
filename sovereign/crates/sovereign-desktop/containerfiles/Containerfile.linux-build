@@ -1,0 +1,142 @@
+# syntax=docker/dockerfile:1.7
+# Local Linux desktop-bundle builder.
+#
+# Mirrors the GitHub Actions `ubuntu-22.04` runner closely enough that a
+# successful build here is a strong signal CI will succeed. Use to
+# iterate on Tauri config / .cargo/config.toml / llama-cpp-sys-4
+# linkage / Vulkan-backend behavior WITHOUT 30-minute roundtrips
+# through GitHub Actions.
+#
+# Driver script: scripts/build-desktop-linux.sh.
+#
+# What this image deliberately includes vs. the runner:
+#   - Vulkan build tooling from LunarG's apt repo . llama-cpp-sys-4's
+#     CMake step forces -DGGML_VULKAN=ON on Linux (the backend per
+#     sovereign-inference Cargo.toml) and leans on find_package(Vulkan
+#     COMPONENTS glslc) with NO fallback. Stock Ubuntu 22.04 ships
+#     libvulkan-dev + spirv-tools but NOT glslc, so we pull `shaderc`
+#     (provides /usr/bin/glslc) and `vulkan-headers` from LunarG.
+#   - mold              . required by .cargo/config.toml's
+#                          x86_64-unknown-linux-gnu rustflags
+#                          (-fuse-ld=mold).
+#   - libfuse2          . AppImage runtime needs it; missing on
+#                          newer Ubuntu without this explicit install.
+#   - libwebkit2gtk-4.1-dev + libappindicator3-dev + librsvg2-dev +
+#     patchelf        . Tauri's GTK frontend + AppImage post-processing.
+#   - xdg-utils + desktop-file-utils + libglib2.0-bin +
+#     libgdk-pixbuf2.0-bin + librsvg2-bin . linuxdeploy + its GTK plugin
+#     shell out to xdg-mime / glib-compile-schemas / gdk-pixbuf-query-loaders
+#     / rsvg-convert / desktop-file-validate during AppImage bundling.
+#     The GitHub runner has these preinstalled (fuller base image); a
+#     minimal Ubuntu container does not, so `tauri build` aborts with
+#     "xdg-mime binary not found" partway through AppImage creation.
+#   - tesseract-ocr     . staged into binaries/ for the bundled OCR
+#                          flow; the bundle ships brew-/apt-linked
+#                          binaries per RELEASING.md "Tesseract . the
+#                          awkward dependency".
+#   - rust stable (via rustup) + node 20 (via NodeSource) + tauri-cli.
+#
+# What this image deliberately does NOT include vs. the runner:
+#   - GitHub Actions environment variables (CI, GITHUB_*, etc.) . the
+#     build script reads TAURI_SIGNING_PRIVATE_KEY{,_PASSWORD} from
+#     the env if set, else proceeds unsigned (resulting AppImage has
+#     no .sig sidecar; updater chain will skip it).
+#   - apt/dpkg pre-baked caches . the runner gets a warmed apt cache;
+#     we don't. First image build is slow; subsequent runs reuse the
+#     image layer until the Containerfile changes.
+#
+# ── Build (run from monorepo root):
+#     podman build -t sovereign-desktop-linux-build:latest \
+#         -f sovereign/crates/sovereign-desktop/containerfiles/Containerfile.linux-build .
+#
+# ── Run (via the driver script, recommended):
+#     scripts/build-desktop-linux.sh
+#
+# ── Run (direct, with explicit env for updater signing):
+#     podman run --rm -it \
+#         -v "$(pwd):/work:Z" \
+#         -e TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/sovereign-updater.key)" \
+#         -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD="...." \
+#         sovereign-desktop-linux-build:latest
+
+FROM docker.io/library/ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ─── System deps (matches workflow's apt block + Vulkan SDK + mold) ───
+#
+# Two-phase apt: install ca-certificates+curl first so we can register
+# LunarG's Vulkan SDK repo, then install everything (including the
+# Vulkan packages that only LunarG provides on jammy):
+#   shaderc        → /usr/bin/glslc (stock Ubuntu has no glslc package;
+#                    ggml-vulkan's vulkan-shaders-gen needs it)
+#   vulkan-headers → /usr/include/vulkan/*.h (LunarG split these out of
+#                    libvulkan-dev)
+#   spirv-headers  → /usr/include/spirv/unified1/spirv.hpp — ggml-vulkan.cpp
+#                    #includes it for the `spv::` namespace (SPIR-V
+#                    float-controls patching). The official SDK tarball
+#                    ships this in the same include tree as vulkan-headers;
+#                    LunarG's apt packaging splits it into its own package,
+#                    so it must be listed explicitly or the C++ compile
+#                    fails with "'spv' has not been declared".
+#   libvulkan-dev  → libvulkan.so (link target for the Linux backend's
+#                    cargo:rustc-link-lib=vulkan)
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+ && curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+      -o /etc/apt/trusted.gpg.d/lunarg.asc \
+ && curl -fsSL https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list \
+      -o /etc/apt/sources.list.d/lunarg-vulkan-jammy.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+      build-essential cmake git pkg-config libssl-dev \
+      protobuf-compiler libprotobuf-dev \
+      clang libclang-dev llvm-dev mold \
+      python3 file unzip \
+      libwebkit2gtk-4.1-dev \
+      libappindicator3-dev \
+      librsvg2-dev \
+      patchelf \
+      libfuse2 \
+      tesseract-ocr \
+      xdg-utils desktop-file-utils libglib2.0-bin libgdk-pixbuf2.0-bin librsvg2-bin \
+      libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc \
+ && rm -rf /var/lib/apt/lists/*
+
+# ─── Node 20 (via NodeSource — matches actions/setup-node@v4 node-version: "20") ───
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+ && apt-get install -y --no-install-recommends nodejs \
+ && rm -rf /var/lib/apt/lists/* \
+ && node --version && npm --version
+
+# ─── Rust stable + Linux target (matches dtolnay/rust-toolchain@stable) ───
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+      | sh -s -- -y --default-toolchain stable --profile minimal \
+                 --target x86_64-unknown-linux-gnu \
+ && rustc --version && cargo --version
+
+# ─── Tauri CLI (same version pin as the workflow) ───
+RUN cargo install tauri-cli --version "^2.0.0" --locked
+
+# ─── Cache locations (overridable; defaults isolate from host caches) ───
+# The driver script mounts the workspace at /work and points these at
+# subdirs under it, so the host sees the build artifacts directly.
+ENV CARGO_TARGET_DIR=/work/target-container-linux \
+    CARGO_HOME=/work/.cargo-container \
+    npm_config_cache=/work/.npm-container
+
+# Re-add toolchain bins after CARGO_HOME override (rustup installs to
+# the build-time CARGO_HOME, but bins still resolve via /usr/local/cargo/bin
+# which is on PATH from the install step above).
+ENV PATH=/usr/local/cargo/bin:$PATH
+
+WORKDIR /work
+
+# Build script is checked into the same dir as this Containerfile.
+COPY sovereign/crates/sovereign-desktop/containerfiles/build-entrypoint.sh /usr/local/bin/build-entrypoint
+RUN chmod +x /usr/local/bin/build-entrypoint
+
+ENTRYPOINT ["/usr/local/bin/build-entrypoint"]

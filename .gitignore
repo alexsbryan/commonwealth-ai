@@ -8,6 +8,13 @@
 # ── Build artefacts ───────────────────────────────────────────────────────
 /target/
 
+# Local desktop-release container rehearsal (scripts/build-desktop-linux.sh):
+# isolated cargo/npm caches + a separate CARGO_TARGET_DIR so container
+# compiles don't stomp the host's target/. All regenerable build output.
+/target-container-linux/
+/.cargo-container/
+/.npm-container/
+
 # ── Per-host runtime state ────────────────────────────────────────────────
 # .sovereign/sovereign.toml is workspace config (tracked); every other
 # entry in .sovereign/ is per-host bookkeeping or alignment-corpus
