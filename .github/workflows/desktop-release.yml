@@ -142,14 +142,43 @@ jobs:
           # libgdk-pixbuf2.0-bin, librsvg2-bin). The minimal build container
           # installs them explicitly — see the Containerfile.
 
-      - name: macOS linker (lld)
+      - name: macOS build deps (lld, protobuf, SDKROOT)
         if: startsWith(matrix.platform.runner, 'macos')
         run: |
-          # .cargo/config.toml's *-apple-darwin rustflags pass
+          # lld: .cargo/config.toml's *-apple-darwin rustflags pass
           # `-fuse-ld=lld`, which clang routes to LLVM's lld. macos-14
           # and macos-13 runners don't ship lld; the Homebrew LLVM
           # formula provides it.
-          brew install lld
+          #
+          # protobuf: lance-encoding's build script runs prost-build, which
+          # shells out to `protoc`. The ubuntu-22.04 runner ships
+          # protobuf-compiler preinstalled; the macOS runners do NOT — without
+          # this the build dies in lance-encoding with "Could not find `protoc`".
+          #
+          # cmake is already preinstalled on the macOS runners (llama-cpp-sys-4
+          # needs it to compile llama.cpp's Metal backend); add `cmake` to this
+          # brew line if that ever regresses.
+          brew install lld protobuf
+          # SDKROOT: llama-cpp-sys-4's bindgen step resolves system headers via
+          # the macOS SDK; without an explicit SDKROOT it fails with
+          # "'memory' file not found". $GITHUB_ENV persists it to every later
+          # step (this run: shell is otherwise discarded). See
+          # feedback_macos_sdkroot_for_bindgen.
+          echo "SDKROOT=$(xcrun --show-sdk-path)" >> "$GITHUB_ENV"
+
+      - name: Windows build deps (protoc)
+        if: matrix.platform.runner == 'windows-2022'
+        shell: pwsh
+        run: |
+          # Same protoc need as macOS: lance-encoding's build script runs
+          # prost-build, which shells out to `protoc`. The windows-2022 runner
+          # does not ship it; without this the build dies in lance-encoding
+          # with "Could not find `protoc`". choco's package installs the full
+          # protoc distribution (binary + include/google/protobuf well-known
+          # protos) and drops a shim in C:\ProgramData\chocolatey\bin, which is
+          # already on PATH — so the later build step resolves it with no extra
+          # PATH wiring. (ubuntu-22.04 has protobuf-compiler preinstalled.)
+          choco install protoc -y --no-progress
 
       - name: Stage Tesseract (macOS)
         if: startsWith(matrix.platform.runner, 'macos')

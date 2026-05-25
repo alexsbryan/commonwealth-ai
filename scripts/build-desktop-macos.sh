@@ -6,8 +6,10 @@
 # Mirrors the GitHub Actions `macos-14` / `macos-13` runner steps:
 #   1. Verify Xcode CLT + SDKROOT (avoids the bindgen "memory file
 #      not found" error per [[feedback_macos_sdkroot_for_bindgen]]).
-#   2. brew install tesseract + lld (lld is needed by .cargo/config.toml's
-#      *-apple-darwin rustflags).
+#   2. brew install tesseract + lld + protobuf + cmake. lld is needed by
+#      .cargo/config.toml's *-apple-darwin rustflags; protobuf provides
+#      protoc (lance-encoding's prost-build); cmake builds llama.cpp's
+#      Metal backend.
 #   3. Stage the tesseract binary into binaries/<triple>/.
 #   4. Run fetch-desktop-binaries.sh for PDFium + tessdata.
 #   5. cargo tauri build against the release config.
@@ -116,6 +118,8 @@ ensure_brew() {
 log "Checking brew deps..."
 ensure_brew tesseract
 ensure_brew lld
+ensure_brew protobuf   # protoc — lance-encoding's prost-build step shells out to it
+ensure_brew cmake      # llama-cpp-sys-4 compiles llama.cpp's Metal backend with it
 
 # ─── Rust toolchain target ───────────────────────────────────────────
 log "Ensuring rust target is installed..."
