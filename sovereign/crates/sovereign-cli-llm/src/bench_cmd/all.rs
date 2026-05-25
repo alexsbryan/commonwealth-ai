@@ -688,9 +688,27 @@ async fn run_retrieval(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
         }
     }
 
+    // Cross-corpus synth is judged on answer quality (answer-equiv);
+    // isolation + bare retrieval are judged on strict source/fact recall
+    // (per-corpus integrity). See `mean_score`.
+    let gate_on_answer_equiv = opts.synth && !opts.isolate;
+    // Answer-equiv is an LLM judge verdict and varies ~±0.05 run-to-run
+    // (see book-report variance findings) — a 0.5pt threshold just flags
+    // noise. Floor the cross-corpus synth gate so it catches real moves,
+    // not jitter. Isolation/retrieval stay at the operator's threshold
+    // (strict recall is far more stable). `.max` respects a wider
+    // operator-set threshold.
+    const SYNTH_ANSWER_EQUIV_MIN_THRESHOLD: f32 = 0.05;
+    let effective_threshold = if gate_on_answer_equiv {
+        opts.regression_threshold.max(SYNTH_ANSWER_EQUIV_MIN_THRESHOLD)
+    } else {
+        opts.regression_threshold
+    };
     let status = match &baseline {
         None => BenchStatus::FirstRun,
-        Some(prev) => classify_retrieval(prev, &current, opts.regression_threshold),
+        Some(prev) => {
+            classify_retrieval(prev, &current, effective_threshold, gate_on_answer_equiv)
+        }
     };
 
     BenchOutcome {
@@ -758,9 +776,14 @@ fn classify_enrichment(prev: &EvalReport, cur: &EvalReport, threshold: f32) -> B
 /// Classify a retrieval bench's run. Compares per-question
 /// source_score.ratio + fact_score.ratio averaged across all
 /// questions in the bank.
-fn classify_retrieval(prev: &EvalRun, cur: &EvalRun, threshold: f32) -> BenchStatus {
-    let prev_mean = mean_score(prev);
-    let cur_mean = mean_score(cur);
+fn classify_retrieval(
+    prev: &EvalRun,
+    cur: &EvalRun,
+    threshold: f32,
+    use_answer_equiv: bool,
+) -> BenchStatus {
+    let prev_mean = mean_score(prev, use_answer_equiv);
+    let cur_mean = mean_score(cur, use_answer_equiv);
     let delta = cur_mean - prev_mean;
     if delta < -threshold {
         BenchStatus::Regressed
@@ -771,10 +794,22 @@ fn classify_retrieval(prev: &EvalRun, cur: &EvalRun, threshold: f32) -> BenchSta
     }
 }
 
-fn mean_score(run: &EvalRun) -> f32 {
-    // Average across (source_score.ratio + fact_score.ratio)/2 per
-    // question. None ratios fall back to 0.0 — same convention as
-    // `PhaseScore::precision` when the lane was attempted.
+/// Mean per-question score driving the lane verdict.
+///
+/// The headline metric is **mode-dependent**:
+/// - **Cross-corpus synth** (`use_answer_equiv = true`) gates on
+///   *answer quality* — the instructor-mode judge (`judge_fact_score`).
+///   With every corpus installed, a chunk from a *different* corpus that
+///   correctly answers the question is a UX win, so strict per-corpus
+///   source/fact recall is the wrong lens (it flags SEP-vs-wiki
+///   cross-talk as a "regression" even when the answer is correct).
+/// - **Isolation + bare retrieval** (`use_answer_equiv = false`) gates on
+///   strict source + fact recall — the per-corpus *integrity* question:
+///   "does this corpus hold and retrieve the facts its queries need?"
+///
+/// None ratios fall back to 0.0; the answer-equiv path falls back to
+/// strict fact recall when the judge wasn't run (`--no-judge`).
+fn mean_score(run: &EvalRun, use_answer_equiv: bool) -> f32 {
     if run.results.is_empty() {
         return 0.0;
     }
@@ -782,9 +817,24 @@ fn mean_score(run: &EvalRun) -> f32 {
         .results
         .iter()
         .map(|r| {
-            let s = r.source_score.ratio.unwrap_or(0.0);
-            let f = r.fact_score.ratio.unwrap_or(0.0);
-            (s + f) / 2.0
+            if use_answer_equiv {
+                // Answer-equiv lives on the synth sub-object
+                // (`synth.judge_fact_score`), matching the scoreboard's
+                // "answer-equiv [judge]" lever (render.rs). The top-level
+                // `judge_fact_score` is a different (retrieval-lane)
+                // field and is null under synth. Fall back to strict
+                // fact recall when the judge didn't run.
+                r.synth
+                    .as_ref()
+                    .and_then(|s| s.judge_fact_score.as_ref())
+                    .and_then(|s| s.ratio)
+                    .or(r.fact_score.ratio)
+                    .unwrap_or(0.0)
+            } else {
+                let s = r.source_score.ratio.unwrap_or(0.0);
+                let f = r.fact_score.ratio.unwrap_or(0.0);
+                (s + f) / 2.0
+            }
         })
         .sum();
     sum / run.results.len() as f32
