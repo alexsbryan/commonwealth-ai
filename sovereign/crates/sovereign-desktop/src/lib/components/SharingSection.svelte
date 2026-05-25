@@ -173,8 +173,8 @@
 <section class="sharing">
   <h3 class="h3">How much to share</h3>
   <p class="hint">
-    When your machine isn't busy, peers can use it for inference. Pick a
-    ceiling that feels right — you can change it anytime.
+    When your machine has spare cycles, peers can use them. Pick a
+    ceiling that feels right — change it any time.
   </p>
   <div class="presets">
     {#each PRESETS as p (p.value)}
@@ -202,8 +202,8 @@
     </div>
   {:else}
     <p class="hint">
-      Pause briefly when you want every cycle for yourself — e.g. recording
-      audio, playing a game.
+      Pause for a moment when you want every cycle to yourself — recording,
+      gaming, anything that hates a busy machine.
     </p>
     <div class="row">
       <button class="action" onclick={() => pause(15 * 60)} disabled={busy}>
@@ -220,7 +220,7 @@
 
   {#if yielding && !paused}
     <p class="state state-yielding">
-      Currently yielding to your local chat — peer work briefly held.
+      Stepping aside for your chat — peer work paused for a moment.
     </p>
   {/if}
 

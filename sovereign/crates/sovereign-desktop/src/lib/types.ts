@@ -81,6 +81,22 @@ export interface SkillEntry {
   trust_level: string;
 }
 
+/** Behavioural family of a loaded model. Drives chat-template /
+ *  tokenizer / pooling quirks. PascalCase mirrors the Rust
+ *  `ModelFamily` enum (`#[serde(rename_all = "PascalCase")]`). */
+export type ModelFamily =
+  | "Qwen3"
+  | "Qwen35"
+  | "Qwen3Embedding"
+  | "Gemma3"
+  | "Gemma4"
+  | "Llama3"
+  | "Phi4"
+  | "Phi4Reasoning"
+  | "SmolLM3"
+  | "Reranker"
+  | "Unknown";
+
 export interface DesktopConfig {
   model_path: string;
   primary_model_path: string | null;
@@ -91,6 +107,10 @@ export interface DesktopConfig {
    *  instead of dispatching to primary. Null = no code slot; all
    *  substantive work goes to Main responder (pre-PR-E2 behaviour). */
   code_model_path: string | null;
+  /** Model family for the code slot. Drives chat-template / tokenizer
+   *  quirks. `"Qwen35"` for Qwen-Coder lineage, `"Unknown"` (default)
+   *  for BYOM coders. */
+  code_family: ModelFamily;
   data_dir: string;
   skills_dir: string;
   active_skills: string[];
@@ -99,11 +119,29 @@ export interface DesktopConfig {
   search_backend: SearchBackendConfig;
   setup_complete: boolean;
   selected_tier: string | null;
+  /** When true, `knowledge_lookup` auto-escalates to the configured
+   *  web-search provider if the local envelope returns thin results.
+   *  Off by default — every web call goes through the
+   *  InformationRequest card. */
+  auto_escalate_to_web: boolean;
   // Advanced tuning
   temperature: number;
   max_tokens: number;
   think_budget: number;
   top_k: number | null;
+  /** Epistemic-humility audit. When true, the runtime inspects each
+   *  draft for thin evidence and may surface an InformationRequest
+   *  card. Default on. */
+  auto_collaborate: boolean;
+  /** Idle seconds before the lazy chat slot (primary + code) is
+   *  unloaded to reclaim memory. Mirrors
+   *  `DaemonSection::primary_idle_secs`; default 300. */
+  primary_idle_secs: number;
+  /** Embedding model family. `"Qwen3Embedding"` for qwen3-embedding-*
+   *  GGUFs (last-token pooling); `"Unknown"` (default) for mxbai and
+   *  similar mean-pooling embedders. Wrong family silently produces
+   *  incompatible vectors. */
+  embed_family: ModelFamily;
   /** Override for how this machine identifies itself to other mesh
    *  members. Empty string → resolved from the system hostname at
    *  mesh-create/join time. Takes effect on the next join, not
@@ -413,6 +451,55 @@ export interface HardwareInfo {
   gpu_memory_gb: number | null;
   /** True on Apple Silicon (M-series). Drives unified-vs-discrete tiering. */
   is_unified_memory: boolean;
+}
+
+/** Hardware-tier names from `models.toml`. Mirrors
+ *  `sovereign_inference::hardware::ProfileName`, serialised by the
+ *  desktop's `recommended_profile` command as the bare manifest keys. */
+export type ProfileName =
+  | "cpu_only"
+  | "low_mem"
+  | "default"
+  | "high"
+  | "very_high";
+
+/** Returned by `recommendedProfile()`. Effective memory is unified RAM
+ *  on Apple Silicon, GPU VRAM on discrete cards, otherwise system RAM. */
+export interface RecommendedProfile {
+  profile: ProfileName;
+  effective_memory_gb: number;
+  is_unified_memory: boolean;
+}
+
+/** One row in the daemon-supplied primary-model catalog. Sourced from
+ *  `models.toml` via `setup_planner::build_primary_catalog`. */
+export interface PrimaryOption {
+  /** `ProfileName` this slot was drawn from — the headline pick has
+   *  `recommended: true`; lighter alternatives are surfaced beneath. */
+  profile: ProfileName;
+  recommended: boolean;
+  file: string;
+  base_name: string;
+  family: string;
+  quant: string;
+  size_gb: number;
+  /** Repo URL from the manifest. */
+  hf_url: string;
+  /** Direct GGUF download URL — already includes
+   *  `/resolve/main/<file>`. Use this with `downloadModel`. */
+  download_url: string;
+}
+
+/** Single-pick slot (fast or embed). Same fields as `PrimaryOption`
+ *  minus the catalog metadata. */
+export interface SlotConfig {
+  file: string;
+  base_name: string;
+  family: string;
+  quant: string;
+  size_gb: number;
+  hf_url: string;
+  download_url: string;
 }
 
 // ─── Knowledge Base ─────────────────────────────────────────

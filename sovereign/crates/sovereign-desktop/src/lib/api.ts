@@ -14,6 +14,10 @@ import type {
   CorpusProgressPayload,
   CorpusHealthDetail,
   HardwareInfo,
+  PrimaryOption,
+  ProfileName,
+  RecommendedProfile,
+  SlotConfig,
   StreamStartedResponse,
   CreateMeshResponse,
   JoinMeshResponse,
@@ -420,6 +424,40 @@ export async function searchWeb(
 
 export async function scanForModels(): Promise<DiscoveredModel[]> {
   return invoke("scan_for_models");
+}
+
+/** Returns the on-disk size of a GGUF file in bytes. Resolves to `null`
+ *  when the path is empty or the file is missing — useful for the
+ *  Settings → Models budget meter, which queries every slot whether or
+ *  not the user has picked one. Genuine IO failures throw. */
+export async function modelFileSize(path: string | null | undefined): Promise<number | null> {
+  if (!path) return null;
+  return invoke("model_file_size", { path });
+}
+
+/** Recommend a hardware tier for this machine. Single source of truth
+ *  for tier selection lives in `sovereign-inference::hardware::select_profile`;
+ *  this command is just the JSON wrapper. */
+export async function recommendedProfile(): Promise<RecommendedProfile> {
+  return invoke("recommended_profile");
+}
+
+/** Curated catalog of primary-model options for `profile` (or the
+ *  detected profile if omitted). The headline pick has
+ *  `recommended: true`; lighter alternatives follow so a user on
+ *  beefy hardware can still opt into a smaller model. */
+export async function primaryCatalog(
+  profile?: ProfileName,
+): Promise<PrimaryOption[]> {
+  return invoke("primary_catalog", { profile: profile ?? null });
+}
+
+/** Single-pick recommendation for the fast or embed slot. */
+export async function slotRecommendation(
+  kind: "fast" | "embed",
+  profile?: ProfileName,
+): Promise<SlotConfig | null> {
+  return invoke("slot_recommendation", { kind, profile: profile ?? null });
 }
 
 export async function downloadModel(

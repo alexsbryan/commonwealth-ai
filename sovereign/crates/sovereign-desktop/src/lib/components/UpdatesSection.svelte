@@ -133,7 +133,7 @@
   {:else if phase.kind === "installing"}
     <div class="install-status" role="status" aria-live="polite">
       <span class="spinner" aria-hidden="true"></span>
-      <span>Downloading and installing… the app will restart when complete.</span>
+      <span>Downloading and installing — the app will restart when it's done.</span>
     </div>
 
   {:else if phase.kind === "error"}
@@ -153,9 +153,9 @@
         {phase.kind === "checking" ? "Checking…" : "Check for updates"}
       </button>
       <p class="check-meta">
-        Updates are served from <code>svrnme.sh</code>. The plugin verifies
-        every release against a key embedded at build time — no automatic
-        installs, no background downloads.
+        Updates come from <code>svrnme.sh</code>. Each release is signed and
+        verified on this machine before it installs — nothing happens in the
+        background.
       </p>
     </div>
   {/if}

@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import {
     detectBootstrap,
+    detectHardware,
     getConfig,
     saveConfig,
     getIngestBudget,
@@ -10,11 +11,13 @@
     setMeshQuiesced,
     getStorageBudget,
     setStorageBudget,
+    modelFileSize,
   } from "../api";
   import type { StorageBudgetState } from "../api";
   import type {
     BootstrapSnapshot,
     DesktopConfig,
+    HardwareInfo,
     StarterQuestion,
   } from "../types";
   import EnrichmentPanel from "./EnrichmentPanel.svelte";
@@ -85,11 +88,37 @@
   // ── Search + read/edit mode state ─────────────────────────────
   let searchQuery = $state('');
   let editingCreativity = $state(false);
-  let editingReasoning = $state(false);
-  let editingLength = $state(false);
   let editingContextWindow = $state(false);
   let editingStorageBudget = $state(false);
   let editingPaths = $state(false);
+  let editingIdleSecs = $state(false);
+  let showAdvanced = $state(false);
+
+  const EMBED_FAMILY_OPTS = [
+    { value: "Unknown",        label: "Auto (mean pooling)",   desc: "Default — works for mxbai, BGE, and most open-weights embedders." },
+    { value: "Qwen3Embedding", label: "Qwen3 Embedding",       desc: "Required for qwen3-embedding-* GGUFs. Last-token pooling + instruction prefix." },
+  ] as const;
+  const CODE_FAMILY_OPTS = [
+    { value: "Unknown", label: "Auto",          desc: "Default — safe fallback for BYOM coders." },
+    { value: "Qwen35",  label: "Qwen 3.5 / Coder", desc: "For Qwen-Coder / Qwopus lineage. Sets matching chat template + sampling." },
+    { value: "Llama3",  label: "Llama 3",       desc: "DeepSeek-Coder-V2 and Llama-3-derived coders." },
+  ] as const;
+
+  const TOOL_OPTS = [
+    { id: "shell",            label: "Shell",            desc: "Run shell commands on your machine. Sandboxed, and you approve each one." },
+    { id: "search",           label: "Web search",       desc: "Direct queries to whichever search provider you chose under Web Search." },
+    { id: "web_fetch",        label: "Web fetch",        desc: "Read a specific URL the model wants to cite." },
+    { id: "document",         label: "Document",         desc: "Read attached files and ingested documents passage by passage." },
+    { id: "knowledge_lookup", label: "Knowledge lookup", desc: "One look across your library, memory, and notes." },
+  ] as const;
+  function toggleTool(id: string) {
+    if (!config) return;
+    const has = config.enabled_tools.includes(id);
+    config.enabled_tools = has
+      ? config.enabled_tools.filter((t) => t !== id)
+      : [...config.enabled_tools, id];
+    markDirty(`tool-${id}`);
+  }
 
   // ── Provenance tracking (session-level) ───────────────────────
   // A full implementation would persist this alongside config so
@@ -103,6 +132,88 @@
     return `Changed · ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
   }
 
+  // ── Memory budgeting for the Models tab ───────────────────────
+  //
+  // Picking a large model in every slot is a footgun: fast + embed are
+  // always loaded, and either the primary or code slot loads on demand
+  // (they share a lazy slot). Without help, a user can land on a combo
+  // that crashes the daemon at load time or triggers OS-level memory
+  // pressure mid-conversation.
+  //
+  // We sum the always-loaded slots and add max(primary, code) for the
+  // peak, multiply by a runtime-overhead factor (KV cache + activation
+  // workspace + chat-template scratch are ~15% of the file size at
+  // 8192 ctx for typical Q4–Q6 GGUFs), and compare against the
+  // device's effective memory — unified RAM on Apple Silicon, VRAM on
+  // discrete GPUs, system RAM otherwise. The 2 GiB baseline reserves
+  // OS + Sovereign's own working set.
+  const RUNTIME_OVERHEAD = 1.15;
+  const BASELINE_BYTES = 2 * 1024 ** 3;
+  const GIB = 1024 ** 3;
+
+  let hardware = $state<HardwareInfo | null>(null);
+  let slotSizes = $state<{ fast: number | null; primary: number | null; embed: number | null; code: number | null }>({
+    fast: null, primary: null, embed: null, code: null,
+  });
+
+  function effectiveMemoryBytes(hw: HardwareInfo): number {
+    const gb = hw.is_unified_memory
+      ? hw.system_ram_gb
+      : hw.gpu_available && hw.gpu_memory_gb != null
+        ? hw.gpu_memory_gb
+        : hw.system_ram_gb;
+    return gb * GIB;
+  }
+
+  function memorySourceLabel(hw: HardwareInfo): string {
+    if (hw.is_unified_memory) return "unified RAM";
+    if (hw.gpu_available && hw.gpu_memory_gb != null) return "GPU VRAM";
+    return "system RAM";
+  }
+
+  let peakBytes = $derived.by(() => {
+    const fast    = slotSizes.fast    ?? 0;
+    const embed   = slotSizes.embed   ?? 0;
+    const primary = slotSizes.primary ?? 0;
+    const code    = slotSizes.code    ?? 0;
+    const lazy    = Math.max(primary, code);
+    return (fast + embed + lazy) * RUNTIME_OVERHEAD + BASELINE_BYTES;
+  });
+  let effectiveBytes = $derived(hardware ? effectiveMemoryBytes(hardware) : 0);
+  let budgetRatio = $derived(effectiveBytes > 0 ? peakBytes / effectiveBytes : 0);
+  type BudgetState = "ok" | "warn" | "crit";
+  let budgetState = $derived<BudgetState>(
+    budgetRatio >= 0.95 ? "crit" : budgetRatio >= 0.80 ? "warn" : "ok",
+  );
+
+  function fmtGiB(bytes: number): string {
+    return `${(bytes / GIB).toFixed(1)} GiB`;
+  }
+
+  async function refreshSlotSizes(cfg: DesktopConfig | null) {
+    if (!cfg) return;
+    const [fast, primary, embed, code] = await Promise.all([
+      modelFileSize(cfg.model_path),
+      modelFileSize(cfg.primary_model_path),
+      modelFileSize(cfg.embed_model_path),
+      modelFileSize(cfg.code_model_path),
+    ]);
+    slotSizes = { fast, primary, embed, code };
+  }
+
+  // Re-measure whenever any slot path changes. $effect runs after
+  // the model-path mutation so the new size is fetched before the
+  // user has a chance to read the budget meter.
+  $effect(() => {
+    if (!config) return;
+    // Touch every path so Svelte tracks them as dependencies.
+    void config.model_path;
+    void config.primary_model_path;
+    void config.embed_model_path;
+    void config.code_model_path;
+    refreshSlotSizes(config);
+  });
+
   onMount(async () => {
     try {
       config = await getConfig();
@@ -113,6 +224,11 @@
       bootstrap = await detectBootstrap();
     } catch {
       bootstrap = null;
+    }
+    try {
+      hardware = await detectHardware();
+    } catch (e) {
+      console.warn("Hardware detection failed; budget meter will hide:", e);
     }
     try {
       const budget = await getIngestBudget();
@@ -160,10 +276,10 @@
   }
 
   const THROTTLE_PRESETS: Array<{ value: number; label: string; desc: string }> = [
-    { value: 1.00, label: "Off",      desc: "Full speed. The default — ingest uses every available cycle." },
-    { value: 0.75, label: "Light",    desc: "75% duty cycle. Barely noticeable; small headroom for other work." },
+    { value: 1.00, label: "Off",      desc: "Full speed. The default — ingest takes every cycle it can." },
+    { value: 0.75, label: "Light",    desc: "75% duty cycle. Barely noticeable; leaves a little headroom for other work." },
     { value: 0.50, label: "Balanced", desc: "50% duty cycle. Ingest takes about twice as long; the machine stays usable." },
-    { value: 0.25, label: "Quiet",    desc: "25% duty cycle. Ingest runs slowly in the background while you do other things." },
+    { value: 0.25, label: "Quiet",    desc: "25% duty cycle. Ingest hums along in the background while you do other things." },
   ];
   let throttlePreset = $derived.by(() => {
     const exact = THROTTLE_PRESETS.find((p) => Math.abs(p.value - ingestThrottle) < 0.02);
@@ -217,9 +333,11 @@
   );
 
   // ── Semantic preset detection ──────────────────────────────────
+  // Only Creativity is exposed: temperature + top_k wire through every
+  // outer-work synthesis path (KnowledgeQuery, expressive, metalingual,
+  // conation). max_tokens and think_budget reach only a subset, so we
+  // tune those in handler code rather than risk a misleading user knob.
   type CreativityPreset  = "precise" | "balanced" | "exploratory" | "custom";
-  type ReasoningPreset   = "quick" | "balanced" | "thorough" | "exhaustive" | "custom";
-  type LengthPreset      = "concise" | "standard" | "detailed" | "exhaustive" | "custom";
 
   let creativityPreset = $derived.by((): CreativityPreset => {
     if (!config) return "balanced";
@@ -227,24 +345,6 @@
     if (t === 0.3 && k === 10)  return "precise";
     if (t === 0.6 && k === 20)  return "balanced";
     if (t === 1.0 && k === 40)  return "exploratory";
-    return "custom";
-  });
-  let reasoningPreset = $derived.by((): ReasoningPreset => {
-    if (!config) return "balanced";
-    const b = config.think_budget;
-    if (b === 0)     return "quick";
-    if (b === 4096)  return "balanced";
-    if (b === 16384) return "thorough";
-    if (b === 38000) return "exhaustive";
-    return "custom";
-  });
-  let lengthPreset = $derived.by((): LengthPreset => {
-    if (!config) return "standard";
-    const m = config.max_tokens;
-    if (m === 512)   return "concise";
-    if (m === 2048)  return "standard";
-    if (m === 6144)  return "detailed";
-    if (m === 16384) return "exhaustive";
     return "custom";
   });
 
@@ -258,35 +358,11 @@
     [config.temperature, config.top_k] = map[preset];
     markDirty('creativity');
   }
-  function setReasoning(preset: Exclude<ReasoningPreset, "custom">) {
-    if (!config) return;
-    const map = { quick: 0, balanced: 4096, thorough: 16384, exhaustive: 38000 };
-    config.think_budget = map[preset];
-    markDirty('reasoning');
-  }
-  function setLength(preset: Exclude<LengthPreset, "custom">) {
-    if (!config) return;
-    const map = { concise: 512, standard: 2048, detailed: 6144, exhaustive: 16384 };
-    config.max_tokens = map[preset];
-    markDirty('length');
-  }
 
   const CREATIVITY_OPTS = [
-    { id: "precise"     as const, label: "Precise",     desc: "Consistent, deterministic. Best for facts, code, structured output.", tech: "temp 0.3 · top_k 10" },
-    { id: "balanced"    as const, label: "Balanced",    desc: "Coherent but not mechanical. Natural variation in phrasing.",          tech: "temp 0.6 · top_k 20" },
-    { id: "exploratory" as const, label: "Exploratory", desc: "More surprising angles. Higher hallucination risk on factual tasks.",  tech: "temp 1.0 · top_k 40" },
-  ];
-  const REASONING_OPTS = [
-    { id: "quick"      as const, label: "Quick",      desc: "Direct answer. No extended thinking. Lowest latency.",        tech: "budget 0 (disabled)" },
-    { id: "balanced"   as const, label: "Balanced",   desc: "Brief reasoning on hard questions, direct on simple ones.",   tech: "budget 4 096 tok" },
-    { id: "thorough"   as const, label: "Thorough",   desc: "Extended deliberation before answering. Noticeably slower.",  tech: "budget 16 384 tok" },
-    { id: "exhaustive" as const, label: "Exhaustive", desc: "Maximum reasoning. For genuinely hard problems.",             tech: "budget 38 000 tok" },
-  ];
-  const LENGTH_OPTS = [
-    { id: "concise"    as const, label: "Concise",    desc: "Gets to the point. Best for quick questions.",              tech: "max 512 tok" },
-    { id: "standard"   as const, label: "Standard",   desc: "Full answers without padding.",                             tech: "max 2 048 tok" },
-    { id: "detailed"   as const, label: "Detailed",   desc: "Room for nuance, examples, caveats.",                       tech: "max 6 144 tok" },
-    { id: "exhaustive" as const, label: "Exhaustive", desc: "No length constraints. Writes as much as needed.",          tech: "max 16 384 tok" },
+    { id: "precise"     as const, label: "Precise",     desc: "Steady and repeatable. Best for facts, code, structured output.",      tech: "temp 0.3 · top_k 10" },
+    { id: "balanced"    as const, label: "Balanced",    desc: "Natural-sounding answers without surprises. The default for everyday work.", tech: "temp 0.6 · top_k 20" },
+    { id: "exploratory" as const, label: "Exploratory", desc: "Surprising phrasings and angles. Higher risk of stating something wrong with confidence.", tech: "temp 1.0 · top_k 40" },
   ];
 
   let creativityLabel = $derived(CREATIVITY_OPTS.find(o => o.id === creativityPreset)?.label ?? 'Custom');
@@ -295,20 +371,6 @@
     if (found) return found.tech;
     if (!config) return '';
     return `temp ${config.temperature} · top_k ${config.top_k}`;
-  });
-  let reasoningLabel  = $derived(REASONING_OPTS.find(o => o.id === reasoningPreset)?.label  ?? 'Custom');
-  let reasoningTech   = $derived.by((): string => {
-    const found = REASONING_OPTS.find(o => o.id === reasoningPreset);
-    if (found) return found.tech;
-    if (!config) return '';
-    return `budget ${config.think_budget} tok`;
-  });
-  let lengthLabel     = $derived(LENGTH_OPTS.find(o => o.id === lengthPreset)?.label         ?? 'Custom');
-  let lengthTech      = $derived.by((): string => {
-    const found = LENGTH_OPTS.find(o => o.id === lengthPreset);
-    if (found) return found.tech;
-    if (!config) return '';
-    return `max ${config.max_tokens} tok`;
   });
 
   let activeSlot: "fast" | "reasoning" | "embed" | "code" | null = $state(null);
@@ -334,7 +396,7 @@
   const ALL_TABS: { id: Tab; label: string; keywords: string[] }[] = [
     { id: "models",          label: "Models",          keywords: ["model", "creativity", "reasoning", "length", "context", "temperature", "token", "gguf"] },
     { id: "knowledge",       label: "Knowledge",        keywords: ["knowledge", "corpus", "storage", "budget", "ingest", "throttle", "disk", "knowledgeview", "local", "folder", "obsidian", "document", "file", "vault"] },
-    { id: "imports",         label: "Imports",          keywords: ["import", "claude", "anthropic", "chatgpt", "gemini", "conversation", "export", "zip"] },
+    { id: "imports",         label: "Imports",          keywords: ["import", "claude", "anthropic", "conversation", "export", "zip"] },
     { id: "enrichment",      label: "Enrichment",       keywords: ["atlas", "enrich", "graph", "entity", "knowledge graph"] },
     { id: "mesh",            label: "Mesh",             keywords: ["mesh", "peer", "network", "share", "node", "collaborative"] },
     { id: "sharing",         label: "Sharing",          keywords: ["share", "ceiling", "pause", "contribution", "peer", "gpu", "mesh", "yield"] },
@@ -425,11 +487,51 @@
 
         <section class="doc-section">
           <h2 class="doc-h2">Models</h2>
-          <p class="doc-intro">Four model slots handle different roles. You set the file; the daemon manages loading and unloading based on what you need.</p>
+          <p class="doc-intro">Four jobs, up to four models. Pick the file for each — Sovereign loads them only when something needs them.</p>
 
           {#if attachedToDaemon}
             <div class="doc-note">
-              Daemon managed externally. Model-path changes hot-reload the running process. Port and data-dir changes require a daemon restart — run <code>sovereign setup</code> in a terminal.
+              A daemon is already running outside this app. Swapping a model file takes effect immediately; changes to port or data directory need a restart — run <code>sovereign daemon restart</code> in a terminal.
+            </div>
+          {/if}
+
+          <!-- ── Memory budget meter ──────────────────────────────
+               Sums the always-loaded slots plus the larger of the two
+               lazy slots, compares against this device's effective
+               memory, and warns before the user saves a combination
+               that would crash on load. Hidden if hardware detection
+               fails (we'd be guessing). -->
+          {#if hardware}
+            <div class="budget-meter budget-meter--{budgetState}" role="status">
+              <div class="budget-meter-head">
+                <div class="budget-meter-text">
+                  <span class="budget-meter-label">Peak memory</span>
+                  <span class="budget-meter-figure">
+                    <strong>{fmtGiB(peakBytes)}</strong>
+                    <span class="budget-meter-of">of {fmtGiB(effectiveBytes)} {memorySourceLabel(hardware)}</span>
+                  </span>
+                </div>
+                <span class="budget-meter-pct">{Math.round(budgetRatio * 100)}%</span>
+              </div>
+              <div class="budget-bar-track" aria-hidden="true">
+                <div class="budget-bar-fill" style="width: {Math.min(budgetRatio, 1) * 100}%"></div>
+                {#if budgetRatio > 1}
+                  <div class="budget-bar-over" style="width: {Math.min((budgetRatio - 1), 0.5) * 200}%"></div>
+                {/if}
+              </div>
+              {#if budgetState === "crit"}
+                <p class="budget-meter-msg">
+                  This combination is likely to crash on load. The Main responder and Code specialist share a slot — drop one, choose a smaller quant, or pick a lighter Quick responder.
+                </p>
+              {:else if budgetState === "warn"}
+                <p class="budget-meter-msg">
+                  Close to the ceiling. Background tasks and the OS need headroom too — consider a smaller model in one slot.
+                </p>
+              {:else}
+                <p class="budget-meter-msg budget-meter-msg--ok">
+                  Fits comfortably. Quick responder and embedder stay resident; Main and Code load on demand and share one slot.
+                </p>
+              {/if}
             </div>
           {/if}
 
@@ -443,6 +545,7 @@
                 <span class="slot-item-file">
                   {#if config.model_path}
                     {modelFileName(config.model_path)}
+                    {#if slotSizes.fast !== null}<span class="slot-item-size">{fmtGiB(slotSizes.fast)}</span>{/if}
                   {:else}
                     <span class="slot-item-unset">not set</span>
                   {/if}
@@ -452,7 +555,7 @@
               </button>
               {#if activeSlot === "fast"}
                 <div class="slot-item-body">
-                  <p class="slot-item-desc">For short, fast responses — classifications, routing, quick drafts. Stays in memory so it's there the moment you hit send.</p>
+                  <p class="slot-item-desc">Handles the short turns — quick replies, drafts, follow-ups. Stays loaded so there's no wait when you hit send.</p>
                   <div class="slot-item-controls">
                     <ModelSelector selectedPath={slotSelectedPath} onSelect={handleSlotSelect} showRawInput={true} embedMode={false} />
                     {#if config.model_path}
@@ -472,6 +575,7 @@
                 <span class="slot-item-file">
                   {#if config.primary_model_path}
                     {modelFileName(config.primary_model_path)}
+                    {#if slotSizes.primary !== null}<span class="slot-item-size">{fmtGiB(slotSizes.primary)}</span>{/if}
                   {:else}
                     <span class="slot-item-unset">not set</span>
                   {/if}
@@ -481,7 +585,7 @@
               </button>
               {#if activeSlot === "reasoning"}
                 <div class="slot-item-body">
-                  <p class="slot-item-desc">Your primary model for substantive work — research, writing, analysis. Loads when you ask something substantive and unloads after ~60 s idle.</p>
+                  <p class="slot-item-desc">Your heaviest model. Comes out for research, long writing, and careful analysis, then steps back five minutes after the last question to free memory.</p>
                   <div class="slot-item-controls">
                     <ModelSelector selectedPath={slotSelectedPath} onSelect={handleSlotSelect} showRawInput={true} embedMode={false} />
                     {#if config.primary_model_path}
@@ -501,6 +605,7 @@
                 <span class="slot-item-file">
                   {#if config.embed_model_path}
                     {modelFileName(config.embed_model_path)}
+                    {#if slotSizes.embed !== null}<span class="slot-item-size">{fmtGiB(slotSizes.embed)}</span>{/if}
                   {:else}
                     <span class="slot-item-unset slot-item-unset--warn">not set — library unsearchable</span>
                   {/if}
@@ -510,7 +615,7 @@
               </button>
               {#if activeSlot === "embed"}
                 <div class="slot-item-body">
-                  <p class="slot-item-desc">Converts text into vectors so your knowledge base and notes become searchable. Runs in the background whenever you ingest documents.</p>
+                  <p class="slot-item-desc">Indexes every document you add so the assistant can find passages by meaning, not just keywords. Runs in the background while ingest is going.</p>
                   <div class="slot-item-controls">
                     <ModelSelector selectedPath={slotSelectedPath} onSelect={handleSlotSelect} showRawInput={true} embedMode={true} />
                     {#if config.embed_model_path}
@@ -519,6 +624,25 @@
                       </button>
                     {/if}
                   </div>
+                  <div class="inline-field" style="margin-top: 12px;">
+                    <span class="inline-field-label">Family</span>
+                    <select
+                      class="cfg-select"
+                      bind:value={config.embed_family}
+                      onchange={() => markDirty('embed-family')}
+                      aria-label="Embedding model family"
+                    >
+                      {#each EMBED_FAMILY_OPTS as opt}
+                        <option value={opt.value}>{opt.label}</option>
+                      {/each}
+                    </select>
+                  </div>
+                  <p class="preset-desc" style="margin-top: 6px;">
+                    {EMBED_FAMILY_OPTS.find(o => o.value === config!.embed_family)?.desc ?? ''}
+                  </p>
+                  <p class="cfg-caution" style="margin-top: 4px;">
+                    Picking the wrong family produces unsearchable indexes — match it to the embedder you chose above.
+                  </p>
                 </div>
               {/if}
             </div>
@@ -530,6 +654,7 @@
                 <span class="slot-item-file">
                   {#if config.code_model_path}
                     {modelFileName(config.code_model_path)}
+                    {#if slotSizes.code !== null}<span class="slot-item-size">{fmtGiB(slotSizes.code)}</span>{/if}
                   {:else}
                     <span class="slot-item-unset">not set</span>
                   {/if}
@@ -539,7 +664,7 @@
               </button>
               {#if activeSlot === "code"}
                 <div class="slot-item-body">
-                  <p class="slot-item-desc">A dedicated coding model (e.g. Qwen-Coder, DeepSeek-Coder). When set, programming questions route here instead of the Main responder. Shares memory with Main — whichever you need loads on demand.</p>
+                  <p class="slot-item-desc">A second model trained on code (Qwen-Coder, DeepSeek-Coder, etc.). When set, programming questions go here instead of the Main responder. The two share a memory slot — whichever you need loads on demand.</p>
                   <div class="slot-item-controls">
                     <ModelSelector selectedPath={slotSelectedPath} onSelect={handleSlotSelect} showRawInput={true} embedMode={false} />
                     {#if config.code_model_path}
@@ -548,6 +673,22 @@
                       </button>
                     {/if}
                   </div>
+                  <div class="inline-field" style="margin-top: 12px;">
+                    <span class="inline-field-label">Family</span>
+                    <select
+                      class="cfg-select"
+                      bind:value={config.code_family}
+                      onchange={() => markDirty('code-family')}
+                      aria-label="Code model family"
+                    >
+                      {#each CODE_FAMILY_OPTS as opt}
+                        <option value={opt.value}>{opt.label}</option>
+                      {/each}
+                    </select>
+                  </div>
+                  <p class="preset-desc" style="margin-top: 6px;">
+                    {CODE_FAMILY_OPTS.find(o => o.value === config!.code_family)?.desc ?? ''}
+                  </p>
                 </div>
               {/if}
             </div>
@@ -555,8 +696,8 @@
           </div><!-- /slot-list -->
 
           <div class="doc-divider"></div>
-          <h3 class="doc-h3">Behavior</h3>
-          <p class="doc-intro">These values apply to every conversation. Click a row to adjust it.</p>
+          <h3 class="doc-h3">Output style</h3>
+          <p class="doc-intro">Shapes how the assistant writes its final answers. Everything happening behind the scenes — planning, retrieval, formatting — is already tuned for you.</p>
 
           <!-- Creativity -->
           <div class="cfg-entry" class:cfg-entry--open={editingCreativity}>
@@ -570,7 +711,7 @@
             </button>
             {#if editingCreativity}
               <div class="cfg-entry-edit">
-                <p class="cfg-entry-question">How predictable should responses be?</p>
+                <p class="cfg-entry-question">How predictable should answers feel?</p>
                 <div class="preset-row" role="radiogroup" aria-label="Creativity preset">
                   {#each CREATIVITY_OPTS as opt}
                     <button
@@ -592,85 +733,9 @@
                   {/if}
                 {/each}
                 {#if creativityPreset === "exploratory"}
-                  <p class="cfg-caution">More creative, but more likely to confidently say wrong things. Not recommended for research.</p>
+                  <p class="cfg-caution">Lively, but more willing to state wrong things with confidence. Skip this when accuracy matters.</p>
                 {/if}
                 <button class="edit-done" onclick={() => editingCreativity = false}>Done</button>
-              </div>
-            {/if}
-          </div>
-
-          <!-- Reasoning effort -->
-          <div class="cfg-entry" class:cfg-entry--open={editingReasoning}>
-            <button class="cfg-entry-display" onclick={() => editingReasoning = !editingReasoning} aria-expanded={editingReasoning}>
-              <span class="cfg-entry-name">Reasoning effort</span>
-              <span class="cfg-entry-current">
-                <span class="cfg-entry-val">{reasoningLabel}</span>
-                <span class="cfg-entry-tech">{reasoningTech}</span>
-              </span>
-              <span class="cfg-entry-prov">{provenance('reasoning')}</span>
-            </button>
-            {#if editingReasoning}
-              <div class="cfg-entry-edit">
-                <p class="cfg-entry-question">How carefully should the model think before answering? <span class="cfg-entry-scope">Complex questions only.</span></p>
-                <div class="preset-row" role="radiogroup" aria-label="Reasoning preset">
-                  {#each REASONING_OPTS as opt}
-                    <button
-                      class="preset-btn"
-                      class:preset-btn--active={reasoningPreset === opt.id}
-                      role="radio"
-                      aria-checked={reasoningPreset === opt.id}
-                      onclick={() => setReasoning(opt.id)}
-                    >{opt.label}</button>
-                  {/each}
-                  {#if reasoningPreset === "custom"}
-                    <span class="preset-custom">Custom</span>
-                  {/if}
-                </div>
-                {#each REASONING_OPTS as opt}
-                  {#if reasoningPreset === opt.id}
-                    <p class="preset-desc">{opt.desc}</p>
-                    <p class="preset-tech">{opt.tech}</p>
-                  {/if}
-                {/each}
-                <button class="edit-done" onclick={() => editingReasoning = false}>Done</button>
-              </div>
-            {/if}
-          </div>
-
-          <!-- Response length -->
-          <div class="cfg-entry" class:cfg-entry--open={editingLength}>
-            <button class="cfg-entry-display" onclick={() => editingLength = !editingLength} aria-expanded={editingLength}>
-              <span class="cfg-entry-name">Response length</span>
-              <span class="cfg-entry-current">
-                <span class="cfg-entry-val">{lengthLabel}</span>
-                <span class="cfg-entry-tech">{lengthTech}</span>
-              </span>
-              <span class="cfg-entry-prov">{provenance('length')}</span>
-            </button>
-            {#if editingLength}
-              <div class="cfg-entry-edit">
-                <p class="cfg-entry-question">How thorough vs. concise should responses be? <span class="cfg-entry-scope">Complex questions only.</span></p>
-                <div class="preset-row" role="radiogroup" aria-label="Length preset">
-                  {#each LENGTH_OPTS as opt}
-                    <button
-                      class="preset-btn"
-                      class:preset-btn--active={lengthPreset === opt.id}
-                      role="radio"
-                      aria-checked={lengthPreset === opt.id}
-                      onclick={() => setLength(opt.id)}
-                    >{opt.label}</button>
-                  {/each}
-                  {#if lengthPreset === "custom"}
-                    <span class="preset-custom">Custom</span>
-                  {/if}
-                </div>
-                {#each LENGTH_OPTS as opt}
-                  {#if lengthPreset === opt.id}
-                    <p class="preset-desc">{opt.desc}</p>
-                    <p class="preset-tech">{opt.tech}</p>
-                  {/if}
-                {/each}
-                <button class="edit-done" onclick={() => editingLength = false}>Done</button>
               </div>
             {/if}
           </div>
@@ -687,7 +752,7 @@
             </button>
             {#if editingContextWindow}
               <div class="cfg-entry-edit">
-                <p class="cfg-entry-question">How far back should the model read in a long conversation? Higher values improve coherence at the cost of memory.</p>
+                <p class="cfg-entry-question">How much of a long conversation the model can see at once. Larger windows hold long threads coherent; they also use more RAM.</p>
                 <div class="inline-field">
                   <input
                     class="cfg-number-input"
@@ -703,6 +768,117 @@
             {/if}
           </div>
 
+          <!-- Advanced disclosure -->
+          <div class="doc-divider"></div>
+          <button
+            class="adv-toggle"
+            onclick={() => showAdvanced = !showAdvanced}
+            aria-expanded={showAdvanced}
+          >
+            <span class="adv-toggle-chev" aria-hidden="true">{showAdvanced ? '▾' : '▸'}</span>
+            <span class="adv-toggle-label">Advanced</span>
+            <span class="adv-toggle-hint">Self-checking, idle behaviour, available tools</span>
+          </button>
+
+          {#if showAdvanced}
+            <!-- Epistemic-humility audit -->
+            <div class="cfg-entry">
+              <div class="cfg-entry-display cfg-entry-display--static">
+                <span class="cfg-entry-name">Epistemic humility</span>
+                <span class="cfg-entry-current">
+                  <span class="cfg-entry-val">{config.auto_collaborate ? 'On' : 'Off'}</span>
+                  <span class="cfg-entry-tech">auto_collaborate</span>
+                </span>
+              </div>
+              <div class="cfg-entry-edit cfg-entry-edit--always">
+                <label class="cfg-toggle-row">
+                  <input
+                    type="checkbox"
+                    bind:checked={config.auto_collaborate}
+                    onchange={() => markDirty('auto_collaborate')}
+                  />
+                  <span class="cfg-toggle-label">When about to answer on thin evidence, ask you for a source instead of guessing.</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Auto-escalate to web -->
+            <div class="cfg-entry">
+              <div class="cfg-entry-display cfg-entry-display--static">
+                <span class="cfg-entry-name">Auto-escalate to web</span>
+                <span class="cfg-entry-current">
+                  <span class="cfg-entry-val">{config.auto_escalate_to_web ? 'On' : 'Off'}</span>
+                  <span class="cfg-entry-tech">auto_escalate_to_web</span>
+                </span>
+              </div>
+              <div class="cfg-entry-edit cfg-entry-edit--always">
+                <label class="cfg-toggle-row">
+                  <input
+                    type="checkbox"
+                    bind:checked={config.auto_escalate_to_web}
+                    onchange={() => markDirty('auto_escalate_to_web')}
+                  />
+                  <span class="cfg-toggle-label">If your local library can't answer, let the assistant search the web on its own — no permission prompt each time.</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Primary idle seconds -->
+            <div class="cfg-entry" class:cfg-entry--open={editingIdleSecs}>
+              <button class="cfg-entry-display" onclick={() => editingIdleSecs = !editingIdleSecs} aria-expanded={editingIdleSecs}>
+                <span class="cfg-entry-name">Lazy slot idle timeout</span>
+                <span class="cfg-entry-current">
+                  <span class="cfg-entry-val">{config.primary_idle_secs ?? 300}</span>
+                  <span class="cfg-entry-tech">seconds</span>
+                </span>
+                <span class="cfg-entry-prov">{provenance('primary_idle_secs')}</span>
+              </button>
+              {#if editingIdleSecs}
+                <div class="cfg-entry-edit">
+                  <p class="cfg-entry-question">How long to keep the Main responder loaded after the last question. Shorter frees memory faster; longer keeps follow-up turns instant.</p>
+                  <div class="inline-field">
+                    <input
+                      class="cfg-number-input"
+                      type="number"
+                      min="30"
+                      step="30"
+                      bind:value={config.primary_idle_secs}
+                      oninput={() => markDirty('primary_idle_secs')}
+                      aria-label="Primary slot idle timeout in seconds"
+                    />
+                    <span class="inline-field-unit">seconds</span>
+                  </div>
+                  <p class="preset-tech">Default 300 (five minutes). Push to 1800+ if you're hammering the model in batches and don't want it to reload between calls.</p>
+                  <button class="edit-done" onclick={() => editingIdleSecs = false}>Done</button>
+                </div>
+              {/if}
+            </div>
+
+            <!-- Enabled tools -->
+            <div class="cfg-entry">
+              <div class="cfg-entry-display cfg-entry-display--static">
+                <span class="cfg-entry-name">Enabled tools</span>
+                <span class="cfg-entry-current">
+                  <span class="cfg-entry-val">{config.enabled_tools.length} of {TOOL_OPTS.length}</span>
+                  <span class="cfg-entry-tech">enabled_tools</span>
+                </span>
+              </div>
+              <div class="cfg-entry-edit cfg-entry-edit--always">
+                <p class="cfg-entry-question">The full set of tools the assistant is allowed to reach for. It still picks which ones make sense each turn — this is the outer fence.</p>
+                {#each TOOL_OPTS as opt}
+                  <label class="cfg-toggle-row">
+                    <input
+                      type="checkbox"
+                      checked={config.enabled_tools.includes(opt.id)}
+                      onchange={() => toggleTool(opt.id)}
+                    />
+                    <span class="cfg-toggle-label"><strong>{opt.label}</strong> — {opt.desc}</span>
+                  </label>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
         </section>
 
       {:else if activeTab === "models"}
@@ -715,17 +891,17 @@
       {#if activeTab === "knowledge"}
         <section class="doc-section">
           <h2 class="doc-h2">Knowledge</h2>
-          <p class="doc-intro">Everything Sovereign can search lives on this machine. Catalog corpora share infrastructure across users; local folders and vaults are your own layer on top.</p>
+          <p class="doc-intro">Every source Sovereign can search lives on this machine. Install curated libraries from the catalog, or point it at your own folders and notes.</p>
 
           <!-- Catalog corpora first — Wikipedia, SEP, etc. The wider
                reference universe sits above personal local sources
                so the user sees what's available before what they've
                added. -->
-          <h3 class="doc-h3">Catalog corpora</h3>
+          <h3 class="doc-h3">Catalog libraries</h3>
           <p class="doc-body">
-            Curated reference bodies you can install in one click —
-            Wikipedia, Stanford Encyclopedia of Philosophy, Stack
-            Exchange. Stored at <code class="path-inline">~/.sovereign/indexes/</code>.
+            Curated references — Wikipedia, Stanford Encyclopedia of
+            Philosophy, Stack Exchange — installable in one click.
+            Lives at <code class="path-inline">~/.sovereign/indexes/</code>.
           </p>
           <KnowledgeStatus />
 
@@ -741,7 +917,7 @@
           <h3 class="doc-h3">Your folders &amp; vaults</h3>
           <p class="doc-body">
             Point Sovereign at a folder of documents or an Obsidian
-            vault. Files stay on your computer. Nothing is uploaded.
+            vault. Files never leave your computer.
           </p>
           <div class="lk-embed">
             <LocalKnowledgeSection embedded {onOpenChatWithSeed} {onDropToChat} />
@@ -751,7 +927,7 @@
           <div class="doc-divider"></div>
           <h3 class="doc-h3">Disk budget</h3>
           <p class="doc-body">
-            How much disk Sovereign may use for installed corpora. Once the budget is reached, the scheduler stops accepting new work. Existing corpora stay put.
+            How much disk Sovereign may use for installed libraries. Once you hit the ceiling, new installs are turned away — what's already installed stays put.
           </p>
 
           {#if storageBudget}
@@ -790,9 +966,9 @@
               {#if editingStorageBudget}
                 <div class="cfg-entry-edit">
                   {#if usageState === "over"}
-                    <p class="cfg-caution">Over budget. No new corpora or peer shards will be accepted until usage drops or you raise the limit.</p>
+                    <p class="cfg-caution">Over the ceiling. Nothing new — local or from peers — until you free space or raise the limit.</p>
                   {:else if usageState === "near"}
-                    <p class="cfg-caution">Near the limit. New shards will be deferred soon.</p>
+                    <p class="cfg-caution">Close to the ceiling. New work from peers will be deferred soon.</p>
                   {/if}
                   <div class="inline-field">
                     <input
@@ -841,7 +1017,7 @@
             <div class="doc-divider"></div>
             <h3 class="doc-h3">KnowledgeView</h3>
             <p class="doc-body">
-              Builds a running map of recurring questions and tensions across your notes and conversations. The model reads this before answering, giving more continuous responses over time. All of this stays on this machine.
+              Builds a quiet map of recurring questions and tensions across your notes and conversations. The assistant reads it before answering, so it remembers what you've been working through. Everything stays on this machine.
             </p>
 
             <div class="cfg-entry cfg-entry--toggle">
@@ -854,7 +1030,7 @@
                 />
                 <span class="cfg-toggle-body">
                   <span class="cfg-toggle-label">Enable KnowledgeView</span>
-                  <span class="cfg-toggle-sub">Takes effect after a restart. Off: each session starts from zero.</span>
+                  <span class="cfg-toggle-sub">Takes effect after a restart. Off means every session starts fresh.</span>
                 </span>
               </label>
             </div>
@@ -863,7 +1039,7 @@
             <div class="doc-divider"></div>
             <h3 class="doc-h3">Background ingest</h3>
             <p class="doc-body">
-              Large corpora can occupy the GPU for hours. Throttle the duty cycle to keep the machine usable while ingest runs.
+              Large libraries can pin the GPU for hours. Throttle the duty cycle if you want the rest of the machine usable while it runs.
             </p>
 
             <div class="cfg-entry">
@@ -907,7 +1083,7 @@
                 />
                 <span class="cfg-toggle-body">
                   <span class="cfg-toggle-label">Pause shared ingest work</span>
-                  <span class="cfg-toggle-sub">This node won't pull queued work from peers or dispatch its own. Local installs in progress keep going. Re-enable to rejoin without restarting.</span>
+                  <span class="cfg-toggle-sub">Stops handing work to peers and stops accepting theirs. Anything already running on this machine keeps going. Untick to rejoin — no restart needed.</span>
                 </span>
               </label>
             </div>
@@ -924,7 +1100,7 @@
       {#if activeTab === "imports"}
         <section class="doc-section">
           <h2 class="doc-h2">Imports</h2>
-          <p class="doc-intro">Import your conversation history from Claude, ChatGPT, or Gemini. Sovereign builds an atlas you can traverse — see threads, people, and recurring topics in the Atlas tab.</p>
+          <p class="doc-intro">Bring in your conversation history from Claude. Sovereign builds an atlas you can browse — threads, people, and the topics you keep returning to — in the Atlas tab.</p>
           <ImportsTab />
         </section>
       {/if}
@@ -933,7 +1109,7 @@
       {#if activeTab === "enrichment"}
         <section class="doc-section">
           <h2 class="doc-h2">Enrichment</h2>
-          <p class="doc-intro">Atlas enrichment produces a typed knowledge graph from a corpus — entities, events, states, relations, claims, questions, configurations. Run one article or book at a time; errors surface with remediation commands you can copy-paste.</p>
+          <p class="doc-intro">Builds a graph of people, events, claims, and open questions across a library — so the assistant can reason over structure, not just paragraphs. Run it one article or book at a time. When something fails, you'll see exactly what to do next.</p>
           <EnrichmentPanel />
         </section>
       {/if}
@@ -942,7 +1118,7 @@
       {#if activeTab === "mesh"}
         <section class="doc-section">
           <h2 class="doc-h2">Mesh</h2>
-          <p class="doc-intro">Pool compute and knowledge with people you trust. Everyone in a mesh can use each other's spare resources.</p>
+          <p class="doc-intro">Pool compute and knowledge with people you trust. Spare cycles and shared libraries — no central server, no broker.</p>
           <MeshSettings />
         </section>
       {/if}
@@ -951,7 +1127,7 @@
       {#if activeTab === "sharing"}
         <section class="doc-section">
           <h2 class="doc-h2">Sharing</h2>
-          <p class="doc-intro">Control how much of your machine the mesh can use, and pause it whenever you want every cycle for yourself.</p>
+          <p class="doc-intro">Decide how much of your machine the mesh can use. Pause it any time you want the cycles back.</p>
           <SharingSection />
         </section>
       {/if}
@@ -967,7 +1143,7 @@
         <section class="doc-section">
           <h2 class="doc-h2">Web search</h2>
           <p class="doc-intro">
-            Queries go directly to the provider you choose — not through Sovereign's servers. Used when the model needs something beyond its local knowledge.
+            Queries go straight to whichever provider you pick — never through us. Comes up when the model needs something it can't find locally.
           </p>
 
           <div class="cfg-entry">
@@ -1007,6 +1183,9 @@
                     aria-label="Search API key"
                   />
                 </div>
+                <p class="cfg-caution" style="margin-top: 6px;">
+                  Saved in plain text inside <code class="path-inline">config.toml</code>. Use a key you can rotate if it ever gets exposed.
+                </p>
               {/if}
             </div>
           </div>
@@ -1022,7 +1201,7 @@
       {#if activeTab === "connect"}
         <section class="doc-section">
           <h2 class="doc-h2">Connect</h2>
-          <p class="doc-intro">Point Codex, Claude Code, or any OpenAI-compatible client at your local daemon. Everything stays on this machine.</p>
+          <p class="doc-intro">Point Codex, Claude Code, or any OpenAI-compatible client at the local daemon. Nothing leaves this machine.</p>
           <ConnectSection />
         </section>
       {/if}
@@ -1031,7 +1210,7 @@
       {#if activeTab === "paths" && config}
         <section class="doc-section">
           <h2 class="doc-h2">Paths</h2>
-          <p class="doc-intro">These directories are created automatically on first run. Change them only if you want data stored somewhere specific.</p>
+          <p class="doc-intro">Created automatically on first run. Change them only if you want data stored somewhere specific.</p>
 
           <div class="cfg-entry" class:cfg-entry--open={editingPaths}>
             <button class="cfg-entry-display" onclick={() => editingPaths = !editingPaths} aria-expanded={editingPaths}>
@@ -1086,7 +1265,7 @@
       {#if activeTab === "recipes"}
         <section class="doc-section">
           <h2 class="doc-h2">Recipes</h2>
-          <p class="doc-intro">Validate and test corpus recipe files before submitting them. Testing downloads a small sample and runs the full extraction pipeline locally.</p>
+          <p class="doc-intro">Test a library recipe before you ship it. Downloads a small sample, runs the full extraction pipeline locally, and tells you what broke.</p>
           <RecipeTestingPanel />
 
           {#if config}
@@ -1100,9 +1279,9 @@
             <div class="doc-divider"></div>
             <h3 class="doc-h3">Recipe Author workspace</h3>
             <p class="doc-body">
-              Conversation-driven workspace for building corpus
-              recipes interactively. Off by default — opt in when
-              you're authoring or iterating on a recipe.
+              A chat-based workspace for drafting and iterating on
+              recipes. Off by default — turn it on when you're
+              actively authoring one.
             </p>
 
             <div class="cfg-entry cfg-entry--toggle">
@@ -1123,7 +1302,7 @@
                 />
                 <span class="cfg-toggle-body">
                   <span class="cfg-toggle-label">Enable Recipe Author workspace</span>
-                  <span class="cfg-toggle-sub">Adds a Recipe Author entry to the left nav rail (next to Atlas and Settings). Saves on toggle; close Settings to see the rail update.</span>
+                  <span class="cfg-toggle-sub">Adds a Recipe Author entry to the left rail, next to Atlas. Saves immediately; close Settings to see it appear.</span>
                 </span>
               </label>
             </div>
@@ -1135,19 +1314,21 @@
       {#if activeTab === "about"}
         <section class="doc-section">
           <h2 class="doc-h2">About</h2>
-          <p class="doc-intro">Version info and update controls. Updates are signed and served from <code>svrnme.sh</code>; the app verifies each release against a key embedded at build time before installing.</p>
+          <p class="doc-intro">Version info and updates. Releases are signed at <code>svrnme.sh</code> and verified on this machine before they install.</p>
           <UpdatesSection />
         </section>
       {/if}
 
       <!-- ── Save bar ────────────────────────────────────────── -->
       {#if needsSave}
+        {@const blockSave = activeTab === "models" && budgetState === "crit"}
         <div class="doc-save" class:doc-save--visible={dirty || !!saveMessage}>
           <button
             class="save-btn"
             onclick={handleSave}
-            disabled={saving || !dirty}
+            disabled={saving || !dirty || blockSave}
             aria-label="Save and apply settings"
+            title={blockSave ? "Resolve the memory budget warning above before saving." : undefined}
           >
             {saving ? "Saving…" : "Save"}
           </button>
@@ -1155,6 +1336,8 @@
             <span class="save-msg" class:save-msg--error={saveMessage.startsWith("Could")}>
               {saveMessage}
             </span>
+          {:else if blockSave}
+            <span class="save-msg save-msg--error">Over the memory budget — adjust models above.</span>
           {:else if dirty}
             <span class="save-msg save-msg--pending">Unsaved changes</span>
           {/if}
@@ -1455,6 +1638,98 @@
     font-style: italic;
   }
 
+  /* ── Memory budget meter (Models tab) ────────────────────────── */
+  .budget-meter {
+    border: 1px solid var(--border-mid);
+    border-left-width: 3px;
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin: 14px 0 18px;
+    background: var(--bg-secondary);
+  }
+  .budget-meter--ok   { border-left-color: var(--success, #6bbf6b); }
+  .budget-meter--warn { border-left-color: var(--warning, #c9a84c); }
+  .budget-meter--crit { border-left-color: var(--error,   #d96b6b); }
+
+  .budget-meter-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .budget-meter-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .budget-meter-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  .budget-meter-figure {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+  }
+  .budget-meter-figure strong {
+    font-weight: 600;
+  }
+  .budget-meter-of {
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-left: 4px;
+  }
+  .budget-meter-pct {
+    font-family: var(--font-mono);
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+  }
+  .budget-meter--warn .budget-meter-pct { color: var(--warning, #c9a84c); }
+  .budget-meter--crit .budget-meter-pct { color: var(--error,   #d96b6b); }
+
+  .budget-bar-track {
+    position: relative;
+    height: 6px;
+    background: var(--bg-input);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .budget-bar-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: var(--success, #6bbf6b);
+    transition: width 200ms ease;
+  }
+  .budget-meter--warn .budget-bar-fill { background: var(--warning, #c9a84c); }
+  .budget-meter--crit .budget-bar-fill { background: var(--error,   #d96b6b); }
+  /* Over-budget overlay extends past 100% as a slim hatched marker so
+     the user sees how far past the ceiling they've gone. */
+  .budget-bar-over {
+    position: absolute;
+    inset: 0 0 0 auto;
+    background: repeating-linear-gradient(
+      45deg,
+      var(--error, #d96b6b) 0 6px,
+      transparent 6px 12px
+    );
+    opacity: 0.85;
+  }
+
+  .budget-meter-msg {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 1.45;
+    margin: 8px 0 0;
+  }
+  .budget-meter-msg--ok {
+    color: var(--text-muted);
+  }
+  .budget-meter--warn .budget-meter-msg { color: var(--warning, #c9a84c); }
+  .budget-meter--crit .budget-meter-msg { color: var(--error,   #d96b6b); }
+
   /* ── Model slot list ─────────────────────────────────────────── */
   .slot-list {
     border: 1px solid var(--border-mid);
@@ -1521,6 +1796,17 @@
     color: var(--warning);
     font-style: normal;
     font-family: var(--font-mono);
+  }
+
+  .slot-item-size {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 6px;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    background: var(--bg-input);
+    border-radius: 4px;
+    white-space: nowrap;
   }
 
   .slot-item-meta {
@@ -1642,11 +1928,6 @@
     margin-bottom: 10px;
   }
 
-  .cfg-entry-scope {
-    color: var(--lavender);
-    font-style: italic;
-  }
-
   /* Edit block — appears below the display row */
   .cfg-entry-edit {
     padding: 0 0 14px;
@@ -1655,6 +1936,38 @@
   /* Variant: always visible (not toggled) */
   .cfg-entry-edit--always {
     padding-bottom: 12px;
+  }
+
+  /* ── Advanced disclosure ─────────────────────────────────────── */
+  .adv-toggle {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    color: var(--text-primary);
+    font: inherit;
+  }
+  .adv-toggle:hover .adv-toggle-label {
+    color: var(--accent);
+  }
+  .adv-toggle-chev {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    width: 10px;
+  }
+  .adv-toggle-label {
+    font-size: 0.86rem;
+    font-weight: 600;
+  }
+  .adv-toggle-hint {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    margin-left: auto;
   }
 
   /* ── Toggle / checkbox entries ───────────────────────────────── */

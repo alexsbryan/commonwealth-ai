@@ -1018,7 +1018,7 @@
         {#if starters.length > 0}
           <div class="empty-starters">
             <div class="starters-header">
-              <span class="starters-label">Try asking</span>
+              <span class="starters-label">Suggestions?</span>
               {#if canCycleStarters}
                 <button
                   type="button"
