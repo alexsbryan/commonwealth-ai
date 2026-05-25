@@ -58,7 +58,8 @@ impl InferenceProvider for StubInference {
             model_id: "stub".into(),
             latency_ms: 0,
             oicp_meta: None,
-        })
+            finish_reason: None,
+            completion_tokens: None,        })
     }
 
     async fn complete_stream(

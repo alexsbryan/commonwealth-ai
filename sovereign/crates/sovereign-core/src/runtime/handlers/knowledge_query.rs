@@ -1003,6 +1003,11 @@ impl Runtime {
                 } else {
                     format!("{base}\n\n{gap_note}")
                 };
+                let budget_note =
+                    crate::runtime::build_response_length_directive(
+                        FAST_KNOWLEDGE_MAX_TOKENS as usize,
+                    );
+                let base = format!("{base}\n\n{budget_note}");
                 let system = self.build_system_message(&base, context);
                 CompletionRequest {
                     prompt,
@@ -1036,6 +1041,11 @@ impl Runtime {
                 } else {
                     format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{gap_note}\n\n{THINKING_DIRECTIVE}")
                 };
+                let budget_note =
+                    crate::runtime::build_response_length_directive(
+                        self.inference_config.max_tokens,
+                    );
+                let base = format!("{base}\n\n{budget_note}");
                 let system = self.build_primary_system_message(&base, context);
                 CompletionRequest {
                     prompt,
@@ -1286,6 +1296,14 @@ impl Runtime {
             self_assessment,
             routing_trigger,
             coverage: coverage_for_prov,
+            // Non-streaming KQ path: CompletionResponse now carries
+            // the provider-observed finish_reason + completion_tokens
+            // (Phase 1 of the cutoff-legibility plan). Read from the
+            // response so the desktop chip lights up on length
+            // truncation here too, not just on streaming surfaces.
+            finish_reason: completion.finish_reason.clone(),
+            max_tokens_budget: Some(self.inference_config.max_tokens),
+            completion_tokens: completion.completion_tokens,
         };
 
         // PR3 — grounded next-step offers. Look up the most recent

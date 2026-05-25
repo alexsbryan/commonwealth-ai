@@ -491,6 +491,24 @@ struct ModelSlot {
 /// Current millis-since-epoch as `u64`. Saturates at 0 if the
 /// system clock is set before 1970 (impossible in practice;
 /// guarded so we never panic).
+/// Classify why a non-streaming `generate_sync` call stopped emitting
+/// tokens. `generate_sync` itself only returns `(text, prompt_tokens,
+/// completion_tokens)` — the loop's `while n_generated < max_tokens`
+/// + `is_eog_token` predicate is the source of truth, but threading
+/// a `FinishReason` enum back through every decode variant (MTP,
+/// single-token, jump-forward, structured-output, MTP-fallback) is a
+/// large surface change. Compute it here from the observed counts:
+/// if completion_tokens hit the request's `max_tokens` budget, the
+/// loop exited on length; otherwise it exited on EOS. The only false
+/// positive is the vanishing edge where EOS lands at exactly the
+/// budget boundary — accept that vs. the surgery cost.
+fn finish_reason_from_counts(request: &CompletionRequest, completion_tokens: usize) -> FinishReason {
+    match request.max_tokens {
+        Some(budget) if completion_tokens >= budget => FinishReason::Length,
+        _ => FinishReason::Stop,
+    }
+}
+
 fn now_millis() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -4474,6 +4492,8 @@ impl FastShortCoalescer {
                     for (job, (text, prompt_tokens, completion_tokens)) in
                         batch.into_iter().zip(per_seq_results)
                     {
+                        let finish_reason =
+                            finish_reason_from_counts(&job.request, completion_tokens);
                         let resp = CompletionResponse {
                             text,
                             tokens_used: prompt_tokens + completion_tokens,
@@ -4481,6 +4501,8 @@ impl FastShortCoalescer {
                             model_id: model_id.clone(),
                             latency_ms,
                             oicp_meta: None,
+                            finish_reason: Some(finish_reason),
+                            completion_tokens: Some(completion_tokens as u32),
                         };
                         let _ = job.response.send(Ok(resp));
                     }
@@ -5978,6 +6000,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     }
                 };
                 let latency_ms = start.elapsed().as_millis() as u64;
+                let finish_reason = finish_reason_from_counts(&request, completion_tokens);
                 Ok(CompletionResponse {
                     text,
                     tokens_used: prompt_tokens + completion_tokens,
@@ -5985,6 +6008,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     model_id: slot.model_id.clone(),
                     latency_ms,
                     oicp_meta: None,
+                    finish_reason: Some(finish_reason),
+                    completion_tokens: Some(completion_tokens as u32),
                 })
             })
             .await
@@ -6098,6 +6123,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         }
                     };
                     let latency_ms = start.elapsed().as_millis() as u64;
+                    let finish_reason =
+                        finish_reason_from_counts(&request, completion_tokens);
                     Ok(CompletionResponse {
                         text,
                         tokens_used: prompt_tokens + completion_tokens,
@@ -6105,6 +6132,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         model_id: slot.model_id.clone(),
                         latency_ms,
                         oicp_meta: None,
+                        finish_reason: Some(finish_reason),
+                        completion_tokens: Some(completion_tokens as u32),
                     })
                 })
                 .await
@@ -6221,6 +6250,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 *last_use.blocking_lock() = Some(Instant::now());
 
+                let finish_reason = finish_reason_from_counts(&request, completion_tokens);
                 Ok((CompletionResponse {
                     text,
                     tokens_used: prompt_tokens + completion_tokens,
@@ -6231,6 +6261,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     model_id: model_id.clone(),
                     latency_ms,
                     oicp_meta: None,
+                    finish_reason: Some(finish_reason),
+                    completion_tokens: Some(completion_tokens as u32),
                 }, slot_label))
             })
             .await
@@ -6293,6 +6325,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 };
 
                 let latency_ms = start.elapsed().as_millis() as u64;
+                let finish_reason = finish_reason_from_counts(&request, completion_tokens);
 
                 Ok(CompletionResponse {
                     text,
@@ -6301,6 +6334,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     model_id: slot.model_id.clone(),
                     latency_ms,
                     oicp_meta: None,
+                    finish_reason: Some(finish_reason),
+                    completion_tokens: Some(completion_tokens as u32),
                 })
             })
             .await

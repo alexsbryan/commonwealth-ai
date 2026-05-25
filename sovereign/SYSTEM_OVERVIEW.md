@@ -1055,6 +1055,53 @@ filename-signalled coders).
 seen on outgoing requests and incoming claims. Consumed by an external
 governance review process (spec §4.3); **not** the scheduler.
 
+### 4.8c Cutoff legibility — typed `FinishReason` end-to-end
+
+When a synthesis hits `max_tokens` and the model stops mid-sentence, the
+desktop chat surface renders an explicit "Response was cut off
+mid-thought — hit the N-token limit (M generated). [Continue from here]"
+chip instead of leaving the user to guess. Three load-bearing pieces:
+
+1. **Typed `FinishReason` on every provider surface.**
+   `sovereign-core::types::FinishReason { Stop, Length, ToolCalls,
+   ContentFilter, Cancelled, Error(String) }` uses a custom Serialize
+   impl that emits OpenAI-compatible lowercase strings (`"length"`,
+   `"stop"`, …). `CompletionResponse.finish_reason` +
+   `.completion_tokens` carry the typed signal back from the
+   non-streaming path; `StreamFrame::Finish { reason, usage }` carries
+   it on the streaming path via `complete_stream_with_finish`.
+2. **`MeshInferenceProvider::complete_stream_with_id_and_finish`
+   mirrors the routing structure of the legacy `complete_stream_with_id`**
+   (explicit model_id → peer match → OICP-based peer pick → local
+   fallback) but calls `complete_stream_with_finish` on every terminus.
+   Local termini get the real `EmbeddedLlamaCpp` sampler-reason; peer
+   termini get the real SSE `finish_reason` parsed by
+   `RemoteApiProvider::complete_stream_with_finish`. The runtime
+   streaming spawn (`runtime.rs`) consumes typed frames directly — no
+   chars-per-token heuristic.
+3. **The model is told its budget up front.**
+   `build_response_length_directive(max_tokens)` is spliced into the
+   KnowledgeQuery synthesis prompts so the model picks a shape that
+   lands within the budget instead of opening a multi-section essay it
+   can't close. Pairs with the cutoff chip — the chip catches the
+   "model still ran out" case, the directive catches the "model
+   planned poorly" case.
+
+`ThroughputObservedStream` is generic over `S: Stream + Send + Unpin`
+where `S::Item: IsDataFrame`. The predicate distinguishes data frames
+(count toward `chunk_count`) from terminal frames (Finish, Error). Both
+the legacy `Result<String>` and typed `StreamFrame` shapes flow through
+the same wrapper — peer-routing throughput stats survive the typed
+swap.
+
+Pinned by: `AssistantMessage.svelte`'s cutoff chip renders only when
+`provenance.finish_reason === "length"`; `runtime.rs`'s streaming
+spawns consume the terminal Finish frame and populate
+`ResponseProvenance.{finish_reason, max_tokens_budget,
+completion_tokens}`; the SettingsPanel "Response length" entry lets
+the user tune `max_tokens` (Concise 2048 / Standard 4096 / Long 8192 /
+Essay 16384 presets + free-form input).
+
 ### 4.8b Coding-agent harness adapter — /v1/responses + Harness frontdoor
 
 `commonwealth-api` exposes `/v1/chat/completions` (OpenAI chat-completions
@@ -2796,7 +2843,7 @@ file or gap with an entry is sequenced work.
 | `mesh_cmd.rs` split | `sovereign-cli-llm/src/mesh_cmd.rs` (~3000 lines) | Mesh CLI surface — peer ops, gossip introspection, partition tooling. Cohesive while peer-state semantics keep shifting under mesh self-heal + cloud peering work. |
 | `daemon.rs` split | `sovereign-mesh/src/daemon.rs` (~2600 lines) | `EmbeddedDaemon` is the in-process commonwealth+sovereign entry. Holds lifecycle state machine (try_resume / create / join / leave / shutdown), HTTP listener wiring (7-router merge), background-task spawning (gossip, auto-collaborate, auto-resume, storage-snapshot, newsworthy-watcher), AppState construction with an order-sensitive `CorpusEngine` injection invariant, config reload, and mDNS/relay-IP helpers. Free extractions of pure helpers landed: `mesh_discovery.rs` (relay/IP enumeration); the `start_daemon()` order invariant is pinned by `sovereign-mesh/tests/daemon_wiring.rs` and the port-config plumbing is pinned by `tests/port_config.rs`. The load-bearing splits (`start_daemon()` → `app_state_builder.rs` + `background_tasks.rs`) are unblocked but stay deferred until the `MemberRecord.client_port` wire-protocol work (below) lands and a real two-daemon integration test against `start_daemon` itself can be built. |
 | `inference_adapter.rs` split | `sovereign-mesh/src/inference_adapter.rs` (~2100 lines) | Adapts the local `InferenceProvider` to the `LocalInferenceService` shape that the mesh router calls, *and* synthesizes this node's OICP `CapabilityClaim`s for peer scoring. Pure helpers (`build_self_manifest`, `synthesize_slot_claims`) have been extracted to `oicp_synthesis.rs`. Remaining concerns — wire-shape translation, tool-call envelope parsing (grammar vs. legacy marker), tool-profile policy — are tightly coupled to the `LocalInferenceService` impl and stay in the file until the tool-call envelope migration settles. |
-| `peer_inference.rs` split | `sovereign-mesh/src/peer_inference.rs` (~1900 lines) | `MeshInferenceProvider` (the OICP-aware router) plus throughput observation, manifest caching, and quarantine policy. `ThroughputObservedStream` extracted to `throughput_tracking.rs`. Further split blocked on `select_peer` (~470 lines) — splitting it requires the OICP-cache key + peer-health weight semantics to stop moving; until then the routing logic reads more clearly as one method. |
+| `peer_inference.rs` split | `sovereign-mesh/src/peer_inference.rs` (~2280 lines) | `MeshInferenceProvider` (the OICP-aware router) plus throughput observation, manifest caching, and quarantine policy. `ThroughputObservedStream` extracted to `throughput_tracking.rs`. Cutoff-legibility work (2026-05-25) added `complete_stream_with_id_and_finish` mirroring the routing structure of `complete_stream_with_id` — the duplication is intentional per ARCH §10.2 (one dimension per PR). Routing-helper extraction (`select_route` enum + free fn) is the principled follow-up that would deduplicate both methods. Further `select_peer` split (~470 lines) still blocked on OICP-cache key + peer-health weight semantics. |
 | `auto_ingest.rs` split | `sovereign-mesh/src/auto_ingest.rs` (~1200 lines) | Auto-collaborate orchestration: partition planning, peer recruitment, handoff state machine, gossip integration. Lifecycle states (`Planning → Handoff → Active → Complete`) cohere as one state machine; splitting before the cloud-peer flavour settles would re-merge. |
 | `MemberRecord.client_port` wire-protocol field | `commonwealth-core/src/mesh.rs` + `commonwealth-discovery/src/membership.rs` + `sovereign-mesh/src/daemon.rs::peer_inference_endpoints` + `sovereign-mesh/src/auto_ingest.rs` candidate-URL builder | The local-side port plumbing landed 2026-05-13: `EmbeddedDaemon` honors `SetupConfig.daemon.{client_port,internal_port}` for its own bind/announce decisions (`resolved_ports` helper, threaded through `create_mesh` / `join_mesh` / `start_daemon` / mDNS / auto-collaborate spawn). What remains is the **peer-uniformity assumption**: `peer_inference_endpoints` rewrites every peer's URL with `this daemon's client_port`, and `auto_ingest`'s candidate-URL builder pins port `9742` regardless of what gossip reported. Mixed-port mesh deployments need a `client_port` field on `MemberRecord` (and a matching `client_port` slot in the join handshake's wire shape) so peers advertise their *own* client port rather than counting on uniformity. Until then, operators who set a non-default `client_port` should configure every peer the same. |
 | Atlas inspector Phase 2 — curation overlay | `sovereign-tools/src/atlas_view/` (Phase 1 shipped 2026-05-12) | Phase 1 ships read-only inspection (§4.10c). Phase 2 adds an `atlas/overlay.sqlite` keyed by `StableAtomKey` (content-hash, not the volatile sequential `AtomId`) so user edits and approval state survive re-extraction. Overlay-merging branches go inside the existing `FileAtlasReader` — no new trait. The forward-compat `curation_status` / `overlay_supports` fields are already on every DTO; flipping them lights up `<CurationStatusBadge>` and `<EditAffordances>` slots already present in `AtomDetail.svelte`. Design notes: NoteStore decision "Atlas inspector: stable_key by content hash" + todo "Atlas inspector Phase 2 — curation overlay". |

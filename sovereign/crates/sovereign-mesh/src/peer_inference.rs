@@ -1852,6 +1852,186 @@ impl InferenceProvider for MeshInferenceProvider {
         Ok((observed, self.local.model_id_for(request.preferred_speed)))
     }
 
+    /// Typed-Finish sibling of `complete_stream_with_id`. Mirrors the
+    /// routing structure exactly — explicit `model_id` first, then
+    /// OICP-based peer pick, then local fallback — but calls
+    /// `complete_stream_with_finish` on each terminus instead of
+    /// `complete_stream`. The result carries the typed `StreamFrame`
+    /// stream all the way out so the runtime can read the terminal
+    /// `Finish { reason: Length, … }` frame and surface the cutoff
+    /// chip without the chars-per-token heuristic in `runtime.rs`.
+    ///
+    /// Why a duplicate of the routing body, not a `select_route`
+    /// helper: extracting routing would touch every existing peer-
+    /// fallback test simultaneously. ARCH §10.2 says touch one
+    /// dimension at a time — this PR is the "behavior change
+    /// (surface real Length)" dimension; the routing-helper
+    /// extraction is its own subsequent refactor PR. Tagged in
+    /// SYSTEM_OVERVIEW.md Roadmap §10.
+    ///
+    /// Local termini (`local.complete_stream_with_finish`) carry the
+    /// real `FinishReason` from `EmbeddedLlamaCpp`'s sampler. Peer
+    /// termini (`rp.complete_stream_with_finish`) use the trait
+    /// default until Phase 4 overrides it on `RemoteApiProvider`
+    /// with real SSE finish_reason parsing.
+    async fn complete_stream_with_id_and_finish(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<(
+        Pin<Box<dyn Stream<Item = sovereign_core::types::StreamFrame> + Send>>,
+        String,
+    )> {
+        use sovereign_core::types::StreamFrame;
+        if let Some(model_id) = explicit_model_id(request) {
+            match self.locate_named_model(model_id).await {
+                NamedModelLocation::Local => {
+                    tracing::info!(
+                        model = %model_id,
+                        "mesh-inference: serving complete_stream_with_finish() locally by explicit model name"
+                    );
+                    let guard = self.enter_local_inflight(model_id);
+                    let stream = self.local.complete_stream_with_finish(request).await?;
+                    let observed: Pin<Box<dyn Stream<Item = StreamFrame> + Send>> =
+                        Box::pin(InflightGuardedStream::new(
+                            ThroughputObservedStream::new(
+                                stream,
+                                ThroughputTarget::Local(Arc::clone(&self.local_observations)),
+                            ),
+                            guard,
+                        ));
+                    return Ok((observed, model_id.to_string()));
+                }
+                NamedModelLocation::Peer(peer, peer_cand) => {
+                    tracing::info!(
+                        peer = %peer.name,
+                        addrs = peer.base_urls.len(),
+                        model = %peer_cand.model_id,
+                        "mesh-inference: routing complete_stream_with_finish() to peer by explicit model name"
+                    );
+                    let ledger_emission = self
+                        .mesh
+                        .ledger_emission_for(&peer.node_id, &peer_cand.model_id, &peer.name)
+                        .await;
+                    let mut last_transport_err: Option<String> = None;
+                    for url in &peer.base_urls {
+                        let rp = provider_for_peer(&peer, url);
+                        match rp.complete_stream_with_finish(request).await {
+                            Ok(stream) => {
+                                let attribution =
+                                    format!("{} @ peer {}", peer_cand.model_id, peer.name);
+                                let mut wrapper = ThroughputObservedStream::new(
+                                    stream,
+                                    ThroughputTarget::Peer {
+                                        name: peer.name.clone(),
+                                        map: Arc::clone(&self.peer_observations),
+                                    },
+                                );
+                                if let Some(em) = ledger_emission.clone() {
+                                    wrapper = wrapper.with_ledger_emission(em);
+                                }
+                                let observed: Pin<
+                                    Box<dyn Stream<Item = StreamFrame> + Send>,
+                                > = Box::pin(wrapper);
+                                self.peer_health.record_success(&peer.name);
+                                return Ok((observed, attribution));
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    peer = %peer.name,
+                                    url = %url,
+                                    error = %e,
+                                    "mesh-inference: peer complete_stream_with_finish() transport \
+                                     error under explicit model_id, trying next address"
+                                );
+                                last_transport_err = Some(format!("{e}"));
+                            }
+                        }
+                    }
+                    self.peer_health.record_failure(&peer.name);
+                    return Err(sovereign_core::error::Error::Routing(format!(
+                        "model '{}' is advertised by peer '{}' but all peer \
+                         addresses failed: {}",
+                        model_id,
+                        peer.name,
+                        last_transport_err.unwrap_or_else(|| "unreachable".into())
+                    )));
+                }
+                NamedModelLocation::Unknown => {
+                    return Err(sovereign_core::error::Error::ModelNotLoaded(format!(
+                        "no node in this mesh advertises model '{}' — \
+                         check `/v1/models` for available names",
+                        model_id
+                    )));
+                }
+            }
+        }
+
+        if let Some((peer, peer_cand)) = self.select_peer(request).await {
+            tracing::info!(
+                peer = %peer.name,
+                addrs = peer.base_urls.len(),
+                peer_pick = %peer_cand.model_id,
+                "mesh-inference: routing complete_stream_with_finish() to peer"
+            );
+            let ledger_emission = self
+                .mesh
+                .ledger_emission_for(&peer.node_id, &peer_cand.model_id, &peer.name)
+                .await;
+            for url in &peer.base_urls {
+                let rp = provider_for_peer(&peer, url);
+                match rp.complete_stream_with_finish(request).await {
+                    Ok(stream) => {
+                        let model_id =
+                            format!("{} @ peer {}", peer_cand.model_id, peer.name);
+                        let mut wrapper = ThroughputObservedStream::new(
+                            stream,
+                            ThroughputTarget::Peer {
+                                name: peer.name.clone(),
+                                map: Arc::clone(&self.peer_observations),
+                            },
+                        );
+                        if let Some(em) = ledger_emission.clone() {
+                            wrapper = wrapper.with_ledger_emission(em);
+                        }
+                        let observed: Pin<Box<dyn Stream<Item = StreamFrame> + Send>> =
+                            Box::pin(wrapper);
+                        self.peer_health.record_success(&peer.name);
+                        return Ok((observed, model_id));
+                    }
+                    Err(e) => {
+                        tracing::info!(
+                            peer = %peer.name,
+                            url = %url,
+                            error = %e,
+                            "mesh-inference: peer complete_stream_with_finish() transport error, trying next address"
+                        );
+                    }
+                }
+            }
+            self.peer_health.record_failure(&peer.name);
+            tracing::info!(
+                peer = %peer.name,
+                "mesh-inference: all peer addresses failed, falling back to local typed stream"
+            );
+        }
+
+        // Local-fallback typed terminus. Same throughput-tracking +
+        // total-counter shape as the legacy variant, but the stream
+        // carries StreamFrame so `Finish { reason: Length, … }`
+        // reaches the runtime spawn untouched.
+        let total = self.enter_local_total();
+        let stream = self.local.complete_stream_with_finish(request).await?;
+        let observed: Pin<Box<dyn Stream<Item = StreamFrame> + Send>> =
+            Box::pin(TotalGuardedStream::new(
+                ThroughputObservedStream::new(
+                    stream,
+                    ThroughputTarget::Local(Arc::clone(&self.local_observations)),
+                ),
+                total,
+            ));
+        Ok((observed, self.local.model_id_for(request.preferred_speed)))
+    }
+
     async fn warmup_primary(&self) -> Result<()> {
         // Warm only the local primary slot. We deliberately don't
         // poke peers — that would tie up their lazy mutex during a

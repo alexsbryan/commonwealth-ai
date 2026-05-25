@@ -217,7 +217,8 @@ fn completion_response_as_bool() {
         model_id: "test".to_string(),
         latency_ms: 10,
         oicp_meta: None,
-    };
+        finish_reason: None,
+        completion_tokens: None,    };
     assert!(yes.as_bool());
 
     let no = CompletionResponse {
@@ -227,6 +228,7 @@ fn completion_response_as_bool() {
         model_id: "test".to_string(),
         latency_ms: 10,
         oicp_meta: None,
-    };
+        finish_reason: None,
+        completion_tokens: None,    };
     assert!(!no.as_bool());
 }

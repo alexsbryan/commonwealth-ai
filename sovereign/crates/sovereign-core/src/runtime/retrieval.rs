@@ -2532,16 +2532,31 @@ impl Runtime {
         // about the user's coverage gap. Empty string when no
         // gaps — adds zero prompt overhead.
         let gap_note = build_coverage_gaps_note(&all_chunks, &folder_meta_for_ctx);
+        // Budget reminder — same directive spliced into the
+        // KnowledgeQuery synthesis routes. Tells the model how much
+        // room it has so it picks a shape that lands within the
+        // budget instead of opening a multi-section essay that gets
+        // cut off mid-paragraph (the bug the cutoff chip surfaces on
+        // the desktop side).
+        let budget_note = crate::runtime::build_response_length_directive(
+            self.inference_config.max_tokens,
+        );
         let system = if !all_chunks.is_empty() {
             let base = if gap_note.is_empty() {
-                format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{THINKING_DIRECTIVE}")
+                format!(
+                    "{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{THINKING_DIRECTIVE}\n\n{budget_note}"
+                )
             } else {
-                format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{gap_note}\n\n{THINKING_DIRECTIVE}")
+                format!(
+                    "{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{gap_note}\n\n{THINKING_DIRECTIVE}\n\n{budget_note}"
+                )
             };
             self.build_primary_system_message(&base, context)
         } else {
             self.build_system_message(
-                "You are a helpful AI assistant. Respond concisely and accurately.",
+                &format!(
+                    "You are a helpful AI assistant. Respond concisely and accurately.\n\n{budget_note}"
+                ),
                 context,
             )
         };

@@ -246,6 +246,26 @@ pub trait InferenceProvider: Send + Sync {
         Ok(Box::pin(mapped.chain(tail)))
     }
 
+    /// Combined variant: typed `StreamFrame` stream plus the mesh-
+    /// attributed `model_id` of the provider that actually served the
+    /// request. Equivalent to calling both
+    /// [`complete_stream_with_finish`] (for the typed terminal Finish
+    /// frame) and [`complete_stream_with_id`] (for the peer-attributed
+    /// id) but in a single round-trip so the routing decision and
+    /// stream initiation can't drift.
+    ///
+    /// Default implementation: call `complete_stream_with_finish` and
+    /// stamp the synchronous `model_id_for(speed)` (no peer
+    /// attribution). Mesh-aware wrappers override to return the real
+    /// peer-attributed id alongside the typed stream.
+    async fn complete_stream_with_id_and_finish(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<(Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, String)> {
+        let stream = self.complete_stream_with_finish(request).await?;
+        Ok((stream, self.model_id_for(request.preferred_speed)))
+    }
+
     async fn embed(&self, text: &str) -> Result<Vec<f32>>;
 
     /// Embed a batch of texts in a single forward pass when the backend supports it.

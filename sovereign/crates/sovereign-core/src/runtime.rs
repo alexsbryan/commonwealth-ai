@@ -326,6 +326,29 @@ pub(crate) const DECOMP_QUERY_LIMIT: usize = 5;
 /// not enough to invite the model to ramble. Pairs with `think_budget = 0`.
 pub(crate) const FAST_KNOWLEDGE_MAX_TOKENS: u32 = 600;
 
+/// Pre-flight budget reminder spliced into the synthesis system message so
+/// the model paces itself instead of running out mid-sentence. Pairs with
+/// the post-stream length-truncation chip wired in `AssistantMessage` —
+/// surface (chip) tells the user when the budget was hit, contract (this
+/// hint) tells the model the budget exists in the first place. Without the
+/// hint, models routinely open a 5-section essay structure they can't
+/// possibly close inside `max_tokens`, producing mid-paragraph cutoffs
+/// that LOOK like the model failed when it never knew the limit.
+pub(crate) fn build_response_length_directive(max_tokens: usize) -> String {
+    // Conservative word estimate: 1 token ≈ 0.75 English words.
+    let words = max_tokens.saturating_mul(3).saturating_div(4);
+    format!(
+        "RESPONSE LENGTH BUDGET\n\
+         You have approximately {max_tokens} tokens (~{words} words) for this \
+         reply before the response will be cut off mid-sentence. Plan the \
+         shape of your answer accordingly. If a complete treatment wouldn't \
+         fit in that budget, give a focused, concise version that LANDS \
+         within the budget and offer to expand specific sections on request. \
+         Do not start a multi-section essay you can't finish — landing the \
+         answer beats opening every door."
+    )
+}
+
 
 /// When evidence-shape routes FastFocused and a single source dominates,
 /// pull up to this many chunks from that source by title (cohesion, not
@@ -1888,7 +1911,7 @@ impl Runtime {
                 let started = std::time::Instant::now();
 
                 let (mut s, model_id) = match inference
-                    .complete_stream_with_id(&request)
+                    .complete_stream_with_id_and_finish(&request)
                     .await
                 {
                     Ok(pair) => pair,
@@ -1899,16 +1922,26 @@ impl Runtime {
                 };
 
                 let mut full_text = String::new();
-                while let Some(item) = s.next().await {
-                    match item {
-                        Ok(chunk) => {
+                let mut observed_finish: Option<crate::types::FinishReason> = None;
+                let mut observed_completion_tokens: Option<u32> = None;
+                while let Some(frame) = s.next().await {
+                    use crate::types::StreamFrame;
+                    match frame {
+                        StreamFrame::Token(chunk) => {
                             full_text.push_str(&chunk);
                             if tx.send(Ok(chunk)).await.is_err() {
                                 return;
                             }
                         }
-                        Err(e) => {
-                            let _ = tx.send(Err(e)).await;
+                        StreamFrame::Finish { reason, usage } => {
+                            observed_completion_tokens =
+                                usage.as_ref().map(|u| u.completion_tokens);
+                            observed_finish = Some(reason);
+                        }
+                        StreamFrame::Error(msg) => {
+                            let _ = tx
+                                .send(Err(crate::error::Error::Inference(msg)))
+                                .await;
                             return;
                         }
                     }
@@ -1930,6 +1963,31 @@ impl Runtime {
                     // to render "Your conversations" as well.
                     None,
                 );
+                // Phase 5 — typed Finish frame from the provider is
+                // now the source of truth for length truncation, no
+                // more chars-per-token heuristic. Falls back to
+                // `Stop` when the provider closed the stream without
+                // a terminal frame (older test stubs); the trait
+                // `complete_stream_with_finish` default guarantees a
+                // terminal frame on every provider that ships today.
+                let finish_reason_typed =
+                    observed_finish.unwrap_or(crate::types::FinishReason::Stop);
+                let max_budget = inference_config.max_tokens;
+                // Provider-reported count when present; otherwise fall
+                // back to a chars-per-token estimate so the UI's
+                // "(N generated)" line stays useful even on providers
+                // that don't emit usage. The estimate is signposted
+                // — tracing makes the source legible to the operator
+                // post-hoc.
+                let completion_tokens_val = observed_completion_tokens
+                    .unwrap_or_else(|| (full_text.chars().count() / 4) as u32);
+                if observed_completion_tokens.is_none() {
+                    tracing::debug!(
+                        chars = full_text.chars().count(),
+                        est_completion_tokens = completion_tokens_val,
+                        "runtime: kq-stream - usage absent, completion_tokens estimated from chars"
+                    );
+                }
                 let provenance = ResponseProvenance {
                     intent: "KnowledgeQuery".to_string(),
                     search_method: Some("CorpusEngine".to_string()),
@@ -1937,11 +1995,14 @@ impl Runtime {
                     inference_backend: model_id,
                     oicp_match: None,
                     total_latency_ms: started.elapsed().as_millis() as u64,
-                    tokens_used: 0,
+                    tokens_used: completion_tokens_val as usize,
                     coarse_intent: coarse_intent_for_prov,
                     self_assessment: self_assessment_for_prov,
                     routing_trigger: routing_trigger_for_prov,
                     coverage: coverage_for_prov,
+                    finish_reason: Some(finish_reason_typed),
+                    max_tokens_budget: Some(max_budget),
+                    completion_tokens: Some(completion_tokens_val),
                 };
                 let metadata_json = serde_json::json!({
                     "streamed": true,
@@ -2394,7 +2455,7 @@ impl Runtime {
             let mut full_text = String::new();
 
             let (mut s, model_id) = match inference
-                .complete_stream_with_id(&request)
+                .complete_stream_with_id_and_finish(&request)
                 .await
             {
                 Ok(pair) => pair,
@@ -2403,22 +2464,49 @@ impl Runtime {
                     return;
                 }
             };
-            while let Some(item) = s.next().await {
-                match item {
-                    Ok(chunk) => {
+            let mut observed_finish: Option<crate::types::FinishReason> = None;
+            let mut observed_completion_tokens: Option<u32> = None;
+            while let Some(frame) = s.next().await {
+                use crate::types::StreamFrame;
+                match frame {
+                    StreamFrame::Token(chunk) => {
                         full_text.push_str(&chunk);
                         if tx.send(Ok(chunk)).await.is_err() {
                             return;
                         }
                     }
-                    Err(e) => {
-                        let _ = tx.send(Err(e)).await;
+                    StreamFrame::Finish { reason, usage } => {
+                        observed_completion_tokens =
+                            usage.as_ref().map(|u| u.completion_tokens);
+                        observed_finish = Some(reason);
+                    }
+                    StreamFrame::Error(msg) => {
+                        let _ = tx
+                            .send(Err(crate::error::Error::Inference(msg)))
+                            .await;
                         return;
                     }
                 }
             }
 
-            // Persist final assistant message.
+            // Phase 5 — typed Finish frame from the provider is the
+            // source of truth for length truncation. Falls back to
+            // `Stop` when the provider closed without a terminal
+            // frame (older test stubs); the trait
+            // `complete_stream_with_finish` default guarantees a
+            // terminal frame on every provider that ships today.
+            let finish_reason_typed =
+                observed_finish.unwrap_or(crate::types::FinishReason::Stop);
+            let max_budget = inference_config.max_tokens;
+            let completion_tokens_val = observed_completion_tokens
+                .unwrap_or_else(|| (full_text.chars().count() / 4) as u32);
+            if observed_completion_tokens.is_none() {
+                tracing::debug!(
+                    chars = full_text.chars().count(),
+                    est_completion_tokens = completion_tokens_val,
+                    "runtime: deep-stream - usage absent, completion_tokens estimated from chars"
+                );
+            }
             let provenance = ResponseProvenance {
                 intent: intent_label,
                 search_method,
@@ -2426,11 +2514,14 @@ impl Runtime {
                 inference_backend: model_id,
                 oicp_match: None,
                 total_latency_ms: started.elapsed().as_millis() as u64,
-                tokens_used: 0,
+                tokens_used: completion_tokens_val as usize,
                 coarse_intent,
                 self_assessment,
                 routing_trigger: classification.rationale.clone(),
                 coverage,
+                finish_reason: Some(finish_reason_typed),
+                max_tokens_budget: Some(max_budget),
+                completion_tokens: Some(completion_tokens_val),
             };
             let metadata_json = serde_json::json!({
                 "streamed": true,

@@ -15,7 +15,6 @@ use std::task::{Context, Poll};
 use std::time::Instant;
 
 use futures::Stream;
-use sovereign_core::error::Result;
 use sovereign_core::oicp::{NodeObservations, THROUGHPUT_EWMA_ALPHA};
 use tokio::sync::RwLock;
 
@@ -72,19 +71,55 @@ impl LedgerEmission {
     }
 }
 
+/// Predicate that distinguishes "data" frames (count toward
+/// `chunk_count`, mark TTFT on the first one) from "terminal" frames
+/// (errors, typed `Finish` frames — measure but don't tally).
+///
+/// `Result<String, Error>` impls return `true` on `Ok` (the legacy
+/// chat-completion text-chunk shape). [`sovereign_core::types::
+/// StreamFrame`] impls return `true` on `Token` and `false` on
+/// `Finish`/`Error` (the typed Phase 1+ shape used by
+/// `complete_stream_with_finish`).
+///
+/// Without this predicate the typed shape would tally the terminal
+/// `Finish { reason: Length }` frame as a generated token, inflating
+/// throughput observations by one and miscounting TTFT on
+/// zero-token-then-Length-truncate (edge case but real).
+pub(crate) trait IsDataFrame {
+    fn is_data_frame(&self) -> bool;
+}
+
+impl<E> IsDataFrame for std::result::Result<String, E> {
+    fn is_data_frame(&self) -> bool {
+        self.is_ok()
+    }
+}
+
+impl IsDataFrame for sovereign_core::types::StreamFrame {
+    fn is_data_frame(&self) -> bool {
+        matches!(self, sovereign_core::types::StreamFrame::Token(_))
+    }
+}
+
 /// Stream wrapper that records TTFT (time-to-first-token) and
 /// observed token-generation rate when the stream completes. Both
 /// metrics fold into the per-(local|peer) [`NodeObservations`] EWMA
 /// so [`oicp::throughput_factor`] sees real performance, not just
 /// the advertised benchmark.
 ///
+/// Generic over the inner stream's item type so the same wrapper
+/// works for the legacy `Result<String, Error>` text-chunk shape and
+/// the typed `StreamFrame` shape that `complete_stream_with_finish`
+/// returns. The `IsDataFrame` predicate gates token-tallying so
+/// terminal frames don't inflate the EWMA.
+///
 /// Implementation notes:
 ///
-/// - Token count is approximated as **stream chunks**. SSE-streamed
-///   output from llama.cpp emits one chunk per token in practice.
-///   This is a coarse proxy for routing — the absolute number may
-///   be off, but the relative ordering across peers is preserved
-///   (every peer is measured the same way).
+/// - Token count is approximated as **data frames** yielded. SSE-
+///   streamed output from llama.cpp emits one chunk per token in
+///   practice. This is a coarse proxy for routing — the absolute
+///   number may be off, but the relative ordering across peers is
+///   preserved (every peer is measured the same way).
 /// - We record on `Drop` so that streams aborted mid-completion
 ///   still surface their TTFT — abort timing is a useful signal
 ///   too. A stream that ended with zero chunks contributes only
@@ -93,8 +128,11 @@ impl LedgerEmission {
 ///   non-async context. The spawned task uses the same EWMA α as
 ///   the latency probe to stay consistent with the rest of the
 ///   observation pipeline.
-pub(crate) struct ThroughputObservedStream {
-    inner: Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
+pub(crate) struct ThroughputObservedStream<S: Stream + Send + Unpin + 'static>
+where
+    S::Item: IsDataFrame + Send,
+{
+    inner: S,
     dispatched_at: Instant,
     first_chunk_at: Option<Instant>,
     chunk_count: u64,
@@ -103,11 +141,11 @@ pub(crate) struct ThroughputObservedStream {
     ledger_emission: Option<LedgerEmission>,
 }
 
-impl ThroughputObservedStream {
-    pub(crate) fn new(
-        inner: Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
-        target: ThroughputTarget,
-    ) -> Self {
+impl<S: Stream + Send + Unpin + 'static> ThroughputObservedStream<S>
+where
+    S::Item: IsDataFrame + Send,
+{
+    pub(crate) fn new(inner: S, target: ThroughputTarget) -> Self {
         Self {
             inner,
             dispatched_at: Instant::now(),
@@ -125,22 +163,26 @@ impl ThroughputObservedStream {
     }
 }
 
-impl Stream for ThroughputObservedStream {
-    type Item = Result<String>;
+impl<S: Stream + Send + Unpin + 'static> Stream for ThroughputObservedStream<S>
+where
+    S::Item: IsDataFrame + Send,
+{
+    type Item = S::Item;
 
     fn poll_next(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        match self.inner.as_mut().poll_next(cx) {
-            Poll::Ready(Some(Ok(chunk))) => {
-                if self.first_chunk_at.is_none() {
-                    self.first_chunk_at = Some(Instant::now());
+        match Pin::new(&mut self.inner).poll_next(cx) {
+            Poll::Ready(Some(item)) => {
+                if item.is_data_frame() {
+                    if self.first_chunk_at.is_none() {
+                        self.first_chunk_at = Some(Instant::now());
+                    }
+                    self.chunk_count += 1;
                 }
-                self.chunk_count += 1;
-                Poll::Ready(Some(Ok(chunk)))
+                Poll::Ready(Some(item))
             }
-            Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e))),
             Poll::Ready(None) => {
                 self.completed = true;
                 Poll::Ready(None)
@@ -150,7 +192,10 @@ impl Stream for ThroughputObservedStream {
     }
 }
 
-impl Drop for ThroughputObservedStream {
+impl<S: Stream + Send + Unpin + 'static> Drop for ThroughputObservedStream<S>
+where
+    S::Item: IsDataFrame + Send,
+{
     fn drop(&mut self) {
         let dispatched = self.dispatched_at;
         let first_chunk = self.first_chunk_at;

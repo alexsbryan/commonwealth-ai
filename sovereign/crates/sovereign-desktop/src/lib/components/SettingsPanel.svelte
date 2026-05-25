@@ -89,6 +89,7 @@
   let searchQuery = $state('');
   let editingCreativity = $state(false);
   let editingContextWindow = $state(false);
+  let editingResponseLength = $state(false);
   let editingStorageBudget = $state(false);
   let editingPaths = $state(false);
   let editingIdleSecs = $state(false);
@@ -333,10 +334,11 @@
   );
 
   // ── Semantic preset detection ──────────────────────────────────
-  // Only Creativity is exposed: temperature + top_k wire through every
-  // outer-work synthesis path (KnowledgeQuery, expressive, metalingual,
-  // conation). max_tokens and think_budget reach only a subset, so we
-  // tune those in handler code rather than risk a misleading user knob.
+  // Creativity (temperature + top_k) wires through every outer-work
+  // synthesis path. Response length (max_tokens) wires through the
+  // KnowledgeQuery / DeepQuery / SimpleQuery paths (the big ones the
+  // cutoff chip surfaces). think_budget still stays handler-tuned —
+  // it interacts with the Speed selector in non-obvious ways.
   type CreativityPreset  = "precise" | "balanced" | "exploratory" | "custom";
 
   let creativityPreset = $derived.by((): CreativityPreset => {
@@ -777,6 +779,73 @@
                   <span class="inline-field-unit">tokens</span>
                 </div>
                 <button class="edit-done" onclick={() => editingContextWindow = false}>Done</button>
+              </div>
+            {/if}
+          </div>
+
+          <!-- Response length (max_tokens) — knob the cutoff chip points
+               at. Wired into the KnowledgeQuery / DeepQuery / SimpleQuery
+               synthesis prompts so the model knows its budget AND we
+               surface a chip when it hits the limit. Both halves
+               matter — without the chip the user can't tell why a
+               reply ends mid-sentence; without the budget hint the
+               model walks into the cutoff with eyes closed. -->
+          <div class="cfg-entry" class:cfg-entry--open={editingResponseLength}>
+            <button class="cfg-entry-display" onclick={() => editingResponseLength = !editingResponseLength} aria-expanded={editingResponseLength}>
+              <span class="cfg-entry-name">Response length</span>
+              <span class="cfg-entry-current">
+                <span class="cfg-entry-val">{config.max_tokens?.toLocaleString() ?? '—'}</span>
+                <span class="cfg-entry-tech">tokens</span>
+              </span>
+              <span class="cfg-entry-prov">{provenance('max_tokens')}</span>
+            </button>
+            {#if editingResponseLength}
+              <div class="cfg-entry-edit">
+                <p class="cfg-entry-question">How long answers can run before they're cut off. The model is told this budget up front so it shapes the answer to fit; if it still runs out, you'll see a chip on the reply offering to continue.</p>
+                <div class="preset-row" role="radiogroup" aria-label="Response length preset">
+                  <button
+                    class="preset-btn"
+                    class:preset-btn--active={config.max_tokens === 2048}
+                    role="radio"
+                    aria-checked={config.max_tokens === 2048}
+                    onclick={() => { if (config) { config.max_tokens = 2048; markDirty('max_tokens'); } }}
+                  >Concise</button>
+                  <button
+                    class="preset-btn"
+                    class:preset-btn--active={config.max_tokens === 4096}
+                    role="radio"
+                    aria-checked={config.max_tokens === 4096}
+                    onclick={() => { if (config) { config.max_tokens = 4096; markDirty('max_tokens'); } }}
+                  >Standard</button>
+                  <button
+                    class="preset-btn"
+                    class:preset-btn--active={config.max_tokens === 8192}
+                    role="radio"
+                    aria-checked={config.max_tokens === 8192}
+                    onclick={() => { if (config) { config.max_tokens = 8192; markDirty('max_tokens'); } }}
+                  >Long</button>
+                  <button
+                    class="preset-btn"
+                    class:preset-btn--active={config.max_tokens === 16384}
+                    role="radio"
+                    aria-checked={config.max_tokens === 16384}
+                    onclick={() => { if (config) { config.max_tokens = 16384; markDirty('max_tokens'); } }}
+                  >Essay</button>
+                </div>
+                <div class="inline-field" style="margin-top: 10px;">
+                  <input
+                    class="cfg-number-input"
+                    type="number"
+                    min="256"
+                    step="256"
+                    bind:value={config.max_tokens}
+                    oninput={() => markDirty('max_tokens')}
+                    aria-label="Maximum response length in tokens"
+                  />
+                  <span class="inline-field-unit">tokens</span>
+                </div>
+                <p class="preset-tech">Rule of thumb: ~4 chars per token. 2048 ≈ a tight summary; 4096 ≈ a typical long reply; 16384 ≈ a multi-section deep dive. Bigger budgets use more RAM during generation.</p>
+                <button class="edit-done" onclick={() => editingResponseLength = false}>Done</button>
               </div>
             {/if}
           </div>

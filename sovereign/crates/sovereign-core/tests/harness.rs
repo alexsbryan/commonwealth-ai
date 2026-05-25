@@ -146,7 +146,8 @@ impl InferenceProvider for DeterministicInference {
             model_id: "deterministic".to_string(),
             latency_ms: 1,
             oicp_meta: None,
-        })
+            finish_reason: None,
+            completion_tokens: None,        })
     }
 
     async fn complete_stream(
@@ -195,7 +196,8 @@ impl InferenceProvider for AlwaysSearchInference {
             model_id: "always-search".to_string(),
             latency_ms: 1,
             oicp_meta: None,
-        })
+            finish_reason: None,
+            completion_tokens: None,        })
     }
 
     async fn complete_stream(
@@ -472,7 +474,8 @@ impl InferenceProvider for ScriptableInference {
                     model_id: "scriptable-gap".to_string(),
                     latency_ms: 1,
                     oicp_meta: None,
-                }),
+                    finish_reason: None,
+                    completion_tokens: None,                }),
                 GapScript::Gap { gap } => {
                     let body = format!(
                         r#"{{"has_gap": true, "current_understanding": "cu", "gap": "{gap}", "relevance": "r", "satisfying_source": "s", "search_hints": ["h"]}}"#,
@@ -485,7 +488,8 @@ impl InferenceProvider for ScriptableInference {
                         model_id: "scriptable-gap".to_string(),
                         latency_ms: 1,
                         oicp_meta: None,
-                    })
+                        finish_reason: None,
+                        completion_tokens: None,                    })
                 }
                 GapScript::Error => Err(Error::Inference(
                     "scripted gap-check failure".to_string(),
@@ -503,7 +507,8 @@ impl InferenceProvider for ScriptableInference {
                     model_id: "scriptable-refine".to_string(),
                     latency_ms: 1,
                     oicp_meta: None,
-                }),
+                    finish_reason: None,
+                    completion_tokens: None,                }),
                 RefineScript::Unused => panic!(
                     "refinement invoked unexpectedly; test configured RefineScript::Unused"
                 ),

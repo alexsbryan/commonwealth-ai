@@ -255,6 +255,9 @@ impl Runtime {
             self_assessment: None,
             routing_trigger: None,
             coverage: None,
+            finish_reason: synthesis.finish_reason.clone(),
+            max_tokens_budget: Some(self.inference_config.max_tokens),
+            completion_tokens: synthesis.completion_tokens,
         };
 
         // Epistemic-humility hook (see Runtime::maybe_collaborate).
