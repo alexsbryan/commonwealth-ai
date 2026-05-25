@@ -77,3 +77,23 @@ rustflags = [
   "-C", "link-arg=-fuse-ld=mold",
   "-L", "native=/usr/local/lib64",
 ]
+
+# ---------------------------------------------------------------------------
+# macOS deployment target.
+#
+# llama-cpp-sys-4's bundled ggml (ggml-backend-dl.cpp) uses
+# std::filesystem::path, which Apple marks `unavailable: introduced in
+# macOS 10.15`. llama.cpp's CMake doesn't pin a newer floor, so the C++
+# compile inherits a deployment target older than 10.15 and fails with:
+#   error: 'path' is unavailable: introduced in macOS 10.15
+# Observed on BOTH CI runners — macos-13 (x86_64) and macos-14 (arm64).
+#
+# Setting MACOSX_DEPLOYMENT_TARGET here propagates to the build scripts
+# (the `cc` crate reads it directly; the `cmake` crate maps it to
+# CMAKE_OSX_DEPLOYMENT_TARGET), raising the floor to 10.15 on both arches.
+# 10.15 is the minimum that satisfies std::filesystem; arm64's own baseline
+# (11.0) is higher, so the value is harmless there. Ignored on non-Apple
+# targets. `force` is unset (cargo default) so an explicit env override
+# from the shell/CI still wins.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "10.15"
