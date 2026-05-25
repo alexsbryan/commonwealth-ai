@@ -289,7 +289,8 @@ mod tests {
                 model_id: "mock".to_string(),
                 latency_ms: 10,
                 oicp_meta: None,
-            })
+                finish_reason: None,
+                completion_tokens: None,            })
         }
 
         async fn complete_stream(

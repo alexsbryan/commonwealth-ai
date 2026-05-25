@@ -41,7 +41,8 @@ impl InferenceProvider for MockInference {
             model_id: "mock".to_string(),
             latency_ms: 1,
             oicp_meta: None,
-        })
+            finish_reason: None,
+            completion_tokens: None,        })
     }
 
     async fn complete_stream(
@@ -730,7 +731,8 @@ impl InferenceProvider for SequencedMockInference {
             model_id: "mock-seq".to_string(),
             latency_ms: 1,
             oicp_meta: None,
-        })
+            finish_reason: None,
+            completion_tokens: None,        })
     }
 
     async fn complete_stream(

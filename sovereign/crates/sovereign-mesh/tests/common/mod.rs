@@ -252,7 +252,8 @@ impl InferenceProvider for TestProvider {
                 model_id: self.model_id.clone(),
                 latency_ms: 0,
                 oicp_meta: None,
-            }),
+                finish_reason: None,
+                completion_tokens: None,            }),
             None => Err(Error::NotImplemented(
                 "TestProvider::complete not configured — \
                  call .with_complete_text(...) on the builder"

@@ -64,7 +64,8 @@ impl InferenceProvider for CannedInferenceProvider {
             model_id: "canned-test".into(),
             latency_ms: 1,
             oicp_meta: None,
-        })
+            finish_reason: None,
+            completion_tokens: None,        })
     }
 
     async fn complete_stream(

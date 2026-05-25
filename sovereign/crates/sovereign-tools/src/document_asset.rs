@@ -184,6 +184,14 @@ pub struct ExecutionOutput {
     pub model_id: String,
     pub tokens_used: usize,
     pub latency_ms: u64,
+    /// Why the synthesizing model stopped emitting. Plumbed from
+    /// the underlying `CompletionResponse.finish_reason` so the
+    /// desktop's DocumentAsk surface can light up the cutoff chip
+    /// when ask_document's reply was length-truncated.
+    pub finish_reason: Option<sovereign_core::types::FinishReason>,
+    /// Completion-only token count from the synthesizing model.
+    /// Mirrors `CompletionResponse.completion_tokens`.
+    pub completion_tokens: Option<u32>,
 }
 
 impl ExecutionOutput {
@@ -197,6 +205,8 @@ impl ExecutionOutput {
             model_id: String::new(),
             tokens_used: 0,
             latency_ms: 0,
+            finish_reason: None,
+            completion_tokens: None,
         }
     }
 }
@@ -1179,7 +1189,8 @@ impl DocumentAssetManager {
             citations,
             model_id: response.model_id,
             tokens_used: response.tokens_used,
-            latency_ms: response.latency_ms,
+            finish_reason: response.finish_reason.clone(),
+            completion_tokens: response.completion_tokens,            latency_ms: response.latency_ms,
         })
     }
 
@@ -1215,6 +1226,8 @@ impl DocumentAssetManager {
                 citations: Vec::new(),
                 model_id: String::new(),
                 tokens_used: 0,
+                finish_reason: None,
+                completion_tokens: None,
                 latency_ms: 0,
             });
         }
@@ -1354,7 +1367,8 @@ impl DocumentAssetManager {
             citations,
             model_id: response.model_id,
             tokens_used: response.tokens_used,
-            latency_ms: response.latency_ms,
+            finish_reason: response.finish_reason.clone(),
+            completion_tokens: response.completion_tokens,            latency_ms: response.latency_ms,
         })
     }
 
@@ -1394,6 +1408,8 @@ impl DocumentAssetManager {
                 citations: Vec::new(),
                 model_id: String::new(),
                 tokens_used: 0,
+                finish_reason: None,
+                completion_tokens: None,
                 latency_ms: 0,
             });
         }
@@ -1463,7 +1479,8 @@ impl DocumentAssetManager {
             citations,
             model_id: response.model_id,
             tokens_used: response.tokens_used,
-            latency_ms: response.latency_ms,
+            finish_reason: response.finish_reason.clone(),
+            completion_tokens: response.completion_tokens,            latency_ms: response.latency_ms,
         })
     }
 
@@ -1534,7 +1551,8 @@ impl DocumentAssetManager {
             citations: Vec::new(),
             model_id: response.model_id,
             tokens_used: response.tokens_used,
-            latency_ms: response.latency_ms,
+            finish_reason: response.finish_reason.clone(),
+            completion_tokens: response.completion_tokens,            latency_ms: response.latency_ms,
         })
     }
 

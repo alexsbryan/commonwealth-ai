@@ -972,6 +972,22 @@
     }
   }
 
+  /// Resume a length-truncated reply. Move C of the cutoff-legibility
+  /// trio (A: surface finish_reason, B: tell model its budget, C:
+  /// Continue affordance). We re-prompt as a fresh turn — the model
+  /// has the prior assistant text in its conversation history, so a
+  /// short imperative is enough to pick up where it stopped. We
+  /// deliberately don't try to splice the new content into the prior
+  /// bubble; making the resumption a new message keeps the audit
+  /// trail honest (the user can see exactly what was generated where).
+  async function handleContinueFromCutoff() {
+    if (isLoading) return;
+    inputText =
+      "Continue from where you left off in the previous response. " +
+      "Pick up mid-sentence if needed — don't restart from the top.";
+    await handleSend();
+  }
+
   function scrollToBottom() {
     requestAnimationFrame(() => {
       if (messagesContainer) {
@@ -1076,6 +1092,7 @@
           refining={msg.refining}
           searchAugmentation={msg.searchAugmentation}
           onNextStep={handleNextStep}
+          onContinue={handleContinueFromCutoff}
         />
       {/each}
 

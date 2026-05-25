@@ -60,7 +60,8 @@ impl InferenceProvider for DeterministicInference {
             model_id: "deterministic".to_string(),
             latency_ms: 1,
             oicp_meta: None,
-        })
+            finish_reason: None,
+            completion_tokens: None,        })
     }
 
     async fn complete_stream(

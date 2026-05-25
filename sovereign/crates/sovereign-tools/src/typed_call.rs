@@ -274,7 +274,8 @@ mod tests {
                 model_id: "scripted".into(),
                 latency_ms: 0,
                 oicp_meta: None,
-            })
+                finish_reason: None,
+                completion_tokens: None,            })
         }
         async fn complete_stream(
             &self,

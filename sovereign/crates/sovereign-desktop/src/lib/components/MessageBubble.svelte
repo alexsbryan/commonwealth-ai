@@ -18,6 +18,9 @@
      *  orchestrator that routes via `resumeSession` or
      *  `sendMessageStream`. */
     onNextStep?: (offer: NextStepOffer) => void;
+    /** Fired when the user clicks "Continue from here" on the cutoff
+     *  chip. Forwarded to AssistantMessage; see its Props. */
+    onContinue?: () => void;
   }
 
   let {
@@ -30,6 +33,7 @@
     refining,
     searchAugmentation,
     onNextStep,
+    onContinue,
   }: Props = $props();
 </script>
 
@@ -48,6 +52,7 @@
     {refining}
     {searchAugmentation}
     {onNextStep}
+    {onContinue}
   />
 {/if}
 

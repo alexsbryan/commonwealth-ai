@@ -282,6 +282,13 @@ struct ChatCompletionResponse {
 #[derive(Deserialize)]
 struct ChatChoice {
     message: ChatMessage,
+    /// OpenAI-compatible finish_reason carried on the terminal
+    /// choice — `"stop"` / `"length"` / `"content_filter"` /
+    /// `"tool_calls"`. Parsed into [`FinishReason`] at the consume
+    /// site so the desktop cutoff chip + non-streaming surfacing
+    /// behave identically across local and remote providers.
+    #[serde(default)]
+    finish_reason: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -295,21 +302,42 @@ struct UsageInfo {
     total_tokens: usize,
     #[serde(default)]
     prompt_tokens: usize,
+    /// Completion tokens generated. Distinct from `total_tokens -
+    /// prompt_tokens` only when the server emits all three (some
+    /// proxies don't); kept as the explicit source so the cutoff
+    /// chip can read the authoritative split.
+    #[serde(default)]
+    completion_tokens: u32,
 }
 
 // ─── SSE Streaming Types ─────────────────────────────────────
 
 #[derive(Deserialize)]
 struct StreamChunk {
+    #[serde(default)]
     choices: Vec<StreamChoice>,
+    /// OpenAI emits a final post-DONE chunk carrying token usage on
+    /// some servers (vLLM, recent llama.cpp). `None` on servers that
+    /// don't emit it — the cutoff chip still works via finish_reason
+    /// alone, just without the precise generated-token count.
+    #[serde(default)]
+    usage: Option<UsageInfo>,
 }
 
 #[derive(Deserialize)]
 struct StreamChoice {
+    #[serde(default)]
     delta: StreamDelta,
+    /// Set on the terminal chunk (and only the terminal chunk in
+    /// OpenAI-compliant servers). Parsed via
+    /// [`FinishReason::from_openai_str`] at the consume site so a
+    /// stray non-OpenAI string (server bug) round-trips to None and
+    /// we synthesise a `Stop` rather than panic.
+    #[serde(default)]
+    finish_reason: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 struct StreamDelta {
     content: Option<String>,
 }
@@ -347,20 +375,31 @@ impl InferenceProvider for RemoteApiProvider {
             .await
             .map_err(|e| Error::Inference(format!("Failed to parse API response: {e}")))?;
 
-        let text = chat_response
-            .choices
-            .first()
+        let first_choice = chat_response.choices.first();
+        let text = first_choice
             .and_then(|c| c.message.content.clone())
             .unwrap_or_default();
+        let finish_reason = first_choice
+            .and_then(|c| c.finish_reason.as_deref())
+            .and_then(FinishReason::from_openai_str);
 
-        let (tokens_used, prompt_tokens) = chat_response
+        let (tokens_used, prompt_tokens, completion_tokens) = chat_response
             .usage
-            .map(|u| (u.total_tokens, u.prompt_tokens))
-            .unwrap_or((0, 0));
+            .map(|u| (u.total_tokens, u.prompt_tokens, Some(u.completion_tokens)))
+            .unwrap_or((0, 0, None));
 
         let model_id = chat_response
             .model
             .unwrap_or_else(|| self.model_id.clone());
+
+        if let Some(ref fr) = finish_reason {
+            tracing::debug!(
+                model = %model_id,
+                finish_reason = %fr.as_openai_str(),
+                completion_tokens = ?completion_tokens,
+                "remote: chat_completions - finish_reason"
+            );
+        }
 
         Ok(CompletionResponse {
             text,
@@ -369,7 +408,113 @@ impl InferenceProvider for RemoteApiProvider {
             model_id,
             latency_ms: start.elapsed().as_millis() as u64,
             oicp_meta: chat_response.oicp,
+            finish_reason,
+            completion_tokens,
         })
+    }
+
+    /// Typed-Finish streaming override. Parses the SSE
+    /// `choices[].finish_reason` and `usage` fields and emits a
+    /// terminal [`StreamFrame::Finish`] frame so peer-routed mesh
+    /// streams surface real Length truncation instead of the trait
+    /// default's synthetic `Stop`. Pairs with
+    /// `MeshInferenceProvider::complete_stream_with_id_and_finish`,
+    /// which is what carries the typed frame all the way to the
+    /// runtime's cutoff-chip wiring.
+    ///
+    /// Note on OpenAI SSE shapes: `finish_reason` typically lands on
+    /// the last `delta`-bearing chunk (or one just before `[DONE]`).
+    /// `usage` lands either on the same chunk (vLLM, recent llama.cpp)
+    /// or in a separate post-DONE chunk on some servers. We
+    /// accumulate both lazily and emit them on the terminal Finish
+    /// frame regardless of which chunk carried them.
+    async fn complete_stream_with_finish(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = sovereign_core::types::StreamFrame> + Send>>> {
+        use sovereign_core::types::{FinishReason, StreamFrame, StreamUsage};
+        let url = format!("{}/chat/completions", self.endpoint);
+        let mut body = self.build_request(request);
+        body["stream"] = serde_json::json!(true);
+
+        let mut req = self.client.post(&url).json(&body);
+        if let Some(ref auth) = self.auth_header() {
+            req = req.header("Authorization", auth);
+        }
+
+        let response = req
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("Remote typed stream request failed: {e}")))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            return Err(Error::Inference(format!(
+                "Remote typed stream API returned {status}"
+            )));
+        }
+
+        let byte_stream = response.bytes_stream();
+        // Carry parser state across the byte-stream's filter_map by
+        // streaming into a channel: parsing SSE line-by-line is
+        // stateful (finish_reason + usage may land on any chunk
+        // before [DONE]) and async-stream combinators can't carry
+        // mutable state across yields cleanly. Channel-driven actor
+        // keeps the parser straightforward.
+        let (tx, rx) = tokio::sync::mpsc::channel::<StreamFrame>(32);
+        tokio::spawn(async move {
+            use futures::StreamExt;
+            let mut byte_stream = byte_stream;
+            let mut buf = String::new();
+            let mut finish_reason: Option<FinishReason> = None;
+            let mut usage: Option<StreamUsage> = None;
+            'outer: while let Some(chunk) = byte_stream.next().await {
+                let Ok(bytes) = chunk else { continue };
+                buf.push_str(&String::from_utf8_lossy(&bytes));
+                // Process complete lines; leave the tail in buf for
+                // the next iteration so a chunk-split SSE line
+                // doesn't drop tokens.
+                while let Some(pos) = buf.find('\n') {
+                    let line = buf[..pos].trim().to_string();
+                    buf.drain(..=pos);
+                    if line == "data: [DONE]" {
+                        break 'outer;
+                    }
+                    let Some(data) = line.strip_prefix("data: ") else { continue };
+                    let Ok(parsed) = serde_json::from_str::<StreamChunk>(data) else { continue };
+                    if let Some(u) = parsed.usage {
+                        usage = Some(StreamUsage {
+                            prompt_tokens: u.prompt_tokens as u32,
+                            completion_tokens: u.completion_tokens,
+                            total_tokens: u.total_tokens as u32,
+                        });
+                    }
+                    for choice in parsed.choices {
+                        if let Some(text) = choice.delta.content {
+                            if !text.is_empty() {
+                                if tx.send(StreamFrame::Token(text)).await.is_err() {
+                                    return;
+                                }
+                            }
+                        }
+                        if let Some(reason_str) = choice.finish_reason {
+                            finish_reason = FinishReason::from_openai_str(&reason_str);
+                            tracing::debug!(
+                                finish_reason = %reason_str,
+                                "remote: stream - terminal finish_reason captured"
+                            );
+                        }
+                    }
+                }
+            }
+            let _ = tx
+                .send(StreamFrame::Finish {
+                    reason: finish_reason.unwrap_or(FinishReason::Stop),
+                    usage,
+                })
+                .await;
+        });
+        Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)))
     }
 
     async fn complete_stream(

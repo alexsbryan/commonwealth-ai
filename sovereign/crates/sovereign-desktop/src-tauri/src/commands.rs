@@ -3376,6 +3376,15 @@ pub async fn ask_document(
         self_assessment: None,
         routing_trigger: None,
         coverage: None,
+        finish_reason: output.finish_reason.clone(),
+        // DocumentAsk uses the same inference_config.max_tokens
+        // budget any other handler does; surface it so the cutoff
+        // chip can say "hit the N-token limit" honestly. RwLockGuard
+        // derefs to `&DesktopConfig` so we can read the field
+        // directly — Some() because DesktopConfig.max_tokens is a
+        // bare number, not an Option.
+        max_tokens_budget: Some(state.config.read().await.max_tokens as usize),
+        completion_tokens: output.completion_tokens,
     };
 
     let sources_content: Vec<String> = output

@@ -31,6 +31,11 @@
      *  with clickable source URLs. */
     searchAugmentation?: SearchAugmentation;
     onNextStep?: (offer: NextStepOffer) => void;
+    /** Fired when the user clicks "Continue from here" on the cutoff
+     *  chip — meaning provenance.finish_reason was "length" and the
+     *  prior reply ended mid-thought. ChatView resends as a fresh
+     *  turn instructing the model to pick up from the cutoff. */
+    onContinue?: () => void;
   }
 
   let {
@@ -42,6 +47,7 @@
     refining,
     searchAugmentation,
     onNextStep,
+    onContinue,
   }: Props = $props();
 
   // rAF-coalesce parse work. `parseAssistantContent` is O(n) over
@@ -122,9 +128,29 @@
               failed_files: number;
             }>;
           };
+          // Why the streaming generation stopped. "length" means the
+          // model was cut off at `max_tokens_budget` mid-thought —
+          // surfaced as the cutoff chip so the user can act (raise
+          // budget, continue, or retry) instead of guessing.
+          finish_reason?: string;
+          max_tokens_budget?: number;
+          completion_tokens?: number;
         }
       | undefined,
   );
+
+  // Cutoff chip — fires only when the runtime tagged the stream as
+  // length-truncated. `tokens_used` (an estimate today; see
+  // `runtime.rs` for the chars-per-token heuristic) gives a rough
+  // sense of where the budget ran out so the user can decide
+  // whether to raise it or just ask for a continuation.
+  let cutoffInfo = $derived.by(() => {
+    if (provenance?.finish_reason !== "length") return null;
+    return {
+      budget: provenance.max_tokens_budget ?? null,
+      used: provenance.completion_tokens ?? null,
+    };
+  });
 
   // Compose the chip text from the provenance coverage payload.
   // Empty string when no coverage note is attached, which hides
@@ -475,6 +501,38 @@
 
   <SourceAttribution {content} {retrievedChunks} />
 
+  {#if cutoffInfo && !isStreaming}
+    <div class="cutoff-chip" role="note">
+      <div class="cutoff-line">
+        <span class="cutoff-mark" aria-hidden="true">⊣</span>
+        <span class="cutoff-text">
+          Response was cut off mid-thought
+          {#if cutoffInfo.budget}
+            — hit the {cutoffInfo.budget.toLocaleString()}-token limit
+            {#if cutoffInfo.used}
+              (~{cutoffInfo.used.toLocaleString()} generated)
+            {/if}
+          {/if}.
+        </span>
+      </div>
+      <div class="cutoff-actions">
+        {#if onContinue}
+          <button
+            type="button"
+            class="cutoff-btn primary"
+            onclick={() => onContinue?.()}
+          >
+            Continue from here
+          </button>
+        {/if}
+        <span class="cutoff-hint">
+          To get longer answers, raise the response length in
+          Settings → Models.
+        </span>
+      </div>
+    </div>
+  {/if}
+
   {#if showNextSteps}
     <NextStepButtons
       offers={nextStepOffers}
@@ -499,17 +557,23 @@
 {/if}
 
 <style>
+  /* Assistant messages used to carry a 2px lavender border-left and
+     a 14px gutter to keep prose off the rail. The role-label row
+     ("◈ SOVEREIGN") already announces who's speaking, so the rail
+     was redundant chrome that ate ~16px of horizontal real estate
+     on every message. Dropping it lets the prose breathe to the
+     full conversation width. Per-state signals that used to ride
+     the border (refining tint, redirected dashed) move to body
+     opacity / header pills instead. */
   .sv-ai-msg {
-    align-self: flex-start;
-    padding: 0 0 0 14px;
-    border-left: 2px solid color-mix(in srgb, var(--lavender) 35%, transparent);
-    max-width: 82%;
+    align-self: stretch;
+    padding: 0;
+    max-width: 100%;
     margin-bottom: 18px;
   }
 
   .sv-ai-msg.redirected {
     opacity: 0.55;
-    border-left-style: dashed;
   }
 
   .redirected-note {
@@ -547,14 +611,11 @@
     50%      { opacity: 1;    transform: scale(1.05); }
   }
 
-  /* While refining, the existing prose desaturates and dims to
-     signal "this content is about to change" without blanking the
-     screen. The {#key content} block in the template tears the
-     prose subtree down on content swap so the fade-in animation
-     fires on the NEW content rather than re-styling the old. */
-  .sv-ai-msg.refining {
-    border-left-color: color-mix(in srgb, var(--accent, #c9a84c) 60%, transparent);
-  }
+  /* `.sv-ai-msg.refining` carries no additional styling: the
+     refining signal lives in the `.refining-note` pill (pulsing
+     dot in the header) + `.prose-refining` body fade below. Class
+     hook stays via the template so a future surface can layer
+     state without re-introducing the lavender rail. */
 
   .prose-refining {
     opacity: 0.55;
@@ -727,6 +788,65 @@
   .coverage-chip .dot {
     color: var(--accent, #c9a84c);
     font-size: 0.85em;
+  }
+
+  /* Cutoff chip — surfaces length-truncation honestly instead of
+     leaving the user staring at a sentence that ended mid-clause.
+     Two affordances: the Continue button re-prompts the model to
+     resume from where it stopped, the hint points at the budget
+     setting so the next answer can fit without trimming. */
+  .cutoff-chip {
+    margin-top: 12px;
+    padding: 10px 14px;
+    border: 1px solid color-mix(in srgb, var(--warning, #c9a84c) 35%, transparent);
+    background: color-mix(in srgb, var(--warning, #c9a84c) 6%, transparent);
+    border-radius: var(--radius);
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+  .cutoff-chip .cutoff-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  }
+  .cutoff-chip .cutoff-mark {
+    color: var(--warning, #c9a84c);
+    font-size: 1.05em;
+    line-height: 1.4;
+  }
+  .cutoff-chip .cutoff-text {
+    flex: 1;
+  }
+  .cutoff-chip .cutoff-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  .cutoff-btn {
+    padding: 5px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--accent, #c9a84c);
+    background: transparent;
+    color: var(--accent, #c9a84c);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .cutoff-btn.primary {
+    background: var(--accent, #c9a84c);
+    color: var(--bg-surface, #1a1a1a);
+  }
+  .cutoff-btn:hover {
+    background: color-mix(in srgb, var(--accent, #c9a84c) 80%, white);
+  }
+  .cutoff-hint {
+    color: var(--text-muted);
+    font-size: 0.76rem;
   }
 
   .unresolved-toast em {

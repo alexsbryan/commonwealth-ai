@@ -200,6 +200,9 @@ impl Runtime {
             self_assessment,
             routing_trigger,
             coverage: kc.coverage,
+            finish_reason: completion.finish_reason.clone(),
+            max_tokens_budget: Some(self.inference_config.max_tokens),
+            completion_tokens: completion.completion_tokens,
         };
 
         // Phase 3b: include recalled memories on the relational

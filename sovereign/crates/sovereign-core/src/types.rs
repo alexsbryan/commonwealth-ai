@@ -384,6 +384,21 @@ pub struct CompletionResponse {
     /// OICP metadata from the provider, if available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oicp_meta: Option<oicp::OicpResponseMeta>,
+    /// Why generation stopped — `Length` when the model hit
+    /// `max_tokens`, `Stop` on EOS, etc. `None` from providers that
+    /// don't track the distinction (older tests, stub providers).
+    /// Surfaced into `ResponseProvenance` so the desktop cutoff chip
+    /// works on non-streaming handler paths the same way it works on
+    /// streaming.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<FinishReason>,
+    /// Completion tokens generated (excludes prompt). Mirrors the
+    /// OpenAI `usage.completion_tokens` split so the cutoff chip can
+    /// say "hit the 2048-token limit (1947 generated)" without
+    /// fudging from `tokens_used - prompt_tokens`. `None` when the
+    /// provider doesn't track it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_tokens: Option<u32>,
 }
 
 impl CompletionResponse {
@@ -421,7 +436,18 @@ pub struct ProviderCapabilities {
 /// `finish_reason` enum plus a `Cancelled` variant for our
 /// CancellationToken / receiver-drop paths and a free-form
 /// `Error` variant for provider-side faults.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// Serialization uses the OpenAI-compatible lowercase string
+/// (`"stop"` / `"length"` / `"tool_calls"` / `"content_filter"` /
+/// `"cancelled"` / `"error"`) rather than the Rust enum-variant
+/// shape. Frontend code, persisted message metadata, and SSE wire
+/// frames all consume this string form; using the derive default
+/// (`"Stop"`, `"Length"`) would silently break the desktop chip
+/// renderer + any legacy message persisted under the original
+/// `Option<String>` shape on `ResponseProvenance.finish_reason`.
+/// `Error(msg)` collapses to `"error"` on the wire — the inner
+/// message is internal-only.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FinishReason {
     /// Model emitted EOS (or an equivalent end-of-generation token).
     Stop,
@@ -456,6 +482,45 @@ impl FinishReason {
             FinishReason::Cancelled => "cancelled",
             FinishReason::Error(_) => "error",
         }
+    }
+
+    /// Parse the OpenAI wire string back into the typed enum. Used
+    /// when decoding peer-emitted SSE chunks and when deserializing
+    /// legacy persisted message metadata (originally shipped as
+    /// `Option<String>` on `ResponseProvenance.finish_reason`).
+    /// Unknown strings round-trip to `None` so callers can decide
+    /// whether to treat them as `Stop` (lenient) or surface the bug.
+    pub fn from_openai_str(s: &str) -> Option<Self> {
+        match s {
+            "stop" => Some(FinishReason::Stop),
+            "length" => Some(FinishReason::Length),
+            "tool_calls" => Some(FinishReason::ToolCalls),
+            "content_filter" => Some(FinishReason::ContentFilter),
+            "cancelled" => Some(FinishReason::Cancelled),
+            // Inner message is lost on the wire — recover the variant
+            // with an empty payload. Callers that need the message
+            // get it from the surrounding tracing event.
+            "error" => Some(FinishReason::Error(String::new())),
+            _ => None,
+        }
+    }
+}
+
+impl Serialize for FinishReason {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.as_openai_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for FinishReason {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s: String = Deserialize::deserialize(d)?;
+        FinishReason::from_openai_str(&s).ok_or_else(|| {
+            serde::de::Error::custom(format!(
+                "unknown OpenAI finish_reason: {s:?} (expected one of \
+                 stop/length/tool_calls/content_filter/cancelled/error)"
+            ))
+        })
     }
 }
 
@@ -2334,6 +2399,27 @@ pub struct ResponseProvenance {
     /// learns *what we don't have* without a second click.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coverage: Option<CoverageNote>,
+    /// Why the streaming generation stopped. OpenAI-compatible string
+    /// (`"stop"` / `"length"` / `"content_filter"` / `"cancelled"` /
+    /// `"error"`). `None` on non-streaming paths and on old messages.
+    /// `Length` is the load-bearing signal — desktop renders a chip
+    /// + Continue offer so the user can tell the response was cut off
+    /// at `max_tokens_budget`. Typed `FinishReason` serializes to the
+    /// OpenAI-compatible lowercase string on the wire (e.g.
+    /// `"length"`) — see `FinishReason`'s serde docs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<FinishReason>,
+    /// Token budget the request was capped at. Pairs with `tokens_used`
+    /// and `finish_reason` so the truncation chip can read e.g. "Hit
+    /// the 2048-token limit". `None` on paths that don't (yet) capture
+    /// this; surfaced where it's reliably known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens_budget: Option<usize>,
+    /// Completion tokens generated on this turn (excludes prompt).
+    /// Streamed paths can populate this from the terminal `Finish`
+    /// frame's `usage`. `None` when the provider didn't report usage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2985,6 +3071,62 @@ impl DocumentAssetOperation {
             DocumentAssetOperation::Transformation => "Applied transformation",
             DocumentAssetOperation::OffTopic { .. } => "Answered from general knowledge",
         }
+    }
+}
+
+#[cfg(test)]
+mod finish_reason_tests {
+    use super::*;
+
+    /// Pins the wire shape downstream consumers depend on: the desktop
+    /// cutoff chip in `AssistantMessage.svelte` checks
+    /// `provenance.finish_reason === "length"` (lowercase). Derive-default
+    /// Serialize would emit `"Length"` (capitalized) and silently break
+    /// the chip.
+    #[test]
+    fn finish_reason_serializes_as_openai_string() {
+        assert_eq!(serde_json::to_string(&FinishReason::Stop).unwrap(), "\"stop\"");
+        assert_eq!(serde_json::to_string(&FinishReason::Length).unwrap(), "\"length\"");
+        assert_eq!(serde_json::to_string(&FinishReason::ToolCalls).unwrap(), "\"tool_calls\"");
+        assert_eq!(serde_json::to_string(&FinishReason::ContentFilter).unwrap(), "\"content_filter\"");
+        assert_eq!(serde_json::to_string(&FinishReason::Cancelled).unwrap(), "\"cancelled\"");
+        assert_eq!(
+            serde_json::to_string(&FinishReason::Error("oom".into())).unwrap(),
+            "\"error\""
+        );
+    }
+
+    /// Pins backcompat for messages persisted under the shipped
+    /// `ResponseProvenance.finish_reason: Option<String>` shape — the
+    /// initial Phase A iteration wrote `"length"` directly. After
+    /// flipping to `Option<FinishReason>`, the on-disk JSON must still
+    /// decode to the typed enum.
+    #[test]
+    fn finish_reason_deserialize_round_trip() {
+        let cases = [
+            ("\"stop\"", FinishReason::Stop),
+            ("\"length\"", FinishReason::Length),
+            ("\"tool_calls\"", FinishReason::ToolCalls),
+            ("\"content_filter\"", FinishReason::ContentFilter),
+            ("\"cancelled\"", FinishReason::Cancelled),
+        ];
+        for (wire, expected) in cases {
+            let got: FinishReason = serde_json::from_str(wire).unwrap();
+            assert_eq!(got, expected, "wire {wire} should decode to {expected:?}");
+        }
+        // Error decodes with empty inner — the original message is
+        // not on the wire, only the variant tag.
+        let err: FinishReason = serde_json::from_str("\"error\"").unwrap();
+        assert!(matches!(err, FinishReason::Error(ref m) if m.is_empty()));
+    }
+
+    /// Unknown OpenAI strings must surface as an error, not a silent
+    /// `Stop`. A future server bug that emits e.g. `"max_tokens"`
+    /// should fail loudly rather than mask itself as a clean stop.
+    #[test]
+    fn finish_reason_rejects_unknown_string() {
+        let r: Result<FinishReason, _> = serde_json::from_str("\"bogus\"");
+        assert!(r.is_err(), "unknown finish_reason should fail to deserialize");
     }
 }
 

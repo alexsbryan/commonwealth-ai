@@ -320,6 +320,9 @@ impl Runtime {
             self_assessment: None,
             routing_trigger: None,
             coverage: None,
+            finish_reason: prompt_response.finish_reason.clone(),
+            max_tokens_budget: Some(self.inference_config.max_tokens),
+            completion_tokens: prompt_response.completion_tokens,
         };
 
         let assistant_msg = Message {
