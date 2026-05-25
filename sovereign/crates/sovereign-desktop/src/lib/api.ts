@@ -460,6 +460,14 @@ export async function slotRecommendation(
   return invoke("slot_recommendation", { kind, profile: profile ?? null });
 }
 
+/** List the model IDs the local daemon currently advertises on
+ *  `/v1/models`. Backed by a Tauri command so the request goes
+ *  through reqwest on the Rust side — the renderer's `fetch` is
+ *  blocked by Tauri's sandbox and fails with Safari's "Load failed". */
+export async function listDaemonModels(): Promise<string[]> {
+  return invoke("list_daemon_models");
+}
+
 export async function downloadModel(
   request: DownloadRequest,
 ): Promise<string> {

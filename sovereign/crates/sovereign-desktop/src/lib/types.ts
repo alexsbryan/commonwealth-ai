@@ -530,6 +530,15 @@ export interface CorpusEntry {
    * them as toggles under the parent's row instead.
    */
   parent_corpus_id: string | null;
+  /** Catalog presentation tier from `registry_snapshot.toml`.
+   *  - `"featured"` — robustly built; install affordance enabled.
+   *  - `"preview"` — recipe declared but ingest pipeline not ready;
+   *    rendered under "Coming soon" with install disabled.
+   *  - `"hidden"` — never surfaced in the catalog picker (dev-only
+   *    corpora or auto-managed recipes).
+   *  `null` falls back to `"preview"` so newly-registered recipes
+   *  surface under Coming soon by default. */
+  catalog_status: string | null;
 }
 
 /** Detailed health stats for an installed corpus — loaded on demand. */

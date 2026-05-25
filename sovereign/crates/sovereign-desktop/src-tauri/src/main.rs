@@ -363,6 +363,7 @@ fn main() -> ExitCode {
             commands::recommended_profile,
             commands::primary_catalog,
             commands::slot_recommendation,
+            commands::list_daemon_models,
             commands::download_model,
             commands::list_corpora,
             commands::install_corpus,

@@ -17,6 +17,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia/recipe.toml"
 sha256 = ""
+catalog_status = "featured"
 
 [recipes.prebuilt]
 hf_repo = "svrnmesh/wikipedia-index"
@@ -36,6 +37,7 @@ mesh_sharing = true
 parent_corpus_id = "wikipedia"
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-simple/recipe.toml"
 sha256 = ""
+catalog_status = "featured"
 
 [[recipes]]
 id = "sep"
@@ -48,6 +50,7 @@ enrichment_enabled = true
 mesh_sharing = false
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/sep/recipe.toml"
 sha256 = ""
+catalog_status = "featured"
 
 [[recipes]]
 id = "stackexchange"
@@ -60,6 +63,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/stackexchange/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "stackexchange-knowledge"
@@ -72,6 +76,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/stackexchange-knowledge/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "openalex"
@@ -84,6 +89,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/openalex/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "gutenberg"
@@ -96,6 +102,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/gutenberg/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "gutenberg-work"
@@ -108,6 +115,7 @@ enrichment_enabled = true
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/gutenberg-work/recipe.toml"
 sha256 = ""
+catalog_status = "hidden"
 
 [[recipes]]
 id = "wikipedia-catalog"
@@ -120,6 +128,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-catalog/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "wikipedia-article"
@@ -132,6 +141,7 @@ enrichment_enabled = true
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-article/recipe.toml"
 sha256 = ""
+catalog_status = "hidden"
 
 [[recipes]]
 id = "crs_reports"
@@ -144,6 +154,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/crs_reports/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "alignment"
@@ -156,6 +167,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/alignment/recipe.toml"
 sha256 = ""
+catalog_status = "hidden"
 
 [[recipes]]
 id = "us-code"
@@ -168,6 +180,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/us-code/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "olc-opinions"
@@ -180,6 +193,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/olc-opinions/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "scotus-opinions"
@@ -192,6 +206,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/scotus-opinions/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "federal-register-presidential"
@@ -204,6 +219,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/federal-register-presidential/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "wikipedia-newsworthy"
@@ -217,6 +233,7 @@ mesh_sharing = true
 parent_corpus_id = "wikipedia"
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-newsworthy/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "conversations-anthropic"
@@ -229,3 +246,4 @@ enrichment_enabled = true
 mesh_sharing = false
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/conversations-anthropic/recipe.toml"
 sha256 = ""
+catalog_status = "hidden"

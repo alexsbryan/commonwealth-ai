@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { getConfig } from "../api";
+  import { getConfig, listDaemonModels } from "../api";
 
   // W5: surface the daemon's OpenAI-compatible endpoint so power
   // users can point Codex / Claude Code / etc. at it without
@@ -29,16 +29,10 @@
     loadingModels = true;
     modelsError = null;
     try {
-      const resp = await fetch(`${baseUrl}/models`);
-      if (!resp.ok) {
-        modelsError = `daemon /v1/models returned ${resp.status}`;
-        return;
-      }
-      const json: { data?: Array<{ id?: string }> } = await resp.json();
-      models = (json.data ?? [])
-        .map((m) => (typeof m.id === "string" ? m.id : null))
-        .filter((s): s is string => s !== null)
-        .sort();
+      // Goes through a Tauri command on the Rust side rather than
+      // raw `fetch` — the renderer can't reach localhost across
+      // Tauri's sandbox (Safari surfaces this as "Load failed").
+      models = await listDaemonModels();
     } catch (e) {
       modelsError = e instanceof Error ? e.message : String(e);
     } finally {

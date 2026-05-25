@@ -150,6 +150,12 @@ pub struct CorpusEntry {
     /// from the top-level picker and surfaces them as toggles under
     /// the parent's row. `null` for top-level corpora.
     pub parent_corpus_id: Option<String>,
+    /// Catalog presentation tier (`"featured"` / `"preview"` /
+    /// `"hidden"`). Sourced from `registry_snapshot.toml`; lets the
+    /// desktop curate the picker without growing a parallel allowlist.
+    /// `None` defaults to `"preview"` so newly-registered recipes
+    /// land under "Coming soon" until promoted by editing the snapshot.
+    pub catalog_status: Option<String>,
 }
 
 /// Detailed health report for a single installed corpus, loaded on demand
@@ -424,6 +430,43 @@ pub async fn primary_catalog(
             hf_url: opt.slot.hf_url.clone(),
         })
         .collect())
+}
+
+/// List the model IDs the local daemon's `/v1/models` endpoint
+/// advertises. Used by the Connect tab so it can show what's
+/// currently registered without the renderer making raw HTTP calls
+/// across Tauri's sandbox (which fails with Safari's "Load failed").
+#[tauri::command]
+pub async fn list_daemon_models() -> Result<Vec<String>, String> {
+    let url = "http://127.0.0.1:9741/v1/models";
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .map_err(|e| format!("build http client: {e}"))?;
+    let resp = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("GET /v1/models: {e}"))?;
+    let status = resp.status();
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("parse /v1/models body: {e}"))?;
+    if !status.is_success() {
+        return Err(format!("/v1/models returned {status}"));
+    }
+    let mut ids: Vec<String> = body
+        .get("data")
+        .and_then(|d| d.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| m.get("id").and_then(|v| v.as_str()).map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    ids.sort();
+    Ok(ids)
 }
 
 /// Return the recommended slot for `kind` (`"fast"` or `"embed"`) on
@@ -1748,22 +1791,30 @@ pub async fn save_config(
     let old = state.config.read().await.clone();
     let old_embed = old.embed_model_path.clone();
     let new_embed = config.embed_model_path.clone();
+    let rebuild = config_needs_rebuild(&old, &config);
 
     // Mirror shared fields (model paths + data_dir) into SetupConfig
-    // on disk, then ask the daemon to hot-reload. This is the
-    // "desktop Settings → daemon stays up" path: the user picks a new
-    // primary model and the CLI-owned daemon swaps its provider
-    // without the UI seeing a restart gap.
+    // on disk. Cheap when nothing structural changed (compares fields,
+    // writes only on diff), so we run it unconditionally — a sampling-
+    // only save just no-ops here.
     //
-    // Best-effort: a failure to write SetupConfig or to reach the
-    // daemon must not block the desktop's local save. We log and
-    // move on — next desktop save attempt will retry the mirror.
+    // Best-effort: a failure to write SetupConfig must not block the
+    // desktop's local save. We log and move on — next desktop save
+    // attempt will retry the mirror.
     if let Err(e) = mirror_to_setup_config(&config).await {
         tracing::warn!("save_config: could not mirror to SetupConfig: {e}");
     }
-    if let Err(e) = request_daemon_reload().await {
-        tracing::warn!("save_config: admin/reload failed: {e}");
-    }
+    // Daemon reload is best-effort AND fire-and-forget. The HTTP call
+    // has a 5s timeout and previously serialised the Save button's
+    // "Saved" indicator behind whatever the daemon happened to be doing
+    // when the user hit Save. Background it: the daemon will pick up
+    // the new SetupConfig before the user's next inference turn, and
+    // the desktop's local cache is already correct.
+    tokio::spawn(async {
+        if let Err(e) = request_daemon_reload().await {
+            tracing::warn!("save_config: admin/reload failed (background): {e}");
+        }
+    });
 
     *state.config.write().await = config;
     // If the embedding model changed, drop the cached inference so bootstrap
@@ -1771,7 +1822,45 @@ pub async fn save_config(
     if old_embed != new_embed {
         *state.inference.write().await = None;
     }
-    state::rebuild_runtime(&state).await
+    if rebuild {
+        state::rebuild_runtime(&state).await
+    } else {
+        tracing::info!(
+            "save_config: no structural changes — skipping runtime rebuild"
+        );
+        Ok(())
+    }
+}
+
+/// Decide whether a config change warrants tearing down + rebuilding
+/// the Runtime. The cost of a rebuild is high (skill discovery, tool
+/// registry construction, KnowledgeView wire-up, potential embed model
+/// re-load) — measured at 10–20s on a typical desktop. Most saves are
+/// sampling tweaks (temperature, max_tokens, think_budget) or UX
+/// toggles (node_name, enable_recipe_authoring) that the Runtime
+/// either reads at request time or doesn't read at all; rebuilding for
+/// those is pure latency.
+///
+/// Returns `true` only when a field that the Runtime captures at
+/// construction time has actually changed. Fields read at request time
+/// (everything in `InferenceConfig`) intentionally skip the rebuild;
+/// the next chat turn reads the new value from `state.config`.
+fn config_needs_rebuild(old: &DesktopConfig, new: &DesktopConfig) -> bool {
+    old.model_path != new.model_path
+        || old.primary_model_path != new.primary_model_path
+        || old.embed_model_path != new.embed_model_path
+        || old.code_model_path != new.code_model_path
+        || old.embed_family != new.embed_family
+        || old.code_family != new.code_family
+        || old.context_size != new.context_size
+        || old.skills_dir != new.skills_dir
+        || old.active_skills != new.active_skills
+        || old.enabled_tools != new.enabled_tools
+        || old.search_backend.provider != new.search_backend.provider
+        || old.search_backend.api_key != new.search_backend.api_key
+        || old.knowledge_view_enabled != new.knowledge_view_enabled
+        || old.auto_escalate_to_web != new.auto_escalate_to_web
+        || old.data_dir != new.data_dir
 }
 
 /// Mirror the three model paths + data_dir from `DesktopConfig` into
@@ -2837,6 +2926,7 @@ pub async fn list_corpora(
             registry_url: registry_entry.map(|e| e.toml_url.clone()),
             schema_version: Some(1),
             parent_corpus_id: b.parent_corpus_id.clone(),
+            catalog_status: b.catalog_status.clone(),
         });
     }
 

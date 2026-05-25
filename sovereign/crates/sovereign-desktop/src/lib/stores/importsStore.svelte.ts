@@ -28,6 +28,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   enrichBuildAsync,
   getCorpusProgress,
+  listCorpora,
   type ImportStartResponse,
 } from "../api";
 import type { CorpusProgressPayload, EnrichProgress, EnrichBuildStep } from "../types";
@@ -60,6 +61,14 @@ export interface PendingReset {
 
 export interface ImportState {
   stage: ImportStage;
+  /** True when the `conversations-anthropic` corpus is already
+   *  installed on disk from a prior import. Independent of `stage`:
+   *  a user with a finished import who hasn't done anything since
+   *  the desktop launched sits at `stage: "idle"` + `alreadyInstalled: true`.
+   *  Hydrated once on `init()` via `listCorpora()` so the picker can
+   *  render a "Re-import" affordance instead of "Import Claude export"
+   *  next to a corpus the daemon has already chewed through. */
+  alreadyInstalled: boolean;
   /** Pre-flight info from `import_anthropic_zip`. `null` until the
    *  Tauri command resolves. */
   startResponse: ImportStartResponse | null;
@@ -90,6 +99,7 @@ const TARGET_CORPUS_ID = "conversations-anthropic";
 
 const INITIAL: ImportState = {
   stage: "idle",
+  alreadyInstalled: false,
   startResponse: null,
   pendingReset: null,
   startedAtMs: null,
@@ -173,7 +183,7 @@ function applyEnrichProgress(e: EnrichProgress): void {
       };
       break;
     case "complete":
-      _state = { ..._state, stage: "complete" };
+      _state = { ..._state, stage: "complete", alreadyInstalled: true };
       detachEnrichListener();
       break;
     case "aborted":
@@ -258,6 +268,23 @@ function clearPersistedStartResponse(): void {
  *  event" so the tab doesn't briefly flash the idle/button state on
  *  start. */
 async function hydrateFromDaemon(): Promise<void> {
+  // Check whether the target corpus is already installed from a
+  // prior import. This is independent of the in-flight check below
+  // — a user with a finished import who hasn't done anything in
+  // this session sits at stage `idle` + `alreadyInstalled: true`,
+  // which the picker uses to render a "Re-import" affordance
+  // instead of misleading them with "Import Claude export".
+  try {
+    const corpora = await listCorpora();
+    const target = corpora.find((c) => c.id === TARGET_CORPUS_ID);
+    if (target && target.status === "installed") {
+      _state = { ..._state, alreadyInstalled: true };
+    }
+  } catch {
+    // Daemon offline — leave alreadyInstalled false; the listener
+    // path will catch up once the daemon comes back.
+  }
+
   let snapshot: CorpusProgressPayload | null = null;
   try {
     snapshot = await getCorpusProgress(TARGET_CORPUS_ID);

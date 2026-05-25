@@ -304,7 +304,12 @@
       <header class="source-card-header">
         <div class="source-icon">💬</div>
         <div class="source-meta">
-          <h3 class="source-name">Claude (Anthropic)</h3>
+          <h3 class="source-name">
+            Claude (Anthropic)
+            {#if importState.alreadyInstalled}
+              <span class="imported-badge" title="A Claude export has already been ingested on this machine.">Imported</span>
+            {/if}
+          </h3>
           <p class="source-help">
             Go to <strong>claude.ai → Settings → Privacy → Export data</strong>.
             Anthropic emails a download link. It's a <code>.zip</code> named
@@ -323,6 +328,8 @@
           Unpacking…
         {:else if importState.stage === "ingesting" || importState.stage === "enriching"}
           Import in progress
+        {:else if importState.alreadyInstalled}
+          Re-import a fresh export
         {:else}
           Import Claude export
         {/if}
@@ -616,6 +623,21 @@
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.06em;
+  }
+
+  .imported-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 8px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--success, #6bbf6b);
+    background: rgba(120, 220, 140, 0.12);
+    border: 1px solid rgba(120, 220, 140, 0.5);
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    vertical-align: middle;
   }
 
   .progress-card {
