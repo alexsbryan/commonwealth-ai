@@ -462,10 +462,11 @@ pub(crate) use self::collaboration::{
     ASK_MOVE_DELIBERATION_LINGER_MS,
 };
 pub(crate) use self::evidence::{
-    chunk_source_key, compute_evidence_shape, extract_tokens, is_grounding_candidate, median_f32,
-    route_from_evidence, strip_leading_title_duplicate, EvidenceShape, SynthesisRoute,
-    EVIDENCE_DECISIVE_TOP_SOURCE_REPEAT, EVIDENCE_MEDIAN_RATIO_THRESHOLD,
-    EVIDENCE_MIN_TOKEN_COVERAGE, EVIDENCE_MIN_TOP_SOURCE_REPEAT, EVIDENCE_TITLE_MIN_TOKEN_LEN,
+    chunk_source_key, compute_evidence_shape, decide_expansion_strategy, extract_tokens,
+    is_grounding_candidate, median_f32, route_from_evidence, strip_leading_title_duplicate,
+    EvidenceShape, ExpansionStrategy, SynthesisRoute, EVIDENCE_DECISIVE_TOP_SOURCE_REPEAT,
+    EVIDENCE_MEDIAN_RATIO_THRESHOLD, EVIDENCE_MIN_TOKEN_COVERAGE, EVIDENCE_MIN_TOP_SOURCE_REPEAT,
+    EVIDENCE_TITLE_MIN_TOKEN_LEN,
 };
 pub use self::evidence::build_test_evidence_shape;
 pub(crate) use self::intent_helpers::{
