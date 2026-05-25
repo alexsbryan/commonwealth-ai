@@ -127,10 +127,16 @@ pub(crate) async fn run_collaboration(
     };
 
     // 2. Stamp task/step on the request so the UI can correlate it
-    //    with the current conversation.
+    //    with the current conversation. Force kind = Refinement here
+    //    even though gap.rs already sets it — this is the single point
+    //    where the runtime owns the contract that "anything coming out
+    //    of run_collaboration is post-answer refinement," independent
+    //    of what the gap-checker chose to put on the wire.
     let mut req = gap;
     req.task_id = conversation_id.to_string();
     req.step_id = 0;
+    req.kind = InformationRequestKind::Refinement;
+    req.task_title.clear();
 
     tracing::info!(
         gap_chars = req.gap.len(),

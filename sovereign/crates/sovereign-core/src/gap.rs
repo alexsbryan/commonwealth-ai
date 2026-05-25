@@ -17,7 +17,7 @@
 use crate::error::Result;
 use crate::title::strip_think_blocks;
 use crate::traits::InferenceProvider;
-use crate::types::{CompletionRequest, InformationRequest, Speed};
+use crate::types::{CompletionRequest, InformationRequest, InformationRequestKind, Speed};
 
 /// Hard caps on the inputs we feed the gap-assessment prompt. The
 /// gap-checker doesn't need the full answer or evidence — it just
@@ -212,6 +212,11 @@ fn parse_gap_response(raw: &str) -> Option<InformationRequest> {
         search_hints,
         task_id: String::new(),
         step_id: 0,
+        // Gap-checker only produces post-answer refinement cards;
+        // planned-step cards come from `StepKind::AwaitUserInfo` and
+        // are stamped by the executor instead.
+        kind: InformationRequestKind::Refinement,
+        task_title: String::new(),
     })
 }
 
@@ -278,6 +283,14 @@ mod tests {
         assert!(req.gap.starts_with("Empirical magnitude"));
         assert_eq!(req.search_hints.len(), 2);
         assert!(req.satisfying_source.contains("NEJM"));
+        // Gap-checker is the post-answer refinement producer; UI
+        // contract requires the kind to be stamped accordingly so the
+        // card renders the "sharpen answer" chrome.
+        assert_eq!(req.kind, InformationRequestKind::Refinement);
+        assert!(
+            req.task_title.is_empty(),
+            "Refinement cards have no task — task_title must be empty"
+        );
     }
 
     #[test]

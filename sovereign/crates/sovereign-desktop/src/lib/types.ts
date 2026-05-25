@@ -225,6 +225,15 @@ export interface UserInputRequestPayload {
   question: string;
 }
 
+/** Discriminates the two producers of an information-request card.
+ *  Mirrors `sovereign_core::types::InformationRequestKind` (snake-case
+ *  serde rename). The UI renders distinct chrome per kind: `refinement`
+ *  cards are post-answer "would source X sharpen this?" prompts
+ *  anchored to the most recent assistant bubble; `step_block` cards
+ *  represent a paused task waiting on the user for a specific input
+ *  and carry `task_title`. */
+export type InformationRequestKind = "refinement" | "step_block";
+
 /** Sent on `information-request` when the agent suspends a research task
  *  to ask the user for a specific external piece of evidence. Renders as
  *  a dedicated card (not a chat bubble) — see InformationRequestCard.svelte. */
@@ -237,6 +246,12 @@ export interface InformationRequestPayload {
   relevance: string;
   satisfying_source: string;
   search_hints: string[];
+  /** Producer discriminator. See `InformationRequestKind`. */
+  kind: InformationRequestKind;
+  /** Populated only for `step_block` cards; empty string for
+   *  `refinement`. The card renders this as "Task: <goal>" in the
+   *  header. */
+  task_title: string;
 }
 
 /** Emitted when the agent re-synthesises an already-streamed assistant

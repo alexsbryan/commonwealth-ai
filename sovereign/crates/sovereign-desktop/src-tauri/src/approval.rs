@@ -48,6 +48,10 @@ pub struct UserInputRequestPayload {
 /// Sent to the frontend when the agent suspends the task to ask the user
 /// for a specific external piece of information. Rendered as a card, not
 /// a chat bubble — see InformationRequestCard.svelte.
+///
+/// `kind` discriminates the two producers (post-answer refinement vs
+/// planned task-blocking step); the UI renders distinct chrome per
+/// kind. `task_title` is populated only for `step_block` cards.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct InformationRequestPayload {
     pub task_id: String,
@@ -58,6 +62,8 @@ pub struct InformationRequestPayload {
     pub relevance: String,
     pub satisfying_source: String,
     pub search_hints: Vec<String>,
+    pub kind: sovereign_core::types::InformationRequestKind,
+    pub task_title: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -224,6 +230,8 @@ impl ApprovalChannel for TauriApprovalChannel {
                 relevance: request.relevance.clone(),
                 satisfying_source: request.satisfying_source.clone(),
                 search_hints: request.search_hints.clone(),
+                kind: request.kind,
+                task_title: request.task_title.clone(),
             },
         );
 

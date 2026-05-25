@@ -714,12 +714,20 @@ impl Executor {
             StepKind::AwaitUserInfo { request } => {
                 // Stamp the executor-known task/step ids so the UI can
                 // correlate the request back to the suspended task.
+                // Also stamp kind = StepBlock and task_title so the
+                // card can render its "task paused" chrome instead of
+                // the post-answer "sharpen this" chrome (the two
+                // share one payload but have distinct UX contracts —
+                // see InformationRequestKind doc).
                 let mut req = request.clone();
                 req.task_id = task.id.clone();
                 req.step_id = step.id;
+                req.kind = crate::types::InformationRequestKind::StepBlock;
+                req.task_title = task.goal.clone();
                 tracing::info!(
                     step_id = step.id,
                     gap_chars = req.gap.len(),
+                    task_title_chars = req.task_title.len(),
                     "executor: awaiting user info"
                 );
                 let resolved = self.approval.request_information(&req).await;

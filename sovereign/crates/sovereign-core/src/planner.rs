@@ -468,6 +468,16 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
                             search_hints: Vec::new(),
                             task_id: String::new(),
                             step_id: 0,
+                            // Planner-side default; executor re-stamps
+                            // kind = StepBlock + task_title at dispatch,
+                            // so the value here is never observed by the
+                            // UI. Default::default() would be Refinement,
+                            // which is the wrong default for a step kind
+                            // whose entire job is to block a task — keep
+                            // it explicit to make that visible at the
+                            // construction site.
+                            kind: crate::types::InformationRequestKind::StepBlock,
+                            task_title: String::new(),
                         },
                     );
                 StepKind::AwaitUserInfo { request }

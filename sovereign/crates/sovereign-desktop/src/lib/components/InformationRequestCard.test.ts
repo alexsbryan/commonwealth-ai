@@ -35,6 +35,8 @@ function payload(
     relevance: "Relevance note",
     satisfying_source: "A 2024 paper",
     search_hints: ["hint one", "hint two"],
+    kind: "refinement",
+    task_title: "",
     ...overrides,
   };
 }

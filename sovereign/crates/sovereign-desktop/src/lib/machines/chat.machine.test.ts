@@ -43,6 +43,8 @@ function fakeInfoRequest(
     relevance: "r",
     satisfying_source: "s",
     search_hints: [],
+    kind: "refinement",
+    task_title: "",
   };
 }
 
