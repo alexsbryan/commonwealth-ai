@@ -320,7 +320,37 @@
   </header>
 
   {#if loading}
-    <div class="status">Loading atlases…</div>
+    <!-- Skeleton list: two stub category blocks of three rows each.
+         Each placeholder mirrors the real row's height + structure
+         (name lozenge + total · two count chips · meta line) so the
+         page doesn't reflow when the data arrives. The shimmer
+         keyframe runs on each placeholder via CSS — no JS work
+         needed. Settles into the real grid in place rather than
+         replacing a tiny "Loading…" line with a tall list. -->
+    <div class="category-stack" aria-busy="true" aria-live="polite">
+      {#each [0, 1] as i (i)}
+        <section class="category-section">
+          <div class="skeleton-line skeleton-heading"></div>
+          <ul class="corpus-list">
+            {#each [0, 1, 2] as j (j)}
+              <li class="corpus-row">
+                <div class="row-button row-button--skeleton">
+                  <div class="row-header">
+                    <span class="skeleton-line skeleton-title"></span>
+                    <span class="skeleton-line skeleton-total"></span>
+                  </div>
+                  <div class="counts">
+                    <span class="skeleton-line skeleton-chip"></span>
+                    <span class="skeleton-line skeleton-chip skeleton-chip--narrow"></span>
+                  </div>
+                  <div class="skeleton-line skeleton-meta"></div>
+                </div>
+              </li>
+            {/each}
+          </ul>
+        </section>
+      {/each}
+    </div>
   {:else if error}
     <div class="status error" role="alert">
       Failed to load atlases: {error}
@@ -335,14 +365,23 @@
       </p>
     </div>
   {:else}
-    <div class="category-stack">
-      {#each grouped as group (group.key)}
-        <section class="category-section" data-testid="atlas-category-section" data-category={group.key}>
+    <div class="category-stack atlas-loaded">
+      {#each grouped as group, gi (group.key)}
+        <section
+          class="category-section atlas-fade-in"
+          data-testid="atlas-category-section"
+          data-category={group.key}
+          style="--atlas-fade-delay: {gi * 60}ms"
+        >
           <h2 class="category-heading">{group.title}</h2>
           <ul class="corpus-list">
-            {#each group.rows as row (row.kind + ":" + row.data.corpus_id)}
+            {#each group.rows as row, ri (row.kind + ":" + row.data.corpus_id)}
               {#if row.kind === "atom"}
-                <li class="corpus-row" data-testid="atlas-corpus-row">
+                <li
+                  class="corpus-row atlas-fade-in"
+                  data-testid="atlas-corpus-row"
+                  style="--atlas-fade-delay: {(gi * 60) + (ri * 40) + 60}ms"
+                >
                   <button
                     class="row-button"
                     type="button"
@@ -370,7 +409,12 @@
                   </button>
                 </li>
               {:else}
-                <li class="corpus-row" data-testid="atlas-corpus-row" data-row-kind="conv">
+                <li
+                  class="corpus-row atlas-fade-in"
+                  data-testid="atlas-corpus-row"
+                  data-row-kind="conv"
+                  style="--atlas-fade-delay: {(gi * 60) + (ri * 40) + 60}ms"
+                >
                   <button
                     class="row-button"
                     type="button"
@@ -451,6 +495,11 @@
     padding: 40px 32px 80px;
     color: var(--text-primary);
     font-family: var(--font-sans);
+    /* Reserve enough vertical real estate that the page doesn't
+       grow taller mid-load when categories arrive. Two stub categories
+       × three skeleton rows is ~520px; this keeps the layout from
+       jumping when the real data lands. */
+    min-height: 640px;
   }
 
   .atlas-header {
@@ -639,5 +688,99 @@
     color: var(--text-muted);
     font-size: 0.7rem;
     font-weight: normal;
+  }
+
+  /* ── Skeleton placeholders ───────────────────────────────────────
+     Shown while the initial `atlasListCorpora` + `atlasListConvCorpora`
+     promises resolve. Mirrors the real row's shape (header bar +
+     count chips + meta) so the eventual swap-in happens in place
+     without reflow. The shimmer is purely cosmetic — the user reads
+     it as "loading" without needing a spinner.
+     ───────────────────────────────────────────────────────────── */
+  .row-button--skeleton {
+    cursor: default;
+    pointer-events: none;
+    background: var(--bg-secondary);
+  }
+  .skeleton-line {
+    display: inline-block;
+    height: 12px;
+    border-radius: 6px;
+    background: linear-gradient(
+      90deg,
+      var(--border) 0%,
+      var(--border-mid) 50%,
+      var(--border) 100%
+    );
+    background-size: 200% 100%;
+    animation: atlas-shimmer 1.6s ease-in-out infinite;
+    vertical-align: middle;
+  }
+  .skeleton-heading {
+    height: 10px;
+    width: 110px;
+    margin: 0 0 12px;
+    background: linear-gradient(
+      90deg,
+      var(--border) 0%,
+      var(--border-mid) 50%,
+      var(--border) 100%
+    );
+    background-size: 200% 100%;
+  }
+  .skeleton-title {
+    height: 14px;
+    width: 38%;
+  }
+  .skeleton-total {
+    height: 11px;
+    width: 18%;
+  }
+  .skeleton-chip {
+    height: 18px;
+    width: 80px;
+    border-radius: 10px;
+  }
+  .skeleton-chip--narrow {
+    width: 56px;
+  }
+  .skeleton-meta {
+    height: 10px;
+    width: 32%;
+    margin-top: 10px;
+  }
+  @keyframes atlas-shimmer {
+    0%   { background-position: 200% 50%; }
+    100% { background-position: -100% 50%; }
+  }
+
+  /* ── Real-data fade-in ────────────────────────────────────────
+     Lightweight staggered reveal once the initial promises resolve.
+     Categories fade first (delay 0–60ms), then rows cascade
+     (40ms each). Pure CSS — runs once on insertion, no JS hooks.
+     The delay var is set inline per element so the cascade order
+     reads naturally as you scroll the markup. */
+  .atlas-fade-in {
+    opacity: 0;
+    transform: translateY(4px);
+    animation: atlas-fade-in 320ms ease-out var(--atlas-fade-delay, 0ms) forwards;
+  }
+  @keyframes atlas-fade-in {
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  /* Respect users who'd rather not see motion. */
+  @media (prefers-reduced-motion: reduce) {
+    .atlas-fade-in {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+    .skeleton-line,
+    .skeleton-heading {
+      animation: none;
+    }
   }
 </style>

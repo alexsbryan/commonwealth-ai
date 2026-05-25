@@ -36,6 +36,7 @@
   import { enrichProgressStore } from "../stores/enrichProgress.svelte";
   import { chatSeedStore } from "../stores/chatSeed.svelte";
   import StarterChips from "./StarterChips.svelte";
+  import BrandMark from "./BrandMark.svelte";
   import { MAX_TURN_MESSAGE_CHARS, OVERSIZE_MESSAGE_HINT } from "../types";
   import { WordBufferedStream } from "../stream-buffer";
   import { chatMachine } from "../machines/chat.machine";
@@ -1011,7 +1012,9 @@
     {#if messages.length === 0 && !isLoading}
       <div class="empty-state">
         <div class="empty-glow"></div>
-        <div class="empty-mark">◈</div>
+        <div class="empty-mark">
+          <BrandMark size={88} />
+        </div>
         <h2>SOVEREIGN</h2>
         <p class="empty-sub">ai for the rest of us</p>
 
@@ -1309,13 +1312,14 @@
   }
 
   .empty-mark {
-    font-size: 3.2rem;
-    color: var(--accent);
+    /* Wrapper for the BrandMark SVG. Holds the breathe animation +
+       drop-shadow halo that the bare SVG doesn't need to know about. */
+    display: inline-flex;
     line-height: 1;
-    filter: drop-shadow(0 0 14px rgba(201, 168, 76, 0.45));
     margin-bottom: 22px;
     animation: empty-breathe 3.5s ease-in-out infinite;
     position: relative;
+    filter: drop-shadow(0 0 18px rgba(201, 168, 76, 0.35));
   }
 
   .empty-state h2 {

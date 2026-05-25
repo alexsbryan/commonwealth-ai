@@ -9,6 +9,7 @@
   } from "../api";
   import type { ConversationEntry } from "../types";
   import MeshStatusIndicator from "./MeshStatusIndicator.svelte";
+  import BrandMark from "./BrandMark.svelte";
 
   interface Props {
     selectedConversationId: string | null;
@@ -179,7 +180,7 @@
 
 <div class="conversation-list">
   <div class="sidebar-brand">
-    <span class="brand-mark">◈</span>
+    <BrandMark size={22} />
     <span class="brand-name">SOVEREIGN</span>
   </div>
 
@@ -290,13 +291,9 @@
     padding: 16px 14px 12px;
   }
 
-  .brand-mark {
-    color: var(--accent);
-    font-size: 1.1rem;
-    line-height: 1;
-    filter: drop-shadow(0 0 6px rgba(201, 168, 76, 0.50));
-    flex-shrink: 0;
-  }
+  /* The mark's drop-shadow halo lives inside BrandMark.svelte; the
+     sidebar context just needs to size it down from the empty-state
+     hero scale, which the `size={22}` prop handles. */
 
   .brand-name {
     flex: 1;
