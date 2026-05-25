@@ -25,7 +25,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_trait::async_trait;
 use corpus_engine::{CorpusEngine, EmbedFn, LintResultStore, TestResultStore};
-use corpus_engine_notes::{NoteStore};
+use corpus_engine_notes::{NoteStore, NotePropagationEvent};
 use sovereign_core::model_family::{
     EmbedModelInfo, ModelFamily, NormalizationStrategy, PoolingStrategy,
 };
@@ -533,6 +533,13 @@ async fn run_daemon(args: &[String]) -> i32 {
             return 1;
         }
     };
+    // NoteStore is built early (other subsystems take it as
+    // `Arc<NoteStore>`), but `embed_fn`, `origin_node_id`, and
+    // `propagation_sink` aren't known yet. They wire post-Arc
+    // via the OnceLock setters at three later seams in this
+    // function — search this file for `set_origin_node_id`,
+    // `set_embed_fn`, and `set_propagation_sink` to find the
+    // wiring sites.
 
     // ── Lint / test result stores ─────────────────────────────────
     // Always opened so the agent-facing `lint_status` / `test_status`
@@ -852,11 +859,24 @@ async fn run_daemon(args: &[String]) -> i32 {
             _ => sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir),
         },
     };
+    // Stamp outbound NoteStore propagation events with this node
+    // id. `content_hash` is the dedup primary key on the gossip
+    // wire so `origin_node_id` rotation (toolbx rebuilds without
+    // ~/.sovereign bind-mount) doesn't create duplicates — this
+    // field is informational, surfaced in the audit display.
+    if let Err(e) = notes_store.set_origin_node_id(self_node_id.to_string()) {
+        tracing::warn!(target = "notes", error = e, "notes: origin_node_id already set — wiring race?");
+    }
 
     // GliNER per-chunk entity extractor — hoisted out of the engine
     // block so both the engine's tiered runner (conv corpora) AND the
     // folder_tiered_deps below can share the same Arc<dyn> handle
     // (the underlying GlinerExtractor is ~150MB ONNX; one load only).
+    //
+    // The raw `Arc<GlinerExtractor>` is hoisted alongside the
+    // trait-object wrapper so the NoteStore T2 path can install
+    // it as a `GlinerFn` adapter without re-loading the model.
+    let mut gliner_raw: Option<Arc<sovereign_tools::gliner_ner::GlinerExtractor>> = None;
     let chunk_entity_extractor: Option<
         std::sync::Arc<
             dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor,
@@ -871,12 +891,14 @@ async fn run_daemon(args: &[String]) -> i32 {
                         Ok(ex) => {
                             tracing::info!(
                                 model = model_id,
-                                "conv-tiered: GliNER extractor loaded (shared across engine + folder driver)"
+                                "conv-tiered: GliNER extractor loaded (shared across engine + folder driver + NoteStore T2)"
                             );
+                            let ex_arc = Arc::new(ex);
+                            gliner_raw = Some(Arc::clone(&ex_arc));
                             Some(std::sync::Arc::new(
                                 sovereign_tools::conv_tiered_provider::GlinerChunkExtractor::new(
                                     Arc::new(store_for_extractor),
-                                    Arc::new(ex),
+                                    ex_arc,
                                 ),
                             ) as Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>)
                         }
@@ -932,6 +954,72 @@ async fn run_daemon(args: &[String]) -> i32 {
                     .map_err(|e| corpus_engine::Error::Embed(e.to_string()))
             })
         });
+
+        // Wire the SAME embed slot into the NoteStore so T1
+        // (semantic-blend retrieval) lights up. NoteStore has its
+        // own `Error` type — adapt at the boundary so
+        // `corpus-engine-notes` stays dep-free of `corpus-engine`
+        // per `ARCH §8.3` (one-way edge).
+        let provider_for_notes = Arc::clone(&provider);
+        let notes_embed: corpus_engine_notes::EmbedFn = Arc::new(move |text: &str| {
+            let p = Arc::clone(&provider_for_notes);
+            let text = text.to_string();
+            Box::pin(async move {
+                p.embed(&text).await.map_err(|e| {
+                    corpus_engine_notes::Error::Io(std::io::Error::other(format!(
+                        "notes embed: {e}"
+                    )))
+                })
+            })
+        });
+        if let Err(e) = notes_store.set_embed_fn(notes_embed) {
+            tracing::warn!(target = "notes", error = e, "notes: embed_fn already set");
+        } else {
+            tracing::info!(target = "notes", "notes: T1 embed_fn wired to local embed slot");
+        }
+
+        // T2: wire the same GLiNER session into the NoteStore so
+        // write_note extracts (entity, kind) pairs into
+        // `note_entities`. Skips if GLiNER isn't loaded — T2 then
+        // works on author-supplied symbols + files only (still a
+        // useful signal for read_notes_related).
+        if let Some(ref gliner) = gliner_raw {
+            let gliner_clone = Arc::clone(gliner);
+            let notes_gliner: corpus_engine_notes::GlinerFn = Arc::new(move |text: &str| {
+                let g = Arc::clone(&gliner_clone);
+                let text = text.to_string();
+                Box::pin(async move {
+                    // GlinerExtractor::extract is sync (Mutex-locked
+                    // ONNX session). Run on the blocking pool so we
+                    // don't park the async runtime for ~tens of ms.
+                    tokio::task::spawn_blocking(move || g.extract(&text))
+                        .await
+                        .map_err(|e| {
+                            corpus_engine_notes::Error::Io(std::io::Error::other(format!(
+                                "notes gliner: join error {e}"
+                            )))
+                        })?
+                        .map(|mentions| {
+                            mentions
+                                .into_iter()
+                                .map(|m| (m.text, m.label))
+                                .collect::<Vec<_>>()
+                        })
+                        .map_err(|e| {
+                            corpus_engine_notes::Error::Io(std::io::Error::other(format!(
+                                "notes gliner: {e}"
+                            )))
+                        })
+                })
+            });
+            if let Err(e) = notes_store.set_gliner_fn(notes_gliner) {
+                tracing::warn!(target = "notes", error = e, "notes: gliner_fn already set");
+            } else {
+                tracing::info!(target = "notes", "notes: T2 gliner_fn wired to loaded GLiNER session");
+            }
+        } else {
+            tracing::info!(target = "notes", "notes: GLiNER not loaded; T2 will use author-supplied symbols/files only");
+        }
         // Derive the embed model identifier from the configured GGUF
         // path so `_corpus_meta.json` records the actual model rather
         // than failing the ingest pre-flight ("embedding model name not
@@ -1327,6 +1415,166 @@ async fn run_daemon(args: &[String]) -> i32 {
     daemon
         .set_mesh_store(Arc::clone(&work_atlas_mesh_store))
         .await;
+
+    // ── NoteStore propagation wiring ─────────────────────────────
+    //
+    // Now that `mesh_store` is live, wire NoteStore's outbound
+    // sink to publish global non-private notes via app_id="notes"
+    // (and private notes via "notes-private", which is
+    // structurally gossip-excluded — see
+    // `commonwealth-state::peer_preferences::GOSSIP_EXCLUDED_APP_IDS`).
+    {
+        let mesh_for_sink = Arc::clone(&work_atlas_mesh_store);
+        let self_id_for_sink = self_node_id;
+        let sink: corpus_engine_notes::PropagationSinkFn = Arc::new(move |ev: &NotePropagationEvent| {
+            let app_id = if ev.tombstone {
+                // Tombstones ride the public namespace so peers
+                // converge to the deleted state. Private notes
+                // never propagate, so private tombstones don't
+                // need to either.
+                "notes"
+            } else {
+                "notes"
+            };
+            match serde_json::to_vec(ev) {
+                Ok(bytes) => {
+                    if let Err(e) = mesh_for_sink.set(
+                        app_id,
+                        &ev.content_hash,
+                        bytes.into(),
+                        self_id_for_sink,
+                    ) {
+                        tracing::warn!(
+                            target = "notes",
+                            error = %e,
+                            content_hash = %ev.content_hash,
+                            "notes: mesh propagation sink set() failed"
+                        );
+                    } else {
+                        tracing::debug!(
+                            target = "notes",
+                            content_hash = %ev.content_hash,
+                            tombstone = ev.tombstone,
+                            "notes: propagated"
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        target = "notes",
+                        error = %e,
+                        "notes: failed to serialize propagation event"
+                    );
+                }
+            }
+        });
+        if let Err(e) = notes_store.set_propagation_sink(sink) {
+            tracing::warn!(target = "notes", error = e, "notes: propagation_sink already set");
+        } else {
+            tracing::info!(target = "notes", "notes: propagation_sink wired to MeshStore (app_id=notes)");
+        }
+    }
+
+    // One-shot tier-artifact backfill: pre-T1/T2 notes (anything
+    // written before `embed_fn`/`gliner_fn` were wired) get
+    // embeddings + entity rows on a background task so the
+    // existing notes corpus benefits from semantic recall +
+    // related-notes lookup immediately, not only when re-written.
+    // Runs once per daemon start. Best-effort: rows that error
+    // skip + pick up on the next start.
+    {
+        let notes_for_backfill = Arc::clone(&notes_store);
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            let report = notes_for_backfill.backfill_tier_artifacts(0).await;
+            if report.embeddings_backfilled > 0 || report.entities_backfilled > 0 {
+                tracing::info!(
+                    target = "notes",
+                    embeddings = report.embeddings_backfilled,
+                    entities = report.entities_backfilled,
+                    embed_skipped = report.embed_skipped,
+                    entity_skipped = report.entity_skipped,
+                    "notes: tier-artifact backfill done"
+                );
+            }
+        });
+    }
+
+    // Ingest poller: bridge inbound MeshStore entries (merged from
+    // gossip) into `NoteStore::ingest_remote_notes`. MeshStore
+    // doesn't expose a merge-callback today — periodic scan is
+    // the path of least resistance. `ingest_remote_notes` is
+    // idempotent (content_hash dedup) so re-reads cost nothing.
+    //
+    // Cadence: 10s, matching the gossip push-pull cadence. Skips
+    // entries whose `origin` is `self_node_id` (those are notes
+    // WE published; reingesting via our own sink would be a no-op
+    // but wastes a JSON roundtrip).
+    {
+        let mesh_for_poller = Arc::clone(&work_atlas_mesh_store);
+        let notes_for_poller = Arc::clone(&notes_store);
+        let self_id_for_poller = self_node_id;
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                interval.tick().await;
+                let entries = match mesh_for_poller.scan("notes", "") {
+                    Ok(e) => e,
+                    Err(err) => {
+                        tracing::debug!(
+                            target = "notes",
+                            error = %err,
+                            "notes: ingest poller scan failed"
+                        );
+                        continue;
+                    }
+                };
+                let mut events: Vec<NotePropagationEvent> = Vec::new();
+                for entry in entries {
+                    if entry.origin == self_id_for_poller {
+                        continue;
+                    }
+                    match serde_json::from_slice::<NotePropagationEvent>(&entry.value) {
+                        Ok(ev) => events.push(ev),
+                        Err(e) => {
+                            tracing::warn!(
+                                target = "notes",
+                                key = %entry.key,
+                                error = %e,
+                                "notes: ingest poller could not decode entry; skipping"
+                            );
+                        }
+                    }
+                }
+                if events.is_empty() {
+                    continue;
+                }
+                match notes_for_poller.ingest_remote_notes(events).await {
+                    Ok(report) => {
+                        if report.inserted > 0 || report.tombstoned > 0 || report.forked > 0 {
+                            tracing::info!(
+                                target = "notes",
+                                inserted = report.inserted,
+                                tombstoned = report.tombstoned,
+                                forked = report.forked,
+                                deduplicated = report.deduplicated,
+                                rejected = report.rejected,
+                                "notes: ingest poller converged batch"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            target = "notes",
+                            error = %e,
+                            "notes: ingest_remote_notes failed"
+                        );
+                    }
+                }
+            }
+        });
+    }
 
     // Lazy-stamp canonical fingerprints for any installed
     // canonicals that don't yet carry one (legacy ingests pre-

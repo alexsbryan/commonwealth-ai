@@ -32,7 +32,7 @@
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, Connection};
@@ -41,8 +41,8 @@ use tokio::sync::Mutex;
 
 use crate::error::{Error, Result};
 use crate::notes_schema::{
-    MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6,
-    MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, SCHEMA_NEW,
+    MIGRATION_V1, MIGRATION_V10, MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5,
+    MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, SCHEMA_NEW,
 };
 
 /// Propagation event shipped on the mesh wire for a single note.
@@ -127,6 +127,15 @@ pub struct ExportedNoteEntity {
 /// hides the transport.
 pub type PropagationSinkFn = Arc<dyn Fn(&NotePropagationEvent) + Send + Sync>;
 
+/// Counts surfaced by [`NoteStore::backfill_tier_artifacts`].
+#[derive(Debug, Default, Clone)]
+pub struct BackfillReport {
+    pub embeddings_backfilled: usize,
+    pub embed_skipped: usize,
+    pub entities_backfilled: usize,
+    pub entity_skipped: usize,
+}
+
 /// Result of [`NoteStore::ingest_remote_notes`] — counts so the
 /// gossip layer can log convergence progress.
 #[derive(Debug, Default, Clone)]
@@ -144,6 +153,27 @@ pub struct IngestRemoteReport {
     /// flag on the wire, scope != global, etc).
     pub rejected: usize,
 }
+
+/// GLiNER entity-extraction function injected by the caller.
+///
+/// Returns `Vec<(entity, kind)>` per text — `entity` is the raw
+/// surface form found in the content, `kind` is the GLiNER label
+/// (e.g. `"Person"`, `"Organization"`, `"Symbol"`, `"File"`).
+/// The set of admissible kinds is the caller's concern; NoteStore
+/// stores whatever it's handed.
+///
+/// Sovereign passes its loaded GLiNER session (the same one
+/// `chunk_entity_extractor` uses for the corpus pipeline).
+/// Commonwealth passes an HTTP shim. Tests pass a deterministic
+/// mock that emits known labels per substring.
+///
+/// Async because GLiNER inference is non-trivial; tens of ms
+/// even on a small model. The closure copies `&str` internally.
+pub type GlinerFn = Arc<
+    dyn Fn(&str) -> Pin<Box<dyn Future<Output = Result<Vec<(String, String)>>> + Send>>
+        + Send
+        + Sync,
+>;
 
 /// Embedding function injected by the caller.
 ///
@@ -778,19 +808,32 @@ pub struct NoteStore {
     /// disabled for this store — writes still succeed,
     /// embedding-less, and the semantic-blend read path silently
     /// falls back to FTS5-only ranking.
-    embed_fn: Option<EmbedFn>,
+    ///
+    /// `OnceLock` so the daemon can open the store early (before
+    /// the inference slot is built) and inject the embed closure
+    /// later without breaking the existing `Arc<NoteStore>` graph.
+    embed_fn: OnceLock<EmbedFn>,
     /// Optional mesh-propagation sink. When set, every `scope=global
     /// && !private` write fires the sink with the corresponding
     /// [`NotePropagationEvent`]. `None` keeps notes node-local
     /// (the pre-v9 default). The caller (most commonly the
     /// sovereign daemon) wires this to `MeshStore::put` under
-    /// `app_id="notes"`.
-    propagation_sink: Option<PropagationSinkFn>,
+    /// `app_id="notes"`. Wired late — after `set_mesh_store` on
+    /// the daemon.
+    propagation_sink: OnceLock<PropagationSinkFn>,
     /// Node id stamped on outbound propagation events as the
     /// `origin_node_id`. Optional because the store can run
     /// dependency-free in tests / CLI tools that don't have a
-    /// mesh identity. Set via [`NoteStore::with_origin_node_id`].
-    origin_node_id: Option<String>,
+    /// mesh identity. Set via [`NoteStore::set_origin_node_id`].
+    origin_node_id: OnceLock<String>,
+    /// Optional T2 entity extractor. When set, every
+    /// `write_note_full_v9` call runs the closure against the
+    /// note's content and writes `(entity, kind)` tuples into
+    /// `note_entities` in the same transaction. Author-supplied
+    /// `symbols` are merged in first (INSERT then INSERT OR
+    /// IGNORE on the extracted set), so manual tags always win
+    /// on overlap.
+    gliner_fn: OnceLock<GlinerFn>,
 }
 
 impl NoteStore {
@@ -951,56 +994,132 @@ impl NoteStore {
             backfill_content_hashes(&conn)?;
         }
 
+        // v9 → v10: T2 entity-graph surface. One additive table
+        // (`note_entities`) + two indexes; same `chunk_entities`
+        // row shape so PPR utilities work unchanged. No
+        // back-compat cliff — pre-v10 notes simply have no
+        // entity rows yet; `sovereign notes reindex --t2` is the
+        // operator-driven backfill once GLiNER is wired.
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap_or(0);
+        if version < 10 {
+            conn.execute_batch(MIGRATION_V10).map_err(|e| {
+                Error::Io(std::io::Error::other(format!("NoteStore migrate v10: {e}")))
+            })?;
+        }
+
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
-            embed_fn: None,
-            propagation_sink: None,
-            origin_node_id: None,
+            embed_fn: OnceLock::new(),
+            propagation_sink: OnceLock::new(),
+            origin_node_id: OnceLock::new(),
+            gliner_fn: OnceLock::new(),
         })
     }
 
     /// Builder: attach an [`EmbedFn`] so writes compute and persist
     /// T1 embeddings, and reads can blend semantic similarity into
-    /// the FTS5 BM25 ranking. Idempotent — calling twice replaces
-    /// the prior closure.
+    /// the FTS5 BM25 ranking.
     ///
     /// Per `ARCH §5.4` the store stays primitive: it takes a
     /// closure, not a daemon handle. The caller owns the
     /// transport (local Embed slot, HTTP client, mock) and
     /// adapts it into the [`EmbedFn`] shape.
-    pub fn with_embed_fn(mut self, embed_fn: EmbedFn) -> Self {
-        self.embed_fn = Some(embed_fn);
+    ///
+    /// Use [`NoteStore::set_embed_fn`] for the deferred /
+    /// post-Arc-wrapping wiring shape needed by the daemon.
+    pub fn with_embed_fn(self, embed_fn: EmbedFn) -> Self {
+        let _ = self.embed_fn.set(embed_fn);
         self
+    }
+
+    /// Wire the [`EmbedFn`] AFTER the store is already shared via
+    /// `Arc<NoteStore>`. Idempotent (only the first call sticks);
+    /// returns `Err` on the second call so the daemon can detect
+    /// double-wiring during construction-order bugs.
+    pub fn set_embed_fn(&self, embed_fn: EmbedFn) -> std::result::Result<(), &'static str> {
+        self.embed_fn
+            .set(embed_fn)
+            .map_err(|_| "embed_fn already set")
     }
 
     /// Whether T1 embeddings are enabled on this store. Useful
     /// for diagnostics and for skipping embed-dependent tests
     /// against a NoteStore opened without `with_embed_fn`.
     pub fn has_embed_fn(&self) -> bool {
-        self.embed_fn.is_some()
+        self.embed_fn.get().is_some()
     }
 
     /// Builder: attach a [`PropagationSinkFn`] so global,
     /// non-private writes fan out to the mesh. The sink fires
     /// AFTER the local write commits — peers only see notes that
     /// landed locally, never half-committed state.
-    pub fn with_propagation_sink(mut self, sink: PropagationSinkFn) -> Self {
-        self.propagation_sink = Some(sink);
+    ///
+    /// Use [`NoteStore::set_propagation_sink`] for the deferred
+    /// wiring shape.
+    pub fn with_propagation_sink(self, sink: PropagationSinkFn) -> Self {
+        let _ = self.propagation_sink.set(sink);
         self
+    }
+
+    /// Wire the propagation sink AFTER `Arc::new` — the
+    /// counterpart to `with_propagation_sink` for the daemon's
+    /// construction order (mesh state lands later than the
+    /// NoteStore needs to exist).
+    pub fn set_propagation_sink(
+        &self,
+        sink: PropagationSinkFn,
+    ) -> std::result::Result<(), &'static str> {
+        self.propagation_sink
+            .set(sink)
+            .map_err(|_| "propagation_sink already set")
     }
 
     /// Builder: stamp outbound propagation events with this node's
     /// id. When unset, events carry `origin_node_id = None` and
     /// peers reconcile by `content_hash` alone (the toolbx
     /// node-rotation-safe path).
-    pub fn with_origin_node_id(mut self, node_id: impl Into<String>) -> Self {
-        self.origin_node_id = Some(node_id.into());
+    pub fn with_origin_node_id(self, node_id: impl Into<String>) -> Self {
+        let _ = self.origin_node_id.set(node_id.into());
         self
+    }
+
+    /// Deferred-wiring counterpart to `with_origin_node_id`.
+    pub fn set_origin_node_id(
+        &self,
+        node_id: impl Into<String>,
+    ) -> std::result::Result<(), &'static str> {
+        self.origin_node_id
+            .set(node_id.into())
+            .map_err(|_| "origin_node_id already set")
     }
 
     /// Whether propagation is wired on this store.
     pub fn has_propagation_sink(&self) -> bool {
-        self.propagation_sink.is_some()
+        self.propagation_sink.get().is_some()
+    }
+
+    /// Builder: attach a [`GlinerFn`] so writes extract entities
+    /// into `note_entities`. Persisted alongside the note row in
+    /// the same SQL transaction; failure soft-fails per `ARCH §9`.
+    pub fn with_gliner_fn(self, gliner_fn: GlinerFn) -> Self {
+        let _ = self.gliner_fn.set(gliner_fn);
+        self
+    }
+
+    /// Deferred-wiring counterpart to `with_gliner_fn` — for the
+    /// daemon construction order where GLiNER is loaded after
+    /// the NoteStore is already Arc-wrapped.
+    pub fn set_gliner_fn(&self, gliner_fn: GlinerFn) -> std::result::Result<(), &'static str> {
+        self.gliner_fn
+            .set(gliner_fn)
+            .map_err(|_| "gliner_fn already set")
+    }
+
+    /// Whether T2 entity extraction is wired on this store.
+    pub fn has_gliner_fn(&self) -> bool {
+        self.gliner_fn.get().is_some()
     }
 
     // ── Note writes ────────────────────────────────────────────────────────
@@ -1231,7 +1350,7 @@ impl NoteStore {
         // nothing back — we just need both rows to land in one
         // SQL transaction. Soft-fail per `ARCH §9`: a note with
         // no embedding is strictly better than no note.
-        let embedding: Option<(Vec<f32>, String)> = match &self.embed_fn {
+        let embedding: Option<(Vec<f32>, String)> = match self.embed_fn.get() {
             Some(embed) => match embed(content).await {
                 Ok(vec) => {
                     let model_id =
@@ -1253,6 +1372,43 @@ impl NoteStore {
             None => None,
         };
 
+        // T2: extract entities outside the connection mutex too.
+        // Soft-fail with empty Vec on extractor error — author's
+        // explicit `symbols` + `files` still seed the entity table
+        // below, so the related-notes path keeps a signal even
+        // when GLiNER is offline.
+        let extracted_entities: Vec<(String, String)> = match self.gliner_fn.get() {
+            Some(extract) => match extract(content).await {
+                Ok(pairs) => pairs,
+                Err(e) => {
+                    tracing::warn!(
+                        target = "notes",
+                        error = %e,
+                        note_id = %id,
+                        "notes: gliner_fn failed; persisting note without T2 entities"
+                    );
+                    Vec::new()
+                }
+            },
+            None => Vec::new(),
+        };
+
+        // Author-supplied symbols + files always become entity
+        // rows of kind="Symbol" / kind="File", even when GLiNER
+        // isn't wired. This keeps `read_notes_related` useful for
+        // the canonical "find related decisions by symbol" case
+        // from day 0; GLiNER widens the recall later.
+        let mut all_entities: Vec<(String, String)> = Vec::new();
+        for s in &symbols {
+            all_entities.push((s.clone(), "Symbol".to_string()));
+        }
+        for f in &files {
+            all_entities.push((f.clone(), "File".to_string()));
+        }
+        for (e, k) in &extracted_entities {
+            all_entities.push((e.clone(), k.clone()));
+        }
+
         let conn = self.conn.lock().await;
         conn.execute_batch("BEGIN").map_err(sqlite_err)?;
         let txn_result: Result<()> = (|| {
@@ -1270,7 +1426,7 @@ impl NoteStore {
                     source.as_str(), supersedes, payload_json,
                     content_hash,
                     private as i64,
-                    self.origin_node_id.as_deref()
+                    self.origin_node_id.get().map(String::as_str)
                 ],
             )
             .map_err(sqlite_err)?;
@@ -1292,6 +1448,18 @@ impl NoteStore {
                     "notes: embedding persisted"
                 );
             }
+            // T2 entities — `INSERT OR IGNORE` so duplicates within
+            // the merged list (author + extracted) collapse on the
+            // composite primary key.
+            for (entity, kind) in &all_entities {
+                conn.execute(
+                    "INSERT OR IGNORE INTO note_entities (
+                        note_id, entity, kind, salience, created_at
+                    ) VALUES (?1, ?2, ?3, 1.0, ?4)",
+                    params![id, entity, kind, now],
+                )
+                .map_err(sqlite_err)?;
+            }
             bump_notes_version(&conn)?;
             Ok(())
         })();
@@ -1307,7 +1475,7 @@ impl NoteStore {
                 // non-private app_id. Fire AFTER commit so peers
                 // only see notes that landed locally.
                 if !private && scope == NoteScope::Global {
-                    if let Some(sink) = &self.propagation_sink {
+                    if let Some(sink) = self.propagation_sink.get() {
                         let event = NotePropagationEvent {
                             content_hash: content_hash.clone(),
                             note: ExportedNoteRow {
@@ -1324,14 +1492,20 @@ impl NoteStore {
                                 source: source.as_str().to_string(),
                                 supersedes: supersedes.map(str::to_string),
                                 payload_json: payload_json.map(str::to_string),
-                                origin_node_id: self.origin_node_id.clone(),
+                                origin_node_id: self.origin_node_id.get().cloned(),
                             },
                             embedding: embedding.map(|(vec, model_id)| ExportedNoteEmbedding {
                                 model_id,
                                 dim: vec.len() as i64,
                                 embedding: embedding_to_le_bytes(&vec),
                             }),
-                            entities: Vec::new(),
+                            entities: all_entities
+                                .iter()
+                                .map(|(e, k)| ExportedNoteEntity {
+                                    entity: e.clone(),
+                                    kind: k.clone(),
+                                })
+                                .collect(),
                             tombstone: false,
                             updated_at: now,
                         };
@@ -1385,7 +1559,7 @@ impl NoteStore {
         if !tombstone || private_flag != 0 || scope != "global" {
             return Ok(());
         }
-        if let Some(sink) = &self.propagation_sink {
+        if let Some(sink) = self.propagation_sink.get() {
             // Tombstone wire format: same content_hash + a stub
             // ExportedNoteRow + tombstone=true. Peers receiving
             // this hit the tombstone branch in ingest_remote_notes
@@ -1407,7 +1581,7 @@ impl NoteStore {
                     source: String::new(),
                     supersedes: None,
                     payload_json: None,
-                    origin_node_id: self.origin_node_id.clone(),
+                    origin_node_id: self.origin_node_id.get().cloned(),
                 },
                 embedding: None,
                 entities: Vec::new(),
@@ -1601,6 +1775,15 @@ impl NoteStore {
                             emb.dim,
                             ev.note.created_at
                         ],
+                    )
+                    .map_err(sqlite_err)?;
+                }
+                for ent in &ev.entities {
+                    conn.execute(
+                        "INSERT OR IGNORE INTO note_entities (
+                            note_id, entity, kind, salience, created_at
+                        ) VALUES (?1, ?2, ?3, 1.0, ?4)",
+                        params![ev.note.id, ent.entity, ent.kind, ev.note.created_at],
                     )
                     .map_err(sqlite_err)?;
                 }
@@ -1906,6 +2089,331 @@ impl NoteStore {
         for r in rows {
             out.push(r.map_err(sqlite_err)?);
         }
+        Ok(out)
+    }
+
+    /// One-shot backfill: compute T1 embeddings for every note
+    /// that doesn't have one yet, and T2 entities (author symbols
+    /// + GLiNER, if wired) for every note that doesn't have any.
+    /// Called once at daemon startup to retrofit pre-v9 notes
+    /// (and pre-T1/T2 wiring) so the existing corpus benefits
+    /// from semantic recall + related-notes lookup immediately
+    /// instead of only when notes get re-written.
+    ///
+    /// Best-effort: rows that error out (embed slot busy,
+    /// extractor failure) are skipped with a warn; the next
+    /// invocation picks them up. Returns counts so the caller
+    /// can log convergence progress.
+    ///
+    /// Bounded by `max_per_run` (0 → unlimited). The daemon
+    /// passes a generous cap so a fresh DB with 10k notes finishes
+    /// in one pass; tests pass a small cap.
+    pub async fn backfill_tier_artifacts(&self, max_per_run: usize) -> BackfillReport {
+        let mut report = BackfillReport::default();
+        if self.embed_fn.get().is_none() && self.gliner_fn.get().is_none() {
+            return report;
+        }
+
+        // Pull candidate ids in two passes (T1 + T2) so a missing
+        // embedding doesn't block an entity backfill on the same row.
+        let embed_targets: Vec<(String, String)> = {
+            let conn = self.conn.lock().await;
+            let cap = if max_per_run == 0 { i64::MAX } else { max_per_run as i64 };
+            let mut stmt = conn
+                .prepare(
+                    "SELECT n.id, n.content FROM notes n
+                       LEFT JOIN note_embeddings e ON e.note_id = n.id
+                      WHERE e.note_id IS NULL
+                        AND n.retired_at IS NULL
+                        AND n.tombstone = 0
+                   ORDER BY n.created_at DESC
+                      LIMIT ?",
+                )
+                .ok();
+            match stmt.as_mut() {
+                Some(s) => match s.query_map(params![cap], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+                }) {
+                    Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+                    Err(_) => Vec::new(),
+                },
+                None => Vec::new(),
+            }
+        };
+
+        if let Some(embed_fn) = self.embed_fn.get().cloned() {
+            let model_id = std::env::var("SOVEREIGN_EMBED_MODEL_ID")
+                .unwrap_or_else(|_| "qwen-embedding-0.6b".to_string());
+            for (note_id, content) in &embed_targets {
+                let vec = match embed_fn(content).await {
+                    Ok(v) => v,
+                    Err(e) => {
+                        tracing::debug!(
+                            target = "notes",
+                            note_id = %note_id,
+                            error = %e,
+                            "notes: backfill embed failed; will retry next run"
+                        );
+                        report.embed_skipped += 1;
+                        continue;
+                    }
+                };
+                let bytes = embedding_to_le_bytes(&vec);
+                let dim = vec.len() as i64;
+                let now = unix_now();
+                let conn = self.conn.lock().await;
+                match conn.execute(
+                    "INSERT OR IGNORE INTO note_embeddings (
+                        note_id, embedding, model_id, dim, created_at
+                    ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![note_id, &bytes[..], model_id, dim, now],
+                ) {
+                    Ok(_) => report.embeddings_backfilled += 1,
+                    Err(e) => {
+                        tracing::warn!(
+                            target = "notes",
+                            note_id = %note_id,
+                            error = %e,
+                            "notes: backfill embed INSERT failed"
+                        );
+                        report.embed_skipped += 1;
+                    }
+                }
+            }
+        }
+
+        // T2 backfill — symbols + files always; GLiNER content
+        // pass only when wired. Pulls every note that has zero
+        // entity rows; this lets read_notes_related find related
+        // by author-supplied symbols even when GLiNER is offline.
+        let entity_targets: Vec<(String, String, Vec<String>, Vec<String>)> = {
+            let conn = self.conn.lock().await;
+            let cap = if max_per_run == 0 { i64::MAX } else { max_per_run as i64 };
+            let mut stmt = conn
+                .prepare(
+                    "SELECT n.id, n.content, n.symbols, n.files FROM notes n
+                       LEFT JOIN note_entities ne ON ne.note_id = n.id
+                      WHERE ne.note_id IS NULL
+                        AND n.retired_at IS NULL
+                        AND n.tombstone = 0
+                   ORDER BY n.created_at DESC
+                      LIMIT ?",
+                )
+                .ok();
+            match stmt.as_mut() {
+                Some(s) => match s.query_map(params![cap], |r| {
+                    let symbols_json: String = r.get(2)?;
+                    let files_json: String = r.get(3)?;
+                    let symbols: Vec<String> =
+                        serde_json::from_str(&symbols_json).unwrap_or_default();
+                    let files: Vec<String> = serde_json::from_str(&files_json).unwrap_or_default();
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, symbols, files))
+                }) {
+                    Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+                    Err(_) => Vec::new(),
+                },
+                None => Vec::new(),
+            }
+        };
+
+        for (note_id, content, symbols, files) in &entity_targets {
+            let mut entities: Vec<(String, String)> = Vec::new();
+            for s in symbols {
+                entities.push((s.clone(), "Symbol".to_string()));
+            }
+            for f in files {
+                entities.push((f.clone(), "File".to_string()));
+            }
+            if let Some(extract) = self.gliner_fn.get().cloned() {
+                match extract(content).await {
+                    Ok(pairs) => entities.extend(pairs),
+                    Err(e) => {
+                        tracing::debug!(
+                            target = "notes",
+                            note_id = %note_id,
+                            error = %e,
+                            "notes: backfill gliner failed; using author-supplied symbols only"
+                        );
+                    }
+                }
+            }
+            if entities.is_empty() {
+                report.entity_skipped += 1;
+                continue;
+            }
+            let now = unix_now();
+            let conn = self.conn.lock().await;
+            for (entity, kind) in &entities {
+                if conn
+                    .execute(
+                        "INSERT OR IGNORE INTO note_entities (
+                            note_id, entity, kind, salience, created_at
+                        ) VALUES (?1, ?2, ?3, 1.0, ?4)",
+                        params![note_id, entity, kind, now],
+                    )
+                    .is_ok()
+                {
+                    report.entities_backfilled += 1;
+                }
+            }
+        }
+
+        tracing::info!(
+            target = "notes",
+            embeddings = report.embeddings_backfilled,
+            embed_skipped = report.embed_skipped,
+            entities = report.entities_backfilled,
+            entity_skipped = report.entity_skipped,
+            "notes: backfill_tier_artifacts complete"
+        );
+        report
+    }
+
+    /// T2 surface: find notes related to a symbol / file / entity
+    /// via the `note_entities` co-occurrence graph.
+    ///
+    /// Algorithm (v1, no PPR):
+    /// 1. Find every entity row whose `entity` equals `seed`
+    ///    (case-sensitive — symbols + files are exact-token,
+    ///    GLiNER-extracted entities preserve their surface form).
+    /// 2. The notes those entity rows belong to are the
+    ///    **seed notes**.
+    /// 3. Pull every entity from every seed note → the
+    ///    **seed entity bag**.
+    /// 4. Score every note by how many entities it shares with
+    ///    the seed bag (excluding the seed notes themselves).
+    /// 5. Return top-`k` by overlap count, tombstoned + retired
+    ///    notes filtered out.
+    ///
+    /// Empty result when `note_entities` is empty (no T2 writes
+    /// have landed yet) or no seed match — the caller falls back
+    /// to FTS5 / semantic blend.
+    ///
+    /// PPR-seeded ranking (per `PROGRESSIVE_ENRICHMENT.md` step 2)
+    /// is a v2 optimisation that swaps the overlap-count score
+    /// for a diffusion score over the bipartite entity↔note
+    /// graph. Same input + output shape, deeper signal.
+    pub async fn read_notes_related(
+        &self,
+        seed: &str,
+        k: usize,
+    ) -> Result<Vec<NoteRow>> {
+        let cap = k.min(100);
+        let conn = self.conn.lock().await;
+
+        // Step 1+2: seed note ids. Match the seed against the
+        // `entity` column directly. Symbols + files land as
+        // entities with kind="Symbol"/"File" on write so the
+        // index covers both axes from one column.
+        let seed_note_ids: Vec<String> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT DISTINCT note_id FROM note_entities WHERE entity = ?",
+                )
+                .map_err(sqlite_err)?;
+            let mapped = stmt
+                .query_map(params![seed], |r| r.get::<_, String>(0))
+                .map_err(sqlite_err)?;
+            let collected: rusqlite::Result<Vec<String>> = mapped.collect();
+            collected.map_err(sqlite_err)?
+        };
+        if seed_note_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Step 3: collect every entity from those seed notes.
+        let seed_entities: Vec<(String, String)> = {
+            let mut placeholders = String::new();
+            for i in 0..seed_note_ids.len() {
+                if i > 0 {
+                    placeholders.push(',');
+                }
+                placeholders.push('?');
+            }
+            let sql = format!(
+                "SELECT DISTINCT entity, kind FROM note_entities WHERE note_id IN ({placeholders})"
+            );
+            let mut stmt = conn.prepare(&sql).map_err(sqlite_err)?;
+            let bound: Vec<rusqlite::types::Value> = seed_note_ids
+                .iter()
+                .map(|s| rusqlite::types::Value::Text(s.clone()))
+                .collect();
+            let mapped = stmt
+                .query_map(rusqlite::params_from_iter(bound), |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+                })
+                .map_err(sqlite_err)?;
+            let collected: rusqlite::Result<Vec<(String, String)>> = mapped.collect();
+            collected.map_err(sqlite_err)?
+        };
+        if seed_entities.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Step 4+5: score every other note by entity overlap.
+        // SQL does the join + count + order in one statement.
+        // Build the `(entity, kind) IN (...)` tuple bag.
+        let mut entity_clause = String::from("(");
+        for i in 0..seed_entities.len() {
+            if i > 0 {
+                entity_clause.push(',');
+            }
+            entity_clause.push_str("(?, ?)");
+        }
+        entity_clause.push(')');
+        let mut seed_id_clause = String::new();
+        for i in 0..seed_note_ids.len() {
+            if i > 0 {
+                seed_id_clause.push(',');
+            }
+            seed_id_clause.push('?');
+        }
+        let sql = format!(
+            "WITH scored AS (
+               SELECT ne.note_id, COUNT(*) AS overlap
+                 FROM note_entities ne
+                WHERE (ne.entity, ne.kind) IN {entity_clause}
+                  AND ne.note_id NOT IN ({seed_id_clause})
+             GROUP BY ne.note_id
+             )
+             SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
+                    n.created_at, n.tool_name, n.retired_at, n.retired_by,
+                    n.scope, n.feature_id, n.promoted_from, n.related_entity,
+                    n.source, n.supersedes, n.payload_json,
+                    s.overlap
+               FROM notes n
+               JOIN scored s ON s.note_id = n.id
+              WHERE n.retired_at IS NULL AND n.tombstone = 0
+           ORDER BY s.overlap DESC, n.created_at DESC
+              LIMIT ?"
+        );
+        let mut bound: Vec<rusqlite::types::Value> = Vec::new();
+        for (e, k) in &seed_entities {
+            bound.push(rusqlite::types::Value::Text(e.clone()));
+            bound.push(rusqlite::types::Value::Text(k.clone()));
+        }
+        for nid in &seed_note_ids {
+            bound.push(rusqlite::types::Value::Text(nid.clone()));
+        }
+        bound.push(rusqlite::types::Value::Integer(cap as i64));
+        let mut stmt = conn.prepare(&sql).map_err(sqlite_err)?;
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(bound), |row| {
+                map_note_row(row)
+            })
+            .map_err(sqlite_err)?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(sqlite_err)?);
+        }
+        tracing::debug!(
+            target = "notes",
+            seed,
+            seed_notes = seed_note_ids.len(),
+            seed_entities = seed_entities.len(),
+            related = out.len(),
+            "notes: read_notes_related"
+        );
         Ok(out)
     }
 
@@ -2329,13 +2837,17 @@ impl NoteStore {
         // byte-identical-to-baseline invariant — even a microsecond
         // of cosine compute is forbidden here, because tests
         // assert byte equivalence.
-        if weight == 0.0 || semantic_query.is_none() || self.embed_fn.is_none() {
+        if weight == 0.0 || semantic_query.is_none() || self.embed_fn.get().is_none() {
             return self
                 .read_notes_scoped(query, symbols, files, kinds, limit, include_retired, scope_filter)
                 .await;
         }
         let sem_q = semantic_query.unwrap();
-        let embed_fn = self.embed_fn.clone().expect("checked above");
+        let embed_fn = self
+            .embed_fn
+            .get()
+            .cloned()
+            .expect("checked above");
 
         // Compute query embedding outside the lock; soft-fail on
         // error (drop to baseline).
@@ -4681,7 +5193,7 @@ mod tests {
         let v: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 9, "post-migration user_version should be 9");
+        assert!(v >= 9, "post-migration user_version should be ≥ 9, got {v}");
 
         // Pre-v9 row still there.
         let row: (String, String, i64, i64, Option<String>, Option<i64>, Option<String>) = conn
@@ -4748,7 +5260,7 @@ mod tests {
         assert_eq!(prop_idx, 1);
     }
 
-    /// Re-opening a v9 DB is a no-op: no errors, no double-fire,
+    /// Re-opening a v9+ DB is a no-op: no errors, no double-fire,
     /// backfill query matches zero rows on the second open.
     #[tokio::test]
     async fn v9_migration_is_idempotent() {
@@ -4762,7 +5274,7 @@ mod tests {
         let v: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 9);
+        assert!(v >= 9);
     }
 
     /// New notes written through `write_note_full` carry a
@@ -4922,6 +5434,189 @@ mod tests {
 
         let zero = vec![0.0_f32, 0.0, 0.0, 0.0];
         assert_eq!(cosine_sim(&zero, &v), 0.0);
+    }
+
+    // ── v10 migration + T2 (entity-graph) tests ────────────────────────
+
+    /// Author-supplied `symbols` and `files` land as
+    /// `note_entities` rows with kind="Symbol" / "File", even
+    /// without a GLiNER extractor wired. This keeps
+    /// `read_notes_related` useful from day 0.
+    #[tokio::test]
+    async fn write_note_persists_author_symbols_as_entities() {
+        let store = make_store().await;
+        let id = store
+            .write_note(
+                "decision",
+                "use BTreeMap",
+                vec!["BTreeMap".into(), "Ordering".into()],
+                vec!["src/lib.rs".into()],
+                "s1",
+            )
+            .await
+            .unwrap();
+        let conn = store.conn.lock().await;
+        let rows: Vec<(String, String)> = {
+            let mut stmt = conn
+                .prepare("SELECT entity, kind FROM note_entities WHERE note_id = ? ORDER BY kind, entity")
+                .unwrap();
+            let mapped = stmt
+                .query_map(params![id], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+                })
+                .unwrap();
+            mapped.collect::<rusqlite::Result<_>>().unwrap()
+        };
+        assert_eq!(
+            rows,
+            vec![
+                ("src/lib.rs".to_string(), "File".to_string()),
+                ("BTreeMap".to_string(), "Symbol".to_string()),
+                ("Ordering".to_string(), "Symbol".to_string()),
+            ]
+        );
+    }
+
+    /// `read_notes_related` finds notes that co-mention a symbol.
+    /// Seed entity exists in two notes; the third note shares an
+    /// adjacent entity ("BTreeMap" appears in n1 + n3, n2 shares
+    /// "Ordering" with n1) → result is ranked by entity-overlap.
+    #[tokio::test]
+    async fn read_notes_related_finds_co_mentioned_notes() {
+        let store = make_store().await;
+        // n1 mentions BTreeMap + Ordering
+        let _n1 = store
+            .write_note(
+                "decision",
+                "use BTreeMap; depends on Ordering",
+                vec!["BTreeMap".into(), "Ordering".into()],
+                vec![],
+                "s",
+            )
+            .await
+            .unwrap();
+        // n2 shares Ordering with n1
+        let n2 = store
+            .write_note(
+                "invariant",
+                "Ordering must be total",
+                vec!["Ordering".into()],
+                vec![],
+                "s",
+            )
+            .await
+            .unwrap();
+        // n3 shares BTreeMap with n1
+        let n3 = store
+            .write_note(
+                "todo",
+                "switch BTreeMap to HashMap",
+                vec!["BTreeMap".into()],
+                vec![],
+                "s",
+            )
+            .await
+            .unwrap();
+        // n4 unrelated
+        let _n4 = store
+            .write_note(
+                "decision",
+                "use channels for IPC",
+                vec!["mpsc".into()],
+                vec![],
+                "s",
+            )
+            .await
+            .unwrap();
+
+        let related = store.read_notes_related("BTreeMap", 10).await.unwrap();
+        let ids: Vec<&str> = related.iter().map(|n| n.id.as_str()).collect();
+        // n2 shares Ordering with the seed bag (n1+n3's entities)
+        // and IS the related note. n1 + n3 are seed notes
+        // themselves (directly mention BTreeMap) so the algorithm
+        // excludes them — "find OTHER notes connected to the seed,
+        // not the seed itself".
+        assert!(
+            ids.contains(&n2.as_str()),
+            "n2 (shares Ordering with seed-bag) must appear, got {ids:?}"
+        );
+        // n3 is a seed note; excluded.
+        assert!(
+            !ids.contains(&n3.as_str()),
+            "n3 is a seed note (directly mentions BTreeMap); must NOT appear, got {ids:?}"
+        );
+        // n4 must NOT appear (no overlap with seed bag).
+        let n4_in_results = related.iter().any(|n| n.content.contains("mpsc"));
+        assert!(!n4_in_results, "n4 must not appear in BTreeMap-related set");
+    }
+
+    /// Empty result when the seed isn't in any entity row — no
+    /// crash, no fallback to FTS5 (caller does that).
+    #[tokio::test]
+    async fn read_notes_related_returns_empty_for_unknown_seed() {
+        let store = make_store().await;
+        store
+            .write_note("decision", "alpha", vec![], vec![], "s")
+            .await
+            .unwrap();
+        let related = store.read_notes_related("DoesNotExist", 10).await.unwrap();
+        assert!(related.is_empty());
+    }
+
+    /// GLiNER extractor closure receives the note content and its
+    /// emitted `(entity, kind)` pairs land in `note_entities`
+    /// alongside the author-supplied symbols.
+    #[tokio::test]
+    async fn gliner_fn_extracts_and_persists_entities() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("notes.db");
+        // Mock GLiNER: any text containing "Anthropic" emits one
+        // Organization entity. Deterministic, no model load.
+        let gliner: GlinerFn = Arc::new(|text: &str| {
+            let t = text.to_string();
+            Box::pin(async move {
+                if t.contains("Anthropic") {
+                    Ok(vec![("Anthropic".to_string(), "Organization".to_string())])
+                } else {
+                    Ok(Vec::new())
+                }
+            })
+        });
+        let store = NoteStore::open(&db_path).unwrap().with_gliner_fn(gliner);
+        assert!(store.has_gliner_fn());
+
+        let id = store
+            .write_note(
+                "decision",
+                "switch primary model to Anthropic claude-opus-4-7",
+                vec!["primary_model".into()],
+                vec![],
+                "s",
+            )
+            .await
+            .unwrap();
+        let conn = store.conn.lock().await;
+        let rows: Vec<(String, String)> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT entity, kind FROM note_entities WHERE note_id = ? ORDER BY kind, entity",
+                )
+                .unwrap();
+            let mapped = stmt
+                .query_map(params![id], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+                })
+                .unwrap();
+            mapped.collect::<rusqlite::Result<_>>().unwrap()
+        };
+        assert!(
+            rows.contains(&("Anthropic".to_string(), "Organization".to_string())),
+            "GLiNER emission must land, got {rows:?}"
+        );
+        assert!(
+            rows.contains(&("primary_model".to_string(), "Symbol".to_string())),
+            "author-supplied symbol must land alongside, got {rows:?}"
+        );
     }
 
     /// `embedding_to_le_bytes` round-trips through

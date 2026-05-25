@@ -81,13 +81,17 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // 2026-05-06 with rows untouched since Apr 21.
     let flat_stores_dir = crate::util::dirs::sovereign_root();
 
-    // Zero-vector embed function. Descriptor() + every tool here does
-    // a pure SQL/FTS lookup — embeddings are consulted inside
-    // `code_search` when present, but the tool falls back to FTS on
-    // empty vectors so this default is safe.
-    let embed: EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
-    });
+    // Embed function: prefer the running daemon's embed slot so
+    // `tools call notes` benefits from T1 semantic blend on the
+    // CLI side just like the MCP-over-HTTP path does. Falls back
+    // to zero-vector when the daemon is unreachable — every tool
+    // here either ignores embeddings (pure SQL/FTS) or treats
+    // zero vectors as "no semantic signal" and returns FTS-only
+    // results, so the offline mode stays correct.
+    let daemon_url = std::env::var("SOVEREIGN_DAEMON_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:9741".to_string());
+    let embed: EmbedFn = build_daemon_embed_fn_or_zero(&daemon_url).await;
+    let notes_embed = build_daemon_notes_embed_fn_or_none(&daemon_url).await;
     let engine = Arc::new(CorpusEngine::new(data_dir.clone(), data_dir.clone(), embed));
 
     // Stores — open each; degrade to in-memory on error so the CLI
@@ -102,11 +106,27 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
             .or_else(|_| LintResultStore::open(std::path::Path::new(":memory:")))
             .map_err(|e| format!("lint results store: {e}"))?,
     );
-    let notes_store = Arc::new(
-        NoteStore::open(&sovereign_dir.join("notes.db"))
+    // NoteStore lives at `~/.sovereign/notes.db` — the same path
+    // the daemon writes to, NOT the project-local `<repo>/.sovereign/`.
+    // Notes are agent-global working memory (per ATOS), not
+    // per-repo state. Two physical DBs split the corpus + leave
+    // the CLI reading 15-note fragments while the daemon's
+    // canonical store holds the full 298+ history. Other CLI
+    // surfaces (audit_recover.rs, code_cmd.rs, reflect_cmd.rs)
+    // already use `home_dir().join(".sovereign").join("notes.db")`;
+    // registry.rs was the lone outlier. Aligning here unifies
+    // both CLI tool invocations + the daemon-side MCP path on a
+    // single physical SQLite file (WAL-mode concurrent-safe).
+    let notes_store = {
+        let inner = NoteStore::open(&flat_stores_dir.join("notes.db"))
             .or_else(|_| NoteStore::open(std::path::Path::new(":memory:")))
-            .map_err(|e| format!("notes store: {e}"))?,
-    );
+            .map_err(|e| format!("notes store: {e}"))?;
+        let inner = match notes_embed {
+            Some(f) => inner.with_embed_fn(f),
+            None => inner,
+        };
+        Arc::new(inner)
+    };
     let features_store = Arc::new(
         FeatureStore::open(&sovereign_dir.join("features.db"))
             .or_else(|_| FeatureStore::open(std::path::Path::new(":memory:")))
@@ -338,6 +358,125 @@ fn find_git_root(start: &std::path::Path) -> Option<PathBuf> {
     Some(PathBuf::from(
         String::from_utf8_lossy(&out.stdout).trim(),
     ))
+}
+
+/// Build a `corpus_engine::EmbedFn` backed by the running daemon's
+/// `/v1/embeddings`. Probes once; if the daemon's offline at CLI
+/// startup, returns the zero-vector fallback so SQL/FTS tools
+/// stay correct and embedding-sensitive tools degrade to FTS-only
+/// behavior. Per call, the closure retries (no probe latch).
+async fn build_daemon_embed_fn_or_zero(daemon_url: &str) -> EmbedFn {
+    let reachable = probe_daemon(daemon_url).await;
+    if !reachable {
+        return Arc::new(|_text: &str| {
+            Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
+        });
+    }
+    let url = format!("{}/v1/embeddings", daemon_url);
+    let model = "qwen-embedding-0.6b".to_string();
+    Arc::new(move |text: &str| {
+        let url = url.clone();
+        let model = model.clone();
+        let input = text.to_string();
+        Box::pin(async move {
+            let resp = reqwest::Client::new()
+                .post(&url)
+                .json(&serde_json::json!({ "model": model, "input": input }))
+                .timeout(std::time::Duration::from_secs(10))
+                .send()
+                .await
+                .map_err(|e| corpus_engine::Error::Embed(format!("daemon: {e}")))?;
+            if !resp.status().is_success() {
+                return Err(corpus_engine::Error::Embed(format!(
+                    "daemon HTTP {}",
+                    resp.status()
+                )));
+            }
+            let body: serde_json::Value = resp.json().await.map_err(|e| {
+                corpus_engine::Error::Embed(format!("daemon parse: {e}"))
+            })?;
+            body.get("data")
+                .and_then(|v| v.get(0))
+                .and_then(|v| v.get("embedding"))
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_f64().map(|f| f as f32))
+                        .collect::<Vec<f32>>()
+                })
+                .ok_or_else(|| {
+                    corpus_engine::Error::Embed("daemon: no embedding in response".into())
+                })
+        })
+    })
+}
+
+/// Build a `corpus_engine_notes::EmbedFn` adapter for the daemon's
+/// embed slot. Returns `None` when the daemon is offline so the
+/// NoteStore stays in baseline-FTS5 mode rather than burning
+/// per-write embed budget on a closure that always errors.
+async fn build_daemon_notes_embed_fn_or_none(
+    daemon_url: &str,
+) -> Option<corpus_engine_notes::EmbedFn> {
+    if !probe_daemon(daemon_url).await {
+        return None;
+    }
+    let url = format!("{}/v1/embeddings", daemon_url);
+    let model = "qwen-embedding-0.6b".to_string();
+    Some(Arc::new(move |text: &str| {
+        let url = url.clone();
+        let model = model.clone();
+        let input = text.to_string();
+        Box::pin(async move {
+            let resp = reqwest::Client::new()
+                .post(&url)
+                .json(&serde_json::json!({ "model": model, "input": input }))
+                .timeout(std::time::Duration::from_secs(10))
+                .send()
+                .await
+                .map_err(|e| {
+                    corpus_engine_notes::Error::Io(std::io::Error::other(format!(
+                        "daemon notes embed: {e}"
+                    )))
+                })?;
+            if !resp.status().is_success() {
+                return Err(corpus_engine_notes::Error::Io(std::io::Error::other(
+                    format!("daemon notes embed HTTP {}", resp.status()),
+                )));
+            }
+            let body: serde_json::Value = resp.json().await.map_err(|e| {
+                corpus_engine_notes::Error::Io(std::io::Error::other(format!(
+                    "daemon notes embed parse: {e}"
+                )))
+            })?;
+            body.get("data")
+                .and_then(|v| v.get(0))
+                .and_then(|v| v.get("embedding"))
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_f64().map(|f| f as f32))
+                        .collect::<Vec<f32>>()
+                })
+                .ok_or_else(|| {
+                    corpus_engine_notes::Error::Io(std::io::Error::other(
+                        "daemon notes embed: no embedding in response",
+                    ))
+                })
+        })
+    }))
+}
+
+async fn probe_daemon(daemon_url: &str) -> bool {
+    let url = format!("{}/v1/models", daemon_url);
+    matches!(
+        reqwest::Client::new()
+            .get(&url)
+            .timeout(std::time::Duration::from_secs(2))
+            .send()
+            .await,
+        Ok(r) if r.status().is_success()
+    )
 }
 
 /// Resolve the current branch for `repo_root`, or `None` if not a git

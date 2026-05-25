@@ -1,0 +1,89 @@
+# Query fixture — the 8 audit queries from NOTES_TIERED.md.
+#
+# Each query carries:
+#   - `expected_hits`: note ids the bench scores against (true
+#     positives). Hit = the note is in the top-`k` returned by
+#     the retrieval path under test.
+#   - `audit_baseline`: how many of `expected_hits` the FTS5-only
+#     path returned on 2026-05-25. The bench reproduces this
+#     baseline as a regression guard and measures the lift T1
+#     provides.
+#   - `failure_class`: which FTS5 weakness this query exercises.
+#     Reported in the brief to track which failure class T1 closes
+#     vs leaves open.
+
+[bank]
+name = "notes-tiered-queries-v0"
+target_k = 5
+
+# ── synonym / paraphrase class ─────────────────────────────────────
+
+[[queries]]
+id = "q1_eos_bypass"
+query = "EOS bypass"
+expected_hits = ["n1"]
+audit_baseline = 0
+failure_class = "paraphrase"
+notes = "FTS5 sees the literal 'bypass' on the pointer note (n2) but misses n1 (force_continue + empty-bytes). T1 must reach n1."
+
+[[queries]]
+id = "q2_wiki_dedup_paraphrase"
+query = "why is dedup off for wikipedia"
+expected_hits = ["n3", "n4"]
+audit_baseline = 0
+failure_class = "synonym"
+notes = "FTS5 misses because the notes use 'wiki', the query says 'wikipedia'."
+
+[[queries]]
+id = "q3_wiki_regression"
+query = "wiki dedup regression"
+expected_hits = ["n3"]
+audit_baseline = 0
+failure_class = "stem"
+notes = "FTS5 has no stemming — 'regression' vs 'regresses' is a miss."
+
+[[queries]]
+id = "q4_empty_bytes_eos"
+query = "empty bytes token EOS bypass"
+expected_hits = ["n1"]
+audit_baseline = 0
+failure_class = "tokenization"
+notes = "FTS5 fails because 'empty-bytes' is hyphenated in the note, 'empty bytes' in the query."
+
+# ── stem class ─────────────────────────────────────────────────────
+
+[[queries]]
+id = "q5_regress"
+query = "regress"
+expected_hits = ["n3", "n5"]
+audit_baseline = 1
+failure_class = "stem"
+notes = "FTS5 only finds 'regresses' literally; T1 should pull both via cosine over the variant."
+
+[[queries]]
+id = "q6_tokenize"
+query = "tokenize"
+expected_hits = ["n6", "n7"]
+audit_baseline = 0
+failure_class = "stem"
+notes = "FTS5 returns 0 for 'tokenize'; both target notes say 'tokenizer'."
+
+# ── verbatim class (partial baseline) ──────────────────────────────
+
+[[queries]]
+id = "q7_speculative_decoding"
+query = "speculative decoding"
+expected_hits = ["n8", "n9", "n10", "n11", "n12"]
+audit_baseline = 2
+failure_class = "paraphrase"
+notes = "FTS5 hits the 2 that say 'speculative decoding' verbatim; T1 should also reach n10 (draft-model), n11 (MTP), n12 (draft-model)."
+
+# ── exact-token class (both should hit) ────────────────────────────
+
+[[queries]]
+id = "q8_reranker"
+query = "reranker"
+expected_hits = ["n13", "n14"]
+audit_baseline = 2
+failure_class = "exact_token"
+notes = "Sanity-check that T1 doesn't regress the queries FTS5 already gets right."

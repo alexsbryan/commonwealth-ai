@@ -94,6 +94,23 @@ impl Tool for ReadNotesTool {
                         "type": "string",
                         "description": "Feature id to pair with scope=['feature']. Notes \
                                         in other features are excluded."
+                    },
+                    "related_to": {
+                        "type": "string",
+                        "description": "When set, ignore query/symbols/files and return \
+                                        notes related to this symbol/file/entity via the \
+                                        T2 entity-graph (co-occurrence ranking). Use this \
+                                        to discover decisions, invariants, or attempts \
+                                        thematically connected to a symbol even when the \
+                                        symbol isn't mentioned in their content."
+                    },
+                    "semantic": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "When `query` is set and the daemon's embed slot is \
+                                        wired, blend BM25 with cosine similarity over the \
+                                        note embeddings (T1 retrieval). Default on; set \
+                                        false to force FTS5-only behavior."
                     }
                 },
                 "required": []
@@ -110,6 +127,10 @@ impl Tool for ReadNotesTool {
                 ToolExample {
                     situation: "You want to check what the session_reflection tool has flagged about a tool you're about to use heavily — surface known blind spots before relying on it.".into(),
                     call: serde_json::json!({ "kinds": ["reflection"], "query": "blast_radius" }),
+                },
+                ToolExample {
+                    situation: "You're about to modify a symbol and want every note thematically connected to it — even notes whose content doesn't literally mention the symbol. Uses the T2 entity-graph co-occurrence path; surfaces invariants, decisions, and attempts on the same conceptual axis.".into(),
+                    call: serde_json::json!({ "related_to": "UrlAllowlistConstraint" }),
                 },
             ],
             effect: Effect::Read,
@@ -199,20 +220,84 @@ impl Tool for ReadNotesTool {
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string());
 
-        let notes = if scopes.is_empty() && feature_id.is_none() {
-            self.store
-                .read_notes(query, &symbols, &files, &kinds, limit, false)
+        // T2 path: when `related_to` is set, surface notes related
+        // to that symbol/file/entity via the entity-graph
+        // co-occurrence ranking. Other filters (kind, scope, file)
+        // don't apply — the path is "find notes connected to X",
+        // not "find notes matching X under filters".
+        if let Some(seed) = params
+            .get("related_to")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+        {
+            let related = self
+                .store
+                .read_notes_related(seed, limit)
                 .await
-        } else {
-            let filter = ScopeFilter { scopes, feature_id };
-            self.store
-                .read_notes_scoped(query, &symbols, &files, &kinds, limit, false, &filter)
-                .await
+                .map_err(|e| Error::Tool {
+                    tool_id: "notes".to_string(),
+                    message: e.to_string(),
+                })?;
+            let total = related.len();
+            let note_values: Vec<serde_json::Value> = related
+                .into_iter()
+                .map(|n| {
+                    json!({
+                        "id": n.id,
+                        "kind": n.kind,
+                        "content": n.content,
+                        "symbols": n.symbols,
+                        "files": n.files,
+                        "session_id": n.session_id,
+                        "created_at": n.created_at,
+                        "scope": n.scope,
+                        "feature_id": n.feature_id,
+                    })
+                })
+                .collect();
+            return Ok(StepOutput::Json(json!({
+                "notes": note_values,
+                "total": total,
+                "path": "related",
+                "seed": seed,
+            })));
         }
-        .map_err(|e| Error::Tool {
-            tool_id: "notes".to_string(),
-            message: e.to_string(),
-        })?;
+
+        // T1 path: when query is set + semantic on (default), use
+        // `read_notes_scoped_semantic`. It auto-falls-back to
+        // FTS5-only when embed_fn isn't wired (so callers don't
+        // have to know whether T1 is live) and is byte-identical
+        // to the baseline when `SOVEREIGN_NOTES_EMBED_WEIGHT=0`.
+        let semantic_enabled = params
+            .get("semantic")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let semantic_query = if semantic_enabled && query.map(|q| !q.is_empty()).unwrap_or(false) {
+            query
+        } else {
+            None
+        };
+        let filter = ScopeFilter {
+            scopes,
+            feature_id,
+        };
+        let notes = self
+            .store
+            .read_notes_scoped_semantic(
+                query,
+                &symbols,
+                &files,
+                &kinds,
+                limit,
+                false,
+                &filter,
+                semantic_query,
+            )
+            .await
+            .map_err(|e| Error::Tool {
+                tool_id: "notes".to_string(),
+                message: e.to_string(),
+            })?;
 
         let total = notes.len();
         let note_values: Vec<serde_json::Value> = notes
