@@ -270,7 +270,34 @@ impl EmbedRouter {
         let second_sim = ranked.get(1).map(|(_, s, _, _)| *s).unwrap_or(0.0);
         let margin = top_sim - second_sim;
 
-        if top_sim < self.min_top_sim || margin < self.min_margin {
+        // Glassbox: the routing decision is the *first level* of the
+        // whole stack — if intent classification is wrong, every
+        // downstream choice (retrieval, expansion, synthesis) is built
+        // on sand. Emit per-query whether the embed router was confident
+        // enough to OWN this route (`decided=true`, short-circuiting the
+        // heuristic + LLM cascade) or fell through (`decided=false`), with
+        // the similarity/margin vs thresholds that drove it. On the
+        // `router.embed` target, which the default daemon/eval filter
+        // does NOT enable — so this is opt-in (`router.embed=info`) and
+        // free in normal operation. Pairs with the second-best intent so
+        // near-miss misroutes (the margin-just-cleared case) are visible.
+        let second_intent = ranked.get(1).map(|(i, _, _, _)| format!("{i:?}"));
+        let decided = top_sim >= self.min_top_sim && margin >= self.min_margin;
+        tracing::info!(
+            target: "router.embed",
+            event = "classify",
+            top_intent = ?top_intent,
+            top_sim,
+            second_intent = ?second_intent,
+            second_sim,
+            margin,
+            min_top_sim = self.min_top_sim,
+            min_margin = self.min_margin,
+            decided,
+            "router.embed: classify decision"
+        );
+
+        if !decided {
             return None;
         }
         Some(EmbedClassification {

@@ -194,13 +194,16 @@ pub enum SafeExtractError {
 /// Scope is intentionally narrow — only used to suppress
 /// `pdf-extract`'s in-process `println!` noise. Tracing writes to
 /// stderr (daemon.err), so structured logs are unaffected.
+#[cfg(unix)]
 struct StdoutSilencer {
     saved_fd: libc::c_int,
     _guard: std::sync::MutexGuard<'static, ()>,
 }
 
+#[cfg(unix)]
 static STDOUT_SILENCE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+#[cfg(unix)]
 impl StdoutSilencer {
     fn new() -> std::io::Result<Self> {
         // Poisoned mutex is harmless — the previous holder only held
@@ -236,6 +239,7 @@ impl StdoutSilencer {
     }
 }
 
+#[cfg(unix)]
 impl Drop for StdoutSilencer {
     fn drop(&mut self) {
         // Restore stdout. Failures here are unrecoverable but
@@ -247,6 +251,21 @@ impl Drop for StdoutSilencer {
             libc::dup2(self.saved_fd, 1);
             libc::close(self.saved_fd);
         }
+    }
+}
+
+/// No-op on non-Unix targets. The silencer above redirects fd 1 to
+/// `/dev/null` via `libc::dup2`, which has no portable Windows analogue
+/// (`std::os::fd` doesn't exist there). pdf-extract's `println!` spew is
+/// cosmetic, so on Windows we simply don't silence it rather than port the
+/// Win32 `SetStdHandle` dance for a non-load-bearing nicety.
+#[cfg(not(unix))]
+struct StdoutSilencer;
+
+#[cfg(not(unix))]
+impl StdoutSilencer {
+    fn new() -> std::io::Result<Self> {
+        Ok(StdoutSilencer)
     }
 }
 

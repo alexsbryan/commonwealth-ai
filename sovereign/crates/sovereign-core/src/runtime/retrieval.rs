@@ -1344,6 +1344,55 @@ impl Runtime {
                 }
             }
         }
+
+        // Merged-pool diversity (glassbox, OPT-IN). After fan-out + merge
+        // this is the candidate set synthesis will see. The regressed
+        // bench title-coverage metric scores against the DISTINCT source
+        // titles present here, so logging the merged distinct-title count
+        // + the titles makes "did the expected articles survive the
+        // merge?" answerable from logs alone. Pairs with the per-corpus
+        // `rerank_diversity` event emitted inside search_with_rerank.
+        //
+        // Gated on the `retrieval_audit` target: when off (production
+        // default) we pay one atomic level-check and skip the dedup pass
+        // + title clones entirely. The work only runs under
+        // `retrieval_audit=info`.
+        if tracing::enabled!(target: "retrieval_audit", tracing::Level::INFO) {
+            use std::collections::{HashMap, HashSet};
+            let mut seen = HashSet::new();
+            let mut distinct_titles: Vec<String> = Vec::new();
+            let mut by_corpus: HashMap<String, usize> = HashMap::new();
+            for c in &chunks {
+                *by_corpus.entry(c.corpus_id.clone()).or_insert(0) += 1;
+                let t = c.title.clone().unwrap_or_default();
+                if seen.insert(t.clone()) {
+                    distinct_titles.push(t);
+                }
+            }
+            // Chunk counts per corpus, busiest first — the at-a-glance
+            // cross-corpus-contamination signal (e.g. a wikipedia-target
+            // turn whose pool is mostly `sep` chunks). This fan-out is
+            // the shared retrieval entry point, so this single event
+            // covers every handler — KnowledgeQuery, ComparisonQuery,
+            // AND the DeepQuery/Simple path that has no turn_summary.
+            let mut corpus_pairs: Vec<(String, usize)> = by_corpus.into_iter().collect();
+            corpus_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+            // Truncated query so events correlate to the bench question
+            // without threading an id through every call site.
+            let query_preview: String = query_text.chars().take(80).collect();
+            tracing::info!(
+                target: "retrieval_audit",
+                event = "merged_pool",
+                label = label,
+                query = %query_preview,
+                merged_chunks = chunks.len(),
+                distinct_titles = distinct_titles.len(),
+                corpora_searched = eligible.len(),
+                by_corpus = ?corpus_pairs,
+                titles = ?distinct_titles,
+                "retrieval_audit: merged_pool"
+            );
+        }
         chunks
     }
     /// Search a *specific subset* of installed corpora — the
