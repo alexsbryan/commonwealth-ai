@@ -89,10 +89,6 @@ query = "Summarize Husserl's intentionality thesis."
 
 [[example]]
 intent = "knowledge_query"
-query = "What is the doctrine of double effect?"
-
-[[example]]
-intent = "knowledge_query"
 query = "Who attended the Yalta Conference?"
 
 [[example]]
@@ -101,15 +97,7 @@ query = "What was the Manhattan Project?"
 
 [[example]]
 intent = "knowledge_query"
-query = "Define the no-miracles argument for scientific realism."
-
-[[example]]
-intent = "knowledge_query"
 query = "Explain Aristotle's hylomorphism."
-
-[[example]]
-intent = "knowledge_query"
-query = "What is Berlin's distinction between positive and negative liberty?"
 
 [[example]]
 intent = "knowledge_query"
@@ -261,7 +249,7 @@ query = "Compare Husserl and Heidegger on intentionality."
 
 [[example]]
 intent = "comparison_query"
-query = "Differentiate situationism from virtue ethics."
+query = "Compare the act and rule formulations of utilitarianism."
 
 [[example]]
 intent = "comparison_query"
