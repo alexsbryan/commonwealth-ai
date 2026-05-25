@@ -312,7 +312,7 @@
   .doc-header-title {
     font-size: 16px;
     font-weight: 600;
-    font-family: Georgia, var(--font-serif, serif);
+    font-family: var(--font-serif);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -376,7 +376,7 @@
     font-size: 14px;
     line-height: 1.7;
     color: var(--text-primary);
-    font-family: Georgia, var(--font-serif, serif);
+    font-family: var(--font-serif);
   }
   .source-panel {
     margin-top: 10px;

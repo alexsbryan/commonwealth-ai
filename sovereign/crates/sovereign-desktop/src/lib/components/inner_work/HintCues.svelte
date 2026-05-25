@@ -115,7 +115,7 @@
   .chord {
     display: inline-block;
     padding: 1px 6px;
-    font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+    font-family: var(--inner-font-mono);
     font-size: 0.85em;
     font-style: normal;
     color: var(--inner-ink);

@@ -78,6 +78,17 @@
   /* IBM Plex Mono: true family member of Plex Sans, shares construction logic.   */
   --font-mono:  'IBM Plex Mono', ui-monospace, 'Cascadia Code', monospace;
 
+  /* ── Inner Work surface — intentional deviation from the global
+     stack. Inner Work is a calmer, more spacious aesthetic
+     (see InnerWorkSurface.svelte's `--inner-*` tokens) that prefers
+     a humanist geometric sans + a typewriter-grade mono. Outfit and
+     JetBrains Mono sit at the front of the stack so a future
+     fontsource install picks them up automatically; today both fall
+     through to system-ui / SF Mono, which is the look the surface
+     ships with. Token-form keeps the override in one place. ──     */
+  --inner-font-sans: 'Outfit', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --inner-font-mono: 'JetBrains Mono', 'SF Mono', Menlo, ui-monospace, monospace;
+
   /* ── Amber — insight capture / clip mark ── */
   --amber:            #BA7517;
   --amber-flash:      rgba(186, 117, 23, 0.12);

@@ -1368,7 +1368,7 @@
     letter-spacing: 0.04em;
   }
   .relay-list .relay-frag {
-    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-family: var(--font-mono);
     font-size: 0.78rem;
     color: var(--text-muted);
     background: var(--bg-input);
@@ -1447,7 +1447,7 @@
     background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-family: var(--font-mono);
     font-size: 0.78rem;
     overflow-x: auto;
     white-space: nowrap;

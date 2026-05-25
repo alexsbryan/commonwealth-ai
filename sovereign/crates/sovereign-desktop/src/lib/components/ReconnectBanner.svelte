@@ -204,7 +204,7 @@
   }
 
   .report-info code {
-    font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+    font-family: var(--font-mono);
     background: oklch(94% 0.008 250);
     padding: 1px 5px;
     border-radius: 3px;
