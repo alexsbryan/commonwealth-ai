@@ -128,7 +128,14 @@ jobs:
             libfuse2 \
             tesseract-ocr \
             mold \
+            protobuf-compiler libprotobuf-dev \
             libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
+          # protobuf-compiler (protoc) + libprotobuf-dev (the well-known
+          # protos, e.g. google/protobuf/empty.proto) are required by
+          # lance-encoding's prost-build step. NOT preinstalled on the
+          # current ubuntu-22.04 runner image (GitHub slimmed it) — the
+          # build dies in lance-encoding with "Could not find `protoc`"
+          # without them.
           # `mold` is required by .cargo/config.toml's
           # x86_64-unknown-linux-gnu rustflags. Without it, every
           # crate's link step errors with
@@ -151,9 +158,9 @@ jobs:
           # formula provides it.
           #
           # protobuf: lance-encoding's build script runs prost-build, which
-          # shells out to `protoc`. The ubuntu-22.04 runner ships
-          # protobuf-compiler preinstalled; the macOS runners do NOT — without
-          # this the build dies in lance-encoding with "Could not find `protoc`".
+          # shells out to `protoc`. None of the runners ship it (the Linux
+          # job installs protobuf-compiler explicitly via apt) — without this
+          # the build dies in lance-encoding with "Could not find `protoc`".
           #
           # cmake is already preinstalled on the macOS runners (llama-cpp-sys-4
           # needs it to compile llama.cpp's Metal backend); add `cmake` to this
@@ -177,7 +184,8 @@ jobs:
           # protoc distribution (binary + include/google/protobuf well-known
           # protos) and drops a shim in C:\ProgramData\chocolatey\bin, which is
           # already on PATH — so the later build step resolves it with no extra
-          # PATH wiring. (ubuntu-22.04 has protobuf-compiler preinstalled.)
+          # PATH wiring. (Linux installs protobuf-compiler + libprotobuf-dev
+          # via apt; macOS gets protobuf via brew.)
           choco install protoc -y --no-progress
 
       - name: Stage Tesseract (macOS)
