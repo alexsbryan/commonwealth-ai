@@ -1,6 +1,12 @@
 # Open Inference Capabilities Protocol (OICP)
 
-**Version:** 0.1.0-draft **Status:** Draft **License:** CC0 (public domain dedication)
+**Version:** 0.1.0-draft **Status:** Canonical wire spec —
+evolves in-place. **License:** CC0 (public domain dedication).
+
+**Lifecycle:** Wire specs don't ship-and-retire — they version
+in-place. Increment `Version` on every breaking change; coordinate
+with downstream consumers per `commonwealth/docs/oicp-v0.3.md`.
+This spec stays in `docs/specs/` indefinitely.
 
 ---
 

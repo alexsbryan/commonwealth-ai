@@ -16,7 +16,7 @@ The "look it up" docs — flag tables, tool inventories, schema specs.
 
 - [`CLI_REFERENCE.md`](CLI_REFERENCE.md) — every `sovereign-cli` subcommand, flags, deprecations
 - [`CORRECTNESS_TOOLING.md`](CORRECTNESS_TOOLING.md) — `eval`, `voice eval`, `enrich atlas-eval`, `reading-diag` — pick the right tool
-- [`specs/oicp.md`](specs/oicp.md) — OICP v0.1.0 protocol spec (capability vocabulary, proficiency levels)
+- [`specs/`](specs/README.md) — in-flight design proposals, reference patterns, and canonical wire specs (incl. OICP v0.1.0 protocol)
 
 ## Feature deep-dives
 
@@ -38,27 +38,32 @@ The charter / phases / runner stack lives across four docs. Start with `ATOS.md`
 - [`ATOS_RUNNER.md`](ATOS_RUNNER.md) — the ralph-wiggum loop: spawn driver, judge against charter, repeat
 - [`ATOS_RUNNER_SMOKE.md`](ATOS_RUNNER_SMOKE.md) — smoke-test runbook for the runner against `oicp-types`
 
-## Demos & runbooks
+## Runbooks
 
-End-to-end walkthroughs and deployment patterns.
+End-to-end operator workflows + deployment patterns.
 
-- [`CODE_INTEL_DEMO.md`](CODE_INTEL_DEMO.md) — Panicked Engineer Demo: 64GB Mac, 400K-line monorepo, three P0s
-- [`CLINICAL_TELEMED_DEMO.md`](CLINICAL_TELEMED_DEMO.md) — Clinical Telemed Demo: NIDA R34 grant planning
 - [`TOOLBOX_SETUP.md`](TOOLBOX_SETUP.md) — AMD Strix Halo via toolbox containers (Fedora/Ubuntu, ROCm/Vulkan)
 - [`CLOUD_PEER_DEPLOY.md`](CLOUD_PEER_DEPLOY.md) — spin up a transient cloud GPU as a sovereign-mesh worker
 - [`BENCHMARKING.md`](BENCHMARKING.md) — embed-decode throughput across Metal / Vulkan / ROCm
 
+Prospect-facing demo walkthroughs (different audience, dated, not
+maintained) live under [`../handoff/`](../handoff/README.md).
+
 ## Experiments
 
-Opt-in / gated work. Code is in-tree but **not on by default** — read the status banner.
-
-- [`RERANK_EXPERIMENT.md`](RERANK_EXPERIMENT.md) — cross-encoder reranker; opt-in via env vars; defaults preserve baseline
+Historical experiment writeups have been moved to
+[`archive/`](archive/README.md); the durable lessons live in the
+NoteStore (`sovereign notes --query <topic>`). The reranker code
+stays in-tree but is opt-in via env vars; the writeup is at
+[`archive/RERANK_EXPERIMENT.md`](archive/RERANK_EXPERIMENT.md).
 
 ## Internal / contributor
 
-Implementation conventions, not user-facing.
+Implementation conventions live next to the crate that owns them as
+`AGENTS.md` (mirroring root `AGENTS.md`). Pair with
+[`../ARCH_PRINCIPLES.md`](../ARCH_PRINCIPLES.md).
 
-- [`frontend-state.md`](frontend-state.md) — Svelte 5 + runes + XState state-management tiers
+- [`../crates/sovereign-desktop/AGENTS.md`](../crates/sovereign-desktop/AGENTS.md) — Svelte 5 + runes + XState state-management tiers, immutability rule, Tauri-event discipline
 
 ## Examples
 

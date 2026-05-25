@@ -1,8 +1,18 @@
 # Spec: Tiered retrieval port for conversation corpora
 
-**Status:** scoped, not implemented. Next-session pickup.
-**Effort estimate:** ~600-900 lines across `corpus-engine/`, `sovereign-store/`, `sovereign-tools/`, `sovereign-core/`; one new bench harness extension; one new SQLite migration.
-**Prerequisites:** read `sovereign/docs/TIERED_RETRIEVAL.md` (Phase A architecture this is the Phase B port of); read `sovereign/docs/specs/CLUSTER_SCORE_BLEND.md` for the retrieval-side blend the briefing eventually feeds.
+**Status:** Shipped 2026-05-23.
+**Lifecycle:** Spec preserved for design-rationale forensics (why
+the new `conversation_skeleton` sidecar table instead of extending
+`document_assets`; why the conversation-seal trigger over an
+ingest-completion hook). Live runtime surface in
+[`../TIERED_RETRIEVAL.md`](../TIERED_RETRIEVAL.md) and
+[`TIERED_RETRIEVAL_PHASE_B.md`](TIERED_RETRIEVAL_PHASE_B.md) port
+matrix.
+
+**Prerequisites for reading:** [`../TIERED_RETRIEVAL.md`](../TIERED_RETRIEVAL.md)
+(Phase A architecture this is the Phase B port of);
+[`CLUSTER_SCORE_BLEND.md`](CLUSTER_SCORE_BLEND.md) for the
+retrieval-side blend the briefing eventually feeds.
 
 ## Why this exists
 

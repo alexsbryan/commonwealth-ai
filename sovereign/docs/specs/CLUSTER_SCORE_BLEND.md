@@ -1,8 +1,15 @@
 # Spec: RAPTOR cluster-score as a retrieval blend term
 
-**Status:** scoped, not implemented. Next-agent pickup welcomed.
-**Effort estimate:** ~50-100 lines + unit tests + one bench-validation cycle.
-**Prerequisites:** read `sovereign/docs/TIERED_RETRIEVAL.md` first for the wider architecture; read `sovereign/docs/RERANK_EXPERIMENT.md` for the structural pattern this proposal is descended from.
+**Status:** Shipped 2026-05-22.
+**Lifecycle:** Spec preserved for design-rationale forensics
+(failure-mode analysis + bench plan + choice-vs-alternatives); the
+runtime surface is described in
+[`../TIERED_RETRIEVAL.md`](../TIERED_RETRIEVAL.md) under
+"Cluster-score blend (optional T3 re-ranking)."
+
+**Prerequisites for reading:** [`../TIERED_RETRIEVAL.md`](../TIERED_RETRIEVAL.md)
+for the wider architecture; [`../archive/RERANK_EXPERIMENT.md`](../archive/RERANK_EXPERIMENT.md)
+for the structural pattern this proposal descends from.
 
 ## Why this exists
 

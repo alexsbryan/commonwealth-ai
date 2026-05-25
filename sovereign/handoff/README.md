@@ -1,0 +1,35 @@
+# sovereign/handoff/
+
+External-audience material: product walkthroughs, prospect demos,
+deployment briefs you hand to someone outside the contributor circle.
+
+Different from `sovereign/docs/`. Docs are for people building the
+system. Handoff is for people *seeing* it.
+
+## What lives here
+
+- [`CLINICAL_TELEMED_DEMO.md`](CLINICAL_TELEMED_DEMO.md) — NIDA R34
+  grant planning walkthrough; clinical telemedicine context.
+- [`CODE_INTEL_DEMO.md`](CODE_INTEL_DEMO.md) — Panicked Engineer
+  Demo: 64GB Mac, 400K-line monorepo, three P0s.
+
+## When to add a file here
+
+- A deployment brief for one identified peer / cohort
+  (e.g., "what to send a lab onboarding next week").
+- An end-to-end demo script tied to a specific use case the user
+  shows on a call.
+- A pitch artifact a prospect reads outside the repo.
+
+## When NOT
+
+- Operator runbooks → `sovereign/docs/` (e.g. `TOOLBOX_SETUP.md`).
+- Feature deep-dives → `sovereign/docs/`.
+- Architecture or principle docs → top-level `sovereign/`.
+
+## Cadence
+
+Handoff docs are one-shots. Each carries a date stamp; they age
+out, not get maintained. If a demo would be evergreen, write the
+underlying feature doc in `sovereign/docs/` and have the demo
+reference it.

@@ -1,8 +1,19 @@
 # Spec: Typed-Extension LLM Pass over RAPTOR Cluster Summaries
 
-**Status:** design — not implemented. Targets v2 of the vault tiered port (`project_vault_tiered_port_2026_05_24` in sovereign notes; plan at `~/.claude/plans/let-s-get-into-raptor-wise-bachman.md`).
+**Status:** In flight (design only).
+**Targets:** v2 of the vault tiered port
+(`sovereign notes --query vault-tiered-port-2026-05-24`; plan at
+`~/.claude/plans/let-s-get-into-raptor-wise-bachman.md`).
+**Lifecycle:** When shipped, the runtime surface lands in
+[`../TIERED_RETRIEVAL.md`](../TIERED_RETRIEVAL.md); this spec
+either retires here with a Shipped status banner (forensic value
+of the rationale) or moves to `docs/archive/` (low forensic value).
+Decision at ship time.
 
-**Prerequisites:** read `sovereign/docs/TIERED_RETRIEVAL.md` (tier architecture), `sovereign/docs/specs/PROGRESSIVE_ENRICHMENT.md` (RAPTOR + GLiNER layering), and `sovereign/docs/specs/CONV_TIERED_PORT.md` (conv-tiered persistence schema).
+**Prerequisites for reading:** [`../TIERED_RETRIEVAL.md`](../TIERED_RETRIEVAL.md)
+(tier architecture); [`PROGRESSIVE_ENRICHMENT.md`](PROGRESSIVE_ENRICHMENT.md)
+(RAPTOR + GLiNER layering); [`CONV_TIERED_PORT.md`](CONV_TIERED_PORT.md)
+(conv-tiered persistence schema).
 
 ## Why this exists
 

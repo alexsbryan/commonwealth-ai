@@ -1,8 +1,21 @@
 # Spec: Progressive Enrichment Pattern (RAPTOR + GliNER, layered)
 
-**Status:** shipped on `conversations-anthropic` 2026-05-23. Reference implementation for any future corpus port (vault, SEP, attached docs, wikipedia subsets).
+**Status:** Shipped on `conversations-anthropic` 2026-05-23. Stays
+in `docs/specs/` as a **reference pattern**, not an in-flight
+spec — any future corpus port (vault, SEP, attached docs,
+wikipedia subsets) should adopt this layered shape rather than the
+early mutually-exclusive picker.
 
-**Prerequisites:** read `sovereign/docs/TIERED_RETRIEVAL.md` first for the T1/T2/T3 tier architecture; read `sovereign/docs/specs/CONV_TIERED_PORT.md` for the conv-specific instance.
+**Lifecycle:** Reference-pattern specs stay in `specs/`
+indefinitely because they're prescriptive for future work, not a
+record of intent. Distinct from in-flight specs (which retire on
+ship) and canonical wire specs like [`oicp.md`](oicp.md) (which
+evolve in-place).
+
+**Prerequisites for reading:** [`../TIERED_RETRIEVAL.md`](../TIERED_RETRIEVAL.md)
+for the T1/T2/T3 tier architecture;
+[`CONV_TIERED_PORT.md`](CONV_TIERED_PORT.md) for the conv-specific
+instance.
 
 ## Why this exists
 
