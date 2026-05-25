@@ -172,15 +172,14 @@ jobs:
           # step (this run: shell is otherwise discarded). See
           # feedback_macos_sdkroot_for_bindgen.
           echo "SDKROOT=$(xcrun --show-sdk-path)" >> "$GITHUB_ENV"
-          # NOTE: the macOS deployment target is deliberately NOT set here.
-          # ggml-backend-dl.cpp uses std::filesystem (needs macOS 10.15), but
-          # `cargo tauri build` injects MACOSX_DEPLOYMENT_TARGET from the Tauri
-          # config's bundle.macOS.minimumSystemVersion (see tauri-build's
-          # build script) and that OVERRIDES anything we export to $GITHUB_ENV
-          # — a CI run confirmed cc still emitted -mmacosx-version-min=10.13
-          # (Tauri's default) despite a 10.15 pin here. The real fix is
-          # bundle.macOS.minimumSystemVersion = "10.15" in
-          # src-tauri/tauri.release.conf.json.
+          # The macOS deployment target is pinned on the Tauri build step's
+          # own `env:` block (below), not here. ggml-backend-dl.cpp uses
+          # std::filesystem (needs 10.15); with MACOSX_DEPLOYMENT_TARGET unset,
+          # the `cc` crate falls through to the Xcode SDK's DefaultDeploymentTarget
+          # (10.13 on Xcode 15.4) and the C++ compile fails. The repo's
+          # .cargo/config.toml [env] also force-sets it (covers local + non-CI),
+          # but a step-level env: is the most direct guarantee it reaches the
+          # build-script process here.
 
       - name: Windows build deps (protoc)
         if: matrix.platform.runner == 'windows-2022'
@@ -236,6 +235,12 @@ jobs:
         working-directory: sovereign/crates/sovereign-desktop
         shell: bash
         env:
+          # macOS deployment target floor for ggml's std::filesystem use
+          # (ggml-backend-dl.cpp needs 10.15). Setting it on this step's env
+          # puts it in the cargo-tauri → cargo → build-script process tree, so
+          # the `cc` crate reads it (step 1) instead of falling through to the
+          # Xcode SDK default of 10.13. Harmless on Linux/Windows runners.
+          MACOSX_DEPLOYMENT_TARGET: "10.15"
           # tauri-bundler signs each updater artifact in-place and writes a
           # .sig file next to it when these are present. Without them, the
           # bundle still builds but no signatures are produced, and the
