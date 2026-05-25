@@ -131,12 +131,22 @@ else
     trap 'rm -rf "$PDFIUM_TMP"' EXIT
     if fetch_to "$PDFIUM_URL" "$PDFIUM_TMP/pdfium.tgz" \
        && extract_to "$PDFIUM_TMP/pdfium.tgz" "$PDFIUM_TMP/extract"; then
-        # PDFium archives put the dylib at lib/<lib_name>.
-        if [[ -f "$PDFIUM_TMP/extract/lib/$PDFIUM_LIB" ]]; then
-            cp "$PDFIUM_TMP/extract/lib/$PDFIUM_LIB" "$PDFIUM_DEST"
-            echo "  installed: $PDFIUM_DEST"
+        # PDFium archive layout differs by platform. Unix archives put the
+        # shared lib in lib/ (libpdfium.dylib / libpdfium.so). Windows puts
+        # the *runtime* DLL in bin/pdfium.dll — lib/ only holds the
+        # pdfium.dll.lib import library, which we don't ship. Search both.
+        pdfium_src=""
+        for sub in lib bin; do
+            if [[ -f "$PDFIUM_TMP/extract/$sub/$PDFIUM_LIB" ]]; then
+                pdfium_src="$PDFIUM_TMP/extract/$sub/$PDFIUM_LIB"
+                break
+            fi
+        done
+        if [[ -n "$pdfium_src" ]]; then
+            cp "$pdfium_src" "$PDFIUM_DEST"
+            echo "  installed: $PDFIUM_DEST (from ${pdfium_src#"$PDFIUM_TMP/extract/"})"
         else
-            echo "fetch-desktop-binaries: $PDFIUM_LIB not found in archive" >&2
+            echo "fetch-desktop-binaries: $PDFIUM_LIB not found in archive (looked in lib/, bin/)" >&2
             exit 1
         fi
     fi
