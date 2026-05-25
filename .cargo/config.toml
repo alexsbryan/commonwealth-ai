@@ -83,17 +83,22 @@ rustflags = [
 #
 # llama-cpp-sys-4's bundled ggml (ggml-backend-dl.cpp) uses
 # std::filesystem::path, which Apple marks `unavailable: introduced in
-# macOS 10.15`. llama.cpp's CMake doesn't pin a newer floor, so the C++
-# compile inherits a deployment target older than 10.15 and fails with:
-#   error: 'path' is unavailable: introduced in macOS 10.15
-# Observed on BOTH CI runners — macos-13 (x86_64) and macos-14 (arm64).
+# macOS 10.15`. The `cc` crate (used by llama-cpp-sys-4's build script,
+# directly and via the `cmake` crate) computes the deployment target as:
+#   1. MACOSX_DEPLOYMENT_TARGET env var, else
+#   2. the Xcode SDK's DefaultDeploymentTarget  ← 10.13 on Xcode 15.4, else
+#   3. arch default (11.0 arm64 / 10.7 x86_64).
+# (See cc-1.2.62 src/lib.rs ~line 4171.) With the env var unset, cc fell
+# through to the SDK's 10.13 and the C++ compile failed with
+#   error: 'path'/'string' is unavailable: introduced in macOS 10.15.
 #
-# Setting MACOSX_DEPLOYMENT_TARGET here propagates to the build scripts
-# (the `cc` crate reads it directly; the `cmake` crate maps it to
-# CMAKE_OSX_DEPLOYMENT_TARGET), raising the floor to 10.15 on both arches.
-# 10.15 is the minimum that satisfies std::filesystem; arm64's own baseline
-# (11.0) is higher, so the value is harmless there. Ignored on non-Apple
-# targets. `force` is unset (cargo default) so an explicit env override
-# from the shell/CI still wins.
+# So we pin step 1. `force = true` is LOAD-BEARING: a plain
+# `MACOSX_DEPLOYMENT_TARGET = "10.15"` is NOT applied by cargo when the
+# variable is already present in the environment (cargo defers unless
+# forced), and on the CI runners it was effectively unset/empty so cc kept
+# using the SDK default. `force = true` makes cargo set it for every build
+# script regardless, so cc's step 1 returns 10.15. Ignored on non-Apple
+# targets; arm64's own baseline (11.0) is higher so 10.15 is harmless there.
+# NB this is a COMPILE-time floor — a rustflags link-arg cannot fix it.
 [env]
-MACOSX_DEPLOYMENT_TARGET = "10.15"
+MACOSX_DEPLOYMENT_TARGET = { value = "10.15", force = true }
