@@ -350,7 +350,7 @@
 <div class="knowledge-status">
   {#if corpora.length > 0 && installedCount === 0 && !anyInstalling}
     <div class="tier-banner">
-      <p class="tier-prompt">No knowledge bases installed. Quick-install a tier:</p>
+      <p class="tier-prompt">Nothing installed yet. Pick a tier to get going:</p>
       <div class="tier-buttons">
         {#each tiers as tier}
           <button class="tier-btn" onclick={() => installTier(tier.id)}>

@@ -272,6 +272,192 @@ pub async fn detect_hardware() -> Result<HardwareInfo, String> {
     })
 }
 
+// ─── Model Recommendation Catalog ────────────────────────────
+//
+// Single source of truth for "what model should the user pick on this
+// machine" lives in `sovereign-inference::setup_planner` +
+// `models.toml`. These commands expose the same catalog the CLI uses
+// to the desktop so the setup wizard and the Settings → Models tab
+// don't drift. Without this, the Svelte side hand-rolls thresholds and
+// hardcodes filenames — and we get to discover the drift when a user
+// follows a desktop recommendation the daemon's manifest doesn't carry.
+//
+// All three DTOs intentionally strip OICP capability annotations: the
+// UI only needs human-readable names, sizes, and the HuggingFace URL
+// it has to download from. Capability routing stays on the Rust side.
+
+/// String form of `ProfileName` matching the keys in `models.toml`
+/// (`"cpu_only" / "low_mem" / "default" / "high" / "very_high"`). The
+/// desktop never wants the Rust enum directly — strings round-trip
+/// cleanly through JSON and let the wizard compare them to manifest
+/// section names without an extra translation layer.
+fn profile_name_str(p: &sovereign_inference::hardware::ProfileName) -> &'static str {
+    use sovereign_inference::hardware::ProfileName;
+    match p {
+        ProfileName::CpuOnly => "cpu_only",
+        ProfileName::LowMem => "low_mem",
+        ProfileName::Default => "default",
+        ProfileName::High => "high",
+        ProfileName::VeryHigh => "very_high",
+    }
+}
+
+fn parse_profile_name(
+    s: &str,
+) -> Result<sovereign_inference::hardware::ProfileName, String> {
+    use sovereign_inference::hardware::ProfileName;
+    match s {
+        "cpu_only" => Ok(ProfileName::CpuOnly),
+        "low_mem" => Ok(ProfileName::LowMem),
+        "default" => Ok(ProfileName::Default),
+        "high" => Ok(ProfileName::High),
+        "very_high" => Ok(ProfileName::VeryHigh),
+        other => Err(format!("unknown profile: {other}")),
+    }
+}
+
+#[derive(Serialize)]
+pub struct RecommendedProfileDto {
+    pub profile: String,
+    pub effective_memory_gb: f64,
+    pub is_unified_memory: bool,
+}
+
+#[derive(Serialize)]
+pub struct PrimaryOptionDto {
+    /// `"cpu_only" / "low_mem" / "default" / "high" / "very_high"` —
+    /// the profile bucket this slot belongs to. The wizard ranks
+    /// recommended-first then descending model size; this field lets
+    /// it group "lighter alternatives" beneath the headline pick.
+    pub profile: String,
+    pub recommended: bool,
+    pub file: String,
+    pub base_name: String,
+    pub family: String,
+    pub quant: String,
+    pub size_gb: f64,
+    pub hf_url: String,
+    /// Direct GGUF download URL — `setup_planner::hf_download_url`
+    /// applies the `/resolve/main/<file>` convention so the desktop
+    /// can `downloadModel({ url })` without re-implementing the
+    /// HuggingFace path rules.
+    pub download_url: String,
+}
+
+#[derive(Serialize)]
+pub struct SlotConfigDto {
+    pub file: String,
+    pub base_name: String,
+    pub family: String,
+    pub quant: String,
+    pub size_gb: f64,
+    pub hf_url: String,
+    pub download_url: String,
+}
+
+impl From<&sovereign_core::models_manifest::SlotConfig> for SlotConfigDto {
+    fn from(s: &sovereign_core::models_manifest::SlotConfig) -> Self {
+        SlotConfigDto {
+            file: s.file.clone(),
+            base_name: s.base_name.clone(),
+            family: s.family.clone(),
+            quant: s.quant.clone(),
+            size_gb: s.size_gb,
+            hf_url: s.hf_url.clone(),
+            download_url: sovereign_inference::setup_planner::hf_download_url(s),
+        }
+    }
+}
+
+/// Return the recommended hardware profile for this machine plus the
+/// effective memory the daemon's bucket logic saw. Effective memory
+/// is unified RAM on Apple Silicon, GPU VRAM on discrete cards, system
+/// RAM otherwise — matching `HardwareProfile::effective_vram_gb`.
+#[tauri::command]
+pub async fn recommended_profile() -> Result<RecommendedProfileDto, String> {
+    let profile = tokio::task::spawn_blocking(|| {
+        sovereign_inference::hardware::HardwareProfile::detect()
+    })
+    .await
+    .map_err(|e| format!("Hardware detection failed: {e}"))?;
+
+    let pname = sovereign_inference::hardware::select_profile(&profile);
+    let effective_memory_gb = profile.effective_vram_gb() as f64;
+    Ok(RecommendedProfileDto {
+        profile: profile_name_str(&pname).to_string(),
+        effective_memory_gb,
+        is_unified_memory: profile.is_unified_memory,
+    })
+}
+
+/// Return the curated primary-model catalog for `profile` (or the
+/// detected profile if `None`). Wraps `setup_planner::build_primary_catalog`
+/// so a single Rust function decides which models qualify for the user's
+/// tier — the desktop just renders the result.
+#[tauri::command]
+pub async fn primary_catalog(
+    profile: Option<String>,
+) -> Result<Vec<PrimaryOptionDto>, String> {
+    let pname = match profile {
+        Some(s) => parse_profile_name(&s)?,
+        None => {
+            let hw = tokio::task::spawn_blocking(|| {
+                sovereign_inference::hardware::HardwareProfile::detect()
+            })
+            .await
+            .map_err(|e| format!("Hardware detection failed: {e}"))?;
+            sovereign_inference::hardware::select_profile(&hw)
+        }
+    };
+    let catalog = sovereign_inference::setup_planner::build_primary_catalog(&pname);
+    Ok(catalog
+        .into_iter()
+        .map(|opt| PrimaryOptionDto {
+            profile: opt.profile.to_string(),
+            recommended: opt.recommended,
+            download_url: sovereign_inference::setup_planner::hf_download_url(&opt.slot),
+            file: opt.slot.file.clone(),
+            base_name: opt.slot.base_name.clone(),
+            family: opt.slot.family.clone(),
+            quant: opt.slot.quant.clone(),
+            size_gb: opt.slot.size_gb,
+            hf_url: opt.slot.hf_url.clone(),
+        })
+        .collect())
+}
+
+/// Return the recommended slot for `kind` (`"fast"` or `"embed"`) on
+/// `profile` (or detected). Wraps `setup_planner::resolve_slot`. The
+/// thoughtful (primary) slot has its own catalog endpoint above; the
+/// fast and embed slots are single-pick.
+#[tauri::command]
+pub async fn slot_recommendation(
+    kind: String,
+    profile: Option<String>,
+) -> Result<Option<SlotConfigDto>, String> {
+    let pname = match profile {
+        Some(s) => parse_profile_name(&s)?,
+        None => {
+            let hw = tokio::task::spawn_blocking(|| {
+                sovereign_inference::hardware::HardwareProfile::detect()
+            })
+            .await
+            .map_err(|e| format!("Hardware detection failed: {e}"))?;
+            sovereign_inference::hardware::select_profile(&hw)
+        }
+    };
+    let slot_kind = match kind.as_str() {
+        "fast" => sovereign_inference::setup_planner::SlotKind::Fast,
+        "embed" => sovereign_inference::setup_planner::SlotKind::Embed,
+        other => return Err(format!("unknown slot kind: {other}")),
+    };
+    Ok(
+        sovereign_inference::setup_planner::resolve_slot(&pname, slot_kind)
+            .as_ref()
+            .map(SlotConfigDto::from),
+    )
+}
+
 /// Expose the result of `bootstrap::detect` to the frontend so the
 /// setup wizard can skip screens that are already covered by the
 /// CLI-written `SetupConfig`. Called once at app start (or any time
@@ -2166,6 +2352,30 @@ mod scan_tests {
         let path = dir.path().join("missing.gguf");
         assert!(!looks_like_gguf(&path));
     }
+}
+
+/// Returns `Some(bytes)` for an existing file path, `None` if the path
+/// is empty or the file does not exist. Errors are reserved for genuine
+/// IO failures (permissions etc.) so the UI can distinguish "user
+/// hasn't picked this slot yet" from "the file vanished" — both render
+/// as "—" but only the second is worth a console warning. Used by the
+/// Settings → Models budget meter to estimate peak memory before the
+/// user saves a combination that would crash the daemon at load time.
+#[tauri::command]
+pub async fn model_file_size(path: String) -> Result<Option<u64>, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    let p = PathBuf::from(trimmed);
+    tokio::task::spawn_blocking(move || match std::fs::metadata(&p) {
+        Ok(meta) if meta.is_file() => Ok(Some(meta.len())),
+        Ok(_) => Ok(None),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("stat failed: {e}")),
+    })
+    .await
+    .map_err(|e| format!("model_file_size join error: {e}"))?
 }
 
 #[tauri::command]

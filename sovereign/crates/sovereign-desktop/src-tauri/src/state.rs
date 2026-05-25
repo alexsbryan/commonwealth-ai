@@ -45,10 +45,10 @@ pub struct DesktopConfig {
     /// PR-E2: Optional Code specialist GGUF. When set, `code`-
     /// hinted inference requests route to this slot instead of the
     /// Main responder (primary). Lazy-loaded on first use; idle-
-    /// unloads after 60s, same as primary. `None` (the common
-    /// case) means the Main responder handles code too — a
-    /// well-rounded general model does this adequately per v0.3
-    /// §4.4 guidance.
+    /// unloads after `primary_idle_secs` (default 300s), same as
+    /// primary. `None` (the common case) means the Main responder
+    /// handles code too — a well-rounded general model does this
+    /// adequately per v0.3 §4.4 guidance.
     #[serde(default)]
     pub code_model_path: Option<PathBuf>,
     /// Model family of the code slot — drives tokenizer / chat

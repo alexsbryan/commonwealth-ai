@@ -499,8 +499,8 @@
       <div class="join-section">
         <p class="section-label">Joining a friend's mesh?</p>
         <p class="hint">
-          Open the <code>sovereign://join/…</code> link they shared, or
-          paste it below (useful when running from source).
+          Open the <code>sovereign://join/…</code> link they sent, or
+          paste it below.
         </p>
         <div class="join-row">
           <input
@@ -522,9 +522,9 @@
   <!-- ─── Create form ───────────────────────────────────── -->
   {#if showCreateForm && !createResult}
     <div class="form-card">
-      <h4>Create a Community Mesh</h4>
+      <h4>Create a mesh</h4>
       <p class="muted">
-        Pick a name your group will recognize. You'll get a link to share.
+        Give it a name your group will recognise. You'll get a link to share.
       </p>
       <label>
         <span>Mesh name</span>
@@ -555,8 +555,8 @@
     <div class="share-card">
       <h4>"{createResult.mesh_name}" is live</h4>
       <p class="muted">
-        Share this link with people you trust. They'll tap it once and
-        be in the mesh — no terminal, no setup.
+        Send this link to people you trust. One tap and they're in — no
+        terminal, no setup.
       </p>
       <div class="link-row">
         <code class="link">{createResult.join_link}</code>
@@ -619,7 +619,7 @@
       <div class="invite-card">
         <h5>Invite link</h5>
         <p class="muted">
-          Send this to anyone you want in the mesh. They tap once to join.
+          Send this to anyone you want in the mesh. One tap, they're in.
         </p>
         <div class="link-row">
           <code class="link">{enrichedLink}</code>
@@ -645,9 +645,9 @@
             {/if}
           </summary>
           <p class="hint">
-            mDNS only finds joiners on the same Wi-Fi. Pick a routable
-            address (Tailscale recommended) so people on other networks
-            can reach you.
+            Local discovery only finds people on the same Wi-Fi. Pick a
+            routable address — Tailscale is the easy one — so people on
+            other networks can reach you.
           </p>
           {#if relayLoading}
             <p class="muted">Loading addresses…</p>
@@ -714,9 +714,8 @@
       <div class="invite-card invite-missing">
         <h5>Invite link</h5>
         <p class="muted">
-          This mesh was created before invite caching was added.
-          Rotate to generate a fresh share link — existing members
-          stay connected.
+          This mesh predates invite caching. Rotate to generate a fresh
+          share link — existing members stay connected.
         </p>
         <button class="primary" onclick={openRotateConfirm}>
           Generate new invite link
@@ -728,9 +727,9 @@
       <div class="members-header">
         <h5>Members</h5>
         <p class="hint">
-          What each peer has contributed in the last {windowDays} days.
-          Three separate dimensions — never collapsed into a single
-          score, since "good peer" is incommensurable across them.
+          What each peer has contributed over the past {windowDays} days.
+          Three separate dimensions, kept apart on purpose — "good peer"
+          doesn't reduce to one number.
         </p>
       </div>
       {#if meshState.members.length === 0}
@@ -846,10 +845,9 @@
                   {#if prefDraft[member.node_id]}
                     <div class="member-preference-form">
                       <p class="hint">
-                        A multiplier the manifest you serve to <em>this peer
-                        only</em> applies to every claim's affinity. 100% is
-                        neutral; lower values ration what they see. Never
-                        gossiped — it stays on this machine.
+                        Dial back what this peer can pull from you. 100% is
+                        neutral; lower values ration what they see. The number
+                        never leaves this machine.
                       </p>
                       <label class="pref-row">
                         <span>Multiplier</span>

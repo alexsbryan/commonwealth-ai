@@ -2,12 +2,21 @@
   import { onMount } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { scanForModels, downloadModel, detectHardware } from "../api";
+  import {
+    scanForModels,
+    downloadModel,
+    detectHardware,
+    primaryCatalog,
+    slotRecommendation,
+  } from "../api";
   import type {
     DiscoveredModel,
     DownloadProgress,
     RecommendedModel,
     HardwareInfo,
+    PrimaryOption,
+    ProfileName,
+    SlotConfig,
   } from "../types";
 
   interface Props {
@@ -32,77 +41,77 @@
   let unlisten: UnlistenFn | null = null;
   let hardware: HardwareInfo | null = $state(null);
 
-  const EMBED_MODELS: RecommendedModel[] = [
-    {
-      name: "Qwen3-Embedding-0.6B",
-      file_name: "Qwen3-Embedding-0.6B-Q8_0.gguf",
-      url: "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf",
-      size_estimate: "~640 MB",
-      ram_minimum: "4 GB",
-      description: "Purpose-built retrieval model with last-token pooling. Best default choice for atlas and search.",
-      min_ram_gb: 2,
-    },
-  ];
+  // Daemon-supplied catalog. Single source of truth lives in
+  // `sovereign-inference::setup_planner` + `models.toml`; the desktop
+  // mirrors what the CLI's `sovereign setup` would offer so the two
+  // surfaces never drift on which file is recommended for which tier.
+  let detectedProfile: ProfileName | null = $state(null);
+  let catalog: PrimaryOption[] = $state([]);
+  let fastSlot: SlotConfig | null = $state(null);
+  let embedSlot: SlotConfig | null = $state(null);
 
-  // Quant-aware catalog. Picks come from the "single best model per tier"
-  // table in the loading guide (v3): one model per memory bucket, with
-  // Q6_K preferred when room allows (near-lossless, +35% over Q4_K_M).
-  const CATALOG: Record<string, RecommendedModel> = {
-    "Qwen3-2B-Q6_K.gguf": {
-      name: "Qwen3.5-2B (Q6_K)",
-      file_name: "Qwen3-2B-Q6_K.gguf",
-      url: "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q6_K.gguf",
-      size_estimate: "~1.1 GB",
-      ram_minimum: "4 GB",
-      description: "Lossless small model for low-memory or CPU-only systems.",
-      min_ram_gb: 4,
-    },
-    "Qwen3-4B-Q6_K.gguf": {
-      name: "Qwen3-4B (Q6_K)",
-      file_name: "Qwen3-4B-Q6_K.gguf",
-      url: "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q6_K.gguf",
-      size_estimate: "~3.4 GB",
-      ram_minimum: "8 GB",
-      description: "Near-lossless 4B with /no_think. Primary on 8 GB Macs; ideal fast slot at 16 GB+.",
-      min_ram_gb: 8,
-    },
-    "Qwen3-8B-Q4_K_M.gguf": {
-      name: "Qwen3-8B (Q4_K_M)",
-      file_name: "Qwen3-8B-Q4_K_M.gguf",
-      url: "https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf",
-      size_estimate: "~5 GB",
-      ram_minimum: "8 GB",
-      description: "Quality leader at 8B for 8 GB VRAM — fits with 16 K context at ~42 tok/s.",
-      min_ram_gb: 8,
-    },
-    "Qwen3-8B-Q6_K.gguf": {
-      name: "Qwen3-8B (Q6_K)",
-      file_name: "Qwen3-8B-Q6_K.gguf",
-      url: "https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q6_K.gguf",
-      size_estimate: "~6.2 GB",
-      ram_minimum: "12 GB",
-      description: "Near-lossless 8B. Best single-model pick for 12 GB GPUs and 16 GB Macs (32 K context).",
-      min_ram_gb: 12,
-    },
-    "Qwen3-14B-Q6_K.gguf": {
-      name: "Qwen3-14B (Q6_K)",
-      file_name: "Qwen3-14B-Q6_K.gguf",
-      url: "https://huggingface.co/Qwen/Qwen3-14B-GGUF/resolve/main/Qwen3-14B-Q6_K.gguf",
-      size_estimate: "~11.3 GB",
-      ram_minimum: "16 GB",
-      description: "Dense 14B at near-lossless quant. Quality jump over 8B for 16 GB GPUs and 24 GB Macs.",
-      min_ram_gb: 16,
-    },
-    "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf": {
-      name: "Qwen3.6-35B-A3B (Q4_K_M)",
-      file_name: "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
-      url: "https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
-      size_estimate: "~20 GB",
-      ram_minimum: "24 GB",
-      description: "MoE: 3B active of 35B. ~65 tok/s on 24 GB GPU, ~90 tok/s on 36 GB Mac. The 24 GB sweet spot.",
-      min_ram_gb: 24,
-    },
+  // ── Adapter: daemon DTO → display shape used by this component's
+  // template. The template was built around `RecommendedModel`; rather
+  // than rewrite the markup, we project both PrimaryOption and
+  // SlotConfig into the same shape. Display copy (size estimate,
+  // RAM minimum, description) is synthesized from the manifest's
+  // structured fields so we don't keep parallel hand-curated text.
+  const PROFILE_MIN_RAM_GB: Record<ProfileName, number> = {
+    cpu_only: 0,
+    low_mem: 1,
+    default: 8,
+    high: 20,
+    very_high: 24,
   };
+  const PROFILE_LABEL: Record<ProfileName, string> = {
+    cpu_only: "CPU-only",
+    low_mem: "low-memory",
+    default: "8 GB+ systems",
+    high: "20 GB+ systems",
+    very_high: "24 GB+ systems",
+  };
+
+  function displayName(s: { base_name: string; file: string; quant: string }): string {
+    const base = s.base_name && s.base_name.length > 0 ? s.base_name : s.file.replace(/\.gguf$/i, "");
+    return s.quant ? `${base} (${s.quant})` : base;
+  }
+  function sizeEstimate(size_gb: number): string {
+    if (size_gb <= 0) return "size unknown";
+    if (size_gb < 1) return `~${Math.round(size_gb * 1024)} MB`;
+    return `~${size_gb.toFixed(size_gb < 10 ? 1 : 0)} GB`;
+  }
+  function ramMinimum(profile: ProfileName): string {
+    const min = PROFILE_MIN_RAM_GB[profile];
+    return min > 0 ? `${min} GB` : "any";
+  }
+
+  function primaryToDisplay(opt: PrimaryOption): RecommendedModel {
+    return {
+      name: displayName(opt),
+      file_name: opt.file,
+      url: opt.download_url,
+      size_estimate: sizeEstimate(opt.size_gb),
+      ram_minimum: ramMinimum(opt.profile),
+      description: opt.recommended
+        ? `Daemon's headline pick for ${PROFILE_LABEL[opt.profile]}.`
+        : `Lighter alternative — sized for ${PROFILE_LABEL[opt.profile]}.`,
+      min_ram_gb: PROFILE_MIN_RAM_GB[opt.profile],
+    };
+  }
+  function slotToDisplay(slot: SlotConfig, role: "fast" | "embed"): RecommendedModel {
+    const min = detectedProfile ? PROFILE_MIN_RAM_GB[detectedProfile] : 0;
+    return {
+      name: displayName(slot),
+      file_name: slot.file,
+      url: slot.download_url,
+      size_estimate: sizeEstimate(slot.size_gb),
+      ram_minimum: min > 0 ? `${min} GB` : "any",
+      description: role === "fast"
+        ? "Quick responder — stays loaded so short turns return instantly."
+        : "Embedder — turns your library into something searchable by meaning.",
+      min_ram_gb: min,
+    };
+  }
 
   function modelTier(model: RecommendedModel): "basic" | "standard" | "premium" {
     if (model.min_ram_gb <= 10) return "basic";
@@ -110,68 +119,34 @@
     return "premium";
   }
 
-  // Effective memory for tier selection.
-  //   - Apple Silicon (unified): system RAM is the model pool.
-  //   - Discrete GPU: VRAM is the wall — spilling collapses MoE perf.
-  //   - CPU-only: system RAM, biased toward smaller models since speed is poor.
-  function effectiveMemoryGb(hw: HardwareInfo): number {
-    if (hw.is_unified_memory) return hw.system_ram_gb;
-    if (hw.gpu_available && hw.gpu_memory_gb != null) return hw.gpu_memory_gb;
-    return hw.system_ram_gb;
-  }
-
-  // Single primary pick per tier (mirrors the "single best model" table
-  // in the loading guide v3).
-  function pickPrimary(hw: HardwareInfo): RecommendedModel {
-    const eff = effectiveMemoryGb(hw);
-
-    if (hw.is_unified_memory) {
-      // Apple Silicon: bucket by total RAM. OS reserve baked into min_ram_gb.
-      if (eff >= 36) return CATALOG["Qwen3.6-35B-A3B-UD-Q4_K_M.gguf"];
-      if (eff >= 24) return CATALOG["Qwen3-14B-Q6_K.gguf"];
-      if (eff >= 16) return CATALOG["Qwen3-8B-Q6_K.gguf"];
-      if (eff >= 8)  return CATALOG["Qwen3-4B-Q6_K.gguf"];
-      return CATALOG["Qwen3-2B-Q6_K.gguf"];
-    }
-
-    if (hw.gpu_available && hw.gpu_memory_gb != null) {
-      // Discrete GPU: VRAM bucket.
-      if (eff >= 24) return CATALOG["Qwen3.6-35B-A3B-UD-Q4_K_M.gguf"];
-      if (eff >= 16) return CATALOG["Qwen3-14B-Q6_K.gguf"];
-      if (eff >= 12) return CATALOG["Qwen3-8B-Q6_K.gguf"];
-      if (eff >= 8)  return CATALOG["Qwen3-8B-Q4_K_M.gguf"];
-      return CATALOG["Qwen3-4B-Q6_K.gguf"];
-    }
-
-    // CPU-only.
-    if (eff >= 12) return CATALOG["Qwen3-4B-Q6_K.gguf"];
-    return CATALOG["Qwen3-2B-Q6_K.gguf"];
-  }
-
-  // Fast slot recommendation. Surfaces only when ≥16 GB effective memory
-  // (so it fits alongside the primary) and would not duplicate the primary.
-  function pickFast(hw: HardwareInfo, primary: RecommendedModel): RecommendedModel | null {
-    const eff = effectiveMemoryGb(hw);
-    if (eff < 16) return null;
-    const fast = CATALOG["Qwen3-4B-Q6_K.gguf"];
-    if (primary.file_name === fast.file_name) return null;
-    return fast;
-  }
-
-  const FALLBACK_DEFAULT = CATALOG["Qwen3-8B-Q4_K_M.gguf"];
-
   let visibleModels = $derived.by<RecommendedModel[]>(() => {
-    if (embedMode) return EMBED_MODELS;
-    if (!hardware) return [FALLBACK_DEFAULT];
-    const primary = pickPrimary(hardware);
-    const fast = pickFast(hardware, primary);
-    return fast ? [primary, fast] : [primary];
+    if (embedMode) {
+      return embedSlot ? [slotToDisplay(embedSlot, "embed")] : [];
+    }
+    const out: RecommendedModel[] = [];
+    const recommended = catalog.find((opt) => opt.recommended);
+    if (recommended) out.push(primaryToDisplay(recommended));
+    // Show lighter alternatives below the headline pick so users on
+    // capable hardware can still opt down without leaving Settings.
+    for (const opt of catalog) {
+      if (opt.recommended) continue;
+      out.push(primaryToDisplay(opt));
+    }
+    // The fast slot is a separate role; surface it only when distinct
+    // from the primary recommendation (small machines reuse the same
+    // file across slots).
+    if (fastSlot && !out.some((m) => m.file_name === fastSlot!.file)) {
+      out.push(slotToDisplay(fastSlot, "fast"));
+    }
+    return out;
   });
 
-  // Recommended highlight goes on the primary (first) entry.
+  // Recommended highlight tracks the headline pick from the daemon
+  // catalog. Embed mode has no equivalent — the embed slot is a
+  // single-pick, always-displayed row.
   let recommendedFileName = $derived.by(() => {
-    if (embedMode || !hardware || visibleModels.length === 0) return null;
-    return visibleModels[0].file_name;
+    if (embedMode) return null;
+    return catalog.find((o) => o.recommended)?.file ?? null;
   });
 
   onMount(async () => {
@@ -202,11 +177,31 @@
     }
     scanning = false;
 
-    // Detect hardware to filter recommended models.
+    // Detect hardware (for the header summary) + pull the daemon's
+    // recommended profile and catalog. Single source of truth: the
+    // CLI and desktop both go through `sovereign-inference::setup_planner`
+    // → `models.toml`, so a recommendation here matches what
+    // `sovereign setup` would offer at a terminal.
     try {
       hardware = await detectHardware();
     } catch (e) {
       console.error("Hardware detection failed:", e);
+    }
+    try {
+      const [cat, fast, embed] = await Promise.all([
+        primaryCatalog(),
+        slotRecommendation("fast"),
+        slotRecommendation("embed"),
+      ]);
+      catalog = cat;
+      fastSlot = fast;
+      embedSlot = embed;
+      // Profile is implicit in which row is `recommended`. Cache it
+      // separately so slotToDisplay can compute ram_minimum without a
+      // second round-trip.
+      detectedProfile = (cat.find((o) => o.recommended)?.profile as ProfileName | undefined) ?? null;
+    } catch (e) {
+      console.error("Model catalog load failed:", e);
     }
   });
 

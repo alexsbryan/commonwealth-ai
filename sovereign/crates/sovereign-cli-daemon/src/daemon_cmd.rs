@@ -477,7 +477,7 @@ async fn run_daemon(args: &[String]) -> i32 {
                     return 1;
                 }
             }
-            // Sourced from `[daemon].primary_idle_secs`. Default 60s
+            // Sourced from `[daemon].primary_idle_secs`. Default 300s
             // suits a desktop touching the model occasionally; batch
             // workloads (atlas enrich) want 1800+ to skip the 3–4 s
             // reload tax between back-to-back short LLM calls.

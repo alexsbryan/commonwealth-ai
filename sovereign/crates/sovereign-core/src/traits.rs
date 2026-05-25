@@ -350,7 +350,7 @@ pub trait InferenceProvider: Send + Sync {
     /// Wired into the desktop's foreground/focus events so the
     /// primary slot is hot by the time the user hits send. Without
     /// this, every conversation that pauses past
-    /// `primary_idle_secs` (default 60s) re-pays the model-load
+    /// `primary_idle_secs` (default 300s) re-pays the model-load
     /// wait — which on a 35B Q6 is ~10–20s on Metal and an order of
     /// magnitude worse on CPU.
     async fn warmup_primary(&self) -> Result<()> {

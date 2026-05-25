@@ -307,7 +307,7 @@
           <h3 class="source-name">Claude (Anthropic)</h3>
           <p class="source-help">
             Go to <strong>claude.ai → Settings → Privacy → Export data</strong>.
-            Anthropic emails you a download link. The file is a <code>.zip</code> named
+            Anthropic emails a download link. It's a <code>.zip</code> named
             <code>data-&lt;uuid&gt;-&lt;batch&gt;.zip</code>.
           </p>
         </div>
@@ -334,7 +334,7 @@
         <div class="source-icon">💬</div>
         <div class="source-meta">
           <h3 class="source-name">ChatGPT (OpenAI)</h3>
-          <p class="source-help">Export your data from OpenAI's privacy portal. We'll add support shortly.</p>
+          <p class="source-help">Export your data from OpenAI's privacy portal. Support coming soon.</p>
         </div>
       </header>
       <span class="badge">Coming soon</span>
@@ -345,7 +345,7 @@
         <div class="source-icon">💬</div>
         <div class="source-meta">
           <h3 class="source-name">Gemini (Google)</h3>
-          <p class="source-help">Export Gemini Apps via Google Takeout. We'll add support shortly.</p>
+          <p class="source-help">Export Gemini Apps via Google Takeout. Support coming soon.</p>
         </div>
       </header>
       <span class="badge">Coming soon</span>
@@ -361,10 +361,10 @@
       <div class="source-meta">
         <h3 class="source-name">Smart highlights for your chats</h3>
         <p class="source-help">
-          Find the people, places, works, and organizations in every
-          conversation you import. Once installed, this runs
-          automatically in the background — and your searches get
-          better at finding related conversations across topics.
+          Tags the people, places, works, and organizations across every
+          conversation you import. Runs in the background once installed —
+          and search starts finding related threads across topics you
+          didn't think to link.
         </p>
       </div>
     </header>
@@ -412,7 +412,7 @@
 
   {#if !pickerVisible && importState.stage !== "needs_reset_confirm"}
     <p class="resume-banner" data-testid="imports-resume-banner">
-      Your Claude conversations import is already running. Progress below.
+      Your Claude import is already running. Progress below.
     </p>
   {/if}
 
@@ -424,13 +424,14 @@
     >
       <h3 id="imports-reset-title" class="confirm-title">Start fresh for the best results</h3>
       <p class="confirm-body">
-        A previous import for your Claude conversations didn't finish. We've improved
-        how Sovereign reads conversations since then, so picking up where you left off
-        would mix old and new results.
+        A previous Claude import didn't finish. Sovereign reads conversations
+        better now than it did then — picking up where you left off would mix
+        old and new results.
       </p>
       <p class="confirm-body">
-        We'd like to start over with all {importState.pendingReset.totalMessages.toLocaleString()} messages.
-        Your Claude export file isn't touched — only the search data Sovereign built so far.
+        Better to start over with all {importState.pendingReset.totalMessages.toLocaleString()} messages.
+        Your export file stays put; only the search data Sovereign built so far
+        gets cleared.
       </p>
       <div class="actions confirm-actions">
         <button

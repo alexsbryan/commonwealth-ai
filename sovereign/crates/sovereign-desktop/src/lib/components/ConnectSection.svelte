@@ -87,8 +87,8 @@
 <section class="connect">
   <h3 class="h3">External tools</h3>
   <p class="hint">
-    Codex, Claude Code, and any OpenAI-compatible client can talk to your
-    local daemon. Point them at this endpoint:
+    Codex, Claude Code, and any OpenAI-compatible client can talk to the
+    local daemon. Point them here:
   </p>
 
   <div class="env">
@@ -117,11 +117,11 @@
   </div>
 
   <p class="hint">
-    The API key can be any non-empty string — the daemon trusts every
-    connection on the loopback interface.
+    Any non-empty string works as the API key — the daemon trusts every
+    connection coming from this machine.
   </p>
 
-  <h3 class="h3">Example: Codex one-liner</h3>
+  <h3 class="h3">Codex, one line</h3>
   <div class="cmd">
     <code class="cmd-text">{codexCommand}</code>
     <button
@@ -147,7 +147,7 @@
       {/each}
     </ul>
   {/if}
-  <p class="meta">Refreshes every 10 seconds.</p>
+  <p class="meta">Refreshes every ten seconds.</p>
 </section>
 
 <style>

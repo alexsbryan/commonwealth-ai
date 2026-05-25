@@ -194,9 +194,8 @@
 
 <section class="enrich-panel">
   <p class="intro">
-    Atlas enrichment produces a typed atom graph — entities, events,
-    states, relations, claims, questions, configurations — from one
-    corpus at a time. Runs locally; every LLM call goes through the
+    Builds a graph of people, events, claims, and open questions across
+    one library at a time. Every LLM call stays local — through the
     daemon at <code>localhost:9741</code>.
   </p>
 
@@ -204,8 +203,8 @@
 
   <p class="section-label">New SEP article</p>
   <p class="slot-desc" style="margin-bottom: 10px;">
-    Scaffold a per-article philosophy corpus from the cached Stanford
-    Encyclopedia of Philosophy parquet. Acquire the parquet first with
+    Build a per-article library from the Stanford Encyclopedia of
+    Philosophy parquet. Cache the parquet first with
     <code>sovereign corpus acquire sep</code>.
   </p>
 
@@ -238,15 +237,15 @@
 
   <!-- ── Corpora list ────────────────────────────────── -->
 
-  <p class="section-label" style="margin-top: 28px;">Enriched corpora</p>
+  <p class="section-label" style="margin-top: 28px;">Enriched libraries</p>
 
   {#if corporaLoading}
     <p class="muted">Loading…</p>
   {:else if corporaError}
-    <p class="err-msg">Could not list corpora: {corporaError}</p>
+    <p class="err-msg">Could not list libraries: {corporaError}</p>
   {:else if corpora.length === 0}
     <p class="muted">
-      No enriched corpora yet. Scaffold an SEP article above or use the CLI:
+      Nothing enriched yet. Scaffold an SEP article above or use the CLI:
       <code>sovereign enrich init &lt;corpus&gt; --source &lt;file&gt; --pipeline philosophy_atlas</code>.
     </p>
   {:else}
