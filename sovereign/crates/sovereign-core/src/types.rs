@@ -921,6 +921,33 @@ pub enum StepKind {
     },
 }
 
+/// Discriminates the two producers of `InformationRequest`. The UI
+/// renders each kind with distinct chrome because the user-facing
+/// contract differs:
+///
+/// - **`Refinement`** — post-answer epistemic-humility audit. The
+///   conversation already has a complete answer; the card is an
+///   optional "would source X sharpen this?" prompt. Skipping leaves
+///   the original answer intact.
+/// - **`StepBlock`** — a planned `StepKind::AwaitUserInfo` step that
+///   has suspended a task. Skipping advances the task with empty
+///   step output, which downstream steps will consume as a real
+///   (empty) value — semantically different from "no card was ever
+///   shown."
+///
+/// Producers must stamp the right variant; the UI uses this to pick
+/// header text, dismiss semantics, and visual anchoring. `Default`
+/// is `Refinement` because it's the conservative choice on the wire
+/// (stale producers / older clients won't accidentally render a
+/// task-blocking card).
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum InformationRequestKind {
+    #[default]
+    Refinement,
+    StepBlock,
+}
+
 /// Structured information request surfaced when the agent has a specific,
 /// nameable gap that the local corpus can't fill. Rendered in the UI as a
 /// dedicated card (not a chat bubble) with the four fields spelled out.
@@ -948,6 +975,14 @@ pub struct InformationRequest {
     pub task_id: String,
     #[serde(default)]
     pub step_id: usize,
+    /// Producer discriminator. See [`InformationRequestKind`].
+    #[serde(default)]
+    pub kind: InformationRequestKind,
+    /// Human-readable task goal — populated by the executor for
+    /// `StepBlock` cards so the UI can show "Task: <goal>" in the
+    /// card header. Empty for `Refinement` cards.
+    #[serde(default)]
+    pub task_title: String,
 }
 
 /// Emitted after an already-streamed assistant message has been

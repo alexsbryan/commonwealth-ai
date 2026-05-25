@@ -1409,6 +1409,8 @@ fn await_user_info_plan() -> (Plan, Task) {
         search_hints: vec!["NEJM 2024".to_string()],
         task_id: String::new(),
         step_id: 0,
+        kind: sovereign_core::types::InformationRequestKind::default(),
+        task_title: String::new(),
     };
     let plan = Plan {
         id: "info-test".to_string(),
@@ -1467,6 +1469,79 @@ async fn await_user_info_yields_user_content_on_fulfill() {
         }
         other => panic!("expected Text, got {other:?}"),
     }
+}
+
+/// Spy channel that captures the `InformationRequest` payload the
+/// executor hands to `request_information`. Used to pin the executor's
+/// stamping contract for `AwaitUserInfo` steps.
+struct SpyInfoChannel {
+    captured: tokio::sync::Mutex<Option<sovereign_core::types::InformationRequest>>,
+}
+
+#[async_trait]
+impl ApprovalChannel for SpyInfoChannel {
+    async fn request_approval(&self, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
+        Ok(true)
+    }
+    async fn ask_user(&self, _question: &str) -> Result<String> {
+        Ok(String::new())
+    }
+    fn emit_progress(&self, _step: &Step, _output: &StepOutput) {}
+    async fn request_information(
+        &self,
+        request: &sovereign_core::types::InformationRequest,
+    ) -> Option<String> {
+        *self.captured.lock().await = Some(request.clone());
+        None
+    }
+}
+
+#[tokio::test]
+async fn await_user_info_stamps_step_block_kind_and_task_title() {
+    // Pins the executor's contract that every `AwaitUserInfo` step
+    // surfaces to the UI as a `StepBlock` card with `task_title`
+    // populated from the task goal. The UI uses this to render the
+    // "task paused" chrome distinct from the post-answer refinement
+    // card produced by `gap::identify_gap`.
+    let inference = Arc::new(MockInference::new("unused"));
+    let store = Arc::new(MockStore::new());
+    let (plan, task) = await_user_info_plan();
+    let task_goal = task.goal.clone();
+    let spy = Arc::new(SpyInfoChannel {
+        captured: tokio::sync::Mutex::new(None),
+    });
+
+    let executor = Executor::new(
+        inference,
+        Arc::new(ToolRegistry::new()),
+        store,
+        spy.clone(),
+        Arc::new(SkillRegistry::new()),
+    );
+
+    let mut ctx = TaskContext {
+        task,
+        completed: std::collections::HashMap::new(),
+    };
+    let _ = executor.run(&plan, &mut ctx).await.unwrap();
+
+    let captured = spy
+        .captured
+        .lock()
+        .await
+        .clone()
+        .expect("executor must call request_information");
+    assert_eq!(
+        captured.kind,
+        sovereign_core::types::InformationRequestKind::StepBlock,
+        "AwaitUserInfo steps must be stamped StepBlock so the UI picks the task-paused chrome"
+    );
+    assert_eq!(
+        captured.task_title, task_goal,
+        "executor must copy task.goal into task_title so the card can show 'Task: <goal>'"
+    );
+    assert_eq!(captured.task_id, "info-task");
+    assert_eq!(captured.step_id, 0);
 }
 
 #[tokio::test]
