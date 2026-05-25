@@ -813,14 +813,67 @@ impl NoteStore {
         scope_filter: &ScopeFilter,
     ) -> Result<Vec<NoteRow>> {
         let cap = limit.min(100);
-        // Over-fetch when FTS is active to leave room for post-filtering.
-        let fetch_limit = if query.is_some() { cap * 10 } else { cap };
+        // `scope` is the only filter still applied post-fetch; SQL covers
+        // kinds, symbols, and files via WHERE so the LIMIT window no longer
+        // hides notes that match an exact symbol/file/kind written outside
+        // the most-recent N rows. Over-fetch only when the residual
+        // scope_filter is active.
+        let post_fetch_active = !scope_filter_is_no_op(scope_filter);
+        let fetch_limit = if post_fetch_active { cap * 10 } else { cap };
 
         let retired_clause = if include_retired {
             ""
         } else {
-            "AND retired_at IS NULL"
+            "AND n.retired_at IS NULL"
         };
+
+        // Build WHERE fragments + bound params in lock-step. Each
+        // `EXISTS (SELECT 1 FROM json_each(n.<col>) WHERE value IN (?,?,…))`
+        // matches if any candidate value appears anywhere in the JSON array
+        // stored at `n.<col>`. SQLite's `json_each` table-valued function
+        // walks the array element-by-element so element-equality is exact
+        // (no substring false-positives against the surrounding `[...]`).
+        let mut where_extra = String::new();
+        let mut bound: Vec<rusqlite::types::Value> = Vec::new();
+
+        if !kinds.is_empty() {
+            where_extra.push_str(" AND n.kind IN (");
+            for (i, k) in kinds.iter().enumerate() {
+                if i > 0 {
+                    where_extra.push(',');
+                }
+                where_extra.push('?');
+                bound.push(rusqlite::types::Value::Text(k.clone()));
+            }
+            where_extra.push(')');
+        }
+
+        if !symbols.is_empty() {
+            where_extra.push_str(
+                " AND EXISTS (SELECT 1 FROM json_each(n.symbols) WHERE value IN (",
+            );
+            for (i, s) in symbols.iter().enumerate() {
+                if i > 0 {
+                    where_extra.push(',');
+                }
+                where_extra.push('?');
+                bound.push(rusqlite::types::Value::Text(s.clone()));
+            }
+            where_extra.push_str("))");
+        }
+
+        if !files.is_empty() {
+            where_extra
+                .push_str(" AND EXISTS (SELECT 1 FROM json_each(n.files) WHERE value IN (");
+            for (i, f) in files.iter().enumerate() {
+                if i > 0 {
+                    where_extra.push(',');
+                }
+                where_extra.push('?');
+                bound.push(rusqlite::types::Value::Text(f.clone()));
+            }
+            where_extra.push_str("))");
+        }
 
         let rows: Vec<NoteRow> = {
             let conn = self.conn.lock().await;
@@ -830,7 +883,6 @@ impl NoteStore {
                         SELECT rowid, bm25(notes_fts) AS rank
                         FROM notes_fts
                         WHERE notes_fts MATCH ?
-                        LIMIT {fetch_limit}
                     )
                     SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
                            n.created_at, n.tool_name, n.retired_at, n.retired_by,
@@ -838,11 +890,18 @@ impl NoteStore {
                            n.source, n.supersedes, n.payload_json
                     FROM notes n
                     JOIN ranked r ON r.rowid = n.rowid
-                    WHERE 1=1 {retired_clause}
-                    ORDER BY r.rank"
+                    WHERE 1=1 {retired_clause} {where_extra}
+                    ORDER BY r.rank
+                    LIMIT ?"
                 );
+                let mut params_owned: Vec<rusqlite::types::Value> = Vec::new();
+                params_owned.push(rusqlite::types::Value::Text(q.to_string()));
+                params_owned.extend(bound.into_iter());
+                params_owned.push(rusqlite::types::Value::Integer(fetch_limit as i64));
                 let mut stmt = conn.prepare(&sql).map_err(sqlite_err)?;
-                let mapped = stmt.query_map(params![q], map_note_row).map_err(sqlite_err)?;
+                let mapped = stmt
+                    .query_map(rusqlite::params_from_iter(params_owned), map_note_row)
+                    .map_err(sqlite_err)?;
                 let mut out = Vec::new();
                 for row in mapped {
                     out.push(row.map_err(sqlite_err)?);
@@ -850,18 +909,20 @@ impl NoteStore {
                 out
             } else {
                 let sql = format!(
-                    "SELECT id, kind, content, symbols, files, session_id,
-                            created_at, tool_name, retired_at, retired_by,
-                            scope, feature_id, promoted_from, related_entity,
-                            source, supersedes, payload_json
-                     FROM notes
-                     WHERE 1=1 {retired_clause}
-                     ORDER BY created_at DESC
+                    "SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
+                            n.created_at, n.tool_name, n.retired_at, n.retired_by,
+                            n.scope, n.feature_id, n.promoted_from, n.related_entity,
+                            n.source, n.supersedes, n.payload_json
+                     FROM notes n
+                     WHERE 1=1 {retired_clause} {where_extra}
+                     ORDER BY n.created_at DESC
                      LIMIT ?"
                 );
+                let mut params_owned: Vec<rusqlite::types::Value> = bound;
+                params_owned.push(rusqlite::types::Value::Integer(fetch_limit as i64));
                 let mut stmt = conn.prepare(&sql).map_err(sqlite_err)?;
                 let mapped = stmt
-                    .query_map(params![fetch_limit as i64], map_note_row)
+                    .query_map(rusqlite::params_from_iter(params_owned), map_note_row)
                     .map_err(sqlite_err)?;
                 let mut out = Vec::new();
                 for row in mapped {
@@ -873,9 +934,6 @@ impl NoteStore {
 
         let mut out: Vec<NoteRow> = rows
             .into_iter()
-            .filter(|n| kinds.is_empty() || kinds.iter().any(|k| k == &n.kind))
-            .filter(|n| symbols.is_empty() || symbols.iter().any(|s| n.symbols.contains(s)))
-            .filter(|n| files.is_empty() || files.iter().any(|f| n.files.contains(f)))
             .filter(|n| scope_matches(n, scope_filter))
             .collect();
 
@@ -1169,6 +1227,14 @@ fn sqlite_err(e: rusqlite::Error) -> Error {
 /// Returns `true` when the note matches the caller's scope predicate.
 ///
 /// Default `ScopeFilter` (no scopes, no feature_id) always matches — the
+/// True when the scope filter has no predicate to apply (empty scopes AND
+/// no feature_id). Used by `read_notes_scoped` to decide whether the SQL
+/// LIMIT can be tight (`cap`) or whether the post-fetch scope filter still
+/// needs over-fetch headroom (`cap * 10`).
+fn scope_filter_is_no_op(filter: &ScopeFilter) -> bool {
+    filter.scopes.is_empty() && filter.feature_id.is_none()
+}
+
 /// legacy [`NoteStore::read_notes`] wrapper uses this to preserve behavior.
 fn scope_matches(note: &NoteRow, filter: &ScopeFilter) -> bool {
     if filter.scopes.is_empty() && filter.feature_id.is_none() {
@@ -1478,6 +1544,172 @@ mod tests {
             .unwrap();
         assert_eq!(results.len(), 1);
         assert!(results[0].content.contains("foo"));
+    }
+
+    /// Regression for the post-fetch LIMIT bug — pre-fix, `symbols` /
+    /// `files` / `kinds` were applied AFTER `ORDER BY created_at DESC
+    /// LIMIT cap`, so a matching note pushed out of the recency window
+    /// by newer writes silently disappeared. Push the matching note to
+    /// the bottom by writing 20 newer unrelated notes; then ask for it
+    /// by exact symbol with the default limit of 10. Pre-fix returned
+    /// 0; post-fix returns 1.
+    #[tokio::test]
+    async fn symbol_filter_survives_recency_window_displacement() {
+        let store = make_store().await;
+        let needle_id = store
+            .write_note(
+                "invariant",
+                "needle — must survive recency window",
+                vec!["NeedleSymbol".into()],
+                vec![],
+                "s1",
+            )
+            .await
+            .unwrap();
+        for i in 0..20 {
+            store
+                .write_note(
+                    "todo",
+                    &format!("haystack note {i}"),
+                    vec![format!("unrelated_{i}")],
+                    vec![],
+                    "s1",
+                )
+                .await
+                .unwrap();
+        }
+
+        let results = store
+            .read_notes(None, &["NeedleSymbol".to_string()], &[], &[], 10, false)
+            .await
+            .unwrap();
+        assert_eq!(
+            results.len(),
+            1,
+            "exact-symbol filter must find the note even when recency-displaced"
+        );
+        assert_eq!(results[0].id, needle_id);
+    }
+
+    /// Same shape for files filter — pinned because we also hit this
+    /// in the 2026-05-25 audit (`--files=[…]` returned 0 against the
+    /// live DB even though the path was stored verbatim).
+    #[tokio::test]
+    async fn file_filter_survives_recency_window_displacement() {
+        let store = make_store().await;
+        let needle_id = store
+            .write_note(
+                "decision",
+                "shipped X — see file",
+                vec![],
+                vec!["crates/foo/src/needle.rs".into()],
+                "s1",
+            )
+            .await
+            .unwrap();
+        for i in 0..20 {
+            store
+                .write_note(
+                    "todo",
+                    &format!("displacer {i}"),
+                    vec![],
+                    vec![format!("crates/other/src/file_{i}.rs")],
+                    "s1",
+                )
+                .await
+                .unwrap();
+        }
+
+        let results = store
+            .read_notes(
+                None,
+                &[],
+                &["crates/foo/src/needle.rs".to_string()],
+                &[],
+                10,
+                false,
+            )
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, needle_id);
+    }
+
+    /// Same shape for kinds filter.
+    #[tokio::test]
+    async fn kind_filter_survives_recency_window_displacement() {
+        let store = make_store().await;
+        let needle_id = store
+            .write_note("invariant", "needle invariant", vec![], vec![], "s1")
+            .await
+            .unwrap();
+        for i in 0..20 {
+            store
+                .write_note("todo", &format!("displacer {i}"), vec![], vec![], "s1")
+                .await
+                .unwrap();
+        }
+
+        let results = store
+            .read_notes(None, &[], &[], &["invariant".to_string()], 10, false)
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, needle_id);
+    }
+
+    /// Filter combinators: symbols AND kinds, both required. SQL `IN`
+    /// lists give OR semantics within a slot; multiple slots compose
+    /// with AND.
+    #[tokio::test]
+    async fn combined_filters_intersect() {
+        let store = make_store().await;
+        let target = store
+            .write_note(
+                "decision",
+                "right kind + right symbol",
+                vec!["TargetSymbol".into()],
+                vec![],
+                "s1",
+            )
+            .await
+            .unwrap();
+        // Same symbol, wrong kind:
+        store
+            .write_note(
+                "todo",
+                "right symbol, wrong kind",
+                vec!["TargetSymbol".into()],
+                vec![],
+                "s1",
+            )
+            .await
+            .unwrap();
+        // Right kind, wrong symbol:
+        store
+            .write_note(
+                "decision",
+                "right kind, wrong symbol",
+                vec!["OtherSymbol".into()],
+                vec![],
+                "s1",
+            )
+            .await
+            .unwrap();
+
+        let results = store
+            .read_notes(
+                None,
+                &["TargetSymbol".to_string()],
+                &[],
+                &["decision".to_string()],
+                10,
+                false,
+            )
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, target);
     }
 
     #[tokio::test]

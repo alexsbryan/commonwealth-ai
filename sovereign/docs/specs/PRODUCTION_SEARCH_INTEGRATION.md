@@ -1,13 +1,19 @@
 # Production web-search integration — plan
 
-**Status**: gym-validated at 90% on the mock backend (search-gym v8,
-2026-05-19); orchestrator + registry shipped (Phase 6, commit `30402d2`)
-and the zero-config DuckDuckGo fallback is e2e-verified against live
-network (`sovereign-tools/tests/duckduckgo_real_e2e.rs`, 2026-05-19 —
-5/5 results, deduped, sub-second). Remaining productionization work is
-(a) operator-configurable backend (Tavily/Brave key plumbing through
-the registry), (b) the open decisions in §"Open decisions for the
-operator" below.
+**Status:** In flight — partially shipped. Orchestrator + registry
++ zero-config DuckDuckGo fallback shipped 2026-05-19; remaining
+Tavily/Brave key plumbing + operator-decision items in §"Open
+decisions for the operator" below.
+**Lifecycle:** When remaining decisions resolve and Tavily plumbing
+ships, the runtime surface lands in a `docs/web-search.md` deep-
+dive and this spec moves to `docs/archive/` with a companion note.
+
+**Earlier status detail** (forensics): gym-validated at 90% on the
+mock backend (search-gym v8, 2026-05-19); orchestrator + registry
+shipped (Phase 6, commit `30402d2`); zero-config DuckDuckGo
+fallback e2e-verified against live network
+(`sovereign-tools/tests/duckduckgo_real_e2e.rs`, 2026-05-19 — 5/5
+results, deduped, sub-second).
 
 ## What this is for
 

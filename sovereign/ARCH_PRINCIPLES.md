@@ -275,6 +275,41 @@ Some traits are already minimal and should stay that way:
 If you're tempted to add a method to these, check: is it a new concern? It
 probably belongs in a sibling trait, not on this one.
 
+### 5.4 Pipeline stages parameterize on data, not source identity
+
+When a stage in a multi-step pipeline (enrichment, retrieval,
+indexing) takes a source-shaped handle in its signature
+(`&DocumentAsset`, `&CorpusEntry`, `&ConversationRecord`), it
+silently couples to that source. Adding a second source kind means
+either an `enum` parameter, a wrapper trait, or a parallel
+implementation — none of them free.
+
+The tiered-retrieval port surfaced this. `build_raptor_atlas`,
+`EntityGraph::build`, `extract_motif_candidates`, and
+`detect_segment_boundaries` all take *chunks + embeddings +
+inference + store handles* — never a `DocumentAsset`. Porting from
+the attached-doc surface to a conversation corpus was a recipe + a
+state-machine adapter; the algorithmic stages were unchanged.
+
+Three concrete commitments that earn portability:
+
+1. **Builder signatures are corpus-free.** Pass primitives
+   (chunks, embeddings, an `EmbedFn` or `InferenceFn`, store
+   handles), not source aggregates.
+2. **Storage tables key on string IDs in the source's own
+   namespace**, not on document-specific identifiers. Same
+   schema serves conversation, vault, attached doc, encyclopedia
+   — under their own `asset_id`-shaped namespaces.
+3. **State machines are per-source, not per-document.** The
+   variant set (`Pending → Indexing → PartiallyReady → … →
+   Ready | Failed`) is universal; *where it lives* is per-corpus.
+
+Reference: `sovereign-core::document_asset::AssetState` +
+`corpus-engine/src/enrichment/pipeline/raptor_atlas.rs` (canonical
+shape). Counter-example: any function that needs an `if let Some(doc)
+= asset { … } else { … }` switch is reaching across this boundary
+and should be split.
+
 ---
 
 ## 6. Data vs. program — the SICP separation
