@@ -353,25 +353,59 @@ is the 21-turn fixture covering Phase A (topic Q&A) → pivot → Phase B
 (second topic) → Phase C (third topic) → callbacks across all three.
 Baselines under `bench/wikipedia_learn/baselines/threads-marathon-graceful-*.json`.
 
-## Retrieval-over-history (spike, 2026-05-26)
+## Retrieval-over-history (default-on, 2026-05-26)
 
-The v0-v3 marathon_graceful sweep surfaced a methodology smell:
-re-summarising the dropped tail every turn lossy-compresses the
-preamble. Spike replaces that mechanism (on callback workloads) with
-cosine-similarity retrieval over prior turn pairs.
+`Runtime::maybe_retrieve_relevant_history` surfaces directly relevant
+earlier turns when the conversation grows past the visible window
+(`CONV_HISTORY_TURNS = 8` most recent). Replaces what would otherwise
+be a re-summarisation spiral: instead of folding the dropped tail into
+a fresh Fast-slot summary every turn, retrieve the 1-5 most relevant
+prior (user, assistant) pairs by hybrid score.
 
-`Runtime::maybe_retrieve_relevant_history` runs after
-`maybe_compact_dropped_history`, embeds user+assistant pairs OUTSIDE
-the visible window (`embed_batch`), embeds the current user message
-(`embed_query`), keeps the top-K=3 hits above a similarity floor of
-0.45, and stashes them on `ConversationContext.history_retrieval_hits`.
-`build_system_message` renders them as a "Relevant earlier turns:"
-prompt section after the visible-history block.
+### Pipeline
 
-Gated on `SOVEREIGN_HISTORY_RETRIEVAL=1` while the bench validates
-whether the mechanism beats the lossy-summary approach. If v4 holds
-the line on judge_coverage and lifts late-callback fact_recall, the
-gate inverts (default-on, env var to disable).
+1. **Query enrichment.** Concatenate current user message with
+   `topic_context.topic` + `topic_context.domain` (added as
+   `[topic: …]` / `[domain: …]` markers). Captures pivots like
+   "switching back to Linnaeus" where bare phrasing wouldn't cosine-
+   match the right earlier turn.
+2. **Pair construction.** Walk message pairs OUTSIDE the visible
+   window in (user, assistant) order. Each pair becomes one
+   indexable unit, body truncated at 600 chars per side.
+3. **Embed batch.** `InferenceProvider::embed_batch` over the unit
+   bodies + `embed_query` over the enriched query (qwen-embedding-0.6b
+   today).
+4. **Entity extraction (when GLiNER installed).** GLiNER ONNX (5-label
+   tag set: Person, Organization, Work, Location, Event) extracts
+   entity sets from query + each pair. Trait `EntityExtractor` in
+   `sovereign-core::traits`; impl on `GlinerExtractor` in
+   `sovereign-tools::gliner_ner`. Cycle-break — runtime holds
+   `Option<Arc<dyn EntityExtractor>>` so core doesn't depend on tools.
+5. **Hybrid scoring.** `0.6·cosine + 0.4·jaccard(entity_set)` when
+   GLiNER is wired; pure cosine fallback when it isn't.
+6. **MMR top-K selection.** K=5, similarity floor 0.30, λ=0.5
+   (balanced relevance/diversity). Keeps cross-subject diversity
+   on synthesis turns ("compare across Curie / Linnaeus / Galileo").
+7. **Render.** `build_system_message` injects hits BEFORE the visible-
+   history block as "Relevant earlier turns from this conversation
+   (selected by similarity to your current message):" with turn index,
+   similarity, and pair body.
+
+### Toggle
+
+Default on. `SOVEREIGN_HISTORY_RETRIEVAL=0` disables for A/B compares.
+When GLiNER model `gliner_small-v2.1` isn't installed under
+`~/.sovereign/models/gliner/`, the system falls back to pure cosine +
+MMR (entity-aware retrieval silently disabled, no error).
+
+### Bench evidence (marathon_graceful)
+
+Single-trial v14 produced the highest judge score across the entire
+v0-v16 spike (judge 0.792 vs v0 baseline 0.764). Subjective read of
+transcripts: v14 caught factual details v0 hallucinated (e.g. Curie's
+1934 death date). Three-trial mean was hurt by one judge-instrument
+outlier (v15 judge 0.278); judge variance on this fixture saturates
+the measurement. See `baselines/threads-marathon-graceful-v{14,15,16}-gliner.json`.
 
 ---
 

@@ -150,6 +150,21 @@ impl FolderMetadataOracle for NoFolderMetadata {
     }
 }
 
+/// Entity extractor for entity-aware retrieval-over-history.
+/// `sovereign-tools::gliner_ner::GlinerExtractor` is the canonical
+/// production impl (GLiNER ONNX, 5-label tag set). Defined here as a
+/// trait so `sovereign-core` can hold an `Option<Arc<dyn EntityExtractor>>`
+/// on Runtime without depending on sovereign-tools (cycle: tools →
+/// core already exists).
+///
+/// Returns the unique set of entity texts (lower-cased) found in
+/// `text`. The label is intentionally elided — for retrieval scoring
+/// we only need the entity STRING for set-overlap (jaccard), not its
+/// type. Implementations should dedupe before returning.
+pub trait EntityExtractor: Send + Sync {
+    fn extract_entities(&self, text: &str) -> Vec<String>;
+}
+
 // ─── 1. Inference ──────────────────────────────────────────────
 
 #[async_trait]

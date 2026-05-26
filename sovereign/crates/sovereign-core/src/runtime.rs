@@ -707,6 +707,12 @@ pub struct Runtime {
     /// path needs the same surface later, mirror the capture in
     /// `handle_expressive_query`.
     pub turn_provenance: Arc<std::sync::RwLock<HashMap<String, TurnProvenance>>>,
+    /// Optional GLiNER entity extractor. Wired by the CLI/daemon bootstrap
+    /// when the gliner_small-v2.1 ONNX model is installed. Used by
+    /// `maybe_retrieve_relevant_history` for entity-aware query
+    /// enrichment + hybrid cosine/jaccard scoring. `None` = pre-GLiNER
+    /// behaviour preserved (pure cosine + MMR).
+    pub gliner: Option<Arc<dyn crate::traits::EntityExtractor>>,
 }
 
 impl Runtime {
@@ -780,7 +786,23 @@ impl Runtime {
             rerank_config: corpus_engine::RerankConfig::default(),
             meta_atlas: None,
             turn_provenance: Arc::new(std::sync::RwLock::new(HashMap::new())),
+            gliner: None,
         }
+    }
+
+    /// Install a GLiNER entity extractor for entity-aware retrieval
+    /// over conversation history. Used by
+    /// `maybe_retrieve_relevant_history` to compute a hybrid
+    /// cosine/jaccard score: 0.6·cosine(query, pair) +
+    /// 0.4·jaccard(query_entities, pair_entities). When `None`,
+    /// retrieval falls back to pure cosine + MMR (pre-GLiNER
+    /// behaviour preserved).
+    pub fn with_gliner(
+        mut self,
+        gliner: Arc<dyn crate::traits::EntityExtractor>,
+    ) -> Self {
+        self.gliner = Some(gliner);
+        self
     }
 
     /// Install a cross-encoder reranker. Pure-additive: when enabled,
@@ -1409,9 +1431,7 @@ impl Runtime {
         //       the current user message, stashes hits on the context
         //       for the renderer. Mechanism A/B vs the lossy-summary
         //       compaction arm — see `maybe_retrieve_relevant_history`.
-        eprintln!("[runtime] about to call maybe_retrieve_relevant_history, msg_len={}", message.len());
         self.maybe_retrieve_relevant_history(&mut context, message).await;
-        eprintln!("[runtime] returned from maybe_retrieve_relevant_history");
 
         // 2b. Tag the conversation with the skill that was active
         // when it started. The store upsert is idempotent — only
