@@ -2111,6 +2111,15 @@ impl InferenceProvider for MeshInferenceProvider {
         self.local.n_ctx_train_for_primary()
     }
 
+    /// Delegate so the runtime budget calc sees the real BPE count
+    /// (when local is `EmbeddedLlamaCpp`). Mesh-forwarded chat
+    /// requests still budget against the *local* slot's ctx —
+    /// `MeshInferenceProvider` doesn't know what tokenizer the peer
+    /// will use, and the runtime decides compaction before routing.
+    fn count_tokens(&self, text: &str) -> u32 {
+        self.local.count_tokens(text)
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         self.local.capabilities()
     }

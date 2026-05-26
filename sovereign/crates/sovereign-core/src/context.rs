@@ -30,6 +30,7 @@ pub async fn build_context(
             deleted_at: None,
             skill_id: None,
             enabled_corpora: None,
+        searched_sources: None,
         },
         Err(e) => return Err(e),
     };

@@ -755,3 +755,174 @@ expected_facts = [
 ]
 expected_sources = []
 notes = "T1 — relative coreference; 'the year before that' = 2026. The dossier should surface T0's no-results note, and the tutor should reason from that prior attempt rather than silently retrying or fabricating 2026 results. Predicates are judge-scored."
+
+
+# ── Thread 16 ────────────────────────────────────────────────────────
+# Marathon-graceful — 20-turn arc across THREE topics with explicit
+# callbacks across the conversation.
+#
+# Purpose: stress the context-management substrate (added 2026-05-25
+# in the marathon-graceful PR set) end-to-end:
+#   * Budget-aware compaction trigger (`COMPACTION_PRESSURE_THRESHOLD`)
+#     fires multiple times across the run on tight slots.
+#   * Age-aware per-message truncation (`chars_for_message_age`)
+#     keeps the most-recent exchanges high-fidelity while older
+#     verbatim turns compress to 300 chars.
+#   * `compacted_history` preamble preserves coreference targets that
+#     fall off the visible window.
+#
+# Topic mix:
+#   * Topic A (turns 0-4):  Marie Curie + radioactivity
+#   * Topic B (turns 6-9):  Carolus Linnaeus + classification
+#   * Topic C (turns 11-13): Galileo + heliocentrism
+#   * Pivots at 5, 10 carry the conversation between topics.
+#   * Callbacks at 14-19 reach back across all three, exercising
+#     coreference + cumulative-context fidelity.
+#
+# This thread is pure Q&A — uploaded-doc + web-search phases land
+# in a follow-up sub-PR once the integration surface is settled.
+# `computing_history` exercises the same compaction substrate but on
+# a tighter 12-turn arc; this thread is the longer-tail companion
+# that surfaces age-aware truncation behaviour.
+
+[[threads]]
+id = "marathon_graceful"
+category = "marathon_graceful"
+description = "20-turn marathon across Curie / Linnaeus / Galileo with topic pivots + cross-topic callbacks. Validates budget-aware compaction + age-aware truncation."
+
+# ── Topic A: Marie Curie + radioactivity ─────────────────────
+
+[[threads.turns]]
+question = "Who was Marie Curie?"
+expected_facts = ["physicist", "Polish", "Nobel"]
+expected_sources = ["Marie Curie"]
+
+[[threads.turns]]
+question = "What element did she discover with her husband?"
+expected_facts = ["polonium", "Pierre Curie", "1898"]
+expected_sources = ["Marie Curie", "Polonium"]
+notes = "Coref 'she' → Curie (T0). T1 introduces polonium — the anchor a later callback (T15) reaches back for."
+
+[[threads.turns]]
+question = "What about radium — when was that isolated?"
+expected_facts = ["radium", "1898", "pitchblende"]
+expected_sources = ["Marie Curie", "Radium"]
+notes = "Topic-internal pivot from polonium to radium within the same scientist."
+
+[[threads.turns]]
+question = "Why was her radioactivity research so dangerous at the time?"
+expected_facts = ["radiation sickness", "no protective equipment", "ionising"]
+expected_sources = ["Marie Curie", "Radioactive decay"]
+notes = "'Her' chains back to Curie. Brings in the safety dimension — anchor for a callback at T18."
+
+[[threads.turns]]
+question = "Did her work earn recognition during her lifetime?"
+expected_facts = ["Nobel Prize", "1903", "1911", "two Nobels"]
+expected_sources = ["Marie Curie"]
+notes = "Closing the Curie arc. Recognition facts become anchors for callbacks at T14, T17."
+
+# ── Pivot to Topic B ──────────────────────────────────────────
+
+[[threads.turns]]
+question = "Stepping back — who founded the modern system of biological classification?"
+expected_facts = ["Linnaeus", "binomial nomenclature", "18th century"]
+expected_sources = ["Carl Linnaeus"]
+notes = "Explicit topic pivot. 'Stepping back' acknowledges the shift; the system should re-anchor retrieval on Linnaeus."
+
+# ── Topic B: Linnaeus + classification ───────────────────────
+
+[[threads.turns]]
+question = "What was the key idea he introduced?"
+expected_facts = ["genus", "species", "Latin", "two-part name"]
+expected_sources = ["Carl Linnaeus", "Binomial nomenclature"]
+notes = "Coref 'he' → Linnaeus (T5). Anchor for callback at T16."
+
+[[threads.turns]]
+question = "Which book laid that system out?"
+expected_facts = ["Systema Naturae", "1735", "editions"]
+expected_sources = ["Systema Naturae"]
+notes = "'That system' = binomial nomenclature (T6)."
+
+[[threads.turns]]
+question = "How did naturalists before him organise species?"
+expected_facts = ["pre-Linnaean", "common names", "vernacular", "polynomial"]
+expected_sources = ["Carl Linnaeus", "Biological classification"]
+notes = "'Him' → Linnaeus. Tests temporal reasoning within the topic."
+
+[[threads.turns]]
+question = "Did his framework survive into modern biology?"
+expected_facts = ["still used", "phylogenetic", "extended", "DNA"]
+expected_sources = ["Carl Linnaeus", "Phylogenetics"]
+notes = "Closes the Linnaeus arc — relevance to modern bio. Anchor for a callback at T19."
+
+# ── Pivot to Topic C ──────────────────────────────────────────
+
+[[threads.turns]]
+question = "Centuries earlier, Galileo took on a different establishment — what did he get in trouble for?"
+expected_facts = ["heliocentrism", "Catholic Church", "Inquisition", "1633"]
+expected_sources = ["Galileo Galilei"]
+notes = "TURN 10 — second topic pivot. By here, the conversation history block can no longer hold turns 0-2 verbatim; the budget-aware compaction trigger should have fired at least once on a tight slot."
+
+# ── Topic C: Galileo + heliocentrism ──────────────────────────
+
+[[threads.turns]]
+question = "What evidence did his telescope give him for that view?"
+expected_facts = ["Jupiter's moons", "phases of Venus", "lunar craters"]
+expected_sources = ["Galileo Galilei", "Galilean moons"]
+notes = "Coref 'his' → Galileo, 'that view' → heliocentrism (T10)."
+
+[[threads.turns]]
+question = "What was the formal verdict against him?"
+expected_facts = ["house arrest", "abjure", "Dialogue Concerning the Two Chief World Systems"]
+expected_sources = ["Galileo Galilei", "Galileo affair"]
+notes = "'Him' → Galileo. Tests the institutional-context arc."
+
+[[threads.turns]]
+question = "How long did it take the Church to formally rehabilitate him?"
+expected_facts = ["1992", "John Paul II", "359 years"]
+expected_sources = ["Galileo affair"]
+notes = "Closes Galileo arc with the 1992 rehabilitation. Anchor for callback at T17."
+
+# ── Callbacks: cross-topic ────────────────────────────────────
+
+[[threads.turns]]
+question = "Going back to Curie's prizes — how do they compare in number to those of any other physicist?"
+expected_facts = ["two Nobel Prizes", "only person", "different sciences", "Physics and Chemistry"]
+expected_sources = ["Marie Curie"]
+notes = "TURN 14 — explicit callback to T4 (Curie's Nobels). Curie's record (two Nobels in two different sciences) is the load-bearing fact. By here, T0-T4 are far outside the verbatim window — `compacted_history` is the only path."
+
+[[threads.turns]]
+question = "And that element she found first — what's it used for today?"
+expected_facts = ["polonium", "anti-static", "spacecraft", "alpha source"]
+expected_sources = ["Polonium"]
+notes = "TURN 15 — coref callback to T1 (polonium). 'That element she found first' requires both the Curie anchor AND the polonium anchor to chain. Tests cumulative-context fidelity."
+
+[[threads.turns]]
+question = "Switching back to Linnaeus — has the binomial naming style ever been challenged?"
+expected_facts = ["cladistics", "PhyloCode", "rank-free", "Hennig"]
+expected_sources = ["Carl Linnaeus", "Phylogenetics", "PhyloCode"]
+notes = "TURN 16 — callback to T6 (binomial nomenclature). Tests topic re-acquisition after a 9-turn pivot to Galileo."
+
+[[threads.turns]]
+question = "Coming back to the church-and-science theme — what did the Curies do that was institutionally controversial?"
+expected_facts = ["women in science", "first female professor", "Sorbonne", "Académie des sciences rejection"]
+expected_sources = ["Marie Curie"]
+notes = "TURN 17 — bridges T13 (Galileo/Church/1992) with the Curies' institutional story. Tests reasoning across the conversation's *thematic* arc, not just topic facts."
+
+[[threads.turns]]
+question = "On the radiation-safety angle from earlier — what shifted in the decades after her death?"
+expected_facts = ["dosimetry", "lead shielding", "ALARA", "regulatory"]
+expected_sources = ["Radiation protection"]
+notes = "TURN 18 — callback to T3 (radiation safety). 'From earlier' is the entire purpose of compaction: T3's safety context must survive in some form."
+
+[[threads.turns]]
+question = "And Linnaeus's framework — what part of his work proved least durable?"
+expected_facts = ["fixed species", "no evolution", "creationism", "pre-Darwinian"]
+expected_sources = ["Carl Linnaeus"]
+notes = "TURN 19 — callback to T9 (Linnaean framework durability). Tests whether the conversation can still anchor on Linnaeus 13 turns after the last verbatim mention."
+
+[[threads.turns]]
+question = "Across all three of these — Curie, Linnaeus, Galileo — which one's discipline-level legacy has been most rewritten by later work?"
+expected_facts = ["Linnaeus", "evolution", "Darwin", "phylogenetics"]
+expected_sources = ["Carl Linnaeus", "Charles Darwin"]
+notes = "TURN 20 — synthesis turn. Requires all three subjects in active context. Either via verbatim history (impossible at turn 20 on any realistic slot) or via the compacted preamble + visible-window blend. THIS is the load-bearing test of the marathon-graceful pipeline."

@@ -139,14 +139,21 @@ pub(crate) fn today_anchor_block(today_iso: &str) -> String {
 }
 
 /// Render a trailing slice of conversation history into a system-
-/// prompt block. `max_turns` and `chars_per_msg` are caller-supplied
-/// so callers can tune for the synthesis vs. compaction paths.
+/// prompt block. `max_turns` bounds how many messages are visible;
+/// `chars_per_msg_fn` is invoked per message with that message's
+/// **age** (0 = newest visible, growing) and returns the body cap.
+///
+/// The age-aware shape (see `crate::runtime::chars_for_message_age`)
+/// keeps recent turns high-fidelity for coreference while compressing
+/// older turns. Callers that want the legacy uniform behaviour pass a
+/// closure that ignores age and returns a constant.
+///
 /// Returns `None` when there's nothing worth saying (single in-flight
 /// user message + no compacted preamble).
 pub(crate) fn format_conversation_history(
     messages: &[Message],
     max_turns: usize,
-    chars_per_msg: usize,
+    chars_per_msg_fn: impl Fn(usize) -> usize,
     compacted_preamble: Option<&str>,
 ) -> Option<String> {
     if messages.len() < 2 && compacted_preamble.is_none() {
@@ -168,7 +175,8 @@ pub(crate) fn format_conversation_history(
         sections.push(format!("Earlier in the conversation:\n{preamble}"));
     }
     let mut lines = vec!["Prior conversation (most recent last):".to_string()];
-    for m in slice {
+    let slice_len = slice.len();
+    for (i, m) in slice.iter().enumerate() {
         let label = match m.role {
             Role::User => "USER",
             Role::Assistant => "ASSISTANT",
@@ -178,7 +186,11 @@ pub(crate) fn format_conversation_history(
         if body.is_empty() {
             continue;
         }
-        let trimmed = truncate_with_ellipsis(body, chars_per_msg);
+        // Age = how many turns back from the newest visible message.
+        // slice is rendered oldest-first; i=0 is the oldest visible,
+        // i=slice_len-1 is the newest. Newest visible has age 0.
+        let age = slice_len.saturating_sub(1).saturating_sub(i);
+        let trimmed = truncate_with_ellipsis(body, chars_per_msg_fn(age));
         lines.push(format!("{label}: {trimmed}"));
     }
     if lines.len() > 1 {
@@ -299,7 +311,7 @@ mod format_conversation_history_tests {
     #[test]
     fn single_trailing_user_returns_none() {
         let msgs = vec![msg(Role::User, "hello")];
-        assert!(format_conversation_history(&msgs, 8, 500, None).is_none());
+        assert!(format_conversation_history(&msgs, 8, |_| 500, None).is_none());
     }
 
     /// Empty preamble (whitespace-only) is treated as absent — the
@@ -312,7 +324,7 @@ mod format_conversation_history_tests {
             msg(Role::Assistant, "second"),
             msg(Role::User, "in-flight"),
         ];
-        let out = format_conversation_history(&msgs, 8, 500, Some("   ")).unwrap();
+        let out = format_conversation_history(&msgs, 8, |_| 500, Some("   ")).unwrap();
         assert!(!out.contains("Earlier in the conversation"));
         assert!(out.contains("USER: first"));
         assert!(out.contains("ASSISTANT: second"));
@@ -328,7 +340,7 @@ mod format_conversation_history_tests {
             msg(Role::User, "q"),
             msg(Role::Assistant, "a"),
         ];
-        let out = format_conversation_history(&msgs, 8, 500, None).unwrap();
+        let out = format_conversation_history(&msgs, 8, |_| 500, None).unwrap();
         assert!(out.contains("USER: q"));
         assert!(out.contains("ASSISTANT: a"));
     }
@@ -341,9 +353,67 @@ mod format_conversation_history_tests {
             msg(Role::User, "q"),
             msg(Role::Assistant, &long),
         ];
-        let out = format_conversation_history(&msgs, 8, 100, None).unwrap();
+        let out = format_conversation_history(&msgs, 8, |_| 100, None).unwrap();
         assert!(out.contains("ASSISTANT:"));
         assert!(out.contains("..."));
+    }
+
+    /// Age-aware truncation: recent visible turns keep more body
+    /// than older ones. Drives the marathon-graceful behaviour where
+    /// the user's most recent exchange stays high-fidelity in the
+    /// prompt while turns 4+ ago compress.
+    ///
+    /// Uses ASCII sentinels chosen to be absent from the header text
+    /// "Prior conversation (most recent last):" and the role labels
+    /// "USER:" / "ASSISTANT:" — so the per-char count exactly matches
+    /// the truncated body. `truncate_with_ellipsis` is *byte*-based,
+    /// so single-byte ASCII gives clean 1-char = 1-byte semantics.
+    #[test]
+    fn age_aware_truncation_gives_recent_turns_more_room() {
+        // 6 visible turns. Newest is at index 5 (age 0). Each body
+        // is 1500 copies of a distinct char so we can identify it
+        // after the cut.
+        let sentinels = ['b', 'd', 'f', 'g', 'h', 'j'];
+        let bodies: Vec<String> = sentinels
+            .iter()
+            .map(|c| c.to_string().repeat(1500))
+            .collect();
+        let msgs: Vec<_> = bodies
+            .iter()
+            .enumerate()
+            .map(|(i, body)| msg(
+                if i % 2 == 0 { Role::User } else { Role::Assistant },
+                body,
+            ))
+            .collect();
+
+        // Age budget shaped like the production tier:
+        //   age 0-1 → 1000 chars (newest pair)
+        //   age 2-3 → 600 chars (mid pair)
+        //   age 4+  → 300 chars (oldest)
+        let chars_for_age = |age: usize| match age {
+            0..=1 => 1000,
+            2..=3 => 600,
+            _ => 300,
+        };
+        let out = format_conversation_history(&msgs, 8, chars_for_age, None)
+            .expect("six visible turns should render a history block");
+
+        // Layout: oldest first, newest last. Verify cap held by
+        // counting sentinel char occurrences (none in header/labels).
+        //   index 0 → b → age 5 → cap 300
+        //   index 1 → d → age 4 → cap 300
+        //   index 2 → f → age 3 → cap 600
+        //   index 3 → g → age 2 → cap 600
+        //   index 4 → h → age 1 → cap 1000
+        //   index 5 → j → age 0 → cap 1000
+        let count_char = |c: char| out.chars().filter(|&x| x == c).count();
+        assert_eq!(count_char('b'), 300, "oldest visible (age 5) caps at 300");
+        assert_eq!(count_char('d'), 300, "age 4 caps at 300");
+        assert_eq!(count_char('f'), 600, "age 3 caps at 600");
+        assert_eq!(count_char('g'), 600, "age 2 caps at 600");
+        assert_eq!(count_char('h'), 1000, "age 1 caps at 1000");
+        assert_eq!(count_char('j'), 1000, "newest (age 0) caps at 1000");
     }
 
     /// `max_turns` clamps the trailing slice.
@@ -357,7 +427,7 @@ mod format_conversation_history_tests {
             .collect();
         // 10 messages, last is U/A pattern; tail-user-elide makes cap=9.
         // max_turns=3 keeps only 3 messages.
-        let out = format_conversation_history(&msgs, 3, 500, None).unwrap();
+        let out = format_conversation_history(&msgs, 3, |_| 500, None).unwrap();
         assert!(out.contains("turn-6") || out.contains("turn-7") || out.contains("turn-8"));
         assert!(!out.contains("turn-0"));
     }

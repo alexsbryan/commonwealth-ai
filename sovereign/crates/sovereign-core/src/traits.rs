@@ -368,6 +368,27 @@ pub trait InferenceProvider: Send + Sync {
         None
     }
 
+    /// Estimate the token count of `text` for the active chat slot's
+    /// tokenizer. Used by the runtime's chat-context-management layer
+    /// (compaction trigger, retrieval-bundle budget) to decide when
+    /// the prompt is approaching the slot's `effective_context_size`.
+    ///
+    /// Default implementation uses the project-wide
+    /// `~4 chars/token` heuristic — accurate within ±15% on Latin-1
+    /// prose for the GGUFs we ship; less accurate on CJK / code /
+    /// heavy punctuation. Providers that own a real tokenizer
+    /// (`EmbeddedLlamaCpp`) override with the slot's own BPE vocab
+    /// for an exact count.
+    ///
+    /// Sync method. Implementors must not block on a `Mutex` —
+    /// the chat-context-management path calls this in hot loops
+    /// (per-message during prompt assembly). `EmbeddedLlamaCpp`'s
+    /// override reads from the always-resident `Arc<LlamaModel>` on
+    /// the fast slot, no lock needed.
+    fn count_tokens(&self, text: &str) -> u32 {
+        (text.chars().count() / 4) as u32
+    }
+
     /// Return the model ID of a configured Code specialist slot, if the
     /// provider has one separately from its primary slot. Returns `None`
     /// on providers that collapse all chat work into `model_id_for(Slow)`
@@ -613,6 +634,25 @@ pub trait ConversationStore: Send + Sync {
         &self,
         conversation_id: &str,
         enabled_corpora: Option<Vec<String>>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    /// Marathon-graceful M3 — replace the cumulative web-source
+    /// registry for this conversation. The `submit_information_search`
+    /// Tauri command loads the current set, dedupes new URLs against
+    /// it (bumping `last_referenced_turn` on duplicates, appending new
+    /// entries), then writes the merged list back through this method.
+    /// `None` clears the column entirely (re-creates the
+    /// pre-migration state).
+    ///
+    /// Default `Ok(())` no-op lets test doubles / in-memory stores
+    /// keep compiling without re-implementing the storage layer.
+    #[allow(unused_variables)]
+    async fn set_conversation_searched_sources(
+        &self,
+        conversation_id: &str,
+        entries: Option<Vec<crate::types::SearchedSourceEntry>>,
     ) -> Result<()> {
         Ok(())
     }

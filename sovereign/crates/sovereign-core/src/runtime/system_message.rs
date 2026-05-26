@@ -150,10 +150,16 @@ impl Runtime {
         // refers to" because the synthesis prompt sees only the
         // current user message. Surfaced by
         // sovereign/bench/wikipedia_learn 2026-05-17 smoke.
+        // Age-aware per-message truncation: recent turns keep more
+        // fidelity (coreference + topical anchor), older turns
+        // compress. See `chars_for_message_age` in runtime.rs for the
+        // tiered budget. Pre-PR-M2 this passed
+        // `CONV_HISTORY_CHARS_PER_MSG` uniformly; new shape passes a
+        // closure.
         if let Some(history) = format_conversation_history(
             &context.conversation.messages,
             CONV_HISTORY_TURNS,
-            CONV_HISTORY_CHARS_PER_MSG,
+            crate::runtime::chars_for_message_age,
             context.compacted_history.as_deref(),
         ) {
             parts.push(history);
@@ -204,6 +210,39 @@ impl Runtime {
         // / no tension found) and renders nothing.
         if !context.temporal_tensions.is_empty() {
             parts.push(render_temporal_tensions(&context.temporal_tensions));
+        }
+
+        // Marathon-graceful M3 — cumulative web-source registry.
+        // Renders all URLs the user has been shown via
+        // `submit_information_search` across this conversation's
+        // turns. Ordered by `last_referenced_turn` descending so the
+        // model sees the most-recently-relevant sources first.
+        // Capped at 20 entries to keep the system message bounded on
+        // long conversations; older entries roll off silently.
+        if let Some(searched) = &context.conversation.searched_sources {
+            if !searched.is_empty() {
+                let mut sorted: Vec<&crate::types::SearchedSourceEntry> =
+                    searched.iter().collect();
+                sorted.sort_by(|a, b| {
+                    b.last_referenced_turn.cmp(&a.last_referenced_turn)
+                });
+                sorted.truncate(20);
+                let mut block = String::from(
+                    "Web sources gathered so far in this conversation (most recent first):\n",
+                );
+                for entry in sorted {
+                    let title = if entry.title.trim().is_empty() {
+                        "(no title)"
+                    } else {
+                        entry.title.trim()
+                    };
+                    block.push_str(&format!(
+                        "- [{}] {} — first seen turn {}\n",
+                        title, entry.url, entry.first_seen_turn,
+                    ));
+                }
+                parts.push(block);
+            }
         }
 
         // Tool-Mastery dossier — spliced LAST so it sits at the tail
