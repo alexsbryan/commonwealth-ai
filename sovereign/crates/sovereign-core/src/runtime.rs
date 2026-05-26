@@ -277,23 +277,32 @@ pub(crate) fn chars_for_message_age(age: usize) -> usize {
 pub(crate) const CONV_HISTORY_COMPACT_MIN_DROPPED: usize = 2;
 
 /// Fraction of `effective_context_size` above which the
-/// budget-aware compaction arm fires, even when `CONV_HISTORY_TURNS`
-/// would normally keep all messages visible. Pairs with the prior
-/// PR's `SYSTEM_OVERHEAD_TOKEN_RESERVE = 4096` (system message +
-/// retrieval bundle + response) — together they leave roughly half
-/// the slot for the conversation history block. Above 0.55, the
-/// retrieval-bundle ctx-aware trim (also from the prior PR) starts
-/// dropping chunks; that's the user-perceptible cliff we're trying
-/// to keep history compaction ahead of.
+/// budget-aware compaction arm fires.
 ///
-/// Tuning rationale (2026-05-25 design pass): chats with 6 long
-/// turns can already hit 4-5K tokens of pure history on a tight slot,
-/// blowing budget before turn 8 (when the turn-count arm would have
-/// fired). 0.55 is the empirical threshold where the user starts to
-/// notice the retrieval cliff; compacting earlier than that keeps
-/// the chat "feeling free" without paying for summary calls during
-/// short conversations.
-pub(crate) const COMPACTION_PRESSURE_THRESHOLD: f32 = 0.55;
+/// **History (2026-05-25 → 2026-05-26 marathon-graceful bench):**
+/// Started at 0.55, then 0.7. Both regressed the judge-coverage
+/// metric on the marathon_graceful thread (v0=0.764 →
+/// v1@0.55=0.694 → v2@0.7=0.639). Each compaction call generates a
+/// fresh Fast-slot summary preamble; on this 21-turn thread the
+/// preamble was getting re-summarized so often it lost the
+/// nuance the late callback turns (T16–T20) needed to synthesise.
+/// Substring fact_recall improved slightly (model used keywords
+/// more) but the paraphrase-tolerant judge saw worse coverage —
+/// the model's prose got more keyword-dense and less
+/// comprehensive.
+///
+/// Reset to 0.9 = effective "emergency only" threshold. On a 16k
+/// ctx slot, 0.9 × 16000 = 14400 tokens of *conversation-history-
+/// only* pressure — only reachable on a >50-turn dense chat.
+/// `estimate_compaction_pressure` measures conv-history + memories +
+/// existing compacted_preamble; system message + retrieval bundle
+/// are excluded (they fire later in the handler). The right fix is
+/// to redesign the sensor to include all prompt components, then
+/// re-tune the threshold — captured as a kind=todo note for the
+/// next iteration cycle. For now the budget arm is a safety net
+/// that fires on truly pathological pressure; everyday compaction
+/// rides the turn-count arm at `CONV_HISTORY_TURNS = 8`.
+pub(crate) const COMPACTION_PRESSURE_THRESHOLD: f32 = 0.9;
 
 /// Below this dropped-message count, suppress the narration chip
 /// (compaction fires, but silently — chips on ≤2 dropped messages

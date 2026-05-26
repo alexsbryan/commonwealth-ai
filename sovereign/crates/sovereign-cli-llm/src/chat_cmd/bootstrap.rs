@@ -55,6 +55,16 @@ pub struct SplitInferenceProvider {
     chat: Arc<RemoteApiProvider>,
     embed: Arc<RemoteApiProvider>,
     chat_model_id: String,
+    /// Daemon-side chat slot context window. Stored so
+    /// `effective_context_size` can return a concrete value without
+    /// a daemon round-trip on every call — the CLI reads
+    /// `SetupConfig.effective_context_size()` at construction (same
+    /// value the daemon's slot loader uses) and mirrors it here.
+    ///
+    /// Wired 2026-05-26 so the runtime's budget-aware compaction arm
+    /// (M1) activates on CLI bench paths; previously the trait
+    /// default returned `None` and only the turn-count arm fired.
+    context_size: u32,
 }
 
 impl SplitInferenceProvider {
@@ -80,6 +90,7 @@ impl SplitInferenceProvider {
             chat,
             embed,
             chat_model_id,
+            context_size,
         }
     }
 }
@@ -117,6 +128,18 @@ impl InferenceProvider for SplitInferenceProvider {
 
     fn capabilities(&self) -> ProviderCapabilities {
         self.chat.capabilities()
+    }
+
+    /// Surface the daemon-side context window so the runtime's
+    /// compaction layer (M1 budget arm) can budget against it. The
+    /// value is captured at construction from
+    /// `SetupConfig.effective_context_size()` — the same value the
+    /// daemon's slot loader uses — and stays accurate as long as the
+    /// daemon isn't hot-reloaded with a different ctx mid-session.
+    /// (Hot reload triggers a new bench bootstrap anyway, so the
+    /// captured-once shape is safe.)
+    fn effective_context_size(&self) -> Option<u32> {
+        Some(self.context_size)
     }
 }
 
