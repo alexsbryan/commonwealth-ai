@@ -13,6 +13,17 @@ A Sovereign code intelligence server runs at `http://localhost:9741/mcp`. The MC
 
 **The CLI binary is `sovereign-cli`.** A symlink at `~/.local/bin/sovereign` lets you type `sovereign …`; if it's missing, run `sovereign-cli` directly or `ln -sf $(realpath sovereign/target/release/sovereign-cli) ~/.local/bin/sovereign`. When the daemon isn't reachable, `sovereign doctor` is the first stop.
 
+**`sovereign-cli` is a thin dispatcher that `exec`s into sibling binaries — rebuild the sibling that owns the verb you changed, or your change won't run.** Editing a command's code and rebuilding only `sovereign-cli` is a silent no-op: the dispatcher just execs the stale sibling. Map of verb → owning crate/binary:
+
+| Verb(s) | Owning binary (rebuild this) |
+|---|---|
+| `tools`, `code`, `project`, `atos` | `sovereign-cli-dev` |
+| `daemon`, `doctor`, `setup`, `install-service` | `sovereign-cli-daemon` |
+| `mesh`, `corpus`, `mcp`, `recipe`, `pipeline`, `bench`, `chat`, `eval`, `enrich`, `atlas`, `claim` | `sovereign-cli-llm` |
+| `init`, `status`, `notes`, `drift`, `design`, `plan`, `serve`, `reflect`, `memory`, … | `sovereign-cli` (in-process) |
+
+So `lint_status`/`test_status`/`build` (under `tools`) live in **`sovereign-cli-dev`**; the watcher daemon + `doctor`'s `watcher_live` probe live in **`sovereign-cli-daemon`**. To build everything correctly the first time, build all the binaries the change spans, e.g. `cargo build --release -p sovereign-cli -p sovereign-cli-dev -p sovereign-cli-daemon -p sovereign-cli-llm` (or `cargo build --release --bins`). The daemon must be restarted (`sovereign daemon stop && sovereign daemon start`, inside the `sovereign-vulkan` toolbox) to load a new `sovereign-cli-daemon` binary; CLI verbs pick up the new sibling on next invocation.
+
 When the MCP server is running (the common case), prefer the MCP path — it's faster and native to Claude Code. The same tools are also exposed as a CLI:
 
 ```
@@ -181,6 +192,10 @@ The watcher runs continuously. After you finish editing a file, `lint_status` of
 
 **Daemon-side watcher setup.** The long-running `sovereign daemon run` starts the lint/test watcher only when a workspace is configured. Either set `SOVEREIGN_WORKSPACE_DIR=<path>` in the launchd/systemd environment, or write the path to `~/.sovereign/workspace` (single-line text file). The daemon then loads `<workspace>/.sovereign/sovereign.toml` and runs the configured `[lint_runner]` / `[test_runner]` commands. The committed workspace-root config uses `scripts/sovereign-lint.sh` which fan-runs `cargo check` over corpus-engine + sovereign + commonwealth in parallel — one env var lights up coverage for all three. After changing the workspace config, restart the daemon (per `reference_daemon_restart_lwcr.md`: `launchctl bootout` + `bootstrap`).
 
+**Read the `watcher` object before `status`.** Every `lint_status`/`test_status`/`build` response carries a `watcher` health object: `{live, reason, configured, heartbeat_age_secs, hint}`. It is the authoritative liveness signal — driven by the coordinator's heartbeat (a sidecar file the daemon stamps, readable cross-process by the CLI), not a one-shot bool. When `watcher.live` is **false**, the `status`/results below are *orphaned* — no watcher is running to keep them current — and you must NOT trust them. `watcher.reason` says why (`not_configured` / `watcher_dead` / `unknown`) and `watcher.hint` says exactly what to do. In that case `status` itself is reported as **`watcher_down`** rather than `fresh_*`/`stale`, so a days-old failing run can never masquerade as a current `fresh_failing` again.
+
+**When the watcher is down, fall back to the FULL-workspace scripts — never narrow `cargo`.** `watcher_down` (or `watcher.reason ∈ {not_configured, watcher_dead, unknown}`) means run `scripts/sovereign-lint.sh --human` and `scripts/sovereign-test.sh --human`, which cover the same `cargo --workspace` surface the watcher does. Do NOT substitute a scoped `cargo -p <crate>` / `--test <name>` call — it under-covers the workspace and lets regressions in untouched crates accrete. The daemon's `WatcherSupervisor` self-heals a dead watcher within ~75s; if `watcher_down` persists, `sovereign daemon restart`. `sovereign doctor`'s `watcher_live` check probes this same signal.
+
 **Decision tree — "does this compile?"**
 
 The workspace-level `status` field answers "is the watcher idle and clean across everything?" — useful for final pre-commit checks. The new **per-file query mode** answers "are MY files clean?" — useful during active editing, since the watcher may still be running the full workspace check long after the crate containing your edits has finished.
@@ -196,17 +211,19 @@ The workspace-level `status` field answers "is the watcher idle and clean across
 2. **Pre-commit / pre-push** — plain `lint_status` (no flags). Workspace-wide:
    - `fresh_passing` → clean, keep going
    - `fresh_failing` → errors are already in the response, fix them
-   - `stale` → watcher queued but run not done yet; call again in ~15s. **If `watcher_active: false` AND `age_seconds` is large (hours+), the watcher isn't really running — fall back to `cargo check` or `scripts/sovereign-lint.sh` via Bash.** Same for an `age_seconds` older than your most recent edit by more than a few minutes.
+   - `stale` → watcher queued but run not done yet; call again in ~15s.
    - `running` → check again in ~15s (or use `--changed` to get a per-file answer against the *prior* completed run while this one finishes)
-   - `never_run` → watcher not configured; fall back to `cargo check` via Bash
+   - `watcher_down` → no live watcher (see `watcher.reason`/`hint`); the run is orphaned. Run `scripts/sovereign-lint.sh --human` (NOT narrow `cargo`).
+   - `never_run` → no run yet; see `watcher.reason`. If `not_configured`, restore `.sovereign/sovereign.toml.with-watchers`; else `scripts/sovereign-lint.sh --human`.
 
 **Decision tree — "do tests pass?"**
 1. `test_status`
    - `fresh_passing` → safe to proceed
    - `fresh_failing` → failures are in the response
-   - `stale` → call `run_tests` (returns immediately), then poll `test_status` every ~30s. **If `watcher_active: false` AND the report is hours old, fall back to `scripts/sovereign-test.sh` directly.**
+   - `stale` → call `run_tests` (returns immediately), then poll `test_status` every ~30s.
    - `running` → poll `test_status` every ~30s
-   - `never_run` → watcher not configured; fall back to `cargo test` via Bash
+   - `watcher_down` → no live watcher (see `watcher.reason`/`hint`); the run is orphaned. Run `scripts/sovereign-test.sh --human` (NOT a scoped `cargo test -p <crate>` / `--test <name>` — it under-covers and lets bugs accrete).
+   - `never_run` → no run yet; see `watcher.reason`. If `not_configured`, restore `.sovereign/sovereign.toml.with-watchers`; else `scripts/sovereign-test.sh --human`.
 
 **Only call `get_lint_output` / `get_run_output`** when `output_truncated: true` in the status response. The errors are already in `lint_status` / `test_status` for the common case.
 

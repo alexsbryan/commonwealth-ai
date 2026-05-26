@@ -613,7 +613,11 @@ async fn run_daemon(args: &[String]) -> i32 {
     // Shared liveness beacon: the coordinator loop stamps it, the
     // status tools read it. Replaces the old one-shot `watcher_active`
     // bool, which could not detect a watcher that died after starting.
-    let watcher_heartbeat = corpus_engine::WatcherHeartbeat::new();
+    // Mirrors to a sidecar file so the separate `sovereign` CLI process
+    // (which reads the same SQLite stores) sees the same liveness — the
+    // daemon's in-memory atomic alone is invisible cross-process.
+    let watcher_heartbeat =
+        corpus_engine::WatcherHeartbeat::with_sidecar(data_dir.join("watcher-heartbeat"));
     let mut lint_watcher: Option<Arc<corpus_engine::LintWatcher>> = None;
     let mut test_watcher: Option<Arc<corpus_engine::TestWatcher>> = None;
     let mut watched_lint_scope: Option<String> = None;
