@@ -32,7 +32,10 @@
       // Goes through a Tauri command on the Rust side rather than
       // raw `fetch` — the renderer can't reach localhost across
       // Tauri's sandbox (Safari surfaces this as "Load failed").
-      models = await listDaemonModels();
+      // Coerce a missing/empty result to `[]` so a command that
+      // resolves nothing can't make `models.length` throw and blank
+      // the whole Connect panel (degrade visibly, not via a crash).
+      models = (await listDaemonModels()) ?? [];
     } catch (e) {
       modelsError = e instanceof Error ? e.message : String(e);
     } finally {

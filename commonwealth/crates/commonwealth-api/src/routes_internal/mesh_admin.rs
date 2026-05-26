@@ -1437,3 +1437,135 @@ pub async fn contribution_view(
     out.sort_by(|a, b| a.node_id.cmp(&b.node_id));
     Ok(Json(out))
 }
+
+// ── Local Activity ledger (Activity & Sharing surface) ──────────
+//
+// The activity counterpart to the contribution handlers above. Reads
+// the gossip-excluded `activity-private` namespace and folds in this
+// node's *own* mesh-contribution totals, so one response answers
+// "what has my daemon been doing — for me, and for the mesh?" — the
+// glassbox view that works even for a mesh of one.
+
+#[derive(Debug, Deserialize)]
+pub struct ActivitySummaryParams {
+    /// Lookback window in days. Defaults to the activity ledger's
+    /// 7-day window; capped at 365.
+    pub window_days: Option<u32>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ActivitySummaryResponse {
+    #[serde(flatten)]
+    pub activity: commonwealth_core::activity::ActivitySummary,
+    // Folded-in mesh contribution: what THIS node provided to peers
+    // (the gossiped contribution ledger, over its own 30-day window).
+    pub peer_inference_served_requests: u64,
+    pub peer_inference_served_tokens: u64,
+    pub peer_knowledge_queries_served: u64,
+    pub peer_bytes_served: u64,
+    pub peer_bytes_received: u64,
+}
+
+/// `GET /internal/activity/summary` — the local Activity rollup plus
+/// this node's mesh-contribution totals. Powers the "all on this
+/// machine" totals card in Settings → Activity & Sharing.
+pub async fn activity_summary(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<ActivitySummaryParams>,
+) -> Result<Json<ActivitySummaryResponse>, (StatusCode, String)> {
+    let window_days = params
+        .window_days
+        .unwrap_or(commonwealth_core::activity::DEFAULT_ACTIVITY_WINDOW_DAYS)
+        .min(365);
+    let activity =
+        commonwealth_state::current_activity(&state.inner.mesh_store, window_days)
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("activity_summary: aggregate failed: {e}"),
+                )
+            })?;
+
+    // Fold in this node's own contribution totals. Self-origin
+    // contribution events land on the self node's `NodeContributions`,
+    // so the self entry is exactly "what I served to / received from
+    // the mesh."
+    let self_id = state.inner.contribution_emitter.self_node_id();
+    let caps_map: std::collections::HashMap<
+        NodeId,
+        commonwealth_core::capabilities::NodeCapabilities,
+    > = {
+        let mesh_view = state.inner.mesh.read().await;
+        mesh_view
+            .members
+            .iter()
+            .map(|(id, member)| (id.clone(), member.capabilities.clone()))
+            .collect()
+    };
+    let contrib = commonwealth_state::current_contributions(
+        &state.inner.mesh_store,
+        &caps_map,
+        commonwealth_core::contributions::DEFAULT_WINDOW_DAYS,
+    )
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("activity_summary: contribution aggregate failed: {e}"),
+        )
+    })?;
+    let self_c = contrib.get(&self_id);
+
+    Ok(Json(ActivitySummaryResponse {
+        activity,
+        peer_inference_served_requests: self_c
+            .map(|c| c.inference_served.requests)
+            .unwrap_or(0),
+        peer_inference_served_tokens: self_c
+            .map(|c| c.inference_served.total_tokens_generated)
+            .unwrap_or(0),
+        peer_knowledge_queries_served: self_c
+            .map(|c| {
+                c.corpora_hosted
+                    .iter()
+                    .map(|h| h.queries_served)
+                    .sum::<u64>()
+            })
+            .unwrap_or(0),
+        peer_bytes_served: self_c.map(|c| c.bytes_served).unwrap_or(0),
+        peer_bytes_received: self_c.map(|c| c.bytes_received).unwrap_or(0),
+    }))
+}
+
+#[derive(Debug, Serialize)]
+pub struct ActivityRecentResponse {
+    /// Most recent local activity events, newest first. Each entry is
+    /// a full `ActivityEvent`; the UI formats the friendly summary.
+    pub events: Vec<commonwealth_core::activity::ActivityEvent>,
+}
+
+/// `GET /internal/activity/recent` — recent local activity events,
+/// newest first. Powers the unified feed in Activity & Sharing
+/// (interleaved client-side with the contribution feed).
+pub async fn activity_recent(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<RecentContributionsParams>,
+) -> Result<Json<ActivityRecentResponse>, (StatusCode, String)> {
+    let limit = params.limit.unwrap_or(20).min(200);
+    let entries = state
+        .inner
+        .mesh_store
+        .scan(commonwealth_state::ACTIVITY_APP_ID, "")
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("activity_recent: scan failed: {e}"),
+            )
+        })?;
+    let mut events: Vec<commonwealth_core::activity::ActivityEvent> = entries
+        .into_iter()
+        .filter_map(|e| serde_json::from_slice(e.value.as_ref()).ok())
+        .collect();
+    events.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    events.truncate(limit);
+    Ok(Json(ActivityRecentResponse { events }))
+}

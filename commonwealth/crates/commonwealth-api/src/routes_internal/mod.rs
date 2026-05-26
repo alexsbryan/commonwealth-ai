@@ -58,7 +58,8 @@ pub use pipeline_pause::{
     pipeline_pause, NodePauseResult, PipelinePauseRequest, PipelinePauseResponse,
 };
 pub use mesh_admin::{
-    contribution_ceiling_set, contribution_pause, contribution_recent,
+    activity_recent, activity_summary, contribution_ceiling_set,
+    contribution_pause, contribution_recent,
     contribution_resume, contribution_status, contribution_view, foreground_state,
     inference_warmup, ingest_budget_get, ingest_budget_set, join, mesh_quiesce_get,
     mesh_quiesce_set, models_inventory, models_load, models_unload, node_activity,

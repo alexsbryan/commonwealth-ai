@@ -38,6 +38,12 @@ const FIXTURE = {
     embedding_dimensions: null,
     vector_index_ready: false,
     parent_corpus_id: null,
+    // KnowledgeStatus only renders a `.corpus-row` for top-level
+    // corpora whose `catalog_status` is "featured" — everything
+    // else falls into the "Coming soon" grid (preview) or is hidden.
+    // The parent must be featured for its row (and the layer chips
+    // nested inside it) to appear at all.
+    catalog_status: "featured",
   },
   wikipediaSimple: {
     id: "wikipedia-simple",
@@ -55,6 +61,9 @@ const FIXTURE = {
     embedding_dimensions: null,
     vector_index_ready: false,
     parent_corpus_id: "wikipedia",
+    // A child layer — grouped under its parent via parent_corpus_id,
+    // never a top-level row, so catalog_status is irrelevant here.
+    catalog_status: null,
   },
   wikipediaNewsworthy: {
     id: "wikipedia-newsworthy",
@@ -72,6 +81,7 @@ const FIXTURE = {
     embedding_dimensions: null,
     vector_index_ready: false,
     parent_corpus_id: "wikipedia",
+    catalog_status: null,
   },
   wikipediaPartition: {
     id: "wikipedia-partition-node-deadbeef00000001",
@@ -89,6 +99,10 @@ const FIXTURE = {
     embedding_dimensions: 1024,
     vector_index_ready: false,
     parent_corpus_id: null,
+    // The `*-partition-node-*` id is filtered out of top-level rows
+    // by KnowledgeStatus's isPartition() guard regardless of
+    // catalog_status — this entry must never reach the DOM.
+    catalog_status: "featured",
   },
 };
 
@@ -144,6 +158,13 @@ test.describe("knowledge picker — layer grouping", () => {
         (window as unknown as { __chipBundleCalls: unknown[] }).__chipBundleCalls.push(args);
         return null;
       });
+      // KnowledgeStatus polls newsworthy status (for the parent's
+      // layer-status line) and probes expandability per installed
+      // corpus on mount. Stub both benign so the picker renders
+      // without unstubbed-invoke noise and without the extra
+      // newsworthy detail block interfering with the chip assertions.
+      window.__sovereign_test__.setHandler("lc_newsworthy_status", () => null);
+      window.__sovereign_test__.setHandler("lc_can_expand", () => false);
     }, FIXTURE);
     await openKnowledgeTab(page);
   });

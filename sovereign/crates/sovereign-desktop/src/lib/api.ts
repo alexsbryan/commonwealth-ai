@@ -1665,6 +1665,108 @@ export async function getRecentContributions(
   return invoke("get_recent_contributions", { limit: limit ?? null });
 }
 
+// ─── Activity ledger (Activity & Sharing surface) ────────────
+//
+// The local "what has my daemon been doing — for me and the mesh?"
+// rollup. `ActivitySummary` is the daemon-side ledger (embeddings,
+// ingest/enrich, local serving + folded-in peer contribution);
+// `ChatActivitySummary` is the in-process chat slice derived from
+// message provenance. The UI shows them together.
+
+/** Served-work tally split by who it was for (mesh peer vs local). */
+export interface ServedTally {
+  local_requests: number;
+  peer_requests: number;
+  /** Unit count: tokens for inference, texts for embeddings. */
+  local_units: number;
+  peer_units: number;
+}
+
+/** Per-corpus ingest + enrich activity on this machine. */
+export interface CorpusActivity {
+  corpus_id: string;
+  chunks_ingested: number;
+  ingest_runs: number;
+  ingest_seconds: number;
+  enrich_runs: number;
+  enrich_atoms: number;
+  enrich_seconds: number;
+}
+
+export interface ActivitySummary {
+  window_days: number;
+  // Inference the daemon served to local API clients.
+  local_inference_requests: number;
+  local_tokens_generated: number;
+  local_inference_wall_seconds: number;
+  // Embeddings served over /v1/embeddings (peer + local).
+  embeddings: ServedTally;
+  // Knowledge served to local API clients.
+  local_knowledge_queries: number;
+  local_chunks_served: number;
+  // Per-corpus ingest + enrich work done here.
+  corpora: CorpusActivity[];
+  total_chunks_ingested: number;
+  // Newsworthy freshness fetches.
+  newsworthy_fetches: number;
+  newsworthy_articles: number;
+  // Folded-in mesh contribution: what this node provided to peers.
+  peer_inference_served_requests: number;
+  peer_inference_served_tokens: number;
+  peer_knowledge_queries_served: number;
+  peer_bytes_served: number;
+  peer_bytes_received: number;
+}
+
+export interface ChatCorpusUsage {
+  origin: string;
+  chunks: number;
+  from_peer: boolean;
+}
+
+export interface ChatModelUsage {
+  model: string;
+  turns: number;
+  tokens_generated: number;
+}
+
+/** The user's own chat usage, derived from persisted provenance. */
+export interface ChatActivitySummary {
+  window_days: number;
+  turns: number;
+  tokens_generated: number;
+  chunks_retrieved: number;
+  by_corpus: ChatCorpusUsage[];
+  by_model: ChatModelUsage[];
+}
+
+/** A local-activity feed event (tagged union; branch on `kind.type`:
+ *  "LocalInferenceServed" | "EmbeddingsServed" | "LocalKnowledgeServed"
+ *  | "ChunksIngested" | "CorpusEnriched" | "NewsworthyFetched"). */
+export interface ActivityEventDto {
+  node_id: unknown;
+  timestamp: number;
+  kind: { type: string; [k: string]: unknown };
+}
+
+export async function getActivitySummary(
+  windowDays?: number,
+): Promise<ActivitySummary> {
+  return invoke("get_activity_summary", { windowDays: windowDays ?? null });
+}
+
+export async function getActivityRecent(
+  limit?: number,
+): Promise<ActivityEventDto[]> {
+  return invoke("get_activity_recent", { limit: limit ?? null });
+}
+
+export async function getChatActivity(
+  windowDays?: number,
+): Promise<ChatActivitySummary> {
+  return invoke("get_chat_activity", { windowDays: windowDays ?? null });
+}
+
 // ─── First-mesh-join consent (W4) ────────────────────────────
 
 export interface FirstMeshConsent {

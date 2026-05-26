@@ -57,6 +57,10 @@ fn main() -> ExitCode {
                 // logs surface without the user setting RUST_LOG. The
                 // alternative (silent tracing calls) made every mesh
                 // failure look identical from the user's perspective.
+                // `bootstrap` + `mesh_state` are explicit event targets
+                // (not module paths) used by the Attach/Local decision
+                // and the mesh-state read — surfaced at info so the
+                // "why is Members empty?" trace shows without RUST_LOG.
                 "sovereign_desktop=info,\
                  sovereign_core=debug,\
                  sovereign_tools=debug,\
@@ -64,7 +68,9 @@ fn main() -> ExitCode {
                  sovereign_mesh=info,\
                  commonwealth_discovery=info,\
                  commonwealth_api=info,\
-                 corpus_engine=debug"
+                 corpus_engine=debug,\
+                 bootstrap=info,\
+                 mesh_state=info"
                     .into()
             }),
         )
@@ -384,6 +390,9 @@ fn main() -> ExitCode {
             commands::pause_contributions,
             commands::resume_contributions,
             commands::get_recent_contributions,
+            commands::get_activity_summary,
+            commands::get_activity_recent,
+            commands::get_chat_activity,
             commands::prepare_crash_report,
             commands::get_first_mesh_consent,
             commands::record_first_mesh_consent,

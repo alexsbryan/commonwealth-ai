@@ -7,6 +7,17 @@ import { test, expect, bootToChat } from "../fixtures/test-base";
 // take on faith." A regression that drops the negative-space
 // "What I don't have" surface, or that hides the sensitivity /
 // sync-mode metadata, must fail before reaching the user.
+//
+// 2026-05-25 navigation rewrite: the standalone "Local Knowledge"
+// Settings tab was merged into the "Knowledge" tab, which now
+// embeds <LocalKnowledgeSection embedded /> below the catalog
+// status. The watched-folder list + detail panel live inside that
+// embedded section. The detail panel's enrichment OFF state also
+// lost its pipeline picker (the tiered driver is universal across
+// corpus shapes, so the {philosophy/referential/literary}_atlas
+// radio group was removed); the honest-framing copy moved to
+// "Worth it for / Skip it for / Easy to undo". The behaviours each
+// assertion guards are unchanged — only the selectors/copy moved.
 test.describe("watched-folder detail panel", () => {
   test("renders formats, skipped, failed, sensitivity, sync mode", async ({
     sovereignPage: page,
@@ -124,20 +135,27 @@ test.describe("watched-folder detail panel", () => {
           };
         },
       );
+      // The card list polls lc_enrichment_status per corpus on a 5s
+      // cadence. Stub it benign so the poll doesn't log unstubbed
+      // warnings; `{ state: null }` renders no enrichment label.
+      w.__sovereign_test__.setHandler("lc_enrichment_status", () => ({
+        state: null,
+        is_stalled: false,
+        fraction_complete: 0,
+      }));
     }, lastSweepUnix);
 
-    // Open Settings → Local Knowledge tab where the watched-folder
-    // surface lives.
+    // Open Settings → Knowledge tab where the watched-folder surface
+    // now lives (the former "Local Knowledge" tab was merged in).
     await page.getByTestId("nav-settings").click();
     await page.locator(".cfg").waitFor();
     // The Settings panel uses `.cfg` as its root and `.toc-item`
-    // buttons for the left rail. Disambiguate "Local Knowledge"
-    // from "Knowledge" via exact text match.
-    const localKnowledgeTab = page
+    // buttons for the left rail. Exact-text match on Knowledge.
+    const knowledgeTab = page
       .locator(".cfg-toc .toc-item")
-      .filter({ hasText: /^Local Knowledge$/ });
-    await expect(localKnowledgeTab).toBeVisible();
-    await localKnowledgeTab.click();
+      .filter({ hasText: /^Knowledge$/ });
+    await expect(knowledgeTab).toBeVisible();
+    await knowledgeTab.click();
 
     // The watched-folder list should render the stubbed corpus
     // with the multi-root, Manual-sync, and Sensitive badges.
@@ -201,26 +219,43 @@ test.describe("watched-folder detail panel", () => {
       page.locator(".metric", { hasText: "Sync mode" }),
     ).toContainText("Manual");
 
-    // §3.3 acceptance: enrichment surface in Off state shows
-    // honest framing (when-it-works-well / when-it-works-less-well /
-    // recoverability), the pipeline picker with all three atlas
-    // options, the cost estimate, and the Enable button.
+    // §3.3 acceptance: enrichment surface in Off state shows honest
+    // framing (when-it-works-well / when-it-works-less-well /
+    // recoverability), the cost estimate, and the Enable button.
+    //
+    // Note: the pipeline picker (3-radio atlas chooser + legend) was
+    // removed when the tiered driver became universal across corpus
+    // shapes — the picker assertion is no longer expressible. The
+    // honest-framing copy that the picker accompanied now lives in
+    // the three-item .honest-list ("Worth it for" / "Skip it for" /
+    // "Easy to undo"), which this still pins.
     await expect(
       page.locator(".enrichment").locator(".section-title", { hasText: "Atlas enrichment" }),
     ).toBeVisible();
-    await expect(page.locator(".honest-list")).toContainText("works well");
-    await expect(page.locator(".honest-list")).toContainText("works less well");
-    await expect(page.locator(".honest-list")).toContainText("recoverable");
-    await expect(page.locator(".pipeline-picker legend")).toBeVisible();
-    await expect(page.locator(".pipeline-picker .radio")).toHaveCount(3);
+    await expect(page.locator(".honest-list")).toContainText("Worth it for");
+    await expect(page.locator(".honest-list")).toContainText("Skip it for");
+    await expect(page.locator(".honest-list")).toContainText("Easy to undo");
     await expect(page.locator(".cost")).toContainText("Estimated build time");
     await expect(
       page.locator(".enrichment button.primary", { hasText: "Enable enrichment" }),
     ).toBeEnabled();
 
-    // Back button returns to the list.
-    await page.locator(".back").click();
-    await expect(card).toBeVisible();
+    // Back returns to the folder list — onClose flips
+    // LocalKnowledgeSection back to mode:idle and re-renders the list.
+    // (This was briefly un-clickable: SettingsPanel's embedded-mode
+    // `.lk-section .head { display:none }` rule also matched
+    // WatchedFolderDetail's `.detail > .head`, hiding this button. Fixed
+    // by narrowing that rule to a direct-child selector — see
+    // SettingsPanel.svelte.)
+    const back = page.locator(".back");
+    await expect(back).toHaveText(/Back to folders/);
+    await back.click();
+    // Detail panel gone; the folder list (the "Research dump" card) is
+    // back.
+    await expect(page.locator(".detail")).toHaveCount(0);
+    await expect(
+      page.locator(".card").filter({ hasText: "Research dump" }),
+    ).toBeVisible();
   });
 
   test("renders enrichment Building state with progress", async ({
@@ -276,13 +311,18 @@ test.describe("watched-folder detail panel", () => {
           { idx: 0, path: "/tmp/building", added_at_unix: 0, doc_count: 5, primary: true },
         ],
       }));
+      w.__sovereign_test__.setHandler("lc_enrichment_status", () => ({
+        state: null,
+        is_stalled: false,
+        fraction_complete: 0,
+      }));
     });
 
     await page.getByTestId("nav-settings").click();
     await page.locator(".cfg").waitFor();
     await page
       .locator(".cfg-toc .toc-item")
-      .filter({ hasText: /^Local Knowledge$/ })
+      .filter({ hasText: /^Knowledge$/ })
       .click();
     await page
       .locator(".card")
@@ -299,8 +339,12 @@ test.describe("watched-folder detail panel", () => {
     await expect(
       page.locator(".enrichment button", { hasText: "Cancel & disable" }),
     ).toBeVisible();
-    // Enable / Pipeline-picker UI gone in Building.
-    await expect(page.locator(".pipeline-picker")).toHaveCount(0);
+    // Enable / honest-framing UI gone in Building (only the Off
+    // state renders the honest-list + cost + Enable button).
+    await expect(page.locator(".honest-list")).toHaveCount(0);
+    await expect(
+      page.locator(".enrichment button", { hasText: "Enable enrichment" }),
+    ).toHaveCount(0);
   });
 
   test("renders enrichment Complete with stale-docs callout", async ({
@@ -354,13 +398,18 @@ test.describe("watched-folder detail panel", () => {
           { idx: 0, path: "/tmp/done", added_at_unix: 0, doc_count: 12, primary: true },
         ],
       }));
+      w.__sovereign_test__.setHandler("lc_enrichment_status", () => ({
+        state: null,
+        is_stalled: false,
+        fraction_complete: 0,
+      }));
     });
 
     await page.getByTestId("nav-settings").click();
     await page.locator(".cfg").waitFor();
     await page
       .locator(".cfg-toc .toc-item")
-      .filter({ hasText: /^Local Knowledge$/ })
+      .filter({ hasText: /^Knowledge$/ })
       .click();
     await page
       .locator(".card")

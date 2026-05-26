@@ -35,7 +35,7 @@ impl MeshState {
                 let is_self = m.node_id == self_node_id;
                 MeshMember {
                     name: m.name.clone(),
-                    node_id: m.node_id.to_string(),
+                    node_id: member_node_id_key(&m.node_id),
                     is_self,
                     status: match m.status {
                         NodeStatus::Online => MemberStatus::Online,
@@ -105,6 +105,18 @@ impl MeshState {
     }
 }
 
+/// The canonical node_id string the mesh UI keys on. Full hex (32
+/// chars), NOT `NodeId`'s `Display` (which is `"node-"+8 bytes` — a
+/// lossy, non-round-trippable label). The desktop joins members
+/// against per-peer contributions and peer-preferences (both keyed on
+/// full hex) by this string, and `mesh_set_peer_preference` parses it
+/// back into a `NodeId`. Emitting the Display form here silently broke
+/// every `contributions.get(member.node_id)` lookup → blank per-member
+/// panels even when the data was present. Pinned by `node_id_key_is_full_hex`.
+fn member_node_id_key(id: &commonwealth_core::ids::NodeId) -> String {
+    id.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
+}
+
 fn humanize_corpus_id(id: &str) -> String {
     match id {
         "wikipedia" => "Wikipedia".to_string(),
@@ -138,5 +150,23 @@ mod tests {
     #[test]
     fn humanize_unknown_corpus() {
         assert_eq!(humanize_corpus_id("custom"), "Custom");
+    }
+
+    /// Regression pin (the per-member panel was blank because the
+    /// member list used the lossy `Display` form while contributions +
+    /// prefs are keyed on full hex). The member key MUST be the full
+    /// 32-char hex and MUST differ from `Display` (`"node-…"`), so the
+    /// UI's `contributions.get(member.node_id)` join lands.
+    #[test]
+    fn node_id_key_is_full_hex() {
+        use commonwealth_core::ids::NodeId;
+        let id = NodeId::from_u128(0x44ae_7614_2b0c_3c72_3051_ff98_f043_104a);
+        let key = member_node_id_key(&id);
+        assert_eq!(key.len(), 32, "node_id key must be full 16-byte hex");
+        assert!(key.chars().all(|c| c.is_ascii_hexdigit()));
+        // It must NOT be the truncated Display label the bug emitted
+        // (`Display` = "node-"+8 bytes = 21 chars).
+        assert_ne!(key, id.to_string());
+        assert!(!key.starts_with("node-"));
     }
 }

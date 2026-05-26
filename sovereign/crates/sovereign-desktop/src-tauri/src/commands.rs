@@ -5919,6 +5919,102 @@ pub async fn get_recent_contributions(
         .map_err(|e| format!("decode /internal/contribution/recent: {e}"))
 }
 
+// ─── Activity ledger (Activity & Sharing surface) ────────────
+//
+// Three reads behind the "all on this machine" totals + feed:
+//  - get_activity_summary  → daemon /internal/activity/summary
+//    (embeddings served, chunks ingested/enriched, local serving,
+//     plus this node's folded-in peer contribution).
+//  - get_activity_recent   → daemon /internal/activity/recent feed.
+//  - get_chat_activity     → the in-process Runtime's own chat usage,
+//    derived from persisted message provenance (the daemon never sees
+//    desktop chat, so this slice is read locally from the store).
+// The first two return raw JSON; the Svelte side owns the typed shape.
+
+#[tauri::command]
+pub async fn get_activity_summary(
+    window_days: Option<u32>,
+) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/activity/summary");
+    let mut req = client.get(&url);
+    if let Some(d) = window_days {
+        req = req.query(&[("window_days", d.to_string())]);
+    }
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("GET /internal/activity/summary: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/activity/summary returned {status}: {body}"
+        ));
+    }
+    resp.json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("decode /internal/activity/summary: {e}"))
+}
+
+#[tauri::command]
+pub async fn get_activity_recent(
+    limit: Option<usize>,
+) -> Result<Vec<serde_json::Value>, String> {
+    #[derive(serde::Deserialize)]
+    struct Resp {
+        events: Vec<serde_json::Value>,
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/activity/recent");
+    let mut req = client.get(&url);
+    if let Some(n) = limit {
+        req = req.query(&[("limit", n.to_string())]);
+    }
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("GET /internal/activity/recent: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/activity/recent returned {status}: {body}"
+        ));
+    }
+    resp.json::<Resp>()
+        .await
+        .map(|r| r.events)
+        .map_err(|e| format!("decode /internal/activity/recent: {e}"))
+}
+
+#[tauri::command]
+pub async fn get_chat_activity(
+    state: State<'_, Arc<AppState>>,
+    window_days: Option<u32>,
+) -> Result<serde_json::Value, String> {
+    let window_secs = (window_days.unwrap_or(7).max(1) as i64) * 86_400;
+    let store = {
+        let guard = state.sqlite_store.read().await;
+        guard.as_ref().cloned()
+    };
+    let Some(store) = store else {
+        return Err("chat store not ready".into());
+    };
+    let summary = store
+        .summarize_chat_activity(window_secs)
+        .await
+        .map_err(|e| format!("summarize_chat_activity: {e}"))?;
+    serde_json::to_value(summary)
+        .map_err(|e| format!("serialize chat activity: {e}"))
+}
+
 // ─── First-mesh consent (W4) ─────────────────────────────────
 //
 // One-time dialog shown after setup completes, before the user

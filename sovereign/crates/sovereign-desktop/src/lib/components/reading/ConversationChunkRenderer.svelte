@@ -79,7 +79,10 @@
     atlasGetConvEntities(corpusId, convUuid)
       .then((chips) => {
         if (!cancelled) {
-          entityChips = chips;
+          // Coerce a missing result to `[]` — `entityChips.length` is
+          // read in the template, so `undefined` here would crash the
+          // whole reading surface.
+          entityChips = chips ?? [];
         }
       })
       .catch(() => {
@@ -132,7 +135,9 @@
   function segmentsFor(chunk: ChunkRecord): ConversationSegment[] {
     const segs = chunk.conversation?.segments ?? [];
     if (segs.length > 0) return segs;
-    if (chunk.content.trim().length === 0) return [];
+    // A chunk may arrive without `content` (a not-yet-hydrated record);
+    // guard so `.trim()` can't throw and blank the reading surface.
+    if (!chunk.content || chunk.content.trim().length === 0) return [];
     return [{ role: "user", content: chunk.content }];
   }
 

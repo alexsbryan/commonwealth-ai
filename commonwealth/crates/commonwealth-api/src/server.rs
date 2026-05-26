@@ -257,6 +257,19 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/contribution/view",
             get(routes_internal::contribution_view),
         )
+        // Local Activity ledger — the glassbox "what is my daemon
+        // doing?" surface. Local-only namespace; loopback-only like
+        // the rest of /internal/*. `summary` is the totals card;
+        // `recent` is the unified feed. Read by Settings → Activity &
+        // Sharing.
+        .route(
+            "/internal/activity/summary",
+            get(routes_internal::activity_summary),
+        )
+        .route(
+            "/internal/activity/recent",
+            get(routes_internal::activity_recent),
+        )
         // Foreground-yield introspection — read-only snapshot of the
         // atomics that decide whether ingest workers are pausing for
         // chat. No POST: the window is configured at startup via

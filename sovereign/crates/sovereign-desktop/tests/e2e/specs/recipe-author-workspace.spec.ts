@@ -4,11 +4,18 @@ import { test, expect, bootToChat } from "../fixtures/test-base";
 // mocked Tauri shim so the workspace renders without a real daemon.
 //
 // What the spec proves:
-// - The "Recipe Author →" entry on the chat sidebar opens the
-//   workspace.
+// - The "Recipe Author" entry on the left nav rail (gated behind
+//   the `enable_recipe_authoring` config flag) opens the workspace.
 // - "+ New project" creates a project, refreshes the sidebar, auto-
 //   selects, and renders all the dashboard cards.
 // - "← Back to chat" returns to the chat workspace.
+//
+// 2026-05-25 navigation rewrite: the entry moved off the chat
+// sidebar (testid `open-recipe-author`, now gone) onto the left
+// NavRail as `nav-recipe-author`, surfaced only when App.svelte
+// reads `enable_recipe_authoring: true` from get_config. The shim
+// default returns true, so the entry shows by default; the
+// "hidden when flag off" case overrides get_config to false.
 //
 // Pre-2026-05-24 this spec also asserted that workspace enter/exit
 // toggled the recipe-author skill via
@@ -23,8 +30,9 @@ test.describe("recipe author workspace", () => {
   }) => {
     await bootToChat(page, chat);
 
-    // The sidebar entry is gated behind the M2 dev flag — present.
-    const openBtn = page.getByTestId("open-recipe-author");
+    // The nav-rail entry is gated behind enable_recipe_authoring,
+    // which the shim default returns true — so it's present.
+    const openBtn = page.getByTestId("nav-recipe-author");
     await expect(openBtn).toBeVisible();
 
     await openBtn.click();
@@ -82,7 +90,7 @@ test.describe("recipe author workspace", () => {
     chat,
   }) => {
     await bootToChat(page, chat);
-    await page.getByTestId("open-recipe-author").click();
+    await page.getByTestId("nav-recipe-author").click();
     const workspace = page.getByTestId("recipe-author-workspace");
     await expect(workspace).toBeVisible();
     // Sidebar shows the "no projects yet" text.
@@ -173,7 +181,7 @@ test.describe("recipe author workspace", () => {
       };
     });
 
-    await page.getByTestId("open-recipe-author").click();
+    await page.getByTestId("nav-recipe-author").click();
 
     // Pick the seeded project from the sidebar.
     const row = page.getByTestId("recipe-author-project-row").first();
@@ -250,7 +258,7 @@ test.describe("recipe author workspace", () => {
       };
     });
 
-    await page.getByTestId("open-recipe-author").click();
+    await page.getByTestId("nav-recipe-author").click();
     await page.getByTestId("recipe-author-project-row").first().click();
 
     const dashboard = page.getByTestId("recipe-author-dashboard");
@@ -295,7 +303,7 @@ test.describe("recipe author workspace", () => {
     await bootToChat(page, chat);
 
     // Sidebar entry must NOT appear when the flag is off.
-    await expect(page.getByTestId("open-recipe-author")).toHaveCount(0);
+    await expect(page.getByTestId("nav-recipe-author")).toHaveCount(0);
   });
 
   test("validation card shows the no-recipe state cleanly", async ({
@@ -303,7 +311,7 @@ test.describe("recipe author workspace", () => {
     chat,
   }) => {
     await bootToChat(page, chat);
-    await page.getByTestId("open-recipe-author").click();
+    await page.getByTestId("nav-recipe-author").click();
     await page.getByTestId("recipe-author-new-project").click();
     await page.getByTestId("recipe-author-new-title").fill("Pristine");
     await page.getByTestId("recipe-author-new-charter").fill("# Charter");

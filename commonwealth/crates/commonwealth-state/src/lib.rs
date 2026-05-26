@@ -2,6 +2,7 @@
 //!
 //! Provides `MeshStore` (SQLite-backed, LWW-merged) and `RetentionGc`.
 
+pub mod activity;
 mod backend;
 pub mod contributions;
 pub mod error;
@@ -10,6 +11,9 @@ pub mod peer_preferences;
 pub mod processed_shards;
 pub mod store;
 
+pub use activity::{
+    current_activity, served_for, ActivityEmitter, ACTIVITY_APP_ID,
+};
 pub use contributions::{
     current_contributions, ContributionEmitter, CONTRIBUTIONS_APP_ID,
 };
