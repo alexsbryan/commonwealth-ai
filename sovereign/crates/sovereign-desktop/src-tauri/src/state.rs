@@ -1995,6 +1995,31 @@ pub async fn bootstrap_with_progress(
     if let Some(ns) = state.notes.read().await.as_ref() {
         runtime = runtime.with_note_store(Arc::clone(ns));
     }
+    // GLiNER entity extractor for retrieval-over-history. Probe the
+    // default model id; if installed, load it and wire it onto the
+    // Runtime. Failures soft-fall-through to pure cosine + MMR — the
+    // desktop chat path keeps working without GLiNER. See
+    // `Runtime::maybe_retrieve_relevant_history`.
+    {
+        let model_id = sovereign_tools::gliner_ner::DEFAULT_MODEL_ID;
+        if sovereign_tools::gliner_ner::probe_model_available(model_id) {
+            match sovereign_tools::gliner_ner::GlinerExtractor::new_default() {
+                Ok(g) => {
+                    let arc: Arc<dyn sovereign_core::traits::EntityExtractor> = Arc::new(g);
+                    runtime = runtime.with_gliner(arc);
+                    tracing::info!(model = model_id, "desktop: GLiNER entity extractor loaded");
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "desktop: GLiNER probe ok but load failed; entity-aware retrieval disabled");
+                }
+            }
+        } else {
+            tracing::debug!(
+                model = model_id,
+                "desktop: GLiNER model not installed; entity-aware retrieval disabled (falls back to cosine+MMR)"
+            );
+        }
+    }
     // Rolling-summary compaction worker. Spawn one per Runtime so
     // the save-time hook in `end_conversation` can fire-and-forget
     // a compaction pass without blocking the writer's turn. The
