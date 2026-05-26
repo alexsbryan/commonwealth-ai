@@ -262,7 +262,8 @@ impl AtlasIngestion for StructureFirstIngestion {
                     first_appearance: ChunkRef::new(
                         first_chunk_id.to_string(),
                         Some(preview(lead_text, 120)),
-                    ),
+                    )
+                    .with_source_doc(agg.source_doc_id.clone()),
                     description,
                     defining_quote: None,
                     salience: 0.5, // structural pass has no centrality input yet
@@ -414,6 +415,11 @@ impl AtlasIngestion for StructureFirstIngestion {
 pub struct AggregatedArticle {
     #[allow(dead_code)]
     title: String,
+    /// The article's `source_doc_id` (the exact value the index +
+    /// `crate::freshness` key on). Carried onto the article entity's
+    /// `first_appearance` so the Atlas can look up the document's
+    /// index recency and bubble freshly-(re)indexed articles up.
+    source_doc_id: Option<String>,
     wikidata_qid: Option<String>,
     page_id: Option<i64>,
     url: Option<String>,
@@ -426,6 +432,7 @@ impl AggregatedArticle {
     fn new(title: String) -> Self {
         Self {
             title,
+            source_doc_id: None,
             wikidata_qid: None,
             page_id: None,
             url: None,
@@ -497,6 +504,9 @@ pub fn aggregate_articles_from_chunks(
         }
         if entry.url.is_none() {
             entry.url = chunk.url.clone();
+        }
+        if entry.source_doc_id.is_none() {
+            entry.source_doc_id = chunk.source_doc_id.clone();
         }
 
         let is_lead = meta.section_type == "lead"
@@ -708,7 +718,8 @@ pub fn extract_atoms_for_articles(
             first_appearance: ChunkRef::new(
                 first_chunk_id.to_string(),
                 Some(preview(lead_text, 120)),
-            ),
+            )
+            .with_source_doc(agg.source_doc_id.clone()),
             description,
             defining_quote: None,
             salience: 0.5,

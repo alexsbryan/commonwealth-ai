@@ -10,7 +10,7 @@
   // rows render as buttons that no-op (with a placeholder hint), so
   // the interaction shape is already in place.
 
-  import { onMount, untrack } from "svelte";
+  import { onMount, untrack, tick } from "svelte";
   import { atlasListAtoms } from "../../api";
   import type {
     AtomFilter,
@@ -112,6 +112,7 @@
         { offset: 0, limit: PAGE_LIMIT },
       );
       applyPage(page, /* replace */ true);
+      void measureRow();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -162,6 +163,81 @@
   function formatSalience(s: number | undefined): string {
     if (s === undefined) return "";
     return s.toFixed(2);
+  }
+
+  /** Short relative-time label for atoms whose source document was
+   *  re-indexed after the bulk install (a newsworthy fetch, a
+   *  watched-folder edit). The backend has already sorted these to the
+   *  top; this renders the "fresh" marker beside the name. `null` /
+   *  `undefined` updated_at → "" (baseline install-time content, no
+   *  badge). */
+  function freshLabel(updatedAt: number | null | undefined): string {
+    if (updatedAt == null) return "";
+    const secs = Math.max(0, Date.now() / 1000 - updatedAt);
+    if (secs < 90) return "just now";
+    const mins = Math.round(secs / 60);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.round(hrs / 24)}d ago`;
+  }
+
+  // ─── Windowing (virtual list) ─────────────────────────────
+  // SEP and other large corpora list thousands of atoms; rendering
+  // every <li> made the page so tall the scroll container couldn't
+  // reach the bottom (and choked on the node count). We render only
+  // the rows in (and just around) the viewport, inside a sizer that
+  // reserves the full scroll height so the scrollbar stays honest.
+  const OVERSCAN = 8; // rows kept rendered above/below the viewport
+  const ROW_GAP = 8; // matches `.atom-row` margin-bottom (px)
+  const EST_ROW = 64; // row-height estimate before the first measure
+
+  let viewport: HTMLElement | undefined = $state();
+  let scrollTop = $state(0);
+  let viewportH = $state(0);
+  // Center-to-center row height (row box + gap). Measured from the
+  // first rendered row; rows are uniform (single-line ellipsized name
+  // + ≤3 non-wrapping meta chips), so one measurement holds.
+  let rowStride = $state(EST_ROW + ROW_GAP);
+
+  let total = $derived(items.length);
+  let startIndex = $derived(
+    Math.max(0, Math.floor(scrollTop / rowStride) - OVERSCAN),
+  );
+  let windowCount = $derived(
+    Math.ceil(viewportH / rowStride) + OVERSCAN * 2,
+  );
+  let endIndex = $derived(Math.min(total, startIndex + windowCount));
+  let visible = $derived(items.slice(startIndex, endIndex));
+  let topPad = $derived(startIndex * rowStride);
+  let totalHeight = $derived(total * rowStride);
+
+  function onScroll() {
+    if (viewport) scrollTop = viewport.scrollTop;
+    maybeLoadMore();
+  }
+
+  // Infinite scroll: prefetch the next page as the window nears the
+  // end of what's loaded, so the list grows without a manual click.
+  function maybeLoadMore() {
+    if (nextOffset === undefined || loadingMore || !viewport) return;
+    const remaining = totalHeight - (scrollTop + viewportH);
+    if (remaining < rowStride * OVERSCAN) void loadMore();
+  }
+
+  // Measure the real row height once a fresh list has painted, and
+  // reset the scroll to the top (a filter/search change starts over).
+  async function measureRow() {
+    scrollTop = 0;
+    await tick();
+    if (viewport) viewport.scrollTop = 0;
+    const el = viewport?.querySelector<HTMLElement>(".atom-row");
+    if (el) {
+      const h = el.offsetHeight + ROW_GAP;
+      if (h > ROW_GAP) rowStride = h;
+    }
+    // The first viewport may be taller than the first page — top up.
+    maybeLoadMore();
   }
 </script>
 
@@ -227,75 +303,98 @@
     </div>
   </div>
 
-  {#if error}
-    <div class="status error" role="alert">
-      Failed to load atoms: {error}
-    </div>
-  {:else if loading && items.length === 0}
-    <div class="status">Loading atoms…</div>
-  {:else if items.length === 0}
-    <div class="status empty">
-      No atoms match the current filter.
-    </div>
-  {:else}
-    <ul class="atom-list">
-      {#each items as a (a.atom_id)}
-        <li class="atom-row" data-testid="atlas-atom-row">
-          <button
-            class="atom-button"
-            type="button"
-            disabled={!onSelectAtom}
-            onclick={() => onSelectAtom?.(a.atom_id)}
-            aria-label={`Inspect ${a.display_name}`}
-          >
-            <div class="atom-header">
-              <span class="type-pill" data-type={a.atom_type}>
-                {ATOM_TYPE_LABEL[a.atom_type]}
-              </span>
-              <span class="display-name">{a.display_name}</span>
-            </div>
-            <div class="atom-meta">
-              {#if a.salience !== undefined}
-                <span class="meta-chip" title="Salience">
-                  ◆ {formatSalience(a.salience)}
-                </span>
-              {/if}
-              {#if a.evidence_chunk_count > 0}
-                <span class="meta-chip" title="Evidence chunks">
-                  ▤ {a.evidence_chunk_count}
-                </span>
-              {/if}
-              <span class="meta-chip depth" title="Enrichment depth">
-                {a.enrichment_depth}
-              </span>
-            </div>
-          </button>
-        </li>
-      {/each}
-    </ul>
-
-    {#if nextOffset !== undefined}
-      <div class="load-more-row">
-        <button
-          class="load-more"
-          type="button"
-          disabled={loadingMore}
-          onclick={loadMore}
-        >
-          {loadingMore ? "Loading…" : "Load more"}
-        </button>
+  <div
+    class="atom-scroll"
+    bind:this={viewport}
+    bind:clientHeight={viewportH}
+    onscroll={onScroll}
+  >
+    {#if error}
+      <div class="status error" role="alert">
+        Failed to load atoms: {error}
       </div>
+    {:else if loading && items.length === 0}
+      <div class="status">Loading atoms…</div>
+    {:else if items.length === 0}
+      <div class="status empty">
+        No atoms match the current filter.
+      </div>
+    {:else}
+      <!-- The sizer reserves the full scroll height for all `total`
+           rows; the list is absolutely positioned and translated to the
+           current window, so only the visible slice is in the DOM. -->
+      <div class="atom-sizer" style="height: {totalHeight}px;">
+        <ul class="atom-list" style="transform: translateY({topPad}px);">
+          {#each visible as a (a.atom_id)}
+            <li class="atom-row" data-testid="atlas-atom-row">
+              <button
+                class="atom-button"
+                type="button"
+                disabled={!onSelectAtom}
+                onclick={() => onSelectAtom?.(a.atom_id)}
+                aria-label={`Inspect ${a.display_name}`}
+              >
+                <div class="atom-header">
+                  <span class="type-pill" data-type={a.atom_type}>
+                    {ATOM_TYPE_LABEL[a.atom_type]}
+                  </span>
+                  <span class="display-name">{a.display_name}</span>
+                  {#if a.updated_at != null}
+                    <span
+                      class="fresh-badge"
+                      data-testid="atlas-atom-fresh"
+                      title={`Source refreshed ${freshLabel(a.updated_at)}`}
+                    >
+                      ● {freshLabel(a.updated_at)}
+                    </span>
+                  {/if}
+                </div>
+                <div class="atom-meta">
+                  {#if a.salience !== undefined}
+                    <span class="meta-chip" title="Salience">
+                      ◆ {formatSalience(a.salience)}
+                    </span>
+                  {/if}
+                  {#if a.evidence_chunk_count > 0}
+                    <span class="meta-chip" title="Evidence chunks">
+                      ▤ {a.evidence_chunk_count}
+                    </span>
+                  {/if}
+                  <span class="meta-chip depth" title="Enrichment depth">
+                    {a.enrichment_depth}
+                  </span>
+                </div>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      </div>
+
+      {#if loadingMore}
+        <div class="load-more-row" aria-live="polite">
+          <span class="loading-hint">Loading more…</span>
+        </div>
+      {/if}
     {/if}
-  {/if}
+  </div>
 </div>
 
 <style>
   .atlas-corpus-view {
     max-width: 920px;
+    width: 100%;
     margin: 0 auto;
-    padding: 32px 32px 80px;
+    padding: 32px 32px 16px;
     color: var(--text-primary);
     font-family: var(--font-sans);
+    box-sizing: border-box;
+    /* Fill the .atlas-surface flex/scroll column and host an internal
+       windowed scroller (`.atom-scroll`), so the atom list always
+       reaches its bottom no matter how many rows it holds. */
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
   .corpus-header {
@@ -437,17 +536,39 @@
     color: var(--danger, #c33);
   }
 
+  .atom-scroll {
+    /* The internal windowed scroll region — fills the height left by
+       the header/tabs/search above it. */
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+
+  .atom-sizer {
+    /* Reserves the full height of all `total` rows so the scrollbar
+       reflects the whole list; the `.atom-list` inside is absolutely
+       positioned and translated to the current window. */
+    position: relative;
+    width: 100%;
+  }
+
   .atom-list {
     list-style: none;
     padding: 0;
     margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    will-change: transform;
   }
 
   .atom-row {
     list-style: none;
+    /* Inter-row spacing baked into the row box (was `.atom-list` gap)
+       so each row's stride is self-contained for the windowing math. */
+    margin-bottom: 8px;
   }
 
   .atom-button {
@@ -500,6 +621,23 @@
     white-space: nowrap;
   }
 
+  /* Atoms whose source doc was re-indexed after install — newsworthy
+     fetches, watched-folder edits. The backend sorts these to the top;
+     this badge says why a row leads the list. */
+  .fresh-badge {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--accent-light, var(--accent));
+    background: var(--accent-dim);
+    letter-spacing: 0.01em;
+  }
+
   .atom-meta {
     display: flex;
     gap: 6px;
@@ -523,24 +661,8 @@
     margin-top: 16px;
   }
 
-  .load-more {
-    padding: 8px 18px;
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: 0.85rem;
-    cursor: pointer;
-  }
-
-  .load-more:hover:not(:disabled) {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-  }
-
-  .load-more:disabled {
-    opacity: 0.5;
-    cursor: default;
+  .loading-hint {
+    color: var(--text-muted);
+    font-size: 0.82rem;
   }
 </style>

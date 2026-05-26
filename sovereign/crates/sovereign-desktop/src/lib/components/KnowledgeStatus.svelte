@@ -131,16 +131,30 @@
       .sort((a, b) => a.name.localeCompare(b.name)),
   );
   // Group children by parent_corpus_id so each parent row can render
-  // its layers in a sub-panel.
+  // its add-on toggles in a sub-panel. Excludes:
+  //  - `wikipedia-fetched`: a byproduct of the Catalog add-on (filled
+  //    by on-demand fetches), not something the user toggles. Its count
+  //    is surfaced as status under the Catalog chip instead.
+  //  - hidden corpora (e.g. the on-demand `wikipedia-article` recipe).
   let childrenByParent: Record<string, typeof corpora> = $derived.by(() => {
     const map: Record<string, typeof corpora> = {};
     for (const c of corpora) {
-      if (c.parent_corpus_id) {
+      if (
+        c.parent_corpus_id &&
+        c.id !== "wikipedia-fetched" &&
+        catalogTier(c) !== "hidden"
+      ) {
         (map[c.parent_corpus_id] ||= []).push(c);
       }
     }
     return map;
   });
+
+  // The on-demand fetch corpus the Catalog add-on populates. Surfaced
+  // as a count under the Catalog chip ("N articles fetched").
+  let wikipediaFetched = $derived(
+    corpora.find((c) => c.id === "wikipedia-fetched"),
+  );
 
   onMount(async () => {
     await refresh();
@@ -203,12 +217,11 @@
 
   async function handleInstall(id: string) {
     try {
-      // Wikipedia is a layered stack: Simple English ships as a Layer
-      // 0 satellite that should always install alongside Core. The
-      // user only sees one "Wikipedia" row in the picker, so clicking
-      // Install must kick off both layers. `startLayeredSetup` is
-      // idempotent — already-installed sub-corpora just no-op on the
-      // daemon side.
+      // Installing Wikipedia gives the curated Core (Vital Articles).
+      // Newsworthy and Catalog are opt-in add-on toggles, not part of
+      // the base install; Simple English is parked in "Coming soon".
+      // `startLayeredSetup` is the (now Core-only) "install Wikipedia"
+      // entry point — idempotent on the daemon side.
       if (id === "wikipedia") {
         await startLayeredSetup();
       } else {
@@ -225,18 +238,6 @@
   async function handleRemove(id: string) {
     try {
       await removeCorpus(id);
-      // The user only sees one "Wikipedia" row, so Remove must also
-      // tear down the Simple English satellite. Best-effort: a stale
-      // wikipedia-simple index left behind is harmless (the next
-      // Install would resume it), but the user's mental model is
-      // "Wikipedia is gone" so we honor that.
-      if (id === "wikipedia") {
-        try {
-          await removeCorpus("wikipedia-simple");
-        } catch (e) {
-          console.warn("removing wikipedia-simple satellite failed:", e);
-        }
-      }
       await refresh();
     } catch (e) {
       console.error("Remove failed:", e);
@@ -472,7 +473,7 @@
         </div>
         {#if childrenByParent[corpus.id]?.length}
           <div class="corpus-layers" data-testid="corpus-layers">
-            <span class="layers-label">Layers:</span>
+            <span class="layers-label">Add-ons:</span>
             {#each childrenByParent[corpus.id] as layer}
               {@const layerInProgress =
                 layer.status === "installing" ||
@@ -574,6 +575,20 @@
                 {:else}
                   <span class="status-pending">
                     watcher starting — first tick lands within ~15 min
+                  </span>
+                {/if}
+              </div>
+            {/if}
+            {#if layer.id === "wikipedia-catalog" && layer.status === "installed"}
+              <div class="layer-status" data-testid="catalog-status">
+                <span class="layer-status-label">Catalog</span>
+                <span title="Indexes article titles + abstracts so any of ~6.8M Wikipedia articles can be fetched in full on demand. Fetched articles accumulate in the shared wikipedia-fetched corpus and are reused after the first fetch.">
+                  fetch any article on demand
+                </span>
+                {#if wikipediaFetched && (wikipediaFetched.chunks_count ?? 0) > 0}
+                  <span class="status-sep">·</span>
+                  <span title="Full-text fetched on demand so far, stored in the wikipedia-fetched corpus.">
+                    {(wikipediaFetched.chunks_count ?? 0).toLocaleString()} chunks fetched
                   </span>
                 {/if}
               </div>

@@ -104,6 +104,27 @@ const FIXTURE = {
     // catalog_status — this entry must never reach the DOM.
     catalog_status: "featured",
   },
+  wikipediaFetched: {
+    id: "wikipedia-fetched",
+    name: "Wikipedia (fetched)",
+    description: "On-demand fetched articles.",
+    size_compressed_gb: 0,
+    size_indexed_gb: 0.1,
+    license: "CC-BY-SA-4.0",
+    tiers: [],
+    status: "installed" as const,
+    chunks_count: 128,
+    enrichment_enabled: false,
+    indexed_at: 1_700_000_000,
+    embedding_model: "qwen-embedding-0.6b",
+    embedding_dimensions: 1024,
+    vector_index_ready: true,
+    // A child of wikipedia, but a BYPRODUCT of the Catalog add-on
+    // (filled by on-demand fetches) — not a user-toggleable layer.
+    // KnowledgeStatus must filter it out of the add-on chips.
+    parent_corpus_id: "wikipedia",
+    catalog_status: "preview",
+  },
 };
 
 async function openKnowledgeTab(page: import("@playwright/test").Page) {
@@ -136,6 +157,7 @@ test.describe("knowledge picker — layer grouping", () => {
         fixture.wikipediaCore,
         fixture.wikipediaSimple,
         fixture.wikipediaNewsworthy,
+        fixture.wikipediaFetched,
         fixture.wikipediaPartition,
       ]);
       // Capture install/remove invocations so each test can assert
@@ -211,6 +233,20 @@ test.describe("knowledge picker — layer grouping", () => {
       rows
         .locator(".corpus-name")
         .filter({ hasText: "Wikipedia — Newsworthy" }),
+    ).toHaveCount(0);
+
+    // `wikipedia-fetched` is a child of wikipedia but a BYPRODUCT of
+    // the Catalog add-on, not a toggle — it must be filtered out of the
+    // add-on chips AND never appear as a top-level row. (Its fetched
+    // count surfaces as status text under the Catalog chip instead.)
+    await expect(
+      page.locator(
+        '[data-testid="layer-chip"][data-layer-id="wikipedia-fetched"]',
+      ),
+    ).toHaveCount(0);
+    await expect(layersPanel).not.toContainText("Wikipedia (fetched)");
+    await expect(
+      rows.locator(".corpus-name").filter({ hasText: "Wikipedia (fetched)" }),
     ).toHaveCount(0);
   });
 

@@ -441,6 +441,17 @@ impl CorpusEngine {
         let written = insert_pairs.len();
         index.insert_batch(&insert_pairs).await?;
 
+        // Stamp this document's index recency. Source-agnostic: the
+        // newsworthy watcher, the watched-folder reindex, and the delta
+        // updater all converge here, so every incremental (re)index
+        // marks its document "fresh" and the Atlas bubbles its atoms to
+        // the top — no per-source code. See `crate::freshness`.
+        crate::freshness::stamp_doc_indexed(
+            &index_path,
+            source_doc_id,
+            crate::freshness::now_unix(),
+        );
+
         // Glassbox: every reindex_by_source_doc_id call is a live
         // mutation that downstream consumers (atlas, /v1/knowledge/
         // search) read from. Emitting an info event so newsworthy
