@@ -297,11 +297,12 @@
       console.warn("getFirstMeshConsent failed:", e);
     }
     view = needsConsent ? "consent" : "chat";
-    // Fire-and-forget background install of `wikipedia-simple` so
-    // the user lands in chat with retrieval gradually coming online.
-    // Idempotent on the daemon; safe to call on every setup
+    // Fire-and-forget background install of the default Wikipedia
+    // Core corpus so the user lands in chat with retrieval coming
+    // online. Idempotent on the daemon; safe to call on every setup
     // completion. Errors are silent — the user discovers Knowledge
-    // from Settings if they care.
+    // from Settings if they care. (Newsworthy + Catalog are opt-in
+    // add-ons; Simple English is parked in "Coming soon".)
     void startDefaultCorpusInstall().catch(() => {});
   }
 

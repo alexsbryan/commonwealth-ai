@@ -2096,20 +2096,26 @@ pub async fn complete_setup_auto(
     crate::setup_flow::run(app_handle, state.inner().clone()).await
 }
 
-/// Fire-and-forget background install of the default
-/// `wikipedia-simple` corpus (Layer 0, ~2–3 min). Idempotent —
-/// `install_corpus` short-circuits when the daemon is already
-/// ingesting it. The desktop's `App.svelte` calls this on the
-/// transition into chat after first-launch setup completes; the
-/// install runs silently with no setup-flow UI surface, surfacing
-/// only on the regular `corpus-progress` channel that
-/// `Settings → Knowledge` already listens to.
+/// Fire-and-forget background install of the default `wikipedia` Core
+/// corpus (curated Vital Articles L5; a prebuilt snapshot keeps the
+/// first-run download a one-time cost). Idempotent — `install_corpus`
+/// short-circuits when the daemon is already ingesting it. The
+/// desktop's `App.svelte` calls this on the transition into chat after
+/// first-launch setup completes; it runs silently, surfacing only on
+/// the regular `corpus-progress` channel that `Settings → Knowledge`
+/// already listens to.
+///
+/// Previously installed `wikipedia-simple` (the small Layer 0). Simple
+/// is now parked in "Coming soon", so the default install points at
+/// Core — "core by default". (Heavier first-run download; if that's
+/// undesirable, make this a no-op and let the user install Core
+/// explicitly from Settings → Knowledge.)
 #[tauri::command]
 pub async fn start_default_corpus_install(
     app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    install_corpus(app_handle, state, "wikipedia-simple".into()).await
+    install_corpus(app_handle, state, "wikipedia".into()).await
 }
 
 #[tauri::command]
@@ -4013,29 +4019,23 @@ pub async fn lc_newsworthy_status() -> Result<serde_json::Value, String> {
         .map_err(|e| format!("parse newsworthy status body: {e}"))
 }
 
-/// Tauri command: kick off the layered Wikipedia setup. Installs
-/// `wikipedia-simple` (Layer 0, ~2–3 min) and `wikipedia` Core
-/// (Layer 1, ~10–12 min) back-to-back. Both run via the existing
+/// Tauri command: install the default Wikipedia corpus — `wikipedia`
+/// Core (curated Vital Articles L5). Runs via the existing
 /// `/internal/corpus/install` daemon endpoint, so progress streams on
 /// the unchanged `corpus-progress` event channel.
+///
+/// Was a two-layer install (`wikipedia-simple` Layer 0 + Core); Simple
+/// is now parked in the desktop "Coming soon" bucket until it ships as
+/// a proper HF subset of Core, so install is Core-only. Newsworthy and
+/// Catalog are opt-in add-on toggles, not part of the default install.
+/// (Name kept for call-site stability; it's the "install Wikipedia" entry.)
 #[tauri::command]
 pub async fn lc_start_layered_setup(
     app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<String>, String> {
-    // Layer 0 first — small, fast, gives the user grounded responses
-    // within minutes.
-    install_corpus(
-        app_handle.clone(),
-        state.clone(),
-        "wikipedia-simple".into(),
-    )
-    .await?;
-    // Layer 1 — kicks off concurrently with Layer 0. The daemon
-    // schedules both serially behind the shared embed slot, but the
-    // download phase parallelises with whichever phase Layer 0 is in.
     install_corpus(app_handle, state, "wikipedia".into()).await?;
-    Ok(vec!["wikipedia-simple".into(), "wikipedia".into()])
+    Ok(vec!["wikipedia".into()])
 }
 
 /// Spawn the background poller that reads

@@ -246,6 +246,14 @@ pub struct ChunkRef {
     pub chunk_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub passage_preview: Option<String>,
+    /// `source_doc_id` of the document this evidence chunk belongs to,
+    /// when known. Lets the Atlas join an atom to its document's index
+    /// recency (`crate::freshness`) and bubble freshly-(re)indexed
+    /// content to the top. `#[serde(default)]` — older `atoms.json`
+    /// omit it (read as `None`); the post-reindex atlas rebuild
+    /// backfills it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_doc_id: Option<String>,
 }
 
 impl ChunkRef {
@@ -253,7 +261,14 @@ impl ChunkRef {
         Self {
             chunk_id: chunk_id.into(),
             passage_preview: preview,
+            source_doc_id: None,
         }
+    }
+
+    /// Builder: attach the owning document's `source_doc_id`.
+    pub fn with_source_doc(mut self, source_doc_id: Option<String>) -> Self {
+        self.source_doc_id = source_doc_id;
+        self
     }
 }
 

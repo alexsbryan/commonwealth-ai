@@ -1996,6 +1996,12 @@ export interface AtomSummary {
   curation_status: CurationStatus;
   /** Phase 2 forward-compat — always `false` in Phase 1. */
   overlay_supports: boolean;
+  /** Unix seconds of the most recent (re)index of this atom's source
+   *  document, when known. Present means the doc was refreshed after
+   *  the bulk install (e.g. a newsworthy fetch) — the backend already
+   *  sorts these to the top; the UI renders a "fresh" marker.
+   *  Absent/null means baseline install-time content. */
+  updated_at?: number | null;
 }
 
 export interface AtomListPage {

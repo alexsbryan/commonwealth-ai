@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
 
 use corpus_engine::enrichment::atlas::atoms::{
-    AtomEnvelope, AtomId, AtomType, AtomsFile, ChunkRef,
+    AtomEnvelope, AtomId, AtomType, AtomsFile,
 };
 use corpus_engine::enrichment::atlas::read_atlas_atoms;
 use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
@@ -100,6 +100,14 @@ pub struct AtomSummary {
     /// Phase 2 forward-compat — `false` today. UIs can already
     /// branch on this to hide the (empty) edit affordances slot.
     pub overlay_supports: bool,
+    /// Unix seconds of the most recent (re)index of this atom's source
+    /// document, when known. `Some` means the doc was refreshed *after*
+    /// the bulk install — e.g. a wikipedia-newsworthy fetch or a
+    /// watched-folder edit — so the backend bubbles it to the top and
+    /// the UI can render a "fresh" marker. `None` is baseline
+    /// (install-time) content with no recorded recency.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<i64>,
 }
 
 const DISPLAY_NAME_TRUNCATION: usize = 120;
@@ -129,11 +137,20 @@ impl FileAtlasReader {
         // freeze the runtime for wiki-scale reads.
         let page = tokio::task::spawn_blocking(move || -> Result<AtomListPage, AtomBrowseError> {
             let atoms = cached_atoms(&atlas_dir).map_err(AtomBrowseError::ReadAtoms)?;
+            // Per-doc recency lives one level up from the atlas dir —
+            // `<indexes>/<corpus>/_doc_freshness.json`, beside the
+            // `atlas/` subdir. Missing sidecar → empty map → insertion
+            // order, so a never-reindexed corpus renders unchanged.
+            let freshness = atlas_dir
+                .parent()
+                .map(corpus_engine::freshness::load_doc_freshness)
+                .unwrap_or_default();
             Ok(filter_and_page(
                 &corpus_id_owned,
                 &atoms,
                 &filter_for_task,
                 page,
+                &freshness,
             ))
         })
         .await
@@ -227,6 +244,7 @@ fn filter_and_page(
     atoms: &[AtomEnvelope],
     filter: &AtomFilter,
     page: PageCursor,
+    freshness: &HashMap<String, i64>,
 ) -> AtomListPage {
     let name_needle = filter
         .name_query
@@ -257,6 +275,19 @@ fn filter_and_page(
         matches.push(atom);
     }
 
+    // Fresh-first: documents (re)indexed after the bulk install — a
+    // newsworthy fetch, a watched-folder edit — bubble to the top so
+    // the most recently-touched knowledge leads the list. The sort is
+    // stable, so atoms with equal (or no) freshness keep their original
+    // insertion order; a corpus with no recency sidecar is unchanged.
+    // Recency is the *only* reordering signal — salience etc. are left
+    // to the per-type tiebreak that insertion order already encodes.
+    if !freshness.is_empty() {
+        matches.sort_by(|a, b| {
+            atom_freshness(b, freshness).cmp(&atom_freshness(a, freshness))
+        });
+    }
+
     let total_matching = matches.len() as u64;
     let end = page.offset.saturating_add(page.limit).min(matches.len());
     let slice = if page.offset >= matches.len() {
@@ -267,7 +298,7 @@ fn filter_and_page(
 
     let items: Vec<AtomSummary> = slice
         .iter()
-        .map(|a| build_summary(corpus_id, a))
+        .map(|a| build_summary(corpus_id, a, freshness))
         .collect();
 
     let next_offset = if end < matches.len() {
@@ -283,7 +314,11 @@ fn filter_and_page(
     }
 }
 
-fn build_summary(corpus_id: &str, atom: &AtomEnvelope) -> AtomSummary {
+fn build_summary(
+    corpus_id: &str,
+    atom: &AtomEnvelope,
+    freshness: &HashMap<String, i64>,
+) -> AtomSummary {
     AtomSummary {
         atom_id: atom.id().clone(),
         stable_key: compute_stable_key(corpus_id, atom),
@@ -294,6 +329,7 @@ fn build_summary(corpus_id: &str, atom: &AtomEnvelope) -> AtomSummary {
         evidence_chunk_count: evidence_count(atom),
         curation_status: CurationStatus::Generated,
         overlay_supports: false,
+        updated_at: atom_freshness(atom, freshness),
     }
 }
 
@@ -364,11 +400,32 @@ fn evidence_count(atom: &AtomEnvelope) -> u32 {
     }
 }
 
-// Silence `unused` on ChunkRef — it's referenced through the atom
-// variants but not directly in this file's call graph after the
-// helpers above. Keeps the explicit import obvious for future readers.
-#[allow(dead_code)]
-fn _ensure_chunk_ref_in_scope(_: &ChunkRef) {}
+/// The `source_doc_id` of the atom's anchoring chunk, when enrichment
+/// populated it. This is the join key into `_doc_freshness.json`.
+/// Named atom types anchor on their single `first_appearance` chunk;
+/// evidence-bearing types use their first piece of evidence (which is
+/// the chunk that introduced the atom).
+fn atom_source_doc_id(atom: &AtomEnvelope) -> Option<&str> {
+    let chunk = match atom {
+        AtomEnvelope::Entity(a) => Some(&a.first_appearance),
+        AtomEnvelope::Position(a) => Some(&a.first_appearance),
+        AtomEnvelope::Opposition(a) => Some(&a.first_appearance),
+        AtomEnvelope::Event(a) => a.evidence.first(),
+        AtomEnvelope::State(a) => a.evidence.first(),
+        AtomEnvelope::Relation(a) => a.evidence.first(),
+        AtomEnvelope::Claim(a) => a.evidence.first(),
+        AtomEnvelope::Configuration(a) => a.evidence.first(),
+        AtomEnvelope::ArgumentReconstruction(a) => a.evidence.first(),
+        AtomEnvelope::Question(a) => a.raised_at.first(),
+    };
+    chunk.and_then(|c| c.source_doc_id.as_deref())
+}
+
+/// Recency of the atom's source document, or `None` when the doc has
+/// no recorded (re)index — i.e. baseline install-time content.
+fn atom_freshness(atom: &AtomEnvelope, freshness: &HashMap<String, i64>) -> Option<i64> {
+    atom_source_doc_id(atom).and_then(|id| freshness.get(id).copied())
+}
 
 #[cfg(test)]
 mod tests {
@@ -701,5 +758,77 @@ mod tests {
             enrichment_depth: EnrichmentDepth::Extracted,
         });
         assert_eq!(evidence_count(&e), 1);
+    }
+
+    /// An entity whose `first_appearance` carries a `source_doc_id` —
+    /// the join key the freshness sort uses.
+    fn entity_doc(id: usize, name: &str, salience: f32, doc: &str) -> AtomEnvelope {
+        let AtomEnvelope::Entity(mut e) = entity(id, name, salience) else {
+            unreachable!("entity() builds an Entity")
+        };
+        e.first_appearance = ChunkRef::new("sec_0001", None)
+            .with_source_doc(Some(doc.to_string()));
+        AtomEnvelope::Entity(e)
+    }
+
+    #[tokio::test]
+    async fn list_atoms_sorts_fresh_docs_first() {
+        let tmp = tempfile::tempdir().unwrap();
+        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let corpus_dir = tmp.path().join("news");
+        // Insertion order: Alpha, Beta, Gamma.
+        write_atoms(
+            &corpus_dir.join("atlas"),
+            vec![
+                entity_doc(1, "Alpha", 0.9, "Alpha"),
+                entity_doc(2, "Beta", 0.9, "Beta"),
+                entity_doc(3, "Gamma", 0.9, "Gamma"),
+            ],
+        );
+        // Freshness sidecar one level up from atlas/. Gamma newest,
+        // Beta older, Alpha absent (baseline).
+        let mut freshness = HashMap::new();
+        freshness.insert("Beta".to_string(), 2_000i64);
+        freshness.insert("Gamma".to_string(), 3_000i64);
+        std::fs::write(
+            corpus_dir.join(corpus_engine::freshness::DOC_FRESHNESS_FILE),
+            serde_json::to_vec(&freshness).unwrap(),
+        )
+        .unwrap();
+
+        let page = reader
+            .list_atoms("news", AtomFilter::default(), PageCursor::default())
+            .await
+            .unwrap();
+
+        let names: Vec<&str> = page.items.iter().map(|i| i.display_name.as_str()).collect();
+        // Fresh-first: Gamma (3000) → Beta (2000) → Alpha (baseline, last).
+        assert_eq!(names, vec!["Gamma", "Beta", "Alpha"]);
+        // updated_at reflects each doc's recency; baseline doc is None.
+        assert_eq!(page.items[0].updated_at, Some(3_000));
+        assert_eq!(page.items[1].updated_at, Some(2_000));
+        assert_eq!(page.items[2].updated_at, None);
+    }
+
+    #[tokio::test]
+    async fn list_atoms_without_sidecar_keeps_insertion_order() {
+        // No `_doc_freshness.json` → empty map → no reordering, no
+        // updated_at. Proves the feature is inert for baseline corpora.
+        let tmp = tempfile::tempdir().unwrap();
+        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        write_atoms(
+            &tmp.path().join("c").join("atlas"),
+            vec![
+                entity_doc(1, "Alpha", 0.9, "Alpha"),
+                entity_doc(2, "Beta", 0.9, "Beta"),
+            ],
+        );
+        let page = reader
+            .list_atoms("c", AtomFilter::default(), PageCursor::default())
+            .await
+            .unwrap();
+        let names: Vec<&str> = page.items.iter().map(|i| i.display_name.as_str()).collect();
+        assert_eq!(names, vec!["Alpha", "Beta"]);
+        assert!(page.items.iter().all(|i| i.updated_at.is_none()));
     }
 }

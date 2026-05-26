@@ -13,6 +13,9 @@ both the curated head AND the dynamic long tail.\
 """
 license = "CC-BY-SA-4.0"
 kind = "catalog"
+# Renders as a "Fetch any article" add-on toggle under the Wikipedia
+# (English) corpus in the desktop picker, alongside Newsworthy.
+parent_corpus_id = "wikipedia"
 mesh_sharing = true
 size_compressed_gb = 0.3
 size_indexed_gb = 4.0

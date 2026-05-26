@@ -27,6 +27,7 @@ pub mod enrichment;
 pub mod error;
 pub mod extractors;
 pub mod filters;
+pub mod freshness;
 pub mod index;
 pub mod pii;
 pub mod progress;

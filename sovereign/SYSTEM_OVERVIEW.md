@@ -547,6 +547,7 @@ traversal). The desktop app registers as the system handler.
 | Solver design | [`docs/SOLVER_DESIGN.md`](./docs/SOLVER_DESIGN.md) |
 | Local corpora / Obsidian / watched folders | `sovereign-tools/src/local_corpus/` — invariants pinned via tests in that crate |
 | Wikipedia freshness layer | `corpus-engine/src/update/newsworthy*.rs` + `sovereign-recipes/wikipedia-newsworthy/` |
+| Per-document index recency (Atlas fresh-first) | `corpus-engine/src/freshness.rs` — source-agnostic `source_doc_id → unix` sidecar (`_doc_freshness.json`) stamped at the single reindex convergence point (`engine::reindex::reindex_by_source_doc_id`); `ChunkRef.source_doc_id` carries the join key onto atoms, and `sovereign-tools::atlas_view::atom_browse` sorts atoms fresh-first + sets `AtomSummary.updated_at`. ANY re-indexing source (newsworthy, watched-folder edit, delta) makes its content "fresh" with no per-source code — freshness is emergent from indexing. |
 | Pinned worker pods as inference peers | [`docs/PINNED_WORKER_AS_INFERENCE_PEER.md`](./docs/PINNED_WORKER_AS_INFERENCE_PEER.md), [`docs/EPHEMERAL_WORKER_PODS.md`](./docs/EPHEMERAL_WORKER_PODS.md) |
 | Cloud peer deploy | [`docs/CLOUD_PEER_DEPLOY.md`](./docs/CLOUD_PEER_DEPLOY.md) |
 | Mesh load awareness | [`docs/MESH_LOAD_AWARENESS.md`](./docs/MESH_LOAD_AWARENESS.md) |
