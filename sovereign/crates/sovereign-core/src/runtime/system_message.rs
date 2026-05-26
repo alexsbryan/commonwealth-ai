@@ -588,7 +588,16 @@ impl Runtime {
         // The user is awaiting a `Response` return rather than
         // staring at a streaming chat surface, so the chip is
         // less load-bearing on this path.
-        run_collaboration(
+        //
+        // Flatten the `RefinementOutcome` enum back to a plain
+        // `String` so non-streaming callers (SimpleQuery,
+        // ComplexTask, KnowledgeQuery sync, tauri command) keep
+        // the original contract: any non-`Refined` outcome means
+        // "use the original answer." The stuck-UI bug the enum
+        // was introduced to fix only affects the streaming
+        // post-stream refinement path, which dispatches the
+        // typed outcome via `run_post_stream_refinement` below.
+        match run_collaboration(
             self.inference.as_ref(),
             self.approval.as_ref(),
             &self.inference_config,
@@ -600,6 +609,14 @@ impl Runtime {
             None,
         )
         .await
+        {
+            crate::runtime::collaboration::RefinementOutcome::Refined(text) => text,
+            crate::runtime::collaboration::RefinementOutcome::NotAttempted
+            | crate::runtime::collaboration::RefinementOutcome::NoChange
+            | crate::runtime::collaboration::RefinementOutcome::Failed { .. } => {
+                response.to_string()
+            }
+        }
     }
     /// Post-stream refinement hook: runs the gap check against the
     /// already-streamed answer; if the user pastes content, overwrites

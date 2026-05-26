@@ -113,6 +113,11 @@ describe("InformationRequestCard", () => {
     expect(api.submitInformationSearch).toHaveBeenCalledWith(
       "r-search",
       "Mac Studio next gen date",
+      // conversationId — component threads through; test scenario
+      // doesn't pass one so it's `null`. `submitInformationSearch`
+      // signature: (key, query, conversationId?). Pinned here so a
+      // future signature change can't silently regress the spy.
+      null,
     );
     await vi.waitFor(() => expect(onHandled).toHaveBeenCalled());
   });

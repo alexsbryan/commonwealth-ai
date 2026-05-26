@@ -64,8 +64,17 @@ pub struct DesktopConfig {
     pub active_skills: Vec<String>,
     #[serde(default = "default_enabled_tools")]
     pub enabled_tools: Vec<String>,
-    #[serde(default = "default_context_size")]
-    pub context_size: u32,
+    /// **Deprecated** — kept on disk only so existing `desktop.toml`
+    /// files deserialize without losing the value during one-shot
+    /// migration into `SetupConfig`. The canonical home for the
+    /// chat-slot context window is now `~/.sovereign/config.toml`'s
+    /// `[models].context_size` (see `sovereign-core::setup_config`).
+    /// `DesktopConfig::load` migrates this field into `SetupConfig` if
+    /// daemon config doesn't yet carry an explicit value, then leaves
+    /// the desktop field in place to avoid surprising the user with
+    /// a config rewrite. The bootstrap path no longer reads from here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_size: Option<u32>,
     #[serde(default)]
     pub search_backend: SearchBackendConfig,
     #[serde(default)]
@@ -302,24 +311,6 @@ fn default_enabled_tools() -> Vec<String> {
     ]
 }
 
-fn default_context_size() -> u32 {
-    // 8192 ≈ 8K tokens — ample headroom for KnowledgeView Phase 2
-    // entity-extraction prompts (~1848 tokens each) plus a 2K
-    // generation budget without invoking the
-    // `max_tokens exceeded context headroom` clamp. Previously 2048,
-    // which silently truncated entity-extraction outputs to ~200
-    // tokens and degraded enrichment quality.
-    //
-    // Both fast and primary slots share this — the ~600-900 MB extra
-    // KV cache for a Qwen3.5-9B primary at 8K is comfortable on
-    // anything ≥ 16 GB unified memory. Asymmetry note:
-    // `sovereign-core::setup_config::default_context_size` returns
-    // 16384 for the daemon path; desktop is now closer but still
-    // conservative. Users on 64 GB+ machines can safely bump this
-    // higher via Settings.
-    8192
-}
-
 fn default_temperature() -> f32 {
     0.7
 }
@@ -348,7 +339,10 @@ impl Default for DesktopConfig {
             skills_dir: default_skills_dir(),
             active_skills: Vec::new(),
             enabled_tools: default_enabled_tools(),
-            context_size: default_context_size(),
+            // Deprecated — see field doc comment. Default to `None`
+            // so a freshly-saved desktop.toml doesn't materialise a
+            // stale ctx hint; bootstrap reads `SetupConfig` instead.
+            context_size: None,
             search_backend: SearchBackendConfig::default(),
             setup_complete: false,
             selected_tier: None,
@@ -408,26 +402,70 @@ impl DesktopConfig {
             Self::default()
         };
 
-        // Migration: bump persisted context_size below the new default.
-        // Older configs were saved with context_size = 2048, which
-        // caused the `max_tokens exceeded context headroom` clamp on
-        // KnowledgeView Phase 2 entity extraction (1848-token prompts
-        // + 200-token output budget). 8192 fixes that without
-        // measurable memory impact on supported hardware. Config is
-        // re-saved so the migration is one-shot.
-        let migrated_default = default_context_size();
-        if config.context_size < migrated_default {
-            tracing::info!(
-                old = config.context_size,
-                new = migrated_default,
-                "config migration: bumping context_size to new default"
-            );
-            config.context_size = migrated_default;
-            if let Err(e) = config.save() {
-                tracing::warn!(
-                    "failed to persist context_size migration: {e} \
-                     (in-memory value still applied for this run)"
-                );
+        // Migration: copy any pre-merge `context_size` from
+        // `desktop.toml` into the canonical home in
+        // `~/.sovereign/config.toml`'s `[models].context_size`. Runs
+        // exactly when:
+        //   1. desktop.toml carries an explicit `context_size` AND
+        //   2. SetupConfig either doesn't exist OR has no explicit
+        //      `context_size` of its own.
+        //
+        // Goal: a user who set 8192 in the desktop UI before the
+        // single-source-of-truth merge keeps that value automatically
+        // — the daemon config is created (or amended) with their
+        // chosen ctx. After migration the desktop field is moot;
+        // bootstrap reads SetupConfig.
+        //
+        // We do NOT rewrite desktop.toml to clear the field — the
+        // deprecated marker on the struct field handles future-proofing
+        // and avoiding a config rewrite keeps the migration a pure
+        // one-way write into SetupConfig (the worse error mode is
+        // surfacing a stale value, not losing one).
+        if let Some(desktop_ctx) = config.context_size {
+            use sovereign_core::setup_config::SetupConfig;
+            let mut cli = SetupConfig::load().ok();
+            let needs_write = match cli.as_ref() {
+                Some(c) => c.models.context_size.is_none(),
+                None => true,
+            };
+            if needs_write {
+                let mut setup = cli.take().unwrap_or_else(|| SetupConfig {
+                    models: sovereign_core::setup_config::ModelsSection {
+                        primary: config
+                            .primary_model_path
+                            .clone()
+                            .unwrap_or_else(|| config.model_path.clone()),
+                        fast: Some(config.model_path.clone()),
+                        embed: config
+                            .embed_model_path
+                            .clone()
+                            .unwrap_or_else(|| config.model_path.clone()),
+                        code: config.code_model_path.clone(),
+                        context_size: None,
+                        extra: std::collections::BTreeMap::new(),
+                        max_extras_memory_gb: None,
+                        primary_pool: None,
+                    },
+                    daemon: Default::default(),
+                    data: sovereign_core::setup_config::DataSection {
+                        dir: config.data_dir.clone(),
+                    },
+                    watched_folders: Default::default(),
+                    memory: Default::default(),
+                });
+                setup.models.context_size = Some(desktop_ctx);
+                match setup.save() {
+                    Ok(path) => tracing::info!(
+                        desktop_ctx,
+                        target = %path.display(),
+                        "config migration: copied desktop.toml context_size into SetupConfig"
+                    ),
+                    Err(e) => tracing::warn!(
+                        error = %e,
+                        "config migration: failed to persist context_size into SetupConfig \
+                         (in-memory value still applied via SetupConfig::load fallback)"
+                    ),
+                }
             }
         }
 
@@ -721,6 +759,29 @@ pub async fn bootstrap_with_progress(
                 );
             }
 
+            // Canonical chat-slot ctx lives in `~/.sovereign/config.toml`'s
+            // `[models].context_size` now (single source of truth, see the
+            // migration block in `DesktopConfig::load`). Read it here so
+            // the desktop-embedded `EmbeddedLlamaCpp` lines up with the
+            // value the daemon also uses. Fallback chain:
+            //   1. `SetupConfig::effective_context_size()` (daemon
+            //      canonical — explicit value, or daemon's 16384 default).
+            //   2. If `SetupConfig::load` errors at all (file missing /
+            //      malformed and not yet migrated), use the daemon-side
+            //      default directly so we still pass a non-zero ctx to
+            //      llama.
+            // 16384 matches `sovereign-core::setup_config::default_context_size`
+            // — the daemon's safe default for a 30B+ primary on a
+            // 64 GB Mac. We can't reach the private helper from here,
+            // so the literal duplicates the constant. If it drifts on
+            // the daemon side, the daemon's `effective_context_size`
+            // wins for users who actually have a SetupConfig file
+            // (the common case); this fallback only fires on a
+            // genuinely-missing daemon config.
+            let effective_ctx = sovereign_core::setup_config::SetupConfig::load()
+                .map(|c| c.models.effective_context_size())
+                .unwrap_or(16384);
+
             // Crash-isolated smoke test: spawn ourselves with
             // `--smoketest` and run a 1-token decode against the
             // chat slot's GGUF before loading it in-process. If the
@@ -743,7 +804,7 @@ pub async fn bootstrap_with_progress(
                     .recommended_gpu_layers;
                 if smoke_gpu_layers > 0 {
                     emit(BootstrapPhase::SmokeTesting);
-                    let smoke_ctx = config.context_size.min(2048);
+                    let smoke_ctx = effective_ctx.min(2048);
                     tracing::info!(
                         model = %config.model_path.display(),
                         gpu_layers = smoke_gpu_layers,
@@ -792,7 +853,7 @@ pub async fn bootstrap_with_progress(
                     config.primary_model_path.as_deref(),
                     config.embed_model_path.as_deref(),
                     config.code_model_path.as_deref(),
-                    config.context_size,
+                    effective_ctx,
                     None,
                     ModelFamily::Unknown,               // fast slot
                     ModelFamily::Unknown,               // primary slot (lazy-loaded)

@@ -2103,6 +2103,14 @@ impl InferenceProvider for MeshInferenceProvider {
         self.local.code_model_id()
     }
 
+    fn effective_context_size(&self) -> Option<u32> {
+        self.local.effective_context_size()
+    }
+
+    fn n_ctx_train_for_primary(&self) -> Option<u32> {
+        self.local.n_ctx_train_for_primary()
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         self.local.capabilities()
     }

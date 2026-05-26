@@ -356,6 +356,8 @@ fn main() -> ExitCode {
             commands::weaken_memory,
             commands::get_config,
             commands::save_config,
+            commands::get_setup_context_size,
+            commands::set_setup_context_size,
             commands::is_setup_complete,
             commands::complete_setup,
             commands::complete_setup_auto,

@@ -1170,6 +1170,139 @@ async fn post_stream_refinement_noops_when_no_gap() {
 }
 
 #[tokio::test]
+async fn post_stream_refinement_emits_fallback_when_inference_errors() {
+    // Repro for the 2026-05-25 "Refining your answer" stall: the
+    // user clicked Search on the InformationRequestCard (so the
+    // desktop set `m.refining = true`), the daemon ran the gap
+    // check + web search, then refinement inference errored with
+    // `Decode Error -3`. Backend logged "falling back to original"
+    // and returned without emitting anything → desktop stuck on
+    // the refining overlay forever.
+    //
+    // Invariant under test: when refinement INFERENCE errors after
+    // the user has provided content, `run_post_stream_refinement`
+    // MUST emit `message-refined` with the original content so the
+    // frontend clears `m.refining`. The persisted message stays
+    // unchanged (no rewrite). Stale-write to the dossier does NOT
+    // fire (`refined.is_none()`).
+    let h = TestHarness::new_with_collaborate(
+        GapScript::Gap {
+            gap: "Need a primary source".to_string(),
+        },
+        RefineScript::Error,
+        InfoResponseScript::Pasted("user-supplied source text".to_string()),
+    );
+
+    let conv_id = uuid::Uuid::new_v4().to_string();
+    let msg_id = uuid::Uuid::new_v4().to_string();
+    let original = "Initial streamed answer from the corpus.";
+    let initial = Message {
+        id: msg_id.clone(),
+        conversation_id: conv_id.clone(),
+        role: Role::Assistant,
+        content: original.to_string(),
+        created_at: 0,
+        metadata: None,
+        version: 0,
+    };
+    h.store.save_message(&initial).await.unwrap();
+
+    let refined = h
+        .runtime
+        .apply_post_stream_refinement(&conv_id, &msg_id, "Q?", original, "E", None)
+        .await;
+
+    // Refinement errored → caller should see `None` so the
+    // stale-write dossier path doesn't trigger.
+    assert!(
+        refined.is_none(),
+        "inference error must not return a refined string"
+    );
+
+    // Persisted message must stay unchanged — we didn't rewrite it.
+    let conv = h.store.get_conversation(&conv_id).await.unwrap();
+    let msg = conv
+        .messages
+        .iter()
+        .find(|m| m.id == msg_id)
+        .expect("message should still exist");
+    assert_eq!(
+        msg.content, original,
+        "store must not change when refinement errors"
+    );
+
+    // CRITICAL: a `message-refined` event MUST still be emitted
+    // (with the original content) so the desktop's `m.refining`
+    // flag clears. Without this emit the UI sticks on "Refining
+    // your answer" forever.
+    let events = h
+        .scripted_approval
+        .as_ref()
+        .expect("collaborate harness sets scripted_approval")
+        .refined_emissions();
+    assert_eq!(
+        events.len(),
+        1,
+        "exactly one fallback emission expected to clear UI flag"
+    );
+    assert_eq!(events[0].message_id, msg_id);
+    assert_eq!(events[0].conversation_id, conv_id);
+    assert_eq!(
+        events[0].new_content, original,
+        "fallback emission carries the original (unchanged) content"
+    );
+}
+
+#[tokio::test]
+async fn post_stream_refinement_emits_fallback_when_output_equals_original() {
+    // Sibling invariant to the Error case: if the refinement model
+    // produces text byte-identical to the original answer (the
+    // "model declined to revise" branch), the desktop still has
+    // `m.refining = true` from the user's Submit/Search click —
+    // we must emit `message-refined` (with the original) to clear
+    // the flag.
+    let h = TestHarness::new_with_collaborate(
+        GapScript::Gap {
+            gap: "Need a primary source".to_string(),
+        },
+        RefineScript::Text("Initial streamed answer from the corpus.".to_string()),
+        InfoResponseScript::Pasted("user-supplied source text".to_string()),
+    );
+
+    let conv_id = uuid::Uuid::new_v4().to_string();
+    let msg_id = uuid::Uuid::new_v4().to_string();
+    let original = "Initial streamed answer from the corpus.";
+    let initial = Message {
+        id: msg_id.clone(),
+        conversation_id: conv_id.clone(),
+        role: Role::Assistant,
+        content: original.to_string(),
+        created_at: 0,
+        metadata: None,
+        version: 0,
+    };
+    h.store.save_message(&initial).await.unwrap();
+
+    let refined = h
+        .runtime
+        .apply_post_stream_refinement(&conv_id, &msg_id, "Q?", original, "E", None)
+        .await;
+
+    assert!(
+        refined.is_none(),
+        "no-change refinement must not advertise as a successful rewrite"
+    );
+
+    let events = h.scripted_approval.as_ref().unwrap().refined_emissions();
+    assert_eq!(
+        events.len(),
+        1,
+        "no-change still emits message-refined to clear UI flag"
+    );
+    assert_eq!(events[0].new_content, original);
+}
+
+#[tokio::test]
 async fn post_stream_refinement_noops_when_user_skips() {
     let h = TestHarness::new_with_collaborate(
         GapScript::Gap {

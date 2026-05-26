@@ -853,7 +853,7 @@ impl Runtime {
             "retrieval_audit: expansion_decision"
         );
         let expansion_kind: &'static str;
-        let (mut chunks, knowledge_char_budget, expansion_fired) = match expansion_strategy {
+        let (mut chunks, mut knowledge_char_budget, expansion_fired) = match expansion_strategy {
             ExpansionStrategy::DominantSource => {
                 expansion_kind = "dominant_source";
                 let (expanded, _from_source, _grounding, _dropped) =
@@ -879,6 +879,59 @@ impl Runtime {
                 (chunks, MAX_KNOWLEDGE_CHARS, false)
             }
         };
+
+        // Pre-flight retrieval-bundle budget. The configured
+        // `knowledge_char_budget` (8000 / 16000 chars) is the
+        // *upper* bound the formatter respects, but it's blind to the
+        // slot's actual context window — see the 2026-05-25 repro
+        // where a 39KB synth prompt blew an 8192 ctx primary slot at
+        // `clamp_max_tokens` before the formatter's budget even
+        // mattered. Compute a ctx-aware ceiling here and pass the
+        // tighter of the two to the formatter:
+        //
+        //   1. `effective_context_size()` — what the slot actually
+        //      allocated (post llama-cpp padding). `None` on remote
+        //      providers (no local slot to budget against) — fall
+        //      through to the formatter's static cap.
+        //   2. Reserve `inference_config.max_tokens` for the response.
+        //   3. Reserve a `SYSTEM_OVERHEAD_TOKEN_RESERVE` cushion for
+        //      `KNOWLEDGE_SYNTHESIS_SYSTEM` + `THINKING_DIRECTIVE` +
+        //      epistemic contract + persona + memories + tool dossier.
+        //      The persona/memory tail varies by turn; the empirical
+        //      max during marathon eval is ~5000 tokens, so 4096 is
+        //      a conservative-but-honest cushion that leaves the
+        //      synthesis prompt the bulk of the window.
+        //   4. Convert the remaining token budget to chars via the
+        //      project's standard ~4 chars/token heuristic.
+        //
+        // When `effective_context_size()` returns `None` (remote
+        // provider, deterministic test stubs) or the ctx-aware budget
+        // is at least as generous as the static cap, the formatter
+        // sees `knowledge_char_budget` unchanged — pre-fix behaviour.
+        const SYSTEM_OVERHEAD_TOKEN_RESERVE: u32 = 4096;
+        const CHARS_PER_TOKEN: u32 = 4;
+        let original_budget = knowledge_char_budget;
+        if let Some(n_ctx) = self.inference.effective_context_size() {
+            let reserved_output = self.inference_config.max_tokens as u32;
+            let available_tokens = n_ctx
+                .saturating_sub(reserved_output)
+                .saturating_sub(SYSTEM_OVERHEAD_TOKEN_RESERVE);
+            let available_chars = available_tokens.saturating_mul(CHARS_PER_TOKEN) as usize;
+            if available_chars < knowledge_char_budget {
+                tracing::info!(
+                    n_ctx,
+                    reserved_output,
+                    system_overhead_reserve = SYSTEM_OVERHEAD_TOKEN_RESERVE,
+                    chunk_count = chunks.len(),
+                    static_budget = knowledge_char_budget,
+                    ctx_aware_budget = available_chars,
+                    "trim_bundle_to_budget: ctx-aware retrieval budget tighter than static cap — formatter will drop lowest-score chunks until under budget"
+                );
+                knowledge_char_budget = available_chars;
+            }
+        }
+        let _ = original_budget; // silence unused warning when ctx-aware branch never fires
+
 
         // Naturalistic audit — post-expansion composition. After the
         // dominant-source or top-sources expander has had its say,
@@ -1323,6 +1376,11 @@ impl Runtime {
             finish_reason: completion.finish_reason.clone(),
             max_tokens_budget: Some(self.inference_config.max_tokens),
             completion_tokens: completion.completion_tokens,
+            // Ctx-budget glassbox — paired with `tokens_used` so the
+            // desktop chat bubble can render `N / M (X%)` and brighten
+            // as the cap approaches. `None` on remote-only providers
+            // (no local slot to read from).
+            context_window: self.inference.effective_context_size(),
         };
 
         // PR3 — grounded next-step offers. Look up the most recent

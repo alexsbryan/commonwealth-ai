@@ -1846,13 +1846,17 @@ pub async fn save_config(
 /// (everything in `InferenceConfig`) intentionally skip the rebuild;
 /// the next chat turn reads the new value from `state.config`.
 fn config_needs_rebuild(old: &DesktopConfig, new: &DesktopConfig) -> bool {
+    // `context_size` is deliberately absent — it now lives in
+    // `SetupConfig` (see the migration in `DesktopConfig::load`) and
+    // changes route through the dedicated `set_setup_context_size`
+    // Tauri command, which calls `EmbeddedLlamaCpp::rebuild_chat_contexts`
+    // directly without rebuilding the Runtime.
     old.model_path != new.model_path
         || old.primary_model_path != new.primary_model_path
         || old.embed_model_path != new.embed_model_path
         || old.code_model_path != new.code_model_path
         || old.embed_family != new.embed_family
         || old.code_family != new.code_family
-        || old.context_size != new.context_size
         || old.skills_dir != new.skills_dir
         || old.active_skills != new.active_skills
         || old.enabled_tools != new.enabled_tools
@@ -2074,6 +2078,148 @@ fn kickstart_daemon() -> Result<(), String> {
     {
         Err("service restart is only supported on macOS and Linux".into())
     }
+}
+
+/// Snapshot of the canonical chat-slot context window. Returned by
+/// `get_setup_context_size`; the Settings panel shows the three values
+/// side-by-side so the user can see configured vs. effective vs.
+/// gguf-trained ceiling and make an informed decision before changing
+/// the value via `set_setup_context_size`.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SetupContextWindow {
+    /// Value persisted in `~/.sovereign/config.toml`'s
+    /// `[models].context_size`, or the daemon-side default (16384) when
+    /// no explicit value is set. This is the value the next slot load
+    /// will pass to `LlamaContextParams::with_n_ctx`.
+    pub configured: u32,
+    /// The currently-running primary slot's `effective_context_size()`
+    /// — what `clamp_max_tokens` is actually budgeting against right
+    /// now. Usually equals `configured`; may differ immediately after
+    /// editing the value via `set_setup_context_size` if the reload
+    /// hasn't completed yet. `None` when the active inference provider
+    /// is remote-only (no local slot).
+    pub effective: Option<u32>,
+    /// GGUF-trained ceiling (`n_ctx_train`). llama.cpp silently caps
+    /// `configured` at this value without a RoPE-scaling rebuild;
+    /// surfacing it lets the Settings UI render an "up to N without
+    /// recompile" hint. `None` when no local model is loaded.
+    pub n_ctx_train: Option<u32>,
+}
+
+/// Read the canonical chat-slot context window state, sourced from
+/// `~/.sovereign/config.toml` (configured value) and the currently-
+/// loaded inference provider (effective + gguf ceiling). Settings
+/// panel consumes this to render the read-only "current state" block
+/// next to the editor.
+#[tauri::command]
+pub async fn get_setup_context_size(
+    state: State<'_, Arc<AppState>>,
+) -> Result<SetupContextWindow, String> {
+    let configured = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.models.effective_context_size())
+        .unwrap_or(16384);
+    let (effective, n_ctx_train) = match state.inference.read().await.as_ref() {
+        Some(inf) => (
+            inf.effective_context_size(),
+            inf.n_ctx_train_for_primary(),
+        ),
+        None => (None, None),
+    };
+    Ok(SetupContextWindow {
+        configured,
+        effective,
+        n_ctx_train,
+    })
+}
+
+/// Update the canonical chat-slot context window. Writes
+/// `~/.sovereign/config.toml`'s `[models].context_size`, kicks the
+/// daemon to reload (best-effort, background), then tears down the
+/// desktop-embedded inference + Runtime so the next bootstrap call
+/// reads the fresh value.
+///
+/// Hard bounds [512, 1_048_576] guard against footguns — 512 is below
+/// llama.cpp's 256-byte pad granularity (and useless for any real
+/// chat); 1M is the ceiling llama recently capped n_seq_max-aware
+/// allocation at, plus a KV-cache size that's pathological on any
+/// consumer hardware. The Settings UI clamps further based on
+/// `n_ctx_train_for_primary` so the user can't request more than the
+/// gguf supports without an explicit override.
+///
+/// Latency: ~15-30s on Metal (weights re-mmap + context rebuild).
+/// Future: an in-place `EmbeddedLlamaCpp::rebuild_chat_contexts` would
+/// reuse the cached `Arc<LlamaModel>` and cut this to ~5-10s, but the
+/// drop+rebuild path here reuses the existing `state::rebuild_runtime`
+/// machinery without structural changes to the inference layer.
+#[tauri::command]
+pub async fn set_setup_context_size(
+    state: State<'_, Arc<AppState>>,
+    new_ctx: u32,
+) -> Result<(), String> {
+    use sovereign_core::setup_config::SetupConfig;
+
+    if !(512..=1_048_576).contains(&new_ctx) {
+        return Err(format!(
+            "context_size {new_ctx} outside [512, 1048576] — refusing to write"
+        ));
+    }
+
+    // SetupConfig may not exist on a fresh install — fall back to a
+    // synthesised one populated from the in-memory DesktopConfig's
+    // paths. Mirrors `mirror_to_setup_config`'s construction.
+    let cfg_result = SetupConfig::load();
+    let mut cfg = match cfg_result {
+        Ok(c) => c,
+        Err(_) => {
+            let desktop = state.config.read().await.clone();
+            SetupConfig {
+                models: sovereign_core::setup_config::ModelsSection {
+                    primary: desktop
+                        .primary_model_path
+                        .clone()
+                        .unwrap_or_else(|| desktop.model_path.clone()),
+                    fast: Some(desktop.model_path.clone()),
+                    embed: desktop
+                        .embed_model_path
+                        .clone()
+                        .unwrap_or_else(|| desktop.model_path.clone()),
+                    code: desktop.code_model_path.clone(),
+                    context_size: None,
+                    extra: std::collections::BTreeMap::new(),
+                    max_extras_memory_gb: None,
+                    primary_pool: None,
+                },
+                daemon: Default::default(),
+                data: sovereign_core::setup_config::DataSection {
+                    dir: desktop.data_dir.clone(),
+                },
+                watched_folders: Default::default(),
+                memory: Default::default(),
+            }
+        }
+    };
+
+    cfg.models.context_size = Some(new_ctx);
+    let path = cfg
+        .save()
+        .map_err(|e| format!("save SetupConfig: {e}"))?;
+    tracing::info!(
+        new_ctx,
+        target = %path.display(),
+        "set_setup_context_size: SetupConfig written"
+    );
+
+    tokio::spawn(async {
+        if let Err(e) = request_daemon_reload().await {
+            tracing::warn!(
+                error = %e,
+                "set_setup_context_size: daemon admin/reload failed (background)"
+            );
+        }
+    });
+
+    *state.inference.write().await = None;
+    crate::state::rebuild_runtime(&state).await
 }
 
 #[tauri::command]
@@ -3391,6 +3537,13 @@ pub async fn ask_document(
         // bare number, not an Option.
         max_tokens_budget: Some(state.config.read().await.max_tokens as usize),
         completion_tokens: output.completion_tokens,
+        // DocumentAsk is a self-contained desktop-side path that
+        // doesn't share the `self.inference` field other handlers do
+        // — the ctx-budget glassbox here would need to thread the
+        // provider Arc through `output`. Leave `None` for now; the
+        // primary chat path (KnowledgeQuery / DeepQuery / Simple)
+        // already surfaces the budget where it matters most.
+        context_window: None,
     };
 
     let sources_content: Vec<String> = output

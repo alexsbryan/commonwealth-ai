@@ -2455,6 +2455,14 @@ pub struct ResponseProvenance {
     /// frame's `usage`. `None` when the provider didn't report usage.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub completion_tokens: Option<u32>,
+    /// Active chat-slot context window, sourced from
+    /// `InferenceProvider::effective_context_size()`. Pairs with
+    /// `tokens_used` so the desktop chat bubble can render a budget
+    /// indicator — e.g. `2415 / 16384 (15%)`, brightening as the
+    /// turn approaches the cap. `None` on providers without a local
+    /// slot (remote API).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

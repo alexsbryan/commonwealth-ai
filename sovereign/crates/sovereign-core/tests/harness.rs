@@ -425,6 +425,12 @@ pub enum GapScript {
 pub enum RefineScript {
     /// Return this exact string as the refined answer.
     Text(String),
+    /// Fail the refinement inference call (simulates Decode Error -3
+    /// / context-overflow / network errors). Used to exercise the
+    /// stuck-UI fallback path: `run_post_stream_refinement` must
+    /// still emit `message-refined` (with the original content) so
+    /// the desktop's `m.refining` flag clears.
+    Error,
     /// Should not be called in this scenario — panics if invoked.
     Unused,
 }
@@ -509,6 +515,9 @@ impl InferenceProvider for ScriptableInference {
                     oicp_meta: None,
                     finish_reason: None,
                     completion_tokens: None,                }),
+                RefineScript::Error => Err(Error::Inference(
+                    "scripted refinement failure".to_string(),
+                )),
                 RefineScript::Unused => panic!(
                     "refinement invoked unexpectedly; test configured RefineScript::Unused"
                 ),

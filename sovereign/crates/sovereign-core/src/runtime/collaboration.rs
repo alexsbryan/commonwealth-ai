@@ -52,6 +52,43 @@ pub(crate) struct ContradictionCheck {
     pub(crate) current_claim: String,
 }
 
+/// Outcome of a `run_collaboration` invocation. Distinguishes the
+/// "refinement never reached inference" cases (no gap, user skipped,
+/// auto-collab off) from the "inference ran" cases (succeeded,
+/// produced no change, or errored). Callers need this distinction
+/// because the frontend's `m.refining` flag is set the moment the
+/// user clicks Submit or Search on the InformationRequestCard
+/// (`onRefiningStarted`); the backend must emit `message-refined`
+/// to clear that flag whenever refinement was attempted, regardless
+/// of whether the answer changed or the inference crashed.
+///
+/// Without this distinction, `run_post_stream_refinement` short-
+/// circuits on `refined == original_content` and the UI stays stuck
+/// on "Refining your answer" forever.
+pub(crate) enum RefinementOutcome {
+    /// Refinement was never attempted. Either auto-collaborate is
+    /// disabled, the gap-check found no gap (or errored), or the
+    /// user dismissed the card without providing content. The
+    /// frontend never set `m.refining = true` on this path —
+    /// `handleSkip` in `InformationRequestCard.svelte` does not
+    /// fire `onRefiningStarted`. No emit needed.
+    NotAttempted,
+    /// User provided content; refinement inference ran and produced
+    /// new text that differs from the original.
+    Refined(String),
+    /// User provided content; refinement inference ran but produced
+    /// output identical to the original answer. Frontend's refining
+    /// flag must clear — caller emits `message-refined` with the
+    /// original content.
+    NoChange,
+    /// User provided content; refinement inference errored. Frontend's
+    /// refining flag must clear — caller emits `message-refined` with
+    /// the original content. `error` is the formatted error string
+    /// for telemetry / narration; it is NOT shown verbatim in the
+    /// chat bubble.
+    Failed { error: String },
+}
+
 /// Shared body of [`super::Runtime::maybe_collaborate`]. Factored out so the
 /// streaming spawn (which doesn't hold a live `&self`) can invoke the
 /// same logic via owned `Arc`s. See the method's doc comment for
@@ -74,9 +111,9 @@ pub(crate) async fn run_collaboration(
     // synchronous callers without a live streaming session).
     routing_events: Option<Arc<dyn RoutingEventSink>>,
     session_id: Option<String>,
-) -> String {
+) -> RefinementOutcome {
     if !inference_config.auto_collaborate {
-        return response.to_string();
+        return RefinementOutcome::NotAttempted;
     }
 
     let t_start = std::time::Instant::now();
@@ -115,14 +152,14 @@ pub(crate) async fn run_collaboration(
                 latency_ms = t_start.elapsed().as_millis() as u64,
                 "maybe_collaborate: no gap identified — passing through"
             );
-            return response.to_string();
+            return RefinementOutcome::NotAttempted;
         }
         Err(e) => {
             tracing::warn!(
                 error = %e,
                 "maybe_collaborate: gap check failed — passing through"
             );
-            return response.to_string();
+            return RefinementOutcome::NotAttempted;
         }
     };
 
@@ -172,7 +209,7 @@ pub(crate) async fn run_collaboration(
                 latency_ms = t_start.elapsed().as_millis() as u64,
                 "maybe_collaborate: user skipped or provided no content"
             );
-            return response.to_string();
+            return RefinementOutcome::NotAttempted;
         }
     };
 
@@ -242,14 +279,66 @@ pub(crate) async fn run_collaboration(
                 refined_chars = c.text.len(),
                 "maybe_collaborate: refined answer produced"
             );
-            c.text
+            if c.text == response {
+                // Model declined to revise — glassbox the no-op so the
+                // user knows their source was reviewed even though the
+                // bubble didn't change. Caller still emits
+                // `message-refined` with the original content so the
+                // UI's `refining` flag clears.
+                if let (Some(events), Some(sid)) =
+                    (routing_events.as_ref(), session_id.as_ref())
+                {
+                    events
+                        .emit_turn_narration(TurnNarration {
+                            session_id: sid.clone(),
+                            conversation_id: conversation_id.to_string(),
+                            event: NarrationEvent {
+                                phase: NarrationPhase::GapCheckFired,
+                                text: "Reviewed the source — no change to the answer."
+                                    .to_string(),
+                                elapsed_ms: t_start.elapsed().as_millis() as u64,
+                            },
+                        })
+                        .await;
+                }
+                RefinementOutcome::NoChange
+            } else {
+                RefinementOutcome::Refined(c.text)
+            }
         }
         Err(e) => {
+            let err_str = e.to_string();
             tracing::warn!(
-                error = %e,
+                error = %err_str,
                 "maybe_collaborate: refinement inference failed — falling back to original"
             );
-            response.to_string()
+            // Surface the failure as a stage-error narration so the
+            // user sees *why* the bubble didn't change. Without this
+            // chip the chat looks like nothing happened. The caller
+            // is still responsible for emitting `message-refined`
+            // with the original content to clear the UI's
+            // `refining` flag — silence there is the stuck-state bug
+            // this enum was introduced to prevent.
+            if let (Some(events), Some(sid)) =
+                (routing_events.as_ref(), session_id.as_ref())
+            {
+                events
+                    .emit_turn_narration(TurnNarration {
+                        session_id: sid.clone(),
+                        conversation_id: conversation_id.to_string(),
+                        event: NarrationEvent {
+                            phase: NarrationPhase::StageError {
+                                stage: "refinement".to_string(),
+                                error: err_str.clone(),
+                            },
+                            text: "Refinement failed — kept the original answer."
+                                .to_string(),
+                            elapsed_ms: t_start.elapsed().as_millis() as u64,
+                        },
+                    })
+                    .await;
+            }
+            RefinementOutcome::Failed { error: err_str }
         }
     }
 }
@@ -277,7 +366,7 @@ pub(crate) async fn run_post_stream_refinement(
     routing_events: Option<Arc<dyn RoutingEventSink>>,
     session_id: Option<String>,
 ) -> Option<String> {
-    let refined = run_collaboration(
+    let outcome = run_collaboration(
         inference,
         approval,
         inference_config,
@@ -289,34 +378,66 @@ pub(crate) async fn run_post_stream_refinement(
         session_id,
     )
     .await;
-    if refined == original_content {
-        return None;
-    }
 
-    let updated = Message {
-        id: message_id.to_string(),
-        conversation_id: conversation_id.to_string(),
-        role: Role::Assistant,
-        content: refined.clone(),
-        created_at: now(),
-        metadata: original_metadata,
-        version: now(),
-    };
-    if let Err(e) = store.save_message(&updated).await {
-        tracing::warn!(
-            error = %e,
-            message_id = %message_id,
-            "post-stream refinement: save_message failed"
-        );
-        return None;
-    }
+    match outcome {
+        // Refinement never reached the inference call (auto-collab off,
+        // no gap, user dismissed via Skip). The frontend never set
+        // `m.refining = true` on this path, so no emit is needed.
+        RefinementOutcome::NotAttempted => None,
 
-    approval.emit_message_refined(MessageRefinedPayload {
-        conversation_id: conversation_id.to_string(),
-        message_id: message_id.to_string(),
-        new_content: refined.clone(),
-    });
-    Some(refined)
+        // Inference ran and produced new content. Persist the rewrite
+        // and emit `message-refined` so the desktop swaps the bubble.
+        RefinementOutcome::Refined(refined) => {
+            let updated = Message {
+                id: message_id.to_string(),
+                conversation_id: conversation_id.to_string(),
+                role: Role::Assistant,
+                content: refined.clone(),
+                created_at: now(),
+                metadata: original_metadata,
+                version: now(),
+            };
+            if let Err(e) = store.save_message(&updated).await {
+                tracing::warn!(
+                    error = %e,
+                    message_id = %message_id,
+                    "post-stream refinement: save_message failed"
+                );
+                return None;
+            }
+
+            approval.emit_message_refined(MessageRefinedPayload {
+                conversation_id: conversation_id.to_string(),
+                message_id: message_id.to_string(),
+                new_content: refined.clone(),
+            });
+            Some(refined)
+        }
+
+        // Inference ran but produced no change OR errored. In both
+        // cases the user clicked Submit / Search on the
+        // InformationRequestCard, so the desktop has the bubble in
+        // `refining = true` state — we MUST emit `message-refined`
+        // (with the original content) to clear that flag. Without
+        // this emit the UI sticks on "Refining your answer" forever.
+        // Repro: web-search affordance with primary slot in a bad
+        // KV state — see Decode Error -3 trace 2026-05-25.
+        RefinementOutcome::NoChange | RefinementOutcome::Failed { .. } => {
+            if let RefinementOutcome::Failed { ref error } = outcome {
+                tracing::warn!(
+                    error = %error,
+                    message_id = %message_id,
+                    "post-stream refinement: emitting fallback message-refined to clear UI"
+                );
+            }
+            approval.emit_message_refined(MessageRefinedPayload {
+                conversation_id: conversation_id.to_string(),
+                message_id: message_id.to_string(),
+                new_content: original_content.to_string(),
+            });
+            None
+        }
+    }
 }
 
 /// Emit a "system is deliberating, about to ask" narration chip
