@@ -1437,3 +1437,125 @@ privacy = "mesh_allowed"
         "the skill tag must persist unchanged across turns"
     );
 }
+
+// ─── Compaction privacy invariant (marathon-graceful) ────────
+//
+// `summarize_dropped_history` produces a Fast-slot summary of dropped
+// chat history that the prompt then re-injects as a preamble. The
+// privacy contract: that summary call MUST use `Speed::Fast` because
+// `MeshInferenceProvider` only forwards `Speed::Slow` over the mesh
+// — Fast stays local. If a future refactor accidentally bumps this
+// to `Speed::Slow` (e.g. "the summary needs more model power"),
+// local-only chat content would leak to whichever mesh peer the
+// daemon happens to be routing to.
+//
+// The test installs a capturing `InferenceProvider` that records the
+// first `complete` request and asserts its `preferred_speed`. Pure
+// unit-shape; no harness needed.
+
+#[tokio::test]
+async fn summarize_dropped_history_uses_fast_slot_only() {
+    use async_trait::async_trait;
+    use futures::Stream;
+    use sovereign_core::error::{Error as CoreError, Result as CoreResult};
+    use std::pin::Pin;
+    use std::sync::Mutex;
+
+    struct CapturingProvider {
+        captured: Mutex<Option<CompletionRequest>>,
+    }
+
+    #[async_trait]
+    impl InferenceProvider for CapturingProvider {
+        async fn complete(
+            &self,
+            request: &CompletionRequest,
+        ) -> CoreResult<CompletionResponse> {
+            *self.captured.lock().unwrap() = Some(request.clone());
+            // Return a valid JSON envelope so the parse path
+            // succeeds and the function returns Ok(Some(_)). The
+            // test inspects the *captured request*, not the
+            // response.
+            Ok(CompletionResponse {
+                text: r#"{"summary": "captured"}"#.to_string(),
+                tokens_used: 1,
+                prompt_tokens: 0,
+                model_id: "capturing".to_string(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+
+        async fn complete_stream(
+            &self,
+            _request: &CompletionRequest,
+        ) -> CoreResult<Pin<Box<dyn Stream<Item = CoreResult<String>> + Send>>> {
+            Err(CoreError::NotImplemented("capturing".to_string()))
+        }
+
+        async fn embed(&self, _text: &str) -> CoreResult<Vec<f32>> {
+            Err(CoreError::NotImplemented("capturing".to_string()))
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 2048,
+                supports_structured_output: true,
+                relative_speed: Speed::Fast,
+                relative_reasoning: Depth::Shallow,
+            }
+        }
+    }
+
+    let provider = CapturingProvider {
+        captured: Mutex::new(None),
+    };
+    let dropped = vec![
+        Message {
+            id: "m1".to_string(),
+            conversation_id: "c1".to_string(),
+            role: Role::User,
+            content: "What's the photoelectric effect?".to_string(),
+            created_at: 0,
+            metadata: None,
+            version: 0,
+        },
+        Message {
+            id: "m2".to_string(),
+            conversation_id: "c1".to_string(),
+            role: Role::Assistant,
+            content: "Einstein explained it in 1905.".to_string(),
+            created_at: 1,
+            metadata: None,
+            version: 0,
+        },
+    ];
+
+    let _ = sovereign_core::context::summarize_dropped_history(&provider, &dropped)
+        .await
+        .expect("summarize should complete with the captured response");
+
+    let captured = provider.captured.lock().unwrap().clone().expect(
+        "summarize_dropped_history must call inference.complete exactly once",
+    );
+
+    // CRITICAL: removing this `Speed::Fast` would let chat content
+    // leak over the mesh on a local_only conversation. The
+    // `MeshInferenceProvider` only forwards `Speed::Slow` (see
+    // peer_inference.rs); Fast stays local. Defence in depth per
+    // ARCH §7.4.
+    assert!(
+        matches!(captured.preferred_speed, Speed::Fast),
+        "summarize_dropped_history must use Speed::Fast to stay local-only, got {:?}",
+        captured.preferred_speed
+    );
+    // Sanity: structured_output must be set so the parse path
+    // remains deterministic. (If a future refactor swaps in a
+    // free-form summary, the parse logic needs a parallel change.)
+    assert!(
+        captured.structured_output.is_some(),
+        "summarize_dropped_history must request structured output"
+    );
+}

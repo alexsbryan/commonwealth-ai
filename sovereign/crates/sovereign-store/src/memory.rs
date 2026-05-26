@@ -82,6 +82,7 @@ impl ConversationStore for InMemoryStateStore {
                 deleted_at: None,
                 skill_id: None,
                 enabled_corpora: None,
+            searched_sources: None,
             });
 
         if let Some(convo) = convos.get_mut(&msg.conversation_id) {
@@ -139,6 +140,22 @@ impl ConversationStore for InMemoryStateStore {
         match convos.get_mut(conversation_id) {
             Some(c) => {
                 c.enabled_corpora = enabled_corpora;
+                c.updated_at = now();
+                Ok(())
+            }
+            None => Err(Error::NotFound(format!("conversation {conversation_id}"))),
+        }
+    }
+
+    async fn set_conversation_searched_sources(
+        &self,
+        conversation_id: &str,
+        entries: Option<Vec<sovereign_core::types::SearchedSourceEntry>>,
+    ) -> Result<()> {
+        let mut convos = self.conversations.write().await;
+        match convos.get_mut(conversation_id) {
+            Some(c) => {
+                c.searched_sources = entries;
                 c.updated_at = now();
                 Ok(())
             }
@@ -552,3 +569,115 @@ impl DocumentAssetStore for InMemoryStateStore {
 }
 
 impl StateStore for InMemoryStateStore {}
+
+#[cfg(test)]
+mod searched_sources_tests {
+    use super::*;
+    use sovereign_core::types::SearchedSourceEntry;
+
+    /// Round-trip test for the searched_sources column: a fresh
+    /// conversation has `None`, after a write the read reflects the
+    /// new entries (preserving order + per-entry fields). Pins the
+    /// in-memory store's parity with the SQL stores.
+    #[tokio::test]
+    async fn set_and_get_searched_sources_round_trip() {
+        let store = InMemoryStateStore::new();
+        // Seed a conversation by saving a message (the in-memory
+        // store auto-creates the row on first save).
+        let conv_id = "c-test";
+        store
+            .save_message(&Message {
+                id: "m1".into(),
+                conversation_id: conv_id.into(),
+                role: Role::User,
+                content: "hi".into(),
+                created_at: 0,
+                metadata: None,
+                version: 0,
+            })
+            .await
+            .unwrap();
+
+        // Fresh conversation: searched_sources is None.
+        let before = store.get_conversation(conv_id).await.unwrap();
+        assert!(before.searched_sources.is_none());
+
+        // Write two entries.
+        let entries = vec![
+            SearchedSourceEntry {
+                url: "https://example.com/a".into(),
+                title: "A".into(),
+                first_seen_turn: 1,
+                last_referenced_turn: 1,
+                search_query: "alpha".into(),
+            },
+            SearchedSourceEntry {
+                url: "https://example.com/b".into(),
+                title: "B".into(),
+                first_seen_turn: 1,
+                last_referenced_turn: 1,
+                search_query: "alpha".into(),
+            },
+        ];
+        store
+            .set_conversation_searched_sources(conv_id, Some(entries.clone()))
+            .await
+            .unwrap();
+
+        // Read back.
+        let after = store.get_conversation(conv_id).await.unwrap();
+        let got = after.searched_sources.expect("searched_sources written");
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[0].url, "https://example.com/a");
+        assert_eq!(got[1].title, "B");
+        assert_eq!(got[0].search_query, "alpha");
+    }
+
+    /// Writing `None` clears the column (back to pre-migration shape).
+    #[tokio::test]
+    async fn set_searched_sources_none_clears_column() {
+        let store = InMemoryStateStore::new();
+        let conv_id = "c-clear";
+        store
+            .save_message(&Message {
+                id: "m1".into(),
+                conversation_id: conv_id.into(),
+                role: Role::User,
+                content: "hi".into(),
+                created_at: 0,
+                metadata: None,
+                version: 0,
+            })
+            .await
+            .unwrap();
+        store
+            .set_conversation_searched_sources(
+                conv_id,
+                Some(vec![SearchedSourceEntry {
+                    url: "u".into(),
+                    title: "t".into(),
+                    first_seen_turn: 0,
+                    last_referenced_turn: 0,
+                    search_query: "q".into(),
+                }]),
+            )
+            .await
+            .unwrap();
+        assert!(store
+            .get_conversation(conv_id)
+            .await
+            .unwrap()
+            .searched_sources
+            .is_some());
+        store
+            .set_conversation_searched_sources(conv_id, None)
+            .await
+            .unwrap();
+        assert!(store
+            .get_conversation(conv_id)
+            .await
+            .unwrap()
+            .searched_sources
+            .is_none());
+    }
+}

@@ -2719,27 +2719,101 @@ impl Runtime {
     /// leaves `compacted_history = None` and the synthesis path
     /// continues on just the visible window. Surfaced by
     /// `sovereign/bench/wikipedia_learn` 2026-05-17 marathon thread.
-    pub(crate) async fn maybe_compact_dropped_history(&self, context: &mut ConversationContext) {
+    pub(crate) async fn maybe_compact_dropped_history(
+        &self,
+        context: &mut ConversationContext,
+        conversation_id: &str,
+        // Optional because the compaction call fires earlier in the
+        // streaming handler (line ~1355) than `self.sessions.begin`
+        // (line ~1432), so the session_id isn't bound yet on the
+        // critical path. Non-streaming and test callers don't have
+        // a session at all. Emit the narration chip only when
+        // Some; below that we still fire compaction + the
+        // `runtime:compaction.budget_triggered` trace, just no chip.
+        session_id: Option<&str>,
+    ) {
         let total = context.conversation.messages.len();
-        if total <= CONV_HISTORY_TURNS {
+        // Two-axis trigger (added 2026-05-25 in the
+        // marathon-graceful pass):
+        //   1. **Turn-count arm** (original): visible window has
+        //      already overflowed, oldest messages are about to be
+        //      dropped silently. This is the steady-state trigger on
+        //      typical multi-turn chats.
+        //   2. **Budget-pressure arm** (new): the conversation
+        //      already exceeds `COMPACTION_PRESSURE_THRESHOLD * ctx`
+        //      even with all turns visible. Catches the case where 6
+        //      verbose turns on a tight slot would blow ctx before
+        //      the turn-count arm fires.
+        let turn_count_trigger = total > CONV_HISTORY_TURNS;
+        let (budget_trigger, budget_pressure, budget_ctx) =
+            self.estimate_compaction_pressure(context);
+        if !turn_count_trigger && !budget_trigger {
             return;
         }
-        let dropped_end = total.saturating_sub(CONV_HISTORY_TURNS);
-        // If the tail is a user turn (in-flight message we just
-        // pushed) the visible window already accounts for it via
-        // `format_conversation_history`'s cap-1 logic — we keep
-        // the same "dropped before visible" set here.
+
+        // Pick the dropped window. Turn-count arm keeps its existing
+        // shape (everything before `last 8`). Budget arm without the
+        // turn-count arm drops just the oldest pair so the chat
+        // shrinks one user/assistant pair at a time as pressure
+        // climbs — leaves the recent context maximally intact.
+        let dropped_end = if turn_count_trigger {
+            total.saturating_sub(CONV_HISTORY_TURNS)
+        } else {
+            // Budget-only arm. Need ≥ 4 messages to drop a pair
+            // without leaving the visible window degenerate.
+            if total < 4 {
+                return;
+            }
+            2
+        };
         let dropped = &context.conversation.messages[..dropped_end];
         if dropped.len() < CONV_HISTORY_COMPACT_MIN_DROPPED {
             return;
         }
+
+        if budget_trigger {
+            tracing::debug!(
+                turn_count_trigger,
+                budget_trigger,
+                budget_pressure,
+                budget_ctx,
+                dropped = dropped.len(),
+                total,
+                "runtime:compaction.budget_triggered"
+            );
+        }
+
         match crate::context::summarize_dropped_history(
             self.inference.as_ref(),
             dropped,
         )
         .await
         {
-            Ok(summary @ Some(_)) => context.compacted_history = summary,
+            Ok(summary @ Some(_)) => {
+                context.compacted_history = summary;
+                // Glassbox the compaction so the user sees why their
+                // chat surface changed shape. Gated below
+                // `COMPACTION_CHIP_MIN_DROPPED = 3` — folding 2
+                // messages would chip-spam on every long-chat turn.
+                let dropped_count = dropped.len();
+                if dropped_count >= crate::runtime::COMPACTION_CHIP_MIN_DROPPED {
+                    if let Some(sid) = session_id {
+                        self.routing_events
+                            .emit_turn_narration(crate::types::TurnNarration {
+                                session_id: sid.to_string(),
+                                conversation_id: conversation_id.to_string(),
+                                event: crate::types::NarrationEvent {
+                                    phase: crate::types::NarrationPhase::GapCheckFired,
+                                    text: format!(
+                                        "Folded {dropped_count} earlier turns into a summary to keep context fresh."
+                                    ),
+                                    elapsed_ms: 0,
+                                },
+                            })
+                            .await;
+                    }
+                }
+            }
             Ok(None) => {
                 tracing::debug!(
                     dropped = dropped.len(),
@@ -2755,6 +2829,66 @@ impl Runtime {
             }
         }
     }
+
+    /// Estimate the conversation-history-side pressure on the slot's
+    /// context window. Returns `(triggered, estimated_tokens,
+    /// ctx_size)`. `triggered` is true iff the estimate crosses
+    /// `COMPACTION_PRESSURE_THRESHOLD * ctx_size`. Returns
+    /// `(false, 0, 0)` when the inference provider doesn't expose a
+    /// concrete context window (remote-only forwarder) — the
+    /// turn-count arm carries the trigger in that case.
+    ///
+    /// Walks the components the runtime knows it will splice into the
+    /// next prompt's system message:
+    ///   * visible conversation history (per-msg capped to
+    ///     `CONV_HISTORY_CHARS_PER_MSG`),
+    ///   * the compacted preamble we've already emitted on a prior
+    ///     turn (if any — saves the call when the slot was already
+    ///     hot),
+    ///   * recalled memories (top-K, bounded).
+    ///
+    /// Retrieval-bundle pressure isn't measured here because retrieval
+    /// fires later in the handler; that path has its own ctx-aware
+    /// trim (added in the prior PR). The split is deliberate — this
+    /// function makes the decision before retrieval runs, so it must
+    /// not depend on retrieval state.
+    fn estimate_compaction_pressure(
+        &self,
+        context: &ConversationContext,
+    ) -> (bool, u32, u32) {
+        let Some(ctx_size) = self.inference.effective_context_size() else {
+            return (false, 0, 0);
+        };
+        let threshold = (ctx_size as f32 * crate::runtime::COMPACTION_PRESSURE_THRESHOLD) as u32;
+
+        let mut total: u32 = 0;
+        // Visible conversation history: same per-msg truncate the
+        // formatter applies. Use `count_tokens` on the truncated
+        // body, not the full body — over-counting here would fire
+        // compaction too aggressively.
+        for msg in context.conversation.messages.iter() {
+            let raw = &msg.content;
+            let mut end = raw.len().min(CONV_HISTORY_CHARS_PER_MSG);
+            while end > 0 && !raw.is_char_boundary(end) {
+                end -= 1;
+            }
+            total = total.saturating_add(self.inference.count_tokens(&raw[..end]));
+        }
+        // Pre-existing compacted preamble (from a prior turn on this
+        // conversation). It rides every prompt until the slot
+        // unloads.
+        if let Some(s) = &context.compacted_history {
+            total = total.saturating_add(self.inference.count_tokens(s));
+        }
+        // Recalled memories — bounded at the FTS top-K but each can
+        // carry 100-500 tokens.
+        for mem in &context.memories {
+            total = total.saturating_add(self.inference.count_tokens(&mem.content));
+        }
+
+        (total > threshold, total, ctx_size)
+    }
+
     /// Gather the union of `ev-Tn-NNNN` handles emitted by prior
     /// `tool_decision` writes on this conversation, for sampler-side
     /// citation constraint (Tier 2 of tool-framework expansion).

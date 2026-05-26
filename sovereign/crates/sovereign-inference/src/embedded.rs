@@ -7074,6 +7074,26 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         Some(self.fast.model.n_ctx_train())
     }
 
+    /// Override the trait default heuristic with the fast slot's
+    /// actual BPE tokenizer. `LlamaModel::str_to_token` is what the
+    /// inference path calls at decode time, so this returns the same
+    /// count the runtime budget needs to predict. Reads from the
+    /// always-resident `Arc<LlamaModel>` — no lock, safe to call in
+    /// the chat-context-management hot path.
+    ///
+    /// When `str_to_token` fails (rare — invalid UTF-8 or empty
+    /// tokenizer vocab), falls back to the project-wide ~4 chars/token
+    /// heuristic so the caller still gets a usable number. The
+    /// heuristic over-estimates compared to the real tokenizer on
+    /// dense text, which is the safe direction for budgeting (we'd
+    /// rather over-compact than blow the slot).
+    fn count_tokens(&self, text: &str) -> u32 {
+        match self.fast.model.str_to_token(text, AddBos::Never) {
+            Ok(tokens) => tokens.len() as u32,
+            Err(_) => (text.chars().count() / 4) as u32,
+        }
+    }
+
     /// PR-E2: filename stem of the configured code GGUF, or `None` if
     /// the user skipped configuring a Code specialist. Mirrors
     /// `model_id_for` — derived from the path without locking.

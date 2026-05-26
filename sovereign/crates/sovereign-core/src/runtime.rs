@@ -241,11 +241,31 @@ mod text_utils;
 /// follow-up chains without bloating the prompt with stale turns.
 pub(crate) const CONV_HISTORY_TURNS: usize = 8;
 
-/// Per-message char budget for the conversation-history block. We
-/// don't want one verbose prior answer to dominate the system
-/// prompt; assistant answers in the SEP/wiki bench commonly hit 2-3
-/// KB, of which only the first ~500 chars carry the topic anchor.
+/// Per-message char budget for the conversation-history block when
+/// the caller wants a uniform cap (pre-age-aware behaviour, kept for
+/// the few callers that don't have message ordering). New code should
+/// prefer `chars_for_message_age` below — recent turns keep more
+/// fidelity, older turns compress more aggressively.
 pub(crate) const CONV_HISTORY_CHARS_PER_MSG: usize = 500;
+
+/// Age-aware per-message char budget. Walks from the newest visible
+/// turn (age = 0) backward — recent turns keep 1000 chars of body
+/// so the user's most current exchange stays high-fidelity in the
+/// prompt; older turns compress to 300 chars so the cumulative
+/// conv-history block doesn't dominate the budget on long chats.
+///
+/// Rationale (2026-05-25 marathon-graceful pass): a uniform 500-char
+/// cap clips the user's current question's preceding answer just as
+/// aggressively as a 6-turns-ago answer that's served its
+/// coreference purpose. The age-aware tier puts the bytes where
+/// they earn the most context-coherence value.
+pub(crate) fn chars_for_message_age(age: usize) -> usize {
+    match age {
+        0..=1 => 1000,
+        2..=3 => 600,
+        _ => 300,
+    }
+}
 
 
 
@@ -255,6 +275,31 @@ pub(crate) const CONV_HISTORY_CHARS_PER_MSG: usize = 500;
 /// span is already at risk; below that the cost-benefit doesn't
 /// justify the extra ~1s latency.
 pub(crate) const CONV_HISTORY_COMPACT_MIN_DROPPED: usize = 2;
+
+/// Fraction of `effective_context_size` above which the
+/// budget-aware compaction arm fires, even when `CONV_HISTORY_TURNS`
+/// would normally keep all messages visible. Pairs with the prior
+/// PR's `SYSTEM_OVERHEAD_TOKEN_RESERVE = 4096` (system message +
+/// retrieval bundle + response) — together they leave roughly half
+/// the slot for the conversation history block. Above 0.55, the
+/// retrieval-bundle ctx-aware trim (also from the prior PR) starts
+/// dropping chunks; that's the user-perceptible cliff we're trying
+/// to keep history compaction ahead of.
+///
+/// Tuning rationale (2026-05-25 design pass): chats with 6 long
+/// turns can already hit 4-5K tokens of pure history on a tight slot,
+/// blowing budget before turn 8 (when the turn-count arm would have
+/// fired). 0.55 is the empirical threshold where the user starts to
+/// notice the retrieval cliff; compacting earlier than that keeps
+/// the chat "feeling free" without paying for summary calls during
+/// short conversations.
+pub(crate) const COMPACTION_PRESSURE_THRESHOLD: f32 = 0.55;
+
+/// Below this dropped-message count, suppress the narration chip
+/// (compaction fires, but silently — chips on ≤2 dropped messages
+/// are spam on short chats). The compaction still runs and emits a
+/// `debug!` trace; only the user-facing chip is gated.
+pub(crate) const COMPACTION_CHIP_MIN_DROPPED: usize = 3;
 
 
 
@@ -1321,13 +1366,22 @@ impl Runtime {
         context.conversation.messages.push(user_msg);
 
         // 2a. Compact dropped history. Once the conversation exceeds
-        //     the visible window the synthesis prompt would drop the
-        //     oldest turns silently — coreference and topic anchors
-        //     established in T0/T1 would vanish from view at T10+.
-        //     Fast-slot summary preserves them as a compact preamble.
-        //     Surfaced by sovereign/bench/wikipedia_learn 2026-05-17
-        //     marathon thread.
-        self.maybe_compact_dropped_history(&mut context).await;
+        //     the visible window OR crosses the budget-pressure
+        //     threshold (added 2026-05-25), the synthesis prompt
+        //     would drop the oldest turns silently — coreference and
+        //     topic anchors established in T0/T1 would vanish from
+        //     view at T10+. Fast-slot summary preserves them as a
+        //     compact preamble. Surfaced by
+        //     sovereign/bench/wikipedia_learn 2026-05-17 marathon
+        //     thread + the upcoming marathon_graceful bench.
+        //
+        //     session_id is None on this code path because
+        //     `self.sessions.begin` doesn't run until further down —
+        //     the narration chip is gated behind Some, so compaction
+        //     still fires (and traces) but the user sees no chip on
+        //     this entry point. The chip surface fires from the
+        //     handler-level paths that have a session in scope.
+        self.maybe_compact_dropped_history(&mut context, conversation_id, None).await;
 
         // 2b. Tag the conversation with the skill that was active
         // when it started. The store upsert is idempotent — only

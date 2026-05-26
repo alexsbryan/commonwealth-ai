@@ -219,6 +219,11 @@ impl PostgresStateStore {
             -- installed corpora participate in retrieval" — the
             -- default and the value on every pre-migration row.
             ALTER TABLE conversations ADD COLUMN IF NOT EXISTS enabled_corpora JSONB;
+
+            -- Marathon-graceful M3 — cumulative web-source registry
+            -- per conversation (mirror of run_searched_sources_migration
+            -- on SQLite). NULL means "no searches have run yet."
+            ALTER TABLE conversations ADD COLUMN IF NOT EXISTS searched_sources JSONB;
             "#,
             )
             .await
@@ -277,7 +282,7 @@ impl ConversationStore for PostgresStateStore {
 
         let row = client
             .query_opt(
-                "SELECT id, title, created_at, updated_at, skill_id, enabled_corpora \
+                "SELECT id, title, created_at, updated_at, skill_id, enabled_corpora, searched_sources \
                  FROM conversations WHERE id = $1",
                 &[&id],
             )
@@ -312,6 +317,9 @@ impl ConversationStore for PostgresStateStore {
         let enabled_corpora: Option<serde_json::Value> = row.get("enabled_corpora");
         let enabled_corpora = enabled_corpora
             .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok());
+        let searched_sources: Option<serde_json::Value> = row.get("searched_sources");
+        let searched_sources = searched_sources
+            .and_then(|v| serde_json::from_value::<Vec<sovereign_core::types::SearchedSourceEntry>>(v).ok());
         Ok(Conversation {
             id: row.get("id"),
             title: row.get("title"),
@@ -322,6 +330,7 @@ impl ConversationStore for PostgresStateStore {
             deleted_at: None,
             skill_id: row.get("skill_id"),
             enabled_corpora,
+            searched_sources,
         })
     }
 
@@ -330,7 +339,7 @@ impl ConversationStore for PostgresStateStore {
 
         let rows = client
             .query(
-                "SELECT id, title, created_at, updated_at, skill_id, enabled_corpora FROM conversations \
+                "SELECT id, title, created_at, updated_at, skill_id, enabled_corpora, searched_sources FROM conversations \
                  WHERE deleted_at IS NULL \
                    AND (skill_id IS NULL OR skill_id != 'inner-work') \
                  ORDER BY updated_at DESC LIMIT $1 OFFSET $2",
@@ -343,6 +352,7 @@ impl ConversationStore for PostgresStateStore {
             .iter()
             .map(|r| {
                 let enabled_corpora: Option<serde_json::Value> = r.get("enabled_corpora");
+                let searched_sources: Option<serde_json::Value> = r.get("searched_sources");
                 Conversation {
                     id: r.get("id"),
                     title: r.get("title"),
@@ -354,6 +364,8 @@ impl ConversationStore for PostgresStateStore {
                     skill_id: r.get("skill_id"),
                     enabled_corpora: enabled_corpora
                         .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok()),
+                    searched_sources: searched_sources
+                        .and_then(|v| serde_json::from_value::<Vec<sovereign_core::types::SearchedSourceEntry>>(v).ok()),
                 }
             })
             .collect())
@@ -448,6 +460,30 @@ impl ConversationStore for PostgresStateStore {
         let rows = client
             .execute(
                 "UPDATE conversations SET enabled_corpora = $2 \
+                 WHERE id = $1 AND deleted_at IS NULL",
+                &[&conversation_id, &encoded],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        if rows == 0 {
+            return Err(Error::NotFound(format!("conversation {conversation_id}")));
+        }
+        Ok(())
+    }
+
+    async fn set_conversation_searched_sources(
+        &self,
+        conversation_id: &str,
+        entries: Option<Vec<sovereign_core::types::SearchedSourceEntry>>,
+    ) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let encoded: Option<serde_json::Value> = entries
+            .map(|es| serde_json::to_value(&es))
+            .transpose()
+            .map_err(|e| Error::Storage(format!("encode searched_sources: {e}")))?;
+        let rows = client
+            .execute(
+                "UPDATE conversations SET searched_sources = $2 \
                  WHERE id = $1 AND deleted_at IS NULL",
                 &[&conversation_id, &encoded],
             )

@@ -1094,6 +1094,51 @@ pub struct Conversation {
     /// `ConversationStore::set_conversation_enabled_corpora`.
     #[serde(default)]
     pub enabled_corpora: Option<Vec<String>>,
+    /// Cumulative list of web sources surfaced to the user via
+    /// `submit_information_search` across this conversation's turns.
+    /// Each `submit_information_search` call dedupes new URLs against
+    /// the existing set, bumping `last_referenced_turn` on duplicates
+    /// and appending new entries with `first_seen_turn = current_turn`.
+    ///
+    /// Rendered in the synthesis system prompt as a "Web sources
+    /// gathered so far" block so the model has cumulative awareness
+    /// of which URLs the user has already been shown — preventing
+    /// duplicate citations and the "the search you did three turns
+    /// ago" coreference miss.
+    ///
+    /// `None` for conversations predating the M3 migration; an empty
+    /// Vec is structurally distinct from `None` (the conversation ran
+    /// no searches, but the migration has fired).
+    ///
+    /// Stored as JSON-encoded text in the conversations table.
+    /// Updated via `ConversationStore::set_conversation_searched_sources`.
+    #[serde(default)]
+    pub searched_sources: Option<Vec<SearchedSourceEntry>>,
+}
+
+/// One entry in `Conversation.searched_sources` — a URL the user has
+/// been shown via an `submit_information_search` call. Cumulative
+/// across the conversation's turns; deduped by `url`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SearchedSourceEntry {
+    /// Canonical URL (the value the user could click). Used as the
+    /// dedup key.
+    pub url: String,
+    /// Display title (search-result title). Empty string when the
+    /// search backend doesn't surface one.
+    #[serde(default)]
+    pub title: String,
+    /// 0-indexed turn during which this URL first entered the
+    /// conversation's known set. Stable across re-references.
+    pub first_seen_turn: usize,
+    /// 0-indexed turn during which the URL was most recently
+    /// referenced (e.g. via a subsequent search that returned the
+    /// same URL). Equals `first_seen_turn` on the first sighting.
+    pub last_referenced_turn: usize,
+    /// The query string that initially surfaced this URL. Empty when
+    /// the originating search didn't supply one.
+    #[serde(default)]
+    pub search_query: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3189,6 +3234,7 @@ mod knowledge_view_digest_tests {
                 deleted_at: None,
                 skill_id: None,
                 enabled_corpora: None,
+            searched_sources: None,
             },
             memories: vec![],
             working_memory: None,

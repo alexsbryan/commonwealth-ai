@@ -342,6 +342,7 @@ async fn run_question_routing(session: &ChatSession, q: &Question) -> RoutingRes
             deleted_at: None,
             skill_id: None,
             enabled_corpora: None,
+        searched_sources: None,
         },
         memories: vec![],
         working_memory: None,

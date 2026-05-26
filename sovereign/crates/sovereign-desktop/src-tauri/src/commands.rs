@@ -1585,6 +1585,75 @@ pub async fn submit_information_search(
             url: r.url.clone(),
         })
         .collect();
+
+    // Marathon-graceful M3 — fold the new URLs into the conversation's
+    // cumulative `searched_sources` registry. Dedupe by URL: existing
+    // entries get their `last_referenced_turn` bumped to the current
+    // turn; new entries are appended with
+    // `first_seen_turn = last_referenced_turn = current_turn`. The
+    // synthesis system message later renders this as a "Web sources
+    // gathered so far" block so the model has stable awareness of
+    // which URLs the user has already been shown.
+    //
+    // Soft-fail: a missing conversation_id (legacy callers, tests
+    // without a wired conversation) skips the registry update; the
+    // search still feeds through to refinement so the bench's
+    // `submit_information_response` path is unaffected.
+    if let Some(ref cid) = conversation_id {
+        let store_arc: Option<Arc<dyn sovereign_core::traits::StateStore>> = {
+            let guard = state.store.read().await;
+            guard.as_ref().map(Arc::clone)
+        };
+        if let Some(store) = store_arc {
+            match store.get_conversation(cid).await {
+                Ok(conv) => {
+                    let current_turn = conv.messages.len();
+                    let mut entries =
+                        conv.searched_sources.unwrap_or_default();
+                    let mut url_seen: std::collections::HashSet<String> =
+                        entries.iter().map(|e| e.url.clone()).collect();
+                    for r in &out.results {
+                        if url_seen.contains(&r.url) {
+                            if let Some(existing) =
+                                entries.iter_mut().find(|e| e.url == r.url)
+                            {
+                                existing.last_referenced_turn = current_turn;
+                            }
+                        } else {
+                            entries.push(
+                                sovereign_core::types::SearchedSourceEntry {
+                                    url: r.url.clone(),
+                                    title: r.title.clone(),
+                                    first_seen_turn: current_turn,
+                                    last_referenced_turn: current_turn,
+                                    search_query: query.to_string(),
+                                },
+                            );
+                            url_seen.insert(r.url.clone());
+                        }
+                    }
+                    if let Err(e) = store
+                        .set_conversation_searched_sources(cid, Some(entries))
+                        .await
+                    {
+                        tracing::warn!(
+                            conversation_id = %cid,
+                            error = %e,
+                            "submit_information_search: failed to persist searched_sources — search proceeds, model loses cumulative-URL awareness this turn"
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::debug!(
+                        conversation_id = %cid,
+                        error = %e,
+                        "submit_information_search: could not load conversation for searched_sources update — skipping"
+                    );
+                }
+            }
+        }
+    }
+
     let accepted = state
         .approval
         .submit_information_response(&key, Some(formatted))

@@ -501,6 +501,7 @@ mod tests {
             deleted_at: None,
             skill_id: None,
             enabled_corpora: None,
+        searched_sources: None,
         }
     }
 

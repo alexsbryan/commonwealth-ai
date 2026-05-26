@@ -798,3 +798,25 @@ pub fn run_corpus_filter_migration(conn: &Connection) -> rusqlite::Result<()> {
     );
     Ok(())
 }
+
+/// Marathon-graceful M3 — cumulative web-source registry per
+/// conversation. Adds `searched_sources` (JSON-encoded
+/// `Vec<SearchedSourceEntry>`) to `conversations`.
+///
+/// Semantics: `NULL` means "no searches have run on this
+/// conversation yet" (pre-migration rows + fresh conversations
+/// before any `submit_information_search` call). A non-NULL JSON
+/// array is the cumulative URL set the user has been shown via
+/// web search; each entry carries `first_seen_turn` /
+/// `last_referenced_turn` so the synthesis prompt can render a
+/// "Web sources gathered so far" block ordered by recency.
+///
+/// Updated via `ConversationStore::set_conversation_searched_sources`
+/// from the `submit_information_search` Tauri command after every
+/// successful search. The runtime doesn't write it directly.
+pub fn run_searched_sources_migration(conn: &Connection) -> rusqlite::Result<()> {
+    let _ = conn.execute_batch(
+        "ALTER TABLE conversations ADD COLUMN searched_sources TEXT",
+    );
+    Ok(())
+}
