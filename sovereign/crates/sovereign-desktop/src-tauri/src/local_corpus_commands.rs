@@ -18,7 +18,7 @@ use sovereign_tools::local_corpus::{
     clusterer::ClusterConfig,
     git::GitStatus,
     manager::{IncompleteJob, ProgressCallback},
-    ocr::OcrCtx,
+    ocr::{OcrCtx, OcrEngineKind},
     pre_scanner::PreScanResult,
     preview::VaultPreview,
     progress::LocalCorpusProgress,
@@ -154,6 +154,10 @@ pub async fn install_ocr_ctx_for_app(
         dpi: 300,
         tesseract_timeout_secs: 30,
         cleanup_timeout_secs: 30,
+        // v1 ships the tesseract engine. The PaddleOCR engine is gated
+        // behind the `paddle-ocr` feature and selected by setting this
+        // to `OcrEngineKind::Paddle` once the bake-off greenlights it.
+        engine: OcrEngineKind::Tesseract,
     };
     tracing::info!(
         tesseract = %ctx.tesseract_bin.display(),

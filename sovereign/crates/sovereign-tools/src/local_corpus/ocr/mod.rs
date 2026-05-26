@@ -34,9 +34,16 @@
 //! text noisy enough to *degrade* the index.
 
 pub mod cleanup;
+pub mod engine;
 pub mod pipeline;
 pub mod rasterize;
 pub mod tesseract;
+
+/// PaddleOCR (ONNX) engine — an alternative to the tesseract subprocess
+/// that drives the ONNX Runtime already linked for GLiNER. Gated so
+/// headless/default builds don't pull the OCR model-inference surface.
+#[cfg(feature = "paddle-ocr")]
+pub mod paddle;
 
 use std::path::PathBuf;
 
@@ -82,6 +89,13 @@ pub struct OcrCtx {
     /// Per-page cleanup HTTP request timeout. Same fallback behaviour
     /// as tesseract.
     pub cleanup_timeout_secs: u64,
+    /// Which recognition engine to build for this ingest. Defaults to
+    /// `Tesseract` (the v1 engine); `Paddle` selects the ONNX PaddleOCR
+    /// engine, which `build_engine` constructs only when the
+    /// `paddle-ocr` feature is compiled in. The tesseract-specific
+    /// fields above are ignored when this is `Paddle`; the paddle model
+    /// paths are resolved by the engine itself (env / `~/.sovereign`).
+    pub engine: engine::OcrEngineKind,
 }
 
 impl OcrCtx {
@@ -103,6 +117,7 @@ impl OcrCtx {
             dpi: 300,
             tesseract_timeout_secs: 30,
             cleanup_timeout_secs: 30,
+            engine: engine::OcrEngineKind::Tesseract,
         }
     }
 }
@@ -129,6 +144,7 @@ pub struct PageProgress {
 }
 
 pub use cleanup::cleanup_page;
+pub use engine::{build_engine, OcrEngine, OcrEngineKind, OcrError};
 pub use pipeline::extract_pdf_via_ocr;
 pub use rasterize::{pdf_to_pages, Rasterizer};
 pub use tesseract::recognize_page;
