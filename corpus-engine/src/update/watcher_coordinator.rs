@@ -54,27 +54,76 @@ use crate::error::{Error, Result};
 /// last stamp is recent. When the loop stops — for *any* reason — the
 /// stamp freezes and liveness decays to `false` on its own. Death is
 /// the default, not something we have to remember to signal.
+///
+/// ## Cross-process visibility
+///
+/// The status tools that report liveness (`lint_status` / `test_status`)
+/// run in TWO processes: the daemon (which owns the live in-memory
+/// heartbeat) and the `sovereign` CLI (a separate process that reads the
+/// daemon's SQLite stores). An in-memory `AtomicU64` is invisible to the
+/// CLI. So a writer heartbeat optionally mirrors each stamp to a small
+/// **sidecar file** (`~/.sovereign/watcher-heartbeat`); the CLI builds a
+/// [`reader`](Self::reader) over that path and gets the same liveness the
+/// daemon sees. Writes are throttled to once per [`SIDECAR_WRITE_THROTTLE_SECS`]
+/// so a sub-second loop doesn't churn the inode.
 #[derive(Debug)]
 pub struct WatcherHeartbeat {
-    /// Unix seconds of the last loop iteration. `0` == never ticked
-    /// (coordinator not started, or started but loop hasn't run yet).
+    /// Unix seconds of the last loop iteration (writer modes). `0` ==
+    /// never ticked (coordinator not started, or loop hasn't run yet).
     last_tick_unix: AtomicU64,
+    /// Throttle bookkeeping: unix seconds of the last sidecar write.
+    last_write_unix: AtomicU64,
+    /// When set, each `stamp` also mirrors the timestamp to this file so
+    /// other processes can read liveness. Writer mode.
+    sidecar_write: Option<std::path::PathBuf>,
+    /// When set, `last_tick_unix`/`age_secs`/`is_live` read the timestamp
+    /// from this file rather than the in-memory atomic. Reader mode —
+    /// `stamp` is a no-op. Used by the CLI process.
+    file_read: Option<std::path::PathBuf>,
 }
+
+/// Minimum gap between sidecar file writes. The loop stamps sub-second;
+/// 3s keeps the file fresh for a 30–60s liveness window without inode
+/// churn.
+pub const SIDECAR_WRITE_THROTTLE_SECS: u64 = 3;
 
 impl Default for WatcherHeartbeat {
     fn default() -> Self {
         Self {
             last_tick_unix: AtomicU64::new(0),
+            last_write_unix: AtomicU64::new(0),
+            sidecar_write: None,
+            file_read: None,
         }
     }
 }
 
 impl WatcherHeartbeat {
-    /// A fresh heartbeat that has never ticked. Wrapped in `Arc` because
-    /// it is shared between the coordinator loop (writer) and the status
-    /// tools (readers).
+    /// A fresh in-memory heartbeat that has never ticked. Wrapped in
+    /// `Arc` because it is shared between the coordinator loop (writer)
+    /// and any in-process readers (the daemon's status tools).
     pub fn new() -> Arc<Self> {
         Arc::new(Self::default())
+    }
+
+    /// A writer heartbeat that also mirrors every stamp to `path`, so a
+    /// different process can read liveness via [`reader`](Self::reader).
+    pub fn with_sidecar(path: std::path::PathBuf) -> Arc<Self> {
+        Arc::new(Self {
+            sidecar_write: Some(path),
+            ..Self::default()
+        })
+    }
+
+    /// A read-only heartbeat backed by a sidecar `path` a writer in
+    /// another process maintains. `stamp` is a no-op; `age_secs` /
+    /// `is_live` reflect the file's mtime-of-content (the stamped unix
+    /// seconds). A missing/empty/unparseable file reads as never-ticked.
+    pub fn reader(path: std::path::PathBuf) -> Arc<Self> {
+        Arc::new(Self {
+            file_read: Some(path),
+            ..Self::default()
+        })
     }
 
     fn now_unix() -> u64 {
@@ -85,14 +134,30 @@ impl WatcherHeartbeat {
     }
 
     /// Record that the coordinator loop is alive *now*. Called once per
-    /// loop iteration.
+    /// loop iteration. No-op for a reader heartbeat. For a sidecar writer,
+    /// throttles the file mirror to [`SIDECAR_WRITE_THROTTLE_SECS`].
     pub fn stamp(&self) {
-        self.last_tick_unix.store(Self::now_unix(), Ordering::Release);
+        if self.file_read.is_some() {
+            return; // reader: never writes
+        }
+        let now = Self::now_unix();
+        self.last_tick_unix.store(now, Ordering::Release);
+
+        if let Some(ref path) = self.sidecar_write {
+            let last_write = self.last_write_unix.load(Ordering::Acquire);
+            if now.saturating_sub(last_write) >= SIDECAR_WRITE_THROTTLE_SECS {
+                self.last_write_unix.store(now, Ordering::Release);
+                write_heartbeat_file(path, now);
+            }
+        }
     }
 
-    /// Unix seconds of the last stamp, or `None` if the loop has never
-    /// ticked.
+    /// Unix seconds of the last stamp, or `None` if never ticked. Reads
+    /// the sidecar file in reader mode, the atomic otherwise.
     pub fn last_tick_unix(&self) -> Option<u64> {
+        if let Some(ref path) = self.file_read {
+            return read_heartbeat_file(path);
+        }
         match self.last_tick_unix.load(Ordering::Acquire) {
             0 => None,
             t => Some(t),
@@ -112,6 +177,26 @@ impl WatcherHeartbeat {
     pub fn is_live(&self, window_secs: u64) -> bool {
         matches!(self.age_secs(), Some(age) if age <= window_secs)
     }
+}
+
+/// Atomically write `unix_secs` to the heartbeat sidecar (temp + rename
+/// so a concurrent reader never sees a torn write). Best-effort: a
+/// failure just means readers see a slightly older stamp until the next
+/// successful write — the watcher itself is unaffected.
+fn write_heartbeat_file(path: &std::path::Path, unix_secs: u64) {
+    let tmp = path.with_extension(format!("tmp.{}", std::process::id()));
+    if std::fs::write(&tmp, unix_secs.to_string().as_bytes()).is_ok() {
+        let _ = std::fs::rename(&tmp, path);
+    }
+}
+
+/// Read the unix-seconds stamp from the sidecar. `None` on any of
+/// missing / empty / unparseable — all of which mean "no live writer."
+fn read_heartbeat_file(path: &std::path::Path) -> Option<u64> {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .filter(|&t| t > 0)
 }
 
 /// True iff the path has an extension that maps to a tracked source-file
@@ -734,6 +819,46 @@ mod tests {
         assert!(!handle.is_alive(), "aborted loop must report not-alive");
 
         std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn sidecar_writer_to_reader_roundtrip() {
+        let path = std::env::temp_dir().join(format!("wc_hb_sidecar_{}", std::process::id()));
+        std::fs::remove_file(&path).ok();
+
+        let reader = WatcherHeartbeat::reader(path.clone());
+        // No file yet → reader is never-ticked / not live.
+        assert_eq!(reader.last_tick_unix(), None);
+        assert!(!reader.is_live(86_400));
+
+        // Writer stamps → mirrors to the file (first stamp always writes:
+        // last_write starts at 0, so the throttle gap is satisfied).
+        let writer = WatcherHeartbeat::with_sidecar(path.clone());
+        writer.stamp();
+        assert!(path.exists(), "sidecar file must be written on first stamp");
+
+        // A fresh reader over the same path now sees a live heartbeat.
+        let reader2 = WatcherHeartbeat::reader(path.clone());
+        assert!(reader2.last_tick_unix().is_some());
+        assert!(reader2.is_live(30), "reader must see the writer's stamp as live");
+        assert!(matches!(reader2.age_secs(), Some(a) if a <= 1));
+
+        // `reader` mode never writes, even on stamp.
+        let before = std::fs::read_to_string(&path).unwrap();
+        reader2.stamp();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn reader_treats_garbage_file_as_never_ticked() {
+        let path = std::env::temp_dir().join(format!("wc_hb_garbage_{}", std::process::id()));
+        std::fs::write(&path, b"not-a-number").unwrap();
+        let reader = WatcherHeartbeat::reader(path.clone());
+        assert_eq!(reader.last_tick_unix(), None);
+        assert!(!reader.is_live(86_400));
+        std::fs::remove_file(&path).ok();
     }
 
     #[tokio::test]

@@ -229,15 +229,31 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
             .with_atlas(Arc::clone(&atlas_store)),
     ));
 
-    // Watcher tools — no `with_watcher_active` here. The CLI is a
-    // reader over the daemon's shared store; the tools' built-in
-    // freshness heuristic decides `watcher_active` from data age.
+    // Watcher tools. The CLI is a separate process from the daemon, so
+    // it can't see the daemon's in-memory heartbeat — but the daemon
+    // mirrors it to a sidecar file. A reader heartbeat over that path
+    // gives the CLI's status tools the SAME liveness the daemon reports,
+    // so `sovereign tools call test_status` distinguishes live / dead /
+    // not-configured precisely instead of guessing from data age.
     // `with_workspace_root` enables per-file freshness queries
     // (`lint_status --files <paths>` and `lint_status --changed`).
-    tools.register(Box::new(
-        sovereign_tools::LintStatusTool::new(Arc::clone(&lint_store))
-            .with_workspace_root(repo_root.clone()),
-    ));
+    let heartbeat_reader =
+        corpus_engine::WatcherHeartbeat::reader(flat_stores_dir.join("watcher-heartbeat"));
+    // Read the same runner config the daemon does so `configured` (and
+    // the displayed scope) is correct per tool — the heartbeat is shared
+    // across lint+test, so a live coordinator alone doesn't tell us
+    // whether THIS tool's runner exists.
+    let sov_cfg =
+        corpus_engine::SovereignConfig::load_or_default(&repo_root.join(".sovereign"));
+    let lint_scope = sov_cfg.lint_runner.as_ref().map(|c| c.command.clone());
+    let test_scope = sov_cfg.test_runner.as_ref().map(|c| c.command.clone());
+    let mut lint_status = sovereign_tools::LintStatusTool::new(Arc::clone(&lint_store))
+        .with_workspace_root(repo_root.clone())
+        .with_heartbeat(Arc::clone(&heartbeat_reader));
+    if let Some(ref scope) = lint_scope {
+        lint_status = lint_status.with_watched_scope(scope.clone());
+    }
+    tools.register(Box::new(lint_status));
     // Architectural-drift freshness gate — sibling to lint_status.
     // Replaces the launchd-cron trigger model: the brief / pre-push
     // hook query this; the orchestrator writes the fingerprint after
@@ -260,12 +276,18 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // the same lint store as `lint_status`; the agent sees one
     // canonical tool while the legacy ids stay reachable during
     // the alias window.
-    tools.register(Box::new(sovereign_tools::BuildTool::new(Arc::clone(
-        &lint_store,
-    ))));
-    tools.register(Box::new(sovereign_tools::TestStatusTool::new(Arc::clone(
-        &test_store,
-    ))));
+    let mut build_tool = sovereign_tools::BuildTool::new(Arc::clone(&lint_store))
+        .with_heartbeat(Arc::clone(&heartbeat_reader));
+    if let Some(ref scope) = lint_scope {
+        build_tool = build_tool.with_watched_scope(scope.clone());
+    }
+    tools.register(Box::new(build_tool));
+    let mut test_status = sovereign_tools::TestStatusTool::new(Arc::clone(&test_store))
+        .with_heartbeat(Arc::clone(&heartbeat_reader));
+    if let Some(ref scope) = test_scope {
+        test_status = test_status.with_watched_scope(scope.clone());
+    }
+    tools.register(Box::new(test_status));
     tools.register(Box::new(sovereign_tools::GetRunOutputTool::new(
         Arc::clone(&test_store),
     )));

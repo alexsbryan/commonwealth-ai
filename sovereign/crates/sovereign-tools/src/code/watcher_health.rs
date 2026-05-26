@@ -107,33 +107,49 @@ impl WatcherReason {
     }
 
     /// Actionable next step for the caller. `None` when live (nothing to do).
+    ///
+    /// When the watcher is down, the hint deliberately steers to the
+    /// repo's **full-workspace scripts** — not an ad-hoc `cargo` call.
+    /// A scoped `cargo -p <crate>` / `--test <name>` fallback under-covers
+    /// the workspace, so regressions in untouched crates slip through and
+    /// bugs accrete. `scripts/sovereign-lint.sh` / `scripts/sovereign-test.sh`
+    /// run the same `cargo --workspace` surface the watcher does, so the
+    /// fallback has equal coverage.
     pub fn hint(self) -> Option<&'static str> {
         match self {
             WatcherReason::Live | WatcherReason::LegacyActive => None,
             WatcherReason::NotConfigured => Some(
                 "No lint/test runner is configured for this scope. Restore \
                  `.sovereign/sovereign.toml.with-watchers` (or add the \
-                 [lint_runner]/[test_runner] section), restart the daemon, \
-                 or fall back to scripts/sovereign-lint.sh / \
-                 scripts/sovereign-test.sh via Bash. `sovereign doctor` \
-                 confirms the config state.",
+                 [lint_runner]/[test_runner] section) and restart the daemon. \
+                 Until then, get EQUAL coverage by running the full-workspace \
+                 scripts `scripts/sovereign-lint.sh --human` and \
+                 `scripts/sovereign-test.sh --human` — do NOT substitute a \
+                 narrow `cargo -p <crate>` / `--test <name>` call, which \
+                 under-covers the workspace and lets bugs accrete. \
+                 `sovereign doctor` confirms the config state.",
             ),
             WatcherReason::WatcherDead => Some(
                 "A runner is configured but the watcher coordinator is not \
-                 alive — the stored result is orphaned and may be stale. \
-                 The daemon's supervisor should restart it shortly; if this \
-                 persists, restart the daemon. Fall back to \
-                 scripts/sovereign-lint.sh / scripts/sovereign-test.sh \
-                 meanwhile — do NOT trust the status below as current.",
+                 alive — the result below is orphaned; do NOT trust it as \
+                 current. The daemon's supervisor should restart it shortly; \
+                 if it persists, `sovereign daemon restart`. Meanwhile run the \
+                 full-workspace scripts `scripts/sovereign-lint.sh --human` / \
+                 `scripts/sovereign-test.sh --human` (they cover every crate) \
+                 — not a scoped `cargo -p <crate>` call, which under-covers \
+                 and lets regressions in untouched crates slip through.",
             ),
             WatcherReason::InferredFromAge => Some(
                 "CLI mode: liveness inferred from the last-run age; the \
                  daemon's heartbeat isn't visible from here.",
             ),
             WatcherReason::Unknown => Some(
-                "CLI mode and the last run is old or absent — a live watcher \
-                 can't be confirmed. Fall back to a direct cargo invocation \
-                 (scripts/sovereign-lint.sh / scripts/sovereign-test.sh).",
+                "CLI mode and a live watcher can't be confirmed (last run old \
+                 or absent). Run the full-workspace scripts \
+                 `scripts/sovereign-lint.sh --human` / \
+                 `scripts/sovereign-test.sh --human` for full coverage — avoid \
+                 a narrow `cargo -p <crate>` call, which under-covers the \
+                 workspace and lets bugs accrete.",
             ),
         }
     }

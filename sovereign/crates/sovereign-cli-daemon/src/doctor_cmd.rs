@@ -451,11 +451,15 @@ fn check_lint_runner(sovereign_dir: &std::path::Path) -> CheckResult {
 
 /// Probe the *liveness* of the lint/test watcher — distinct from
 /// `check_test_runner`/`check_lint_runner`, which only confirm a runner
-/// is *configured*. Calls the `test_status` MCP tool and reads the
-/// `watcher` health object it now returns. This is the check that
-/// catches the "configured but the coordinator died/never started"
-/// state a config-presence check structurally cannot see — the exact
-/// blind spot behind the watcher silently going stale.
+/// is *configured*. Calls the `lint_status` MCP tool and reads the
+/// `watcher` health object it now returns. (`lint_status` and `build`
+/// are the watcher tools exposed over the MCP transport; `test_status`
+/// is CLI-only. The shared coordinator heartbeat backs all of them, so
+/// `lint_status` answers the liveness question for the whole watcher.)
+/// This is the check that catches the "configured but the coordinator
+/// died/never started" state a config-presence check structurally
+/// cannot see — the exact blind spot behind the watcher silently going
+/// stale.
 async fn check_watcher_live() -> CheckResult {
     let resp = http_post_json(
         "http://localhost:9741/mcp",
@@ -463,7 +467,7 @@ async fn check_watcher_live() -> CheckResult {
             "jsonrpc": "2.0",
             "id": 1,
             "method": "tools/call",
-            "params": { "name": "test_status", "arguments": {} },
+            "params": { "name": "lint_status", "arguments": {} },
         }),
     )
     .await;
@@ -482,7 +486,7 @@ async fn check_watcher_live() -> CheckResult {
             name: "watcher_live",
             layer: Layer::Sovereign,
             status: CheckStatus::Warning,
-            message: "test_status returned an unparseable response".into(),
+            message: "lint_status returned an unparseable response".into(),
             repair: Repair::Manual("Check daemon logs".into()),
         };
     };
@@ -532,7 +536,7 @@ async fn check_watcher_live() -> CheckResult {
             name: "watcher_live",
             layer: Layer::Sovereign,
             status: CheckStatus::Warning,
-            message: "test_status returned no `watcher` health object — daemon/tool version mismatch?".into(),
+            message: "lint_status returned no `watcher` health object — daemon/tool version mismatch?".into(),
             repair: Repair::Executable("sovereign daemon restart".into()),
         },
     }
