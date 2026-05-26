@@ -169,7 +169,11 @@ pub async fn compress_working_memory(
                 Role::Assistant => "Assistant",
                 Role::System => "System",
             };
-            format!("{role}: {}", &m.content[..m.content.len().min(300)])
+            let mut end = m.content.len().min(300);
+            while end > 0 && !m.content.is_char_boundary(end) {
+                end -= 1;
+            }
+            format!("{role}: {}", &m.content[..end])
         })
         .collect();
 

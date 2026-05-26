@@ -106,6 +106,7 @@ pub async fn build_context(
         // None until Runtime runs `maybe_compact_dropped_history`
         // after the conversation grows past the visible window.
         compacted_history: None,
+        history_retrieval_hits: None,
         tool_dossier: None,
         intent_policy: None,
     })

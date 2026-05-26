@@ -422,7 +422,7 @@ lazy-loaded slot system (Quick / Main / Code / Embed). Hybrid +
 remote providers wrap OpenAI-compatible servers (vLLM, Ollama,
 llama.cpp, TGI, Commonwealth). Full detail — slots, polished slot
 management, sibling pool, decode paths, MTP, OICP scoring, harness
-adapters, cutoff legibility — in
+adapters, cutoff legibility, conversation-history compaction — in
 [`docs/inference.md`](./docs/inference.md).
 
 ### Tools

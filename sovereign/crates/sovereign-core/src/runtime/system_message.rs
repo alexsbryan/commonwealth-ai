@@ -156,6 +156,26 @@ impl Runtime {
         // tiered budget. Pre-PR-M2 this passed
         // `CONV_HISTORY_CHARS_PER_MSG` uniformly; new shape passes a
         // closure.
+        // Retrieval-over-history (v5 2026-05-26). Render BEFORE the
+        // visible-history block — anchor-then-recent shape matches
+        // standard RAG layout (retrieved context first, recent
+        // dialogue last, user question lands closest to attention).
+        // Comes BEFORE format_conversation_history because that block
+        // already ends with the current user message and the
+        // retrieval anchor needs to precede it.
+        if let Some(hits) = context.history_retrieval_hits.as_ref().filter(|h| !h.is_empty()) {
+            let mut section = String::from(
+                "Relevant earlier turns from this conversation (selected by similarity to your current message):\n",
+            );
+            for h in hits {
+                section.push_str(&format!(
+                    "— turn ~{} (similarity {:.2}):\n{}\n\n",
+                    h.turn_index, h.similarity, h.content
+                ));
+            }
+            parts.push(section.trim_end().to_string());
+        }
+
         if let Some(history) = format_conversation_history(
             &context.conversation.messages,
             CONV_HISTORY_TURNS,

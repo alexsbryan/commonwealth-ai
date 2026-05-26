@@ -1200,6 +1200,22 @@ pub struct ConversationContext {
     /// without a compacted anchor.
     #[serde(default)]
     pub compacted_history: Option<String>,
+    /// Retrieval-over-history hits — top-K prior user/assistant message
+    /// pairs (older than the visible window) selected by cosine
+    /// similarity against the current user message. Mechanism replaces
+    /// the lossy re-summarisation spiral that marathon_graceful v1/v2
+    /// surfaced — instead of re-compressing the dropped tail every
+    /// turn, retrieve the relevant 2-3 turns directly.
+    ///
+    /// Populated by `Runtime::maybe_retrieve_relevant_history` (gated
+    /// on `SOVEREIGN_HISTORY_RETRIEVAL=1` for the spike phase) and
+    /// consumed by `build_system_message` as a "Relevant earlier
+    /// turns:" section in the prompt.
+    ///
+    /// `#[serde(skip)]` — embeddings are recomputed each turn from the
+    /// visible message list; nothing persists.
+    #[serde(skip)]
+    pub history_retrieval_hits: Option<Vec<HistoryRetrievalHit>>,
     /// Tool-Mastery framework dossier: ambient context block listing
     /// the tools narrowed for the active skill on this turn, the
     /// recent tool-decision outcomes scoped to this conversation,
@@ -1320,6 +1336,25 @@ pub struct ToolDossierOutcome {
     /// two outcomes are from the same tool: `T2` vs `T4` ids.
     #[serde(default)]
     pub turn_index: usize,
+}
+
+/// One retrieved earlier-turn pair (user question + assistant reply)
+/// selected by cosine similarity against the current user message.
+/// Produced by `Runtime::maybe_retrieve_relevant_history`; consumed
+/// by `build_system_message` for the "Relevant earlier turns" prompt
+/// section. Spike phase (2026-05-26) — gated on
+/// `SOVEREIGN_HISTORY_RETRIEVAL=1` and not persisted (rebuilt per turn).
+#[derive(Debug, Clone)]
+pub struct HistoryRetrievalHit {
+    /// Index of the user message in `Conversation.messages` (the
+    /// pair's lead message). Useful for traceability in glassbox.
+    pub turn_index: usize,
+    /// Concatenated user+assistant body, truncated to ~600 chars per
+    /// side so the section stays bounded.
+    pub content: String,
+    /// Cosine similarity of `content` embedding to the current
+    /// user-message embedding. Surfaced for debug logging only.
+    pub similarity: f32,
 }
 
 /// A pairwise tension between a prior memory the user expressed
@@ -3244,6 +3279,7 @@ mod knowledge_view_digest_tests {
             knowledge_view_digests: None,
             temporal_tensions: Vec::new(),
             compacted_history: None,
+            history_retrieval_hits: None,
             tool_dossier: None,
             intent_policy: None,
         }

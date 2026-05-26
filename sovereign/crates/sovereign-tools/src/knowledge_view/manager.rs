@@ -1029,6 +1029,7 @@ mod tests {
             knowledge_view_digests: None,
             temporal_tensions: Vec::new(),
             compacted_history: None,
+            history_retrieval_hits: None,
             tool_dossier: None,
             intent_policy: None,
         }
