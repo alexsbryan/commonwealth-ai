@@ -4,14 +4,18 @@ import { test, expect, bootToChat } from "../fixtures/test-base";
 //
 // Two complementary specs:
 //
-// 1. **Skill exclusivity round-trip.** When the user enters the
-//    inner-work surface, every other active skill is deactivated
-//    and inner-work is activated. On exit, the snapshot is restored.
-//    This guards against the 2026-05-04 failure shape — a co-active
-//    research/knowledge skill leaving the relational register
-//    without primacy and a planner with `optional = ["knowledge"]`
-//    pulling chunks from code corpora into a heartfelt journal
-//    response.
+// 1. **Surface skill tag.** Skill conveyance moved off the client on
+//    2026-05-23: the surface no longer toggles peer skills off/on via
+//    `toggle_skill`. Instead, entering the witness and summoning
+//    lazily creates a conversation stamped with
+//    `surfaceSkillId = "inner-work"`, and `Runtime::resolve_active_mode`
+//    enforces the witness-path register/exclusivity server-side from
+//    that tag. (The old client-side deactivate-peers / restore-on-exit
+//    dance — the 2026-05-04 fix for co-active research/knowledge skills
+//    polluting the relational register — is gone; the structural
+//    surface override is now the single source of truth.) This spec
+//    pins the new contract: the conversation the surface creates
+//    carries its surface skill id.
 //
 // 2. **Render hygiene on a paragraph-shape entry.** The mocked
 //    Tauri bridge drives a clean witness response into the surface
@@ -43,213 +47,65 @@ const REASONING_OPENERS = [
   "The user is asking",
 ];
 
-// Companion to the snapshot/restore test below. Verifies that the
-// peer-skill restoration also runs when the user leaves inner-work
-// *without* going through the brand-corner mark — clicking the
-// NavRail Settings icon jumps view straight from "inner_work" to
-// "settings", bypassing the exit-mark. The keep-alive layer in
-// App.svelte means onDestroy never fires either; the per-visit
-// `active` effect inside InnerWorkSurface is what actually runs the
-// restoration in this path.
-test.describe("inner work surface — exit via nav-rail", () => {
-  test("nav-rail-to-settings (no exit-mark click) still restores prior skills", async ({
+test.describe("inner work surface — surface skill tag", () => {
+  test("summoning a witness tags the conversation with the inner-work surface skill", async ({
     sovereignPage: page,
     chat,
   }) => {
     await bootToChat(page, chat);
 
+    // Record the surfaceSkillId every create_conversation carries.
+    // Installed AFTER bootToChat so the boot-time default conversation
+    // isn't counted — we only assert on the one the witness makes.
     await page.evaluate(() => {
       const w = window as unknown as {
         __sovereign_test__: {
           setHandler: (cmd: string, fn: (args?: unknown) => unknown) => void;
         };
-        __toggleLog?: Array<{ id: string; active: boolean }>;
-        __activeSkills?: Set<string>;
+        __createdConversations?: Array<{ surfaceSkillId: string | null }>;
       };
-      w.__toggleLog = [];
-      w.__activeSkills = new Set(["research"]);
-      w.__sovereign_test__.setHandler("list_skills", () => {
-        const active = w.__activeSkills!;
-        return [
-          {
-            id: "research",
-            name: "Research",
-            description: "",
-            trust_level: "user",
-            active: active.has("research"),
-          },
-          {
-            id: "inner-work",
-            name: "Inner Work",
-            description: "",
-            trust_level: "user",
-            active: active.has("inner-work"),
-          },
-        ];
-      });
-      w.__sovereign_test__.setHandler("toggle_skill", (args: unknown) => {
-        const a = args as { skillId?: string; active?: boolean };
-        const id = String(a.skillId ?? "");
-        const isActive = Boolean(a.active);
-        w.__toggleLog!.push({ id, active: isActive });
-        if (isActive) w.__activeSkills!.add(id);
-        else w.__activeSkills!.delete(id);
-        return null;
-      });
-    });
-
-    await page.getByTestId("open-inner-work").click();
-    await expect(page.locator(".dateline")).toBeVisible({ timeout: 3_000 });
-
-    // Skip the brand-corner exit — jump straight to settings via the
-    // NavRail. This is the path the user takes when they're done
-    // writing and want to flip a setting before chatting.
-    await page.getByTestId("nav-settings").click();
-    await page.locator(".cfg").waitFor();
-
-    // Poll until the restoration sequence appears in the toggle log.
-    await expect
-      .poll(
-        async () =>
-          page.evaluate(() => {
-            return (
-              window as unknown as {
-                __toggleLog: Array<{ id: string; active: boolean }>;
-              }
-            ).__toggleLog;
-          }),
-        { timeout: 2_000 },
-      )
-      .toEqual([
-        { id: "research", active: false },
-        { id: "inner-work", active: true },
-        { id: "inner-work", active: false },
-        { id: "research", active: true },
-      ]);
-  });
-});
-
-test.describe("inner work surface — skill exclusivity", () => {
-  test("entering deactivates other skills and activates inner-work; exit restores", async ({
-    sovereignPage: page,
-    chat,
-  }) => {
-    await bootToChat(page, chat);
-
-    // Seed two pre-active skills + an inactive inner-work. Track
-    // every toggle call so we can replay the sequence at the end.
-    await page.evaluate(() => {
-      const w = window as unknown as {
-        __sovereign_test__: {
-          setHandler: (cmd: string, fn: (args?: unknown) => unknown) => void;
+      w.__createdConversations = [];
+      w.__sovereign_test__.setHandler("create_conversation", (args: unknown) => {
+        const a = (args ?? {}) as { surfaceSkillId?: string };
+        w.__createdConversations!.push({
+          surfaceSkillId: a.surfaceSkillId ?? null,
+        });
+        return {
+          id: `inner-work-conv-${w.__createdConversations!.length}`,
+          title: "Inner Work",
+          created_at: Math.floor(Date.now() / 1000),
         };
-        __toggleLog?: Array<{ id: string; active: boolean }>;
-        __activeSkills?: Set<string>;
-      };
-      w.__toggleLog = [];
-      w.__activeSkills = new Set(["research", "general-helper"]);
-
-      w.__sovereign_test__.setHandler("list_skills", () => {
-        const active = w.__activeSkills!;
-        return [
-          {
-            id: "research",
-            name: "Research",
-            description: "",
-            trust_level: "user",
-            active: active.has("research"),
-          },
-          {
-            id: "general-helper",
-            name: "General Helper",
-            description: "",
-            trust_level: "user",
-            active: active.has("general-helper"),
-          },
-          {
-            id: "inner-work",
-            name: "Inner Work",
-            description: "",
-            trust_level: "user",
-            active: active.has("inner-work"),
-          },
-        ];
-      });
-      w.__sovereign_test__.setHandler("toggle_skill", (args: unknown) => {
-        const a = args as { skillId?: string; active?: boolean };
-        const id = String(a.skillId ?? "");
-        const isActive = Boolean(a.active);
-        w.__toggleLog!.push({ id, active: isActive });
-        if (isActive) w.__activeSkills!.add(id);
-        else w.__activeSkills!.delete(id);
-        return null;
       });
     });
 
-    // Enter the surface. Wait for the dateline so we know onMount
-    // has flushed (the snapshot+activate sequence runs synchronously
-    // in the awaited block before any further work).
     await page.getByTestId("open-inner-work").click();
-    await expect(page.locator(".dateline")).toBeVisible({ timeout: 3_000 });
+    const column = page.locator("textarea.column");
+    await expect(column).toBeVisible({ timeout: 3_000 });
 
-    // The toggle log should now contain (in order):
-    //   - research  → false  (snapshot deactivation)
-    //   - general-helper → false  (snapshot deactivation)
-    //   - inner-work → true  (skill of this surface)
-    // Order between the two deactivations is not pinned — both
-    // deactivations come from a for-of over priorActiveSkillIds
-    // which preserves the listSkills order, so research goes first.
-    const onEntry = await page.evaluate(() => {
-      return (
-        window as unknown as { __toggleLog: Array<{ id: string; active: boolean }> }
-      ).__toggleLog;
-    });
-    expect(onEntry).toEqual([
-      { id: "research", active: false },
-      { id: "general-helper", active: false },
-      { id: "inner-work", active: true },
-    ]);
+    // Summon a witness. The first summon of the day lazily creates the
+    // conversation, stamped with the surface's skill id. That tag (not
+    // a client-side skill toggle) is the structural override that
+    // routes the turn down the witness path — `resolve_active_mode`
+    // reads it server-side.
+    await column.fill("Sitting with what's here.");
+    await column.press("Meta+Enter");
 
-    // Active set on the daemon side reflects the same exclusivity.
-    const activeAfterEntry = await page.evaluate(() => {
-      return Array.from(
-        (window as unknown as { __activeSkills: Set<string> }).__activeSkills,
-      );
-    });
-    expect(activeAfterEntry).toEqual(["inner-work"]);
-
-    // Exit via the brand mark. The surface's onDestroy fires
-    // toggle_skill("inner-work", false), then re-enables every id
-    // in the snapshot.
-    await page.locator(".exit-mark").click();
-    await expect(page.locator(".app-layout")).toBeVisible();
-
-    // Toggles are async fire-and-forget on destroy; poll until the
-    // expected sequence appears so we don't race the unmount.
     await expect
       .poll(
         async () =>
-          page.evaluate(() => {
-            return (
-              window as unknown as {
-                __toggleLog: Array<{ id: string; active: boolean }>;
-              }
-            ).__toggleLog.slice(3);
-          }),
-        { timeout: 2_000 },
+          page.evaluate(
+            () =>
+              (
+                window as unknown as {
+                  __createdConversations: Array<{
+                    surfaceSkillId: string | null;
+                  }>;
+                }
+              ).__createdConversations,
+          ),
+        { timeout: 5_000 },
       )
-      .toEqual([
-        { id: "inner-work", active: false },
-        { id: "research", active: true },
-        { id: "general-helper", active: true },
-      ]);
-
-    const activeAfterExit = await page.evaluate(() =>
-      Array.from(
-        (window as unknown as { __activeSkills: Set<string> }).__activeSkills,
-      ),
-    );
-    expect(activeAfterExit.sort()).toEqual(["general-helper", "research"]);
+      .toContainEqual({ surfaceSkillId: "inner-work" });
   });
 });
 

@@ -1,3 +1,4 @@
+pub mod activity;
 pub mod capabilities;
 pub mod config;
 pub mod contributions;

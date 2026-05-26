@@ -722,6 +722,30 @@ absent and the guards fail closed for *every* caller.
   `ShardTransferred` is emitted by the merge leader on behalf of
   the peer that shipped bytes — the schema carries an explicit
   `from_node`, and the aggregator credits `bytes_served` to it.
+- **Local Activity ledger** (`commonwealth-core::activity`) — the
+  glassbox counterpart answering "what is *my* daemon doing, even as
+  a mesh of one?" A sibling of the contribution ledger, not part of
+  it: `ActivityEventKind` variants (`LocalInferenceServed`,
+  `EmbeddingsServed`, `LocalKnowledgeServed`, `ChunksIngested`,
+  `CorpusEnriched`, `NewsworthyFetched`) record resource work that
+  never crosses a peer boundary, and `aggregate_activity` folds them
+  into one self-view `ActivitySummary`. Storage in
+  `commonwealth-state::ActivityEmitter` under the **gossip-excluded**
+  `app_id = "activity-private"` (in `GOSSIP_EXCLUDED_APP_IDS` — your
+  own usage never gossips, the deliberate contrast to
+  `contributions`). Recorded at daemon boundaries: the local arm of
+  `routes_inference::chat_completions`, the `embeddings` handler
+  (previously unrecorded — a peer using your embed model was
+  invisible), and the corpus-ingest `ProgressCallback`
+  (`ChunksIngested` on `Complete`, `CorpusEnriched` on the
+  structural-atlas pass). Surfaced via `GET /internal/activity/
+  {summary,recent}`. Desktop chat runs the in-process Runtime and
+  never hits a daemon HTTP boundary, so its slice is read *derived*
+  from the `ResponseProvenance` already persisted on each message via
+  `SqliteStateStore::summarize_chat_activity` (no new write path).
+  All three feed Settings → **Activity & Sharing** (rebuilt
+  `SharingSection.svelte`), which also hosts "the reins": ingest
+  throttle, mesh-quiesce, and peer-share ceiling/pause controls.
 - **Peer preferences (Ostrom sanctions)** —
   `commonwealth-state::peer_preferences` is the local-only,
   gossip-excluded store of per-peer affinity multipliers (clamped
@@ -831,12 +855,14 @@ work pins the GPU while the user is chatting. Components:
   `~/Desktop/sovereign-crash-<ts>.md`, prefilled `mailto:`. No
   auto-upload; v1 ships transparency.
 
-Control routes (loopback-only, on the client port):
+Control routes (loopback-only, on the internal port :9742):
 `GET /internal/contribution/status`,
 `POST /internal/contribution/ceiling`,
 `POST /internal/contribution/pause`,
 `POST /internal/contribution/resume`,
-`GET /internal/contribution/recent`.
+`GET /internal/contribution/recent`,
+`GET /internal/activity/summary`,
+`GET /internal/activity/recent`.
 
 Open polish: tray icon tint, HintCues nudge to Sharing tab, the W1
 PR-3 default-flip removing in-process EmbeddedDaemon, graceful

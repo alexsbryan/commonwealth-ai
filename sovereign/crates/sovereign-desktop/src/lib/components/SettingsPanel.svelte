@@ -401,7 +401,7 @@
     { id: "imports",         label: "Imports",          keywords: ["import", "claude", "anthropic", "conversation", "export", "zip"] },
     { id: "enrichment",      label: "Enrichment",       keywords: ["atlas", "enrich", "graph", "entity", "knowledge graph"] },
     { id: "mesh",            label: "Mesh",             keywords: ["mesh", "peer", "network", "share", "node", "collaborative"] },
-    { id: "sharing",         label: "Sharing",          keywords: ["share", "ceiling", "pause", "contribution", "peer", "gpu", "mesh", "yield"] },
+    { id: "sharing",         label: "Activity & Sharing", keywords: ["activity", "usage", "tokens", "chunks", "embeddings", "queries", "ingest", "share", "ceiling", "pause", "contribution", "peer", "gpu", "mesh", "yield", "throttle", "reins"] },
     { id: "tools",           label: "Web Search",       keywords: ["tool", "search", "web", "duck", "brave", "tavily"] },
     { id: "connect",         label: "Connect",          keywords: ["codex", "openai", "api", "external", "connect", "claude", "endpoint"] },
     { id: "paths",           label: "Paths",            keywords: ["path", "directory", "folder", "data dir", "skills dir"] },
@@ -1186,11 +1186,11 @@
         </section>
       {/if}
 
-      <!-- ──────────── SHARING (W3) ──────────── -->
+      <!-- ──────────── ACTIVITY & SHARING ──────────── -->
       {#if activeTab === "sharing"}
         <section class="doc-section">
-          <h2 class="doc-h2">Sharing</h2>
-          <p class="doc-intro">Decide how much of your machine the mesh can use. Pause it any time you want the cycles back.</p>
+          <h2 class="doc-h2">Activity &amp; Sharing</h2>
+          <p class="doc-intro">See exactly what Sovereign has been doing on this machine — tokens, chunks, embeddings, all local — then take the reins on how hard it works.</p>
           <SharingSection />
         </section>
       {/if}
@@ -1731,7 +1731,12 @@
   .lk-embed :global(.lk-section) {
     padding: 0;
   }
-  .lk-embed :global(.lk-section .head) {
+  /* Direct child only — hides LocalKnowledgeSection's own hero header,
+     NOT a descendant `.head` inside a child panel. The broad
+     descendant form also matched WatchedFolderDetail's `.detail > .head`,
+     hiding its "← Back to folders" button and trapping the user in the
+     detail view (embedded mode is the only mode that panel renders in). */
+  .lk-embed :global(.lk-section > .head) {
     display: none;
   }
   /* Each plate inside the embedded local-knowledge section reads as

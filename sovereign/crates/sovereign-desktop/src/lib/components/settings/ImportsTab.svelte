@@ -81,7 +81,10 @@
 
   async function refreshGlinerStatus() {
     try {
-      glinerStatus = await atlasCheckGlinerModel();
+      // Coerce a missing result to `null` so the `=== null` template
+      // guard catches it — otherwise `undefined` slips past and
+      // `glinerStatus.installed` throws, blanking the Imports panel.
+      glinerStatus = (await atlasCheckGlinerModel()) ?? null;
     } catch (e) {
       glinerError = e instanceof Error ? e.message : String(e);
     }

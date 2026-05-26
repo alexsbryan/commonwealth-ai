@@ -12,6 +12,7 @@
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
+use commonwealth_core::activity::ActivityEventKind;
 use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
@@ -733,6 +734,18 @@ pub async fn spawn_corpus_install_with_parameters(
                     duration_secs = info.duration_secs,
                     "spawn_corpus_install: ingest complete"
                 );
+                // Record the ingest on the local Activity ledger — the
+                // headline "your import did real work" signal. Embedding
+                // thousands of chunks is heavy local resource use that
+                // never crosses a peer boundary, so the contribution
+                // ledger never sees it; this is where it becomes visible.
+                state_for_task.inner.activity_emitter.record(
+                    ActivityEventKind::ChunksIngested {
+                        corpus_id: corpus_id_for_task.clone(),
+                        chunks: info.chunks_created,
+                        duration_secs: info.duration_secs,
+                    },
+                );
                 // Post-install hook: build the structural atlas the
                 // moment chunks are committed. Detached so the route
                 // handler that triggered the install isn't held up
@@ -744,6 +757,8 @@ pub async fn spawn_corpus_install_with_parameters(
                 // the CorpusEngine constructor without a recipe lookup.
                 let indexes = engine.index_dir().to_path_buf();
                 let recipes = indexes.clone();
+                let enrich_activity =
+                    state_for_task.inner.activity_emitter.clone();
                 tokio::spawn(async move {
                     use sovereign_tools::atlas_postinstall::{
                         build_structural_atlas, build_triage_candidates, effective_tier2_budget,
@@ -790,6 +805,17 @@ pub async fn spawn_corpus_install_with_parameters(
                                 0,
                                 0,
                                 Some(&format!("structural atlas built in {elapsed_secs}s")),
+                            );
+                            // Glassbox: enrichment is heavy local
+                            // inference work — record it so the
+                            // Activity surface shows "enriched <corpus>"
+                            // distinct from the raw ingest embed pass.
+                            enrich_activity.record(
+                                ActivityEventKind::CorpusEnriched {
+                                    corpus_id: cid.clone(),
+                                    atoms: 0,
+                                    duration_secs: elapsed_secs as u64,
+                                },
                             );
                             true
                         }

@@ -118,20 +118,41 @@ pub async fn detect() -> BootstrapMode {
         .unwrap_or(9741);
 
     if is_daemon_live(port).await {
+        tracing::info!(
+            target: "bootstrap",
+            port,
+            "bootstrap: daemon answered on client port — Attach mode \
+             (Members + activity read from the running daemon)"
+        );
         return BootstrapMode::Attach { client_port: port };
     }
 
     // Nothing listening. Pick the best available config source.
-    if let Ok(cfg) = SetupConfig::load() {
-        return BootstrapMode::Local { source: ConfigSource::CliSetup(cfg) };
-    }
-
-    let desktop = DesktopConfig::load();
-    if desktop.setup_complete {
-        return BootstrapMode::Local { source: ConfigSource::DesktopLegacy };
-    }
-
-    BootstrapMode::Local { source: ConfigSource::Fresh }
+    let (mode, label) = if let Ok(cfg) = SetupConfig::load() {
+        (
+            BootstrapMode::Local { source: ConfigSource::CliSetup(cfg) },
+            "CliSetup",
+        )
+    } else if DesktopConfig::load().setup_complete {
+        (
+            BootstrapMode::Local { source: ConfigSource::DesktopLegacy },
+            "DesktopLegacy",
+        )
+    } else {
+        (BootstrapMode::Local { source: ConfigSource::Fresh }, "Fresh")
+    };
+    // Glassbox: Local mode means this desktop runs its OWN embedded
+    // daemon. If a separate daemon is in fact serving the mesh on this
+    // port, that's the "empty Members list" failure mode — this log
+    // line plus the `is_daemon_live` warning below name it directly.
+    tracing::info!(
+        target: "bootstrap",
+        port,
+        source = label,
+        "bootstrap: no live daemon on client port — Local mode \
+         (this desktop will run its own in-process EmbeddedDaemon)"
+    );
+    mode
 }
 
 /// TCP-connect + `GET /v1/models` probe. We need both checks:
@@ -153,10 +174,20 @@ async fn is_daemon_live(port: u16) -> bool {
     .unwrap_or(false);
 
     if !tcp_ok {
+        // Nothing on the port — definitively no daemon. Fast path; a
+        // closed port refuses immediately, so this costs ~nothing and
+        // we must NOT retry (it's the common fresh-install case).
         return false;
     }
 
-    // Something's listening. Ask if it speaks our protocol.
+    // Something's listening, but it may still be booting: a cold model
+    // load can push the first `/v1/models` response past a single 2s
+    // window. Retry a few times before concluding "not a daemon."
+    // This closes the startup race where the desktop probes while a
+    // CLI/headless daemon is mid-boot and would otherwise fall through
+    // to its OWN embedded daemon — which then shows an empty Members
+    // list even though the real daemon (with peers) is right there.
+    // Cheap: only reached when the port is already occupied.
     let url = format!("http://127.0.0.1:{port}/v1/models");
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(2))
@@ -165,12 +196,45 @@ async fn is_daemon_live(port: u16) -> bool {
         Ok(c) => c,
         Err(_) => return false,
     };
-    client
-        .get(&url)
-        .send()
-        .await
-        .map(|r| r.status().is_success())
-        .unwrap_or(false)
+    for attempt in 1..=3u32 {
+        match client.get(&url).send().await {
+            Ok(r) if r.status().is_success() => {
+                tracing::info!(
+                    target: "bootstrap",
+                    port,
+                    attempt,
+                    "bootstrap: /v1/models answered — daemon is live"
+                );
+                return true;
+            }
+            Ok(r) => tracing::debug!(
+                target: "bootstrap",
+                port,
+                attempt,
+                status = %r.status(),
+                "bootstrap: port occupied, /v1/models non-2xx — retrying"
+            ),
+            Err(e) => tracing::debug!(
+                target: "bootstrap",
+                port,
+                attempt,
+                error = %e,
+                "bootstrap: port occupied, /v1/models errored — retrying"
+            ),
+        }
+        if attempt < 3 {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    }
+    tracing::warn!(
+        target: "bootstrap",
+        port,
+        "bootstrap: port occupied but /v1/models never answered after 3 \
+         tries — NOT attaching. Either a non-sovereign service holds the \
+         port, or the daemon is still booting. If Members looks empty, \
+         this is the most likely cause."
+    );
+    false
 }
 
 #[cfg(test)]

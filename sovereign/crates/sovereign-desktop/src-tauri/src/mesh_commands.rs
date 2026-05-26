@@ -178,22 +178,63 @@ pub async fn mesh_get_state(
             .await
             .map_err(|e| format!("mesh status: {e}"))?;
         if !resp.status().is_success() {
+            // Glassbox: a non-2xx here is one way Members ends up
+            // blank — surface it instead of silently returning None.
+            tracing::warn!(
+                target: "mesh_state",
+                port,
+                status = %resp.status(),
+                "mesh_get_state(attach): /v1/mesh/status non-2xx — Members will be empty"
+            );
             return Ok(None);
         }
         let remote: sovereign_mesh::mesh_http::StatusResponse =
             resp.json().await.map_err(|e| format!("parse mesh/status: {e}"))?;
         if remote.mesh_name.is_none() {
+            tracing::warn!(
+                target: "mesh_state",
+                port,
+                "mesh_get_state(attach): daemon reports no active mesh — Members empty"
+            );
             return Ok(None);
         }
+        tracing::info!(
+            target: "mesh_state",
+            mode = "attach",
+            port,
+            members = remote.members.len(),
+            members_online = remote.members_online,
+            "mesh_get_state(attach): fetched mesh status"
+        );
         return Ok(Some(MeshStateResponse::from_remote_status(remote)));
     }
 
     let Some(mesh) = state.mesh.as_ref() else {
+        tracing::warn!(
+            target: "mesh_state",
+            "mesh_get_state(local): no in-process mesh daemon — Members empty"
+        );
         return Ok(None);
     };
     let Some(mesh_state) = mesh.mesh_state().await else {
+        tracing::warn!(
+            target: "mesh_state",
+            "mesh_get_state(local): in-process daemon has no active mesh — Members empty"
+        );
         return Ok(None);
     };
+    // Glassbox: in Local mode this desktop reads its OWN embedded
+    // daemon. If that shows zero members while a separate daemon is
+    // serving the mesh on :9741, the app attached to the wrong process
+    // (a startup-probe race — see `bootstrap::detect`). Log the count
+    // so one real run distinguishes "genuinely solo" from "wrong
+    // daemon."
+    tracing::info!(
+        target: "mesh_state",
+        mode = "local",
+        members = mesh_state.members.len(),
+        "mesh_get_state(local): read in-process mesh state"
+    );
     let mut resp = MeshStateResponse::from(mesh_state);
     // Local-mode equivalent of the Attach-mode HTTP path: enrich the
     // status with the cached invite so the active-mesh view's share

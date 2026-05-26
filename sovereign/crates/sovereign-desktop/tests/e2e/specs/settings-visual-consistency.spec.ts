@@ -65,7 +65,7 @@ test.describe("settings · visual consistency", () => {
     await openSettings(page, chat);
     await page
       .locator(".cfg-toc .toc-item")
-      .filter({ hasText: /^Sharing$/ })
+      .filter({ hasText: /^Activity & Sharing$/ })
       .click();
     await page.locator(".sharing").waitFor();
 
@@ -152,7 +152,7 @@ test.describe("settings · visual consistency", () => {
     }
 
     for (const [label, selector] of [
-      ["Sharing", ".sharing"],
+      ["Activity & Sharing", ".sharing"],
       ["Connect", ".connect"],
     ] as const) {
       await page

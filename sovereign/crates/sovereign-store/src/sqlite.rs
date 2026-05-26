@@ -2507,7 +2507,163 @@ impl ConvTieredReader for SqliteStateStore {
 // corpus-engine never touches the store directly (no dep on
 // sovereign-store).
 
+/// Per-corpus chunk-retrieval rollup for the chat activity surface.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ChatCorpusUsage {
+    pub origin: String,
+    pub chunks: u64,
+    /// True when these chunks came from a mesh peer (the provenance
+    /// `SourceSummary.from_peer` was set).
+    pub from_peer: bool,
+}
+
+/// Per-model turn + token rollup for the chat activity surface.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ChatModelUsage {
+    pub model: String,
+    pub turns: u64,
+    pub tokens_generated: u64,
+}
+
+/// Read-side rollup of the user's own chat usage, derived entirely
+/// from the `ResponseProvenance` already persisted under
+/// `metadata["provenance"]` on each assistant message. There is no new
+/// write path: chat runs in the in-process Runtime (it never crosses a
+/// daemon HTTP boundary, so the daemon's Activity ledger can't see it),
+/// but every turn already records tokens + retrieved sources, so the
+/// summary is *derived* rather than separately recorded — the data is
+/// durable because the messages are.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ChatActivitySummary {
+    pub window_days: u32,
+    pub turns: u64,
+    pub tokens_generated: u64,
+    pub chunks_retrieved: u64,
+    pub by_corpus: Vec<ChatCorpusUsage>,
+    pub by_model: Vec<ChatModelUsage>,
+}
+
 impl SqliteStateStore {
+    /// Aggregate the user's own chat usage over the last `window_secs`.
+    /// Reads `metadata["provenance"]` off every assistant message in
+    /// the window and totals tokens generated, chunks retrieved (per
+    /// corpus, local vs peer), turns, and per-model usage. Messages
+    /// that predate provenance, or whose metadata fails to parse, are
+    /// skipped — a best-effort read, never an error for the caller.
+    pub async fn summarize_chat_activity(
+        &self,
+        window_secs: i64,
+    ) -> Result<ChatActivitySummary> {
+        use std::collections::BTreeMap;
+
+        let cutoff = now().saturating_sub(window_secs);
+        let window_days = (window_secs / 86_400).max(1) as u32;
+
+        // Accumulate into ordered maps so the materialized Vecs are
+        // stable between polls (a HashMap would reshuffle the UI rows).
+        let mut corpus_local: BTreeMap<String, u64> = BTreeMap::new();
+        let mut corpus_peer: BTreeMap<String, u64> = BTreeMap::new();
+        let mut models: BTreeMap<String, (u64, u64)> = BTreeMap::new();
+        let mut turns: u64 = 0;
+        let mut tokens_generated: u64 = 0;
+        let mut chunks_retrieved: u64 = 0;
+
+        {
+            let conn = self.conn.lock().await;
+            let mut stmt = conn
+                .prepare(
+                    "SELECT metadata FROM messages
+                     WHERE role = 'assistant' AND created_at >= ?1
+                       AND metadata IS NOT NULL",
+                )
+                .map_err(map_db)?;
+            let rows = stmt
+                .query_map(rusqlite::params![cutoff], |row| {
+                    row.get::<_, Option<String>>(0)
+                })
+                .map_err(map_db)?;
+
+            // Collect provenance inside the locked scope (per the
+            // MappedRows-lifetime invariant: never return the iterator
+            // across the conn/stmt block boundary).
+            for meta in rows.flatten() {
+                let Some(meta) = meta else { continue };
+                let Ok(value) =
+                    serde_json::from_str::<serde_json::Value>(&meta)
+                else {
+                    continue;
+                };
+                // Provenance is nested under `metadata["provenance"]`
+                // (see the runtime handlers that build message metadata).
+                let Some(prov_value) = value.get("provenance") else {
+                    continue;
+                };
+                let Ok(prov) = serde_json::from_value::<ResponseProvenance>(
+                    prov_value.clone(),
+                ) else {
+                    continue;
+                };
+
+                turns += 1;
+                // Prefer the explicit completion-token count; fall back
+                // to total `tokens_used` for messages that lack it.
+                let gen = prov
+                    .completion_tokens
+                    .map(|t| t as u64)
+                    .unwrap_or(prov.tokens_used as u64);
+                tokens_generated += gen;
+
+                let m = models.entry(prov.inference_backend.clone()).or_default();
+                m.0 += 1;
+                m.1 += gen;
+
+                for s in &prov.sources {
+                    chunks_retrieved += s.count as u64;
+                    let bucket = if s.from_peer.is_some() {
+                        &mut corpus_peer
+                    } else {
+                        &mut corpus_local
+                    };
+                    *bucket.entry(s.origin.clone()).or_insert(0) +=
+                        s.count as u64;
+                }
+            }
+        }
+
+        let mut by_corpus: Vec<ChatCorpusUsage> = Vec::new();
+        for (origin, chunks) in corpus_local {
+            by_corpus.push(ChatCorpusUsage {
+                origin,
+                chunks,
+                from_peer: false,
+            });
+        }
+        for (origin, chunks) in corpus_peer {
+            by_corpus.push(ChatCorpusUsage {
+                origin,
+                chunks,
+                from_peer: true,
+            });
+        }
+        let by_model = models
+            .into_iter()
+            .map(|(model, (turns, tokens_generated))| ChatModelUsage {
+                model,
+                turns,
+                tokens_generated,
+            })
+            .collect();
+
+        Ok(ChatActivitySummary {
+            window_days,
+            turns,
+            tokens_generated,
+            chunks_retrieved,
+            by_corpus,
+            by_model,
+        })
+    }
+
     /// Upsert the per-conv skeleton row. `state` is one of
     /// `ConvTieredState::as_str()`; future-proofed to bare string so
     /// the provider can write a custom error sub-state without a

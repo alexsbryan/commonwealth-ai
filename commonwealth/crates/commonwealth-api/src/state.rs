@@ -17,7 +17,9 @@ use commonwealth_inference::store_adapter::InferenceStateStore;
 use commonwealth_core::ids::HandoffId;
 use commonwealth_knowledge::store_adapter::KnowledgeStateStore;
 use commonwealth_knowledge::WorkQueueManager;
-use commonwealth_state::{ContributionEmitter, MeshStore, PeerPreferenceStore};
+use commonwealth_state::{
+    ActivityEmitter, ContributionEmitter, MeshStore, PeerPreferenceStore,
+};
 use corpus_engine::CorpusEngine;
 use futures::Stream;
 
@@ -377,6 +379,16 @@ pub struct AppStateInner {
     /// passed into spawned tasks without lifetime gymnastics.
     pub contribution_emitter: ContributionEmitter,
 
+    /// Local Activity ledger emitter. Records this daemon's own
+    /// resource work — tokens served to local clients, embeddings
+    /// produced, chunks ingested/enriched, newsworthy fetches — in
+    /// Sovereign's vocabulary, for the glassbox "Activity & Sharing"
+    /// surface. Unlike `contribution_emitter`, its records are
+    /// **local-only and never gossip** (written under the
+    /// `activity-private` namespace). Cheap to clone; shares the same
+    /// underlying `MeshStore`. See `commonwealth_core::activity`.
+    pub activity_emitter: ActivityEmitter,
+
     /// Per-peer preference store (Ostrom sanctions). Local-only,
     /// never gossiped — see
     /// `commonwealth_state::peer_preferences` for the structural
@@ -502,6 +514,8 @@ impl AppState {
         let knowledge_store = KnowledgeStateStore::new(Arc::clone(&mesh_store), self_node_id);
         let contribution_emitter =
             ContributionEmitter::new((*mesh_store).clone(), self_node_id);
+        let activity_emitter =
+            ActivityEmitter::new((*mesh_store).clone(), self_node_id);
         let peer_preferences =
             PeerPreferenceStore::new((*mesh_store).clone(), self_node_id);
         // ATOS middleware registry with the M4 core four implementations
@@ -618,6 +632,7 @@ impl AppState {
                 storage_budget_bytes: std::sync::atomic::AtomicU64::new(0),
                 storage_used_bytes: std::sync::atomic::AtomicU64::new(0),
                 contribution_emitter,
+                activity_emitter,
                 peer_preferences,
                 local_in_flight_publisher: std::sync::OnceLock::new(),
             }),

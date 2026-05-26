@@ -196,6 +196,14 @@ impl PeerPreferenceStore {
 ///   `scope=global && !private`; private notes route to
 ///   `notes-private` and never enter the wire. Symmetric to the
 ///   work-atlas pattern.
+/// - `activity-private` — The local Activity ledger (see
+///   `activity` module). Records the user's own resource usage
+///   (tokens generated, embeddings produced, chunks ingested/
+///   enriched, local inference/knowledge served) for the glassbox
+///   "Activity & Sharing" surface. This is a local-first sovereignty
+///   guarantee: what work your daemon did *for you* is yours and
+///   never gossips. Contrast `contributions` (what you provided to
+///   peers), which *does* gossip.
 ///
 /// Each entry is pinned by a test that asserts `is_gossip_excluded`
 /// returns `true` for it.
@@ -203,6 +211,7 @@ pub const GOSSIP_EXCLUDED_APP_IDS: &[&str] = &[
     PEER_PREFERENCES_APP_ID,
     "work-atlas-private",
     "notes-private",
+    "activity-private",
 ];
 
 /// Returns true when the given `app_id` is excluded from gossip
@@ -333,5 +342,17 @@ mod tests {
     fn gossip_excludes_notes_private_app_id() {
         assert!(is_gossip_excluded("notes-private"));
         assert!(!is_gossip_excluded("notes"));
+    }
+
+    /// **Structural invariant pin** for the local Activity ledger
+    /// (see `activity` module). The user's own resource usage —
+    /// tokens, embeddings, chunks ingested — is recorded under
+    /// `activity-private` and must never gossip. The gossiped
+    /// `contributions` namespace (what you provided to peers) is the
+    /// deliberate counterpart and must continue to replicate.
+    #[test]
+    fn gossip_excludes_activity_private_app_id() {
+        assert!(is_gossip_excluded("activity-private"));
+        assert!(!is_gossip_excluded("contributions"));
     }
 }

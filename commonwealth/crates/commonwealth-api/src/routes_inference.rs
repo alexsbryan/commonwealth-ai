@@ -6,6 +6,7 @@ use axum::Json;
 use futures::StreamExt;
 use tracing::{debug, info, warn};
 
+use commonwealth_core::activity::{ActivityEventKind, ServedFor};
 use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_core::mesh::NodeStatus;
@@ -518,8 +519,14 @@ async fn forward_to_llama_server(
 /// chat_completions does.
 pub async fn embeddings(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(request): Json<EmbeddingRequest>,
 ) -> Response {
+    // Who is this for? A peer with no embed model of its own (driving
+    // ingestion via `http_embed_fn`) carries `X-Node-Id`; a local
+    // OpenAI-API client does not. Either way it's real embedding work
+    // this daemon performed — recorded on the Activity ledger below.
+    let requester = crate::headers::parse_x_node_id(&headers);
     let Some(service) = state.inner.local_inference.as_ref() else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -557,6 +564,7 @@ pub async fn embeddings(
             .into_response();
     }
 
+    let n_texts = inputs.len() as u64;
     let mut data: Vec<EmbeddingData> = Vec::with_capacity(inputs.len());
     let mut total_chars: usize = 0;
     for (i, text) in inputs.into_iter().enumerate() {
@@ -598,6 +606,20 @@ pub async fn embeddings(
             total_tokens: approx_tokens,
         },
     };
+    // Record the embedding work on the local Activity ledger — split
+    // peer (mesh-driven ingestion) vs local (own API client). This was
+    // previously invisible: nothing recorded embeddings served.
+    state
+        .inner
+        .activity_emitter
+        .record(ActivityEventKind::EmbeddingsServed {
+            served_for: match requester {
+                Some(node_id) => ServedFor::Peer { node_id },
+                None => ServedFor::Local,
+            },
+            n_texts,
+            tokens: approx_tokens as u64,
+        });
     (StatusCode::OK, Json(resp)).into_response()
 }
 
@@ -790,6 +812,27 @@ async fn serve_local_non_stream(
                         wall_seconds,
                     },
                 );
+            } else {
+                // Local API client (no `X-Node-Id`). The contribution
+                // ledger deliberately skips this — it's not work *for
+                // the mesh* — but it IS resource work this daemon did,
+                // so record it on the local Activity ledger. Without
+                // this, a solo user's own OpenAI-API traffic through
+                // the daemon would be invisible in the glassbox view.
+                let (prompt_tokens, completion_tokens) = resp
+                    .usage
+                    .as_ref()
+                    .map(|u| (u.prompt_tokens as u64, u.completion_tokens as u64))
+                    .unwrap_or((0, 0));
+                let wall_seconds = started.elapsed().as_secs_f64();
+                state.inner.activity_emitter.record(
+                    ActivityEventKind::LocalInferenceServed {
+                        model_id,
+                        prompt_tokens,
+                        completion_tokens,
+                        wall_seconds,
+                    },
+                );
             }
             (StatusCode::OK, Json(resp)).into_response()
         }
@@ -976,17 +1019,28 @@ async fn serve_local_stream(
     // emission, matching the non-streaming policy.
     let chunks_for_done = chunks_count;
     let state_for_done = state.inner.contribution_emitter.clone();
+    let activity_for_done = state.inner.activity_emitter.clone();
     let requester_for_done = requester;
     let model_for_done = model_id_for_ledger;
     let done = futures::stream::once(async move {
+        let tokens =
+            chunks_for_done.load(std::sync::atomic::Ordering::Relaxed);
+        let wall_seconds = started.elapsed().as_secs_f64();
         if let Some(for_node) = requester_for_done {
-            let tokens =
-                chunks_for_done.load(std::sync::atomic::Ordering::Relaxed);
-            let wall_seconds = started.elapsed().as_secs_f64();
             state_for_done.record(LedgerEventKind::InferenceServed {
                 for_node,
                 model_id: model_for_done,
                 tokens_generated: tokens,
+                wall_seconds,
+            });
+        } else {
+            // Local API client — record on the Activity ledger, same
+            // as the non-streaming path. Stream frames ≈ completion
+            // tokens; prompt token count isn't available on this path.
+            activity_for_done.record(ActivityEventKind::LocalInferenceServed {
+                model_id: model_for_done,
+                prompt_tokens: 0,
+                completion_tokens: tokens,
                 wall_seconds,
             });
         }
