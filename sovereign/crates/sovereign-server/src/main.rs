@@ -417,6 +417,29 @@ async fn main() {
     if let Some(store) = note_store_for_runtime {
         runtime_builder = runtime_builder.with_note_store(store);
     }
+    // GLiNER entity extractor for retrieval-over-history. Probe the
+    // default model id; if installed, load it and wire it onto the
+    // Runtime. Failures soft-fall-through to pure cosine + MMR.
+    {
+        let model_id = sovereign_tools::gliner_ner::DEFAULT_MODEL_ID;
+        if sovereign_tools::gliner_ner::probe_model_available(model_id) {
+            match sovereign_tools::gliner_ner::GlinerExtractor::new_default() {
+                Ok(g) => {
+                    let arc: Arc<dyn sovereign_core::traits::EntityExtractor> = Arc::new(g);
+                    runtime_builder = runtime_builder.with_gliner(arc);
+                    tracing::info!(model = model_id, "server: GLiNER entity extractor loaded");
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "server: GLiNER probe ok but load failed; entity-aware retrieval disabled");
+                }
+            }
+        } else {
+            tracing::debug!(
+                model = model_id,
+                "server: GLiNER model not installed; entity-aware retrieval disabled (falls back to cosine+MMR)"
+            );
+        }
+    }
     // Install the landscape-digest provider only when KnowledgeView
     // is enabled. When disabled, the splice path stays a no-op —
     // identical to pre-KnowledgeView behaviour.

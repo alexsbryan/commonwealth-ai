@@ -7,7 +7,7 @@ edition.workspace = true
 sovereign-core = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
-sovereign-tools = { workspace = true, features = ["treesitter"] }
+sovereign-tools = { workspace = true, features = ["treesitter", "gliner-ner"] }
 # TDD-machine backend — HTTP + MCP transports dispatch through this
 # crate's SolverRegistry. See sovereign/docs/TDD_MACHINE_DESIGN.md
 # phase 7e.
