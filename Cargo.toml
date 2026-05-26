@@ -196,6 +196,21 @@ llguidance = "1.7"
 [profile.dev]
 debug = 0
 
+# Release builds ship in the desktop bundle. The desktop binary is ~397 MB
+# unstripped (835k symbols) because cargo's default release profile keeps the
+# full symbol table and Tauri's bundler does NOT strip Rust binaries for you.
+# `strip = "symbols"` reclaims ~80 MB off the on-disk binary with zero runtime
+# change. `lto = "thin"` + `codegen-units = 1` lets the linker prune dead code
+# across crate boundaries (notably the static llama/ggml/lance surface) at the
+# cost of slower release link times — release builds are cut rarely (tagged
+# `desktop-v*`), so the trade favours a smaller artifact. `panic = "abort"` is
+# deliberately NOT set: the desktop's daemon supervisor and OCR pipeline rely
+# on catching/propagating panics across the in-process boundary.
+[profile.release]
+strip = "symbols"
+lto = "thin"
+codegen-units = 1
+
 # ── Patches ──────────────────────────────────────────────────────────────
 # Vendored `llama-cpp-4` re-introduces the `LlamaContextParams::with_n_seq_max`
 # builder method that upstream 0.2.x retired. The underlying C field is still

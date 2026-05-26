@@ -21,12 +21,13 @@
 //!     failure by the pipeline.
 //!   - timeout → typed error (`Timeout`), per-page failure.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use image::DynamicImage;
 
+use super::engine::{OcrEngine, OcrError};
 use super::OcrCtx;
 
 #[derive(Debug)]
@@ -77,26 +78,49 @@ pub fn recognize_page(
 
 /// Lower-level entry point: run tesseract on a PNG that already
 /// exists on disk. Used by tests with checked-in images so we don't
-/// have to round-trip through `image::save_with_format`.
+/// have to round-trip through `image::save_with_format`. Thin wrapper
+/// over [`run_tesseract_paths`] that unpacks the tesseract-relevant
+/// fields from the `OcrCtx`.
 pub fn run_tesseract(png_path: &Path, ctx: &OcrCtx) -> Result<String, TesseractError> {
-    let mut cmd = Command::new(&ctx.tesseract_bin);
+    run_tesseract_paths(
+        png_path,
+        &ctx.tesseract_bin,
+        &ctx.tessdata_dir,
+        ctx.dpi,
+        ctx.tesseract_timeout_secs,
+    )
+}
+
+/// The actual tesseract invocation, parameterised by explicit paths
+/// rather than an `OcrCtx`. `TesseractEngine` (built once per ingest)
+/// calls this with its own stored fields; `run_tesseract` calls it with
+/// fields read off the ctx. Splitting it this way means the engine seam
+/// and the legacy ctx-driven path share one process-spawn body.
+pub fn run_tesseract_paths(
+    png_path: &Path,
+    bin: &Path,
+    tessdata_dir: &Path,
+    dpi: u32,
+    timeout_secs: u64,
+) -> Result<String, TesseractError> {
+    let mut cmd = Command::new(bin);
     cmd.arg(png_path)
         .arg("stdout")
         .arg("-l")
         .arg("eng")
         .arg("--dpi")
-        .arg(ctx.dpi.to_string())
-        .env("TESSDATA_PREFIX", &ctx.tessdata_dir)
+        .arg(dpi.to_string())
+        .env("TESSDATA_PREFIX", tessdata_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .stdin(Stdio::null());
 
     let started = Instant::now();
-    let timeout = Duration::from_secs(ctx.tesseract_timeout_secs);
+    let timeout = Duration::from_secs(timeout_secs);
 
     let mut child = cmd
         .spawn()
-        .map_err(|e| TesseractError::Spawn(format!("{}: {e}", ctx.tesseract_bin.display())))?;
+        .map_err(|e| TesseractError::Spawn(format!("{}: {e}", bin.display())))?;
 
     // Poll-and-kill is enough here: tesseract is well-behaved and
     // typically finishes in 1-3 s per page. We never need to write to
@@ -142,6 +166,71 @@ pub fn run_tesseract(png_path: &Path, ctx: &OcrCtx) -> Result<String, TesseractE
 // reader of the function above. (Suppressed to avoid an unused-binding
 // rustc warning when `temp` lives only for its Drop side effect.)
 fn _ensure_temp_lives_long_enough() {}
+
+// ─── Engine adapter ──────────────────────────────────────────────────
+
+/// Tesseract subprocess engine — the v1 default. Holds the resolved
+/// binary + tessdata paths and per-page tuning; construction (via
+/// [`TesseractEngine::from_ctx`]) is essentially free, since each
+/// `recognize` spawns a fresh `tesseract` process. Built once per ingest
+/// by `engine::build_engine`.
+pub struct TesseractEngine {
+    bin: PathBuf,
+    tessdata_dir: PathBuf,
+    dpi: u32,
+    timeout_secs: u64,
+}
+
+impl TesseractEngine {
+    /// Pull the tesseract-relevant fields off the `OcrCtx`. The cleanup
+    /// fields (daemon URL, model) are not the engine's concern — the
+    /// pipeline owns the cleanup pass.
+    pub fn from_ctx(ctx: &OcrCtx) -> Self {
+        Self {
+            bin: ctx.tesseract_bin.clone(),
+            tessdata_dir: ctx.tessdata_dir.clone(),
+            dpi: ctx.dpi,
+            timeout_secs: ctx.tesseract_timeout_secs,
+        }
+    }
+}
+
+impl OcrEngine for TesseractEngine {
+    fn name(&self) -> &'static str {
+        "tesseract"
+    }
+
+    fn recognize(&self, image: &DynamicImage) -> Result<String, OcrError> {
+        let temp = tempfile::Builder::new()
+            .prefix("sovereign-ocr-")
+            .suffix(".png")
+            .tempfile()
+            .map_err(|e| OcrError::Io(format!("temp file: {e}")))?;
+        let temp_path = temp.path().to_path_buf();
+        image
+            .save_with_format(&temp_path, image::ImageFormat::Png)
+            .map_err(|e| OcrError::Io(format!("write png: {e}")))?;
+
+        run_tesseract_paths(
+            &temp_path,
+            &self.bin,
+            &self.tessdata_dir,
+            self.dpi,
+            self.timeout_secs,
+        )
+        .map_err(|e| match e {
+            // A spawn failure means the binary is missing/not executable
+            // — the page itself is fine, so surface it as "engine
+            // missing" rather than "page unreadable".
+            TesseractError::Spawn(m) => OcrError::Unavailable(m),
+            TesseractError::NonZero { code, stderr } => {
+                OcrError::Page(format!("exit {code}: {}", stderr.trim()))
+            }
+            TesseractError::Timeout => OcrError::Timeout,
+            TesseractError::Io(m) => OcrError::Io(m),
+        })
+    }
+}
 
 // ─── Tests ───────────────────────────────────────────────────────────
 

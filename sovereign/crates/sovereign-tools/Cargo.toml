@@ -155,12 +155,37 @@ orp = { version = "0.9", optional = true }
 # as a Person in every chunk. Production dep regardless of feature
 # because `regex` is small and probably needed elsewhere soon.
 regex = { workspace = true }
+# ── PaddleOCR engine (feature `paddle-ocr`) ──────────────────────────
+# An in-process OCR engine that drives the SAME ONNX Runtime already
+# linked for GLiNER (`ort`), rather than the tesseract subprocess. We
+# pin `ort` to EXACTLY `=2.0.0-rc.9` to unify with orp's exact pin — a
+# single onnxruntime, GLiNER untouched. This is deliberate: the GLiNER
+# stack (orp/gline-rs) cannot move off rc.9 (build-verified that rc.10
+# throws 4 errors and rc.12 throws 60 — SessionOutputs lifetimes,
+# Session::run &mut self, ort::Error losing Send/Sync), so off-the-shelf
+# PaddleOCR crates (which want rc.10+) are unusable and we drive ort
+# directly at rc.9. `ndarray` feature for tensor I/O. `default-features`
+# left on to match orp (linking strategy + std unify across the graph).
+ort = { version = "=2.0.0-rc.9", optional = true, features = ["ndarray"] }
+# Tensor construction / extraction. 0.16 matches the version ort rc.9
+# resolves (the lockfile pins 0.16.1) — do NOT bump to 0.17 (rc.12 era).
+ndarray = { version = "0.16", optional = true }
+# DBNet detection post-processing: `find_contours` on the binarized
+# probability map. Same CV lib the off-the-shelf `oar-ocr` crate uses.
+imageproc = { version = "0.26", optional = true }
+# Polygon offset ("unclip") for detection boxes. Already in the tree
+# transitively (4.0.7); pinning `4` here resolves the single version.
+i_overlay = { version = "4", optional = true }
 
 [features]
 default = []
 email = ["lettre"]
 treesitter = ["corpus-engine/treesitter"]
 gliner-ner = ["dep:gline-rs", "dep:orp"]
+# PaddleOCR (ONNX) OCR engine. Off by default so headless/default builds
+# don't pull the OCR inference surface; the desktop enables it once the
+# bake-off greenlights swapping it in for tesseract.
+paddle-ocr = ["dep:ort", "dep:ndarray", "dep:imageproc", "dep:i_overlay"]
 
 [dev-dependencies]
 # Zip writer for hand-building minimal DOCX fixtures in
@@ -179,6 +204,9 @@ filetime = "0.2"
 # we can exercise `LocalLlmBackend` without a live daemon. Production
 # code does NOT depend on axum.
 axum = { workspace = true }
+# Levenshtein for the OCR bake-off's CER/WER scoring (examples/paddle_bakeoff).
+# Already in the tree (0.11.1); dev-only since only the example uses it.
+strsim = "0.11"
 
 # Examples that import treesitter-gated symbols (SymbolLookupTool,
 # ScipGraphHandle, etc.) only compile when the matching crate
@@ -188,3 +216,11 @@ axum = { workspace = true }
 [[example]]
 name = "exercise_code_tools"
 required-features = ["treesitter"]
+
+# Tesseract-vs-PaddleOCR bake-off harness. Compiles only with the
+# `paddle-ocr` feature; runs both engines on a scanned PDF and emits a
+# side-by-side quality/latency comparison (+ CER/WER if a ground-truth
+# .txt is supplied). See the OCR engine-swap plan.
+[[example]]
+name = "paddle_bakeoff"
+required-features = ["paddle-ocr"]

@@ -20,10 +20,11 @@
 //! for content from a page that didn't OCR cleanly.
 
 use std::path::Path;
+use std::sync::Arc;
 
 use super::cleanup::{cleanup_page, CleanupError};
+use super::engine::{build_engine, OcrEngine};
 use super::rasterize::{PdfiumRasterizer, Rasterizer};
-use super::tesseract::{recognize_page, TesseractError};
 use super::{OcrCtx, PageProgress, PageProgressCallback};
 
 /// One-shot entry point: rasterize, OCR, clean, assemble. Builds a
@@ -50,12 +51,45 @@ pub async fn extract_pdf_via_ocr(
     .await
 }
 
-/// Lower-level entry point that takes a pre-built rasterizer. The
-/// rasterizer is `dyn Rasterizer` so tests pass a `StubRasterizer`
-/// that returns hand-built images and exercises the per-page fallout
-/// (cleanup, placeholders, assembly).
+/// Lower-level entry point that takes a pre-built rasterizer and builds
+/// the OCR engine itself from `ctx.engine`. The rasterizer is
+/// `dyn Rasterizer` so tests pass a `StubRasterizer` that returns
+/// hand-built images and exercises the per-page fallout (cleanup,
+/// placeholders, assembly).
 pub async fn extract_pdf_with_rasterizer<R: Rasterizer + ?Sized>(
     rasterizer: &R,
+    path: &Path,
+    ctx: &OcrCtx,
+    file_display_name: &str,
+    file_idx: u32,
+    file_total: u32,
+    on_progress: Option<PageProgressCallback>,
+) -> Result<String, String> {
+    // Build the recognition engine once for this document. A model-load
+    // failure (PaddleOCR) fails the document here with a clear message,
+    // rather than producing a placeholder for every page.
+    let engine = build_engine(ctx)?;
+    extract_pdf_with_engine(
+        rasterizer,
+        engine,
+        path,
+        ctx,
+        file_display_name,
+        file_idx,
+        file_total,
+        on_progress,
+    )
+    .await
+}
+
+/// Same as [`extract_pdf_with_rasterizer`] but takes a pre-built engine,
+/// so batch ingest (and the bake-off harness) can amortize the engine
+/// build — notably PaddleOCR's ONNX session load — across many files
+/// instead of paying it per document.
+#[allow(clippy::too_many_arguments)]
+pub async fn extract_pdf_with_engine<R: Rasterizer + ?Sized>(
+    rasterizer: &R,
+    engine: Arc<dyn OcrEngine>,
     path: &Path,
     ctx: &OcrCtx,
     file_display_name: &str,
@@ -87,11 +121,11 @@ pub async fn extract_pdf_with_rasterizer<R: Rasterizer + ?Sized>(
             });
         }
 
-        // Tesseract is CPU-bound; hop onto a blocking thread so the
+        // Recognition is CPU-bound; hop onto a blocking thread so the
         // async cleanup HTTP call below doesn't block the runtime.
-        let ctx_for_blocking = ctx.clone();
+        let engine_for_blocking = Arc::clone(&engine);
         let raw = tokio::task::spawn_blocking(move || {
-            recognize_page(&image, &ctx_for_blocking)
+            engine_for_blocking.recognize(&image)
         })
         .await;
 
@@ -127,10 +161,11 @@ pub async fn extract_pdf_with_rasterizer<R: Rasterizer + ?Sized>(
                 tracing::warn!(
                     path = %path.display(),
                     page = page_no,
-                    "tesseract failed: {}",
-                    e.user_message()
+                    engine = engine.name(),
+                    "OCR failed: {}",
+                    e.detail()
                 );
-                placeholder_for(page_no, &tesseract_failure_label(&e))
+                placeholder_for(page_no, &e.placeholder_label())
             }
             Err(join_err) => {
                 tracing::warn!(
@@ -156,15 +191,6 @@ pub async fn extract_pdf_with_rasterizer<R: Rasterizer + ?Sized>(
 /// pages we lost vs which produced text.
 pub(crate) fn placeholder_for(page: u32, reason: &str) -> String {
     format!("<!-- page {page}: could not be read ({reason}) -->")
-}
-
-fn tesseract_failure_label(e: &TesseractError) -> String {
-    match e {
-        TesseractError::Timeout => "OCR timed out".into(),
-        TesseractError::NonZero { .. } => "OCR engine error".into(),
-        TesseractError::Spawn(_) => "OCR engine missing".into(),
-        TesseractError::Io(_) => "page image staging failed".into(),
-    }
 }
 
 fn cleanup_failure_label(e: &CleanupError) -> String {
