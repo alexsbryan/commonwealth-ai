@@ -2732,6 +2732,16 @@ impl Runtime {
         // `runtime:compaction.budget_triggered` trace, just no chip.
         session_id: Option<&str>,
     ) {
+        // v5 spike (2026-05-26): when retrieval-over-history is the
+        // primary memory mechanism for old turns, the lossy-summary
+        // compaction arm fights it (adds a re-summarised preamble
+        // that competes with the retrieval block). Env-var off lets
+        // bench A/B the two cleanly.
+        if std::env::var("SOVEREIGN_COMPACTION_DISABLE").ok().as_deref() == Some("1") {
+            tracing::debug!(conversation_id, "runtime:compaction.disabled_via_env");
+            let _ = session_id;
+            return;
+        }
         let total = context.conversation.messages.len();
         // Two-axis trigger (added 2026-05-25 in the
         // marathon-graceful pass):
@@ -2838,8 +2848,8 @@ impl Runtime {
     /// concrete context window (remote-only forwarder) — the
     /// turn-count arm carries the trigger in that case.
     ///
-    /// Walks the components the runtime knows it will splice into the
-    /// next prompt's system message:
+    /// **NARROW SENSOR — KNOWN LIMITATION.** Walks only the
+    /// components the runtime knows ABOUT BEFORE RETRIEVAL fires:
     ///   * visible conversation history (per-msg capped to
     ///     `CONV_HISTORY_CHARS_PER_MSG`),
     ///   * the compacted preamble we've already emitted on a prior
@@ -2847,11 +2857,26 @@ impl Runtime {
     ///     hot),
     ///   * recalled memories (top-K, bounded).
     ///
-    /// Retrieval-bundle pressure isn't measured here because retrieval
-    /// fires later in the handler; that path has its own ctx-aware
-    /// trim (added in the prior PR). The split is deliberate — this
-    /// function makes the decision before retrieval runs, so it must
-    /// not depend on retrieval state.
+    /// System message (persona + epistemic contract + thinking
+    /// directive + tool dossier) and retrieval bundle are NOT
+    /// measured — both fire later in the handler. The split is
+    /// deliberate (compaction decides before retrieval runs and must
+    /// not depend on retrieval state) but it makes this sensor
+    /// systematically under-count when the system+retrieval terms
+    /// are the dominant pressure source.
+    ///
+    /// Bench result (marathon_graceful 2026-05-26, three trials at
+    /// PRESSURE_THRESHOLD ∈ {0.55, 0.7}): tuning the threshold
+    /// against this narrow sensor monotonically regressed
+    /// paraphrase-judge coverage (0.764 → 0.694 → 0.639). The
+    /// thresholds that fire often enough to matter were firing
+    /// when full-prompt was actually fine, triggering wasteful
+    /// Fast-slot summarisation that lossy-compressed the preamble
+    /// across multiple invocations. PRESSURE_THRESHOLD reverted to
+    /// 0.9 (effective emergency-only); the architectural fix is a
+    /// full-prompt sensor that takes (system_estimate,
+    /// retrieval_estimate, history_estimate, response_reserve) —
+    /// captured as a kind=todo note for the next iteration cycle.
     fn estimate_compaction_pressure(
         &self,
         context: &ConversationContext,
@@ -2887,6 +2912,205 @@ impl Runtime {
         }
 
         (total > threshold, total, ctx_size)
+    }
+
+    /// Retrieval-over-history spike (2026-05-26).
+    ///
+    /// Replaces — at least on the callback workload that crushed
+    /// marathon_graceful T17-T20 — the lossy-summary mechanism with
+    /// embedding-similarity retrieval over prior turns.
+    ///
+    /// Mechanism: embed each user+assistant pair *outside* the visible
+    /// window, embed the current user message, cosine top-K (K=3),
+    /// stash the hits on `context.history_retrieval_hits`. The renderer
+    /// in `build_system_message` formats them as a "Relevant earlier
+    /// turns:" prompt section.
+    ///
+    /// Gated on `SOVEREIGN_HISTORY_RETRIEVAL=1` for the spike phase.
+    /// Off → no-op. On → runs after `maybe_compact_dropped_history`
+    /// so the two can coexist during the A/B (the renderer will show
+    /// both blocks if both fire — bench tells us which carries weight).
+    ///
+    /// Soft-fail by design: embed errors leave hits = None and the
+    /// synthesis path continues on the existing compacted preamble +
+    /// visible window.
+    pub(crate) async fn maybe_retrieve_relevant_history(
+        &self,
+        context: &mut ConversationContext,
+        user_message: &str,
+    ) {
+        eprintln!("[hist_ret] called env={:?} msgs={} usr={}",
+            std::env::var("SOVEREIGN_HISTORY_RETRIEVAL").ok(),
+            context.conversation.messages.len(),
+            &user_message.chars().take(50).collect::<String>());
+        if std::env::var("SOVEREIGN_HISTORY_RETRIEVAL").ok().as_deref() != Some("1") {
+            return;
+        }
+        tracing::warn!(
+            target: "history_retrieval",
+            messages_len = context.conversation.messages.len(),
+            "history_retrieval.entry"
+        );
+        let messages = &context.conversation.messages;
+        // Need at least one pair OLDER than the visible window. Visible
+        // window is CONV_HISTORY_TURNS most recent messages. The
+        // current user message is already pushed (runtime.rs:1386)
+        // so subtract 1.
+        if messages.len() <= crate::runtime::CONV_HISTORY_TURNS + 1 {
+            return;
+        }
+        let dropped_end = messages.len().saturating_sub(crate::runtime::CONV_HISTORY_TURNS + 1);
+        let dropped = &messages[..dropped_end];
+
+        // Build pair-shaped indexable units. Walk in (user, assistant)
+        // pairs so each unit carries the question + its answer. Lone
+        // trailing user message (if any) gets indexed alone.
+        let mut units: Vec<(usize, String)> = Vec::new();
+        let mut i = 0;
+        while i < dropped.len() {
+            let lead = &dropped[i];
+            let body = if i + 1 < dropped.len() {
+                let follow = &dropped[i + 1];
+                format!(
+                    "[{:?}] {}\n[{:?}] {}",
+                    lead.role,
+                    truncate_with_ellipsis(&lead.content, 600),
+                    follow.role,
+                    truncate_with_ellipsis(&follow.content, 600),
+                )
+            } else {
+                format!("[{:?}] {}", lead.role, truncate_with_ellipsis(&lead.content, 600))
+            };
+            units.push((i, body));
+            i += 2;
+        }
+        if units.is_empty() {
+            return;
+        }
+
+        // Embed the candidate units in a single batch + the query
+        // separately. embed_batch falls back to per-unit embed on
+        // providers that don't override it.
+        let unit_texts: Vec<String> = units.iter().map(|(_, b)| b.clone()).collect();
+        let unit_embeds = match self.inference.embed_batch(&unit_texts).await {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::debug!(error = %e, units = units.len(),
+                    "runtime:history_retrieval.embed_batch_failed");
+                return;
+            }
+        };
+        // Query enrichment (v5 tune): when the runtime extracted a
+        // topic_context for this turn, append the topic + domain to
+        // the embed-query text. Captures "switching back to <topic>"
+        // semantics that bare follow-up phrasing misses (e.g.
+        // T19 "And Linnaeus's framework — what part of his work
+        // proved least durable?" embeds toward generic biology
+        // unless we ride the topic_context anchor).
+        let mut query_text = user_message.to_string();
+        if let Some(tc) = context.topic_context.as_ref() {
+            if let Some(t) = tc.topic.as_ref() {
+                query_text.push_str("\n[topic: ");
+                query_text.push_str(t);
+                query_text.push(']');
+            }
+            if let Some(d) = tc.domain.as_ref() {
+                query_text.push_str("\n[domain: ");
+                query_text.push_str(d);
+                query_text.push(']');
+            }
+        }
+        let query_embed = match self.inference.embed_query(&query_text).await {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::debug!(error = %e,
+                    "runtime:history_retrieval.embed_query_failed");
+                return;
+            }
+        };
+
+        // Cosine score. embed/embed_query already normalize, but defend
+        // against unnormalized outputs from custom providers.
+        let normalize = |v: &Vec<f32>| -> Vec<f32> {
+            let n = v.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-8);
+            v.iter().map(|x| x / n).collect()
+        };
+        let q_norm = normalize(&query_embed);
+        let scored: Vec<(usize, String, f32, Vec<f32>)> = unit_embeds
+            .into_iter()
+            .zip(units.into_iter())
+            .map(|(emb, (idx, body))| {
+                let e_norm = normalize(&emb);
+                let sim: f32 = e_norm.iter().zip(q_norm.iter()).map(|(a, b)| a * b).sum();
+                (idx, body, sim, e_norm)
+            })
+            .collect();
+
+        // v6 tune: MMR (Maximal Marginal Relevance) selection.
+        // v5 single trial regressed T20 -0.75 — cosine top-K picks
+        // most-similar candidates, which on a "compare across Curie /
+        // Linnaeus / Galileo" synthesis turn collapses onto whichever
+        // topic dominates the topic_context (one bucket wins, two
+        // missed). MMR optimises top-K = argmax λ·sim(d,q) −
+        // (1−λ)·max sim(d, selected). λ=0.5 = balanced
+        // relevance-vs-diversity. K stays 5, floor stays 0.30.
+        const HISTORY_RETRIEVAL_TOP_K: usize = 5;
+        const HISTORY_RETRIEVAL_SIM_FLOOR: f32 = 0.30;
+        const HISTORY_RETRIEVAL_MMR_LAMBDA: f32 = 0.5;
+
+        let mut candidates: Vec<(usize, String, f32, Vec<f32>)> =
+            scored.into_iter().filter(|(_, _, s, _)| *s >= HISTORY_RETRIEVAL_SIM_FLOOR).collect();
+        // Sort once descending by relevance for stable MMR seeding.
+        candidates.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+
+        let mut selected: Vec<(usize, String, f32)> = Vec::with_capacity(HISTORY_RETRIEVAL_TOP_K);
+        let mut selected_embeds: Vec<Vec<f32>> = Vec::with_capacity(HISTORY_RETRIEVAL_TOP_K);
+
+        while selected.len() < HISTORY_RETRIEVAL_TOP_K && !candidates.is_empty() {
+            let mut best_pos = 0;
+            let mut best_score = f32::MIN;
+            for (i, c) in candidates.iter().enumerate() {
+                let max_sim_to_selected: f32 = selected_embeds
+                    .iter()
+                    .map(|s| s.iter().zip(c.3.iter()).map(|(a, b)| a * b).sum::<f32>())
+                    .fold(0.0_f32, f32::max);
+                let mmr = HISTORY_RETRIEVAL_MMR_LAMBDA * c.2
+                    - (1.0 - HISTORY_RETRIEVAL_MMR_LAMBDA) * max_sim_to_selected;
+                if mmr > best_score {
+                    best_score = mmr;
+                    best_pos = i;
+                }
+            }
+            let (idx, body, sim, emb) = candidates.remove(best_pos);
+            selected.push((idx, body, sim));
+            selected_embeds.push(emb);
+        }
+
+        let hits: Vec<crate::types::HistoryRetrievalHit> = selected
+            .into_iter()
+            .map(|(turn_index, content, similarity)| crate::types::HistoryRetrievalHit {
+                turn_index,
+                content,
+                similarity,
+            })
+            .collect();
+
+        if hits.is_empty() {
+            eprintln!("[hist_ret] NO_HITS user={:?} candidates={}",
+                user_message.chars().take(60).collect::<String>(),
+                dropped.len() / 2);
+            return;
+        }
+        let hit_summary: Vec<String> = hits
+            .iter()
+            .map(|h| format!("T{}@{:.2}({})",
+                h.turn_index, h.similarity,
+                h.content.chars().take(50).collect::<String>().replace('\n', " ")))
+            .collect();
+        eprintln!("[hist_ret] POPULATED user={:?} hits=[{}]",
+            user_message.chars().take(60).collect::<String>(),
+            hit_summary.join(" | "));
+        context.history_retrieval_hits = Some(hits);
     }
 
     /// Gather the union of `ev-Tn-NNNN` handles emitted by prior

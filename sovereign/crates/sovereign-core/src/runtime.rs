@@ -249,16 +249,27 @@ pub(crate) const CONV_HISTORY_TURNS: usize = 8;
 pub(crate) const CONV_HISTORY_CHARS_PER_MSG: usize = 500;
 
 /// Age-aware per-message char budget. Walks from the newest visible
-/// turn (age = 0) backward — recent turns keep 1000 chars of body
-/// so the user's most current exchange stays high-fidelity in the
-/// prompt; older turns compress to 300 chars so the cumulative
-/// conv-history block doesn't dominate the budget on long chats.
+/// turn (age = 0) backward — recent turns keep more body so the
+/// user's most current exchange stays high-fidelity in the prompt;
+/// older turns compress so the cumulative conv-history block
+/// doesn't dominate the budget on long chats.
 ///
-/// Rationale (2026-05-25 marathon-graceful pass): a uniform 500-char
-/// cap clips the user's current question's preceding answer just as
-/// aggressively as a 6-turns-ago answer that's served its
-/// coreference purpose. The age-aware tier puts the bytes where
-/// they earn the most context-coherence value.
+/// Tier history (marathon_graceful bench, judge_coverage canonical
+/// metric per [[feedback_bench_three_views]]):
+///   v1 (2026-05-25, default): 1000 / 600 / 300   judge=0.764
+///   v3 trial   (2026-05-26): 1000 / 600 / 500    judge=0.764
+///
+/// v3 attempted to soften the oldest tier on the hypothesis that
+/// Linnaeus-phase callbacks (T16/T19, 9-10 turn gaps) were losing
+/// coreference anchors to the 300-char floor. Single-trial bench
+/// tied v0 on judge coverage; fact_recall dropped (0.607→0.512)
+/// and src_recall rose (0.587→0.611) — both within the ±0.04-0.06
+/// trial-to-trial variance band we've observed. No positive signal,
+/// reverted to v1 tiers per ARCH §11.1 ("verify before claiming").
+///
+/// If a future bench acquires multi-trial variance bounds, retry v3
+/// — the *mechanism* (Linnaeus content lossy at ages 4-7) is sound;
+/// only the single-trial evidence was inconclusive.
 pub(crate) fn chars_for_message_age(age: usize) -> usize {
     match age {
         0..=1 => 1000,
@@ -1391,6 +1402,16 @@ impl Runtime {
         //     this entry point. The chip surface fires from the
         //     handler-level paths that have a session in scope.
         self.maybe_compact_dropped_history(&mut context, conversation_id, None).await;
+
+        // 2a.5. Retrieval-over-history spike (2026-05-26). Gated on
+        //       SOVEREIGN_HISTORY_RETRIEVAL=1. Embeds prior turn pairs
+        //       OUTSIDE the visible window, picks top-K cosine-near
+        //       the current user message, stashes hits on the context
+        //       for the renderer. Mechanism A/B vs the lossy-summary
+        //       compaction arm — see `maybe_retrieve_relevant_history`.
+        eprintln!("[runtime] about to call maybe_retrieve_relevant_history, msg_len={}", message.len());
+        self.maybe_retrieve_relevant_history(&mut context, message).await;
+        eprintln!("[runtime] returned from maybe_retrieve_relevant_history");
 
         // 2b. Tag the conversation with the skill that was active
         // when it started. The store upsert is idempotent — only

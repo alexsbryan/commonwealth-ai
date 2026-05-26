@@ -352,6 +352,7 @@ async fn run_question_routing(session: &ChatSession, q: &Question) -> RoutingRes
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
             compacted_history: None,
+            history_retrieval_hits: None,
             tool_dossier: None,
             intent_policy: None,
     };

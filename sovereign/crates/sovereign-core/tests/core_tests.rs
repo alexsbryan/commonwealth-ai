@@ -459,6 +459,7 @@ fn format_history_empty() {
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
             compacted_history: None,
+            history_retrieval_hits: None,
             tool_dossier: None,
             intent_policy: None,
     };
@@ -507,6 +508,7 @@ fn format_history_multi_turn() {
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
             compacted_history: None,
+            history_retrieval_hits: None,
             tool_dossier: None,
             intent_policy: None,
     };
@@ -551,6 +553,7 @@ fn format_history_truncates_to_max() {
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
             compacted_history: None,
+            history_retrieval_hits: None,
             tool_dossier: None,
             intent_policy: None,
     };
@@ -588,6 +591,7 @@ async fn passthrough_router_always_simple_query() {
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
             compacted_history: None,
+            history_retrieval_hits: None,
             tool_dossier: None,
             intent_policy: None,
     };
@@ -620,6 +624,7 @@ async fn noop_planner_returns_not_implemented() {
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
             compacted_history: None,
+            history_retrieval_hits: None,
             tool_dossier: None,
             intent_policy: None,
     };
@@ -1041,6 +1046,7 @@ async fn planner_generates_valid_plan() {
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
             compacted_history: None,
+            history_retrieval_hits: None,
             tool_dossier: None,
             intent_policy: None,
     };
@@ -1080,6 +1086,7 @@ async fn planner_fallback_on_garbage() {
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
             compacted_history: None,
+            history_retrieval_hits: None,
             tool_dossier: None,
             intent_policy: None,
     };

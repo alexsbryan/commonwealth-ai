@@ -321,6 +321,60 @@ max_tokens_budget, completion_tokens}`; the SettingsPanel
 
 ---
 
+## Conversation-history compaction (chat layer)
+
+The slot trims its own decode; the chat layer trims its own prompt.
+Two arms gate `maybe_compact_dropped_history`
+(`sovereign-core/src/runtime/retrieval.rs`):
+
+- **Turn-count arm** — `CONV_HISTORY_TURNS = 8`. Fires when ≥ 2
+  messages would otherwise be dropped. Default everyday path.
+- **Budget arm** — `COMPACTION_PRESSURE_THRESHOLD = 0.9` of
+  `effective_context_size`. Emergency-only. `estimate_compaction_pressure`
+  sums conv-history + memories + the existing compacted preamble; system
+  message + retrieval bundle are intentionally excluded (they fire later
+  in the handler). The narrow sensor is documented inline as a known
+  limitation — see the constant's docstring for the trial history
+  (v1@0.55 → v2@0.7 both regressed `judge_coverage` on the
+  marathon_graceful bench, reset to 0.9 = effective off until the sensor
+  measures full-prompt pressure).
+
+The visible window is age-aware: `chars_for_message_age` caps the
+per-message body at 1000 / 600 / 300 chars across ages 0-1 / 2-3 / ≥4.
+The age=≥4 tier was bumped to 500 in a single-trial v3 run that tied v0
+on judge coverage; reverted to 300 per ARCH §11.1.
+
+Glassbox: every compaction emits a `runtime:compaction.*` tracing event
+plus a `NarrationPhase::GapCheckFired` chip (suppressed below
+`COMPACTION_CHIP_MIN_DROPPED = 3` to avoid spam on short chats).
+
+Bench: `sovereign/bench/wikipedia_learn/threads.toml#marathon_graceful`
+is the 21-turn fixture covering Phase A (topic Q&A) → pivot → Phase B
+(second topic) → Phase C (third topic) → callbacks across all three.
+Baselines under `bench/wikipedia_learn/baselines/threads-marathon-graceful-*.json`.
+
+## Retrieval-over-history (spike, 2026-05-26)
+
+The v0-v3 marathon_graceful sweep surfaced a methodology smell:
+re-summarising the dropped tail every turn lossy-compresses the
+preamble. Spike replaces that mechanism (on callback workloads) with
+cosine-similarity retrieval over prior turn pairs.
+
+`Runtime::maybe_retrieve_relevant_history` runs after
+`maybe_compact_dropped_history`, embeds user+assistant pairs OUTSIDE
+the visible window (`embed_batch`), embeds the current user message
+(`embed_query`), keeps the top-K=3 hits above a similarity floor of
+0.45, and stashes them on `ConversationContext.history_retrieval_hits`.
+`build_system_message` renders them as a "Relevant earlier turns:"
+prompt section after the visible-history block.
+
+Gated on `SOVEREIGN_HISTORY_RETRIEVAL=1` while the bench validates
+whether the mechanism beats the lossy-summary approach. If v4 holds
+the line on judge_coverage and lifts late-callback fact_recall, the
+gate inverts (default-on, env var to disable).
+
+---
+
 ## See also
 
 - `commonwealth/docs/oicp-v0.3.md` — OICP wire-protocol spec.
