@@ -23,7 +23,8 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
@@ -31,6 +32,87 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use crate::error::{Error, Result};
+
+// ─── WatcherHeartbeat ───────────────────────────────────────────────────────────
+
+/// Shared liveness beacon for the watcher coordinator.
+///
+/// ## Why a heartbeat and not a bool
+///
+/// The daemon historically tracked watcher liveness with a one-shot
+/// `AtomicBool` set to `true` once `coordinator.start()` returned and
+/// never cleared. That cannot detect a watcher that *died after
+/// starting* — if the coordinator loop task panics or the underlying
+/// `notify` thread dies, the bool stays `true` forever and
+/// `lint_status`/`test_status` keep asserting the watcher is live while
+/// nothing is actually watching. The agent then trusts increasingly
+/// stale data with no signal that anything is wrong.
+///
+/// A heartbeat inverts the failure mode: the coordinator loop stamps
+/// [`stamp`](Self::stamp) on every iteration (≤ `debounce/2`, so
+/// sub-second in practice). Readers treat the watcher as live iff the
+/// last stamp is recent. When the loop stops — for *any* reason — the
+/// stamp freezes and liveness decays to `false` on its own. Death is
+/// the default, not something we have to remember to signal.
+#[derive(Debug)]
+pub struct WatcherHeartbeat {
+    /// Unix seconds of the last loop iteration. `0` == never ticked
+    /// (coordinator not started, or started but loop hasn't run yet).
+    last_tick_unix: AtomicU64,
+}
+
+impl Default for WatcherHeartbeat {
+    fn default() -> Self {
+        Self {
+            last_tick_unix: AtomicU64::new(0),
+        }
+    }
+}
+
+impl WatcherHeartbeat {
+    /// A fresh heartbeat that has never ticked. Wrapped in `Arc` because
+    /// it is shared between the coordinator loop (writer) and the status
+    /// tools (readers).
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self::default())
+    }
+
+    fn now_unix() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    }
+
+    /// Record that the coordinator loop is alive *now*. Called once per
+    /// loop iteration.
+    pub fn stamp(&self) {
+        self.last_tick_unix.store(Self::now_unix(), Ordering::Release);
+    }
+
+    /// Unix seconds of the last stamp, or `None` if the loop has never
+    /// ticked.
+    pub fn last_tick_unix(&self) -> Option<u64> {
+        match self.last_tick_unix.load(Ordering::Acquire) {
+            0 => None,
+            t => Some(t),
+        }
+    }
+
+    /// Seconds since the last stamp, or `None` if never stamped. Uses
+    /// saturating subtraction so a clock skew can't underflow into a
+    /// huge "looks live" value.
+    pub fn age_secs(&self) -> Option<u64> {
+        self.last_tick_unix()
+            .map(|t| Self::now_unix().saturating_sub(t))
+    }
+
+    /// True iff the loop stamped within `window_secs`. A never-stamped
+    /// heartbeat is never live.
+    pub fn is_live(&self, window_secs: u64) -> bool {
+        matches!(self.age_secs(), Some(age) if age <= window_secs)
+    }
+}
 
 /// True iff the path has an extension that maps to a tracked source-file
 /// language. Inlined here so `watcher_coordinator` (which lives in the
@@ -151,6 +233,7 @@ pub struct WatcherCoordinator {
     watchers: Vec<Arc<dyn BackgroundWatcher>>,
     debounce_ms: u64,
     activity: Option<Arc<dyn ActivityCallback>>,
+    heartbeat: Option<Arc<WatcherHeartbeat>>,
 }
 
 impl WatcherCoordinator {
@@ -162,6 +245,7 @@ impl WatcherCoordinator {
             watchers: Vec::new(),
             debounce_ms,
             activity: None,
+            heartbeat: None,
         }
     }
 
@@ -169,6 +253,16 @@ impl WatcherCoordinator {
     /// notified whenever files are flushed to watchers.
     pub fn with_activity(mut self, cb: Arc<dyn ActivityCallback>) -> Self {
         self.activity = Some(cb);
+        self
+    }
+
+    /// Attach a [`WatcherHeartbeat`] the loop will stamp on every
+    /// iteration. The daemon shares this same `Arc` with the status
+    /// tools so they can tell whether the loop is still alive — see the
+    /// `WatcherHeartbeat` docs for why this replaces the old one-shot
+    /// `watcher_active` bool.
+    pub fn with_heartbeat(mut self, heartbeat: Arc<WatcherHeartbeat>) -> Self {
+        self.heartbeat = Some(heartbeat);
         self
     }
 
@@ -224,9 +318,16 @@ impl WatcherCoordinator {
         let watchers = self.watchers;
         let roots = canonical_paths;
         let activity = self.activity;
+        let heartbeat = self.heartbeat;
+        // Stamp once up-front so `is_live` reads true the instant
+        // `start()` returns, before the loop's first tick lands.
+        if let Some(ref hb) = heartbeat {
+            hb.stamp();
+        }
+        let handle_heartbeat = heartbeat.clone();
 
         let task = tokio::spawn(async move {
-            run_coordinator_loop(rx, watchers, roots, debounce, activity).await;
+            run_coordinator_loop(rx, watchers, roots, debounce, activity, heartbeat).await;
         });
 
         tracing::info!(
@@ -237,6 +338,7 @@ impl WatcherCoordinator {
         Ok(CoordinatorHandle {
             _watcher: watcher,
             task,
+            heartbeat: handle_heartbeat,
         })
     }
 
@@ -254,12 +356,28 @@ impl WatcherCoordinator {
 pub struct CoordinatorHandle {
     _watcher: RecommendedWatcher,
     task: JoinHandle<()>,
+    heartbeat: Option<Arc<WatcherHeartbeat>>,
 }
 
 impl CoordinatorHandle {
     /// Abort the background task explicitly. Also called by `Drop`.
     pub fn abort(&self) {
         self.task.abort();
+    }
+
+    /// True iff the coordinator loop task is still running. Cheap,
+    /// non-blocking poll of the tokio `JoinHandle`. A supervisor uses
+    /// this to detect a panicked loop and restart the coordinator.
+    pub fn is_alive(&self) -> bool {
+        !self.task.is_finished()
+    }
+
+    /// The shared heartbeat, if one was attached via
+    /// [`WatcherCoordinator::with_heartbeat`]. Lets a supervisor check
+    /// liveness by stamp-age in addition to the coarse `is_alive` task
+    /// poll (catches a loop that's alive-but-wedged).
+    pub fn heartbeat(&self) -> Option<&Arc<WatcherHeartbeat>> {
+        self.heartbeat.as_ref()
     }
 
     /// Query the current status of all plugins. Calls each plugin's
@@ -297,14 +415,29 @@ async fn run_coordinator_loop(
     roots: Vec<PathBuf>,
     debounce: Duration,
     activity: Option<Arc<dyn ActivityCallback>>,
+    heartbeat: Option<Arc<WatcherHeartbeat>>,
 ) {
     // Map: absolute path → (last_event_at, is_delete).
     let mut pending: std::collections::HashMap<PathBuf, (Instant, bool)> =
         std::collections::HashMap::new();
 
-    let tick_interval = debounce / 2;
+    // `tick_interval` is `debounce/2`, so even a fully idle workspace
+    // wakes this loop at least that often via the timer arm. Guard
+    // against a zero-debounce config producing a zero interval (which
+    // would busy-spin) by flooring at 100ms.
+    let tick_interval = (debounce / 2).max(Duration::from_millis(100));
 
     loop {
+        // Heartbeat: stamp at the top of every iteration. Because the
+        // timer arm below fires every `tick_interval`, this stamp is
+        // refreshed sub-second on an idle workspace. If this task ever
+        // panics or returns, the stamp freezes and readers see the
+        // watcher decay to not-live on their own — no explicit
+        // death-signal needed. See `WatcherHeartbeat`.
+        if let Some(ref hb) = heartbeat {
+            hb.stamp();
+        }
+
         tokio::select! {
             maybe_event = rx.recv() => {
                 match maybe_event {
@@ -531,6 +664,76 @@ mod tests {
 
         assert_eq!(counter.load(Ordering::SeqCst), 0, "should not have been called");
         assert_eq!(pending.len(), 1, "pending should not be drained");
+    }
+
+    #[test]
+    fn heartbeat_never_stamped_is_not_live() {
+        let hb = WatcherHeartbeat::new();
+        assert_eq!(hb.last_tick_unix(), None);
+        assert_eq!(hb.age_secs(), None);
+        // A never-stamped heartbeat must never read live, no matter how
+        // generous the window — this is the "watcher never started" case.
+        assert!(!hb.is_live(0));
+        assert!(!hb.is_live(86_400));
+    }
+
+    #[test]
+    fn heartbeat_live_after_stamp() {
+        let hb = WatcherHeartbeat::new();
+        hb.stamp();
+        assert!(hb.last_tick_unix().is_some());
+        assert!(matches!(hb.age_secs(), Some(a) if a <= 1));
+        assert!(hb.is_live(30), "freshly stamped heartbeat must be live");
+    }
+
+    /// `start()` stamps the heartbeat synchronously before returning, and
+    /// the spawned loop keeps it warm. A live coordinator therefore reads
+    /// `is_live` immediately and `is_alive` (task running) is true.
+    #[tokio::test]
+    async fn started_coordinator_is_live_via_heartbeat() {
+        let tmp = std::env::temp_dir().join(format!(
+            "wc_hb_live_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let hb = WatcherHeartbeat::new();
+        let coordinator = WatcherCoordinator::new(200).with_heartbeat(Arc::clone(&hb));
+        let handle = coordinator.start(vec![tmp.clone()]).await.unwrap();
+
+        assert!(hb.is_live(30), "heartbeat must be live right after start");
+        assert!(handle.is_alive(), "loop task must be running");
+        assert!(handle.heartbeat().is_some());
+
+        // Let the timer arm tick at least once and confirm the stamp
+        // advances (loop is actually running, not just the pre-stamp).
+        let first = hb.last_tick_unix();
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        assert!(hb.last_tick_unix() >= first);
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    /// When the loop task is aborted (the failure we previously couldn't
+    /// detect), `is_alive` flips to false. The heartbeat stops advancing,
+    /// so a liveness window eventually lapses too.
+    #[tokio::test]
+    async fn aborted_loop_reports_not_alive() {
+        let tmp = std::env::temp_dir().join(format!(
+            "wc_hb_abort_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let hb = WatcherHeartbeat::new();
+        let coordinator = WatcherCoordinator::new(200).with_heartbeat(Arc::clone(&hb));
+        let handle = coordinator.start(vec![tmp.clone()]).await.unwrap();
+        assert!(handle.is_alive());
+
+        handle.abort();
+        // Give tokio a moment to mark the JoinHandle finished.
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(!handle.is_alive(), "aborted loop must report not-alive");
+
+        std::fs::remove_dir_all(&tmp).ok();
     }
 
     #[tokio::test]

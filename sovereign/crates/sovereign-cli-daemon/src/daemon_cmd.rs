@@ -21,7 +21,6 @@
 use std::io::IsTerminal as _;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_trait::async_trait;
 use corpus_engine::{CorpusEngine, EmbedFn, LintResultStore, TestResultStore};
@@ -611,15 +610,20 @@ async fn run_daemon(args: &[String]) -> i32 {
     // sovereign + commonwealth + corpus-engine in parallel. So one
     // env var lights up coverage for all three.
     let workspace_dir = resolve_workspace_dir();
-    let watcher_active_flag = Arc::new(AtomicBool::new(false));
+    // Shared liveness beacon: the coordinator loop stamps it, the
+    // status tools read it. Replaces the old one-shot `watcher_active`
+    // bool, which could not detect a watcher that died after starting.
+    let watcher_heartbeat = corpus_engine::WatcherHeartbeat::new();
     let mut lint_watcher: Option<Arc<corpus_engine::LintWatcher>> = None;
     let mut test_watcher: Option<Arc<corpus_engine::TestWatcher>> = None;
     let mut watched_lint_scope: Option<String> = None;
     let mut watched_test_scope: Option<String> = None;
-    // Held for the lifetime of `start_daemon` — its `Drop` aborts the
-    // watcher's spawned tasks. Underscored because we never read it
-    // back; the value is the side effect of holding the handle alive.
-    let mut _coordinator_handle: Option<corpus_engine::CoordinatorHandle> = None;
+    // Held for the lifetime of `start_daemon`. This is the
+    // `WatcherSupervisor`'s monitor task: dropping it aborts the
+    // monitor, which in turn drops the live coordinator handle and
+    // shuts the watcher down. Underscored because we never read it back;
+    // the value is the side effect of holding the task alive.
+    let mut _watcher_monitor: Option<tokio::task::JoinHandle<()>> = None;
 
     // ── Work atlas wiring (Phase 2) ────────────────────────────────────
     // Single shared `Arc<MeshStore>`: handed into the EmbeddedDaemon
@@ -769,38 +773,37 @@ async fn run_daemon(args: &[String]) -> i32 {
                 .and_then(|c| c.debounce_ms)
                 .or_else(|| sov_cfg.test_runner.as_ref().and_then(|c| c.debounce_ms))
                 .unwrap_or(800);
-            let mut coordinator = corpus_engine::WatcherCoordinator::new(debounce_ms);
+
+            // Collect the registered watchers once; the supervisor holds
+            // them so it can rebuild the coordinator on restart without
+            // re-deriving anything.
+            let mut watchers: Vec<Arc<dyn corpus_engine::BackgroundWatcher>> = Vec::new();
             if let Some(ref w) = lint_watcher {
-                coordinator.register(
-                    Arc::clone(w) as Arc<dyn corpus_engine::BackgroundWatcher>,
-                );
+                watchers.push(Arc::clone(w) as Arc<dyn corpus_engine::BackgroundWatcher>);
             }
             if let Some(ref w) = test_watcher {
-                coordinator.register(
-                    Arc::clone(w) as Arc<dyn corpus_engine::BackgroundWatcher>,
-                );
+                watchers.push(Arc::clone(w) as Arc<dyn corpus_engine::BackgroundWatcher>);
             }
             if let Some(ref obs) = work_atlas_observer {
-                coordinator.register(
-                    Arc::clone(obs) as Arc<dyn corpus_engine::BackgroundWatcher>,
-                );
+                watchers.push(Arc::clone(obs) as Arc<dyn corpus_engine::BackgroundWatcher>);
             }
-            match coordinator.start(vec![ws.clone()]).await {
-                Ok(handle) => {
-                    watcher_active_flag.store(true, Ordering::Release);
-                    _coordinator_handle = Some(handle);
-                    eprintln!(
-                        "sovereign daemon: watcher coordinator live on {}",
-                        ws.display()
-                    );
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        error = %e,
-                        workspace = %ws.display(),
-                        "watcher coordinator failed to start"
-                    );
-                }
+
+            // The supervisor performs the initial start AND self-heals:
+            // if the coordinator loop dies or its heartbeat freezes, it
+            // rebuilds and restarts (bounded backoff). Holding the monitor
+            // task handle keeps the watcher alive for the daemon's life.
+            let supervisor = crate::watcher_supervisor::WatcherSupervisor::new(
+                watchers,
+                vec![ws.clone()],
+                debounce_ms,
+                Arc::clone(&watcher_heartbeat),
+            );
+            _watcher_monitor = supervisor.spawn();
+            if _watcher_monitor.is_some() {
+                eprintln!(
+                    "sovereign daemon: watcher supervisor live on {} (self-healing)",
+                    ws.display()
+                );
             }
         }
     } else {
@@ -1203,7 +1206,7 @@ async fn run_daemon(args: &[String]) -> i32 {
         test_watcher.clone(),
         watched_lint_scope.clone(),
         watched_test_scope.clone(),
-        Arc::clone(&watcher_active_flag),
+        Arc::clone(&watcher_heartbeat),
         workspace_dir.clone(),
         Arc::clone(&work_atlas_store),
         work_atlas_cfg.clone(),
@@ -2202,7 +2205,7 @@ async fn build_tool_registry(
     test_watcher: Option<Arc<corpus_engine::TestWatcher>>,
     watched_lint_scope: Option<String>,
     watched_test_scope: Option<String>,
-    watcher_active_flag: Arc<AtomicBool>,
+    watcher_heartbeat: Arc<corpus_engine::WatcherHeartbeat>,
     workspace_dir: Option<PathBuf>,
     work_atlas_store: Arc<sovereign_work_atlas::WorkAtlasStore>,
     work_atlas_cfg: sovereign_work_atlas::WorkAtlasConfig,
@@ -2308,7 +2311,7 @@ async fn build_tool_registry(
     // — accurate, not silently-missing.
     {
         let mut tool = sovereign_tools::LintStatusTool::new(Arc::clone(&lint_store))
-            .with_watcher_active(Arc::clone(&watcher_active_flag));
+            .with_heartbeat(Arc::clone(&watcher_heartbeat));
         if let Some(scope) = watched_lint_scope.clone() {
             tool = tool.with_watched_scope(scope);
         }
@@ -2326,7 +2329,7 @@ async fn build_tool_registry(
     }
     {
         let mut tool = sovereign_tools::BuildTool::new(Arc::clone(&lint_store))
-            .with_watcher_active(Arc::clone(&watcher_active_flag));
+            .with_heartbeat(Arc::clone(&watcher_heartbeat));
         if let Some(scope) = watched_lint_scope {
             tool = tool.with_watched_scope(scope);
         }
@@ -2337,7 +2340,7 @@ async fn build_tool_registry(
     )));
     {
         let mut tool = sovereign_tools::TestStatusTool::new(Arc::clone(&test_store))
-            .with_watcher_active(Arc::clone(&watcher_active_flag));
+            .with_heartbeat(Arc::clone(&watcher_heartbeat));
         if let Some(scope) = watched_test_scope {
             tool = tool.with_watched_scope(scope);
         }

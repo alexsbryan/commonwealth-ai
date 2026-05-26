@@ -12,7 +12,7 @@
 //! - Constantly during active editing — this call costs microseconds.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::time::SystemTime;
 
 use async_trait::async_trait;
@@ -22,7 +22,12 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
+use corpus_engine::WatcherHeartbeat;
 use corpus_engine::test_results::TestResultStore;
+
+use super::watcher_health::{
+    apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs,
+};
 
 pub struct TestStatusTool {
     store: Arc<TestResultStore>,
@@ -32,8 +37,14 @@ pub struct TestStatusTool {
     /// The command the watcher runs, e.g. "cargo test --workspace". Passed
     /// through to the response so agents can confirm scope coverage.
     watched_scope: Option<String>,
-    /// Shared with the watcher coordinator — true while the FS watcher is live.
+    /// Legacy one-shot liveness bool (pre-heartbeat callers, e.g.
+    /// `project serve`). Superseded by `heartbeat`; preferred only when
+    /// no heartbeat is wired.
     watcher_active: Option<Arc<AtomicBool>>,
+    /// Shared coordinator heartbeat — the authoritative liveness signal.
+    /// Lets the tool detect a watcher that died after starting, which the
+    /// one-shot bool never could. See [`super::watcher_health`].
+    heartbeat: Option<Arc<WatcherHeartbeat>>,
 }
 
 impl TestStatusTool {
@@ -43,6 +54,7 @@ impl TestStatusTool {
             running_flag: None,
             watched_scope: None,
             watcher_active: None,
+            heartbeat: None,
         }
     }
 
@@ -64,6 +76,14 @@ impl TestStatusTool {
         self.watcher_active = Some(flag);
         self
     }
+
+    /// Attach the coordinator heartbeat. Preferred over
+    /// [`with_watcher_active`](Self::with_watcher_active) — it can tell a
+    /// live watcher from one that started and then died.
+    pub fn with_heartbeat(mut self, heartbeat: Arc<WatcherHeartbeat>) -> Self {
+        self.heartbeat = Some(heartbeat);
+        self
+    }
 }
 
 #[async_trait]
@@ -82,14 +102,19 @@ impl Tool for TestStatusTool {
                           ran on your current changes); \
                           `watched_scope` — the exact command the watcher runs (e.g. \
                           'cargo test --workspace'), confirming which crates are covered; \
-                          `watcher_active` — true = watcher is live and will rerun on your \
-                          next save automatically; false = watcher not running, only then \
-                          fall back to Bash. \
+                          `watcher` — the liveness object: `{live, reason, configured, \
+                          heartbeat_age_secs, hint}`. Read this FIRST. When `live` is \
+                          false the result below is orphaned (the watcher isn't running \
+                          to keep it current); `reason` says why (not_configured / \
+                          watcher_dead / unknown) and `hint` says what to do. \
+                          `watcher_active` mirrors `watcher.live` for back-compat. \
                           Status: 'fresh_passing' (all pass — safe to proceed), \
                           'fresh_failing' (failures in response), 'stale' (files changed \
                           since last run — call run_tests then poll), 'running' (in \
-                          progress — check again in 30-60s), 'never_run' (watcher not \
-                          configured — fall back to Bash)."
+                          progress — check again in 30-60s), 'watcher_down' (a completed \
+                          run exists but NO live watcher — do not trust it as current; \
+                          fall back to scripts/sovereign-test.sh per `watcher.hint`), \
+                          'never_run' (no run yet — see `watcher.reason`)."
                 .to_string(),
             parameters: json!({
                 "type": "object",
@@ -109,11 +134,22 @@ impl Tool for TestStatusTool {
             output_schema: Some(serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "status":          { "type": "string", "enum": ["fresh_passing","fresh_failing","stale","running","never_run"] },
+                    "status":          { "type": "string", "enum": ["fresh_passing","fresh_failing","stale","running","watcher_down","never_run"] },
                     "age_seconds":     { "type": "integer" },
                     "pass_count":      { "type": "integer" },
                     "fail_count":      { "type": "integer" },
                     "watcher_active":  { "type": "boolean" },
+                    "watcher": {
+                        "type": "object",
+                        "description": "Watcher liveness. Read before trusting `status`. When `live` is false the run below is orphaned.",
+                        "properties": {
+                            "live":               { "type": "boolean" },
+                            "reason":             { "type": "string", "enum": ["live","not_configured","watcher_dead","legacy_active","inferred_from_age","unknown"] },
+                            "configured":         { "type": "boolean" },
+                            "heartbeat_age_secs": { "type": ["integer","null"] },
+                            "hint":               { "type": ["string","null"] }
+                        }
+                    },
                     "watched_scope":   { "type": "string" },
                     "failures":        { "type": "array" },
                     "run_id":          { "type": "integer" },
@@ -167,10 +203,8 @@ impl Tool for TestStatusTool {
     }
 
     async fn execute(&self, _params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
-        let explicit_active = self
-            .watcher_active
-            .as_ref()
-            .map(|f| f.load(Ordering::Relaxed));
+        let legacy_active = read_legacy(&self.watcher_active);
+        let configured = self.watched_scope.is_some();
 
         // Check running flag.
         let is_running = if let Some(ref flag) = self.running_flag {
@@ -195,6 +229,13 @@ impl Tool for TestStatusTool {
             // failure mode the in-flight watcher will keep hitting
             // until someone fixes the build.
             let previous_run = build_previous_run(&self.store).await;
+            let reason = assess(&WatcherHealthInputs {
+                heartbeat: self.heartbeat.as_ref(),
+                legacy_active,
+                configured,
+                run_in_progress: true,
+                last_run_age_secs: None,
+            });
             return Ok(StepOutput::Json(json!({
                 "status": "running",
                 "summary": null,
@@ -202,7 +243,8 @@ impl Tool for TestStatusTool {
                 "stale_since": [],
                 "age_seconds": null,
                 "watched_scope": self.watched_scope,
-                "watcher_active": derive_watcher_active(explicit_active, None, true),
+                "watcher_active": reason.is_live(),
+                "watcher": watcher_json(reason, self.heartbeat.as_ref(), configured),
                 "previous_run": previous_run,
             })));
         }
@@ -213,6 +255,13 @@ impl Tool for TestStatusTool {
         })?;
 
         let Some(run) = latest else {
+            let reason = assess(&WatcherHealthInputs {
+                heartbeat: self.heartbeat.as_ref(),
+                legacy_active,
+                configured,
+                run_in_progress: false,
+                last_run_age_secs: None,
+            });
             return Ok(StepOutput::Json(json!({
                 "status": "never_run",
                 "summary": null,
@@ -220,7 +269,8 @@ impl Tool for TestStatusTool {
                 "stale_since": [],
                 "age_seconds": null,
                 "watched_scope": self.watched_scope,
-                "watcher_active": derive_watcher_active(explicit_active, None, false),
+                "watcher_active": reason.is_live(),
+                "watcher": watcher_json(reason, self.heartbeat.as_ref(), configured),
             })));
         };
 
@@ -235,13 +285,26 @@ impl Tool for TestStatusTool {
             .await
             .unwrap_or_default();
 
-        let status = if !stale.is_empty() {
+        let raw_status = if !stale.is_empty() {
             "stale"
         } else if run.passed() {
             "fresh_passing"
         } else {
             "fresh_failing"
         };
+
+        // Cross-check liveness. A completed run is only trustworthy if a
+        // watcher is actually live to have produced it against the current
+        // tree; otherwise demote to `watcher_down` so the caller falls
+        // back instead of reading a possibly-ancient run as `fresh_*`.
+        let reason = assess(&WatcherHealthInputs {
+            heartbeat: self.heartbeat.as_ref(),
+            legacy_active,
+            configured,
+            run_in_progress: false,
+            last_run_age_secs: Some(age_seconds),
+        });
+        let status = apply_liveness(raw_status, reason);
 
         let failures = self
             .store
@@ -276,7 +339,8 @@ impl Tool for TestStatusTool {
             "stale_since": stale_paths,
             "age_seconds": age_seconds,
             "watched_scope": self.watched_scope,
-            "watcher_active": derive_watcher_active(explicit_active, Some(age_seconds), false),
+            "watcher_active": reason.is_live(),
+            "watcher": watcher_json(reason, self.heartbeat.as_ref(), configured),
         })))
     }
 }
@@ -331,25 +395,6 @@ async fn build_previous_run(store: &TestResultStore) -> serde_json::Value {
         "looks_like_compile_failure": looks_like_compile_failure,
         "failures": failures,
     })
-}
-
-/// Same shape and rationale as the helper in `lint_status.rs`. See
-/// that module's doc-comment on `derive_watcher_active` for the
-/// daemon-vs-CLI fallback logic.
-const WATCHER_FRESH_SECS: u64 = 600;
-
-fn derive_watcher_active(
-    explicit: Option<bool>,
-    last_run_age_secs: Option<u64>,
-    run_in_progress: bool,
-) -> bool {
-    if let Some(flag) = explicit {
-        return flag;
-    }
-    if run_in_progress {
-        return true;
-    }
-    matches!(last_run_age_secs, Some(age) if age < WATCHER_FRESH_SECS)
 }
 
 #[cfg(test)]
@@ -441,6 +486,106 @@ mod tests {
             v["previous_run"].is_null(),
             "previous_run must be null when no completed run exists"
         );
+    }
+
+    /// THE regression for this session: a completed failing run sitting
+    /// in the store behind a watcher that isn't live (configured, but the
+    /// heartbeat never stamped — coordinator never started or died) must
+    /// report `watcher_down`, NOT `fresh_failing`. "fresh" behind a dead
+    /// watcher is the lie that sent the agent hunting for a compile error
+    /// that didn't exist.
+    #[tokio::test]
+    async fn dead_watcher_demotes_completed_run_to_watcher_down() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(
+            TestResultStore::open(&dir.path().join("test.db")).unwrap(),
+        );
+        // A completed failing run, like the 3.4-day-old run 3048.
+        let r1 = store.begin_run().await.unwrap();
+        store
+            .record_result(r1, TestResultKind::Fail, "demo::boom", Some("boom"))
+            .await
+            .unwrap();
+        store.finish_run(r1, 101).await.unwrap();
+
+        // Configured (scope set) but the heartbeat never stamped == the
+        // watcher coordinator is not alive.
+        let hb = WatcherHeartbeat::new();
+        let tool = TestStatusTool::new(Arc::clone(&store))
+            .with_watched_scope("cargo test --workspace".into())
+            .with_heartbeat(hb);
+
+        let v = match tool.execute(&json!({}), &ctx()).await.unwrap() {
+            StepOutput::Json(v) => v,
+            other => panic!("expected Json, got {other:?}"),
+        };
+
+        assert_eq!(
+            v["status"], "watcher_down",
+            "a failing run behind a dead watcher must not read fresh_failing"
+        );
+        assert_eq!(v["watcher"]["live"], false);
+        assert_eq!(v["watcher"]["reason"], "watcher_dead");
+        assert_eq!(v["watcher_active"], false);
+        assert!(v["watcher"]["hint"].is_string());
+        // The underlying summary is still available for inspection.
+        assert_eq!(v["summary"]["fail_count"], 1);
+    }
+
+    /// Same store, but a LIVE heartbeat → the run is trustworthy and the
+    /// status is the honest `fresh_failing` (not demoted).
+    #[tokio::test]
+    async fn live_watcher_keeps_fresh_failing() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(
+            TestResultStore::open(&dir.path().join("test.db")).unwrap(),
+        );
+        let r1 = store.begin_run().await.unwrap();
+        store
+            .record_result(r1, TestResultKind::Fail, "demo::boom", Some("boom"))
+            .await
+            .unwrap();
+        store.finish_run(r1, 101).await.unwrap();
+
+        let hb = WatcherHeartbeat::new();
+        hb.stamp(); // live
+        let tool = TestStatusTool::new(Arc::clone(&store))
+            .with_watched_scope("cargo test --workspace".into())
+            .with_heartbeat(hb);
+
+        let v = match tool.execute(&json!({}), &ctx()).await.unwrap() {
+            StepOutput::Json(v) => v,
+            other => panic!("expected Json, got {other:?}"),
+        };
+        assert_eq!(v["status"], "fresh_failing");
+        assert_eq!(v["watcher"]["live"], true);
+        assert_eq!(v["watcher"]["reason"], "live");
+    }
+
+    /// No runner configured (no scope) → never_run carries an explicit
+    /// `not_configured` reason with an actionable hint, instead of a bare
+    /// `watcher_active: false`.
+    #[tokio::test]
+    async fn not_configured_reports_reason_on_never_run() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(
+            TestResultStore::open(&dir.path().join("test.db")).unwrap(),
+        );
+        // Heartbeat wired (daemon mode) but no scope == this tool has no
+        // test_runner configured.
+        let hb = WatcherHeartbeat::new();
+        hb.stamp();
+        let tool = TestStatusTool::new(Arc::clone(&store)).with_heartbeat(hb);
+
+        let v = match tool.execute(&json!({}), &ctx()).await.unwrap() {
+            StepOutput::Json(v) => v,
+            other => panic!("expected Json, got {other:?}"),
+        };
+        assert_eq!(v["status"], "never_run");
+        assert_eq!(v["watcher"]["reason"], "not_configured");
+        assert_eq!(v["watcher"]["configured"], false);
+        assert_eq!(v["watcher"]["live"], false);
+        assert!(v["watcher"]["hint"].is_string());
     }
 
     /// A passing previous run should NOT flag as compile failure

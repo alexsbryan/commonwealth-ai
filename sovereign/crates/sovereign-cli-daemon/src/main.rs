@@ -10,6 +10,7 @@ mod service_install;
 mod setup_cmd;
 mod setup_config;
 mod util;
+mod watcher_supervisor;
 
 use sovereign_cli_shared::tracing_init::init_tracing;
 

@@ -187,9 +187,15 @@ impl TestEnv {
         ));
 
         // Pre-create the two indexes the watcher writes into. This
-        // matches what the bulk-install path produces in production.
+        // matches what the bulk-install path produces in production —
+        // including the closing `mark_ingestion_complete()`. The
+        // watcher's local-install gate calls `installed_indexes()`,
+        // which skips any index still flagged `ingestion_in_progress`
+        // (the state `CorpusIndex::create` leaves behind). Without the
+        // mark, the gate sees no installed corpus and short-circuits
+        // the whole tick before any portal ingest / article fetch runs.
         for corpus_id in &["wikipedia-newsworthy", "wikipedia"] {
-            CorpusIndex::create(
+            let idx = CorpusIndex::create(
                 &idx_dir.join(corpus_id),
                 corpus_id,
                 corpus_id,
@@ -200,6 +206,7 @@ impl TestEnv {
             )
             .await
             .unwrap();
+            idx.mark_ingestion_complete().unwrap();
         }
 
         let host = Arc::new(StubHost::new(label));
