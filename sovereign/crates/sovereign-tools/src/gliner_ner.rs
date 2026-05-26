@@ -159,6 +159,32 @@ pub struct GlinerExtractor {
     role_marker_re: Regex,
 }
 
+/// Single source of truth for the conversation role-marker pattern.
+///
+/// Two role-marker formats in production:
+///  - claude.ai zip export (conv-anthropic): `### [2025-08-05 14:22] user`
+///  - Sovereign-internal chat history (conversation-history): `[user]` /
+///    `[assistant]` inline markers
+///  - conversations-personal: same as conv-anthropic
+///
+/// Either format must strip so GliNER doesn't tag the literal role word
+/// as a Person. The constructor and the unit tests both build the regex
+/// from here, so the test can never silently diverge from production.
+fn role_marker_regex() -> Regex {
+    Regex::new(
+        r"(?m)(?:^###\s+\[[^\]]+\]\s+(?:user|assistant|system)\s*$|\[(?:user|assistant|system)\])",
+    )
+    .expect("static regex compiles")
+}
+
+/// Strip conversation role markers from `raw`. A pure function of
+/// (text, regex) with no model state — which is exactly why it can be
+/// unit-tested directly, without constructing a `GlinerExtractor` (and
+/// thus without fabricating a `GLiNER` model the test never uses).
+fn strip_role_markers(raw: &str, re: &Regex) -> String {
+    re.replace_all(raw, "").into_owned()
+}
+
 impl GlinerExtractor {
     /// Construct an extractor with the default model id, labels, and
     /// threshold. Reads model files from `models_root()`.
@@ -186,17 +212,7 @@ impl GlinerExtractor {
             model_id: model_id.to_string(),
             labels: labels.iter().map(|s| s.to_string()).collect(),
             threshold,
-            // Two role-marker formats in production:
-            //  - claude.ai zip export (conv-anthropic): `### [2025-08-05 14:22] user`
-            //  - Sovereign-internal chat history (conversation-history):
-            //    `[user]` / `[assistant]` inline markers
-            //  - conversations-personal: same as conv-anthropic
-            // Either format must strip so GliNER doesn't tag the
-            // literal role word as a Person.
-            role_marker_re: Regex::new(
-                r"(?m)(?:^###\s+\[[^\]]+\]\s+(?:user|assistant|system)\s*$|\[(?:user|assistant|system)\])",
-            )
-            .expect("static regex compiles"),
+            role_marker_re: role_marker_regex(),
         })
     }
 
@@ -208,7 +224,7 @@ impl GlinerExtractor {
     /// not the raw chunk — callers using offsets for highlighting
     /// need to be aware).
     pub fn preprocess(&self, raw: &str) -> String {
-        self.role_marker_re.replace_all(raw, "").into_owned()
+        strip_role_markers(raw, &self.role_marker_re)
     }
 
     /// Extract entities from one chunk. Returns mentions
@@ -476,42 +492,33 @@ pub async fn download_model(
 mod tests {
     use super::*;
 
-    fn make_stub_extractor() -> GlinerExtractor {
-        GlinerExtractor {
-            model: Mutex::new(unsafe { std::mem::zeroed() }),
-            model_id: "test".into(),
-            labels: vec!["Person".into()],
-            threshold: 0.6,
-            role_marker_re: Regex::new(
-                r"(?m)(?:^###\s+\[[^\]]+\]\s+(?:user|assistant|system)\s*$|\[(?:user|assistant|system)\])",
-            )
-            .unwrap(),
-        }
-    }
-
+    // `preprocess` is a thin wrapper over `strip_role_markers`, which
+    // is a pure function of (text, regex) with no model state. Test it
+    // directly: constructing a `GlinerExtractor` here would require a
+    // real `GLiNER` model (the model field has no valid zero bit
+    // pattern — `mem::zeroed()` aborts under the rustc validity check),
+    // and the role-marker logic never touches the model anyway.
     #[test]
     fn anthropic_role_markers_get_stripped() {
-        let extractor = make_stub_extractor();
+        let re = role_marker_regex();
         let raw = "### [2025-12-08 20:36] user\nWhat do you think about Borges?\n### [2025-12-08 20:37] assistant\nBorges is a literary giant.";
-        let processed = extractor.preprocess(raw);
+        let processed = strip_role_markers(raw, &re);
         assert!(!processed.contains("user"));
         assert!(!processed.contains("assistant"));
         assert!(processed.contains("Borges?"));
         assert!(processed.contains("literary giant"));
-        std::mem::forget(extractor);
     }
 
     #[test]
     fn sovereign_internal_role_markers_get_stripped() {
-        let extractor = make_stub_extractor();
+        let re = role_marker_regex();
         // conversation-history uses inline [user]/[assistant] markers.
         let raw = "[user] Tell me about Borges and labyrinths.\n\n[assistant] Borges treats labyrinths as a metaphor for coexistence.";
-        let processed = extractor.preprocess(raw);
+        let processed = strip_role_markers(raw, &re);
         assert!(!processed.contains("[user]"));
         assert!(!processed.contains("[assistant]"));
         assert!(processed.contains("Borges"));
         assert!(processed.contains("labyrinths"));
-        std::mem::forget(extractor);
     }
 
     #[test]

@@ -44,6 +44,12 @@ pub mod callers;
 #[cfg(feature = "treesitter")]
 pub mod symbol_lookup;
 
+// Shared watcher-liveness assessment for the lint/test/build status
+// tools. Turns the coordinator heartbeat into an explicit, actionable
+// liveness reason and demotes orphaned results away from `fresh_*`.
+#[cfg(feature = "treesitter")]
+pub mod watcher_health;
+
 // Test watcher MCP tools (require treesitter for SQLite types).
 #[cfg(feature = "treesitter")]
 pub mod test_status;

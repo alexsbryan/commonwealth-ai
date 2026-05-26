@@ -947,6 +947,24 @@ watcher** (`lint_status` / `test_status` MCP tools) for compilation
 feedback — running `cargo build` / `cargo test` directly via Bash
 contends with the watcher for the file lock and idles.
 
+**Watcher liveness is heartbeat-driven and self-healing.** The
+`WatcherCoordinator` loop stamps a shared `WatcherHeartbeat`
+(`corpus-engine/src/update/watcher_coordinator.rs`) every iteration;
+the status tools read it through `code/watcher_health.rs`. Every
+`lint_status`/`test_status`/`build` response carries a `watcher`
+object — `{live, reason, configured, heartbeat_age_secs, hint}`. When
+`live` is false the result is *orphaned* and `status` is reported as
+`watcher_down` (never `fresh_*`), so a stale run can't masquerade as
+current — the failure mode behind "the watcher silently goes stale."
+A daemon-side `WatcherSupervisor`
+(`sovereign-cli-daemon/src/watcher_supervisor.rs`) owns the coordinator
+and restarts it (bounded backoff) when the loop task dies or its
+heartbeat freezes; `sovereign doctor`'s `watcher_live` check probes the
+same signal, catching configured-but-dead — which a config-presence
+check cannot. If the runner sections are commented out in
+`.sovereign/sovereign.toml`, restore from
+`.sovereign/sovereign.toml.with-watchers`.
+
 ```sh
 cd corpus-engine && cargo build --release   # bundled assets copied via build.rs
 cd sovereign     && cargo build --release

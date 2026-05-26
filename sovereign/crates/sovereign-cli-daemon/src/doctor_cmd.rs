@@ -449,6 +449,124 @@ fn check_lint_runner(sovereign_dir: &std::path::Path) -> CheckResult {
     }
 }
 
+/// Probe the *liveness* of the lint/test watcher — distinct from
+/// `check_test_runner`/`check_lint_runner`, which only confirm a runner
+/// is *configured*. Calls the `test_status` MCP tool and reads the
+/// `watcher` health object it now returns. This is the check that
+/// catches the "configured but the coordinator died/never started"
+/// state a config-presence check structurally cannot see — the exact
+/// blind spot behind the watcher silently going stale.
+async fn check_watcher_live() -> CheckResult {
+    let resp = http_post_json(
+        "http://localhost:9741/mcp",
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": { "name": "test_status", "arguments": {} },
+        }),
+    )
+    .await;
+
+    let Some(r) = resp else {
+        return CheckResult {
+            name: "watcher_live",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Warning,
+            message: "daemon /mcp unreachable — cannot probe watcher liveness".into(),
+            repair: Repair::Executable("sovereign daemon restart".into()),
+        };
+    };
+    let Ok(json) = r.json::<serde_json::Value>().await else {
+        return CheckResult {
+            name: "watcher_live",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Warning,
+            message: "test_status returned an unparseable response".into(),
+            repair: Repair::Manual("Check daemon logs".into()),
+        };
+    };
+
+    match find_watcher_health(&json) {
+        Some(w) => {
+            let live = w["live"].as_bool().unwrap_or(false);
+            let reason = w["reason"].as_str().unwrap_or("unknown").to_string();
+            let hint = w["hint"].as_str().map(|s| s.to_string());
+            if live {
+                CheckResult {
+                    name: "watcher_live",
+                    layer: Layer::Sovereign,
+                    status: CheckStatus::Passed,
+                    message: format!("lint/test watcher live (reason: {reason})"),
+                    repair: Repair::None,
+                }
+            } else if reason == "not_configured" {
+                // The dedicated runner checks already advise on this;
+                // keep it a soft note here so we don't double-alarm.
+                CheckResult {
+                    name: "watcher_live",
+                    layer: Layer::Sovereign,
+                    status: CheckStatus::Warning,
+                    message: "lint/test watcher not configured (see test_runner / lint_runner)".into(),
+                    repair: Repair::Manual(
+                        hint.unwrap_or_else(|| {
+                            "Restore .sovereign/sovereign.toml.with-watchers and restart the daemon".into()
+                        }),
+                    ),
+                }
+            } else {
+                // Configured but NOT live — the formerly-invisible state.
+                CheckResult {
+                    name: "watcher_live",
+                    layer: Layer::Sovereign,
+                    status: CheckStatus::Warning,
+                    message: format!(
+                        "lint/test watcher NOT live (reason: {reason}) — stored results are orphaned; \
+                         the supervisor should restart it shortly"
+                    ),
+                    repair: Repair::Executable("sovereign daemon restart".into()),
+                }
+            }
+        }
+        None => CheckResult {
+            name: "watcher_live",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Warning,
+            message: "test_status returned no `watcher` health object — daemon/tool version mismatch?".into(),
+            repair: Repair::Executable("sovereign daemon restart".into()),
+        },
+    }
+}
+
+/// Recursively locate the `watcher` health object inside an MCP
+/// `tools/call` response, regardless of how the envelope wraps the tool
+/// output (structured content vs a JSON string in `content[].text`).
+/// The object is identified by its distinctive key set rather than by
+/// path, so envelope changes don't break the probe.
+fn find_watcher_health(v: &serde_json::Value) -> Option<serde_json::Value> {
+    match v {
+        serde_json::Value::Object(map) => {
+            if map.contains_key("live")
+                && map.contains_key("reason")
+                && map.contains_key("configured")
+            {
+                return Some(v.clone());
+            }
+            map.values().find_map(find_watcher_health)
+        }
+        serde_json::Value::Array(arr) => arr.iter().find_map(find_watcher_health),
+        // Tool output is sometimes embedded as a JSON string in a text
+        // content block — parse and recurse.
+        serde_json::Value::String(s) => {
+            serde_json::from_str::<serde_json::Value>(s)
+                .ok()
+                .as_ref()
+                .and_then(find_watcher_health)
+        }
+        _ => None,
+    }
+}
+
 // Commonwealth checks
 
 async fn check_daemon_running() -> CheckResult {
@@ -1493,6 +1611,7 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
     results.push(check_notes_db());
     results.push(check_test_runner(sovereign_dir));
     results.push(check_lint_runner(sovereign_dir));
+    results.push(check_watcher_live().await);
 
     // Freshness pipeline: registry-level checks that report on the
     // daemon's project watchers and the integrity of their SCIP

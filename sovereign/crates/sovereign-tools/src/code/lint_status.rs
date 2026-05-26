@@ -13,7 +13,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
@@ -23,15 +23,23 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
+use corpus_engine::WatcherHeartbeat;
 use corpus_engine::lint_results::{LintResult, LintResultStore, LintRunSummary};
+
+use super::watcher_health::{
+    apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs,
+};
 
 pub struct LintStatusTool {
     store: Arc<LintResultStore>,
     /// The command the watcher runs, e.g. "cargo check --workspace". Passed
     /// through to the response so agents can confirm scope coverage.
     watched_scope: Option<String>,
-    /// Shared with the watcher coordinator — true while the FS watcher is live.
+    /// Legacy one-shot liveness bool. Superseded by `heartbeat`.
     watcher_active: Option<Arc<AtomicBool>>,
+    /// Shared coordinator heartbeat — authoritative liveness signal. See
+    /// [`super::watcher_health`].
+    heartbeat: Option<Arc<WatcherHeartbeat>>,
     /// Workspace root, used to resolve relative paths in the `files` query
     /// param and to run `git diff` when `changed = true`. Optional because
     /// MCP-spawned daemons may not have a workspace configured; in that
@@ -46,6 +54,7 @@ impl LintStatusTool {
             store,
             watched_scope: None,
             watcher_active: None,
+            heartbeat: None,
             workspace_root: None,
         }
     }
@@ -57,6 +66,14 @@ impl LintStatusTool {
 
     pub fn with_watcher_active(mut self, flag: Arc<AtomicBool>) -> Self {
         self.watcher_active = Some(flag);
+        self
+    }
+
+    /// Attach the coordinator heartbeat. Preferred over
+    /// [`with_watcher_active`](Self::with_watcher_active) — it detects a
+    /// watcher that started and then died.
+    pub fn with_heartbeat(mut self, heartbeat: Arc<WatcherHeartbeat>) -> Self {
+        self.heartbeat = Some(heartbeat);
         self
     }
 
@@ -83,14 +100,18 @@ impl Tool for LintStatusTool {
                           edit; if large, the watcher may have been idle); \
                           `watched_scope` — the exact command the watcher runs (e.g. \
                           'cargo check --workspace'), confirming which crates are covered; \
-                          `watcher_active` — true = watcher is live and will pick up your \
-                          next save automatically; false = watcher not running, only then \
-                          fall back to Bash. \
+                          `watcher` — the liveness object `{live, reason, configured, \
+                          heartbeat_age_secs, hint}`. Read it FIRST: when `live` is false \
+                          the result below is orphaned (no watcher is running to keep it \
+                          current), `reason` says why, `hint` says what to do. \
+                          `watcher_active` mirrors `watcher.live` for back-compat. \
                           Status: 'fresh_passing' (clean, age_seconds shows recency), \
                           'fresh_failing' (errors in response), 'stale' (files changed \
                           since last run — watcher will rerun automatically on next save), \
                           'running' (in progress — check again in ~15s), \
-                          'never_run' (watcher not configured — fall back to Bash)."
+                          'watcher_down' (a completed run exists but NO live watcher — do \
+                          not trust it; fall back to scripts/sovereign-lint.sh per \
+                          `watcher.hint`), 'never_run' (no run yet — see `watcher.reason`)."
                 .to_string(),
             parameters: json!({
                 "type": "object",
@@ -128,12 +149,23 @@ impl Tool for LintStatusTool {
             output_schema: Some(serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "status":          { "type": "string", "enum": ["fresh_passing","fresh_failing","stale","running","never_run"] },
+                    "status":          { "type": "string", "enum": ["fresh_passing","fresh_failing","stale","running","watcher_down","never_run"] },
                     "age_seconds":     { "type": "integer" },
                     "pass_count":      { "type": "integer" },
                     "fail_count":      { "type": "integer" },
                     "warn_count":      { "type": "integer" },
                     "watcher_active":  { "type": "boolean" },
+                    "watcher": {
+                        "type": "object",
+                        "description": "Watcher liveness. Read before trusting `status`. When `live` is false the run below is orphaned.",
+                        "properties": {
+                            "live":               { "type": "boolean" },
+                            "reason":             { "type": "string", "enum": ["live","not_configured","watcher_dead","legacy_active","inferred_from_age","unknown"] },
+                            "configured":         { "type": "boolean" },
+                            "heartbeat_age_secs": { "type": ["integer","null"] },
+                            "hint":               { "type": ["string","null"] }
+                        }
+                    },
                     "watched_scope":   { "type": "string" },
                     "errors":          { "type": "array" },
                     "warnings":        { "type": "array" },
@@ -217,10 +249,8 @@ impl Tool for LintStatusTool {
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
-        let explicit_active = self
-            .watcher_active
-            .as_ref()
-            .map(|f| f.load(Ordering::Relaxed));
+        let legacy_active = read_legacy(&self.watcher_active);
+        let configured = self.watched_scope.is_some();
 
         // Resolve the per-file query (if any). `files` wins over
         // `changed`; both unset means workspace-only mode.
@@ -253,6 +283,13 @@ impl Tool for LintStatusTool {
                     .map(|paths| paths.iter().map(|p| never_checked_entry(p)).collect())
             };
             let previous_run = build_previous_run(&self.store, prior.as_ref()).await;
+            let reason = assess(&WatcherHealthInputs {
+                heartbeat: self.heartbeat.as_ref(),
+                legacy_active,
+                configured,
+                run_in_progress: true,
+                last_run_age_secs: None,
+            });
             return Ok(StepOutput::Json(json!({
                 "status": "running",
                 "summary": null,
@@ -261,7 +298,8 @@ impl Tool for LintStatusTool {
                 "stale_since": [],
                 "age_seconds": null,
                 "watched_scope": self.watched_scope,
-                "watcher_active": derive_watcher_active(explicit_active, None, true),
+                "watcher_active": reason.is_live(),
+                "watcher": watcher_json(reason, self.heartbeat.as_ref(), configured),
                 "files": files_block,
                 "previous_run": previous_run,
             })));
@@ -276,6 +314,13 @@ impl Tool for LintStatusTool {
             let files_block = query_paths
                 .as_ref()
                 .map(|paths| paths.iter().map(|p| never_checked_entry(p)).collect::<Vec<_>>());
+            let reason = assess(&WatcherHealthInputs {
+                heartbeat: self.heartbeat.as_ref(),
+                legacy_active,
+                configured,
+                run_in_progress: false,
+                last_run_age_secs: None,
+            });
             return Ok(StepOutput::Json(json!({
                 "status": "never_run",
                 "summary": null,
@@ -284,7 +329,8 @@ impl Tool for LintStatusTool {
                 "stale_since": [],
                 "age_seconds": null,
                 "watched_scope": self.watched_scope,
-                "watcher_active": derive_watcher_active(explicit_active, None, false),
+                "watcher_active": reason.is_live(),
+                "watcher": watcher_json(reason, self.heartbeat.as_ref(), configured),
                 "files": files_block,
             })));
         };
@@ -300,13 +346,24 @@ impl Tool for LintStatusTool {
             .await
             .unwrap_or_default();
 
-        let status = if !stale.is_empty() {
+        let raw_status = if !stale.is_empty() {
             "stale"
         } else if run.passed() {
             "fresh_passing"
         } else {
             "fresh_failing"
         };
+
+        // Demote to `watcher_down` when no live watcher could have
+        // produced this against the current tree (see watcher_health).
+        let reason = assess(&WatcherHealthInputs {
+            heartbeat: self.heartbeat.as_ref(),
+            legacy_active,
+            configured,
+            run_in_progress: false,
+            last_run_age_secs: Some(age_seconds),
+        });
+        let status = apply_liveness(raw_status, reason);
 
         let raw_failures = self.store.latest_failures(50).await.unwrap_or_default();
         let raw_warnings = self.store.latest_warnings(50).await.unwrap_or_default();
@@ -386,7 +443,8 @@ impl Tool for LintStatusTool {
             "stale_since": stale_paths,
             "age_seconds": age_seconds,
             "watched_scope": self.watched_scope,
-            "watcher_active": derive_watcher_active(explicit_active, Some(age_seconds), false),
+            "watcher_active": reason.is_live(),
+            "watcher": watcher_json(reason, self.heartbeat.as_ref(), configured),
             "files": files_block,
         })))
     }
@@ -699,39 +757,6 @@ async fn build_previous_run(
         "looks_like_compile_failure": looks_like_compile_failure,
         "errors": errors,
     })
-}
-
-/// How recently a run must have completed for the CLI-mode
-/// fallback to consider the watcher "live" (no explicit flag wired).
-/// 10 minutes is comfortably longer than any single watcher
-/// idle-poll cycle but short enough that a daemon that crashed
-/// hours ago doesn't quietly look healthy.
-const WATCHER_FRESH_SECS: u64 = 600;
-
-/// Derive `watcher_active` for the response.
-///
-/// - **Daemon mode** (explicit flag wired by `with_watcher_active`):
-///   trust the flag.
-/// - **CLI mode** (no flag — the CLI process isn't running a
-///   watcher; it's reading the daemon's shared store):
-///   - `running` branch (`run_in_progress = true`) → true (a run
-///     is happening *now*).
-///   - run exists and `age < WATCHER_FRESH_SECS` → true.
-///   - run exists but `age >= WATCHER_FRESH_SECS` → false (data
-///     is stale-ish; treat as not-actively-watched).
-///   - no run yet (`never_run`) → false.
-fn derive_watcher_active(
-    explicit: Option<bool>,
-    last_run_age_secs: Option<u64>,
-    run_in_progress: bool,
-) -> bool {
-    if let Some(flag) = explicit {
-        return flag;
-    }
-    if run_in_progress {
-        return true;
-    }
-    matches!(last_run_age_secs, Some(age) if age < WATCHER_FRESH_SECS)
 }
 
 #[cfg(test)]

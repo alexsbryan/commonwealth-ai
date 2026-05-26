@@ -161,7 +161,8 @@ pub use wikipedia_graph::{
 // index) are still treesitter-gated.
 #[cfg(feature = "stores")]
 pub use update::watcher_coordinator::{
-    ActivityCallback, BackgroundWatcher, CoordinatorHandle, WatcherCoordinator, WatcherStatus,
+    ActivityCallback, BackgroundWatcher, CoordinatorHandle, WatcherCoordinator, WatcherHeartbeat,
+    WatcherStatus,
 };
 
 #[cfg(feature = "stores")]

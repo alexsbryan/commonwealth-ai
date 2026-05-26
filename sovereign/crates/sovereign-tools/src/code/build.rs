@@ -26,7 +26,7 @@
 //! second copy of the watcher logic.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::time::SystemTime;
 
 use async_trait::async_trait;
@@ -36,7 +36,12 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
+use corpus_engine::WatcherHeartbeat;
 use corpus_engine::lint_results::LintResultStore;
+
+use super::watcher_health::{
+    apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs,
+};
 
 /// Maximum output bytes per error in the default (non-`full`)
 /// response. Each error's `output` field is truncated to this with
@@ -57,16 +62,16 @@ pub struct BuildTool {
     /// Command the watcher runs (e.g. `cargo check --workspace`).
     /// Surfaced in the response so the agent can confirm scope.
     watched_scope: Option<String>,
-    /// Shared with the watcher coordinator — true while the FS
-    /// watcher is live. When `None` we report `watcher_active=true`
-    /// (legacy behaviour: assume the watcher is running unless
-    /// explicitly told otherwise).
+    /// Legacy one-shot liveness bool. Superseded by `heartbeat`.
     watcher_active: Option<Arc<AtomicBool>>,
+    /// Shared coordinator heartbeat — authoritative liveness signal. See
+    /// [`super::watcher_health`].
+    heartbeat: Option<Arc<WatcherHeartbeat>>,
 }
 
 impl BuildTool {
     pub fn new(store: Arc<LintResultStore>) -> Self {
-        Self { store, watched_scope: None, watcher_active: None }
+        Self { store, watched_scope: None, watcher_active: None, heartbeat: None }
     }
 
     pub fn with_watched_scope(mut self, scope: String) -> Self {
@@ -76,6 +81,13 @@ impl BuildTool {
 
     pub fn with_watcher_active(mut self, flag: Arc<AtomicBool>) -> Self {
         self.watcher_active = Some(flag);
+        self
+    }
+
+    /// Attach the coordinator heartbeat. Preferred over
+    /// [`with_watcher_active`](Self::with_watcher_active).
+    pub fn with_heartbeat(mut self, heartbeat: Arc<WatcherHeartbeat>) -> Self {
+        self.heartbeat = Some(heartbeat);
         self
     }
 }
@@ -95,11 +107,15 @@ impl Tool for BuildTool {
                           contention. \
                           Pass `full: true` to receive untruncated output for each error \
                           (use sparingly — long failures balloon the response). \
+                          Read the `watcher` object first: `{live, reason, configured, \
+                          heartbeat_age_secs, hint}`. When `live` is false the result is \
+                          orphaned — no watcher is running to keep it current. \
                           Status: 'fresh_passing' (clean), 'fresh_failing' (errors in \
                           response), 'stale' (files changed since last run — watcher will \
                           rerun on next save), 'running' (in progress — check again in \
-                          ~15s), 'never_run' (watcher not configured — only then fall \
-                          back to Bash)."
+                          ~15s), 'watcher_down' (a completed run exists but NO live \
+                          watcher — fall back per `watcher.hint`), 'never_run' (no run \
+                          yet — see `watcher.reason`)."
                 .to_string(),
             parameters: json!({
                 "type": "object",
@@ -129,13 +145,14 @@ impl Tool for BuildTool {
             output_schema: Some(serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "status":         { "type": "string", "enum": ["fresh_passing","fresh_failing","stale","running","never_run"] },
+                    "status":         { "type": "string", "enum": ["fresh_passing","fresh_failing","stale","running","watcher_down","never_run"] },
                     "age_seconds":    { "type": "integer" },
                     "summary":        { "type": "object" },
                     "errors":         { "type": "array" },
                     "warnings":       { "type": "array" },
                     "stale_since":    { "type": "array" },
                     "watcher_active": { "type": "boolean" },
+                    "watcher":        { "type": "object", "description": "Liveness {live, reason, configured, heartbeat_age_secs, hint}. Read before trusting status." },
                     "watched_scope":  { "type": "string" }
                 }
             })),
@@ -173,13 +190,18 @@ impl Tool for BuildTool {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        let explicit_active = self
-            .watcher_active
-            .as_ref()
-            .map(|f| f.load(Ordering::Relaxed));
+        let legacy_active = read_legacy(&self.watcher_active);
+        let configured = self.watched_scope.is_some();
 
         // In-progress short-circuit. Same shape as LintStatusTool.
         if self.store.run_in_progress().await.unwrap_or(false) {
+            let reason = assess(&WatcherHealthInputs {
+                heartbeat: self.heartbeat.as_ref(),
+                legacy_active,
+                configured,
+                run_in_progress: true,
+                last_run_age_secs: None,
+            });
             return Ok(StepOutput::Json(json!({
                 "status": "running",
                 "summary": null,
@@ -188,7 +210,8 @@ impl Tool for BuildTool {
                 "stale_since": [],
                 "age_seconds": null,
                 "watched_scope": self.watched_scope,
-                "watcher_active": derive_watcher_active(explicit_active, None, true),
+                "watcher_active": reason.is_live(),
+                "watcher": watcher_json(reason, self.heartbeat.as_ref(), configured),
             })));
         }
 
@@ -198,6 +221,13 @@ impl Tool for BuildTool {
         })?;
 
         let Some(run) = latest else {
+            let reason = assess(&WatcherHealthInputs {
+                heartbeat: self.heartbeat.as_ref(),
+                legacy_active,
+                configured,
+                run_in_progress: false,
+                last_run_age_secs: None,
+            });
             return Ok(StepOutput::Json(json!({
                 "status": "never_run",
                 "summary": null,
@@ -206,7 +236,8 @@ impl Tool for BuildTool {
                 "stale_since": [],
                 "age_seconds": null,
                 "watched_scope": self.watched_scope,
-                "watcher_active": derive_watcher_active(explicit_active, None, false),
+                "watcher_active": reason.is_live(),
+                "watcher": watcher_json(reason, self.heartbeat.as_ref(), configured),
             })));
         };
 
@@ -217,13 +248,22 @@ impl Tool for BuildTool {
 
         let stale = self.store.stale_files_since_last_run().await.unwrap_or_default();
 
-        let status = if !stale.is_empty() {
+        let raw_status = if !stale.is_empty() {
             "stale"
         } else if run.passed() {
             "fresh_passing"
         } else {
             "fresh_failing"
         };
+
+        let reason = assess(&WatcherHealthInputs {
+            heartbeat: self.heartbeat.as_ref(),
+            legacy_active,
+            configured,
+            run_in_progress: false,
+            last_run_age_secs: Some(age_seconds),
+        });
+        let status = apply_liveness(raw_status, reason);
 
         // Top-N errors. The store sorts by recency / severity; we
         // take the prefix and truncate per-error output for the
@@ -294,28 +334,10 @@ impl Tool for BuildTool {
             "stale_since":   stale_paths,
             "age_seconds":   age_seconds,
             "watched_scope": self.watched_scope,
-            "watcher_active": derive_watcher_active(explicit_active, Some(age_seconds), false),
+            "watcher_active": reason.is_live(),
+            "watcher": watcher_json(reason, self.heartbeat.as_ref(), configured),
         })))
     }
-}
-
-/// Same shape as the helper in `lint_status.rs` / `test_status.rs`.
-/// See `lint_status::derive_watcher_active` for the daemon-vs-CLI
-/// fallback rationale.
-const WATCHER_FRESH_SECS: u64 = 600;
-
-fn derive_watcher_active(
-    explicit: Option<bool>,
-    last_run_age_secs: Option<u64>,
-    run_in_progress: bool,
-) -> bool {
-    if let Some(flag) = explicit {
-        return flag;
-    }
-    if run_in_progress {
-        return true;
-    }
-    matches!(last_run_age_secs, Some(age) if age < WATCHER_FRESH_SECS)
 }
 
 /// Truncate a string to at most `max_bytes` while landing on a
