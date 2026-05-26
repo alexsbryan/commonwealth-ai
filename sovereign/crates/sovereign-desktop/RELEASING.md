@@ -2,8 +2,12 @@
 
 The release process for the Sovereign desktop app: macOS (arm64 +
 x86_64), Linux (x86_64), Windows (x86_64). Cuts a draft GitHub Release
-with installers for all four targets. Unsigned for v1; code signing
-and auto-updates are deferred (see "Phase 2" / "Phase 3" below).
+with installers for all four targets. v1 is ad-hoc signed on macOS
+(runs, but Gatekeeper still warns) and unsigned on Windows; Developer
+ID / Authenticode signing + notarization and auto-updates are deferred
+(see "Code signing" / "Auto-updates" below). NOTE: GitHub retired the
+Intel `macos-13` runner — the `macos-x86_64` matrix leg currently hangs;
+see "Build matrix" for the Intel-coverage options.
 
 If something here is wrong or unclear, fix it in the same PR as the
 release that revealed the gap. This doc is the authoritative checklist.
@@ -246,9 +250,30 @@ Tauri produces these bundle types per platform:
 | Linux | `.AppImage`, `.deb` |
 | Windows | `.msi`, NSIS `-setup.exe` |
 
+> **⚠️ `macos-13` (Intel) is being retired by GitHub.** Symptom: the
+> `macos-x86_64` job sits on *"Waiting for a runner to pick up this job…
+> Requested labels: macos-13"* indefinitely — it never gets a runner, so
+> the matrix leg hangs (and, because `publish` is `needs: build`, no draft
+> release is created even when the other legs are green). This is
+> infrastructure, not a build bug. **Intel-coverage options (undecided as
+> of 2026-05-25, currently building arm64-only):**
+> - **arm64-only** — drop the `macos-13` row; ship Apple Silicon only.
+> - **decoupled x86_64** — add a separate `x86_64-apple-darwin` job that
+>   *cross-compiles* on a `macos-14` (Apple-Silicon) runner. `fail-fast:
+>   false` keeps an x86 failure from sinking arm64. Needs an x86_64
+>   `tesseract` sidecar (Rosetta + x86 Homebrew) for the OCR externalBin.
+> - **universal2** — one `macos-14` job builds `universal-apple-darwin`
+>   (arm64 + x86_64 lipo'd into one `.dmg`). Simplest for users but
+>   **couples** arm64's success to the x86 slice: if x86 fails, *no* Mac
+>   DMG is produced at all. Also needs the x86 `tesseract` + a fat
+>   `pdfium` (`lipo` the two arch dylibs).
+
 Linux runners need: `libwebkit2gtk-4.1-dev`, `libappindicator3-dev`,
-`librsvg2-dev`, `patchelf`, `libfuse2`, `tesseract-ocr`. The workflow
-installs these.
+`librsvg2-dev`, `patchelf`, `libfuse2`, `tesseract-ocr`, `mold`,
+`protobuf-compiler`, `libprotobuf-dev`, and the Vulkan-SDK set from
+LunarG (`libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc`).
+The workflow installs these. (`protobuf-compiler`/`libprotobuf-dev` are
+NOT preinstalled on current runner images — see Troubleshooting.)
 
 `fail-fast: false` is on — one platform failing doesn't kill the
 others, so a flaky Windows runner doesn't block the macOS / Linux
@@ -274,9 +299,23 @@ moving parts.
 
 ---
 
-## Code signing — Phase 2 (deferred)
+## Code signing
 
-When ready to invest:
+### v1 — ad-hoc (current default)
+
+`tauri.release.conf.json` sets `bundle.macOS.signingIdentity = "-"`, which
+makes Tauri **deep ad-hoc sign** the `.app` during bundling (Tauri passes
+`-` straight to `codesign`). This is the minimum needed for the app and
+its nested binaries to run on Apple Silicon — it is *not* notarization, so
+Gatekeeper still warns on first launch (recipients clear quarantine once;
+see "Sharing a local build with friends"). No cost, no secrets, no setup.
+
+Windows v1 ships unsigned (SmartScreen warns — "More info" → "Run anyway").
+
+### Phase 2 — Developer ID + notarization (deferred)
+
+When ready to invest (this is what removes the Gatekeeper/SmartScreen
+prompts):
 
 ### macOS
 
@@ -490,10 +529,38 @@ TAURI_SIGNING_PRIVATE_KEY_PASSWORD=... \
     scripts/build-desktop-macos.sh
 ```
 
-The script auto-installs Homebrew deps (`tesseract`, `lld`),
-ensures `SDKROOT` is set per `[[feedback_macos_sdkroot_for_bindgen]]`,
+The script auto-installs Homebrew deps (`tesseract`, `lld`, `protobuf`,
+`cmake`), ensures `SDKROOT` is set per `[[feedback_macos_sdkroot_for_bindgen]]`,
 stages tesseract into `binaries/`, fetches PDFium + tessdata, and runs
-`cargo tauri build`. Outputs at `target/<triple>/release/bundle/`.
+`cargo tauri build` against the release config. Outputs at
+`target/<triple>/release/bundle/`. (`protobuf` → `protoc` for
+lance-encoding; `cmake` for llama.cpp's Metal backend.)
+
+#### Sharing a local build with friends (no GitHub Actions needed)
+
+This is the route when you're out of CI minutes or just want a build for
+a few people. On an Apple-Silicon Mac, `scripts/build-desktop-macos.sh`
+(no args) produces `target/aarch64-apple-darwin/release/bundle/dmg/
+Sovereign_<ver>_aarch64.dmg`. Hand that `.dmg` over.
+
+The release config sets `bundle.macOS.signingIdentity = "-"`, so the
+build is **deep ad-hoc code-signed** during bundling. Ad-hoc signing is
+what makes the app *and its nested binaries* (the embedded daemon,
+`tesseract`, `pdfium`) runnable on Apple Silicon at all — arm64 refuses
+to exec unsigned binaries. It is **not** notarization, so recipients
+still see a Gatekeeper warning on first launch. Tell them to either:
+
+- right-click the app → **Open** → **Open**, or
+- run once: `xattr -dr com.apple.quarantine /Applications/Sovereign.app`
+
+A real Apple Developer ID + notarization is what removes that prompt
+entirely — see "Code signing — Phase 2" below. Updater `.sig` sidecars
+(the `TAURI_SIGNING_PRIVATE_KEY` path) are unrelated to launching the app
+and aren't needed for hand-shared builds.
+
+Intel-Mac friends: a plain run is arm64-only. Covering x86_64 from an
+Apple-Silicon Mac needs the same cross-compile + x86 `tesseract` work as
+CI (`--universal`); not wired up for the local script yet.
 
 ### Windows
 
@@ -525,14 +592,17 @@ config has no `externalBin` and won't error.
 
 ### macOS DMG won't open: "Sovereign is damaged and can't be opened"
 
-The classic Gatekeeper-on-unsigned-app message. Workaround:
+The classic Gatekeeper message. v1 builds are ad-hoc signed (so they run
+on Apple Silicon) but NOT notarized, so Gatekeeper still warns. Workaround
+(use `-r` for the whole bundle):
 
 ```sh
-xattr -d com.apple.quarantine /Applications/Sovereign.app
+xattr -dr com.apple.quarantine /Applications/Sovereign.app
 ```
 
-This is what users will hit on unsigned v1 builds. Consider documenting
-this in the release notes' install instructions.
+…or right-click the app → Open → Open. This is what users hit until
+Phase 2 (Developer ID + notarization). Document it in the release notes'
+install instructions / your message to friends.
 
 ### Windows SmartScreen blocks the installer
 
@@ -599,6 +669,57 @@ SPIR-V headers (`spirv-headers` — ggml-vulkan.cpp `#include`s
 `spirv-headers`, so both the Containerfile and the CI Linux apt step
 register **LunarG's Vulkan SDK apt repo** and install
 `libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc`.
+
+### Build fails: ``Could not find `protoc` `` (in `lance-encoding`)
+
+`lance-encoding`'s build script runs `prost-build`, which shells out to
+`protoc`. **None** of the GitHub runner images preinstall it (a slimming
+change — don't assume the ubuntu runner has it). Installs, per platform:
+- Linux: `apt-get install protobuf-compiler libprotobuf-dev` (the `-dev`
+  provides the well-known protos, e.g. `google/protobuf/empty.proto`).
+- macOS: `brew install protobuf`.
+- Windows: `choco install protoc` (its shim is already on PATH; the
+  brew/choco packages bundle the well-known protos).
+
+These are wired into the workflow + `build-desktop-{linux,macos}.sh`.
+
+### macOS build fails: `'path'/'string' is unavailable: introduced in macOS 10.15`
+
+In `llama-cpp-sys-4`'s ggml compile (`ggml-backend-dl.cpp` uses
+`std::filesystem`). The `cc` crate picks the deployment target as: (1)
+`MACOSX_DEPLOYMENT_TARGET` env if set, else (2) **the Xcode SDK's
+`DefaultDeploymentTarget` — 10.13 on Xcode 15.4**, else (3) arch default.
+With the env var unset it falls to 10.13, which predates `std::filesystem`.
+Fix (in the repo): root `.cargo/config.toml` sets
+`[env] MACOSX_DEPLOYMENT_TARGET = { value = "10.15", force = true }`. The
+**`force = true` is load-bearing** — a plain string value is skipped by
+cargo if the variable is already present/empty in the environment, which
+is why earlier env pins (`$GITHUB_ENV`, non-forced `[env]`) were ignored.
+The CI workflow also sets it on the Tauri-build step's `env:` as a belt.
+NB: this is NOT driven by Tauri's `minimumSystemVersion` — `tauri-build`'s
+`cargo:rustc-env` only reaches `sovereign-desktop`'s own rustc and runs
+*after* `llama-cpp-sys-4` is already built. It's a COMPILE-time floor, so
+a rustflags `link-arg` cannot fix it.
+
+### macOS build fails: `libomp not found` / `OpenMP not found`
+
+The vendored `llama-cpp-4`'s default features include `openmp`, which on
+macOS makes `llama-cpp-sys-4` build ggml with `-DGGML_OPENMP=ON` and
+demand a Homebrew `libomp` → `libomp.dylib`, a non-self-contained runtime
+dep the `.app` would have to bundle (the same trap static-linking closed).
+Fix: `sovereign-inference/Cargo.toml`'s macOS `llama-cpp-4` dep uses
+`default-features = false, features = ["metal", "mtmd"]` (drops openmp,
+keeps mtmd). Linux keeps openmp — `libgomp` is a standard system lib
+there. ggml's pthread threadpool covers CPU ops; Metal does the real work.
+
+### Windows build fails: `unresolved import std::os::fd` / `pdfium.dll not found in archive`
+
+Two separate Windows-portability fixes: (1) `sovereign-tools`'
+`extract_stage.rs` `StdoutSilencer` used Unix-only `std::os::fd` +
+`libc::dup2` + `/dev/null` — now `#[cfg(unix)]` with a `#[cfg(not(unix))]`
+no-op stub. (2) `fetch-desktop-binaries.sh` looked only in the PDFium
+archive's `lib/`, but bblanchon's `win-x64` archive puts the runtime DLL
+in `bin/pdfium.dll` (`lib/` holds only the import lib) — now searches both.
 
 ### Tesseract OCR not available on the bundled installer
 

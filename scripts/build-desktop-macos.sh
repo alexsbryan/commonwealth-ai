@@ -12,8 +12,12 @@
 #      Metal backend.
 #   3. Stage the tesseract binary into binaries/<triple>/.
 #   4. Run fetch-desktop-binaries.sh for PDFium + tessdata.
-#   5. cargo tauri build against the release config.
-#   6. Print bundle locations.
+#   5. cargo tauri build against the release config — which DEEP AD-HOC
+#      code-signs the .app (bundle.macOS.signingIdentity = "-"), so the
+#      app and its nested binaries (daemon, tesseract, pdfium) run on
+#      Apple Silicon. Ad-hoc is NOT notarization — recipients still clear
+#      Gatekeeper quarantine once (printed at the end).
+#   6. Print bundle locations + the friend-install note.
 #
 # Targets:
 #   --target aarch64-apple-darwin   (default on Apple Silicon)
@@ -166,9 +170,19 @@ fi
 log "Installing npm deps..."
 (cd sovereign/crates/sovereign-desktop && npm ci --no-audit --no-fund)
 
-# ─── Signing key visibility check ────────────────────────────────────
+# ─── Signing visibility ──────────────────────────────────────────────
+# Two independent signatures are in play; don't conflate them:
+#  - Code signing (Gatekeeper / runnability): tauri.release.conf.json sets
+#    bundle.macOS.signingIdentity = "-", so `cargo tauri build` DEEP
+#    AD-HOC signs the .app during bundling. That's what makes the app and
+#    its nested binaries run on Apple Silicon at all. It does NOT satisfy
+#    Gatekeeper — recipients clear quarantine once (note printed below).
+#    A real Developer ID (Phase 2 in RELEASING.md) removes that prompt.
+#  - Updater signing (.sig sidecars): driven by TAURI_SIGNING_PRIVATE_KEY,
+#    consumed by the in-app updater — unrelated to launching the app.
+log "Code signing: ad-hoc (bundle.macOS.signingIdentity = \"-\")"
 if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
-    log "WARNING: TAURI_SIGNING_PRIVATE_KEY not set . .app.tar.gz will be UNSIGNED."
+    log "Updater: TAURI_SIGNING_PRIVATE_KEY not set — no .sig sidecars (fine for hand-shared builds; the in-app updater just won't engage)."
 fi
 
 # ─── Build ───────────────────────────────────────────────────────────
@@ -185,3 +199,13 @@ for f in "$OUT_DIR"/dmg/*.dmg \
          "$OUT_DIR"/macos/*.app.tar.gz.sig; do
     printf '  %s\n' "$f"
 done
+
+cat <<'EOF'
+
+Sharing with friends:
+  This build is ad-hoc signed (runs on Apple Silicon) but NOT notarized,
+  so macOS Gatekeeper warns on first launch. Tell recipients to either:
+    • right-click the app → Open → Open, or
+    • run once:  xattr -dr com.apple.quarantine /Applications/Sovereign.app
+  (A Developer ID + notarization removes this — see RELEASING.md Phase 2.)
+EOF
