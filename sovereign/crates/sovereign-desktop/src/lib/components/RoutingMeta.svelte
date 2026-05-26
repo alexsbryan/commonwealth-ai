@@ -30,6 +30,13 @@
       /// the operator can tell heuristic-shortcut from LLM-Pass-1
       /// from fallback paths without scraping daemon logs.
       routing_trigger?: string;
+      /// Active chat-slot context window (sourced from
+      /// `InferenceProvider::effective_context_size`). When set, the
+      /// meta chip renders `tokens_used / context_window (X%)` and
+      /// brightens as the cap approaches — see `.ctx-tight` /
+      /// `.ctx-critical` below. `null`/absent on remote-only
+      /// providers (no local slot).
+      context_window?: number | null;
     };
     retrievedChunks?: Array<{
       title: string;
@@ -81,6 +88,27 @@
         : `${(provenance.total_latency_ms / 1000).toFixed(1)}s`
       : "",
   );
+
+  // Glassbox budget — `tokens_used / context_window (X%)`. The chip
+  // changes color at 75% (yellow) and 90% (red) so long-running
+  // marathon-style chats surface their pressure honestly before the
+  // synth aborts. `tokensPct` is null when context_window is missing
+  // (remote-only provider) so the chip falls back to the plain
+  // "{tokens_used} tok" rendering.
+  let tokensPct = $derived.by(() => {
+    if (!provenance?.context_window) return null;
+    if (provenance.tokens_used <= 0) return null;
+    return Math.min(
+      100,
+      Math.round((provenance.tokens_used / provenance.context_window) * 100),
+    );
+  });
+  let ctxBudgetClass = $derived.by(() => {
+    if (tokensPct == null) return "";
+    if (tokensPct >= 90) return "ctx-critical";
+    if (tokensPct >= 75) return "ctx-tight";
+    return "";
+  });
 </script>
 
 {#if provenance}
@@ -98,7 +126,13 @@
     {/if}
     <span class="meta-chip">{elapsedLabel}</span>
     {#if provenance.tokens_used > 0}
-      <span class="meta-chip">{provenance.tokens_used} tok</span>
+      {#if tokensPct != null && provenance.context_window}
+        <span class="meta-chip {ctxBudgetClass}">
+          {provenance.tokens_used.toLocaleString()} / {provenance.context_window.toLocaleString()} tok ({tokensPct}%)
+        </span>
+      {:else}
+        <span class="meta-chip">{provenance.tokens_used} tok</span>
+      {/if}
     {/if}
   </div>
   {#if expanded}
@@ -141,6 +175,15 @@
           ? ` \u00B7 ${provenance.tokens_used} tok`
           : ""}
       </div>
+      {#if provenance.context_window}
+        <div>
+          <strong>Context budget:</strong>
+          {provenance.tokens_used.toLocaleString()} / {provenance.context_window.toLocaleString()} tokens
+          {#if tokensPct != null}
+            ({tokensPct}% of the chat-slot window)
+          {/if}
+        </div>
+      {/if}
 
       {#if retrievedChunks.length > 0}
         <div class="sources-section">
@@ -201,6 +244,24 @@
     color: var(--accent);
     border-color: color-mix(in srgb, var(--accent) 25%, transparent);
     background: var(--accent-glow);
+  }
+
+  /* Context-budget glassbox — chip tints warmer as the turn
+     approaches the slot's n_ctx ceiling. Crosses 75% → soft yellow
+     (still safe but worth noticing); crosses 90% → red (next big
+     retrieval might trim aggressively or hit the synth budget).
+     Matches the cutoff-chip palette so the surface family reads as
+     one "budget pressure" vocabulary, not three competing signals. */
+  .meta-chip.ctx-tight {
+    color: var(--warning, #c08a3e);
+    border-color: color-mix(in srgb, var(--warning, #c08a3e) 35%, transparent);
+    background: color-mix(in srgb, var(--warning, #c08a3e) 8%, transparent);
+  }
+
+  .meta-chip.ctx-critical {
+    color: var(--error, #c45650);
+    border-color: color-mix(in srgb, var(--error, #c45650) 45%, transparent);
+    background: color-mix(in srgb, var(--error, #c45650) 10%, transparent);
   }
 
   .routing-detail {

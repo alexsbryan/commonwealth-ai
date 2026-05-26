@@ -947,6 +947,30 @@ impl ModelSlot {
             SlotInferenceMode::SingleToken { ctx }
         };
 
+        // Capture the post-allocation effective context window so
+        // operators can see when llama.cpp silently caps the requested
+        // ctx_size at the gguf's `n_ctx_train`. Repro 2026-05-25: user
+        // set `[models].context_size = 16000` in ~/.sovereign/config.toml
+        // but the primary slot reported "context window of 8192" at
+        // decode time. If `requested_n_ctx > effective_n_ctx` here, the
+        // gguf's trained context is the bottleneck — use a RoPE-scaled
+        // rebuild or pick a model with larger n_ctx_train.
+        let effective_n_ctx = match &mode {
+            SlotInferenceMode::SingleToken { ctx } => ctx.n_ctx(),
+            SlotInferenceMode::Speculative { target_ctx, .. } => target_ctx.n_ctx(),
+        };
+        let n_ctx_train = model.n_ctx_train();
+        if context_size != effective_n_ctx {
+            tracing::warn!(
+                model_id = %model_id,
+                requested_n_ctx = context_size,
+                effective_n_ctx,
+                n_ctx_train,
+                "ModelSlot::load — llama.cpp adjusted context window from configured value. \
+                 If `effective_n_ctx == n_ctx_train`, the gguf's trained context is the cap; \
+                 rebuild with RoPE scaling or pick a model with larger n_ctx_train."
+            );
+        }
         tracing::info!(
             model_id = %model_id,
             params = model.n_params(),
@@ -955,6 +979,9 @@ impl ModelSlot {
             n_threads,
             compute_backend,
             mtp = matches!(&mode, SlotInferenceMode::Speculative { .. }),
+            requested_n_ctx = context_size,
+            effective_n_ctx,
+            n_ctx_train,
             "ModelSlot::load — slot ready"
         );
 
@@ -1899,8 +1926,32 @@ impl ModelSlot {
                     .map_err(|e| Error::Inference(format!("Batch add (jump_fwd) failed: {e}")))?;
             }
 
-            ctx.decode(&mut batch)
-                .map_err(|e| Error::Inference(format!("Decode failed: {e}")))?;
+            if let Err(e) = ctx.decode(&mut batch) {
+                // Mid-generation decode failure (Decode Error -3 etc).
+                // Observed 2026-05-25 on the primary slot AFTER a prior
+                // request blew the context window: cached_tokens was
+                // already cleared at prompt-prefill time, but the
+                // llama.cpp-level KV / SSM state on the recurrent
+                // (DeltaNet) layers can carry residual data that
+                // `clear_kv_cache_seq` alone doesn't rewind.
+                //
+                // Diagnostics on the way out so the next debug pass has
+                // generation progress at error time + the same context
+                // surface the prefix-cache warn above logs. Then force
+                // a FULL `clear_kv_cache()` so the next request lands
+                // on a clean slot regardless of what the prefix-cache
+                // gate would otherwise decide.
+                tracing::warn!(
+                    error = %e,
+                    n_generated,
+                    prompt_tokens = tokens.len(),
+                    forced_run_len = forced_run.len(),
+                    elapsed_ms = started_at.elapsed().as_millis() as u64,
+                    "inference: mid-generation decode failed — clearing slot KV to protect next request"
+                );
+                ctx.clear_kv_cache();
+                return Err(Error::Inference(format!("Decode failed: {e}")));
+            }
 
             if forced_hit_break {
                 break;
@@ -1920,8 +1971,19 @@ impl ModelSlot {
                         batch
                             .add(ct, (tokens.len() + n_generated) as i32, &[0], true)
                             .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
-                        ctx.decode(&mut batch)
-                            .map_err(|e| Error::Inference(format!("Decode failed: {e}")))?;
+                        if let Err(e) = ctx.decode(&mut batch) {
+                            // Same defensive cleanup as the main loop
+                            // decode above — KV may carry residual
+                            // state on hybrid recurrent layers.
+                            tracing::warn!(
+                                error = %e,
+                                n_generated,
+                                phase = "think_budget_close",
+                                "inference: think-close decode failed — clearing slot KV"
+                            );
+                            ctx.clear_kv_cache();
+                            return Err(Error::Inference(format!("Decode failed: {e}")));
+                        }
                         n_generated += 1;
                     }
                 }
@@ -6986,6 +7048,30 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         } else {
             self.fast.model_id.clone()
         }
+    }
+
+    /// Configured primary-slot context size. This is the value passed
+    /// to `LlamaContextParams::with_n_ctx` at slot construction —
+    /// llama.cpp may pad upward to the nearest multiple of 256, so the
+    /// runtime-observed `ctx.n_ctx()` can differ by a tail-end ~255
+    /// tokens. For pre-flight budgeting that's well within the
+    /// `reserved_output` safety margin; surfacing the configured value
+    /// keeps this method sync (no `Mutex` lock) and matches the value
+    /// the user sees in Settings.
+    fn effective_context_size(&self) -> Option<u32> {
+        Some(self.primary_ctx_size)
+    }
+
+    /// The fast slot's `LlamaModel` is held by `Arc` (always loaded,
+    /// no lock needed). `n_ctx_train` comes from gguf metadata and is
+    /// shared across the family, so reading it from fast is the right
+    /// answer for both primary and fast slots when they're the same
+    /// gguf (subsume case). When primary points at a different gguf,
+    /// this returns the fast slot's value — close enough for the
+    /// Settings UI ceiling hint; the upper bound is shape-similar
+    /// across the same model family.
+    fn n_ctx_train_for_primary(&self) -> Option<u32> {
+        Some(self.fast.model.n_ctx_train())
     }
 
     /// PR-E2: filename stem of the configured code GGUF, or `None` if

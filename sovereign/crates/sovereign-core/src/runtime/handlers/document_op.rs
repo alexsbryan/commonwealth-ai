@@ -323,6 +323,7 @@ impl Runtime {
             finish_reason: prompt_response.finish_reason.clone(),
             max_tokens_budget: Some(self.inference_config.max_tokens),
             completion_tokens: prompt_response.completion_tokens,
+            context_window: self.inference.effective_context_size(),
         };
 
         let assistant_msg = Message {

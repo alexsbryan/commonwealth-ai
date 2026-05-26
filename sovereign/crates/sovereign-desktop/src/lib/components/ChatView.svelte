@@ -330,17 +330,23 @@
 
   // Sentence-stare guard: even when the slot has a specific signal,
   // the user can stare at the same sentence for many seconds during
-  // long synthesis or non-streaming fallback paths. After 1500ms with
-  // no slot-text update, append "(still working)"; after 3000ms,
-  // "(taking longer than usual)". Caps there — beyond that the diamond
-  // pulse animation provides the "still alive" cue without adding
-  // false-progress claims. Suspended when a clarification card is up
+  // long synthesis or non-streaming fallback paths. After 3500ms with
+  // no slot-text update, append " — still working"; after 7000ms,
+  // " — still on it". Caps there — beyond that the diamond pulse
+  // animation provides the "still alive" cue without adding false-
+  // progress claims. Suspended when a clarification card is up
   // (system is genuinely waiting on the user, not crunching).
-  const STALE_INTERVAL_MS = 1500;
+  //
+  // The prior cadence (1500ms steps, ending at "taking longer than
+  // usual") felt naggy because the second nudge could land less than
+  // 3s into a turn — premature when the typical synthesis is 4–8s.
+  // 3500ms steps + softer wording read as the system staying with the
+  // user, not apologising for itself.
+  const STALE_INTERVAL_MS = 3500;
   const STALE_SUFFIXES = [
     "",
-    " (still working)",
-    " (taking longer than usual)",
+    " — still working",
+    " — still on it",
   ];
   let staleRotation = $state(0);
   $effect(() => {

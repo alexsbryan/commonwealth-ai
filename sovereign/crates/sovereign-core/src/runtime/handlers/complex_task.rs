@@ -262,6 +262,7 @@ impl Runtime {
             finish_reason: synthesis.finish_reason.clone(),
             max_tokens_budget: Some(self.inference_config.max_tokens),
             completion_tokens: synthesis.completion_tokens,
+            context_window: self.inference.effective_context_size(),
         };
 
         // Epistemic-humility hook (see Runtime::maybe_collaborate).

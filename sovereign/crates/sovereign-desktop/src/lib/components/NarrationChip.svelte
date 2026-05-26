@@ -59,10 +59,15 @@
 {#if entries.length > 0}
   <div class="narration-stack" data-testid="narration-stack">
     {#each entries as entry, i (entry.elapsed_ms + "-" + i)}
+      {@const isLatest = i === entries.length - 1}
+      {@const isGapFired = phaseLabel(entry.phase) === "gap_check_fired"}
       <div
         class="narration-chip"
+        class:latest={isLatest}
+        class:bridging={isLatest && isGapFired}
         data-phase={phaseLabel(entry.phase)}
         title="Phase: {phaseLabel(entry.phase)}"
+        style:--age-step={entries.length - 1 - i}
       >
         <span class="phase-icon" aria-hidden="true">{iconFor(entry.phase)}</span>
         <span class="narration-text">{entry.text}</span>
@@ -80,6 +85,10 @@
     margin-bottom: 6px;
   }
 
+  /* Each chip carries `--age-step` (0 = newest, N = oldest). Older
+     chips recede so the most recent reads as "what's happening now"
+     instead of "fourth nag in a row." Capped at 3 visible steps of
+     decay; the runtime's 3-per-turn cap means we never go deeper. */
   .narration-chip {
     display: inline-flex;
     align-items: center;
@@ -93,6 +102,58 @@
     align-self: flex-start;
     max-width: 100%;
     font-style: italic;
+    /* Linear fade: step 0 → 1.0 alpha, step 1 → 0.65, step 2 → 0.42, step 3+ → 0.3 */
+    opacity: max(0.30, calc(1 - var(--age-step, 0) * 0.30));
+    transition: opacity 380ms cubic-bezier(0.2, 0.7, 0.2, 1),
+                transform 380ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    transform-origin: left center;
+  }
+
+  /* Latest chip — full presence + slight scale-in entrance the first
+     time it renders. Built on a CSS animation rather than a Svelte
+     transition so the fade-in fires reliably whether or not the
+     stack mounted with prior entries. */
+  .narration-chip.latest {
+    color: var(--text-secondary);
+    border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
+    background: color-mix(in srgb, var(--accent) 4%, var(--bg-secondary));
+    animation: chip-arrive 280ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+
+  /* "Bridging" state — when the latest chip is `gap_check_fired`,
+     a card is imminent. The chip grows a downward gold tether so
+     the eye links chip → card landing zone instead of treating the
+     card as an unrelated object. The tether sits below the chip in
+     the same flex column, drawn as a ::after pseudo-element. */
+  .narration-chip.bridging {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+    border-style: solid;
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-secondary));
+    position: relative;
+    /* Slow heartbeat — telegraphs "something is about to land" without
+       being a spinner. Disabled under prefers-reduced-motion. */
+    animation: chip-arrive 280ms cubic-bezier(0.2, 0.7, 0.2, 1),
+               bridge-pulse 1.8s ease-in-out 280ms infinite;
+  }
+  .narration-chip.bridging .phase-icon {
+    /* Replace the default `?` glyph visually with a more anticipatory
+       mark via CSS — keeps the icon-by-phase map intact for tests. */
+    font-size: 0.9rem;
+  }
+  .narration-chip.bridging::after {
+    content: '';
+    position: absolute;
+    left: 16px;
+    top: 100%;
+    width: 1px;
+    height: 6px;
+    background: linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--accent) 80%, transparent),
+      transparent
+    );
+    pointer-events: none;
   }
 
   .phase-icon {
@@ -115,5 +176,36 @@
     color: var(--text-muted);
     opacity: 0.7;
     font-style: normal;
+  }
+
+  @keyframes chip-arrive {
+    from {
+      opacity: 0;
+      transform: translateY(-2px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  @keyframes bridge-pulse {
+    0%, 100% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .narration-chip,
+    .narration-chip.latest,
+    .narration-chip.bridging {
+      animation: none;
+      transition: none;
+    }
+    .narration-chip.bridging::after {
+      display: none;
+    }
   }
 </style>

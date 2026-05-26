@@ -340,6 +340,34 @@ pub trait InferenceProvider: Send + Sync {
         "unknown".to_string()
     }
 
+    /// The actual context window size the chat slots are currently
+    /// configured with, after any llama.cpp-side padding /
+    /// `n_ctx_train` capping. This is the value the runtime should
+    /// budget prompts against — NOT the configured-but-not-yet-active
+    /// value from `SetupConfig`. Returns `None` on providers without
+    /// a meaningful slot context (remote API forwards over HTTP and
+    /// doesn't own a local ctx).
+    ///
+    /// Used by the KnowledgeQuery handler's pre-flight retrieval-bundle
+    /// truncation: if the assembled prompt would exceed
+    /// `effective_context_size() - reserved_output`, drop the
+    /// lowest-score chunks before synthesis. Also surfaced in
+    /// `ResponseProvenance.context_window` so the desktop chat bubble
+    /// can render a "X / N tokens" budget indicator.
+    fn effective_context_size(&self) -> Option<u32> {
+        None
+    }
+
+    /// The gguf-trained context window of the primary slot's model
+    /// (the `n_ctx_train` metadata field). This is the ceiling
+    /// llama.cpp will cap `effective_context_size()` at — useful for
+    /// the Settings UI to show "you can bump configured ctx up to N
+    /// without RoPE scaling." Returns `None` on providers that don't
+    /// own a local model (remote API).
+    fn n_ctx_train_for_primary(&self) -> Option<u32> {
+        None
+    }
+
     /// Return the model ID of a configured Code specialist slot, if the
     /// provider has one separately from its primary slot. Returns `None`
     /// on providers that collapse all chat work into `model_id_for(Slow)`

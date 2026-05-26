@@ -5,6 +5,8 @@
     detectHardware,
     getConfig,
     saveConfig,
+    getSetupContextSize,
+    setSetupContextSize,
     getIngestBudget,
     setIngestBudget,
     getMeshQuiesced,
@@ -18,6 +20,7 @@
     BootstrapSnapshot,
     DesktopConfig,
     HardwareInfo,
+    SetupContextWindow,
     StarterQuestion,
   } from "../types";
   import EnrichmentPanel from "./EnrichmentPanel.svelte";
@@ -58,6 +61,19 @@
   let saveMessage = $state("");
   let dirty = $state(false);
   let bootstrap = $state<BootstrapSnapshot | null>(null);
+
+  // ── Canonical chat-slot context window ───────────────────────
+  // Sourced from `~/.sovereign/config.toml` via the
+  // `get_setup_context_size` Tauri command. Edits route through
+  // `set_setup_context_size`, which writes the daemon config and
+  // tears down + rebuilds the desktop-embedded inference Arc.
+  // `null` until first load completes; `setupCtxBusy` covers the
+  // 15-30s reload window so the UI can disable the Save button and
+  // show progress.
+  let setupCtx = $state<SetupContextWindow | null>(null);
+  let setupCtxDraft = $state<number | null>(null);
+  let setupCtxBusy = $state(false);
+  let setupCtxMessage = $state("");
   let attachedToDaemon = $derived(bootstrap?.daemon_running === true);
 
   // ── Ingest pressure controls ──────────────────────────────────
@@ -248,7 +264,40 @@
     } catch (e) {
       console.warn("Failed to load storage budget (daemon offline?):", e);
     }
+    try {
+      setupCtx = await getSetupContextSize();
+      setupCtxDraft = setupCtx.configured;
+    } catch (e) {
+      console.warn("Failed to load context-window snapshot:", e);
+    }
   });
+
+  async function applyContextWindow() {
+    if (!setupCtx || setupCtxDraft == null) return;
+    if (setupCtxDraft === setupCtx.configured) {
+      editingContextWindow = false;
+      return;
+    }
+    if (!Number.isFinite(setupCtxDraft) || setupCtxDraft < 512) {
+      setupCtxMessage = "Context window must be at least 512 tokens.";
+      return;
+    }
+    setupCtxMessage = "";
+    setupCtxBusy = true;
+    try {
+      await setSetupContextSize(setupCtxDraft);
+      // Re-read after the rebuild settles so all three values reflect
+      // the new state (effective + n_ctx_train read from the freshly-
+      // loaded inference provider).
+      setupCtx = await getSetupContextSize();
+      setupCtxDraft = setupCtx.configured;
+      editingContextWindow = false;
+    } catch (e) {
+      setupCtxMessage = `Failed to apply: ${e}`;
+    } finally {
+      setupCtxBusy = false;
+    }
+  }
 
   async function applyStorageBudget(bytes: number | null) {
     storageStatusMessage = "";
@@ -755,30 +804,75 @@
             {/if}
           </div>
 
-          <!-- Context window -->
+          <!-- Context window — sourced from ~/.sovereign/config.toml
+               via the dedicated Tauri commands. Three values shown:
+                 • configured (editable, daemon-canonical)
+                 • effective (post-llama-pad, read-only)
+                 • n_ctx_train (gguf ceiling, read-only)
+               Edits route through `set_setup_context_size`, which
+               tears down + rebuilds the inference Arc — UI shows a
+               busy state during the 15-30s reload. -->
           <div class="cfg-entry" class:cfg-entry--open={editingContextWindow}>
             <button class="cfg-entry-display" onclick={() => editingContextWindow = !editingContextWindow} aria-expanded={editingContextWindow}>
               <span class="cfg-entry-name">Context window</span>
               <span class="cfg-entry-current">
-                <span class="cfg-entry-val">{config.context_size?.toLocaleString() ?? '—'}</span>
+                <span class="cfg-entry-val">{setupCtx?.configured?.toLocaleString() ?? '—'}</span>
                 <span class="cfg-entry-tech">tokens</span>
               </span>
-              <span class="cfg-entry-prov">{provenance('context_size')}</span>
+              <span class="cfg-entry-prov">
+                {#if setupCtx?.n_ctx_train}
+                  up to {setupCtx.n_ctx_train.toLocaleString()} in this model
+                {:else}
+                  ~/.sovereign/config.toml
+                {/if}
+              </span>
             </button>
             {#if editingContextWindow}
               <div class="cfg-entry-edit">
-                <p class="cfg-entry-question">How much of a long conversation the model can see at once. Larger windows hold long threads coherent; they also use more RAM.</p>
+                <p class="cfg-entry-question">How much of a long conversation the model can see at once. Larger windows hold long threads coherent; they also use more RAM (KV cache scales linearly).</p>
+                {#if setupCtx}
+                  <dl class="ctx-readout">
+                    <div>
+                      <dt>Currently loaded</dt>
+                      <dd>{setupCtx.effective?.toLocaleString() ?? '—'} tokens</dd>
+                    </div>
+                    <div>
+                      <dt>Model ceiling</dt>
+                      <dd>
+                        {#if setupCtx.n_ctx_train}
+                          {setupCtx.n_ctx_train.toLocaleString()} tokens (gguf <code>n_ctx_train</code>)
+                        {:else}
+                          —
+                        {/if}
+                      </dd>
+                    </div>
+                  </dl>
+                {/if}
                 <div class="inline-field">
                   <input
                     class="cfg-number-input"
                     type="number"
-                    bind:value={config.context_size}
-                    oninput={() => markDirty('context_size')}
+                    min={512}
+                    max={setupCtx?.n_ctx_train ?? 1048576}
+                    bind:value={setupCtxDraft}
+                    disabled={setupCtxBusy}
                     aria-label="Context window size in tokens"
                   />
                   <span class="inline-field-unit">tokens</span>
                 </div>
-                <button class="edit-done" onclick={() => editingContextWindow = false}>Done</button>
+                {#if setupCtxMessage}
+                  <p class="cfg-entry-error">{setupCtxMessage}</p>
+                {/if}
+                {#if setupCtxBusy}
+                  <p class="cfg-entry-progress">Reloading model with new context window… (15-30s)</p>
+                {/if}
+                <button
+                  class="edit-done"
+                  onclick={applyContextWindow}
+                  disabled={setupCtxBusy || setupCtxDraft == null || setupCtxDraft === setupCtx?.configured}
+                >
+                  {setupCtxBusy ? 'Reloading…' : 'Apply'}
+                </button>
               </div>
             {/if}
           </div>

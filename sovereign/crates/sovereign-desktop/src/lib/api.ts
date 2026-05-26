@@ -8,6 +8,7 @@ import type {
   SkillEntry,
   DesktopConfig,
   SetupConfig,
+  SetupContextWindow,
   DiscoveredModel,
   DownloadRequest,
   CorpusEntry,
@@ -376,6 +377,21 @@ export async function getConfig(): Promise<DesktopConfig> {
 
 export async function saveConfig(config: DesktopConfig): Promise<void> {
   return invoke("save_config", { config });
+}
+
+/** Read the canonical chat-slot context window state. Settings panel
+ *  uses this to render the three-value display (configured / effective
+ *  / gguf-trained ceiling) — see `SetupContextWindow` in types.ts. */
+export async function getSetupContextSize(): Promise<SetupContextWindow> {
+  return invoke("get_setup_context_size");
+}
+
+/** Update the canonical chat-slot context window. Writes
+ *  `~/.sovereign/config.toml`, kicks the daemon to reload (background),
+ *  then tears down + rebuilds the desktop-embedded inference Arc.
+ *  Returns when the rebuild settles — typically 15-30s on Metal. */
+export async function setSetupContextSize(newCtx: number): Promise<void> {
+  return invoke("set_setup_context_size", { newCtx });
 }
 
 export async function isSetupComplete(): Promise<boolean> {

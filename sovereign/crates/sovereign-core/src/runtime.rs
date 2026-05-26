@@ -1937,6 +1937,30 @@ impl Runtime {
                         StreamFrame::Finish { reason, usage } => {
                             observed_completion_tokens =
                                 usage.as_ref().map(|u| u.completion_tokens);
+                            // FinishReason::Error means the slot's
+                            // generate_stream_sync_with_finish returned
+                            // an Err (context overflow, decode failure,
+                            // tokenizer rejection). Without surfacing it
+                            // here the post-stream path saves a 0-char
+                            // assistant message and the gap-check fires
+                            // a misleading InformationRequest. Forward
+                            // as an error frame so the desktop renders
+                            // a real failure state instead of "empty
+                            // answer + please paste a source." Repro
+                            // 2026-05-25: primary slot n_ctx=8192 vs
+                            // synth prompt 8522 tokens.
+                            if let crate::types::FinishReason::Error(ref msg) = reason {
+                                tracing::warn!(
+                                    finish_reason = "error",
+                                    error = %msg,
+                                    chars_streamed = full_text.len(),
+                                    "kq-stream: slot terminated with Finish::Error — propagating as error frame"
+                                );
+                                let _ = tx
+                                    .send(Err(crate::error::Error::Inference(msg.clone())))
+                                    .await;
+                                return;
+                            }
                             observed_finish = Some(reason);
                         }
                         StreamFrame::Error(msg) => {
@@ -2004,6 +2028,7 @@ impl Runtime {
                     finish_reason: Some(finish_reason_typed),
                     max_tokens_budget: Some(max_budget),
                     completion_tokens: Some(completion_tokens_val),
+                    context_window: inference.effective_context_size(),
                 };
                 let metadata_json = serde_json::json!({
                     "streamed": true,
@@ -2479,6 +2504,24 @@ impl Runtime {
                     StreamFrame::Finish { reason, usage } => {
                         observed_completion_tokens =
                             usage.as_ref().map(|u| u.completion_tokens);
+                        // See the matching block in the KQ stream
+                        // spawn above — Finish::Error means the slot
+                        // bailed mid-stream (context overflow, decode
+                        // failure, etc.). Forward as an error frame
+                        // so the desktop doesn't save a 0-char
+                        // message and trigger a misleading gap check.
+                        if let crate::types::FinishReason::Error(ref msg) = reason {
+                            tracing::warn!(
+                                finish_reason = "error",
+                                error = %msg,
+                                chars_streamed = full_text.len(),
+                                "deep-stream: slot terminated with Finish::Error — propagating as error frame"
+                            );
+                            let _ = tx
+                                .send(Err(crate::error::Error::Inference(msg.clone())))
+                                .await;
+                            return;
+                        }
                         observed_finish = Some(reason);
                     }
                     StreamFrame::Error(msg) => {
@@ -2523,6 +2566,7 @@ impl Runtime {
                 finish_reason: Some(finish_reason_typed),
                 max_tokens_budget: Some(max_budget),
                 completion_tokens: Some(completion_tokens_val),
+                context_window: inference.effective_context_size(),
             };
             let metadata_json = serde_json::json!({
                 "streamed": true,

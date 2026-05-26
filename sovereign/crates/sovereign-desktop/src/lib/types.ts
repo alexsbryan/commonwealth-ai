@@ -115,7 +115,14 @@ export interface DesktopConfig {
   skills_dir: string;
   active_skills: string[];
   enabled_tools: string[];
-  context_size: number;
+  /** **Deprecated.** Kept for backwards compat with desktop.toml files
+   *  written before the SetupConfig merge. The canonical home is now
+   *  `~/.sovereign/config.toml`'s `[models].context_size`, surfaced via
+   *  the `get_setup_context_size` / `set_setup_context_size` Tauri
+   *  commands. Settings UI reads/writes through those; this field
+   *  exists only so existing TOMLs deserialise without losing the
+   *  pre-merge value during one-shot migration. */
+  context_size?: number | null;
   search_backend: SearchBackendConfig;
   setup_complete: boolean;
   selected_tier: string | null;
@@ -160,6 +167,30 @@ export interface DesktopConfig {
    *  default), the workspace switcher is hidden in the chat sidebar.
    *  Toggled from Settings → Advanced. */
   enable_recipe_authoring: boolean;
+}
+
+/** Snapshot of the canonical chat-slot context window state, sourced
+ *  from `~/.sovereign/config.toml` plus the loaded gguf's
+ *  `n_ctx_train`. Returned by the `get_setup_context_size` Tauri
+ *  command; the Settings panel renders the triple side-by-side so the
+ *  user can see configured vs. effective vs. gguf-ceiling. */
+export interface SetupContextWindow {
+  /** Value persisted in `~/.sovereign/config.toml`'s
+   *  `[models].context_size`, or the daemon-side default (16384) when
+   *  no explicit value is set. Editable. */
+  configured: number;
+  /** The value the running primary slot was actually built with —
+   *  what `clamp_max_tokens` and the runtime budget against. Usually
+   *  equals `configured` (post llama-cpp 256-byte pad). May differ
+   *  immediately after a hot reload until the next inference call
+   *  refreshes the slot's resident state. `null` when the active
+   *  provider doesn't own a local slot (remote API forwarding). */
+  effective: number | null;
+  /** GGUF-declared `n_ctx_train` for the primary slot's model. The
+   *  upper bound llama.cpp will silently cap `configured` at without
+   *  a RoPE-scaling rebuild. `null` when the active provider doesn't
+   *  own a local model. */
+  n_ctx_train: number | null;
 }
 
 export interface SearchBackendConfig {
