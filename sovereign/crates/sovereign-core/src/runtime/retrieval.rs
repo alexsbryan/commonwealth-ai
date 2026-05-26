@@ -2939,17 +2939,14 @@ impl Runtime {
         context: &mut ConversationContext,
         user_message: &str,
     ) {
-        eprintln!("[hist_ret] called env={:?} msgs={} usr={}",
-            std::env::var("SOVEREIGN_HISTORY_RETRIEVAL").ok(),
-            context.conversation.messages.len(),
-            &user_message.chars().take(50).collect::<String>());
-        if std::env::var("SOVEREIGN_HISTORY_RETRIEVAL").ok().as_deref() != Some("1") {
+        // Default-on as of 2026-05-26 marathon_graceful spike outcome.
+        // `SOVEREIGN_HISTORY_RETRIEVAL=0` disables for A/B compares.
+        if std::env::var("SOVEREIGN_HISTORY_RETRIEVAL").ok().as_deref() == Some("0") {
             return;
         }
-        tracing::warn!(
-            target: "history_retrieval",
+        tracing::debug!(
             messages_len = context.conversation.messages.len(),
-            "history_retrieval.entry"
+            "runtime:history_retrieval.entry"
         );
         let messages = &context.conversation.messages;
         // Need at least one pair OLDER than the visible window. Visible
@@ -3036,12 +3033,52 @@ impl Runtime {
             v.iter().map(|x| x / n).collect()
         };
         let q_norm = normalize(&query_embed);
+
+        // v7 entity-aware retrieval. When the runtime has a GLiNER
+        // extractor wired, extract entities from the query (user
+        // message + topic_context) and from each candidate pair, then
+        // hybrid-score: 0.6·cosine + 0.4·jaccard. Fixes the v6 T17
+        // failure mode where abstract callbacks ("church-and-science
+        // theme") cosine-matched the wrong topic. GLiNER unavailable
+        // → behaves exactly like v6 (pure cosine + MMR).
+        const HYBRID_COSINE_WEIGHT: f32 = 0.6;
+        const HYBRID_JACCARD_WEIGHT: f32 = 0.4;
+        let query_entities: std::collections::HashSet<String> = if let Some(g) = self.gliner.as_ref() {
+            g.extract_entities(&query_text).into_iter().collect()
+        } else {
+            std::collections::HashSet::new()
+        };
+        if !query_entities.is_empty() {
+            tracing::debug!(
+                entities = ?query_entities,
+                "runtime:history_retrieval.query_entities"
+            );
+        }
+
+        let jaccard = |a: &std::collections::HashSet<String>, b: &std::collections::HashSet<String>| -> f32 {
+            if a.is_empty() || b.is_empty() {
+                return 0.0;
+            }
+            let inter = a.intersection(b).count() as f32;
+            let union = a.union(b).count() as f32;
+            if union == 0.0 { 0.0 } else { inter / union }
+        };
+
+        let gliner = self.gliner.clone();
         let scored: Vec<(usize, String, f32, Vec<f32>)> = unit_embeds
             .into_iter()
             .zip(units.into_iter())
             .map(|(emb, (idx, body))| {
                 let e_norm = normalize(&emb);
-                let sim: f32 = e_norm.iter().zip(q_norm.iter()).map(|(a, b)| a * b).sum();
+                let cos: f32 = e_norm.iter().zip(q_norm.iter()).map(|(a, b)| a * b).sum();
+                let sim = if let Some(g) = gliner.as_ref() {
+                    let pair_ents: std::collections::HashSet<String> =
+                        g.extract_entities(&body).into_iter().collect();
+                    let j = jaccard(&query_entities, &pair_ents);
+                    HYBRID_COSINE_WEIGHT * cos + HYBRID_JACCARD_WEIGHT * j
+                } else {
+                    cos
+                };
                 (idx, body, sim, e_norm)
             })
             .collect();
@@ -3096,20 +3133,26 @@ impl Runtime {
             .collect();
 
         if hits.is_empty() {
-            eprintln!("[hist_ret] NO_HITS user={:?} candidates={}",
-                user_message.chars().take(60).collect::<String>(),
-                dropped.len() / 2);
+            tracing::debug!(
+                candidates = dropped.len() / 2,
+                "runtime:history_retrieval.no_hits_above_floor"
+            );
             return;
         }
+        // Glassbox per-hit summary at debug. Captures the picks chosen
+        // by hybrid (cosine·0.6 + jaccard·0.4) + MMR for post-mortem
+        // analysis of "did retrieval surface the right earlier turn?"
+        // RUST_LOG=sovereign_core::runtime::retrieval=debug to see it.
         let hit_summary: Vec<String> = hits
             .iter()
-            .map(|h| format!("T{}@{:.2}({})",
-                h.turn_index, h.similarity,
-                h.content.chars().take(50).collect::<String>().replace('\n', " ")))
+            .map(|h| format!("T{}@{:.2}", h.turn_index, h.similarity))
             .collect();
-        eprintln!("[hist_ret] POPULATED user={:?} hits=[{}]",
-            user_message.chars().take(60).collect::<String>(),
-            hit_summary.join(" | "));
+        tracing::debug!(
+            hits = hits.len(),
+            top_sim = hits[0].similarity,
+            picked = %hit_summary.join(","),
+            "runtime:history_retrieval.populated"
+        );
         context.history_retrieval_hits = Some(hits);
     }
 

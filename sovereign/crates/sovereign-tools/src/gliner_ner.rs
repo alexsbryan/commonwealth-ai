@@ -335,6 +335,34 @@ impl GlinerExtractor {
     }
 }
 
+/// Implementation of the `sovereign-core::traits::EntityExtractor`
+/// trait. Wraps `GlinerExtractor::extract` and dedupes by entity
+/// text (lower-cased). The trait elides the label because
+/// retrieval-side scoring only needs the entity STRING for
+/// jaccard overlap, not its NER type.
+///
+/// Errors from `extract` (rare, typically ORT runtime issues) are
+/// downgraded to an empty Vec — entity-aware retrieval falls back
+/// to pure cosine on that turn instead of crashing the synthesis
+/// path. The retrieval call sites already log soft-failures via
+/// `tracing::debug!`.
+impl sovereign_core::traits::EntityExtractor for GlinerExtractor {
+    fn extract_entities(&self, text: &str) -> Vec<String> {
+        let Ok(mentions) = self.extract(text) else {
+            return Vec::new();
+        };
+        let mut seen = std::collections::HashSet::new();
+        let mut out = Vec::with_capacity(mentions.len());
+        for m in mentions {
+            let key = m.text.to_lowercase();
+            if seen.insert(key.clone()) {
+                out.push(key);
+            }
+        }
+        out
+    }
+}
+
 /// Collapse internal whitespace + trim. GliNER's span text
 /// occasionally crosses newlines in the source (e.g. multi-line
 /// "Jonathan\nSwift") because the model operates on the chunk

@@ -480,6 +480,31 @@ pub async fn build_session_with_skills(
     if let Some(m) = mesh_knowledge {
         runtime = runtime.with_mesh_knowledge(m);
     }
+    // GLiNER entity extractor for entity-aware retrieval-over-history
+    // (`Runtime::maybe_retrieve_relevant_history`). Best-effort: probe
+    // the default model id; if installed, load it and wire it onto
+    // the Runtime. Failures soft-fall-through to pure cosine + MMR
+    // — the bench/chat path keeps working without GLiNER.
+    {
+        let model_id = sovereign_tools::gliner_ner::DEFAULT_MODEL_ID;
+        if sovereign_tools::gliner_ner::probe_model_available(model_id) {
+            match sovereign_tools::gliner_ner::GlinerExtractor::new_default() {
+                Ok(g) => {
+                    let arc: Arc<dyn sovereign_core::traits::EntityExtractor> = Arc::new(g);
+                    runtime = runtime.with_gliner(arc);
+                    tracing::info!(model = model_id, "bootstrap: GLiNER entity extractor loaded");
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "bootstrap: GLiNER probe ok but load failed; entity-aware retrieval disabled");
+                }
+            }
+        } else {
+            tracing::debug!(
+                model = model_id,
+                "bootstrap: GLiNER model not installed; entity-aware retrieval disabled (falls back to cosine+MMR)"
+            );
+        }
+    }
     // Atlas Layer 0: load any installed Wikipedia link graph. Probes
     // `<indexes_dir>/<corpus>/wikipedia_graph.db` for each installed
     // corpus and, on the first hit, wires it into the Runtime. Today
