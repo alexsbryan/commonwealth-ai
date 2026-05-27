@@ -158,19 +158,21 @@ default engine and tesseract removed from the bundle:
   are absent.
 - `tauri.release.conf.json` bundles `binaries/pdfium/*` + `binaries/paddle-ocr/ppocr-en-v4v5/*`
   as resources; the tesseract `externalBin` + `tessdata` are gone. RELEASING.md §"External
-  binaries" updated. Models/pdfium are gitignored; `fetch-desktop-binaries.sh` still TODO (stage
-  by hand for now — commands in RELEASING.md).
+  binaries" updated. Models/pdfium are gitignored and staged by
+  `scripts/fetch-desktop-binaries.sh` (rewritten for paddle+pdfium, tesseract steps dropped;
+  CI `desktop-release.yml` trimmed to match). Clean-checkout production path verified:
+  fetch → release build → OCR.
 - Verified: the `.app` boots to `OCR context installed (PaddleOCR)`, resolving both assets from
   `Contents/Resources/binaries/`; release bake-off against those exact files reproduced CER
   0.0031. `.app` is 191 MB (down from ~397 MB unstripped).
 
 **Still open:**
-1. `scripts/fetch-desktop-binaries.sh` — referenced by CI but never written; add a `paddle-ocr`
-   section (curl the 3 model files) so CI/onboarding don't stage by hand.
-2. Nice-to-have: confirm on a **real scan** (skew/noise — tesseract's weak case, where paddle
+1. Nice-to-have: confirm on a **real scan** (skew/noise — tesseract's weak case, where paddle
    should widen its lead). The born-digital oracle is tesseract's *best* case, so these numbers
    are a conservative floor for paddle's relative value.
-3. If the ~2.3× latency gap bites, vectorize the scalar normalize loops in `detect.rs`/`recognize.rs`.
+2. If the ~2.3× latency gap bites, vectorize the scalar normalize loops in `detect.rs`/`recognize.rs`.
+3. CI: `desktop-release.yml` is updated but the full mac/linux/win matrix hasn't been run since
+   the swap — first tagged release will exercise the trimmed workflow + new fetch script end-to-end.
 
 **Harness caveat:** single-page isolation (`--skip-pages N --max-pages 1`) can mis-align the
 oracle because `pdf_extract` and `pdfium` may disagree on page boundaries at an offset;
