@@ -25,6 +25,32 @@ fn run(args: &[&str]) -> Output {
     sovereign().args(args).output().expect("spawn sovereign-cli")
 }
 
+/// Retired `project` / `atos` verbs print their banner from inside the
+/// `sovereign-cli-dev` sibling (the dispatcher forwards there). `cargo
+/// test` builds the dispatcher but not the sibling bin, so without a
+/// prior `cargo build --bins` we skip rather than false-fail with
+/// "cannot find sibling binary" — mirrors the python3_available() gate.
+fn siblings_built() -> bool {
+    let dir = std::path::Path::new(env!("CARGO_BIN_EXE_sovereign-cli"))
+        .parent()
+        .expect("CARGO_BIN_EXE_sovereign-cli has a parent dir");
+    ["sovereign-cli-dev", "sovereign-cli-daemon", "sovereign-cli-llm"]
+        .iter()
+        .all(|b| dir.join(b).is_file())
+}
+
+macro_rules! require_siblings {
+    () => {
+        if !siblings_built() {
+            eprintln!(
+                "skip: sibling CLI bins not built next to sovereign-cli — \
+                 run `cargo build --bins`"
+            );
+            return;
+        }
+    };
+}
+
 fn stderr(out: &Output) -> String {
     String::from_utf8_lossy(&out.stderr).to_string()
 }
@@ -46,6 +72,7 @@ fn assert_exit_zero(out: &Output, label: &str) {
 /// demanded it is gone with the rest of the body.)
 #[test]
 fn project_found_is_retired_no_op() {
+    require_siblings!();
     let out = run(&["project", "found"]);
     assert_exit_zero(&out, "project found");
     let err = stderr(&out);
@@ -68,6 +95,7 @@ fn project_found_is_retired_no_op() {
 /// Same retirement contract for `sovereign atos provision`.
 #[test]
 fn atos_provision_is_retired_no_op() {
+    require_siblings!();
     let out = run(&["atos", "provision"]);
     assert_exit_zero(&out, "atos provision");
     let err = stderr(&out);
@@ -90,6 +118,7 @@ fn atos_provision_is_retired_no_op() {
 /// we never silently swallow a retired command).
 #[test]
 fn retirement_banner_pointer_obeys_quiet_env() {
+    require_siblings!();
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_sovereign-cli"));
     cmd.env("SOVEREIGN_QUIET_DEPRECATIONS", "1");
     let out = cmd

@@ -242,6 +242,34 @@ impl PythonSyntaxValidator {
     }
 }
 
+/// Resolve a timeout-wrapper binary for the python3 syntax probe.
+/// Prefers GNU `timeout`, then macOS-coreutils `gtimeout`; returns
+/// `None` when neither is on PATH so the caller invokes python3
+/// directly. Probed once per process and cached — the probe spawns
+/// `<bin> --help`, which is cheap and side-effect-free.
+fn timeout_prefix() -> Option<(&'static str, &'static [&'static str])> {
+    use std::process::{Command, Stdio};
+    use std::sync::OnceLock;
+    static CHOICE: OnceLock<Option<&'static str>> = OnceLock::new();
+    let bin = CHOICE.get_or_init(|| {
+        for cand in ["timeout", "gtimeout"] {
+            let ok = Command::new(cand)
+                .arg("--help")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if ok {
+                return Some(cand);
+            }
+        }
+        None
+    });
+    bin.map(|b| (b, &["--kill-after=1", "10"][..]))
+}
+
 impl SyntaxValidator for PythonSyntaxValidator {
     fn language_id(&self) -> &'static str {
         "Python"
@@ -253,7 +281,9 @@ impl SyntaxValidator for PythonSyntaxValidator {
 
     fn check_file(&self, path: &Path, content: &str) -> Vec<SyntaxError> {
         use std::io::Write;
-        use std::process::{Command, Stdio};
+        use std::process::Stdio;
+
+        const PY_SCRIPT: &str = "import ast, sys; ast.parse(sys.stdin.read())";
 
         // Wrap python3 in `timeout(1)` so a spinning / hung subprocess
         // can never wedge the bench. Observed 2026-05-23: orphaned
@@ -262,21 +292,35 @@ impl SyntaxValidator for PythonSyntaxValidator {
         // after 10s, SIGKILL after 10+1s. Syntax check should
         // complete in <100ms on well-formed input, so 10s is a
         // generous ceiling that never trips legitimately.
-        let mut child = match Command::new("timeout")
-            .args([
-                "--kill-after=1",
-                "10",
-                "python3",
-                "-c",
-                "import ast, sys; ast.parse(sys.stdin.read())",
-            ])
+        //
+        // GNU `timeout` is not present on macOS by default, so we fall
+        // back to `gtimeout` (coreutils) and, failing both, run python3
+        // directly. The wrapper is hang-insurance, not a correctness
+        // requirement — without it the validator still parses, it just
+        // loses the runaway-subprocess guard on hosts that lack any
+        // timeout binary. Before this fallback, a missing `timeout`
+        // made the *spawn itself* fail on macOS → the validator
+        // fail-opened on every file and silently caught nothing.
+        let mut cmd = match timeout_prefix() {
+            Some((bin, pre)) => {
+                let mut c = std::process::Command::new(bin);
+                c.args(pre).arg("python3").arg("-c").arg(PY_SCRIPT);
+                c
+            }
+            None => {
+                let mut c = std::process::Command::new("python3");
+                c.arg("-c").arg(PY_SCRIPT);
+                c
+            }
+        };
+        let mut child = match cmd
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
         {
             Ok(c) => c,
-            Err(_) => return Vec::new(), // fail-open if timeout/python3 unavailable
+            Err(_) => return Vec::new(), // fail-open if python3 unavailable
         };
         if let Some(mut stdin) = child.stdin.take() {
             // Best-effort write; if the pipe closes early we'll still

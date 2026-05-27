@@ -17,6 +17,16 @@
 //! a pure no-op on top of the original handler.
 
 pub async fn run(args: &[String]) -> i32 {
+    // `--help` is answered here, by the dispatcher, before any sibling
+    // spawn — matching every other flat verb (serve_cmd, drift_cmd, …).
+    // Help must never require the 240 MB sovereign-cli-dev sibling to be
+    // built: before this guard, `sovereign init --help` blindly spawned
+    // it and died with "cannot find sibling binary" when it wasn't.
+    if crate::util::help::wants_help(args) {
+        crate::util::help::print(&HELP);
+        return 0;
+    }
+
     // `project-init` lives in the sovereign-cli-dev sibling binary.
     // We spawn (not exec) so we can chain into `serve --background`
     // after a successful init.
@@ -52,6 +62,21 @@ pub async fn run(args: &[String]) -> i32 {
     let _ = crate::serve_cmd::run(&bg_args).await;
     0
 }
+
+const HELP: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign init",
+    summary: "Index the current workspace for code intelligence, then start the MCP server.",
+    sections: &[
+        crate::util::help::HelpSection::Usage(
+            "sovereign init [--no-serve] [--port N] [--data-dir DIR]   Index, then serve --background",
+        ),
+        crate::util::help::HelpSection::Notes(
+            "Renamed from `sovereign project init` (the old name still works and forwards here). \
+             After indexing succeeds, auto-spawns `sovereign serve --background` so a live MCP \
+             server comes up on :9741 — pass --no-serve to skip that.",
+        ),
+    ],
+};
 
 /// Find the `sovereign-cli-dev` sibling. Mirrors the lookup in
 /// `crate::dev_bin` but kept inline because `init` needs a
