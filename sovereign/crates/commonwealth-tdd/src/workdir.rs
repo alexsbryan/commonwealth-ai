@@ -104,6 +104,12 @@ fn is_system_path(path: &Path) -> bool {
     const ROOTS: &[&str] = &[
         "/", "/etc", "/usr", "/var", "/bin", "/sbin", "/lib",
         "/lib64", "/boot", "/root", "/sys", "/proc", "/dev",
+        // macOS firmlinks /etc → /private/etc and /tmp → /private/tmp,
+        // so `canonicalize()` rewrites a bare `/etc` to `/private/etc`
+        // and the guard above would miss it. Include the resolved forms.
+        // Deliberately NOT `/private/var`: macOS tempdirs live under
+        // `/private/var/folders/...` and must stay usable as workdirs.
+        "/private/etc", "/private/tmp",
     ];
     if normalized == "/" {
         return true;
@@ -122,8 +128,18 @@ fn is_system_path(path: &Path) -> bool {
     // enough that we accept this false-positive risk; the gate is
     // a safety net, not a precision tool.
     if let Some(home) = home_dir_string() {
-        if normalized == home || normalized == format!("{home}/.config") {
-            return true;
+        // `normalized` is the canonicalized input path; compare it
+        // against both the literal $HOME and its canonical form. On
+        // macOS a tempdir-backed HOME like /var/folders/… canonicalizes
+        // to /private/var/folders/…, so the literal compare alone would
+        // miss it.
+        let home_canon = std::fs::canonicalize(&home)
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| home.clone());
+        for h in [&home, &home_canon] {
+            if normalized == *h || normalized == format!("{h}/.config") {
+                return true;
+            }
         }
     }
     false

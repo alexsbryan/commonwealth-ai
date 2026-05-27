@@ -26,6 +26,32 @@ fn run(args: &[&str]) -> Output {
     sovereign().args(args).output().expect("spawn sovereign-cli")
 }
 
+/// `daemon` / `setup` / `install-service` delegate into the
+/// `sovereign-cli-daemon` sibling. `cargo test` builds the dispatcher
+/// but not that sibling's bin artifact, so without a prior `cargo build
+/// --bins` we skip rather than false-fail with "cannot find sibling
+/// binary" — mirrors the python3_available() prerequisite-gate pattern.
+fn siblings_built() -> bool {
+    let dir = std::path::Path::new(env!("CARGO_BIN_EXE_sovereign-cli"))
+        .parent()
+        .expect("CARGO_BIN_EXE_sovereign-cli has a parent dir");
+    ["sovereign-cli-dev", "sovereign-cli-daemon", "sovereign-cli-llm"]
+        .iter()
+        .all(|b| dir.join(b).is_file())
+}
+
+macro_rules! require_siblings {
+    () => {
+        if !siblings_built() {
+            eprintln!(
+                "skip: sibling CLI bins not built next to sovereign-cli — \
+                 run `cargo build --bins`"
+            );
+            return;
+        }
+    };
+}
+
 fn combined(out: &Output) -> String {
     format!(
         "{}{}",
@@ -40,6 +66,7 @@ fn combined(out: &Output) -> String {
 /// users won't know how to drive the new flow.
 #[test]
 fn daemon_help_documents_setup_only_and_bare_invocation() {
+    require_siblings!();
     let out = run(&["daemon", "--help"]);
     assert!(out.status.success(), "daemon --help exit: {:?}", out.status.code());
     let text = combined(&out);
@@ -57,6 +84,7 @@ fn daemon_help_documents_setup_only_and_bare_invocation() {
 /// does so users can find it after Phase 4 splits it from setup.
 #[test]
 fn install_service_help_documents_purpose() {
+    require_siblings!();
     let out = run(&["install-service", "--help"]);
     assert!(
         out.status.success(),
@@ -82,6 +110,7 @@ fn install_service_help_documents_purpose() {
 /// service got registered.
 #[test]
 fn install_service_rejects_unknown_flag() {
+    require_siblings!();
     let out = run(&["install-service", "--bogus-flag"]);
     assert!(
         !out.status.success(),
@@ -123,6 +152,7 @@ fn daemon_status_does_not_panic() {
 /// from `--help` that service registration moved.
 #[test]
 fn setup_help_still_works_after_phase4_shim() {
+    require_siblings!();
     let out = run(&["setup", "--help"]);
     assert!(out.status.success(), "setup --help exit: {:?}", out.status.code());
     let text = combined(&out);
@@ -143,6 +173,7 @@ fn setup_help_still_works_after_phase4_shim() {
 /// non-flag tokens like `frobnicate` should not.
 #[test]
 fn daemon_rejects_unknown_subcommand() {
+    require_siblings!();
     let out = run(&["daemon", "frobnicate"]);
     assert!(
         !out.status.success(),

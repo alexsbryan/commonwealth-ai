@@ -62,6 +62,35 @@ fn stderr(out: &Output) -> String {
     String::from_utf8_lossy(&out.stderr).to_string()
 }
 
+/// The flat verbs delegate into sibling crate binaries
+/// (`sovereign-cli-dev`, `-daemon`, `-llm`). `cargo test` builds the
+/// dispatcher but NOT those sibling bin artifacts, so a bare `cargo
+/// test` without a prior `cargo build --bins` can't exercise dispatch
+/// end-to-end. When the siblings are absent we skip rather than
+/// false-fail with "cannot find sibling binary" — the same
+/// prerequisite-gate pattern the Python-validator tests use for
+/// `python3_available()`.
+fn siblings_built() -> bool {
+    let dir = std::path::Path::new(env!("CARGO_BIN_EXE_sovereign-cli"))
+        .parent()
+        .expect("CARGO_BIN_EXE_sovereign-cli has a parent dir");
+    ["sovereign-cli-dev", "sovereign-cli-daemon", "sovereign-cli-llm"]
+        .iter()
+        .all(|b| dir.join(b).is_file())
+}
+
+macro_rules! require_siblings {
+    () => {
+        if !siblings_built() {
+            eprintln!(
+                "skip: sibling CLI bins not built next to sovereign-cli — \
+                 run `cargo build --bins`"
+            );
+            return;
+        }
+    };
+}
+
 /// New-name probe: `sovereign <args> --help` exits 0. Verifies that
 /// the new top-level module exists, is wired into main.rs's match,
 /// and routes through `util::help::wants_help` at the top of `run`.
@@ -94,6 +123,7 @@ fn banner_fires(legacy_args: &[&str], expected_old: &str, expected_new: &str) {
 
 #[test]
 fn alias_init() {
+    require_siblings!();
     help_runs(&["init"]);
     // `sovereign project init --help` short-circuits cleanly; using
     // --help here exercises the alias path's banner with no side
@@ -107,6 +137,7 @@ fn alias_init() {
 
 #[test]
 fn alias_status() {
+    require_siblings!();
     help_runs(&["status"]);
     banner_fires(
         &["project", "status", "--help"],
@@ -117,6 +148,7 @@ fn alias_status() {
 
 #[test]
 fn alias_audit() {
+    require_siblings!();
     help_runs(&["audit"]);
     banner_fires(
         &["project", "audit", "--help"],
@@ -129,6 +161,7 @@ fn alias_audit() {
 
 #[test]
 fn alias_charter() {
+    require_siblings!();
     help_runs(&["charter"]);
     banner_fires(
         &["project", "charter", "--help"],
@@ -139,6 +172,7 @@ fn alias_charter() {
 
 #[test]
 fn alias_amend() {
+    require_siblings!();
     help_runs(&["amend"]);
     banner_fires(
         &["project", "amend", "--help"],
@@ -149,6 +183,7 @@ fn alias_amend() {
 
 #[test]
 fn alias_design() {
+    require_siblings!();
     help_runs(&["design"]);
     banner_fires(
         &["project", "design", "--help"],
@@ -159,6 +194,7 @@ fn alias_design() {
 
 #[test]
 fn alias_plan() {
+    require_siblings!();
     help_runs(&["plan"]);
     banner_fires(
         &["project", "plan", "--help"],
@@ -169,6 +205,7 @@ fn alias_plan() {
 
 #[test]
 fn alias_serve() {
+    require_siblings!();
     help_runs(&["serve"]);
     banner_fires(
         &["project", "serve", "--help"],
@@ -179,6 +216,7 @@ fn alias_serve() {
 
 #[test]
 fn alias_refresh() {
+    require_siblings!();
     help_runs(&["refresh"]);
     banner_fires(
         &["project", "refresh", "--help"],
@@ -197,6 +235,7 @@ fn alias_refresh() {
 
 #[test]
 fn alias_milestone() {
+    require_siblings!();
     help_runs(&["milestone"]);
     // The banner's "new name" hint is the full positional shape so
     // copy-paste lands the user in a working invocation.
@@ -209,6 +248,7 @@ fn alias_milestone() {
 
 #[test]
 fn alias_drift() {
+    require_siblings!();
     help_runs(&["drift"]);
     banner_fires(&["atos", "spec"], "sovereign atos spec", "sovereign drift");
 }
@@ -227,6 +267,7 @@ fn alias_notes() {
 
 #[test]
 fn quiet_env_suppresses_banner() {
+    require_siblings!();
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_sovereign-cli"));
     cmd.env("SOVEREIGN_QUIET_DEPRECATIONS", "1");
     let out = cmd
