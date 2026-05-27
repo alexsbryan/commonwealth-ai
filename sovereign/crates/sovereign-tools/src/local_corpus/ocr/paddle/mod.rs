@@ -107,7 +107,15 @@ impl std::error::Error for PaddleError {}
 #[derive(Debug, Clone)]
 pub struct PaddleConfig {
     /// Detection: cap the longer image side at this many px before the
-    /// multiple-of-32 round (RapidOCR uses 960).
+    /// multiple-of-32 round. RapidOCR's stock default is 960, but that is
+    /// tuned for already-small inputs — on a 300-dpi full page (~2480×3508)
+    /// it downsamples the page to ~27%, collapsing adjacent body-text lines
+    /// into a single probability-map blob → 2-line crops → garbled CTC
+    /// output. The 2026-05-27 bake-off swept this knob: at 960 The Prince
+    /// scored CER 0.137 (scrambled lines); at 1600 it dropped to 0.0031,
+    /// beating tesseract (0.0036). Effective text separation depends only
+    /// on this cap (page-px ∝ dpi cancels against the downscale ratio), so
+    /// a fixed 1600 is dpi-independent. See `docs/OCR_PADDLE_ENGINE.md`.
     pub det_limit_side_len: u32,
     /// Detection: probability-map binarization threshold.
     pub det_thresh: f32,
@@ -126,7 +134,10 @@ pub struct PaddleConfig {
 impl Default for PaddleConfig {
     fn default() -> Self {
         Self {
-            det_limit_side_len: 960,
+            // 1600 (not RapidOCR's stock 960) — see the field doc: 960
+            // merges adjacent lines on 300-dpi full pages. 1600 hit
+            // CER 0.0031 on the bake-off, beating tesseract.
+            det_limit_side_len: 1600,
             det_thresh: 0.3,
             det_box_thresh: 0.6,
             det_unclip_ratio: 1.5,

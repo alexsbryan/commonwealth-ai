@@ -52,6 +52,7 @@ struct Args {
     skip_pages: usize, // drop this many leading pages (skip front matter)
     unclip: Option<f32>,
     box_thresh: Option<f32>,
+    det_limit: Option<u32>, // det_limit_side_len override (line-separation knob)
     run_tesseract: bool,
 }
 
@@ -63,6 +64,7 @@ fn parse_args() -> Result<Args, String> {
     let mut skip_pages = 0usize;
     let mut unclip = None;
     let mut box_thresh = None;
+    let mut det_limit = None;
     let mut run_tesseract = true;
 
     let mut it = std::env::args().skip(1);
@@ -83,6 +85,10 @@ fn parse_args() -> Result<Args, String> {
                 box_thresh =
                     Some(next(&mut it, "--box-thresh")?.parse().map_err(|e| format!("--box-thresh: {e}"))?)
             }
+            "--det-limit" => {
+                det_limit =
+                    Some(next(&mut it, "--det-limit")?.parse().map_err(|e| format!("--det-limit: {e}"))?)
+            }
             "--skip-pages" => {
                 skip_pages = next(&mut it, "--skip-pages")?
                     .parse()
@@ -102,6 +108,7 @@ fn parse_args() -> Result<Args, String> {
         skip_pages,
         unclip,
         box_thresh,
+        det_limit,
         run_tesseract,
     })
 }
@@ -229,9 +236,12 @@ fn run(args: Args) -> Result<(), String> {
     if let Some(b) = args.box_thresh {
         cfg.det_box_thresh = b;
     }
+    if let Some(l) = args.det_limit {
+        cfg.det_limit_side_len = l;
+    }
     println!(
-        "paddle cfg: unclip_ratio={} box_thresh={} det_thresh={} rec_min_score={}",
-        cfg.det_unclip_ratio, cfg.det_box_thresh, cfg.det_thresh, cfg.rec_min_score
+        "paddle cfg: det_limit_side_len={} unclip_ratio={} box_thresh={} det_thresh={} rec_min_score={}",
+        cfg.det_limit_side_len, cfg.det_unclip_ratio, cfg.det_box_thresh, cfg.det_thresh, cfg.rec_min_score
     );
     let t_load = Instant::now();
     let paddle = PaddleEngine::with_config(&model_id, cfg)

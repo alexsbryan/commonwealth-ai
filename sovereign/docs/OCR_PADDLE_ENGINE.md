@@ -1,6 +1,8 @@
 # OCR engine swap: tesseract → PaddleOCR (ONNX/ort) — HANDOFF
 
-**Status as of 2026-05-27:** bake-off complete. Models fetched, harness wired, both engines measured on real documents. **Decision: do NOT swap — keep both behind `OcrEngineKind`, default stays Tesseract.** PaddleOCR is competitive but high-variance and ~1.5× slower; the peer-dep elimination goal is blocked on (a) fixing paddle's line-scramble failure mode and (b) measuring on a real scan, not a born-digital render. See "Findings & decision" below.
+**Status as of 2026-05-27 (updated):** bake-off complete AND the line-scramble root-caused + fixed. **Decision flipped: PaddleOCR is now swap-viable.** The scramble was `det_limit_side_len=960` downsampling 300-dpi full pages to ~27%, merging adjacent text lines. Raising the default to **1600** makes paddle *beat* tesseract on both test docs (The Prince CER 0.0031 vs 0.0036; From Dictatorship 0.0212 vs 0.0652). Default changed in `PaddleConfig`. Remaining before flipping the desktop default: bundle the models + wire `OcrCtx.engine = Paddle` (Task #4 in "What's LEFT"), and ideally confirm on a real scan. See "Findings & decision".
+
+**(superseded) Status as of 2026-05-27:** bake-off complete; initial read was "do NOT swap" because at the stock `det_limit=960` paddle scrambled lines on dense pages. That was a tunable detection bug, not a model-quality ceiling — see the det_limit sweep below.
 
 **Status as of 2026-05-26:** engine code written and compiling; model fetch + bake-off + the swap decision remain. This doc lets another dev finish it on another machine. Author left mid-Phase-3.
 
@@ -87,50 +89,65 @@ mismatch warning — dict is sound).
 **Fixtures:** no scan needed. Used born-digital books from `~/Downloads/Sovereign Test`
 (The Prince, From Dictatorship to Democracy), body prose pages (front matter skipped).
 
-**Results — body prose, dpi 300, default paddle config (unclip 1.5):**
+**The line-scramble root cause (the whole story).** At the stock `det_limit_side_len=960`,
+paddle *scrambled* whole lines on dense pages (The Prince p2: "tak car that rge s poweul s
+hiel shal" vs truth "taking care that no foreigner as powerful as himself shall"). The cause
+is in `detect.rs`: a 300-dpi full page is ~2480×3508, so capping the longer side to 960
+downsamples it to ~27%. At that scale, body-text lines with tight leading **merge** into one
+probability-map blob → the crop handed to the rec model spans two stacked lines → CTC emits
+garbage. The airy From Dictatorship pages have enough leading to survive the downscale, which
+is why paddle already won there. An unclip sweep (1.5→1.8→2.2) made The Prince strictly *worse*
+(CER 0.137→0.308→0.893; chars 12.7k→1.6k) — more dilation = more merging — which pointed away
+from unclip and at the resize. A `det_limit` sweep confirmed it:
 
-| Document | paddle CER / WER | tesseract CER / WER | ms/page (paddle vs tess) |
+| det_limit | The Prince CER / WER | total chars |
+|---|---|---|
+| 960 (old default) | 0.137 / 0.169 | 12 743 |
+| 1280 | 0.017 / 0.024 | 14 454 |
+| **1600** | **0.0031 / 0.0108** | 14 648 |
+| 2048 | 0.0037 / 0.0131 | 14 640 |
+
+1600 is the sweet spot (2048 is slower with no gain; 1280 still loses to tesseract). Effective
+line separation depends only on this cap — page-px ∝ dpi cancels against the downscale ratio —
+so a **fixed 1600 is dpi-independent**, not a 300-dpi-specific magic number. `PaddleConfig`'s
+default is now 1600 (`from_ctx` inherits it, so the desktop path benefits automatically).
+
+**Results — body prose, dpi 300, det_limit 1600, both engines (lower is better):**
+
+| Document | paddle CER / WER | tesseract CER / WER | ms/page (paddle vs tess, debug build) |
 |---|---|---|---|
-| The Prince (pp. 14-17) | 0.137 / 0.169 | **0.004 / 0.014** | 6700 vs 4000 |
-| From Dictatorship (pp. 13-15) | **0.009 / 0.024** | 0.065 / 0.073 | 5800 vs 4000 |
+| The Prince (pp. 14-17) | **0.0031 / 0.0108** | 0.0036 / 0.0138 | 9000 vs 4000 |
+| From Dictatorship (pp. 13-15) | **0.0212 / 0.0442** | 0.0652 / 0.0733 | ~6000 vs 4000 |
 
-**Reading the split — no clear winner, high variance:**
-- **The Prince:** tesseract near-perfect; paddle *scrambles* whole lines on some pages
-  (e.g. p2 "tak car that rge s poweul s hiel shal" vs truth "taking care that no foreigner
-  as powerful as himself shall"). Mid-word character dropping — a CTC under-decode on
-  specific line crops. **Not a detection-threshold issue:** an unclip sweep (1.5 → 1.8 → 2.2)
-  made it strictly *worse* (CER 0.137 → 0.308 → 0.893; total chars 12.7k → 10.2k → 1.6k as
-  dilated boxes merge adjacent lines and swallow text). Default 1.5 is the best unclip.
-- **From Dictatorship:** paddle *wins* — tesseract dropped a page header ("Gene Sharp")
-  plus ~370 chars of body on one page; paddle captured them.
-- Paddle is consistently ~1.4-1.7× slower (5-7 s/page vs ~4 s).
-- **Caveat that dominates the decision:** both engines ran on *born-digital renders*,
-  which is tesseract's best case (crisp glyphs, no skew/noise/JPEG artifacts). The OCR
-  pipeline's actual target is *scanned* PDFs — tesseract's weak spot. This bake-off
-  therefore *under*-measures paddle's relative value on the real workload.
+**Paddle now beats tesseract on both docs.** From Dictatorship regresses slightly vs its 960
+score (0.009 → 0.021) but stays ~3× ahead of tesseract, and The Prince — the worst case — goes
+from a loss to a win. Tesseract's losses come from dropping whole lines/headers (it lost the
+"Gene Sharp" header + ~370 chars on one FDtD page); paddle's content recall is more complete.
 
-**Decision:** **keep both behind `OcrEngineKind`; default stays `Tesseract`.** Do not swap.
-The architecture already supports this (engine seam landed in Phase 1; paddle behind the
-`paddle-ocr` feature). Swapping now would regress The Prince-class documents and add ~50%
-latency, and the peer-dep-elimination win can't be claimed until paddle is reliably ≥
-tesseract on *real scans*.
+**Latency caveat:** paddle is ~2.3× tesseract here, but this is a **debug build** — the
+per-pixel normalize loops in `detect.rs`/`recognize.rs` are unoptimized, and onnxruntime is
+already release C++. A release build should narrow the gap substantially (re-measure before
+quoting a real number). For an initial ship that *deletes the tesseract build dependency*,
+even 2× is an acceptable trade.
 
-**Next steps to make the swap viable (in priority order):**
-1. **Fix paddle's line-scramble** (the real quality blocker). Detection finds the right
-   *count* of boxes (47 on a ~40-line page), so the fault is in the crop→rec path on
-   specific boxes: validate the rec preprocessing against the *specific* monkt v5 export
-   (normalization, the SVTR width handling), and check whether the bad boxes are merged/
-   skewed/multi-line. Instrument `recognize::run_recognition` to dump the offending crops
-   (`--dump-crops <dir>`) and eyeball them. This is `recognize.rs` + `detect.rs` work.
-2. **Source a real scanned fixture** with ground truth (skewed, noisy — tesseract's weak
-   case) and re-run. The born-digital oracle is fast and exact but biased toward tesseract.
-3. **Harness caveat:** single-page isolation (`--skip-pages N --max-pages 1`) can mis-align
-   the oracle because `pdf_extract` and `pdfium` may disagree on page boundaries at an
-   offset; multi-page runs (≥3 pages) align reliably. Prefer multi-page runs for CER/WER.
-4. Only after 1+2 show paddle ≥ tesseract on scans: bundle models in
-   `src-tauri/binaries/paddleocr/`, add a `resolve_paddle_model_dir` mirroring
-   `resolve_tessdata_dir`, set the desktop `OcrCtx.engine = Paddle`, fold the model fetch
-   into `scripts/fetch-desktop-binaries.sh`, and update RELEASING.md §"External binaries".
+**Decision: PaddleOCR is swap-viable.** Quality parity-or-better is achieved. Keep both behind
+`OcrEngineKind` (the seam stays — it's cheap insurance and lets us A/B), but the path to making
+`Paddle` the default is now unblocked.
+
+**Remaining to flip the desktop default (Task #4 below):**
+1. Bundle the models in `src-tauri/binaries/paddleocr/` (gitignore + `tauri.release.conf.json`
+   `resources` + fetch script), add a `resolve_paddle_model_dir` mirroring `resolve_tessdata_dir`,
+   set the desktop `OcrCtx.engine = Paddle`, fold the model fetch into
+   `scripts/fetch-desktop-binaries.sh`, update RELEASING.md §"External binaries".
+2. Re-measure latency on a **release** build; if still too slow, optimize the pixel loops
+   (`ndarray`/SIMD) before shipping.
+3. Nice-to-have: confirm on a **real scan** (skew/noise — tesseract's weak case, where paddle
+   should widen its lead). The born-digital oracle is tesseract's *best* case, so these numbers
+   are a conservative floor for paddle's relative value.
+
+**Harness caveat:** single-page isolation (`--skip-pages N --max-pages 1`) can mis-align the
+oracle because `pdf_extract` and `pdfium` may disagree on page boundaries at an offset;
+multi-page runs (≥3 pages) align reliably. Prefer multi-page runs for CER/WER.
 
 ## How to verify / build on another machine
 
