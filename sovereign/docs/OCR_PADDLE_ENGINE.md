@@ -1,5 +1,7 @@
 # OCR engine swap: tesseract → PaddleOCR (ONNX/ort) — HANDOFF
 
+**Status as of 2026-05-27:** bake-off complete. Models fetched, harness wired, both engines measured on real documents. **Decision: do NOT swap — keep both behind `OcrEngineKind`, default stays Tesseract.** PaddleOCR is competitive but high-variance and ~1.5× slower; the peer-dep elimination goal is blocked on (a) fixing paddle's line-scramble failure mode and (b) measuring on a real scan, not a born-digital render. See "Findings & decision" below.
+
 **Status as of 2026-05-26:** engine code written and compiling; model fetch + bake-off + the swap decision remain. This doc lets another dev finish it on another machine. Author left mid-Phase-3.
 
 ---
@@ -68,6 +70,68 @@ Run the bake-off; capture quality (CER/WER or eyeball), latency, and the **binar
 
 ---
 
+## Findings & decision (2026-05-27)
+
+All four "What's LEFT" tasks are done. The harness (`examples/paddle_bakeoff.rs`)
+is fully wired and uses a born-digital PDF as its own oracle: `pdf_extract::extract_text_by_pages`
+reads the embedded text layer (exact ground truth) while pdfium rasterizes the
+*same* pages to images both engines read. Page-aligned (skip/max), whitespace-normalized
+CER/WER. New flags: `--skip-pages` (drop front matter), `--max-pages`, `--unclip`,
+`--box-thresh`, `--no-tesseract`. `RUST_LOG=sovereign_tools=debug` surfaces the
+engine's internal tracing (session i/o names, box counts, dropped lines).
+
+**Models fetched** to `~/.sovereign/models/paddle-ocr/ppocr-en-v4v5/`: det 4.75 MB,
+rec 7.83 MB (v5 English), dict 436 lines → 437 classes incl. blank (no class-count
+mismatch warning — dict is sound).
+
+**Fixtures:** no scan needed. Used born-digital books from `~/Downloads/Sovereign Test`
+(The Prince, From Dictatorship to Democracy), body prose pages (front matter skipped).
+
+**Results — body prose, dpi 300, default paddle config (unclip 1.5):**
+
+| Document | paddle CER / WER | tesseract CER / WER | ms/page (paddle vs tess) |
+|---|---|---|---|
+| The Prince (pp. 14-17) | 0.137 / 0.169 | **0.004 / 0.014** | 6700 vs 4000 |
+| From Dictatorship (pp. 13-15) | **0.009 / 0.024** | 0.065 / 0.073 | 5800 vs 4000 |
+
+**Reading the split — no clear winner, high variance:**
+- **The Prince:** tesseract near-perfect; paddle *scrambles* whole lines on some pages
+  (e.g. p2 "tak car that rge s poweul s hiel shal" vs truth "taking care that no foreigner
+  as powerful as himself shall"). Mid-word character dropping — a CTC under-decode on
+  specific line crops. **Not a detection-threshold issue:** an unclip sweep (1.5 → 1.8 → 2.2)
+  made it strictly *worse* (CER 0.137 → 0.308 → 0.893; total chars 12.7k → 10.2k → 1.6k as
+  dilated boxes merge adjacent lines and swallow text). Default 1.5 is the best unclip.
+- **From Dictatorship:** paddle *wins* — tesseract dropped a page header ("Gene Sharp")
+  plus ~370 chars of body on one page; paddle captured them.
+- Paddle is consistently ~1.4-1.7× slower (5-7 s/page vs ~4 s).
+- **Caveat that dominates the decision:** both engines ran on *born-digital renders*,
+  which is tesseract's best case (crisp glyphs, no skew/noise/JPEG artifacts). The OCR
+  pipeline's actual target is *scanned* PDFs — tesseract's weak spot. This bake-off
+  therefore *under*-measures paddle's relative value on the real workload.
+
+**Decision:** **keep both behind `OcrEngineKind`; default stays `Tesseract`.** Do not swap.
+The architecture already supports this (engine seam landed in Phase 1; paddle behind the
+`paddle-ocr` feature). Swapping now would regress The Prince-class documents and add ~50%
+latency, and the peer-dep-elimination win can't be claimed until paddle is reliably ≥
+tesseract on *real scans*.
+
+**Next steps to make the swap viable (in priority order):**
+1. **Fix paddle's line-scramble** (the real quality blocker). Detection finds the right
+   *count* of boxes (47 on a ~40-line page), so the fault is in the crop→rec path on
+   specific boxes: validate the rec preprocessing against the *specific* monkt v5 export
+   (normalization, the SVTR width handling), and check whether the bad boxes are merged/
+   skewed/multi-line. Instrument `recognize::run_recognition` to dump the offending crops
+   (`--dump-crops <dir>`) and eyeball them. This is `recognize.rs` + `detect.rs` work.
+2. **Source a real scanned fixture** with ground truth (skewed, noisy — tesseract's weak
+   case) and re-run. The born-digital oracle is fast and exact but biased toward tesseract.
+3. **Harness caveat:** single-page isolation (`--skip-pages N --max-pages 1`) can mis-align
+   the oracle because `pdf_extract` and `pdfium` may disagree on page boundaries at an
+   offset; multi-page runs (≥3 pages) align reliably. Prefer multi-page runs for CER/WER.
+4. Only after 1+2 show paddle ≥ tesseract on scans: bundle models in
+   `src-tauri/binaries/paddleocr/`, add a `resolve_paddle_model_dir` mirroring
+   `resolve_tessdata_dir`, set the desktop `OcrCtx.engine = Paddle`, fold the model fetch
+   into `scripts/fetch-desktop-binaries.sh`, and update RELEASING.md §"External binaries".
+
 ## How to verify / build on another machine
 
 ```sh
@@ -79,6 +143,17 @@ cargo test  -p sovereign-tools --features paddle-ocr paddle   # unit tests (dict
 # Confirm a SINGLE ort version (rc.9) — never rc.10+:
 cargo tree -p sovereign-tools --features paddle-ocr,gliner-ner -i ort
 ```
+
+Run the bake-off (after fetching models per Task #1):
+```sh
+export SOVEREIGN_PDFIUM_LIB=/path/to/libpdfium.dylib   # no system pdfium; point at the bundled one
+export TESSDATA_PREFIX=/opt/homebrew/share/tessdata    # macOS/brew; or your tessdata dir
+cargo build --example paddle_bakeoff --features paddle-ocr -p sovereign-tools
+./target/debug/examples/paddle_bakeoff --pdf <doc.pdf> --skip-pages 13 --max-pages 4
+# add RUST_LOG=sovereign_tools=debug to see box counts / dropped lines / dict class count
+```
+Use a born-digital PDF for self-contained CER/WER (its text layer is the oracle); pass
+`--truth <txt>` for a real scan. Prefer ≥3 pages so the oracle aligns (see caveat above).
 
 NB: the sovereign watcher / `lint_status` tooling was flaky this session (reported `fresh_failing` with zero errors); use raw `cargo` directly. The `paddle-ocr` feature is off by default, so the background watcher never compiles it — you must build it explicitly.
 
