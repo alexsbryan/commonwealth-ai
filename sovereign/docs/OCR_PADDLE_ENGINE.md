@@ -1,6 +1,12 @@
 # OCR engine swap: tesseract → PaddleOCR (ONNX/ort) — HANDOFF
 
-**Status as of 2026-05-27 (updated):** bake-off complete AND the line-scramble root-caused + fixed. **Decision flipped: PaddleOCR is now swap-viable.** The scramble was `det_limit_side_len=960` downsampling 300-dpi full pages to ~27%, merging adjacent text lines. Raising the default to **1600** makes paddle *beat* tesseract on both test docs (The Prince CER 0.0031 vs 0.0036; From Dictatorship 0.0212 vs 0.0652). Default changed in `PaddleConfig`. Remaining before flipping the desktop default: bundle the models + wire `OcrCtx.engine = Paddle` (Task #4 in "What's LEFT"), and ideally confirm on a real scan. See "Findings & decision".
+**Status as of 2026-05-27 (SHIPPED):** PaddleOCR is the macOS desktop OCR engine. The bake-off
+root-caused the line-scramble (`det_limit_side_len=960` downsamples 300-dpi pages → lines merge;
+raised default to **1600** → paddle beats tesseract: The Prince CER 0.0031 vs 0.0036, From
+Dictatorship 0.0212 vs 0.0652). A release `.app` was built with the models + pdfium bundled,
+tesseract removed from the bundle (kept as a code fallback), and verified booting to
+`OCR context installed (PaddleOCR)`. The tesseract build-dependency is eliminated. See
+"Findings & decision" → "Desktop flip — DONE".
 
 **(superseded) Status as of 2026-05-27:** bake-off complete; initial read was "do NOT swap" because at the stock `det_limit=960` paddle scrambled lines on dense pages. That was a tunable detection bug, not a model-quality ceiling — see the det_limit sweep below.
 
@@ -124,26 +130,47 @@ score (0.009 → 0.021) but stays ~3× ahead of tesseract, and The Prince — th
 from a loss to a win. Tesseract's losses come from dropping whole lines/headers (it lost the
 "Gene Sharp" header + ~370 chars on one FDtD page); paddle's content recall is more complete.
 
-**Latency caveat:** paddle is ~2.3× tesseract here, but this is a **debug build** — the
-per-pixel normalize loops in `detect.rs`/`recognize.rs` are unoptimized, and onnxruntime is
-already release C++. A release build should narrow the gap substantially (re-measure before
-quoting a real number). For an initial ship that *deletes the tesseract build dependency*,
-even 2× is an acceptable trade.
+**Latency (release, measured 2026-05-27 against the bundled `.app` assets):** paddle
+5.2 s/page on The Prince (dense), 3.4 s/page on From Dictatorship; tesseract 2.2 s and 1.6 s
+respectively. Release roughly halves the debug numbers (Prince paddle 9.1 → 5.2 s/page) but
+the **~2.3× gap to tesseract holds** — the per-pixel normalize loops in `detect.rs`/
+`recognize.rs` are scalar (release-optimized, not SIMD). For an initial ship that *deletes the
+tesseract build dependency*, ~2× is an acceptable trade; if it bites, vectorize those loops.
+
+**Bundled-asset confirmation:** the `paddle_bakeoff` harness run against the exact model +
+pdfium files inside `Sovereign.app/Contents/Resources/binaries/` (via
+`SOVEREIGN_PADDLE_OCR_MODEL_DIR` / `SOVEREIGN_PDFIUM_LIB`) reproduced CER 0.0031 — the bundle
+is byte-faithful to the dev models.
 
 **Decision: PaddleOCR is swap-viable.** Quality parity-or-better is achieved. Keep both behind
 `OcrEngineKind` (the seam stays — it's cheap insurance and lets us A/B), but the path to making
 `Paddle` the default is now unblocked.
 
-**Remaining to flip the desktop default (Task #4 below):**
-1. Bundle the models in `src-tauri/binaries/paddleocr/` (gitignore + `tauri.release.conf.json`
-   `resources` + fetch script), add a `resolve_paddle_model_dir` mirroring `resolve_tessdata_dir`,
-   set the desktop `OcrCtx.engine = Paddle`, fold the model fetch into
-   `scripts/fetch-desktop-binaries.sh`, update RELEASING.md §"External binaries".
-2. Re-measure latency on a **release** build; if still too slow, optimize the pixel loops
-   (`ndarray`/SIMD) before shipping.
-3. Nice-to-have: confirm on a **real scan** (skew/noise — tesseract's weak case, where paddle
+**Desktop flip — DONE (2026-05-27).** Shipped a macOS release `.app` with PaddleOCR as the
+default engine and tesseract removed from the bundle:
+- `sovereign-tools/paddle-ocr` forwarded via a default-on desktop feature
+  (`sovereign-desktop` `[features] default = ["paddle-ocr"]` → `sovereign-tools/paddle-ocr`).
+  NB: a desktop-local `#[cfg(feature = "paddle-ocr")]` keys off the *desktop* crate's features,
+  not the dep's — without the forwarding feature the paddle branch silently compiles out.
+- `install_ocr_ctx_for_app` prefers Paddle: `resolve_paddle_model_dir` (bundle → dev binaries
+  → `~/.sovereign`) + `resolve_pdfium_lib`; sets `OcrCtx.engine = Paddle` and points
+  `SOVEREIGN_PADDLE_OCR_MODEL_DIR` at the resolved root. Falls back to tesseract when models
+  are absent.
+- `tauri.release.conf.json` bundles `binaries/pdfium/*` + `binaries/paddle-ocr/ppocr-en-v4v5/*`
+  as resources; the tesseract `externalBin` + `tessdata` are gone. RELEASING.md §"External
+  binaries" updated. Models/pdfium are gitignored; `fetch-desktop-binaries.sh` still TODO (stage
+  by hand for now — commands in RELEASING.md).
+- Verified: the `.app` boots to `OCR context installed (PaddleOCR)`, resolving both assets from
+  `Contents/Resources/binaries/`; release bake-off against those exact files reproduced CER
+  0.0031. `.app` is 191 MB (down from ~397 MB unstripped).
+
+**Still open:**
+1. `scripts/fetch-desktop-binaries.sh` — referenced by CI but never written; add a `paddle-ocr`
+   section (curl the 3 model files) so CI/onboarding don't stage by hand.
+2. Nice-to-have: confirm on a **real scan** (skew/noise — tesseract's weak case, where paddle
    should widen its lead). The born-digital oracle is tesseract's *best* case, so these numbers
    are a conservative floor for paddle's relative value.
+3. If the ~2.3× latency gap bites, vectorize the scalar normalize loops in `detect.rs`/`recognize.rs`.
 
 **Harness caveat:** single-page isolation (`--skip-pages N --max-pages 1`) can mis-align the
 oracle because `pdf_extract` and `pdfium` may disagree on page boundaries at an offset;

@@ -113,20 +113,67 @@ pub async fn install_ocr_ctx_for_app(
 ) {
     use tauri::Manager;
 
+    let resource_dir = app.path().resource_dir().ok();
+
+    // pdfium rasterizes PDFs to page images regardless of which OCR
+    // engine reads them — required for BOTH paddle and tesseract. If we
+    // can locate the bundled dylib we pin pdfium-render to it; otherwise
+    // we fall back to its system-library probe (which surfaces a clear
+    // error at OCR-time).
+    let pdfium_lib_path = resolve_pdfium_lib(resource_dir.as_deref());
+
+    // Prefer PaddleOCR. It drives the ONNX Runtime already linked for
+    // GLiNER and needs NO external build dependency — unlike tesseract,
+    // which users must `brew/apt install` or we must statically build.
+    // The 2026-05-27 bake-off put paddle at/above tesseract quality once
+    // `det_limit_side_len` was raised to 1600 (now the engine default).
+    // Use it whenever its models resolve (bundled in the .app, or in
+    // ~/.sovereign for a dev machine); fall back to tesseract otherwise.
+    #[cfg(feature = "paddle-ocr")]
+    {
+        if let Some(model_root) = resolve_paddle_model_dir(resource_dir.as_deref()) {
+            // The engine resolves models via SOVEREIGN_PADDLE_OCR_MODEL_DIR
+            // → `paddle::models_root()`. Point it at whatever we found so a
+            // packaged app uses the bundled copy and a dev box uses
+            // ~/.sovereign — one code path, no per-build special-casing.
+            std::env::set_var("SOVEREIGN_PADDLE_OCR_MODEL_DIR", &model_root);
+            let ctx = OcrCtx {
+                // tesseract_* are inert when engine = Paddle.
+                tesseract_bin: PathBuf::from("tesseract"),
+                tessdata_dir: PathBuf::new(),
+                pdfium_lib_path,
+                daemon_base_url,
+                cleanup_model,
+                dpi: 300,
+                tesseract_timeout_secs: 30,
+                cleanup_timeout_secs: 30,
+                engine: OcrEngineKind::Paddle,
+            };
+            tracing::info!(
+                paddle_model_root = %model_root.display(),
+                pdfium = ?ctx.pdfium_lib_path,
+                cleanup_model = %ctx.cleanup_model,
+                "OCR context installed (PaddleOCR) — folder drop will offer OCR for scanned PDFs"
+            );
+            manager.set_ocr_ctx(ctx).await;
+            return;
+        }
+        tracing::info!(
+            "PaddleOCR models not found (.app bundle or ~/.sovereign/models/paddle-ocr) \
+             — falling back to tesseract"
+        );
+    }
+
+    // Fallback: the tesseract subprocess (needs a system/bundled binary).
     let tesseract_bin = match resolve_tesseract_path(app) {
         Some(p) => p,
         None => {
             tracing::info!(
-                "OCR not available: tesseract sidecar not present in this build"
+                "OCR not available: no PaddleOCR models and no tesseract sidecar"
             );
             return;
         }
     };
-
-    let resource_dir = app.path().resource_dir().ok();
-
-    // tessdata directory — required. We probe the standard locations
-    // before giving up.
     let tessdata_dir = match resolve_tessdata_dir(resource_dir.as_deref()) {
         Some(p) => p,
         None => {
@@ -137,14 +184,6 @@ pub async fn install_ocr_ctx_for_app(
             return;
         }
     };
-
-    // pdfium dynamic library — optional. If we can locate it from
-    // the resource dir or alongside the binaries directory, we pin
-    // pdfium-render to it. Otherwise we fall back to its
-    // system-library probe (which will fail at OCR-time, surfacing
-    // a clear error to the user).
-    let pdfium_lib_path = resolve_pdfium_lib(resource_dir.as_deref());
-
     let ctx = OcrCtx {
         tesseract_bin,
         tessdata_dir,
@@ -154,9 +193,6 @@ pub async fn install_ocr_ctx_for_app(
         dpi: 300,
         tesseract_timeout_secs: 30,
         cleanup_timeout_secs: 30,
-        // v1 ships the tesseract engine. The PaddleOCR engine is gated
-        // behind the `paddle-ocr` feature and selected by setting this
-        // to `OcrEngineKind::Paddle` once the bake-off greenlights it.
         engine: OcrEngineKind::Tesseract,
     };
     tracing::info!(
@@ -164,7 +200,7 @@ pub async fn install_ocr_ctx_for_app(
         tessdata = %ctx.tessdata_dir.display(),
         pdfium = ?ctx.pdfium_lib_path,
         cleanup_model = %ctx.cleanup_model,
-        "OCR context installed — folder drop will offer OCR for scanned PDFs"
+        "OCR context installed (tesseract) — folder drop will offer OCR for scanned PDFs"
     );
     manager.set_ocr_ctx(ctx).await;
 }
@@ -322,6 +358,46 @@ fn resolve_pdfium_lib(resource_dir: Option<&std::path::Path>) -> Option<PathBuf>
         }
     }
     probes.into_iter().find(|p| p.exists())
+}
+
+/// Locate the PaddleOCR models ROOT — the directory that contains the
+/// `<model_id>/` set (`det.onnx` + `rec.onnx` + `dict.txt`). Returned so
+/// it can be handed straight to `SOVEREIGN_PADDLE_OCR_MODEL_DIR`, which
+/// the engine's `paddle::models_root()` reads. A match is only returned
+/// when all three model files actually exist, so the caller can trust
+/// "Some" to mean "Paddle can run" rather than discovering a missing
+/// model per-document later.
+///
+/// Probe order: explicit env → bundled (`<resource>/binaries/paddle-ocr`)
+/// → dev binaries dir → the CLI/user models root (`~/.sovereign`).
+#[cfg(feature = "paddle-ocr")]
+fn resolve_paddle_model_dir(resource_dir: Option<&std::path::Path>) -> Option<PathBuf> {
+    use sovereign_tools::local_corpus::ocr::paddle::DEFAULT_MODEL_ID;
+
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Ok(env_path) = std::env::var("SOVEREIGN_PADDLE_OCR_MODEL_DIR") {
+        roots.push(PathBuf::from(env_path));
+    }
+    if let Some(rd) = resource_dir {
+        roots.push(rd.join("binaries").join("paddle-ocr"));
+        roots.push(rd.join("paddle-ocr"));
+    }
+    roots.push(PathBuf::from(DEV_BINARIES_DIR).join("paddle-ocr"));
+    // Dev/user fallback: the root the CLI fetch populates.
+    if let Ok(home) = std::env::var("HOME") {
+        roots.push(
+            PathBuf::from(home)
+                .join(".sovereign")
+                .join("models")
+                .join("paddle-ocr"),
+        );
+    }
+    roots.into_iter().find(|root| {
+        let set = root.join(DEFAULT_MODEL_ID);
+        set.join("det.onnx").is_file()
+            && set.join("rec.onnx").is_file()
+            && set.join("dict.txt").is_file()
+    })
 }
 
 // ─── Command: lc_validate_path ───────────────────────────────────────
