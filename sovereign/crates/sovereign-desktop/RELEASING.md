@@ -105,9 +105,10 @@ Run before tagging. None are automated — that's the next iteration.
 - [ ] Manual smoke test on your dev machine: launch the app, drop a
       folder, confirm ingest completes, ask one question, confirm
       response. Five-minute test.
-- [ ] If you touched OCR: run a folder containing a real scanned PDF
-      with `SOVEREIGN_TESSERACT_BIN` etc. set, confirm the offer
-      surfaces and works end-to-end.
+- [ ] If you touched OCR: run a folder containing a real scanned PDF,
+      confirm the offer surfaces and works end-to-end. No env setup —
+      the bundled PaddleOCR models + pdfium resolve automatically (boot
+      log: `OCR context installed (PaddleOCR)`).
 - [ ] Versions bumped via `scripts/bump-desktop-version.sh <new-version>`
       (the script writes the three files and runs the consistency
       check internally — no separate verification needed).
@@ -161,73 +162,72 @@ CI-only failure — the user-facing version didn't change.
 
 ## External binaries
 
-The desktop bundles three external binaries for the OCR pipeline.
-They're gated by `lc_ocr_available` — if any are missing the OCR
-button hides itself and ingest is unaffected.
+The OCR pipeline (rasterize → recognize → daemon cleanup) needs two
+bundled assets. They're gated by `lc_ocr_available` — if either is
+missing the OCR button hides itself and ingest is unaffected.
 
-| Binary | Purpose | Source |
-|--------|---------|--------|
-| `tesseract` | OCR engine for scanned PDFs | Platform-installed (v1); static-build hosted on `sovereign-dev` (Phase 2) |
-| `libpdfium.dylib` / `pdfium.dll` / `libpdfium.so` | PDF rasterization to images | `bblanchon/pdfium-binaries` releases |
-| `tessdata/eng.traineddata` | English language pack | `tesseract-ocr/tessdata` |
+| Asset | Purpose | Source | Size |
+|-------|---------|--------|------|
+| `paddle-ocr/ppocr-en-v4v5/{det,rec}.onnx` + `dict.txt` | **OCR engine** (PaddleOCR via the ONNX Runtime already linked for GLiNER) | HF: `SWHL/RapidOCR` (det) + `monkt/paddleocr-onnx` (rec/dict), Apache-2.0 | ~13 MB |
+| `pdfium/libpdfium.dylib` / `pdfium.dll` / `libpdfium.so` | PDF page → image rasterization (engine-independent) | `bblanchon/pdfium-binaries` releases | ~7 MB |
 
-### `scripts/fetch-desktop-binaries.sh`
+PaddleOCR runs **in-process** through `ort` (no second ML runtime —
+it reuses GLiNER's onnxruntime) and needs **no platform install**,
+which is the whole reason it replaced tesseract (see below). The
+desktop selects it automatically: `install_ocr_ctx_for_app` resolves
+the bundled models + pdfium and sets `OcrCtx.engine = Paddle`.
 
-The single source of truth for staging external binaries. Idempotent;
-re-run it any time. CI calls it from
-`.github/workflows/desktop-release.yml`.
+### Staging the binaries
+
+`scripts/fetch-desktop-binaries.sh` is referenced by CI but **not yet
+written**. Until it exists, stage by hand into
+`sovereign/crates/sovereign-desktop/src-tauri/binaries/` (all
+gitignored):
 
 ```sh
-# auto-detect host triple from rustc
-scripts/fetch-desktop-binaries.sh
+# PaddleOCR models
+D=src-tauri/binaries/paddle-ocr/ppocr-en-v4v5 && mkdir -p "$D"
+curl -fSL -o "$D/det.onnx"  "https://huggingface.co/SWHL/RapidOCR/resolve/main/PP-OCRv4/ch_PP-OCRv4_det_infer.onnx"
+curl -fSL -o "$D/rec.onnx"  "https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/rec.onnx"
+curl -fSL -o "$D/dict.txt"  "https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/dict.txt"
 
-# or pass an explicit triple (this is what CI does)
-scripts/fetch-desktop-binaries.sh aarch64-apple-darwin
+# PDFium (bblanchon/pdfium-binaries — extract lib/<lib_name>)
+#   macOS arm64: mac-arm64.tgz → lib/libpdfium.dylib → src-tauri/binaries/pdfium/
 ```
 
-Output lands at
-`sovereign/crates/sovereign-desktop/src-tauri/binaries/`.
+`tauri.release.conf.json` bundles both as `resources`
+(`binaries/pdfium/*`, `binaries/paddle-ocr/ppocr-en-v4v5/*`) into the
+`.app`'s `Contents/Resources/`. The runtime resolver probes that path
+first, then `~/.sovereign/models/paddle-ocr` for dev machines.
 
-### Tesseract — the awkward dependency
+### Why PaddleOCR replaced tesseract
 
-In v1 we don't ship a self-contained Tesseract for macOS / Linux. The
-brew/apt builds are dynamically linked to `libleptonica`, `libtiff`,
-`libjpeg`, `libpng` — copying just the `tesseract` binary out gives
-you a 80 KB executable that breaks the moment a user without those
-dylibs runs the app.
+Tesseract was the awkward dependency this swap eliminates. Its brew/apt
+builds are dynamically linked to `libleptonica`/`libtiff`/`libjpeg`/
+`libpng`, so we couldn't ship a self-contained binary — macOS/Linux
+users had to `brew/apt install tesseract` themselves or OCR was
+unavailable. PaddleOCR's ONNX models have no such linkage.
 
-In CI:
-- macOS runners: `brew install tesseract`, copy the binary into place.
-  The bundled DMG ships ONLY the brew-linked binary; users without
-  `brew install tesseract` themselves will see OCR unavailable. This
-  is acceptable for the technical-early-adopter audience.
-- Linux runners: `apt install tesseract-ocr`, ditto.
-- Windows runners: GitHub's image already includes Tesseract; we copy
-  it into place. UB Mannheim's static-ish binary works portably.
+The 2026-05-27 bake-off (`sovereign/docs/OCR_PADDLE_ENGINE.md`,
+harness `sovereign-tools/examples/paddle_bakeoff.rs`) put PaddleOCR
+**at or above** tesseract quality once `det_limit_side_len` was raised
+to 1600 (the merge-at-960 bug on dense pages — now the engine default):
+The Prince CER 0.0031 vs 0.0036, From Dictatorship 0.0212 vs 0.0652.
 
-**Phase 2** (tracked, not yet built): produce static Tesseract builds
-for macOS arm64 / x86_64 and Linux x86_64 once and host them on a
-dedicated `sovereign-dev/tesseract-static-binaries` GitHub release.
-`fetch-desktop-binaries.sh` then downloads them like it does PDFium.
-
-Until that lands, the macOS/Linux installers' OCR feature requires the
-end user to have system tesseract installed. Document this in the
-release notes for any version that ships OCR.
+Tesseract is **not deleted from the code** — it remains behind
+`OcrEngineKind::Tesseract` as a fallback (`install_ocr_ctx_for_app`
+uses it when the paddle models can't be resolved, or under
+`--no-default-features`). It's simply no longer bundled. If you want a
+tesseract-bundling build, restore the `externalBin`/`tessdata` entries
+in `tauri.release.conf.json` and stage a (statically linked) binary.
 
 ### PDFium
 
-`bblanchon/pdfium-binaries` publishes per-platform tarballs. The fetch
-script downloads the latest, extracts `lib/<lib_name>`, drops it under
-`src-tauri/binaries/pdfium/`. Stable since 2018, no auth required.
-
-If a future PDFium ABI change breaks `pdfium-render`, pin the URL to
-a specific release tag in the script.
-
-### tessdata
-
-`tesseract-ocr/tessdata/main/eng.traineddata`, ~30 MB, English only.
-For multi-language OCR add language packs to the same dir; the desktop
-ships English only in v1.
+Still required — pdfium rasterizes PDF pages to images regardless of
+which engine reads them. `bblanchon/pdfium-binaries` publishes
+per-platform tarballs; extract `lib/<lib_name>` into
+`src-tauri/binaries/pdfium/`. Stable since 2018, no auth. If a future
+ABI change breaks `pdfium-render`, pin the URL to a specific tag.
 
 ---
 
@@ -290,8 +290,8 @@ no one has fetched the binaries yet, so they wouldn't exist.
 
 `tauri.release.conf.json` (also committed) is an overlay applied via
 `cargo tauri build --config src-tauri/tauri.release.conf.json` that
-adds the OCR `externalBin` and `resources`. Only release builds use
-it; CI invokes Tauri with this flag.
+adds the OCR `resources` (the PaddleOCR models + pdfium). Only release
+builds use it; CI invokes Tauri with this flag.
 
 This split is the cleanest available pattern; alternatives (sed-edit
 the main config in CI, environment-variable gates, etc.) all add
@@ -580,15 +580,16 @@ entries, so it works without staging binaries.
 
 ## Troubleshooting
 
-### `resource path 'binaries/tesseract-...' doesn't exist`
+### `resource path 'binaries/...' doesn't exist`
 
-You're running `cargo tauri build` (or just `cargo check` with the
-release config) without first running `scripts/fetch-desktop-binaries.sh`.
-The release config requires the binaries to be present.
+You're running `cargo tauri build` with the release overlay before
+staging the bundled assets. The release config's `resources` require
+`binaries/pdfium/*` and `binaries/paddle-ocr/ppocr-en-v4v5/*` to exist
+— stage them per "External binaries — Staging the binaries".
 
 If you're trying to do a plain dev build, use `cargo check` against
 the base `tauri.conf.json` (not the release overlay) — the base
-config has no `externalBin` and won't error.
+config has no `resources` and won't error.
 
 ### macOS DMG won't open: "Sovereign is damaged and can't be opened"
 
@@ -721,15 +722,17 @@ no-op stub. (2) `fetch-desktop-binaries.sh` looked only in the PDFium
 archive's `lib/`, but bblanchon's `win-x64` archive puts the runtime DLL
 in `bin/pdfium.dll` (`lib/` holds only the import lib) — now searches both.
 
-### Tesseract OCR not available on the bundled installer
+### OCR not available on the bundled installer
 
-System tesseract not installed. v1 builds depend on it (see "External
-binaries — Tesseract — the awkward dependency"). User runs:
-
-```sh
-brew install tesseract           # macOS
-sudo apt install tesseract-ocr   # Linux
-```
+OCR now runs on bundled PaddleOCR models — no system install needed.
+If the OCR button is hidden, the bundle is missing the models or
+pdfium (boot log shows `PaddleOCR models not found … falling back to
+tesseract`, then `OCR not available` if no system tesseract either).
+Confirm `Contents/Resources/binaries/{paddle-ocr/ppocr-en-v4v5,pdfium}`
+exist in the `.app`; if not, the release build skipped the `resources`
+overlay (`--config src-tauri/tauri.release.conf.json`) or the assets
+weren't staged. The legacy tesseract fallback still works if a user has
+system tesseract on PATH, but that's no longer the intended path.
 
 …and re-launches. Phase 2 will eliminate this requirement.
 

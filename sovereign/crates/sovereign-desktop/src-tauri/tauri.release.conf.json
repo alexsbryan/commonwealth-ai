@@ -1,12 +1,9 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicoverbruggen/tauri-v2-schema/main/src/tauri-conf.schema.json",
   "bundle": {
-    "externalBin": [
-      "binaries/tesseract"
-    ],
     "resources": [
-      "binaries/tessdata/*",
-      "binaries/pdfium/*"
+      "binaries/pdfium/*",
+      "binaries/paddle-ocr/ppocr-en-v4v5/*"
     ],
     "macOS": {
       "minimumSystemVersion": "10.15",

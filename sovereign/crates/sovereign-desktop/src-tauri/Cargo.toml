@@ -58,6 +58,16 @@ hostname = { workspace = true }
 # commonwealth crates; keeping the same major.
 rand = "0.8"
 
+[features]
+# Default-on. Forwards to sovereign-tools so the `#[cfg(feature =
+# "paddle-ocr")]` gates in src/local_corpus_commands.rs are meaningful —
+# a desktop-local `#[cfg]` keys off THIS crate's features, not the dep's,
+# so without this forwarding feature the paddle OCR branch would silently
+# compile out. `--no-default-features` drops paddle and falls back to the
+# tesseract path.
+default = ["paddle-ocr"]
+paddle-ocr = ["sovereign-tools/paddle-ocr"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

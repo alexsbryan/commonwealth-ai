@@ -49,7 +49,7 @@ pub fn run_recognition(
 
     // ── run ──
     let (logits, t, c) = {
-        let mut sess = engine
+        let sess = engine
             .rec_session()
             .lock()
             .map_err(|_| PaddleError::Session("rec mutex poisoned".into()))?;

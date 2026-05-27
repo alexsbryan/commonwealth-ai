@@ -51,7 +51,7 @@ pub fn run_detection(engine: &PaddleEngine, image: &DynamicImage) -> Result<Vec<
 
     // ── run ──
     let prob_map = {
-        let mut sess = engine
+        let sess = engine
             .det_session()
             .lock()
             .map_err(|_| PaddleError::Session("det mutex poisoned".into()))?;

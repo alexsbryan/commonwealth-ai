@@ -11,6 +11,7 @@ dist*
 crates/sovereign-desktop/src-tauri/binaries/tesseract-*
 crates/sovereign-desktop/src-tauri/binaries/pdfium/
 crates/sovereign-desktop/src-tauri/binaries/tessdata/
+crates/sovereign-desktop/src-tauri/binaries/paddle-ocr/
 
 # Sovereign code intelligence
 .sovereign/project.json
