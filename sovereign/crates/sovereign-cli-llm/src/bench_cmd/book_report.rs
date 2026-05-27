@@ -1385,6 +1385,7 @@ fn render_progress(p: &IngestProgress) -> (&'static str, serde_json::Value) {
             word_count,
             chunk_count,
             filename,
+            ..
         } => (
             "started",
             serde_json::json!({

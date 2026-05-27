@@ -933,6 +933,9 @@ export interface DocumentProgressPayload {
   asset_id?: string;
   done?: number;
   total?: number;
+  /** Present on the `Started` event — seeds the progress bar's
+   *  denominator before the first `Indexing` tick arrives. */
+  chunk_count?: number;
   main_entities?: number;
   structural_moments?: number;
   reason?: string;
