@@ -207,6 +207,10 @@ axum = { workspace = true }
 # Levenshtein for the OCR bake-off's CER/WER scoring (examples/paddle_bakeoff).
 # Already in the tree (0.11.1); dev-only since only the example uses it.
 strsim = "0.11"
+# Glassbox tracing for the bake-off harness — surfaces the engine's
+# per-stage info!/debug! (session i/o names, box counts, shapes) so a
+# reader of the run can see inside the PP-OCR pipeline. RUST_LOG-gated.
+tracing-subscriber = { workspace = true }
 
 # Examples that import treesitter-gated symbols (SymbolLookupTool,
 # ScipGraphHandle, etc.) only compile when the matching crate
