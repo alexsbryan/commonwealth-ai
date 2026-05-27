@@ -179,21 +179,21 @@ the bundled models + pdfium and sets `OcrCtx.engine = Paddle`.
 
 ### Staging the binaries
 
-`scripts/fetch-desktop-binaries.sh` is referenced by CI but **not yet
-written**. Until it exists, stage by hand into
-`sovereign/crates/sovereign-desktop/src-tauri/binaries/` (all
-gitignored):
+`scripts/fetch-desktop-binaries.sh` is the single source of truth.
+Idempotent (skips files already present), re-run safely. CI calls it
+per matrix triple; locally run it bare to auto-detect the host:
 
 ```sh
-# PaddleOCR models
-D=src-tauri/binaries/paddle-ocr/ppocr-en-v4v5 && mkdir -p "$D"
-curl -fSL -o "$D/det.onnx"  "https://huggingface.co/SWHL/RapidOCR/resolve/main/PP-OCRv4/ch_PP-OCRv4_det_infer.onnx"
-curl -fSL -o "$D/rec.onnx"  "https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/rec.onnx"
-curl -fSL -o "$D/dict.txt"  "https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/dict.txt"
-
-# PDFium (bblanchon/pdfium-binaries — extract lib/<lib_name>)
-#   macOS arm64: mac-arm64.tgz → lib/libpdfium.dylib → src-tauri/binaries/pdfium/
+scripts/fetch-desktop-binaries.sh                      # host triple
+scripts/fetch-desktop-binaries.sh aarch64-apple-darwin # explicit (what CI does)
 ```
+
+It fetches the PaddleOCR models (HF, platform-independent) and the
+PDFium lib (bblanchon, per-triple) into the gitignored
+`sovereign/crates/sovereign-desktop/src-tauri/binaries/`
+(`paddle-ocr/ppocr-en-v4v5/{det,rec}.onnx` + `dict.txt`, `pdfium/<lib>`).
+It does NOT fetch tesseract — that's a code fallback only, no longer
+bundled.
 
 `tauri.release.conf.json` bundles both as `resources`
 (`binaries/pdfium/*`, `binaries/paddle-ocr/ppocr-en-v4v5/*`) into the

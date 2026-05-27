@@ -7,7 +7,7 @@ name: Desktop release
 #
 # What it does:
 #   1. Build matrix across mac arm64 / mac x86_64 / linux x86_64 / windows x86_64.
-#   2. Run scripts/fetch-desktop-binaries.sh to stage Tesseract / PDFium / tessdata.
+#   2. Run scripts/fetch-desktop-binaries.sh to stage PaddleOCR models + PDFium.
 #   3. `tauri build --config tauri.release.conf.json` — produces installers.
 #   4. Upload artifacts to a draft GitHub Release named after the tag.
 #
@@ -126,7 +126,6 @@ jobs:
             librsvg2-dev \
             patchelf \
             libfuse2 \
-            tesseract-ocr \
             mold \
             protobuf-compiler libprotobuf-dev \
             libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
@@ -196,38 +195,11 @@ jobs:
           # via apt; macOS gets protobuf via brew.)
           choco install protoc -y --no-progress
 
-      - name: Stage Tesseract (macOS)
-        if: startsWith(matrix.platform.runner, 'macos')
-        shell: bash
-        run: |
-          # GitHub macOS runners ship Homebrew. Use brew's tesseract for v1.
-          # Phase 2 of RELEASING.md tracks moving to a static build.
-          brew install tesseract
-          mkdir -p sovereign/crates/sovereign-desktop/src-tauri/binaries
-          cp "$(brew --prefix tesseract)/bin/tesseract" \
-             "sovereign/crates/sovereign-desktop/src-tauri/binaries/tesseract-${{ matrix.platform.target }}"
-
-      - name: Stage Tesseract (Linux)
-        if: matrix.platform.runner == 'ubuntu-22.04'
-        run: |
-          mkdir -p sovereign/crates/sovereign-desktop/src-tauri/binaries
-          cp /usr/bin/tesseract \
-             sovereign/crates/sovereign-desktop/src-tauri/binaries/tesseract-${{ matrix.platform.target }}
-
-      - name: Stage Tesseract (Windows)
-        if: matrix.platform.runner == 'windows-2022'
-        shell: pwsh
-        run: |
-          # GitHub Windows runners ship a Tesseract install at C:\Program Files\Tesseract-OCR.
-          $bin = "C:\Program Files\Tesseract-OCR\tesseract.exe"
-          if (-not (Test-Path $bin)) {
-            choco install tesseract -y --no-progress
-          }
-          New-Item -Path "sovereign/crates/sovereign-desktop/src-tauri/binaries" -ItemType Directory -Force | Out-Null
-          Copy-Item "C:\Program Files\Tesseract-OCR\tesseract.exe" `
-                    "sovereign/crates/sovereign-desktop/src-tauri/binaries/tesseract-${{ matrix.platform.target }}.exe"
-
-      - name: Stage PDFium + tessdata
+      # OCR is PaddleOCR (in-process ONNX) as of 2026-05-27 — no tesseract
+      # to install/stage. The fetch script pulls the PaddleOCR models +
+      # PDFium for the target triple. (Tesseract remains a code fallback but
+      # is no longer bundled; see RELEASING.md §"External binaries".)
+      - name: Stage OCR assets (PaddleOCR models + PDFium)
         shell: bash
         run: scripts/fetch-desktop-binaries.sh ${{ matrix.platform.target }}
 

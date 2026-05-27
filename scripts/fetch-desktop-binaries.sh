@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# fetch-desktop-binaries.sh — stage external binaries the Sovereign desktop
-# bundles for the OCR pipeline (Tesseract, PDFium, tessdata).
+# fetch-desktop-binaries.sh — stage the external assets the Sovereign
+# desktop bundles for the OCR pipeline: the PaddleOCR ONNX models and the
+# PDFium rasterization library.
 #
 # Usage:
 #   scripts/fetch-desktop-binaries.sh [<target_triple>]
@@ -11,30 +12,34 @@
 #   x86_64-unknown-linux-gnu        — Linux, x86_64
 #   x86_64-pc-windows-msvc          — Windows, x86_64
 #
-# When called without an argument, the script auto-detects the host's
-# triple via `rustc -vV`. CI passes the matrix triple explicitly.
+# The triple only selects the PDFium platform build — the PaddleOCR models
+# are ONNX and platform-independent. Without an argument the script
+# auto-detects the host triple via `rustc -vV`; CI passes it explicitly.
 #
 # Idempotent: existing files are not re-downloaded. Re-run safely.
 #
-# What this script DOES fetch:
-#   - PDFium dylib (bblanchon/pdfium-binaries, latest release)
-#   - Tesseract eng.traineddata (tesseract-ocr/tessdata, main)
-#   - On Windows: a static-ish tesseract.exe from UB Mannheim
+# What this fetches:
+#   - PaddleOCR det + rec ONNX models and the recognition dictionary
+#     (HF: SWHL/RapidOCR + monkt/paddleocr-onnx, Apache-2.0) → ~13 MB
+#   - PDFium shared library (bblanchon/pdfium-binaries, latest)      → ~7 MB
 #
-# What this script does NOT fetch (yet):
-#   - macOS / Linux Tesseract binaries. They have non-trivial dynamic
-#     dependencies (libleptonica, libtiff, libjpeg, libpng) that need
-#     to be bundled together to be portable. For v1, the desktop's
-#     OCR-availability probe accepts a system-installed tesseract:
-#     macOS users `brew install tesseract`, Linux users
-#     `apt install tesseract-ocr`. Phase 2 of RELEASING.md tracks
-#     building / hosting static binaries we can ship.
+# What it does NOT fetch: tesseract. The 2026-05-27 bake-off (see
+# sovereign/docs/OCR_PADDLE_ENGINE.md) replaced tesseract with PaddleOCR —
+# which needs no platform install — so the desktop no longer bundles it.
+# Tesseract remains a CODE fallback (OcrEngineKind::Tesseract) for users
+# with a system install; a tesseract-bundling build is a documented opt-in
+# in RELEASING.md (restore the externalBin/tessdata entries + stage a
+# statically linked binary).
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 DESKTOP_BIN_DIR="${REPO_ROOT}/sovereign/crates/sovereign-desktop/src-tauri/binaries"
+
+# PaddleOCR model set id — must match `paddle::DEFAULT_MODEL_ID` and the
+# `tauri.release.conf.json` resources glob.
+PADDLE_MODEL_ID="ppocr-en-v4v5"
 
 # ─── Target detection ───────────────────────────────────────────────
 
@@ -59,7 +64,8 @@ case "$TARGET" in
 esac
 
 echo "fetch-desktop-binaries: target=$TARGET dest=$DESKTOP_BIN_DIR"
-mkdir -p "$DESKTOP_BIN_DIR" "$DESKTOP_BIN_DIR/tessdata" "$DESKTOP_BIN_DIR/pdfium"
+PADDLE_DIR="$DESKTOP_BIN_DIR/paddle-ocr/$PADDLE_MODEL_ID"
+mkdir -p "$PADDLE_DIR" "$DESKTOP_BIN_DIR/pdfium"
 
 # ─── Helpers ────────────────────────────────────────────────────────
 
@@ -100,13 +106,29 @@ extract_to() {
     esac
 }
 
-# ─── tessdata (English) ─────────────────────────────────────────────
+# ─── PaddleOCR models (platform-independent) ─────────────────────────
 
-TESSDATA_URL="https://github.com/tesseract-ocr/tessdata/raw/main/eng.traineddata"
-TESSDATA_PATH="$DESKTOP_BIN_DIR/tessdata/eng.traineddata"
+# det: DBNet text detection. rec: CRNN/SVTR recognition (v5 English).
+# dict: the rec model's CTC label table (det/rec/dict must be a matched
+# set — the recognizer warns on a dict/class-count mismatch >1).
+DET_URL="https://huggingface.co/SWHL/RapidOCR/resolve/main/PP-OCRv4/ch_PP-OCRv4_det_infer.onnx"
+REC_URL="https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/rec.onnx"
+DICT_URL="https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/dict.txt"
+
 echo
-echo "[1/3] tessdata"
-fetch_to "$TESSDATA_URL" "$TESSDATA_PATH"
+echo "[1/2] PaddleOCR models ($PADDLE_MODEL_ID)"
+paddle_ok=1
+fetch_to "$DET_URL"  "$PADDLE_DIR/det.onnx"  || paddle_ok=0
+fetch_to "$REC_URL"  "$PADDLE_DIR/rec.onnx"  || paddle_ok=0
+fetch_to "$DICT_URL" "$PADDLE_DIR/dict.txt"  || paddle_ok=0
+if [[ "$paddle_ok" -eq 1 ]]; then
+    # Cheap sanity check: a non-trivial dict and a multi-MB rec model.
+    dict_lines="$(wc -l < "$PADDLE_DIR/dict.txt" 2>/dev/null || echo 0)"
+    echo "  ok: det.onnx + rec.onnx + dict.txt ($dict_lines dict lines)"
+else
+    echo "fetch-desktop-binaries: one or more PaddleOCR model files failed" >&2
+    exit 1
+fi
 
 # ─── PDFium ─────────────────────────────────────────────────────────
 
@@ -123,7 +145,7 @@ PDFIUM_URL="https://github.com/bblanchon/pdfium-binaries/releases/latest/downloa
 PDFIUM_DEST="$DESKTOP_BIN_DIR/pdfium/$PDFIUM_LIB"
 
 echo
-echo "[2/3] PDFium ($PDFIUM_PLATFORM)"
+echo "[2/2] PDFium ($PDFIUM_PLATFORM)"
 if [[ -f "$PDFIUM_DEST" ]]; then
     echo "  skip: $PDFIUM_LIB (already present)"
 else
@@ -149,71 +171,24 @@ else
             echo "fetch-desktop-binaries: $PDFIUM_LIB not found in archive (looked in lib/, bin/)" >&2
             exit 1
         fi
+    else
+        echo "fetch-desktop-binaries: PDFium fetch/extract failed" >&2
+        exit 1
     fi
     rm -rf "$PDFIUM_TMP"
     trap - EXIT
 fi
 
-# ─── Tesseract ──────────────────────────────────────────────────────
-
-echo
-echo "[3/3] Tesseract"
-TESSERACT_DEST="$DESKTOP_BIN_DIR/tesseract-${TARGET}"
-TESSERACT_DEST_EXE="${TESSERACT_DEST}.exe"
-
-case "$TARGET" in
-    x86_64-pc-windows-msvc)
-        # UB Mannheim ships a portable tesseract.exe. The release page
-        # changes URLs over time, so we pin a known-good archive name
-        # and let the user override via TESSERACT_WIN_URL if needed.
-        UB_URL="${TESSERACT_WIN_URL:-https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.5.0.20241111.exe}"
-        echo "  Windows: UB Mannheim distributable"
-        echo "  url: $UB_URL"
-        echo "  This is an installer, not a portable binary. Manual step:"
-        echo "    1. Run the installer (or extract via 7-Zip)."
-        echo "    2. Copy tesseract.exe to:"
-        echo "       $TESSERACT_DEST_EXE"
-        echo "    3. Re-run this script to verify."
-        if [[ -f "$TESSERACT_DEST_EXE" ]]; then
-            echo "  found: $TESSERACT_DEST_EXE"
-        else
-            echo "  NOT YET STAGED — see manual steps above."
-        fi
-        ;;
-    aarch64-apple-darwin|x86_64-apple-darwin)
-        if [[ -f "$TESSERACT_DEST" ]]; then
-            echo "  found: $TESSERACT_DEST"
-        else
-            echo "  macOS: not auto-fetched in v1 (dynamic dep on brew dylibs)."
-            echo "  Local dev path:"
-            echo "    brew install tesseract"
-            echo "    cp \"\$(brew --prefix tesseract)/bin/tesseract\" \\"
-            echo "       $TESSERACT_DEST"
-            echo "  See sovereign/crates/sovereign-desktop/RELEASING.md §'External binaries'"
-            echo "  for the static-binary plan (Phase 2)."
-        fi
-        ;;
-    x86_64-unknown-linux-gnu)
-        if [[ -f "$TESSERACT_DEST" ]]; then
-            echo "  found: $TESSERACT_DEST"
-        else
-            echo "  Linux: not auto-fetched in v1 (dynamic dep on libleptonica)."
-            echo "  Local dev path:"
-            echo "    sudo apt install tesseract-ocr"
-            echo "    cp /usr/bin/tesseract $TESSERACT_DEST"
-            echo "  See sovereign/crates/sovereign-desktop/RELEASING.md §'External binaries'"
-            echo "  for the static-binary plan (Phase 2)."
-        fi
-        ;;
-esac
-
 # ─── Summary ────────────────────────────────────────────────────────
 
 echo
 echo "Summary:"
-ls -la "$DESKTOP_BIN_DIR" 2>/dev/null || true
+echo "  paddle-ocr/$PADDLE_MODEL_ID/:"
+ls -la "$PADDLE_DIR" 2>/dev/null | sed 's/^/    /' || true
+echo "  pdfium/:"
+ls -la "$DESKTOP_BIN_DIR/pdfium" 2>/dev/null | sed 's/^/    /' || true
 echo
 echo "Next:"
-echo "  1. If anything is missing above, follow the printed instructions."
-echo "  2. cd sovereign/crates/sovereign-desktop && npm run tauri build"
-echo "     (or use --config src-tauri/tauri.release.conf.json to bundle the binaries)"
+echo "  cd sovereign/crates/sovereign-desktop"
+echo "  cargo tauri build --config src-tauri/tauri.release.conf.json"
+echo "  (omit --config for a plain dev build; the base config has no resources)"
