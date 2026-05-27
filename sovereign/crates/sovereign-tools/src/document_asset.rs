@@ -267,10 +267,13 @@ fn mentions_document(tokens: &[String], request: &str) -> bool {
 #[serde(tag = "type")]
 pub enum IngestProgress {
     /// File parsed, chunking complete, embedding about to start.
+    /// Carries `asset_id` so the UI can route this earliest signal to
+    /// the right banner — it's the same id every later event uses.
     Started {
         word_count: usize,
         chunk_count: usize,
         filename: String,
+        asset_id: String,
     },
     /// Embedding chunks into the vector store.
     Indexing { done: usize, total: usize },
@@ -309,6 +312,21 @@ pub enum OperationProgress {
     Synthesising,
 }
 
+/// Output of the inference-free preparation step: the persisted
+/// `Pending` asset plus the chunked text awaiting embedding.
+///
+/// The asset id minted in `prepare` is the SAME id `run_ingest` emits
+/// every `document:progress` event under. The desktop command returns
+/// this id to the UI *before* spawning `run_ingest`, so the banner the
+/// UI shows and the events it receives agree on one id. Before this
+/// split the command minted one id and `ingest` minted another
+/// internally — the banner subscribed to an id that never received a
+/// single progress event and sat on "Queued…" for the entire ingest.
+pub struct PreparedIngest {
+    pub asset: DocumentAsset,
+    text_chunks: Vec<TextChunk>,
+}
+
 // ─── Manager ─────────────────────────────────────────────────
 
 /// Manages the lifecycle of document assets: ingest, route, execute.
@@ -330,19 +348,15 @@ impl DocumentAssetManager {
         Self { inference, store }
     }
 
-    /// Ingest a file from disk. Parses, chunks, embeds, and builds
-    /// a structural skeleton. Returns the completed asset.
+    /// Parse + chunk + create the `Pending` asset record. No inference,
+    /// so it's fast enough to call inline before returning to the UI.
     ///
-    /// The progress callback fires at each phase boundary so the
-    /// frontend can update the UI in real time.
-    pub async fn ingest(
-        &self,
-        file_path: &std::path::Path,
-        on_progress: impl Fn(IngestProgress) + Send + Sync + 'static,
-    ) -> Result<DocumentAsset> {
-        let on_progress: Arc<dyn Fn(IngestProgress) + Send + Sync> = Arc::new(on_progress);
-
-        // ── Parse and chunk ─────────────────────────────────
+    /// Returns a [`PreparedIngest`] whose `asset.id` is the id that
+    /// [`run_ingest`](Self::run_ingest) will emit every progress event
+    /// under. Callers that want to surface a live banner (the desktop
+    /// upload command) call `prepare`, return `prepared.asset` to the
+    /// UI, then spawn `run_ingest` — UI and events share one id.
+    pub async fn prepare(&self, file_path: &std::path::Path) -> Result<PreparedIngest> {
         let parsed = parse_file(file_path)?;
         let filename = file_path
             .file_name()
@@ -368,26 +382,62 @@ impl DocumentAssetManager {
             .replace('_', " ")
             .replace('-', " ");
 
-        // ── Create asset in Pending state ───────────────────
         let asset = DocumentAsset {
-            id: asset_id.clone(),
+            id: asset_id,
             title,
-            filename: filename.clone(),
+            filename,
             file_size_mb,
             word_count,
             chunk_count,
             document_type: DocumentTypeTag::Unknown,
             ingested_at: chrono::Utc::now(),
-            index_id: index_id.clone(),
+            index_id,
             skeleton: None,
             state: AssetState::Pending,
         };
         self.store.save_document_asset(&asset).await?;
 
+        Ok(PreparedIngest { asset, text_chunks })
+    }
+
+    /// Parse, chunk, embed, and enrich a file in one call. Convenience
+    /// wrapper over `prepare` + `run_ingest` for callers (server, CLI,
+    /// tests) that wait for completion and don't need the id early.
+    ///
+    /// The progress callback fires at each phase boundary so the
+    /// frontend can update the UI in real time.
+    pub async fn ingest(
+        &self,
+        file_path: &std::path::Path,
+        on_progress: impl Fn(IngestProgress) + Send + Sync + 'static,
+    ) -> Result<DocumentAsset> {
+        let prepared = self.prepare(file_path).await?;
+        self.run_ingest(prepared, on_progress).await
+    }
+
+    /// Run the embed + tiered-enrichment pipeline on an already-prepared
+    /// asset. Emits every `IngestProgress` under `prepared.asset.id`.
+    /// Long-running: embeds all chunks then builds the RAPTOR atlas.
+    pub async fn run_ingest(
+        &self,
+        prepared: PreparedIngest,
+        on_progress: impl Fn(IngestProgress) + Send + Sync + 'static,
+    ) -> Result<DocumentAsset> {
+        let PreparedIngest { asset, text_chunks } = prepared;
+        let on_progress: Arc<dyn Fn(IngestProgress) + Send + Sync> = Arc::new(on_progress);
+
+        let asset_id = asset.id.clone();
+        let filename = asset.filename.clone();
+        let word_count = asset.word_count;
+        let chunk_count = asset.chunk_count;
+        let file_size_mb = asset.file_size_mb;
+        let index_id = asset.index_id.clone();
+
         on_progress(IngestProgress::Started {
             word_count,
             chunk_count,
             filename: filename.clone(),
+            asset_id: asset_id.clone(),
         });
 
         // ── Concurrent: embedding + skeleton ────────────────
@@ -419,6 +469,14 @@ impl DocumentAssetManager {
                         },
                     )
                     .await?;
+                // Emit at 0% *before* the first batch so the banner flips
+                // off "Queued…" the instant embedding starts — the embed
+                // slot's lazy model load (tens of seconds, cold) lands in
+                // this window, and without a 0% tick the UI looks frozen.
+                on_progress(IngestProgress::Indexing {
+                    done: 0,
+                    total: chunk_count,
+                });
 
                 let now_ts = chrono::Utc::now().timestamp();
                 let mut doc_chunks = Vec::with_capacity(chunk_count);

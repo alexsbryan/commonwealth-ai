@@ -54,6 +54,7 @@
   import DocumentPicker from "./DocumentPicker.svelte";
   import PassageContextChip from "./reading/PassageContextChip.svelte";
   import { readingSession } from "../stores/readingSession.svelte";
+  import { documentIngestionStore } from "../stores/documentIngestion.svelte";
 
   interface Props {
     conversationId: string | null;
@@ -657,6 +658,80 @@
     }
   }
 
+  // ── In-flight attachment persistence ──────────────────────
+  //
+  // A document ingest runs for minutes (embed → skeleton → RAPTOR).
+  // `attachedAsset` is component-local $state, and ChatView unmounts
+  // whenever the user opens Settings/Atlas/Recipe-author (App.svelte's
+  // view branches). Without persistence, navigating away and back
+  // dropped the attachment even though the backend ingest and the
+  // singleton documentIngestionStore listener both kept running.
+  //
+  // We mirror the existing `chat-draft:` localStorage pattern, keyed by
+  // conversation id. On reload we re-fetch the asset (so its persisted
+  // state is current even after a full app restart) and re-subscribe to
+  // the live progress store.
+  function attachmentKey(convId: string): string {
+    return `chat-attachment:${convId}`;
+  }
+
+  function persistAttachment(convId: string | null, assetId: string | null) {
+    if (!convId) return; // pre-conversation attach stays in-memory only
+    try {
+      if (assetId) localStorage.setItem(attachmentKey(convId), assetId);
+      else localStorage.removeItem(attachmentKey(convId));
+    } catch {
+      // Best-effort; private-mode storage failures are tolerable.
+    }
+  }
+
+  /** Restore (or clear) the attachment for `targetId`. Synchronously
+   *  clears any carried-over attachment, then async-fetches the stored
+   *  asset. Guards against the user switching conversations mid-fetch. */
+  function restoreAttachment(targetId: string) {
+    let storedId: string | null = null;
+    try {
+      storedId = localStorage.getItem(attachmentKey(targetId));
+    } catch {
+      storedId = null;
+    }
+    if (!storedId) {
+      // No attachment for this conversation — clear whatever the
+      // previous conversation left attached (ChatView persists across
+      // conversation switches; only a view change unmounts it).
+      attachedAsset = null;
+      attachment = null;
+      return;
+    }
+    getDocumentAsset(storedId)
+      .then((asset) => {
+        if (targetId !== conversationId) return; // user moved on
+        const failed =
+          asset != null &&
+          typeof asset.state === "object" &&
+          "Failed" in asset.state;
+        if (!asset || failed) {
+          // Asset was deleted, or its ingest failed — drop the stale key.
+          persistAttachment(targetId, null);
+          attachedAsset = null;
+          attachment = null;
+          return;
+        }
+        attachedAsset = asset;
+        attachment = {
+          source: asset.title || asset.filename,
+          filePath: "",
+          chunksCreated: asset.chunk_count,
+        };
+        // Subscribe to live progress so an ingest still in flight keeps
+        // advancing the banner after the round-trip back to this view.
+        void documentIngestionStore.init();
+      })
+      .catch(() => {
+        // Fetch failed — leave the (already-cleared) state as-is.
+      });
+  }
+
   async function loadConversation(targetId: string | null) {
     onClearTask();
     if (!targetId) {
@@ -686,6 +761,11 @@
         // Best-effort; private-mode storage failures are tolerable.
       }
     }
+
+    // Restore (or clear) any document attachment for this conversation.
+    // Synchronous clear happens inside, so a carried-over attachment from
+    // the previously-open conversation never lingers.
+    restoreAttachment(targetId);
 
     // Eager clear: bind the new conversation id and empty the
     // message list synchronously, BEFORE awaiting the backend
@@ -736,6 +816,11 @@
       filePath: "",
       chunksCreated: asset.chunk_count,
     };
+    // Persist so the attachment survives a round-trip through another
+    // view while the ingest is still running. For a brand-new chat with
+    // no id yet, this is a no-op — ensureConversation persists it once
+    // the id is minted on first send.
+    persistAttachment(activeConversationId, asset.id);
     showDocPicker = false;
   }
 
@@ -765,6 +850,10 @@
     const created = await createConversation();
     send({ type: "CONVERSATION_BOUND", conversationId: created.id });
     onConversationCreated?.(created.id);
+    // If a document was attached before the conversation had an id,
+    // persist it now under the freshly-minted id so it survives a
+    // later view round-trip.
+    if (attachedAsset) persistAttachment(created.id, attachedAsset.id);
     return created.id;
   }
 
@@ -1200,7 +1289,11 @@
         chunksCreated={attachedAsset.chunk_count}
         assetId={attachedAsset.id}
         initialState={attachedAsset.state}
-        onremove={() => { attachedAsset = null; attachment = null; }}
+        onremove={() => {
+          persistAttachment(activeConversationId, null);
+          attachedAsset = null;
+          attachment = null;
+        }}
       />
     {:else if attachment}
       <AttachmentBanner

@@ -705,6 +705,103 @@ async fn rebuild_skeleton_from_stored_chunks() {
     );
 }
 
+/// Regression — the id the UI receives from `prepare` must be the SAME
+/// id every `IngestProgress` fires under. The desktop upload command
+/// once minted one asset id, returned it to the UI, then let `ingest`
+/// mint a *second* id internally: the banner subscribed to the first
+/// while events fired under the second, so it sat on "Queued…" for the
+/// entire ingest while a duplicate record quietly progressed to Ready.
+#[tokio::test]
+async fn ingest_emits_progress_under_the_prepared_asset_id() {
+    use sovereign_core::traits::DocumentAssetStore;
+    use sovereign_core::types::AssetState;
+    use sovereign_tools::document_asset::IngestProgress;
+    use std::sync::{Arc, Mutex};
+
+    let h = TestHarness::new();
+
+    // A small text document — one chunk, so the pipeline finishes fast.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("regression_doc.txt");
+    std::fs::write(
+        &path,
+        "Ada Lovelace wrote the first algorithm intended for a machine. \
+         She collaborated with Charles Babbage on the Analytical Engine.",
+    )
+    .unwrap();
+
+    let inference: Arc<dyn sovereign_core::traits::InferenceProvider> =
+        Arc::new(harness::DeterministicInference);
+    let store_arc: Arc<dyn sovereign_core::traits::StateStore> =
+        Arc::clone(&h.store) as Arc<dyn sovereign_core::traits::StateStore>;
+    let manager =
+        sovereign_tools::document_asset::DocumentAssetManager::new(inference, store_arc);
+
+    // prepare() persists a Pending asset and hands back its id.
+    let prepared = manager.prepare(&path).await.expect("prepare should succeed");
+    let expected_id = prepared.asset.id.clone();
+    assert!(
+        matches!(prepared.asset.state, AssetState::Pending),
+        "prepared asset should start Pending"
+    );
+    let seeded = h
+        .store
+        .get_document_asset(&expected_id)
+        .await
+        .unwrap()
+        .expect("prepare should persist the asset");
+    assert!(matches!(seeded.state, AssetState::Pending));
+
+    // run_ingest() must emit every id-bearing progress event under the
+    // SAME id prepare returned — never a freshly-minted one.
+    let seen_ids: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&seen_ids);
+    let completed = manager
+        .run_ingest(prepared, move |p| {
+            let id = match p {
+                IngestProgress::Started { asset_id, .. } => Some(asset_id),
+                IngestProgress::RagAvailable { asset_id } => Some(asset_id),
+                IngestProgress::MultiHopReady { asset_id } => Some(asset_id),
+                IngestProgress::Ready { asset_id, .. } => Some(asset_id),
+                _ => None,
+            };
+            if let Some(id) = id {
+                sink.lock().unwrap().push(id);
+            }
+        })
+        .await
+        .expect("run_ingest should succeed");
+
+    assert_eq!(
+        completed.id, expected_id,
+        "completed asset must keep the id prepare returned"
+    );
+    assert!(matches!(completed.state, AssetState::Ready));
+
+    let ids = seen_ids.lock().unwrap();
+    assert!(
+        !ids.is_empty(),
+        "at least the Started + Ready events should have fired"
+    );
+    for id in ids.iter() {
+        assert_eq!(
+            id, &expected_id,
+            "every progress event must carry the prepared asset id — \
+             a different id is the dual-asset bug regressing"
+        );
+    }
+    drop(ids);
+
+    // Exactly one record for this id; run_ingest minted no duplicate.
+    let reloaded = h
+        .store
+        .get_document_asset(&expected_id)
+        .await
+        .unwrap()
+        .expect("the single asset record should still exist");
+    assert!(matches!(reloaded.state, AssetState::Ready));
+}
+
 #[tokio::test]
 async fn rebuild_skeleton_missing_chunks_returns_not_found() {
     use sovereign_core::types::{

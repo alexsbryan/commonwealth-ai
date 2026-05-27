@@ -65,22 +65,63 @@
     return null;
   });
 
+  let skeletonPct = $derived.by(() => {
+    if (typeof liveState === "object" && liveState !== null) {
+      if ("BuildingSkeleton" in liveState && liveState.BuildingSkeleton.chunks_total > 0) {
+        return Math.round(
+          (liveState.BuildingSkeleton.chunks_done / liveState.BuildingSkeleton.chunks_total) * 100,
+        );
+      }
+    }
+    return null;
+  });
+
   let stateLabel = $derived.by(() => {
     if (liveState === "Pending") return "Queued…";
     if (liveState === "PartiallyReady") return "Ready for questions";
     if (liveState === "MultiHopReady") return "Multi-hop ready";
     if (typeof liveState === "object" && liveState !== null) {
       if ("Indexing" in liveState) {
+        // chunks_done === 0 means embedding hasn't returned a batch
+        // yet — usually the embed model warming up. Say "Preparing…"
+        // rather than a stuck-looking "Indexing 0%".
+        if (liveState.Indexing.chunks_done === 0) return "Preparing…";
         const pct = indexingPct;
         return pct != null ? `Indexing ${pct}%` : "Indexing…";
       }
-      if ("BuildingSkeleton" in liveState) return "Building structure…";
+      if ("BuildingSkeleton" in liveState) {
+        const pct = skeletonPct;
+        return pct != null && pct > 0
+          ? `Building structure ${pct}%`
+          : "Building structure…";
+      }
       if ("Failed" in liveState) return "Failed";
     }
     return "";
   });
 
   let showProgress = $derived(isIndexing || isBuildingSkeleton);
+
+  // Re-evaluate the ETA ~once a second so it counts down even during
+  // long phases that emit no progress events — the T3 RAPTOR build can
+  // run a minute between ticks. `nowTick` is referenced by `etaLabel`
+  // purely to force the recompute on each interval.
+  let nowTick = $state(Date.now());
+  $effect(() => {
+    if (!showProgress || !assetId) return;
+    const timer = setInterval(() => (nowTick = Date.now()), 1000);
+    return () => clearInterval(timer);
+  });
+
+  let etaLabel = $derived.by(() => {
+    void nowTick; // recompute each tick
+    if (!assetId || !showProgress) return "";
+    const secs = documentIngestionStore.etaSeconds(assetId);
+    if (secs == null) return "estimating…";
+    if (secs < 20) return "almost done";
+    if (secs < 75) return "~1 min left";
+    return `~${Math.round(secs / 60)} min left`;
+  });
 </script>
 
 <div class="attachment-banner" class:indexing={showProgress}>
@@ -102,6 +143,9 @@
     <span class="attachment-name">{filename}</span>
     {#if showProgress}
       <span class="attachment-state">{stateLabel}</span>
+      {#if etaLabel}
+        <span class="attachment-eta">· {etaLabel}</span>
+      {/if}
     {:else if stateLabel}
       <span class="attachment-state ready">{stateLabel}</span>
     {:else}
@@ -178,6 +222,12 @@
   .attachment-state.ready {
     color: var(--growth);
     font-style: normal;
+  }
+
+  .attachment-eta {
+    color: var(--text-muted);
+    font-size: 0.66rem;
+    font-variant-numeric: tabular-nums;
   }
 
   .attachment-remove {

@@ -3328,60 +3328,31 @@ pub async fn upload_document_asset(
         return Err(format!("File not found: {file_path}"));
     }
 
-    // Parse and chunk synchronously (fast — no inference needed).
-    let parsed = sovereign_tools::rag::parse::parse_file(path)
-        .map_err(|e| format!("Parse failed: {e}"))?;
-    let text_chunks = sovereign_tools::rag::chunk::chunk_text(&parsed.content);
-    let word_count = parsed.content.split_whitespace().count();
-    let chunk_count = text_chunks.len();
-    let file_size_mb = std::fs::metadata(path)
-        .map(|m| m.len() as f32 / (1024.0 * 1024.0))
-        .unwrap_or(0.0);
-    let filename = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("document")
-        .to_string();
-    let title = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or(&filename)
-        .replace('_', " ")
-        .replace('-', " ");
-
-    // Create the asset record immediately so the UI shows it.
-    let asset = sovereign_core::types::DocumentAsset {
-        id: uuid::Uuid::new_v4().to_string(),
-        title,
-        filename,
-        file_size_mb,
-        word_count,
-        chunk_count,
-        document_type: sovereign_core::types::DocumentTypeTag::Unknown,
-        ingested_at: chrono::Utc::now(),
-        index_id: format!("doc-pending"),
-        skeleton: None,
-        state: sovereign_core::types::AssetState::Pending,
-    };
-    store
-        .save_document_asset(&asset)
+    // `prepare` parses + chunks + persists the Pending asset (no
+    // inference — fast). Crucially, the asset id it mints is the SAME
+    // id `run_ingest` emits every `document:progress` event under, so
+    // the banner we return here and the events the UI later receives
+    // agree. (The old path created the asset here AND let `ingest`
+    // mint a second id internally — the UI subscribed to the first,
+    // events fired under the second, and the banner sat on "Queued…"
+    // for the entire ingest while a duplicate record progressed to
+    // Ready unseen.)
+    let manager =
+        sovereign_tools::document_asset::DocumentAssetManager::new(inference, Arc::clone(&store));
+    let prepared = manager
+        .prepare(path)
         .await
-        .map_err(|e| format!("Save failed: {e}"))?;
+        .map_err(|e| format!("Prepare failed: {e}"))?;
+    let response_asset = prepared.asset.clone();
 
-    let response_asset = asset.clone();
-
-    // Spawn the full ingest in the background. Progress events will
-    // update the UI in real time; the asset state transitions from
-    // Pending → Indexing → PartiallyReady → BuildingSkeleton → Ready.
-    let file_path_owned = file_path.to_string();
+    // Spawn the embed + enrichment pipeline in the background. Progress
+    // events update the UI in real time; the asset state transitions
+    // Pending → Indexing → PartiallyReady → BuildingSkeleton →
+    // MultiHopReady → Ready, all under `response_asset.id`.
     let handle = app_handle.clone();
     tauri::async_runtime::spawn(async move {
-        let manager =
-            sovereign_tools::document_asset::DocumentAssetManager::new(inference, store);
-
-        let path = std::path::Path::new(&file_path_owned);
         match manager
-            .ingest(path, move |progress| {
+            .run_ingest(prepared, move |progress| {
                 let _ = handle.emit("document:progress", &progress);
             })
             .await
