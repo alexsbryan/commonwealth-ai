@@ -1616,6 +1616,7 @@ fn upsert_entity(
         affiliation,
         role,
         participants: Vec::new(),
+            provenance: Default::default(),
             concept_kind: None,
 });
     by_folded_name.insert(folded, new_idx);

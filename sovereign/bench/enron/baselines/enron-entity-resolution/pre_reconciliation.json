@@ -1,0 +1,24 @@
+{
+  "_about": "Pre-reconciliation FLOOR baseline. Every surface form is its own cluster — the intentionally-bad baseline every Phase 4 tuning move must beat. The numbers here are placeholders until the full Enron run produces real values; the SHAPE of the JSON is what's stable and committed.",
+  "schema_version": 1,
+  "bench_id": "enron-entity-resolution",
+  "policy_kind": "pre_reconciliation",
+  "split": "train",
+  "captured_ts_unix": 0,
+  "b_cubed": {
+    "precision": null,
+    "recall": null,
+    "f1": null,
+    "n_aligned": 0,
+    "unmatched_predicted": [],
+    "unmatched_gold": []
+  },
+  "pairwise": {
+    "precision": null,
+    "recall": null,
+    "f1": null,
+    "n_aligned_pairs": 0
+  },
+  "signal_histogram": {},
+  "notes": "Run `sovereign bench enron run --split train` with `[enrichment.reconciliation]` disabled OR every surface form as its own atom to produce real numbers. Phase 5 of the architecture-over-Enron push commits these once the full corpus run completes."
+}

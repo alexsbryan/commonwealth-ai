@@ -21,11 +21,14 @@
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+
+pub use boilerplate::{BoilerplateConfig, BoilerplateFilter};
 use sha2::{Digest, Sha256};
 
 use crate::extractors::ExtractedDoc;
 
 pub mod assets;
+pub mod boilerplate;
 pub mod knowledge_density;
 pub mod loader;
 pub mod pageview_rank;
@@ -96,6 +99,13 @@ pub enum FilterConfig {
     /// a trade-off thread rather than a single-answer reference post.
     /// See [`crate::filters::KnowledgeDensityConfig`] for fields.
     KnowledgeDensity(KnowledgeDensityConfig),
+    /// Reject email-shaped docs that are reduced to nothing after
+    /// boilerplate (signatures, quoted-reply, corporate disclaimers)
+    /// is stripped. See
+    /// [`crate::filters::boilerplate::BoilerplateConfig`].
+    /// Per-recipe configurable so corpora with code-in-mail or
+    /// non-Outlook clients can tune their strip behaviour.
+    Boilerplate(BoilerplateConfig),
 }
 
 // ---------------------------------------------------------------------------

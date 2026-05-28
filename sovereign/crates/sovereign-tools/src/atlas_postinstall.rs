@@ -1056,6 +1056,7 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
+                    provenance: Default::default(),
                     concept_kind: None,
 };
         // Off-list noise: 5 entities with massive centrality (each
@@ -1075,6 +1076,7 @@ mod tests {
                 role: None,
                 participants: Vec::new(),
                 defining_quote: None,
+                            provenance: Default::default(),
                             concept_kind: None,
 }));
         }
@@ -1201,6 +1203,7 @@ mod tests {
                 role: None,
                 participants: Vec::new(),
                 defining_quote: None,
+                            provenance: Default::default(),
                             concept_kind: None,
 })
         };
@@ -1352,6 +1355,7 @@ mod tests {
                 role: None,
                 participants: Vec::new(),
                 defining_quote: None,
+                            provenance: Default::default(),
                             concept_kind: None,
 }));
         }

@@ -460,6 +460,12 @@ fn partition_atoms(
                 // ArgumentReconstruction; the validator's coverage
                 // histogram lands in a follow-up.
             }
+            AtomEnvelope::Asset(_) => {
+                // Described-asset atoms (AD-2). Document-level, not
+                // chunk-level; the validator's chunk-anchored coverage
+                // histogram does not score them. Same treatment as
+                // the other additive atom kinds above.
+            }
         }
     }
     (entities, events, states, relations, claims, questions, configurations)
@@ -693,6 +699,7 @@ fn build_orphan_analysis(atoms: &[AtomEnvelope], edges: &[Edge]) -> OrphanAnalys
             AtomEnvelope::Configuration(_) => ("", None),
             AtomEnvelope::ArgumentReconstruction(_) => ("", None),
             AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => ("", None),
+            AtomEnvelope::Asset(_) => ("", None),
         };
         let Some(idx) = bucket_idx else {
             continue;
@@ -974,6 +981,7 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
+                    provenance: Default::default(),
                     concept_kind: None,
 }
 }

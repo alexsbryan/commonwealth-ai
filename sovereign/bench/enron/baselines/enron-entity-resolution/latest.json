@@ -1,0 +1,31 @@
+{
+  "_about": "Latest TUNED baseline. Committed once per tuned reconciliation policy that passes the train→test discipline. Phase 5 of the architecture-over-Enron push produces this number; until then the SHAPE of the JSON is what's stable, with null values for the placeholder fields.",
+  "schema_version": 1,
+  "bench_id": "enron-entity-resolution",
+  "policy_kind": "tuned",
+  "split": "test",
+  "captured_ts_unix": 0,
+  "policy": {
+    "name_similarity_threshold": 0.85,
+    "cross_origin_required_signals": 2,
+    "judge_when_uncertain": true,
+    "judge_trials": 3
+  },
+  "b_cubed": {
+    "precision": null,
+    "recall": null,
+    "f1": null,
+    "n_aligned": 0,
+    "unmatched_predicted": [],
+    "unmatched_gold": []
+  },
+  "pairwise": {
+    "precision": null,
+    "recall": null,
+    "f1": null,
+    "n_aligned_pairs": 0
+  },
+  "signal_histogram": {},
+  "delta_from_pre_reconciliation_f1": null,
+  "notes": "Run `sovereign bench enron run --split test` once per tuned policy. The runner overwrites this file with real numbers + computes delta_from_pre_reconciliation_f1 against pre_reconciliation.json's b_cubed.f1."
+}

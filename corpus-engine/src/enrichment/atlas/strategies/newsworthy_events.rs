@@ -209,6 +209,7 @@ pub fn extract_atoms_for_portal_chunks(
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            provenance: Default::default(),
             concept_kind: None,
         }));
     }

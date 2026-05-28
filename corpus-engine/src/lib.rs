@@ -12,6 +12,7 @@
 
 pub mod acquirers;
 pub mod alignment_projector;
+pub mod asset_store;
 // archaeology_eval, git_archaeology, rough_edges moved to
 // corpus-engine-archaeology (step 4 of the decomposition plan,
 // 2026-05-23). corpus-engine has no internal users of these

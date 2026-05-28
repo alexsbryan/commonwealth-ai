@@ -403,6 +403,7 @@ fn atom_type_short(t: &AtomType) -> &'static str {
         AtomType::ArgumentReconstruction => "ArgumentRecon",
         AtomType::Position => "Position",
         AtomType::Opposition => "Opposition",
+        AtomType::Asset => "Asset",
     }
 }
 

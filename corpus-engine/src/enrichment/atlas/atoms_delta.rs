@@ -315,6 +315,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![],
+            provenance: Default::default(),
             concept_kind: None,
         })
     }

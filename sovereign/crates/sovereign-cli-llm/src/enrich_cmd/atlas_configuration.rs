@@ -148,6 +148,11 @@ pub async fn cmd_atlas_configuration(args: &[String]) -> i32 {
             AtomEnvelope::ArgumentReconstruction(x) => argument_reconstructions.push(x),
             AtomEnvelope::Position(x) => positions.push(x),
             AtomEnvelope::Opposition(x) => oppositions.push(x),
+            AtomEnvelope::Asset(_) => {
+                // Configuration-detection pass is prose-shaped; the
+                // Asset substrate is preserved through the
+                // read-modify-write via the writer (not here).
+            }
         }
     }
 

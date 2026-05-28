@@ -18,8 +18,8 @@ use std::sync::Arc;
 
 use crate::error::{Error, Result};
 use crate::filters::{
-    assets, compute_signature, ComposeMode, DocumentFilter, FilterConfig, FilterPipeline,
-    KnowledgeDensityFilter, PageviewRankFilter, TitleListFilter,
+    assets, compute_signature, BoilerplateFilter, ComposeMode, DocumentFilter, FilterConfig,
+    FilterPipeline, KnowledgeDensityFilter, PageviewRankFilter, TitleListFilter,
 };
 
 const BUNDLED_PREFIX: &str = "@bundled:";
@@ -52,6 +52,9 @@ pub fn build_filter_pipeline(
             }
             FilterConfig::KnowledgeDensity(cfg) => {
                 Arc::new(KnowledgeDensityFilter::new(cfg.clone()))
+            }
+            FilterConfig::Boilerplate(cfg) => {
+                Arc::new(BoilerplateFilter::new(cfg.clone()))
             }
         };
         children.push(child);

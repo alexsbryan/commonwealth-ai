@@ -207,6 +207,12 @@ pub fn migrate_atlas_ids(
                 let new = AtomId::opposition_content_hash(&o.canonical_label, corpus_id);
                 (o.id.clone(), new)
             }
+            AtomEnvelope::Asset(_) => {
+                // Asset ids are already content-addressed by sha256 at
+                // birth (see `Asset::make_id`). Nothing to migrate.
+                summary.atoms_already_content_hash += 1;
+                continue;
+            }
         };
         check_collision(&mut new_ids_seen, &old_id, &new_id, &mut summary.collisions_detected);
         id_map.insert(old_id, new_id);
@@ -465,6 +471,16 @@ fn rewrite_atom(env: &mut AtomEnvelope, id_map: &HashMap<AtomId, AtomId>) {
                 }
             }
         }
+        AtomEnvelope::Asset(a) => {
+            // Asset.id is content-addressed by sha256 — id_map never
+            // contains an entry for it. described_by may reference a
+            // remapped atom id, though.
+            if let Some(desc) = a.described_by.as_mut() {
+                if let Some(new) = id_map.get(desc) {
+                    *desc = new.clone();
+                }
+            }
+        }
     }
 }
 
@@ -515,6 +531,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![],
+            provenance: Default::default(),
             concept_kind: None,
         })
     }
@@ -612,6 +629,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![AtomId::entity(1)], // points at Alice
+            provenance: Default::default(),
             concept_kind: None,
         });
         write_fixture(tmp.path(), vec![alice, bob], vec![]);

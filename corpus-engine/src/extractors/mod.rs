@@ -1,8 +1,13 @@
 pub mod alignment_workspace;
 pub mod anthropic_export;
+pub mod column_aware;
+pub mod described_asset;
+pub mod docx;
+pub mod email_rfc5322;
 pub mod json;
 pub mod json_api;
 pub mod custom_file;
+pub mod xlsx;
 pub mod xml;
 pub mod xml_sections;
 pub mod html;

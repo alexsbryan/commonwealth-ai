@@ -566,6 +566,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+                    provenance: Default::default(),
                     concept_kind: None,
 }
 }

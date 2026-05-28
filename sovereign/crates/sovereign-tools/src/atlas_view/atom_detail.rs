@@ -349,6 +349,11 @@ fn build_referenced_atoms(
                 refs.push(r);
             }
         }
+        AtomEnvelope::Asset(a) => {
+            if let Some(d) = &a.described_by {
+                refs.push(d);
+            }
+        }
     }
 
     let mut out: BTreeMap<String, ReferencedAtom> = BTreeMap::new();
@@ -384,6 +389,10 @@ fn build_evidence(atom: &AtomEnvelope) -> Vec<EvidenceExcerpt> {
         AtomEnvelope::ArgumentReconstruction(a) => a.evidence.iter().collect(),
         AtomEnvelope::Position(p) => vec![&p.first_appearance],
         AtomEnvelope::Opposition(o) => vec![&o.first_appearance],
+        // Asset atoms carry no chunk evidence — the asset IS the
+        // evidence. Detail-view UI surfaces sha256/size/parsed_form
+        // through a separate panel.
+        AtomEnvelope::Asset(_) => Vec::new(),
     };
     chunks
         .into_iter()
@@ -421,6 +430,7 @@ fn edge_type_rank(t: EdgeType) -> u8 {
         EdgeType::EvidenceFor => 10,
         EdgeType::Concedes => 11,
         EdgeType::OpposesIn => 12,
+        EdgeType::Attaches => 13,
     }
 }
 
@@ -440,6 +450,7 @@ fn atom_type_of(atom: &AtomEnvelope) -> AtomType {
         AtomEnvelope::ArgumentReconstruction(_) => AtomType::ArgumentReconstruction,
         AtomEnvelope::Position(_) => AtomType::Position,
         AtomEnvelope::Opposition(_) => AtomType::Opposition,
+        AtomEnvelope::Asset(_) => AtomType::Asset,
     }
 }
 
@@ -464,6 +475,13 @@ fn display_name_of(atom: &AtomEnvelope) -> String {
         AtomEnvelope::ArgumentReconstruction(a) => a.name.clone(),
         AtomEnvelope::Position(a) => a.canonical_name.clone(),
         AtomEnvelope::Opposition(a) => a.canonical_label.clone(),
+        AtomEnvelope::Asset(a) => {
+            if a.original_filename.is_empty() {
+                format!("{} asset {}", a.asset_kind, &a.sha256[..12.min(a.sha256.len())])
+            } else {
+                a.original_filename.clone()
+            }
+        }
     }
 }
 
@@ -510,6 +528,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![],
+                    provenance: Default::default(),
                     concept_kind: None,
 })
     }

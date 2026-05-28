@@ -1,0 +1,247 @@
+# Enron entity-resolution bench bank.
+#
+# Schema:
+#   [bank] — bench-wide metadata (name, corpus, description).
+#   [[questions]] — one canonical entity per entry. Each carries:
+#     id              : stable bench-scoped id
+#     canonical_id    : the canonical entity id (chosen at author time)
+#     entity_type     : "person" | "organization" | "place"
+#     canonical_name  : reader-facing label
+#     surface_forms   : array of accepted surface forms the reconciler
+#                       should collapse under canonical_id
+#     split           : "train" | "test" | "holdout"
+#     notes           : optional rationale for the choice / corner case
+#
+# Holdout entries are SEALED: their surface_forms field intentionally
+# carries only 1-2 entries so a passing eye scanning this file doesn't
+# pre-leak the holdout shape. The full surface set unseals via the
+# CLI flag.
+
+[bank]
+name = "enron-entity-resolution-v0"
+corpus = "enron-sample"
+description = """
+Seed ground-truth set for Enron entity reconciliation. Sourced from
+the public Enron organisational record + the counterparty mentions
+attested in the released email corpus.
+
+This is the floor + iteration target for Phase 4's multi_origin_merge
+primitive. The architecture-over-Enron push ships the substrate;
+public release (recipe publish, full curation, holdout unseal) lives
+in a separate follow-up plan.
+"""
+
+# ── Train split — tune against these freely ───────────────────
+
+[[questions]]
+id = "person_ken_lay"
+canonical_id = "person-ken-lay"
+entity_type = "person"
+canonical_name = "Kenneth L. Lay"
+surface_forms = [
+  "Ken Lay",
+  "Kenneth Lay",
+  "Kenneth L. Lay",
+  "K. Lay",
+  "klay@enron.com",
+  "kenneth.lay@enron.com",
+]
+split = "train"
+notes = "Founding executive. Email-address surface forms are decisive signals."
+
+[[questions]]
+id = "person_jeff_skilling"
+canonical_id = "person-jeff-skilling"
+entity_type = "person"
+canonical_name = "Jeffrey K. Skilling"
+surface_forms = [
+  "Jeff Skilling",
+  "Jeffrey Skilling",
+  "J. Skilling",
+  "jeff.skilling@enron.com",
+  "jskilling@enron.com",
+]
+split = "train"
+
+[[questions]]
+id = "person_andy_fastow"
+canonical_id = "person-andy-fastow"
+entity_type = "person"
+canonical_name = "Andrew S. Fastow"
+surface_forms = [
+  "Andy Fastow",
+  "Andrew Fastow",
+  "A. Fastow",
+  "andrew.fastow@enron.com",
+]
+split = "train"
+
+[[questions]]
+id = "org_dynegy"
+canonical_id = "org-dynegy"
+entity_type = "organization"
+canonical_name = "Dynegy Inc."
+surface_forms = [
+  "Dynegy",
+  "Dynegy Inc.",
+  "Dynegy Inc",
+]
+split = "train"
+notes = "Common counterparty. Bare brand + full legal name."
+
+[[questions]]
+id = "org_el_paso"
+canonical_id = "org-el-paso"
+entity_type = "organization"
+canonical_name = "El Paso Corporation"
+surface_forms = [
+  "El Paso",
+  "El Paso Corp.",
+  "El Paso Corporation",
+  "EP Energy",
+]
+split = "train"
+notes = "Watch out: 'El Paso' is also a place name; corpus context disambiguates."
+
+[[questions]]
+id = "org_williams"
+canonical_id = "org-williams-cos"
+entity_type = "organization"
+canonical_name = "The Williams Companies, Inc."
+surface_forms = [
+  "Williams",
+  "Williams Cos.",
+  "Williams Companies",
+  "The Williams Companies, Inc.",
+]
+split = "train"
+notes = "Easily confused with Williams Industries (steel fab). Reconciliation must not collapse them."
+
+[[questions]]
+id = "org_pge"
+canonical_id = "org-pge"
+entity_type = "organization"
+canonical_name = "Pacific Gas and Electric Company"
+surface_forms = [
+  "PG&E",
+  "PGE",
+  "Pacific Gas and Electric",
+  "Pacific Gas & Electric",
+  "Pacific Gas and Electric Company",
+]
+split = "train"
+notes = "California utility, central to the 2000-2001 crisis. Acronym + full name."
+
+[[questions]]
+id = "org_arthur_andersen"
+canonical_id = "org-arthur-andersen"
+entity_type = "organization"
+canonical_name = "Arthur Andersen LLP"
+surface_forms = [
+  "Arthur Andersen",
+  "Andersen",
+  "Arthur Andersen LLP",
+  "AA",
+]
+split = "train"
+notes = "Auditor through 2002. 'Andersen' bare-token can collide with personal surnames; entity_type disambiguates."
+
+# ── Test split — measure ONCE per tuned policy ────────────────
+
+[[questions]]
+id = "person_rebecca_mark"
+canonical_id = "person-rebecca-mark"
+entity_type = "person"
+canonical_name = "Rebecca P. Mark"
+surface_forms = [
+  "Rebecca Mark",
+  "Rebecca P. Mark",
+  "R. Mark",
+  "rebecca.mark@enron.com",
+]
+split = "test"
+
+[[questions]]
+id = "person_richard_causey"
+canonical_id = "person-richard-causey"
+entity_type = "person"
+canonical_name = "Richard A. Causey"
+surface_forms = [
+  "Rick Causey",
+  "Richard Causey",
+  "R. Causey",
+  "richard.causey@enron.com",
+]
+split = "test"
+
+[[questions]]
+id = "org_jpmc"
+canonical_id = "org-jpmc"
+entity_type = "organization"
+canonical_name = "JPMorgan Chase"
+surface_forms = [
+  "JPMorgan",
+  "JP Morgan",
+  "JPM",
+  "JPMorgan Chase",
+  "Chase",
+]
+split = "test"
+notes = "Bare 'Chase' is ambiguous (Chase Manhattan pre-2000 vs JPMC post-2000); judge calibration."
+
+[[questions]]
+id = "org_calpine"
+canonical_id = "org-calpine"
+entity_type = "organization"
+canonical_name = "Calpine Corporation"
+surface_forms = [
+  "Calpine",
+  "Calpine Corp.",
+  "Calpine Corporation",
+]
+split = "test"
+
+[[questions]]
+id = "place_houston"
+canonical_id = "place-houston"
+entity_type = "place"
+canonical_name = "Houston, TX"
+surface_forms = [
+  "Houston",
+  "Houston, TX",
+  "Houston, Texas",
+]
+split = "test"
+
+# ── Holdout — SEALED. Surface forms intentionally minimal ─────
+#
+# Adding entries here is fine; populating their `surface_forms`
+# beyond 1-2 entries leaks the holdout. The full ground truth
+# unseals via `--unseal-holdout` and the canonical store at
+# `~/.sovereign/bench/enron/holdout.jsonl` (gitignored).
+
+[[questions]]
+id = "person_holdout_1"
+canonical_id = "person-holdout-1"
+entity_type = "person"
+canonical_name = "<sealed>"
+surface_forms = ["<sealed>"]
+split = "holdout"
+notes = "Sealed Enron executive — unseal via CLI."
+
+[[questions]]
+id = "person_holdout_2"
+canonical_id = "person-holdout-2"
+entity_type = "person"
+canonical_name = "<sealed>"
+surface_forms = ["<sealed>"]
+split = "holdout"
+
+[[questions]]
+id = "org_holdout_1"
+canonical_id = "org-holdout-1"
+entity_type = "organization"
+canonical_name = "<sealed>"
+surface_forms = ["<sealed>"]
+split = "holdout"
+notes = "Sealed counterparty — unseal via CLI."

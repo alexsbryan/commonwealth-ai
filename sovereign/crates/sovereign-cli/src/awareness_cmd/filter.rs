@@ -610,6 +610,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![AtomId::entity(2), AtomId::entity(3)],
+                    provenance: Default::default(),
                     concept_kind: None,
 };
         let mut counts = HashMap::new();

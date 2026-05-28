@@ -203,3 +203,57 @@ Five cross-iteration prompt-engineering lessons worth keeping even though the ar
 5. **Composing two LLM passes on the same Primary model** doubles latency without doubling quality — the Presenter rewrite loses anchors more than it adds value.
 
 What stays behind the kill-switch: `pipeline/curator.rs`, `pipeline/stages.rs`, `pipeline/presenter.rs` (the `strip_presenter_artifacts` post-processor is genuinely useful as a standalone helper), `pipeline/judge.rs`, `NarrationPhase` stage frames. **Do not flip the default to on.** If deleting, preserve `strip_presenter_artifacts` and consider extracting Curator section-budget logic first.
+
+## enron-entity-resolution (2026-05-27, Phase 1-4 substrate landed)
+
+The architecture-over-Enron push (5-phase plan; see
+`~/.claude/plans/this-is-a-whole-serialized-cake.md`) shipped the
+substrate every future inbox / sales-intel / project-memory vertical
+will inherit unchanged. Phases 1-4 landed; Phase 5 — running the
+substrate at full Enron scale and committing tuned numbers — is
+sequenced behind the corpus actually being in hand.
+
+### Substrate primitives shipped
+
+| Primitive | Location | Owner phase |
+|---|---|---|
+| Content-addressed asset store | `corpus-engine/src/asset_store/` | Phase 1 (AD-1) |
+| Described-asset dispatcher + sub-extractor registry | `corpus-engine/src/extractors/described_asset.rs` | Phase 1 (AD-3) |
+| In-tree sub-extractors: xlsx (parquet parsed_form), docx, plaintext, opaque-fallback | `corpus-engine/src/extractors/{xlsx,docx}.rs` | Phase 1 |
+| `Asset` atom + `EdgeKind::Attaches` | `corpus-engine/src/enrichment/atlas/{atoms,edges}.rs` | Phase 1 (AD-2); SCHEMA_VERSION 2.0→2.1 |
+| RFC-5322 + MIME email extractor with attachment dispatch | `corpus-engine/src/extractors/email_rfc5322.rs` | Phase 2 |
+| Boilerplate DocumentFilter (signature, quoted-reply, disclaimer) | `corpus-engine/src/filters/boilerplate.rs` | Phase 2 |
+| B³ + pairwise-F1 entity-resolution scorer | `sovereign-eval/src/entity_resolution_score.rs` | Phase 3 |
+| Bench split discipline (Train / Test / Holdout) + peek budget | `sovereign-eval/src/entity_resolution_bench.rs` | Phase 3 |
+| Calibrated entity-pair judge prompt + exemplar bank | `corpus-engine/assets/judges/business_entity_v1/` | Phase 3 |
+| Bench scaffold (questions.toml + ground_truth_entities.jsonl) | `sovereign/bench/enron/` | Phase 3 |
+| `Provenance` field on Entity (AD-4) | `corpus-engine/src/enrichment/atlas/atoms.rs` | Phase 4; SCHEMA_VERSION 2.1→2.2 |
+| Multi-origin reconciliation primitive + reversible oplog | `corpus-engine/src/enrichment/reconciliation/` | Phase 4 |
+| Column-aware extractor (reads parquet parsed_form, emits typed Entity atoms) | `corpus-engine/src/extractors/column_aware.rs` | Phase 4 |
+| `[enrichment.reconciliation]` TOML schema | `corpus-engine/src/recipe.rs::ReconciliationToml` | Phase 4 |
+
+### Test coverage (unit + integration)
+
+- Asset store: 10 (mod) + idempotent / parsed-form / sharded raw / ledger malformed-line tolerance / record-parsed-form errors
+- Described-asset dispatcher: 6 + opaque-fallback / dedup-in-store / hidden-file-skip / mac-metadata-skip / parsed-form-stub
+- DOCX: 3 (extract / empty-fallback / detect)
+- XLSX: 3 (detect by ext / detect by magic / name())
+- Email RFC-5322: 7 (parse-plain / thread-collapse / maildir-walk / html-fallback / synth-message-id / body-truncation / attachment-dispatch)
+- Boilerplate filter: 8 (each strip axis / reject-empty-after-strip / accept-substantive / config-axis toggles / description text)
+- B³ + pairwise: 6 (perfect / floor / over-merge / unmatched-diagnostics / empty-safe / pairwise-diagonal-excluded)
+- Split + peek-budget: 5 (load / sealed-excluded-from-gold / merge-unsealed / peek-burn / requires_unseal)
+- Reconciliation: 17 (signals / oplog merge+split / cross-origin gate / transitive collapse / singletons / empty / round-trip)
+- Column-aware: 4 (classify / extract-typed / route-by-entity-type / empty-column)
+- Atoms schema back-compat (2.0 + 2.1 + 2.2 round-trip): 4
+- E2E: 2 corpus-engine + 2 sovereign-eval — three-origin collapse + floor-vs-tuned delta + asset-store-attachment dispatch + over-merge detection
+
+### Phase 5 status
+
+The integration-test `corpus-engine/tests/architecture_over_enron_e2e.rs`
+verifies the substrate end-to-end on a synthetic mini-corpus. The
+full Enron run requires the corpus actually in hand + ~hours of
+LLM inference; placeholder baseline JSONs land at
+`baselines/enron-entity-resolution/{pre_reconciliation,latest,peek_budget}.json`
+so the runner has a target schema to overwrite when the real
+numbers come in.
+

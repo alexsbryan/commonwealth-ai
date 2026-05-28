@@ -507,7 +507,7 @@ impl CorpusEngine {
             .await?;
 
         // Step 2: Extract documents.
-        let extractor = self.make_extractor(&recipe.extract);
+        let extractor = self.make_extractor(&recipe.extract, &recipe.corpus.id);
         let doc_iter = extractor.extract(&source_path)?;
 
         // Step 2.5: Apply document-level filters (recipe scope).

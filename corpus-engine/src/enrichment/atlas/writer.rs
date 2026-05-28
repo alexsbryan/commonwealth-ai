@@ -398,6 +398,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+                    provenance: Default::default(),
                     concept_kind: None,
 };
         let event = Event {
@@ -428,7 +429,14 @@ mod tests {
             assert!(p.exists(), "expected file: {}", p.display());
         }
         let atoms_json = fs::read_to_string(&written.atoms_path).unwrap();
-        assert!(atoms_json.contains("\"schema_version\": \"2.0\""));
+        let atoms_ver = format!(
+            "\"schema_version\": \"{}\"",
+            crate::enrichment::atlas::atoms::AtomsFile::SCHEMA_VERSION
+        );
+        assert!(
+            atoms_json.contains(&atoms_ver),
+            "atoms.json should carry the current schema_version"
+        );
         assert!(atoms_json.contains("\"canonical_name\": \"Alyosha\""));
         let edges_json = fs::read_to_string(&written.edges_path).unwrap();
         assert!(edges_json.contains("\"edge_type\": \"Involves\""));
@@ -455,6 +463,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+                    provenance: Default::default(),
                     concept_kind: None,
 };
         write_atlas(&atlas_dir, &[entity], &[], &[]).unwrap();

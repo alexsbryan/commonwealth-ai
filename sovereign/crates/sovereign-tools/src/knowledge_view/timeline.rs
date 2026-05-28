@@ -330,6 +330,7 @@ mod tests {
             role: role.map(|s| s.into()),
             participants: Vec::new(),
             defining_quote: None,
+                    provenance: Default::default(),
                     concept_kind: None,
 }
 }
@@ -348,6 +349,7 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
+                    provenance: Default::default(),
                     concept_kind: None,
 }
 }
@@ -366,6 +368,7 @@ mod tests {
             role: None,
             participants: participant_ids.to_vec(),
             defining_quote: None,
+                    provenance: Default::default(),
                     concept_kind: None,
 }
 }
