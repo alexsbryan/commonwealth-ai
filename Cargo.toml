@@ -83,6 +83,7 @@ sovereign-cli-shared = { path = "sovereign/crates/sovereign-cli-shared" }
 sovereign-pipeline = { path = "sovereign/crates/sovereign-pipeline" }
 sovereign-work-atlas = { path = "sovereign/crates/sovereign-work-atlas" }
 sovereign-agent-bench = { path = "sovereign/crates/sovereign-agent-bench" }
+sovereign-eval = { path = "sovereign/crates/sovereign-eval" }
 commonwealth-agent-tools = { path = "sovereign/crates/commonwealth-agent-tools" }
 commonwealth-tdd = { path = "sovereign/crates/commonwealth-tdd" }
 commonwealth-core = { path = "commonwealth/crates/commonwealth-core" }
@@ -101,6 +102,15 @@ commonwealth-state = { path = "commonwealth/crates/commonwealth-state" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
+
+# Spreadsheet reader — used by the `xlsx` described-asset sub-extractor
+# (architecture-over-Enron Phase 1). Pure Rust; XLSX/XLSM/XLSB/XLS/ODS.
+calamine = "0.26"
+
+# RFC-5322 / MIME parser — used by the `email_rfc5322` extractor
+# (architecture-over-Enron Phase 2). Pure Rust; handles encoded
+# headers + multipart bodies + transfer-encoding.
+mailparse = "0.15"
 
 thiserror = "2"
 anyhow = "1"

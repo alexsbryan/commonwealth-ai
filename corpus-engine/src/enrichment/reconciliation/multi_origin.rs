@@ -151,8 +151,23 @@ pub fn reconcile_with_signals(
                 1
             };
             if fired.len() < needed {
+                tracing::debug!(
+                    left = %entities[i].canonical_name,
+                    right = %entities[j].canonical_name,
+                    cross_origin,
+                    fired_count = fired.len(),
+                    needed,
+                    "reconciliation: candidate rejected by signal-count gate"
+                );
                 continue;
             }
+            tracing::debug!(
+                left = %entities[i].canonical_name,
+                right = %entities[j].canonical_name,
+                cross_origin,
+                signals = ?fired.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+                "reconciliation: merging candidate pair"
+            );
             signal_log.insert((i, j), fired);
             union(&mut parent, i, j);
         }

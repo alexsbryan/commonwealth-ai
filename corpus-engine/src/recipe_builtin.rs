@@ -47,6 +47,14 @@ pub enum RecipeId {
     /// `mesh_sharing = false`. See
     /// `sovereign-recipes/conversations-anthropic/README.md`.
     ConversationsAnthropic,
+    /// Architecture-over-Enron Phase 5 forcing function — all 150
+    /// mailboxes from the CMU 2015-05-07 snapshot (~500k messages).
+    /// Operator downloads the tarball manually; see
+    /// `corpus-engine/recipes/enron-sample/recipe.toml`.
+    EnronSample,
+    /// Iteration variant — Kenneth Lay's mailbox alone (~6k messages).
+    /// Fast-iteration target for reconciliation-policy tuning.
+    EnronSampleOneMailbox,
 }
 
 impl RecipeId {
@@ -75,6 +83,8 @@ impl RecipeId {
             Self::OlcOpinions => "olc-opinions",
             Self::ScotusOpinions => "scotus-opinions",
             Self::ConversationsAnthropic => "conversations-anthropic",
+            Self::EnronSample => "enron-sample",
+            Self::EnronSampleOneMailbox => "enron-sample-onemailbox",
         }
     }
 
@@ -100,6 +110,8 @@ impl RecipeId {
             "olc-opinions" => Some(Self::OlcOpinions),
             "scotus-opinions" => Some(Self::ScotusOpinions),
             "conversations-anthropic" => Some(Self::ConversationsAnthropic),
+            "enron-sample" => Some(Self::EnronSample),
+            "enron-sample-onemailbox" => Some(Self::EnronSampleOneMailbox),
             _ => None,
         }
     }
@@ -136,6 +148,10 @@ impl RecipeId {
             Self::ConversationsAnthropic => {
                 include_str!("../recipes/conversations-anthropic/recipe.toml")
             }
+            Self::EnronSample => include_str!("../recipes/enron-sample/recipe.toml"),
+            Self::EnronSampleOneMailbox => {
+                include_str!("../recipes/enron-sample-onemailbox/recipe.toml")
+            }
         }
     }
 
@@ -161,6 +177,8 @@ impl RecipeId {
         Self::OlcOpinions,
         Self::ScotusOpinions,
         Self::ConversationsAnthropic,
+        Self::EnronSample,
+        Self::EnronSampleOneMailbox,
     ];
 }
 

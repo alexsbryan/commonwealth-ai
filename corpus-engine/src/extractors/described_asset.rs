@@ -403,10 +403,12 @@ impl DescribedAssetIterator {
                     path.display()
                 ))
             })?;
-            tracing::trace!(
+            tracing::debug!(
                 path = %path.display(),
-                sub = sub.name(),
-                "described_asset: dispatched",
+                size = bytes.len(),
+                sub_extractor = sub.name(),
+                newly_stored = receipt.newly_stored,
+                "described_asset: sub-extractor picked"
             );
             sub.extract(path, &bytes, &receipt.sha256, self.store.as_ref())?
         };

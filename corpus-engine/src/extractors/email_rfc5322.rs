@@ -172,6 +172,14 @@ impl EmailIterator {
 
         let (body, body_was_truncated) = collect_body(&parsed, self.config.max_body_bytes)?;
         let attachments = self.handle_attachments(&parsed, &message_id, path)?;
+        tracing::debug!(
+            path = %path.display(),
+            message_id = %message_id,
+            body_bytes = body.len(),
+            body_truncated = body_was_truncated,
+            attachments = attachments.len(),
+            "email_rfc5322: parsed"
+        );
 
         let metadata = serde_json::json!({
             "doc_type": "email",

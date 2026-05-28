@@ -1,0 +1,94 @@
+# Full Enron Email Corpus (CMU 2015-05-07 snapshot)
+#
+# The forcing function for the architecture-over-Enron substrate
+# (5-phase plan in `~/.claude/plans/this-is-a-whole-serialized-cake.md`).
+# All ~500k messages × 150 mailboxes (~10 GB attachments expected
+# through the asset store).
+#
+# Operator setup (one-shot, manual):
+#
+#   mkdir -p ~/.sovereign/corpora-staging/enron
+#   cd ~/.sovereign/corpora-staging/enron
+#   curl -L -O https://www.cs.cmu.edu/~enron/enron_mail_20150507.tar.gz
+#   tar xzf enron_mail_20150507.tar.gz
+#   # produces ./maildir/{user}/{folder}/...
+#
+# The tarball SHA-256 is pinned in `_provenance.json` next to the
+# extracted maildir so re-extracts are bit-checkable.
+#
+# Privacy: Enron is public record (FERC released it during the 2002
+# investigation). `mesh_sharing = false` anyway — this recipe is the
+# substrate's forcing function, not something to gossip across peers.
+
+[corpus]
+id = "enron-sample"
+name = "Enron Email Corpus (CMU)"
+description = "All 150 mailboxes from the CMU Enron snapshot. Drives the multi-origin reconciliation primitive (corpus-engine/src/enrichment/reconciliation/) at full scale and pins the tuned baseline at sovereign/bench/enron/baselines/enron-entity-resolution/latest.json."
+license = "public-domain"
+schema_version = 1
+mesh_sharing = false
+size_compressed_gb = 0.4
+size_indexed_gb = 6.0
+
+[acquire]
+type = "local_file"
+path = "~/.sovereign/corpora-staging/enron/maildir"
+
+[extract]
+type = "email"
+# 4 MiB per-message body cap — generous; long-tail HTML newsletters
+# truncate and set `body_was_truncated` in metadata.
+max_body_bytes = 4194304
+# 0 → use the described-asset dispatcher's default (64 MiB).
+max_attachment_bytes = 0
+
+[[filter]]
+type = "boilerplate"
+strip_signatures = true
+strip_quoted_replies = true
+strip_disclaimers = true
+min_body_chars_after_strip = 20
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+# Atlas v2 enrichment — `conversation_atlas` extended with business-
+# shape entities through EntityType::Other (per
+# corpus-engine/src/enrichment/pipeline/atlas.rs:106 `string_enum_with_other!`).
+# Reconciliation runs over the resulting Entity atoms.
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "conversational"
+prompt_version = "enron-v0"
+
+# Phase 4 multi-origin reconciliation policy. Defaults match the
+# in-tree `ReconciliationPolicy::default()`; tune over the train
+# split before measuring on test.
+[enrichment.reconciliation]
+name_similarity_threshold = 0.85
+cross_origin_required_signals = 2
+judge_when_uncertain = true
+judge_trials = 3
+
+# Column-aware extractor reads the parquet parsed_form caches that
+# the xlsx sub-extractor writes during described-asset dispatch.
+# Header → entity-type defaults cover Enron's most common
+# spreadsheet shapes (counterparty / employee / trader lists).
+[enrichment.reconciliation.column_aware]
+max_entities_per_column = 5000
+
+[enrichment.reconciliation.column_aware.column_headers]
+person_headers = ["employee", "person", "name", "trader", "owner", "contact", "attendee"]
+organization_headers = ["counterparty", "customer", "vendor", "supplier", "company", "organization", "client", "broker"]
+place_headers = ["city", "state", "country", "location"]
+
+[display]
+category = "email"
+icon = "mail"

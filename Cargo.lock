@@ -10843,6 +10843,7 @@ dependencies = [
  "sovereign-atos",
  "sovereign-cli-shared",
  "sovereign-core",
+ "sovereign-eval",
  "sovereign-inference",
  "sovereign-mesh",
  "sovereign-pipeline",
