@@ -205,7 +205,20 @@ identical schema for a full index or a shard.
 ├── wikipedia/
 │   ├── _corpus_meta.json                # authoritative metadata
 │   └── chunks.lance/{...}
-└── stackexchange-shard-0-6200000/       # same schema as a full index
+├── stackexchange-shard-0-6200000/       # same schema as a full index
+└── enron-sample-onemailbox/             # architecture-over-Enron substrate paths
+    ├── _corpus_meta.json
+    ├── chunks.lance/{...}
+    ├── assets/                          # AD-1 content-addressed asset store
+    │   ├── ledger.jsonl                 # append-only LedgerEntry per sha256
+    │   ├── <hh>/<sha256>                # raw bytes, sharded by leading 2 hex
+    │   └── parsed/<sha256>.<ext>        # typed parsed cache (parquet/ical/…)
+    └── atlas/
+        ├── atoms.json                   # AtomsFile SCHEMA_VERSION 2.2
+        ├── asset_atoms.jsonl            # AD-2 Asset envelopes (sidecar union'd
+        │                                # into atoms.json on next atlas write)
+        ├── asset_edges.jsonl            # EdgeType::Attaches edges
+        └── reconciliation_oplog.jsonl   # Phase 4 reversible Merge/Split ops
 ```
 
 `(corpus_id, chunk_id)` is the citation handle and is **structurally
@@ -1069,6 +1082,12 @@ Default ports:
 | Understand the loopback guard                    | `sovereign-mesh/src/loopback_guard.rs` + `admin_http::tests::loopback_guard_works_under_production_listener_shape` |
 | Understand local-corpus snapshot/rollback        | `sovereign-tools/src/local_corpus/writeback.rs` + `frontmatter.rs`  |
 | Pick the next daemon test to write               | [`docs/TESTING_SURFACE.md`](./docs/TESTING_SURFACE.md)              |
+| Add a binary-bearing corpus (email / .docx / .xlsx / future calendar / transactions) | `corpus-engine/src/extractors/described_asset.rs` — register an `AssetSubExtractor` via `CorpusEngine::set_asset_sub_extractors`; the in-tree defaults cover xlsx / docx / plaintext / opaque |
+| Read or extend the multi-origin reconciliation primitive | `corpus-engine/src/enrichment/reconciliation/{mod,multi_origin,oplog,signals}.rs` — operates on `Vec<Entity>` with `Provenance` (AD-4); writes `atlas/reconciliation_oplog.jsonl` reversible op log |
+| Score a clustering of mention-ids vs ground truth (B³ + pairwise-F1) | `sovereign-eval/src/entity_resolution_score.rs` (scorer) + `entity_resolution_bench.rs` (Split/peek-budget) |
+| Run the Phase 5 Enron measurement loop | `sovereign bench enron run --corpus enron-sample-onemailbox --split train --policy {pre_reconciliation\|tuned}` → `sovereign-cli-llm/src/bench_cmd/enron.rs` |
+| Add another typed Entity column-extractor for tabular asset kinds | `corpus-engine/src/extractors/column_aware.rs` — extend `ColumnHeaderMap` or write a per-asset-kind extractor reading the parquet parsed-form cache directly |
+| Content-addressed asset store on disk | `corpus-engine/src/asset_store/{mod,fs,ledger}.rs` (AD-1; raw bytes + parsed-form caches + append-only ledger under `<corpus>/assets/`) |
 
 ---
 

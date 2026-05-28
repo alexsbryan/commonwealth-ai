@@ -33,6 +33,7 @@ sovereign-mesh = { workspace = true, features = ["treesitter"] }
 sovereign-pipeline = { workspace = true }
 sovereign-work-atlas = { workspace = true }
 sovereign-agent-bench = { workspace = true }
+sovereign-eval = { workspace = true }
 sovereign-cli-shared = { workspace = true, features = ["scip"] }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }

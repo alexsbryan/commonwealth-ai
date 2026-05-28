@@ -28,6 +28,7 @@ mod atlas;
 mod baselines;
 mod book_report;
 mod discover;
+mod enron;
 mod obsidian;
 mod render;
 mod scaffold;
@@ -47,6 +48,10 @@ const HELP: Help = Help {
             (
                 "atlas",
                 "Run atlas Phase 1 + short-call tasks against the loaded primary model.",
+            ),
+            (
+                "enron",
+                "Phase 5 measurement loop for the architecture-over-Enron substrate.",
             ),
             (
                 "book-report",
@@ -87,6 +92,7 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "all" => all::cmd_all(&args[1..]).await,
         "atlas" => atlas::cmd_atlas(&args[1..]).await,
         "book-report" => book_report::cmd_book_report(&args[1..]).await,
+        "enron" => enron::cmd_enron(&args[1..]).await,
         "obsidian" => obsidian::cmd_obsidian(&args[1..]).await,
         "scaffold" => scaffold::cmd_scaffold(&args[1..]).await,
         other => {

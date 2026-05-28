@@ -131,7 +131,18 @@ impl StripReport {
 impl DocumentFilter for BoilerplateFilter {
     fn accept(&self, doc: &ExtractedDoc) -> bool {
         let outcome = self.strip(&doc.content);
-        outcome.body.chars().count() >= self.config.min_body_chars_after_strip
+        let kept = outcome.body.chars().count();
+        let accepted = kept >= self.config.min_body_chars_after_strip;
+        tracing::debug!(
+            doc_source = %doc.source_id,
+            quoted_lines = outcome.report.quoted_reply_lines_removed,
+            signature_lines = outcome.report.signature_lines_removed,
+            disclaimer_lines = outcome.report.disclaimer_lines_removed,
+            kept_chars = kept,
+            accepted,
+            "boilerplate: strip decision"
+        );
+        accepted
     }
 
     fn description(&self) -> String {

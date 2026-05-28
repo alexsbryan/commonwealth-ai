@@ -1,6 +1,9 @@
-# Enrichment Atlas v2.1 — Plan of Record
+# Enrichment Atlas v2.2 — Plan of Record
 
-_Living document. Last substantive update: 2026-04-23 after Landing 2 (resolver hardening + parse-drift auto-recovery)._
+_Living document. Last substantive update: 2026-05-27 after the
+architecture-over-Enron substrate push (added `Asset` atom variant,
+`EdgeType::Attaches`, `Entity.provenance` field; SCHEMA_VERSION
+2.0 → 2.1 → 2.2)._
 
 This doc tracks the stage-by-stage rollout of the v2 enrichment pipeline.
 It is authoritative for the **status of each landing** and the
@@ -16,12 +19,20 @@ sync with this file; this file is the durable one.
 ## Where the atlas lives in the stack
 
 The enrichment pipeline is a v2 layer on top of `corpus-engine`'s
-document store. It produces a typed-graph atlas — seven atom types
-(Entity, State, Relation, Event, Claim, Question, Configuration) plus
-seven edge types (Involves, Transition, Causes, Grounds, Tensions,
-Contrasts, CrossCorpus) — that supports queries beyond
-claim-and-question retrieval: trajectories, relational dynamics, event
-sequences, configurational readings.
+document store. It produces a typed-graph atlas — eight atom types
+(Entity, State, Relation, Event, Claim, Question, Configuration,
+**Asset**) plus eight edge types (Involves, Transition, Causes,
+Grounds, Tension, Composes, Configures, **Attaches**) plus the
+cross-corpus + Gap-B typed-extension families — that supports queries
+beyond claim-and-question retrieval: trajectories, relational
+dynamics, event sequences, configurational readings, **binary-
+attachment traversal** (Asset atoms point at the content-addressed
+store under `<corpus>/assets/`).
+
+The Phase 4 multi-origin reconciliation primitive
+(`corpus-engine/src/enrichment/reconciliation/`) operates on
+`Vec<Entity>` whose atoms carry the `Provenance` AD-4 field and
+writes a reversible op log to `atlas/reconciliation_oplog.jsonl`.
 
 **Open/Closed architecture.** The atlas schema, on-disk format,
 traversal engine, brief assembler, and schema-validation protocol are

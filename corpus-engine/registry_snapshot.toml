@@ -247,3 +247,28 @@ mesh_sharing = false
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/conversations-anthropic/recipe.toml"
 sha256 = ""
 catalog_status = "hidden"
+
+[[recipes]]
+id = "enron-sample"
+name = "Enron Email Corpus (CMU)"
+description = "Full Enron email corpus from the CMU 2015-05-07 snapshot. ~500k messages × 150 mailboxes. The forcing function for the architecture-over-Enron substrate (asset store + described-asset dispatcher + email extractor + multi-origin reconciliation). Operator downloads the tarball manually (see recipe TOML); ingest runs through the full Phase 1-4 chain."
+license = "public-domain"
+size_compressed_gb = 0.4
+size_indexed_gb = 6.0
+enrichment_enabled = true
+mesh_sharing = false
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/enron-sample/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "enron-sample-onemailbox"
+name = "Enron Email (Kenneth Lay mailbox)"
+description = "Iteration target — Kenneth Lay's mailbox alone (~6k messages, 1-2h ingest). Used to tune the reconciliation policy on the train split before committing to a full-corpus run."
+license = "public-domain"
+size_compressed_gb = 0.02
+size_indexed_gb = 0.3
+enrichment_enabled = true
+mesh_sharing = false
+parent_corpus_id = "enron-sample"
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/enron-sample-onemailbox/recipe.toml"
+sha256 = ""

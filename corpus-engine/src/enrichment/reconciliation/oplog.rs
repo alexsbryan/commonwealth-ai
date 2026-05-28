@@ -103,6 +103,13 @@ impl OplogWriter {
             .map_err(Error::Io)?;
         f.write_all(line.as_bytes()).map_err(Error::Io)?;
         f.write_all(b"\n").map_err(Error::Io)?;
+        tracing::debug!(
+            op = ?entry.op,
+            inputs = entry.inputs.len(),
+            signals = ?entry.signals.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            judged = entry.judge_outcome.is_some(),
+            "reconciliation_oplog: append"
+        );
         Ok(())
     }
 }
