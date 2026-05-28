@@ -3350,10 +3350,29 @@ pub async fn upload_document_asset(
     // Pending → Indexing → PartiallyReady → BuildingSkeleton →
     // MultiHopReady → Ready, all under `response_asset.id`.
     let handle = app_handle.clone();
+    let event_asset_id = response_asset.id.clone();
     tauri::async_runtime::spawn(async move {
         match manager
             .run_ingest(prepared, move |progress| {
-                let _ = handle.emit("document:progress", &progress);
+                // Every event MUST carry asset_id. The frontend listener
+                // drops events without one (it keys live state by id),
+                // but the high-frequency `Indexing` / `BuildingSkeleton`
+                // variants don't embed it — only the milestone events
+                // (Started / RagAvailable / MultiHopReady / Ready) do. So
+                // inject it here, where the id is known. Without this the
+                // per-batch progress that advances the % bar and feeds the
+                // ETA never reached the UI: the banner sat on "estimating…"
+                // for the entire embed phase, then jumped straight between
+                // milestones. `or_insert` preserves the id the milestone
+                // variants already carry.
+                let mut payload = serde_json::to_value(&progress)
+                    .unwrap_or_else(|_| serde_json::json!({}));
+                if let serde_json::Value::Object(map) = &mut payload {
+                    map.entry("asset_id".to_string()).or_insert_with(|| {
+                        serde_json::Value::String(event_asset_id.clone())
+                    });
+                }
+                let _ = handle.emit("document:progress", &payload);
             })
             .await
         {

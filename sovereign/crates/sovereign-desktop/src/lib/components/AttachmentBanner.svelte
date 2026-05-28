@@ -36,23 +36,9 @@
     return documentIngestionStore.state(assetId) ?? initialState;
   });
 
-  // The asset is unsendable while we're still in a strictly-Pending or
-  // Indexing phase. PartiallyReady and BuildingSkeleton are RAG-ready —
-  // the user can ask questions even while the skeleton finishes.
-  let isIndexing = $derived.by(() => {
-    if (liveState === "Pending") return true;
-    if (typeof liveState === "object" && liveState !== null) {
-      if ("Indexing" in liveState) return true;
-    }
-    return false;
-  });
-
-  let isBuildingSkeleton = $derived.by(() => {
-    if (typeof liveState === "object" && liveState !== null) {
-      return "BuildingSkeleton" in liveState;
-    }
-    return false;
-  });
+  let isFailed = $derived(
+    typeof liveState === "object" && liveState !== null && "Failed" in liveState,
+  );
 
   let indexingPct = $derived.by(() => {
     if (typeof liveState === "object" && liveState !== null) {
@@ -78,8 +64,13 @@
 
   let stateLabel = $derived.by(() => {
     if (liveState === "Pending") return "Queued…";
-    if (liveState === "PartiallyReady") return "Ready for questions";
-    if (liveState === "MultiHopReady") return "Multi-hop ready";
+    // PartiallyReady (T1) and MultiHopReady (T2) are mid-pipeline
+    // milestones, NOT completion: the user can ask questions, but the
+    // skeleton (T2) and RAPTOR atlas (T3, the bulk of the wall-clock)
+    // are still building. Say so explicitly — "Ready for questions"
+    // alone read as "done" while the logs were clearly still busy.
+    if (liveState === "PartiallyReady") return "Ready for easy questions · still enriching";
+    if (liveState === "MultiHopReady") return "Deeper answers ready · still enriching";
     if (typeof liveState === "object" && liveState !== null) {
       if ("Indexing" in liveState) {
         // chunks_done === 0 means embedding hasn't returned a batch
@@ -100,7 +91,14 @@
     return "";
   });
 
-  let showProgress = $derived(isIndexing || isBuildingSkeleton);
+  // Show the in-progress treatment (spinner + ETA) for EVERY
+  // non-terminal state — including PartiallyReady and MultiHopReady.
+  // Those unlock RAG/multi-hop retrieval but the ingest keeps running
+  // (T2 skeleton, then the ~4-min T3 RAPTOR build). Rendering them as a
+  // static, spinner-less green label made a half-finished ingest look
+  // complete — the exact "it said Ready but the logs kept going"
+  // confusion. Only the terminal `Ready` (and `Failed`) drop the spinner.
+  let showProgress = $derived(liveState !== "Ready" && !isFailed);
 
   // Re-evaluate the ETA ~once a second so it counts down even during
   // long phases that emit no progress events — the T3 RAPTOR build can
@@ -147,7 +145,8 @@
         <span class="attachment-eta">· {etaLabel}</span>
       {/if}
     {:else if stateLabel}
-      <span class="attachment-state ready">{stateLabel}</span>
+      <span class="attachment-state" class:ready={!isFailed} class:failed={isFailed}
+        >{stateLabel}</span>
     {:else}
       <span class="attachment-chunks">{chunksCreated} chunks</span>
     {/if}
@@ -221,6 +220,10 @@
   }
   .attachment-state.ready {
     color: var(--growth);
+    font-style: normal;
+  }
+  .attachment-state.failed {
+    color: var(--error);
     font-style: normal;
   }
 
