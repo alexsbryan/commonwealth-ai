@@ -345,7 +345,7 @@ impl CorpusEngine {
             .await
             .map_err(Error::Io)?;
 
-        let extractor = self.make_extractor(extractor_config);
+        let extractor = self.make_extractor(extractor_config, &corpus_id);
         let docs: Vec<crate::extractors::ExtractedDoc> = extractor
             .extract(tmp.path())?
             .collect::<Result<Vec<_>>>()?;

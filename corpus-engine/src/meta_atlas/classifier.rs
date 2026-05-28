@@ -142,6 +142,11 @@ pub fn classify_articulation(
         AtomEnvelope::Question(_) | AtomEnvelope::ArgumentReconstruction(_) => {
             ArticulationVector::new(0.05, 0.85, 0.10)
         }
+        // Asset — pure Inventory. An asset atom says "this binary
+        // exists in this corpus"; it carries no articulated argument
+        // or temporal trace by itself. The carrier doc's atoms supply
+        // those — the Asset only inventories the thing.
+        AtomEnvelope::Asset(_) => ArticulationVector::new(0.90, 0.05, 0.05),
     }
 }
 
@@ -275,6 +280,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            provenance: Default::default(),
             concept_kind: None,
         })
     }

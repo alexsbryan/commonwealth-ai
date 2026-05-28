@@ -1,0 +1,5 @@
+{
+  "_about": "Holdout peek-budget. Every `sovereign bench enron run --split holdout --unseal-holdout` burns one peek and appends to `log`. The public-release plan (out of scope for the architecture-over-Enron push) reads this counter to decide whether the holdout is still credible as a generalisation estimate.",
+  "holdout_peeks": 0,
+  "log": []
+}

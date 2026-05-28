@@ -536,6 +536,14 @@ pub(crate) fn endpoint_text(atom: Option<&AtomEnvelope>, atom_id: &str) -> Strin
         Some(ArgumentReconstruction(a)) => format!("Argument: {}", a.name),
         Some(Position(p)) => format!("Position ({}): {}", p.stance, p.canonical_name),
         Some(Opposition(o)) => format!("Opposition: {}", o.canonical_label),
+        Some(Asset(a)) => {
+            let name = if a.original_filename.is_empty() {
+                format!("asset:{}", &a.sha256[..12.min(a.sha256.len())])
+            } else {
+                a.original_filename.clone()
+            };
+            format!("Asset ({}): {}", a.asset_kind, name)
+        }
         None => format!("{atom_id} (missing)"),
     }
 }

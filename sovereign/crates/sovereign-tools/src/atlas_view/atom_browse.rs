@@ -345,6 +345,7 @@ fn atom_type_of(atom: &AtomEnvelope) -> AtomType {
         AtomEnvelope::ArgumentReconstruction(_) => AtomType::ArgumentReconstruction,
         AtomEnvelope::Position(_) => AtomType::Position,
         AtomEnvelope::Opposition(_) => AtomType::Opposition,
+        AtomEnvelope::Asset(_) => AtomType::Asset,
     }
 }
 
@@ -364,6 +365,13 @@ fn display_name_of(atom: &AtomEnvelope) -> String {
         AtomEnvelope::ArgumentReconstruction(a) => a.name.clone(),
         AtomEnvelope::Position(a) => a.canonical_name.clone(),
         AtomEnvelope::Opposition(a) => a.canonical_label.clone(),
+        AtomEnvelope::Asset(a) => {
+            if a.original_filename.is_empty() {
+                format!("{} asset {}", a.asset_kind, &a.sha256[..12.min(a.sha256.len())])
+            } else {
+                a.original_filename.clone()
+            }
+        }
     }
 }
 
@@ -397,6 +405,9 @@ fn evidence_count(atom: &AtomEnvelope) -> u32 {
         AtomEnvelope::ArgumentReconstruction(a) => a.evidence.len() as u32,
         AtomEnvelope::Position(_) => 1,
         AtomEnvelope::Opposition(_) => 1,
+        // Asset atoms' evidence is the asset's existence itself —
+        // reachable by the Attaches edge, not chunk-anchored.
+        AtomEnvelope::Asset(_) => 0,
     }
 }
 
@@ -406,6 +417,15 @@ fn evidence_count(atom: &AtomEnvelope) -> u32 {
 /// evidence-bearing types use their first piece of evidence (which is
 /// the chunk that introduced the atom).
 fn atom_source_doc_id(atom: &AtomEnvelope) -> Option<&str> {
+    // Assets stamp their source doc id directly on the atom; no chunk
+    // hop needed.
+    if let AtomEnvelope::Asset(a) = atom {
+        return if a.first_seen_source_doc_id.is_empty() {
+            None
+        } else {
+            Some(a.first_seen_source_doc_id.as_str())
+        };
+    }
     let chunk = match atom {
         AtomEnvelope::Entity(a) => Some(&a.first_appearance),
         AtomEnvelope::Position(a) => Some(&a.first_appearance),
@@ -417,6 +437,7 @@ fn atom_source_doc_id(atom: &AtomEnvelope) -> Option<&str> {
         AtomEnvelope::Configuration(a) => a.evidence.first(),
         AtomEnvelope::ArgumentReconstruction(a) => a.evidence.first(),
         AtomEnvelope::Question(a) => a.raised_at.first(),
+        AtomEnvelope::Asset(_) => unreachable!("handled above"),
     };
     chunk.and_then(|c| c.source_doc_id.as_deref())
 }
@@ -453,6 +474,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![],
+                    provenance: Default::default(),
                     concept_kind: None,
 })
     }

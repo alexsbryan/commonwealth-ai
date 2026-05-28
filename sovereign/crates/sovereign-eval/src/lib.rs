@@ -12,6 +12,8 @@
 pub mod audit_trail;
 pub mod cognitive;
 pub mod diff;
+pub mod entity_resolution_bench;
+pub mod entity_resolution_score;
 pub mod finalize;
 pub mod judge;
 pub mod manifest;

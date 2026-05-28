@@ -5672,6 +5672,22 @@ fn atom_surface_dto(
             },
             Some(o.salience),
         ),
+        AtomEnvelope::Asset(a) => (
+            "asset",
+            if a.original_filename.is_empty() {
+                format!("{} asset", a.asset_kind)
+            } else {
+                a.original_filename.clone()
+            },
+            Vec::new(),
+            format!(
+                "{} ({} bytes); sha256:{}",
+                a.asset_kind,
+                a.size,
+                &a.sha256[..16.min(a.sha256.len())]
+            ),
+            None,
+        ),
     }
 }
 
@@ -5689,6 +5705,7 @@ fn edge_type_label_dto(t: corpus_engine::enrichment::atlas::EdgeType) -> &'stati
         EdgeType::Framing => "framing",
         EdgeType::Provenance => "provenance",
         EdgeType::EvidenceFor | EdgeType::Concedes | EdgeType::OpposesIn => unreachable!("typed edges wired in Gap B Stage 4"),
+        EdgeType::Attaches => "attaches",
     }
 }
 
@@ -5750,6 +5767,7 @@ fn atom_evidence_section_refs_dto(
             out
         }
         AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => unreachable!("typed atoms wired in Gap B Stage 4"),
+        AtomEnvelope::Asset(_) => Vec::new(),
     }
 }
 

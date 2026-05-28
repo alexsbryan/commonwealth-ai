@@ -262,6 +262,7 @@ fn synthesize_entities_from_unresolved_event_participants(
                     affiliation: None,
                     role: None,
                     participants: Vec::new(),
+                                    provenance: Default::default(),
                                     concept_kind: None,
 };
                 name_index.insert(fold(trimmed), new_id.clone());
@@ -629,6 +630,7 @@ async fn resolve_entities(
                         affiliation: None,
                         role: None,
                         participants: Vec::new(),
+                                            provenance: Default::default(),
                                             concept_kind: None,
 };
                     entities.push(entity);
@@ -2629,6 +2631,7 @@ pub fn resolve_type_extensions(
                     affiliation: None,
                     role: None,
                     participants: Vec::new(),
+                    provenance: Default::default(),
                     concept_kind: Some("mechanism".into()),
                 });
             }
@@ -3529,6 +3532,7 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
+                            provenance: Default::default(),
                             concept_kind: None,
 },
             Entity {
@@ -3544,6 +3548,7 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
+                            provenance: Default::default(),
                             concept_kind: None,
 },
         ];
@@ -3679,6 +3684,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            provenance: Default::default(),
             concept_kind: None,
         }];
 
@@ -3903,6 +3909,7 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
+                            provenance: Default::default(),
                             concept_kind: None,
 },
             Entity {
@@ -3918,6 +3925,7 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
+                            provenance: Default::default(),
                             concept_kind: None,
 },
             Entity {
@@ -3933,6 +3941,7 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
+                            provenance: Default::default(),
                             concept_kind: None,
 },
         ]
@@ -4016,6 +4025,7 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
+                            provenance: Default::default(),
                             concept_kind: None,
 },
             Entity {
@@ -4031,6 +4041,7 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
+                            provenance: Default::default(),
                             concept_kind: None,
 },
         ];
@@ -4069,6 +4080,7 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
+                    provenance: Default::default(),
                     concept_kind: None,
 }];
         let name_index = build_name_index(&entities);
@@ -4104,6 +4116,7 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
+                    provenance: Default::default(),
                     concept_kind: None,
 }
     }
@@ -4123,6 +4136,7 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
+                    provenance: Default::default(),
                     concept_kind: None,
 }
     }
@@ -4142,6 +4156,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+                    provenance: Default::default(),
                     concept_kind: None,
 };
         let b = Entity {
@@ -4157,6 +4172,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+                    provenance: Default::default(),
                     concept_kind: None,
 };
         (a, b)
@@ -4207,6 +4223,7 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
+                            provenance: Default::default(),
                             concept_kind: None,
 },
             Entity {
@@ -4222,6 +4239,7 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
+                            provenance: Default::default(),
                             concept_kind: None,
 },
         ];
@@ -4310,6 +4328,7 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
+                            provenance: Default::default(),
                             concept_kind: None,
 },
             Entity {
@@ -4325,6 +4344,7 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
+                            provenance: Default::default(),
                             concept_kind: None,
 },
         ];
@@ -4386,6 +4406,7 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
+            provenance: Default::default(),
             concept_kind: None,
         }
     }
@@ -5000,6 +5021,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+                    provenance: Default::default(),
                     concept_kind: None,
 };
         // Short names below TYPO_DEDUP_MIN_FOLDED_LEN must not match.

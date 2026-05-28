@@ -21,6 +21,7 @@ pub(crate) fn atom_type_label(atom: &AtomEnvelope) -> &'static str {
         AtomEnvelope::ArgumentReconstruction(_) => "argument",
         AtomEnvelope::Position(_) => "position",
         AtomEnvelope::Opposition(_) => "opposition",
+        AtomEnvelope::Asset(_) => "asset",
     }
 }
 
@@ -39,6 +40,7 @@ pub(crate) fn edge_type_label(t: EdgeType) -> &'static str {
         EdgeType::EvidenceFor => "evidence_for",
         EdgeType::Concedes => "concedes",
         EdgeType::OpposesIn => "opposes_in",
+        EdgeType::Attaches => "attaches",
     }
 }
 
@@ -128,6 +130,20 @@ pub(crate) fn atom_surface_fields(
             },
             Some(o.salience),
         ),
+        AtomEnvelope::Asset(a) => {
+            let name = if a.original_filename.is_empty() {
+                format!("{} ({})", a.asset_kind, &a.sha256[..12.min(a.sha256.len())])
+            } else {
+                a.original_filename.clone()
+            };
+            let detail = format!(
+                "{} asset, {} bytes, sha256:{}",
+                a.asset_kind,
+                a.size,
+                &a.sha256[..16.min(a.sha256.len())]
+            );
+            (name, Vec::new(), detail, None)
+        }
     }
 }
 
@@ -199,5 +215,8 @@ pub(crate) fn atom_evidence_section_refs(
             o.first_appearance.chunk_id.clone(),
             o.first_appearance.passage_preview.clone(),
         )],
+        // Asset atoms don't have section-level evidence; reachable
+        // via the carrier doc's Attaches edge.
+        AtomEnvelope::Asset(_) => Vec::new(),
     }
 }

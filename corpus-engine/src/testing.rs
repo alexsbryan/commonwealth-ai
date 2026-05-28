@@ -536,7 +536,7 @@ pub(crate) async fn run_test(
     });
 
     // ── Phase 4: Extract ─────────────────────────────────────────────────────
-    let extractor = engine.make_extractor(&recipe.extract);
+    let extractor = engine.make_extractor(&recipe.extract, &recipe.corpus.id);
     let doc_iter = match extractor.extract(&source_path) {
         Ok(iter) => iter,
         Err(e) => {

@@ -159,6 +159,7 @@ fn atom_type_label(atom: &AtomEnvelope) -> &'static str {
         AtomEnvelope::ArgumentReconstruction(_) => "argument",
         AtomEnvelope::Position(_) => "position",
         AtomEnvelope::Opposition(_) => "opposition",
+        AtomEnvelope::Asset(_) => "asset",
     }
 }
 
@@ -188,6 +189,9 @@ fn atom_anchored_at(atom: &AtomEnvelope, section: &str) -> bool {
         }
         AtomEnvelope::Position(p) => p.first_appearance.chunk_id == section,
         AtomEnvelope::Opposition(o) => o.first_appearance.chunk_id == section,
+        // Asset atoms attach to documents, not sections — anchored
+        // at the corpus level rather than within a single chunk.
+        AtomEnvelope::Asset(_) => false,
     }
 }
 
@@ -267,7 +271,10 @@ fn atom_surface_forms(atom: &AtomEnvelope) -> Vec<String> {
         | AtomEnvelope::Relation(_)
         | AtomEnvelope::Claim(_)
         | AtomEnvelope::Question(_)
-        | AtomEnvelope::Configuration(_) => Vec::new(),
+        | AtomEnvelope::Configuration(_)
+        // Asset atoms surface via the Attaches edge from their
+        // carrier doc, not via span-matching in chunk text.
+        | AtomEnvelope::Asset(_) => Vec::new(),
     }
 }
 
@@ -328,6 +335,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+                    provenance: Default::default(),
                     concept_kind: None,
 })
     }

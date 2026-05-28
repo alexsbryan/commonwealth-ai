@@ -360,6 +360,7 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
+                    provenance: Default::default(),
                     concept_kind: None,
 }
 }

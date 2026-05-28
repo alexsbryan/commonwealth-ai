@@ -1,0 +1,422 @@
+//! Per-pair merge signals for [`super::multi_origin`].
+//!
+//! Each signal answers: "does this evidence support that `left` and
+//! `right` refer to the same real-world entity?" Pure functions over
+//! the typed [`Entity`] pair, returning a [`MergeSignal`] tag the
+//! reconciliation policy folds into its decision.
+//!
+//! Adding a signal: implement [`MergeSignalCheck`], slot it into
+//! [`default_signals`]'s ordered list, name it via the
+//! [`MergeSignal`] enum's `Other(String)` variant if it doesn't yet
+//! map to a known kind, and call out the new tag in the docstring
+//! below so audit-log readers can interpret the new symbol.
+
+use serde::{Deserialize, Serialize};
+
+use crate::enrichment::atlas::atoms::Entity;
+
+/// Tag for a signal that fired on a candidate pair. Round-trips
+/// through the oplog so an auditor can reconstruct exactly which
+/// signals supported a merge.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MergeSignal {
+    /// Canonical names + aliases agree under a fold (lowercase + ASCII
+    /// punctuation collapse).
+    NameSimilarity,
+    /// One of the surface forms is an email address that resolves to
+    /// the other party's company / domain.
+    EmailHeader,
+    /// Person + organisation + role all triangulate (Ken Lay @ Enron
+    /// CEO ↔ Kenneth Lay @ Enron CEO).
+    OrgRole,
+    /// The calibrated judge confirmed the merge after the
+    /// reconciliation policy escalated.
+    JudgeConfirmed,
+    /// Same email-thread root in the carrier doc's metadata (Phase 2
+    /// thread_id matches → the two mentions are in the same
+    /// conversation).
+    ThreadRoot,
+    Other(String),
+}
+
+impl MergeSignal {
+    pub fn as_str(&self) -> &str {
+        match self {
+            MergeSignal::NameSimilarity => "name_similarity",
+            MergeSignal::EmailHeader => "email_header",
+            MergeSignal::OrgRole => "org_role",
+            MergeSignal::JudgeConfirmed => "judge_confirmed",
+            MergeSignal::ThreadRoot => "thread_root",
+            MergeSignal::Other(s) => s.as_str(),
+        }
+    }
+}
+
+/// Trait every signal implements.
+pub trait MergeSignalCheck: Send + Sync {
+    fn check(&self, left: &Entity, right: &Entity) -> bool;
+    fn signal(&self) -> MergeSignal;
+}
+
+/// Name similarity — exact fold-match on canonical_name OR alias-set
+/// intersection. The simplest signal; usually the necessary
+/// precondition that other signals refine.
+pub struct NameSimilaritySignal {
+    /// Minimum length the folded name must reach before this signal
+    /// fires. Guards against `"J" == "j"` matches.
+    pub min_chars: usize,
+}
+
+impl Default for NameSimilaritySignal {
+    fn default() -> Self {
+        Self { min_chars: 3 }
+    }
+}
+
+impl MergeSignalCheck for NameSimilaritySignal {
+    fn check(&self, left: &Entity, right: &Entity) -> bool {
+        if left.entity_type != right.entity_type {
+            return false;
+        }
+        let lf = fold_name(&left.canonical_name);
+        let rf = fold_name(&right.canonical_name);
+        if lf.len() < self.min_chars || rf.len() < self.min_chars {
+            return false;
+        }
+        if lf == rf {
+            return true;
+        }
+        // Initial + surname fold: "J. Skilling" → "j skilling"; we
+        // also try to match against "jeff skilling" by treating
+        // single-letter tokens at the start as initials.
+        if initial_surname_matches(&lf, &rf) || initial_surname_matches(&rf, &lf) {
+            return true;
+        }
+        // Common-prefix nickname: "Ken Lay" ↔ "Kenneth Lay" — same
+        // surname, one first-name is a 3+ char prefix of the other.
+        if shared_surname_with_prefix_first_name(&lf, &rf) {
+            return true;
+        }
+        // Aliases overlap.
+        let l_aliases: std::collections::BTreeSet<String> =
+            left.aliases.iter().map(|s| fold_name(s)).collect();
+        let r_aliases: std::collections::BTreeSet<String> =
+            right.aliases.iter().map(|s| fold_name(s)).collect();
+        !l_aliases.is_disjoint(&r_aliases)
+    }
+
+    fn signal(&self) -> MergeSignal {
+        MergeSignal::NameSimilarity
+    }
+}
+
+/// Email-header signal: one entity's canonical name OR an alias is an
+/// email address, and the local part / domain align with the other
+/// entity's affiliation token.
+pub struct EmailHeaderSignal;
+
+impl MergeSignalCheck for EmailHeaderSignal {
+    fn check(&self, left: &Entity, right: &Entity) -> bool {
+        let lemails = collect_emails(left);
+        let remails = collect_emails(right);
+        if lemails.is_empty() && remails.is_empty() {
+            return false;
+        }
+        // Shared exact email address — strongest signal.
+        if !lemails.is_disjoint(&remails) {
+            return true;
+        }
+        // Local-part heuristic: email on one side, name + same
+        // affiliation on the other.
+        for e in &lemails {
+            if email_matches_name(e, &right.canonical_name)
+                || right
+                    .aliases
+                    .iter()
+                    .any(|a| email_matches_name(e, a))
+            {
+                return true;
+            }
+        }
+        for e in &remails {
+            if email_matches_name(e, &left.canonical_name)
+                || left
+                    .aliases
+                    .iter()
+                    .any(|a| email_matches_name(e, a))
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn signal(&self) -> MergeSignal {
+        MergeSignal::EmailHeader
+    }
+}
+
+/// Org + role signal: same affiliation AND same role string.
+pub struct OrgRoleSignal;
+
+impl MergeSignalCheck for OrgRoleSignal {
+    fn check(&self, left: &Entity, right: &Entity) -> bool {
+        match (&left.affiliation, &right.affiliation, &left.role, &right.role) {
+            (Some(la), Some(ra), Some(lr), Some(rr)) => {
+                fold_name(la) == fold_name(ra) && fold_name(lr) == fold_name(rr)
+            }
+            _ => false,
+        }
+    }
+
+    fn signal(&self) -> MergeSignal {
+        MergeSignal::OrgRole
+    }
+}
+
+/// Thread-root signal: both entities' provenance `source_doc_id`s
+/// share the same email thread root (i.e. the two mentions are in
+/// the same conversation). Read by [`super::multi_origin::reconcile`]
+/// from a caller-supplied lookup; defaults off when no lookup is
+/// installed.
+pub struct ThreadRootSignal {
+    pub thread_of: std::sync::Arc<dyn Fn(&str) -> Option<String> + Send + Sync>,
+}
+
+impl MergeSignalCheck for ThreadRootSignal {
+    fn check(&self, left: &Entity, right: &Entity) -> bool {
+        let l = &left.provenance.source_doc_id;
+        let r = &right.provenance.source_doc_id;
+        if l.is_empty() || r.is_empty() {
+            return false;
+        }
+        match ((self.thread_of)(l), (self.thread_of)(r)) {
+            (Some(lt), Some(rt)) => lt == rt,
+            _ => false,
+        }
+    }
+
+    fn signal(&self) -> MergeSignal {
+        MergeSignal::ThreadRoot
+    }
+}
+
+/// Default signal stack used by [`super::reconcile`] when no caller
+/// custom-builds one.
+pub fn default_signals() -> Vec<Box<dyn MergeSignalCheck>> {
+    vec![
+        Box::new(NameSimilaritySignal::default()),
+        Box::new(EmailHeaderSignal),
+        Box::new(OrgRoleSignal),
+    ]
+}
+
+// ── Helpers ──────────────────────────────────────────────────
+
+pub(crate) fn fold_name(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut prev_space = false;
+    for c in s.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+            prev_space = false;
+        } else if c.is_whitespace() || c == '.' || c == ',' || c == '-' || c == '_' {
+            if !prev_space && !out.is_empty() {
+                out.push(' ');
+                prev_space = true;
+            }
+        } else if c == '@' {
+            out.push('@');
+            prev_space = false;
+        } else if c == '<' || c == '>' || c == '"' || c == '\'' {
+            // strip
+        } else {
+            out.push(c);
+            prev_space = false;
+        }
+    }
+    out.trim().to_string()
+}
+
+fn shared_surname_with_prefix_first_name(a: &str, b: &str) -> bool {
+    // a, b are already folded. Tokens are split on whitespace; we
+    // ignore middle initials (single-char tokens between first and
+    // surname).
+    let a_tokens: Vec<&str> = a.split_whitespace().filter(|t| t.len() > 1).collect();
+    let b_tokens: Vec<&str> = b.split_whitespace().filter(|t| t.len() > 1).collect();
+    if a_tokens.len() < 2 || b_tokens.len() < 2 {
+        return false;
+    }
+    let a_first = a_tokens.first().copied().unwrap_or("");
+    let b_first = b_tokens.first().copied().unwrap_or("");
+    let a_surname = a_tokens.last().copied().unwrap_or("");
+    let b_surname = b_tokens.last().copied().unwrap_or("");
+    if a_surname != b_surname {
+        return false;
+    }
+    // First-name prefix match: one must start with the other, and
+    // the shorter must be ≥3 chars to keep "K" / "Ka" from creating
+    // spurious matches.
+    let (short, long) = if a_first.len() <= b_first.len() {
+        (a_first, b_first)
+    } else {
+        (b_first, a_first)
+    };
+    short.len() >= 3 && long.starts_with(short)
+}
+
+fn initial_surname_matches(short: &str, long: &str) -> bool {
+    // "j skilling" + "jeff skilling" → true (initial matches first
+    // letter of first token).
+    let s_tokens: Vec<&str> = short.split_whitespace().collect();
+    let l_tokens: Vec<&str> = long.split_whitespace().collect();
+    if s_tokens.len() != 2 || l_tokens.len() < 2 {
+        return false;
+    }
+    if s_tokens[0].len() != 1 {
+        return false;
+    }
+    let initial = s_tokens[0].chars().next().unwrap();
+    let first = l_tokens.first().and_then(|t| t.chars().next());
+    let surname_l = s_tokens[1];
+    let surname_long = l_tokens.last().unwrap();
+    Some(initial) == first && surname_l == *surname_long
+}
+
+fn collect_emails(e: &Entity) -> std::collections::BTreeSet<String> {
+    let mut out = std::collections::BTreeSet::new();
+    if let Some(stripped) = strip_to_email(&e.canonical_name) {
+        out.insert(stripped);
+    }
+    for a in &e.aliases {
+        if let Some(stripped) = strip_to_email(a) {
+            out.insert(stripped);
+        }
+    }
+    out
+}
+
+fn strip_to_email(s: &str) -> Option<String> {
+    let trimmed = s.trim_matches(|c: char| c == '<' || c == '>' || c.is_whitespace());
+    if trimmed.contains('@') && !trimmed.contains(' ') {
+        Some(trimmed.to_ascii_lowercase())
+    } else {
+        None
+    }
+}
+
+fn email_matches_name(email: &str, name: &str) -> bool {
+    let local = email
+        .split('@')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .replace(['.', '_', '-'], " ");
+    let folded = fold_name(name);
+    if local.is_empty() || folded.is_empty() {
+        return false;
+    }
+    let surname = folded.split_whitespace().last().unwrap_or("");
+    let first_initial = folded
+        .split_whitespace()
+        .next()
+        .and_then(|t| t.chars().next());
+    // Match patterns: "firstname surname", "f surname", "firstname".
+    let local_tokens: Vec<&str> = local.split_whitespace().collect();
+    if local_tokens.is_empty() {
+        return false;
+    }
+    if local == folded {
+        return true;
+    }
+    if local_tokens.last() == Some(&surname) {
+        if let Some(fi) = first_initial {
+            if let Some(local_first) = local_tokens.first() {
+                if local_first.starts_with(fi) {
+                    return true;
+                }
+            }
+        }
+        return true; // surname-only match — still a useful weak signal
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, Provenance};
+    use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
+
+    fn ent(name: &str, et: EntityType) -> Entity {
+        Entity {
+            id: AtomId::from_raw("entity-001"),
+            canonical_name: name.into(),
+            aliases: Vec::new(),
+            entity_type: et,
+            first_appearance: ChunkRef::new("sec-001", None),
+            description: String::new(),
+            defining_quote: None,
+            salience: 0.5,
+            enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
+            provenance: Provenance::default(),
+            concept_kind: None,
+        }
+    }
+
+    #[test]
+    fn name_similarity_collapses_initial_to_full() {
+        let l = ent("Jeff Skilling", EntityType::Person);
+        let r = ent("J. Skilling", EntityType::Person);
+        assert!(NameSimilaritySignal::default().check(&l, &r));
+    }
+
+    #[test]
+    fn name_similarity_rejects_different_entity_types() {
+        let l = ent("Dynegy", EntityType::Institution);
+        let r = ent("Dynegy", EntityType::Person);
+        assert!(!NameSimilaritySignal::default().check(&l, &r));
+    }
+
+    #[test]
+    fn email_header_matches_full_address() {
+        let mut l = ent("Ken Lay", EntityType::Person);
+        l.aliases.push("klay@enron.com".into());
+        let mut r = ent("klay@enron.com", EntityType::Person);
+        r.aliases.push("klay@enron.com".into());
+        assert!(EmailHeaderSignal.check(&l, &r));
+    }
+
+    #[test]
+    fn email_header_matches_local_part_to_name() {
+        let mut l = ent("Ken Lay", EntityType::Person);
+        l.aliases.push("ken.lay@enron.com".into());
+        let r = ent("Kenneth Lay", EntityType::Person);
+        assert!(EmailHeaderSignal.check(&l, &r));
+    }
+
+    #[test]
+    fn org_role_requires_both_affiliation_and_role_match() {
+        let mut l = ent("Ken Lay", EntityType::Person);
+        l.affiliation = Some("Enron".into());
+        l.role = Some("CEO".into());
+        let mut r = ent("Kenneth Lay", EntityType::Person);
+        r.affiliation = Some("Enron".into());
+        r.role = Some("CEO".into());
+        assert!(OrgRoleSignal.check(&l, &r));
+
+        r.role = Some("CFO".into());
+        assert!(!OrgRoleSignal.check(&l, &r));
+    }
+
+    #[test]
+    fn fold_name_collapses_punctuation_and_case() {
+        assert_eq!(fold_name("Kenneth L. Lay"), "kenneth l lay");
+        assert_eq!(fold_name("KEN-LAY"), "ken lay");
+        assert_eq!(fold_name("<klay@enron.com>"), "klay@enron com");
+    }
+}

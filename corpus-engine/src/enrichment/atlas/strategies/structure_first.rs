@@ -271,6 +271,7 @@ impl AtlasIngestion for StructureFirstIngestion {
                     affiliation: None,
                     role: None,
                     participants: Vec::new(),
+                                    provenance: Default::default(),
                                     concept_kind: None,
 });
             }
@@ -317,6 +318,7 @@ impl AtlasIngestion for StructureFirstIngestion {
                     affiliation: None,
                     role: None,
                     participants: Vec::new(),
+                                    provenance: Default::default(),
                                     concept_kind: None,
 });
             }
@@ -727,6 +729,7 @@ pub fn extract_atoms_for_articles(
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            provenance: Default::default(),
             concept_kind: None,
         };
         // doc_id = article title (matches the structural-first
@@ -776,6 +779,7 @@ pub fn extract_atoms_for_articles(
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            provenance: Default::default(),
             concept_kind: None,
         }));
     }

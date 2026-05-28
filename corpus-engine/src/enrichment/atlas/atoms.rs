@@ -309,6 +309,90 @@ impl SectionPosition {
     }
 }
 
+// ── Provenance (AD-4) ────────────────────────────────────────
+
+/// What signal produced this atom. The architecture-over-Enron push
+/// (Phase 4 reconciliation) co-locates this on the atom rather than a
+/// separate join table so the reconciliation audit log can write
+/// fast and the cross-origin merge can read fast.
+///
+/// `Other(String)` keeps the enum open for future signal kinds without
+/// a schema migration — same extensibility convention as `EntityType`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SignalKind {
+    /// Span produced by the GLiNER chunk-level NER pass.
+    GlinerSpan,
+    /// Atom produced by an LLM-batch entity-extraction call (the
+    /// pre-2026 path; `corpus-engine::enrichment::entity_extraction`).
+    LlmBatch,
+    /// Atom produced by the column-aware extractor reading a tabular
+    /// parsed-form parquet cache. Column header value is the surface
+    /// form; the column header name supplies the entity-type hint.
+    ColumnHeader,
+    /// Atom produced from a parsed RFC-5322 / MIME email header
+    /// (`From:`, `To:`, `Cc:`).
+    EmailHeader,
+    /// Atom produced from a described-asset attachment (an attachment
+    /// resolved to a Person/Organization via signature block, calendar
+    /// ATTENDEE, etc.).
+    AttachmentDescription,
+    /// Atom produced by the manual reconciliation audit (`sovereign
+    /// atlas reconciliation split / merge`).
+    OperatorAction,
+    /// Reserved escape hatch for downstream callers.
+    Other(String),
+}
+
+impl Default for SignalKind {
+    fn default() -> Self {
+        SignalKind::LlmBatch
+    }
+}
+
+/// Atom origin record (AD-4).
+///
+/// Captures *which signal* produced a surface form. The atlas merge
+/// reads this to write a per-merge audit entry naming exactly which
+/// signals fired (e.g. "merged on (EmailHeader + GlinerSpan + Judge)").
+///
+/// `extractor_id` is the human-readable name of the producing
+/// extractor (`"email_rfc5322"`, `"gliner_chunk_ner"`,
+/// `"column_aware"`, `"llm_batch"`). `source_chunk_id` is the chunk
+/// the span came from (or `None` for document-level atoms like
+/// `EmailHeader`-typed Entity).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Provenance {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub extractor_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub source_doc_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_chunk_id: Option<String>,
+    #[serde(default)]
+    pub signal_kind: SignalKind,
+}
+
+impl Provenance {
+    pub fn new(
+        extractor_id: impl Into<String>,
+        source_doc_id: impl Into<String>,
+        signal_kind: SignalKind,
+    ) -> Self {
+        Self {
+            extractor_id: extractor_id.into(),
+            source_doc_id: source_doc_id.into(),
+            source_chunk_id: None,
+            signal_kind,
+        }
+    }
+
+    pub fn with_chunk(mut self, chunk_id: impl Into<String>) -> Self {
+        self.source_chunk_id = Some(chunk_id.into());
+        self
+    }
+}
+
 // ── Entity ───────────────────────────────────────────────────
 
 /// A named thing that persists across sections (spec §2.1).
@@ -357,6 +441,11 @@ pub struct Entity {
     /// non-initiative entities.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub participants: Vec<AtomId>,
+    /// Atom origin record (AD-4 — architecture-over-Enron Phase 4).
+    /// Captures which signal produced this atom. Defaults to an empty
+    /// [`Provenance`] for back-compat with pre-2.2 atoms.json files.
+    #[serde(default)]
+    pub provenance: Provenance,
     /// Gap-B qualifier for `Concept`-typed entities sourced from the
     /// routed-Phase-1 typed-extension dispatcher. Populated when the
     /// resolver projects a Mechanism / Definition / Image / Motif /
@@ -765,6 +854,79 @@ pub struct Opposition {
     pub enrichment_depth: EnrichmentDepth,
 }
 
+// ── Asset (AD-2: described-asset substrate) ──────────────────
+
+/// An opaque-bytes object — an email attachment, a folder-walked
+/// binary, a calendar export, a transactions CSV — referenced from
+/// the atom graph by content-hash. AD-2 of the architecture-over-Enron
+/// push: the atom graph **stays prose-shaped** (no Table/Record/Series
+/// variants); the Asset variant is a thin pointer at the
+/// [`crate::asset_store::AssetStore`] entry, plus an optional link to
+/// the [`Entity`] / [`Claim`] / future Document atom that holds the
+/// **described** prose for the asset.
+///
+/// `described_by` is `None` when the dispatcher emitted only the
+/// opaque-fallback description ("binary, 2.1MB, magic=outlook-pst")
+/// without enrichment getting that far. `Some(atom_id)` once a
+/// downstream atlas pass attaches a Document/Entity atom whose text is
+/// the description.
+///
+/// Asset atoms are emitted by [`crate::extractors::described_asset`]
+/// **at extraction time**, before atlas enrichment runs, and live in a
+/// pre-merged sidecar (`atlas/asset_atoms.jsonl`). They are unioned
+/// into `atoms.json` during the next atlas write. This crosses the
+/// extractor→atom boundary deliberately — an Asset is a structural
+/// fact about the corpus, not an inferential extraction from prose.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Asset {
+    pub id: AtomId,
+    /// SHA-256 hex of the raw bytes; the same value
+    /// [`crate::asset_store::AssetStore::raw_path`] takes as input.
+    pub sha256: String,
+    /// Best-effort MIME type. `application/octet-stream` for the
+    /// opaque-fallback case.
+    pub mime: String,
+    /// Original filename the asset was first observed with, when
+    /// available. Empty when the source did not preserve a filename
+    /// (raw binary stream).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub original_filename: String,
+    /// Byte length of the raw payload.
+    pub size: u64,
+    /// `asset_kind` from the dispatcher: `"pdf"`, `"docx"`, `"xlsx"`,
+    /// `"ical"`, `"opaque"`, …. The dispatcher's tag, not the MIME —
+    /// MIME can be missing or wrong; `asset_kind` is what the
+    /// sub-extractor self-identified as.
+    pub asset_kind: String,
+    /// Description atom for this asset, when emitted. See struct
+    /// docs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub described_by: Option<AtomId>,
+    /// Path to the typed parsed cache (parquet for XLSX, ics for
+    /// calendar, …). `None` for prose-shaped sub-extractors and the
+    /// opaque fallback. Absolute path so the column-aware extractor
+    /// (Phase 4) reads it directly without re-resolving the asset
+    /// store root.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parsed_form: Option<std::path::PathBuf>,
+    /// First message / document that referenced this asset, by
+    /// `source_doc_id`. Lets `sovereign atlas reconciliation-oplog`
+    /// trace an attachment back to its first carrier.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub first_seen_source_doc_id: String,
+    pub enrichment_depth: EnrichmentDepth,
+}
+
+impl Asset {
+    /// Build a content-addressed atom id from the sha256 prefix.
+    /// 16 hex chars (64 bits) — same collision budget as the other
+    /// content-hash constructors.
+    pub fn make_id(sha256: &str) -> AtomId {
+        let short = sha256.get(0..16).unwrap_or(sha256);
+        AtomId::from_raw(format!("asset-{short}"))
+    }
+}
+
 // ── Atom envelope (on-disk shape per spec §6.2) ──────────────
 
 /// Discriminated atom-type tag. Matches the `"atom_type"` string in
@@ -786,6 +948,8 @@ pub enum AtomType {
     ArgumentReconstruction,
     Position,
     Opposition,
+    /// AD-2: described-asset substrate. See [`Asset`].
+    Asset,
 }
 
 /// On-disk representation of a single atom. Untagged body per
@@ -822,6 +986,8 @@ pub enum AtomEnvelope {
     Position(Position),
     /// Gap-B typed-extension atom — see [`Opposition`].
     Opposition(Opposition),
+    /// AD-2 described-asset atom — see [`Asset`].
+    Asset(Asset),
 }
 
 impl AtomEnvelope {
@@ -837,6 +1003,7 @@ impl AtomEnvelope {
             AtomEnvelope::ArgumentReconstruction(a) => &a.id,
             AtomEnvelope::Position(a) => &a.id,
             AtomEnvelope::Opposition(a) => &a.id,
+            AtomEnvelope::Asset(a) => &a.id,
         }
     }
 
@@ -852,6 +1019,7 @@ impl AtomEnvelope {
             AtomEnvelope::ArgumentReconstruction(a) => a.enrichment_depth,
             AtomEnvelope::Position(a) => a.enrichment_depth,
             AtomEnvelope::Opposition(a) => a.enrichment_depth,
+            AtomEnvelope::Asset(a) => a.enrichment_depth,
         }
     }
 }
@@ -867,7 +1035,20 @@ impl AtomsFile {
     /// Current on-disk schema version for the atoms file. Bumped when
     /// the envelope or any variant's data shape changes in a
     /// backwards-incompatible way.
-    pub const SCHEMA_VERSION: &'static str = "2.0";
+    ///
+    /// History:
+    /// - `2.0` — initial typed-atom shape (Entity / Event / State /
+    ///   Relation / Claim / Question / Configuration /
+    ///   ArgumentReconstruction / Position / Opposition).
+    /// - `2.1` — added `Asset` variant + `Attaches` edge kind
+    ///   (architecture-over-Enron Phase 1; AD-2). Reader-side: every
+    ///   non-Asset reader sees a non-`Asset` atom unchanged; an old
+    ///   reader hitting an `Asset` envelope on disk fails loudly per
+    ///   the deliberate "no `#[serde(other)]`" choice on AtomEnvelope.
+    /// - `2.2` — added `Entity::provenance` field (AD-4;
+    ///   architecture-over-Enron Phase 4). Old atoms.json deserialise
+    ///   with a default empty `Provenance`.
+    pub const SCHEMA_VERSION: &'static str = "2.2";
 
     pub fn new(atoms: Vec<AtomEnvelope>) -> Self {
         Self {
@@ -1000,6 +1181,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+                    provenance: Default::default(),
                     concept_kind: None,
 };
         let env = AtomEnvelope::Entity(entity.clone());
@@ -1282,7 +1464,15 @@ mod tests {
     fn atoms_file_serialises_with_schema_version() {
         let file = AtomsFile::new(vec![]);
         let json = serde_json::to_string(&file).unwrap();
-        assert!(json.contains("\"schema_version\":\"2.0\""));
+        // SCHEMA_VERSION is the source of truth — the test pins
+        // whatever the current value is so a future bump updates this
+        // assertion automatically. The shape of `atoms` is what we
+        // actually want to assert.
+        let expected_ver = format!("\"schema_version\":\"{}\"", AtomsFile::SCHEMA_VERSION);
+        assert!(
+            json.contains(&expected_ver),
+            "{json} should contain {expected_ver}"
+        );
         assert!(json.contains("\"atoms\":[]"));
     }
 
@@ -1301,6 +1491,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+                    provenance: Default::default(),
                     concept_kind: None,
 };
         let env = AtomEnvelope::Entity(entity);

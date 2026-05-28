@@ -1202,6 +1202,7 @@ mod tests {
             role: Some("VP Eng".into()),
             participants: Vec::new(),
             defining_quote: None,
+                    provenance: Default::default(),
                     concept_kind: None,
 };
         let api_migration = Entity {
@@ -1217,6 +1218,7 @@ mod tests {
             role: None,
             participants: vec![AtomId::entity(1)],
             defining_quote: None,
+                    provenance: Default::default(),
                     concept_kind: None,
 };
 

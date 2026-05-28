@@ -119,6 +119,16 @@ pub fn extract_doc_id(env: &AtomEnvelope) -> Option<String> {
         AtomEnvelope::Configuration(cfg) => {
             cfg.evidence.first().map(|cr| cr.chunk_id.clone())
         }
+        // Asset atoms are document-level not chunk-level. The
+        // `first_seen_source_doc_id` field is the doc handle — when
+        // empty the caller should fall back to the corpus root.
+        AtomEnvelope::Asset(a) => {
+            if a.first_seen_source_doc_id.is_empty() {
+                None
+            } else {
+                Some(a.first_seen_source_doc_id.clone())
+            }
+        }
     }
 }
 
@@ -207,6 +217,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![],
+            provenance: Default::default(),
             concept_kind: None,
         })
     }

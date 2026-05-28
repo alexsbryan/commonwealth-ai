@@ -112,6 +112,11 @@ pub fn compute_stable_key(corpus_id: &str, atom: &AtomEnvelope) -> StableAtomKey
             a.canonical_label.as_str(),
             a.first_appearance.chunk_id.as_str(),
         ),
+        AtomEnvelope::Asset(a) => (
+            "Asset",
+            a.sha256.as_str(),
+            a.first_seen_source_doc_id.as_str(),
+        ),
     };
 
     let mut h = blake3::Hasher::new();
@@ -153,6 +158,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![],
+                    provenance: Default::default(),
                     concept_kind: None,
 })
     }

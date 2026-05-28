@@ -135,6 +135,12 @@ pub async fn cmd_atlas_query(args: &[String]) -> i32 {
             }
             AtomEnvelope::Position(x) => positions.push(x),
             AtomEnvelope::Opposition(x) => oppositions.push(x),
+            AtomEnvelope::Asset(_) => {
+                // atlas-query view is prose-shaped — asset atoms
+                // reach it via the carrier doc's Attaches edge, not
+                // as a first-class bucket. Skip until the view grows
+                // a dedicated lane.
+            }
         }
     }
 

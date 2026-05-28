@@ -886,6 +886,15 @@ fn atom_brief(atom: &AtomEnvelope) -> (&'static str, String, String) {
                 o.framing.clone()
             },
         ),
+        AtomEnvelope::Asset(a) => (
+            "asset",
+            if a.original_filename.is_empty() {
+                format!("{} asset", a.asset_kind)
+            } else {
+                a.original_filename.clone()
+            },
+            format!("{} bytes, sha256:{}", a.size, &a.sha256[..16.min(a.sha256.len())]),
+        ),
     }
 }
 
@@ -910,6 +919,7 @@ fn atom_evidence_section_ids(atom: &AtomEnvelope) -> Vec<String> {
             out
         }
         AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => unreachable!("typed atoms wired in Gap B Stage 4"),
+        AtomEnvelope::Asset(_) => Vec::new(),
     }
 }
 

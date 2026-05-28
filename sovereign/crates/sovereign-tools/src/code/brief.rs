@@ -581,6 +581,14 @@ fn atom_label(atom: &AtomEnvelope) -> (&'static str, String) {
         AtomEnvelope::ArgumentReconstruction(a) => ("argument", a.name.clone()),
         AtomEnvelope::Position(p) => ("position", p.canonical_name.clone()),
         AtomEnvelope::Opposition(o) => ("opposition", o.canonical_label.clone()),
+        AtomEnvelope::Asset(a) => (
+            "asset",
+            if a.original_filename.is_empty() {
+                format!("asset:{}", &a.sha256[..12.min(a.sha256.len())])
+            } else {
+                a.original_filename.clone()
+            },
+        ),
     }
 }
 

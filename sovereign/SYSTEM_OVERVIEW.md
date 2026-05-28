@@ -83,11 +83,18 @@ Major modules under `corpus-engine/src/`:
 
 - `engine/` — `CorpusEngine` façade (`ingest`, `expand`, `reindex`)
 - `acquirers/`, `extractors/`, `chunkers/`, `filters/` — pipeline stages
+- `asset_store/` — content-addressed filesystem store for binary
+  payloads (raw bytes + optional typed parsed-form caches +
+  append-only ledger). Architecture-over-Enron AD-1; the substrate
+  the described-asset dispatcher and future calendar /
+  transactions / sensor verticals share.
 - `recipe.rs`, `registry.rs` — TOML schema + recipe catalog
 - `index/` — LanceDB (IVF-PQ) + Tantivy FTS, `IndexMeta`, `ScopeMeta`
 - `enrichment/` — v1 field-engine (5-phase domain pipeline) and v2
   atlas (typed atom graph; `Pipeline` trait + registry + exemplar
-  bank). See `ENRICHMENT_V2.md`.
+  bank). See `ENRICHMENT_V2.md`. Plus `enrichment/reconciliation/`
+  — the multi-origin merge primitive (Phase 4 of the architecture-
+  over-Enron push) with reversible oplog + pluggable merge signals.
 - `atlas_traversal/` — query layer over atlas graphs
 - `update/` — code/file watchers, delta updates, lint/test watchers
 - `notes.rs`, `features.rs`, `plan_items.rs` — NoteStore + ATOS
@@ -175,10 +182,18 @@ pipeline. Built-ins per stage:
 | Stage      | Built-ins                                                          |
 |------------|--------------------------------------------------------------------|
 | Acquirer   | `bulk_download`, `huggingface_dataset`, `local_file`, `http_api`   |
-| Extractor  | `mediawiki_xml`, `stackexchange_xml`, `jsonl`, `wikipedia_jsonl`, `wikipedia_structured`, `html`, `html_sections`, `csv`, `parquet`, `plaintext`, `code` |
-| Filter     | `pageview_rank`, `title_list`, composed via `[[filter]]` (`Any` / `All`) |
+| Extractor  | `mediawiki_xml`, `stackexchange_xml`, `jsonl`, `wikipedia_jsonl`, `wikipedia_structured`, `html`, `html_sections`, `csv`, `parquet`, `plaintext`, `code`, `email` (RFC-5322 + MIME), `described_asset` (content-addressed binary dispatcher), `column_aware` (typed Entity atoms from parquet parsed-form caches) |
+| Filter     | `pageview_rank`, `title_list`, `boilerplate` (email signature / quoted-reply / disclaimer stripping), composed via `[[filter]]` (`Any` / `All`) |
 | Chunker    | `paragraph`, `sentence`, `fixed`, `semantic`, `passthrough`, `portal_event_bullet`, `threaded_turns` |
 | Index      | `CorpusIndex` over LanceDB (IVF-PQ) + Tantivy FTS                  |
+
+The `email` + `described_asset` extractors and the `column_aware`
+extractor land together as the substrate of the architecture-over-Enron
+push (5-phase plan in `~/.claude/plans/this-is-a-whole-serialized-cake.md`).
+Each future binary-bearing vertical (Firm Inbox, sales intelligence,
+project memory, calendar / transactions / sensor ingest) inherits the
+same dispatcher + asset-store pair unchanged. See HISTORY.md's
+`enron-entity-resolution` section.
 
 ### Storage
 

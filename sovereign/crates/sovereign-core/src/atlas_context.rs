@@ -125,6 +125,10 @@ impl AtlasGraph {
             AtomEnvelope::ArgumentReconstruction(a) => a.evidence.iter().collect(),
             AtomEnvelope::Position(p) => vec![&p.first_appearance],
             AtomEnvelope::Opposition(o) => vec![&o.first_appearance],
+            // Asset atoms carry no chunk-level evidence; the carrier
+            // doc's atoms supply the evidence for the asset's
+            // existence (via the Attaches edge).
+            AtomEnvelope::Asset(_) => Vec::new(),
         }
     }
 }
@@ -203,6 +207,12 @@ pub fn edge_weight(edge_type: EdgeType) -> f32 {
         EdgeType::EvidenceFor => 0.8,
         EdgeType::Concedes => 1.0,
         EdgeType::OpposesIn => 0.6,
+        // Attaches connects a carrier doc to a described asset.
+        // Intra-article navigation rarely benefits from this edge —
+        // surfacing the asset is downstream UX (atom detail panel),
+        // not retrieval. Zero weight here keeps the navigator
+        // focused on argumentative structure.
+        EdgeType::Attaches => 0.0,
     }
 }
 

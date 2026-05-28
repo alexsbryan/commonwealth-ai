@@ -18,6 +18,7 @@ pub mod filter;
 pub mod investigation;
 pub mod open_questions;
 pub mod pipeline;
+pub mod reconciliation;
 pub mod sep;
 pub mod skeleton;
 pub(crate) mod skeleton_parse;

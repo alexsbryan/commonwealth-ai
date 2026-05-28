@@ -88,6 +88,14 @@ fn default_title_column() -> String {
     "name".to_string()
 }
 
+fn default_described_asset_max_bytes() -> u64 {
+    crate::extractors::described_asset::DescribedAssetExtractor::DEFAULT_MAX_BYTES_PER_ASSET
+}
+
+fn default_email_max_body_bytes() -> usize {
+    crate::extractors::email_rfc5322::EmailExtractorConfig::default().max_body_bytes
+}
+
 fn default_url_column() -> String {
     "url".to_string()
 }
@@ -481,6 +489,79 @@ pub struct EnrichmentConfig {
     /// threshold patterns; the recipe author chooses which to run.
     #[serde(default, rename = "patterns")]
     pub patterns: Vec<PatternDecl>,
+
+    /// Architecture-over-Enron Phase 4: multi-origin reconciliation
+    /// policy. `None` (the default) skips reconciliation entirely;
+    /// pipelines that don't carry [`crate::enrichment::atlas::atoms::Provenance`]
+    /// on their entity atoms produce nothing to reconcile across
+    /// anyway. Recipes that enable described-asset + email
+    /// extractors set this block to tune the merger.
+    #[serde(default)]
+    pub reconciliation: Option<ReconciliationToml>,
+}
+
+/// TOML mirror of
+/// [`crate::enrichment::reconciliation::ReconciliationPolicy`].
+/// Kept as a separate struct so the recipe schema stays string-named
+/// (the policy struct uses Rust-native field names; the TOML can
+/// rename in a future revision without touching the runner).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReconciliationToml {
+    /// Minimum fold-overlap similarity for a name match to count.
+    /// See [`crate::enrichment::reconciliation::ReconciliationPolicy`].
+    #[serde(default = "default_name_similarity_threshold")]
+    pub name_similarity_threshold: f32,
+    /// Minimum *distinct* signals required for a cross-origin merge.
+    #[serde(default = "default_cross_origin_required_signals")]
+    pub cross_origin_required_signals: u8,
+    /// Escalate uncertain candidates to the calibrated judge.
+    #[serde(default = "default_true")]
+    pub judge_when_uncertain: bool,
+    /// Judge trial count when escalation fires.
+    #[serde(default = "default_judge_trials")]
+    pub judge_trials: u8,
+    /// Column-aware extractor configuration. `None` to skip the
+    /// column-aware pass entirely (the multi-origin merger still
+    /// runs on whatever other signals the corpus produces).
+    #[serde(default)]
+    pub column_aware:
+        Option<crate::extractors::column_aware::ColumnAwareConfig>,
+}
+
+fn default_name_similarity_threshold() -> f32 {
+    0.85
+}
+fn default_cross_origin_required_signals() -> u8 {
+    2
+}
+fn default_judge_trials() -> u8 {
+    3
+}
+
+impl Default for ReconciliationToml {
+    fn default() -> Self {
+        Self {
+            name_similarity_threshold: default_name_similarity_threshold(),
+            cross_origin_required_signals: default_cross_origin_required_signals(),
+            judge_when_uncertain: default_true(),
+            judge_trials: default_judge_trials(),
+            column_aware: None,
+        }
+    }
+}
+
+impl ReconciliationToml {
+    /// Project this TOML shape onto the runtime policy struct.
+    pub fn to_policy(
+        &self,
+    ) -> crate::enrichment::reconciliation::ReconciliationPolicy {
+        crate::enrichment::reconciliation::ReconciliationPolicy {
+            name_similarity_threshold: self.name_similarity_threshold,
+            cross_origin_required_signals: self.cross_origin_required_signals,
+            judge_when_uncertain: self.judge_when_uncertain,
+            judge_trials: self.judge_trials,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -667,6 +748,7 @@ impl Default for EnrichmentConfig {
             entity_types: Vec::new(),
             relationship_types: Vec::new(),
             patterns: Vec::new(),
+            reconciliation: None,
         }
     }
 }
@@ -1476,6 +1558,55 @@ pub enum ExtractorConfig {
         /// PDF settings like `ocr_fallback: true`).
         #[serde(default)]
         params: serde_json::Value,
+    },
+    /// Architecture-over-Enron Phase 2: RFC-5322 / MIME email
+    /// extractor. Walks `source_path` recursively (maildir layout,
+    /// raw `.eml` files), parses each through `mailparse`, and
+    /// emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc)
+    /// per message. Metadata carries the parsed headers + a
+    /// `thread_id` derived from In-Reply-To / References. When the
+    /// engine has an [`crate::asset_store::AssetStore`] + an
+    /// [`crate::extractors::described_asset::AssetSubExtractorRegistry`]
+    /// installed (the default after Phase 1), attachments dispatch
+    /// through the described-asset substrate — raw bytes + parsed
+    /// caches + Asset atom + Attaches edge land per attachment.
+    #[serde(rename = "email")]
+    Email {
+        /// Cap on per-message body bytes after MIME decoding. Long-
+        /// tail bodies (200MB HTML newsletters) get truncated; the
+        /// extractor sets a `body_was_truncated` flag in metadata.
+        #[serde(default = "default_email_max_body_bytes")]
+        max_body_bytes: usize,
+        /// Per-attachment byte cap fed into the described-asset
+        /// dispatcher. `0` = use the dispatcher's default.
+        #[serde(default)]
+        max_attachment_bytes: u64,
+    },
+    /// Architecture-over-Enron AD-3: the described-asset dispatcher.
+    /// Walks `source_path` (one mixed-binary folder), hashes each
+    /// file, picks a sub-extractor from the engine's
+    /// [`AssetSubExtractorRegistry`](crate::extractors::described_asset::AssetSubExtractorRegistry)
+    /// by magic-bytes / extension, and emits one
+    /// [`ExtractedDoc`](crate::extractors::ExtractedDoc) per asset
+    /// whose `content` is the description prose (always present —
+    /// opaque-fallback at worst). The dispatcher writes raw bytes
+    /// + optional typed parsed form to the engine's
+    /// [`AssetStore`](crate::asset_store::AssetStore) and pre-forms
+    /// the `Asset` atom + `Attaches` edge into the atlas sidecar so
+    /// the next atlas write picks them up.
+    ///
+    /// Defaults: `xlsx` + `docx` + `plaintext` + `opaque` sub-
+    /// extractors registered in-tree. `sovereign-tools` registers
+    /// `pdf` at daemon startup the same way it does for the
+    /// `Custom` PDF extractor today.
+    #[serde(rename = "described_asset")]
+    DescribedAsset {
+        /// Maximum bytes the dispatcher will load into RAM per
+        /// asset. Larger files fall through to the opaque fallback
+        /// (no double-counting of GiB-scale videos). Defaults to
+        /// 64 MiB.
+        #[serde(default = "default_described_asset_max_bytes")]
+        max_bytes_per_asset: u64,
     },
     /// Section-aware XML extractor. Walks a directory of `.xml`
     /// files and emits one

@@ -196,6 +196,18 @@ pub struct CorpusEngine {
     /// (typically `sovereign-tools`, which ships `pdf-extract` etc.)
     /// so corpus-engine stays free of per-format heavy deps.
     custom_extractors: Arc<RwLock<HashMap<String, CustomExtractorFn>>>,
+    /// Per-corpus content-addressed asset stores, lazily created by
+    /// [`Self::asset_store_for`]. Backs the described-asset
+    /// dispatcher (AD-1).
+    asset_stores: Arc<RwLock<HashMap<String, Arc<dyn crate::asset_store::AssetStore>>>>,
+    /// Optional caller-supplied sub-extractor registry for the
+    /// described-asset dispatcher. `None` → falls back to the in-
+    /// tree defaults (`xlsx` + `docx` + `plaintext` + `opaque`).
+    /// `sovereign-tools` installs a registry that adds `pdf` here
+    /// at daemon startup, the same way it does for the legacy
+    /// per-extension `CustomExtractorFn` map.
+    asset_sub_extractors:
+        Arc<RwLock<Option<crate::extractors::described_asset::AssetSubExtractorRegistry>>>,
     /// Optional cooperative-yield hook polled at embed-batch and
     /// enrichment-phase boundaries. When `Some` and `should_yield()`
     /// returns true, ingest workers sleep briefly and re-poll so the
@@ -319,6 +331,8 @@ impl CorpusEngine {
             cancel_registry: CancellationRegistry::new(),
             custom_acquirers: Arc::new(RwLock::new(HashMap::new())),
             custom_extractors: Arc::new(RwLock::new(HashMap::new())),
+            asset_stores: Arc::new(RwLock::new(HashMap::new())),
+            asset_sub_extractors: Arc::new(RwLock::new(None)),
             yield_hook: std::sync::RwLock::new(None),
             partition_locks: Arc::new(std::sync::Mutex::new(HashMap::new())),
         }
@@ -430,13 +444,71 @@ impl CorpusEngine {
     }
 
     /// Look up a registered custom extractor by `kind`. Used by the
-    /// extractor dispatch in [`make_extractor`].
+    /// extractor dispatch in [`Self::make_extractor`].
     pub(crate) fn custom_extractor(&self, kind: &str) -> Option<CustomExtractorFn> {
         let guard = self
             .custom_extractors
             .read()
             .expect("custom_extractors RwLock poisoned");
         guard.get(kind).cloned()
+    }
+
+    /// Get-or-build the shared [`AssetStore`] for `corpus_id`. The
+    /// store lives at `<index_dir>/<corpus_id>/assets/`. Cached so
+    /// repeated calls during the same ingest reuse the same handle
+    /// (idempotent in-memory dedup index).
+    pub fn asset_store_for(
+        &self,
+        corpus_id: &str,
+    ) -> std::sync::Arc<dyn crate::asset_store::AssetStore> {
+        let mut guard = self
+            .asset_stores
+            .write()
+            .expect("asset_stores RwLock poisoned");
+        if let Some(existing) = guard.get(corpus_id) {
+            return existing.clone();
+        }
+        let root = self.index_dir.join(corpus_id).join("assets");
+        let store = std::sync::Arc::new(
+            crate::asset_store::FilesystemAssetStore::new(&root)
+                .expect("FilesystemAssetStore::new failed"),
+        )
+            as std::sync::Arc<dyn crate::asset_store::AssetStore>;
+        guard.insert(corpus_id.to_string(), store.clone());
+        store
+    }
+
+    /// Install a custom [`AssetSubExtractorRegistry`]
+    /// ([`crate::extractors::described_asset::AssetSubExtractorRegistry`])
+    /// so callers (typically `sovereign-tools`) can plug in `pdf`
+    /// or other heavy-dep sub-extractors. Replaces any previously
+    /// installed registry; defaults (xlsx, docx, plaintext, opaque)
+    /// are lost — callers should re-register them via
+    /// [`crate::extractors::described_asset::AssetSubExtractorRegistry::defaults`]
+    /// and then `register` their additions.
+    pub fn set_asset_sub_extractors(
+        &self,
+        registry: crate::extractors::described_asset::AssetSubExtractorRegistry,
+    ) {
+        let mut guard = self
+            .asset_sub_extractors
+            .write()
+            .expect("asset_sub_extractors RwLock poisoned");
+        *guard = Some(registry);
+    }
+
+    /// Snapshot of the asset sub-extractor registry; falls back to
+    /// the in-tree defaults when no caller has installed one.
+    pub fn asset_sub_extractors(
+        &self,
+    ) -> crate::extractors::described_asset::AssetSubExtractorRegistry {
+        let guard = self
+            .asset_sub_extractors
+            .read()
+            .expect("asset_sub_extractors RwLock poisoned");
+        guard
+            .clone()
+            .unwrap_or_else(crate::extractors::described_asset::AssetSubExtractorRegistry::defaults)
     }
 
     /// Set the partition suffix used when writing to

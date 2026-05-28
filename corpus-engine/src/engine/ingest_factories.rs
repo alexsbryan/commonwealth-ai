@@ -126,7 +126,11 @@ impl CorpusEngine {
         }
     }
 
-    pub(crate) fn make_extractor(&self, config: &ExtractorConfig) -> Box<dyn Extractor> {
+    pub(crate) fn make_extractor(
+        &self,
+        config: &ExtractorConfig,
+        corpus_id: &str,
+    ) -> Box<dyn Extractor> {
         match config {
             ExtractorConfig::MediawikiXml {
                 namespace_filter,
@@ -328,6 +332,47 @@ impl CorpusEngine {
                     kind: kind.clone(),
                     extractor: registered,
                 })
+            }
+            ExtractorConfig::DescribedAsset { max_bytes_per_asset } => {
+                let asset_store = self.asset_store_for(corpus_id);
+                let registry = self.asset_sub_extractors();
+                let asset_atoms_sidecar = self
+                    .index_dir()
+                    .join(corpus_id)
+                    .join("atlas")
+                    .join("asset_atoms.jsonl");
+                Box::new(
+                    extractors::described_asset::DescribedAssetExtractor {
+                        store: asset_store,
+                        registry,
+                        asset_atoms_sidecar,
+                        max_bytes_per_asset: *max_bytes_per_asset,
+                    },
+                )
+            }
+            ExtractorConfig::Email {
+                max_body_bytes,
+                max_attachment_bytes,
+            } => {
+                let asset_store = self.asset_store_for(corpus_id);
+                let registry = self.asset_sub_extractors();
+                let atlas_dir = self.index_dir().join(corpus_id).join("atlas");
+                let dispatch =
+                    extractors::email_rfc5322::EmailAssetDispatch {
+                        store: asset_store,
+                        registry,
+                        asset_atoms_sidecar: atlas_dir.join("asset_atoms.jsonl"),
+                        asset_edges_sidecar: atlas_dir.join("asset_edges.jsonl"),
+                    };
+                Box::new(
+                    extractors::email_rfc5322::EmailExtractor::new(
+                        extractors::email_rfc5322::EmailExtractorConfig {
+                            max_body_bytes: *max_body_bytes,
+                            max_attachment_bytes: *max_attachment_bytes,
+                        },
+                    )
+                    .with_asset_dispatch(dispatch),
+                )
             }
         }
     }

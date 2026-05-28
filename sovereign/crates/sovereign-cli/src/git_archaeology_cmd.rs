@@ -410,6 +410,9 @@ fn anchor_chunk_id(atom: &AtomEnvelope) -> Option<&str> {
         ArgumentReconstruction(a) => a.evidence.first().map(|c| c.chunk_id.as_str()),
         Position(p) => Some(p.first_appearance.chunk_id.as_str()),
         Opposition(o) => Some(o.first_appearance.chunk_id.as_str()),
+        // Asset atoms aren't chunk-anchored; git-archaeology of a
+        // described binary lives outside the per-chunk file-path map.
+        Asset(_) => None,
     }
 }
 
