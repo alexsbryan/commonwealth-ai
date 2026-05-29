@@ -55,6 +55,21 @@ pub enum RecipeId {
     /// Iteration variant — Kenneth Lay's mailbox alone (~6k messages).
     /// Fast-iteration target for reconciliation-policy tuning.
     EnronSampleOneMailbox,
+    /// Smoke-size variant — Lay's `_sent` folder alone (~261 messages).
+    /// Designed to land Phase 1-5 in under an hour on a primary-only
+    /// daemon so the first baseline lands the same session it starts.
+    EnronSampleTiny,
+    /// Stage B cross-origin smoke — Lay's `_sent` + Skilling's `sent`
+    /// (~537 messages, 2 X-Origin values). First baseline that
+    /// exercises Phase 4 multi-origin reconciliation, the load-bearing
+    /// facet that `EnronSampleTiny` (single origin) leaves cold.
+    EnronSampleMultiTiny,
+    /// Stage C wide cross-origin exerciser — Lay + Skilling sent +
+    /// inbox slices (~3170 messages, 4 X-Origin folds, two-way
+    /// correspondence). Designed to catch the surface forms that
+    /// `EnronSampleMultiTiny` (one-way `_sent` only) missed because
+    /// senders rarely echo their own names back.
+    EnronSampleMultiWide,
 }
 
 impl RecipeId {
@@ -85,6 +100,9 @@ impl RecipeId {
             Self::ConversationsAnthropic => "conversations-anthropic",
             Self::EnronSample => "enron-sample",
             Self::EnronSampleOneMailbox => "enron-sample-onemailbox",
+            Self::EnronSampleTiny => "enron-sample-tiny",
+            Self::EnronSampleMultiTiny => "enron-sample-multi-tiny",
+            Self::EnronSampleMultiWide => "enron-sample-multi-wide",
         }
     }
 
@@ -112,6 +130,9 @@ impl RecipeId {
             "conversations-anthropic" => Some(Self::ConversationsAnthropic),
             "enron-sample" => Some(Self::EnronSample),
             "enron-sample-onemailbox" => Some(Self::EnronSampleOneMailbox),
+            "enron-sample-tiny" => Some(Self::EnronSampleTiny),
+            "enron-sample-multi-tiny" => Some(Self::EnronSampleMultiTiny),
+            "enron-sample-multi-wide" => Some(Self::EnronSampleMultiWide),
             _ => None,
         }
     }
@@ -152,6 +173,15 @@ impl RecipeId {
             Self::EnronSampleOneMailbox => {
                 include_str!("../recipes/enron-sample-onemailbox/recipe.toml")
             }
+            Self::EnronSampleTiny => {
+                include_str!("../recipes/enron-sample-tiny/recipe.toml")
+            }
+            Self::EnronSampleMultiTiny => {
+                include_str!("../recipes/enron-sample-multi-tiny/recipe.toml")
+            }
+            Self::EnronSampleMultiWide => {
+                include_str!("../recipes/enron-sample-multi-wide/recipe.toml")
+            }
         }
     }
 
@@ -179,6 +209,9 @@ impl RecipeId {
         Self::ConversationsAnthropic,
         Self::EnronSample,
         Self::EnronSampleOneMailbox,
+        Self::EnronSampleTiny,
+        Self::EnronSampleMultiTiny,
+        Self::EnronSampleMultiWide,
     ];
 }
 

@@ -303,6 +303,18 @@ Return JSON:
             .collect::<Vec<_>>()
             .join("\n\n");
 
+        // Prompt layout is prefix-cache-optimised: every line of
+        // stable instruction sits BEFORE the dynamic `{passages}` tail
+        // so successive batches share the longest possible KV-cache
+        // prefix. Pre-2026-05-28 the `Conversations:\n{passages}\n…`
+        // block lived mid-prompt with stable formatting rules AFTER
+        // it; the suffix collided in cache with prior batches'
+        // passages-tail, hitting 0% prefix-cache hit ratio in
+        // production (`prefix_cache: prefill scope` audit on enron-
+        // sample-tiny Phase 1b, 50 calls, mean_hit=0 / mean_new=3444).
+        // Moving every rule + the JSON example ahead of passages
+        // shifts the diverging boundary to the tail so the ~1.5KB
+        // instruction header re-uses cached tokens.
         Some(format!(
             r#"You are reading conversations between one person (the user) and an
 AI assistant. Your job is named-entity extraction: identify the
@@ -420,9 +432,6 @@ appeared in `mentions`. If you list a person as a participant on
 an initiative, make sure that person also appears in the `persons`
 array.
 
-Conversations:
-{passages}
-
 Return ONLY a JSON object. The example below is illustrative ONLY
 — its entities are deliberately drawn from domains (12th-century
 mysticism, baroque festival programming, antique instrument
@@ -479,7 +488,10 @@ first-person pronouns and the AI assistant. If you find yourself
 about to emit `Hildegard of Bingen`, `Disibodenberg Abbey`, `the
 Salzburg Festival`, `Scivias`, `apophatic theology`, or `restoring
 a 1920s clavichord`, stop — those are example names, not corpus
-content."#,
+content.
+
+Conversations:
+{passages}"#,
             passages = passages
         ))
     }

@@ -1686,6 +1686,29 @@ impl EmbeddedDaemon {
         // shares the daemon's tokio runtime, and listens to the same
         // shutdown channel pattern as RetentionGc/storage-snapshot so
         // it terminates cleanly on `EmbeddedDaemon::stop`.
+        //
+        // Gated on `[daemon] freshness_watchers_enabled` (default
+        // true). Operators flip it to false for measurement runs —
+        // e.g. the Enron Phase 5 baseline — where the per-tick
+        // wikipedia atlas-rebuild streams ~1.88M chunks through the
+        // enrichment LLM and contends with foreground ingest. The
+        // yield hook fires only on user-facing inference, not on
+        // background enrichment, so a config-level toggle is the
+        // clean lever. Future freshness watchers (sec-edgar, etc.)
+        // inherit the same gate.
+        let freshness_enabled = self
+            .setup_config
+            .read()
+            .await
+            .as_ref()
+            .map(|cfg| cfg.daemon.freshness_watchers_enabled)
+            .unwrap_or(true);
+        if !freshness_enabled {
+            info!(
+                "freshness watchers skipped — [daemon].freshness_watchers_enabled = false in config.toml"
+            );
+        }
+        if freshness_enabled {
         if let Some(engine) = corpus_engine.clone() {
             let newsworthy_config =
                 corpus_engine::update::newsworthy_watcher::NewsworthyConfig::default();
@@ -1747,6 +1770,7 @@ impl EmbeddedDaemon {
             });
             info!("WikipediaNewsworthyWatcher started");
         }
+        } // freshness_enabled
 
         let mut state = self.state.write().await;
         *state = DaemonState::Running {
