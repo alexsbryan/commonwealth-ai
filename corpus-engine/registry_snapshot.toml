@@ -272,3 +272,42 @@ mesh_sharing = false
 parent_corpus_id = "enron-sample"
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/enron-sample-onemailbox/recipe.toml"
 sha256 = ""
+
+[[recipes]]
+id = "enron-sample-tiny"
+name = "Enron Email (Lay _sent slice)"
+description = "Smoke-size variant — Kenneth Lay's `_sent` folder alone (~261 messages). Lands the first Phase 1-5 baseline in under an hour on a primary-only daemon."
+license = "public-domain"
+size_compressed_gb = 0.002
+size_indexed_gb = 0.03
+enrichment_enabled = true
+mesh_sharing = false
+parent_corpus_id = "enron-sample"
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/enron-sample-tiny/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "enron-sample-multi-tiny"
+name = "Enron Email (Lay+Skilling _sent slice)"
+description = "Stage B cross-origin smoke — Lay's _sent + Skilling's sent (~537 messages, 2 X-Origin values). First baseline that exercises Phase 4 multi-origin reconciliation."
+license = "public-domain"
+size_compressed_gb = 0.004
+size_indexed_gb = 0.06
+enrichment_enabled = true
+mesh_sharing = false
+parent_corpus_id = "enron-sample"
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/enron-sample-multi-tiny/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "enron-sample-multi-wide"
+name = "Enron Email (Lay+Skilling sent+inbox)"
+description = "Stage C wide cross-origin exerciser — Lay + Skilling sent + inbox slices (~3170 messages, 4 X-Origin folds, two-way correspondence)."
+license = "public-domain"
+size_compressed_gb = 0.025
+size_indexed_gb = 0.35
+enrichment_enabled = true
+mesh_sharing = false
+parent_corpus_id = "enron-sample"
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/enron-sample-multi-wide/recipe.toml"
+sha256 = ""

@@ -40,10 +40,17 @@ use super::clustering::EnrichmentProgress;
 use super::domain::Domain;
 use super::pipeline::atlas::{EnrichmentDepth, EntityType};
 
-/// Concurrency for the batch driver. Matches skeleton extraction
-/// (`field_engine.rs::CONCURRENCY = 4`) so a slow inference back-end
-/// caps both phases at the same in-flight count.
-const CONCURRENCY: usize = 4;
+/// Concurrency for the batch driver. Held at 1 so the daemon's
+/// prefix cache hits across successive batches. Pre-2026-05-28 this
+/// was 4 — symmetrical with `field_engine.rs::CONCURRENCY` — but a
+/// single primary chat slot only decodes one prompt at a time, so the
+/// in-flight 4 just queued at the model with each prompt evicting the
+/// prior batch's cached prefix on its turn. Audit (enron-sample-tiny
+/// Phase 1b, 50 calls) showed cache_hit_tokens=0 / new_prefill=3444
+/// per call — every batch re-prefilled the entire ~1.5KB instruction
+/// header. With CONCURRENCY=1 + the passages-last prompt layout the
+/// stable head stays resident across batches.
+const CONCURRENCY: usize = 1;
 
 /// Number of chunks per inference batch. Same as skeleton extraction.
 const BATCH_SIZE: usize = 4;
@@ -89,7 +96,7 @@ pub struct EntityExtractionResponse {
     pub concepts: Vec<ConceptEntity>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct PersonEntity {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -98,13 +105,34 @@ pub struct PersonEntity {
     pub role: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Canonical email address when known (RFC5322 header or body
+    /// signature). Promoted into `Entity.aliases` at upsert so the
+    /// downstream reconciliation `EmailHeaderSignal` and the
+    /// bench's surface-form matcher both see it. Pre-2026-05-29 the
+    /// field was absent from the schema — the `business_email`
+    /// prompt asked for it but serde silently dropped the value,
+    /// leaving every Entity's `aliases` list empty (verified on
+    /// enron-sample-multi-tiny: 2410 entities, all `aliases=[]`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    /// Every observed textual form for this person within the batch:
+    /// short form ("Andy"), title-prefixed ("Mr. Skilling"), initial
+    /// ("J. Skilling"), email local-part, plus any header-derived
+    /// "Display Name <addr@domain>" pair. Joined into the resulting
+    /// `Entity.aliases` so the train-split gold surface forms (which
+    /// commonly include both a name AND an email AND a short form
+    /// per canonical) match densely instead of one-per-entity. The
+    /// model emits "" for omitted; empty strings are filtered at
+    /// promotion time.
+    #[serde(default, deserialize_with = "deserialize_lenient_string_array")]
+    pub aliases: Vec<String>,
     /// Chunk ids the person was mentioned in within this batch.
     /// Each becomes one Involves edge.
     #[serde(default, deserialize_with = "deserialize_lenient_string_array")]
     pub mentions: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct OrganizationEntity {
     pub name: String,
     /// Free-text relationship to the user — "client", "employer",
@@ -115,6 +143,15 @@ pub struct OrganizationEntity {
     pub relationship: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Every observed textual form for this organization within
+    /// the batch — abbreviation ("AA"), short ("Andersen"), full
+    /// ("Arthur Andersen LLP"), domain-derived ("enron.com"). Joined
+    /// into `Entity.aliases` so the gold's multi-form canonicals
+    /// (e.g. org-arthur-andersen's surface set `["Arthur Andersen",
+    /// "Andersen", "Arthur Andersen LLP", "AA"]`) match densely.
+    /// Empty strings filtered at promotion.
+    #[serde(default, deserialize_with = "deserialize_lenient_string_array")]
+    pub aliases: Vec<String>,
     #[serde(default, deserialize_with = "deserialize_lenient_string_array")]
     pub mentions: Vec<String>,
 }
@@ -827,6 +864,20 @@ fn merge_responses(
 
     for (batch_idx, response) in &parsed {
         for p in &response.persons {
+            // Promote LLM-emitted aliases + the canonical email
+            // address into `Entity.aliases`. The bench matches gold
+            // surface forms case-insensitively against this list, so
+            // adding "andrew.fastow@enron.com" / "Andy Fastow" lets a
+            // single Entity light up multiple gold surface forms for
+            // the same canonical (person-andy-fastow's gold set has
+            // four surface forms; pre-2026-05-29 we matched at most
+            // one per Entity).
+            let mut incoming_aliases = p.aliases.clone();
+            if let Some(em) = p.email.as_ref() {
+                if !em.trim().is_empty() {
+                    incoming_aliases.push(em.clone());
+                }
+            }
             let id = upsert_entity(
                 &mut entities,
                 &mut by_folded_name,
@@ -836,6 +887,7 @@ fn merge_responses(
                 p.role.clone(),
                 p.description.clone(),
                 first_chunk(&p.mentions),
+                incoming_aliases,
             );
             for m in &p.mentions {
                 mentions.push((id, m.clone()));
@@ -867,6 +919,7 @@ fn merge_responses(
                 role_label,
                 o.description.clone(),
                 first_chunk(&o.mentions),
+                o.aliases.clone(),
             );
             for m in &o.mentions {
                 mentions.push((id, m.clone()));
@@ -883,6 +936,7 @@ fn merge_responses(
                 it.status.clone(),
                 it.description.clone(),
                 first_chunk(&it.mentions),
+                Vec::new(),
             );
             for m in &it.mentions {
                 mentions.push((id, m.clone()));
@@ -916,6 +970,7 @@ fn merge_responses(
                 w.kind.clone(),
                 description,
                 first_chunk(&w.mentions),
+                Vec::new(),
             );
             for m in &w.mentions {
                 mentions.push((id, m.clone()));
@@ -932,6 +987,7 @@ fn merge_responses(
                 None,
                 c.description.clone(),
                 first_chunk(&c.mentions),
+                Vec::new(),
             );
             for m in &c.mentions {
                 mentions.push((id, m.clone()));
@@ -1581,8 +1637,35 @@ fn upsert_entity(
     role: Option<String>,
     description: Option<String>,
     first_chunk_id: Option<String>,
+    aliases: Vec<String>,
 ) -> usize {
     let folded = fold_name(raw_name);
+    // Aliases bound for `Entity.aliases`: filter empty strings (the
+    // model emits `""` for omitted fields when nudged for `email` /
+    // `aliases`) and de-dupe against canonical_name + existing alias
+    // list. fold_name normalises whitespace + case so "Andy Fastow"
+    // and "andy  fastow" don't both land.
+    let extend_aliases = |target: &mut Vec<String>, canonical: &str, incoming: Vec<String>| {
+        let canonical_folded = fold_name(canonical);
+        let mut seen: std::collections::BTreeSet<String> = target
+            .iter()
+            .map(|s| fold_name(s))
+            .chain(std::iter::once(canonical_folded.clone()))
+            .collect();
+        for a in incoming {
+            let trimmed = a.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let folded_a = fold_name(trimmed);
+            if folded_a.is_empty() {
+                continue;
+            }
+            if seen.insert(folded_a) {
+                target.push(trimmed.to_string());
+            }
+        }
+    };
     if let Some(&idx) = by_folded_name.get(&folded) {
         // Merge: enrich missing fields, keep first non-empty values.
         if entities[idx].affiliation.is_none() && affiliation.is_some() {
@@ -1596,6 +1679,8 @@ fn upsert_entity(
                 entities[idx].description = d;
             }
         }
+        let canonical = entities[idx].canonical_name.clone();
+        extend_aliases(&mut entities[idx].aliases, &canonical, aliases);
         return idx;
     }
     let new_idx = entities.len();
@@ -1603,10 +1688,13 @@ fn upsert_entity(
     let first_chunk = first_chunk_id
         .or_else(|| Some(String::from("unknown-chunk")))
         .unwrap();
+    let canonical_name = raw_name.trim().to_string();
+    let mut entity_aliases: Vec<String> = Vec::new();
+    extend_aliases(&mut entity_aliases, &canonical_name, aliases);
     entities.push(Entity {
         id: new_id,
-        canonical_name: raw_name.trim().to_string(),
-        aliases: Vec::new(),
+        canonical_name,
+        aliases: entity_aliases,
         entity_type: kind,
         first_appearance: ChunkRef::new(first_chunk, None),
         description: description.unwrap_or_default(),
@@ -1812,6 +1900,8 @@ mod tests {
             affiliation: Some("Acme".into()),
             role: None,
             description: None,
+            email: None,
+            aliases: vec![],
             mentions: vec!["c1".into()],
         });
         response.persons.push(PersonEntity {
@@ -1819,6 +1909,8 @@ mod tests {
             affiliation: None,
             role: Some("VP Engineering".into()),
             description: None,
+            email: None,
+            aliases: vec![],
             mentions: vec!["c2".into()],
         });
 
@@ -1910,6 +2002,7 @@ mod tests {
             name: "Helios Health".into(),
             relationship: None,
             description: None,
+            aliases: vec![],
             mentions: vec!["c1".into()],
         });
         b1.initiatives.push(InitiativeEntity {
@@ -1944,6 +2037,7 @@ mod tests {
             name: "Acme Corp".into(),
             relationship: None,
             description: None,
+            aliases: vec![],
             mentions: vec!["c1".into()],
         });
         b1.initiatives.push(InitiativeEntity {
@@ -1985,6 +2079,7 @@ mod tests {
             name: "Acme Corp".into(),
             relationship: None,
             description: None,
+            aliases: vec![],
             mentions: vec!["c1".into()],
         });
         b1.initiatives.push(InitiativeEntity {
@@ -2033,12 +2128,14 @@ mod tests {
             name: "Stonewell Industries".into(),
             relationship: None,
             description: None,
+            aliases: vec![],
             mentions: vec!["c1".into(), "c2".into(), "c3".into()],
         });
         b1.organizations.push(OrganizationEntity {
             name: "Stonewall Industries".into(),
             relationship: None,
             description: None,
+            aliases: vec![],
             mentions: vec!["c4".into()],
         });
         let mut failures = Vec::new();
@@ -2064,6 +2161,8 @@ mod tests {
             affiliation: None,
             role: None,
             description: None,
+            email: None,
+            aliases: vec![],
             mentions: vec!["c1".into()],
         });
         b1.persons.push(PersonEntity {
@@ -2071,6 +2170,8 @@ mod tests {
             affiliation: None,
             role: None,
             description: None,
+            email: None,
+            aliases: vec![],
             mentions: vec!["c2".into()],
         });
         let mut failures = Vec::new();
@@ -2088,12 +2189,14 @@ mod tests {
             name: "Stonewell Industries".into(),
             relationship: None,
             description: None,
+            aliases: vec![],
             mentions: vec!["c1".into()],
         });
         b1.organizations.push(OrganizationEntity {
             name: "Stonewall Industries".into(),
             relationship: None,
             description: None,
+            aliases: vec![],
             mentions: vec!["c2".into()],
         });
         let mut failures = Vec::new();
@@ -2115,12 +2218,14 @@ mod tests {
             name: "Banner Holdings".into(),
             relationship: None,
             description: None,
+            aliases: vec![],
             mentions: vec!["c1".into(), "c2".into()],
         });
         b1.organizations.push(OrganizationEntity {
             name: "Manner Holdings".into(),
             relationship: None,
             description: None,
+            aliases: vec![],
             mentions: vec!["c3".into()],
         });
         let mut failures = Vec::new();
@@ -2139,6 +2244,8 @@ mod tests {
             affiliation: Some("Acme".into()),
             role: Some("Engineering Lead".into()),
             description: None,
+            email: None,
+            aliases: vec![],
             mentions: vec!["c2".into()],
         });
         let mut b2 = EntityExtractionResponse::default();
@@ -2147,6 +2254,8 @@ mod tests {
             affiliation: None,
             role: None,
             description: None,
+            email: None,
+            aliases: vec![],
             mentions: vec!["c5".into()],
         });
         let mut failures = Vec::new();
@@ -2175,6 +2284,8 @@ mod tests {
             affiliation: None,
             role: None,
             description: None,
+            email: None,
+            aliases: vec![],
             mentions: vec!["c1".into()],
         });
         b1.persons.push(PersonEntity {
@@ -2182,6 +2293,8 @@ mod tests {
             affiliation: None,
             role: None,
             description: None,
+            email: None,
+            aliases: vec![],
             mentions: vec!["c2".into()],
         });
         b1.persons.push(PersonEntity {
@@ -2189,6 +2302,8 @@ mod tests {
             affiliation: None,
             role: None,
             description: None,
+            email: None,
+            aliases: vec![],
             mentions: vec!["c3".into()],
         });
         let mut failures = Vec::new();
@@ -2211,6 +2326,8 @@ mod tests {
             affiliation: None,
             role: None,
             description: None,
+            email: None,
+            aliases: vec![],
             mentions: vec!["c1".into()],
         });
         b1.initiatives.push(InitiativeEntity {
@@ -2225,6 +2342,8 @@ mod tests {
             affiliation: None,
             role: None,
             description: None,
+            email: None,
+            aliases: vec![],
             mentions: vec!["c3".into()],
         });
 
@@ -2286,7 +2405,9 @@ mod tests {
             role: None,
             description: None,
             // Mix of acceptable formats: bare integer, prefixed
-            // label, bracketed label.
+            // label, bracketed label.,
+            email: None,
+            aliases: vec![],
             mentions: vec!["1".into(), "Memory 2".into(), "[Conversation 3]".into()],
         });
         rewrite_mentions(&mut response, &batch);
@@ -2305,6 +2426,8 @@ mod tests {
             affiliation: None,
             role: None,
             description: None,
+            email: None,
+            aliases: vec![],
             mentions: vec!["1".into(), "5".into(), "0".into(), "not-a-number".into()],
         });
         rewrite_mentions(&mut response, &batch);
@@ -2320,7 +2443,9 @@ mod tests {
             affiliation: None,
             role: None,
             description: None,
-            // Same chunk twice — should produce a single Involves edge.
+            // Same chunk twice — should produce a single Involves edge.,
+            email: None,
+            aliases: vec![],
             mentions: vec!["c1".into(), "c1".into(), "c2".into()],
         });
         let mut failures = Vec::new();
@@ -2511,6 +2636,8 @@ mod tests {
             affiliation: None,
             role: None,
             description: None,
+            email: None,
+            aliases: vec![],
             mentions: vec!["c1".into()],
         });
         let mut r1 = EntityExtractionResponse::default();
@@ -2519,6 +2646,8 @@ mod tests {
             affiliation: None,
             role: None,
             description: None,
+            email: None,
+            aliases: vec![],
             mentions: vec!["c2".into()],
         });
 
@@ -2549,6 +2678,8 @@ mod tests {
             affiliation: None,
             role: None,
             description: None,
+            email: None,
+            aliases: vec![],
             mentions: vec!["c1".into()],
         });
 
@@ -2596,6 +2727,8 @@ mod tests {
                 affiliation: None,
                 role: None,
                 description: None,
+                email: None,
+                aliases: vec![],
                 // Use the actual chunk_id of the first chunk in
                 // this batch (chunks 1..=12, batch_idx 0 → chunk 1,
                 // batch_idx 1 → chunk 5).
@@ -2725,6 +2858,8 @@ mod tests {
             affiliation: None,
             role: None,
             description: None,
+            email: None,
+            aliases: vec![],
             mentions: vec!["1".into()],
         });
         append_phase_1b_progress(&jsonl_path, 0, &r0).unwrap();

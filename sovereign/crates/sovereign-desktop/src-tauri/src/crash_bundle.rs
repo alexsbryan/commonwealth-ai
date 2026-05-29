@@ -292,12 +292,7 @@ mod tests {
             daemon: DaemonSection {
                 client_port: 9741,
                 internal_port: 9742,
-                autostart: true,
-                primary_idle_secs: 60,
-                extras_idle_secs: 0,
-                yield_to_foreground_secs: 60,
-                force_tool_calls: false,
-                alternation_grammar: false,
+                ..Default::default()
             },
             data: DataSection::default(),
             watched_folders: Default::default(),

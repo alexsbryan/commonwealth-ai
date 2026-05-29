@@ -162,8 +162,22 @@ pub struct OrgRoleSignal;
 
 impl MergeSignalCheck for OrgRoleSignal {
     fn check(&self, left: &Entity, right: &Entity) -> bool {
+        // Empty strings count as missing — emitting Some("") instead
+        // of None is what business_email's Phase 1b output does when
+        // the model leaves an "omit" field as a literal "". Without
+        // the empty-string guard, every entity at the same employer
+        // with no role specified ("Enron Corp" + "") collapses into
+        // one transitively-merged cluster — observed 2026-05-29 on
+        // enron-sample-multi-tiny train: 86 Enron employees including
+        // Lay, Skilling, and Fastow folded into a single canonical,
+        // dropping tuned B³ precision from 1.000 (conv) to 0.593.
         match (&left.affiliation, &right.affiliation, &left.role, &right.role) {
-            (Some(la), Some(ra), Some(lr), Some(rr)) => {
+            (Some(la), Some(ra), Some(lr), Some(rr))
+                if !la.is_empty()
+                    && !ra.is_empty()
+                    && !lr.is_empty()
+                    && !rr.is_empty() =>
+            {
                 fold_name(la) == fold_name(ra) && fold_name(lr) == fold_name(rr)
             }
             _ => false,
@@ -410,6 +424,29 @@ mod tests {
         assert!(OrgRoleSignal.check(&l, &r));
 
         r.role = Some("CFO".into());
+        assert!(!OrgRoleSignal.check(&l, &r));
+    }
+
+    #[test]
+    fn org_role_rejects_empty_string_role() {
+        // Empty-string role from Phase 1b output ("role":"") was
+        // matching transitively across every same-employer entity,
+        // collapsing 86 distinct Enron employees into one cluster on
+        // enron-sample-multi-tiny train. Lock the empty-string guard
+        // so a future refactor can't quietly drop it.
+        let mut l = ent("Ken Lay", EntityType::Person);
+        l.affiliation = Some("Enron".into());
+        l.role = Some(String::new());
+        let mut r = ent("Jeff Skilling", EntityType::Person);
+        r.affiliation = Some("Enron".into());
+        r.role = Some(String::new());
+        assert!(!OrgRoleSignal.check(&l, &r));
+
+        // Same guard applies to affiliation.
+        l.role = Some("CEO".into());
+        r.role = Some("CEO".into());
+        l.affiliation = Some(String::new());
+        r.affiliation = Some(String::new());
         assert!(!OrgRoleSignal.check(&l, &r));
     }
 

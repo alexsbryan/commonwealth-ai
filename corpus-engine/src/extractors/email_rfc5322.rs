@@ -200,9 +200,31 @@ impl EmailIterator {
 
         let source_id = slug(&message_id);
         let title = subject.clone();
+        // Prepend an RFC5322 header preamble to the body so downstream
+        // domains see sender/recipient identities at extraction time.
+        // StoredChunk only carries `(id, content, title)` to the domain
+        // prompt — the structured `metadata` JSON above is preserved on
+        // disk but the entity-extraction pass never sees it. Without
+        // this preamble the `conversational` domain extracts only body
+        // mentions and silently filters every sender ("the user is the
+        // speaker — do not extract them"), which produced the headline
+        // gap on enron-sample-multi-tiny: 7/35 canonical ground-truth
+        // entities matched because Lay-in-Lay's-mailbox and Skilling-
+        // in-Skilling's-mailbox were both dropped as "the user".
+        // BusinessEmailDomain pairs with this preamble to surface them
+        // as Person atoms. Body chunks past the first inherit the
+        // preamble too — the redundancy is cheap and keeps every chunk
+        // self-describing for the LLM.
+        let content_with_headers = build_header_preamble(
+            from.as_deref(),
+            to.as_deref(),
+            cc.as_deref(),
+            date.as_deref(),
+            subject.as_deref(),
+        ) + &body;
         Ok(Some(ExtractedDoc {
             title,
-            content: body,
+            content: content_with_headers,
             url: None,
             source_id,
             metadata: Some(metadata),
@@ -483,6 +505,49 @@ fn collect_body(parsed: &ParsedMail, max_bytes: usize) -> Result<(String, bool)>
     Ok((body, truncated))
 }
 
+/// Build a compact `From: / To: / Cc: / Date: / Subject:` header block
+/// prefixed onto every email's chunk content. Empty headers are
+/// omitted so the block stays short on terse messages. Trailing blank
+/// line separates the preamble from the body.
+fn build_header_preamble(
+    from: Option<&str>,
+    to: Option<&str>,
+    cc: Option<&str>,
+    date: Option<&str>,
+    subject: Option<&str>,
+) -> String {
+    let mut out = String::new();
+    if let Some(v) = from.filter(|s| !s.is_empty()) {
+        out.push_str("From: ");
+        out.push_str(v);
+        out.push('\n');
+    }
+    if let Some(v) = to.filter(|s| !s.is_empty()) {
+        out.push_str("To: ");
+        out.push_str(v);
+        out.push('\n');
+    }
+    if let Some(v) = cc.filter(|s| !s.is_empty()) {
+        out.push_str("Cc: ");
+        out.push_str(v);
+        out.push('\n');
+    }
+    if let Some(v) = date.filter(|s| !s.is_empty()) {
+        out.push_str("Date: ");
+        out.push_str(v);
+        out.push('\n');
+    }
+    if let Some(v) = subject.filter(|s| !s.is_empty()) {
+        out.push_str("Subject: ");
+        out.push_str(v);
+        out.push('\n');
+    }
+    if !out.is_empty() {
+        out.push('\n');
+    }
+    out
+}
+
 fn synthesize_message_id(path: &Path) -> String {
     // Maildir messages typically don't carry a Message-ID. Synthesize
     // one from the path so the source_id is still stable across
@@ -655,6 +720,17 @@ Notes body here.\r\n\
         assert_eq!(docs.len(), 1);
         let d = &docs[0];
         assert!(d.content.contains("This is a plain-text email."));
+        // Header preamble must reach the domain prompt — StoredChunk
+        // exposes only `(id, content, title)`, so From:/To:/Subject:
+        // need to be in the content body or the BusinessEmailDomain
+        // can't capture sender/recipient identities. Keep this strict.
+        assert!(
+            d.content.starts_with("From: alice@example.com"),
+            "expected header preamble at start of content; got: {:?}",
+            d.content.chars().take(80).collect::<String>()
+        );
+        assert!(d.content.contains("To: bob@example.com"));
+        assert!(d.content.contains("Subject: hello"));
         let meta = d.metadata.as_ref().unwrap();
         assert_eq!(meta["doc_type"], "email");
         assert_eq!(meta["from"], "alice@example.com");

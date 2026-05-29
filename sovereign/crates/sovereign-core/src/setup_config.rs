@@ -321,6 +321,23 @@ pub struct DaemonSection {
     #[serde(default = "default_yield_to_foreground_secs")]
     pub yield_to_foreground_secs: u64,
 
+    /// Enable background freshness watchers (currently:
+    /// `wikipedia-newsworthy`'s daily portal-ingest + article-refresh
+    /// loop; future entries will share this gate). When true, the
+    /// daemon spawns each watcher at startup; when false, none spawn
+    /// and the corresponding `/internal/<watcher>/*` routes report
+    /// `disabled` instead of firing ticks.
+    ///
+    /// Default `true` preserves the standing behavior. Flip to
+    /// `false` for measurement runs where a freshness tick's
+    /// atlas-rebuild would contend with the enrichment LLM and stall
+    /// foreground ingest (the foreground yield hook only fires on
+    /// `/v1/chat/completions`, not on background enrichment, so it
+    /// can't gate this on its own). Restore to `true` once the
+    /// baseline lands.
+    #[serde(default = "default_freshness_watchers_enabled")]
+    pub freshness_watchers_enabled: bool,
+
     /// When true, the inference adapter treats every tools-using
     /// request with `tool_choice: "auto"` (or unset) as if the caller
     /// had sent `tool_choice: "required"`, so the JSON-Schema
@@ -374,6 +391,7 @@ impl Default for DaemonSection {
             primary_idle_secs: default_primary_idle_secs(),
             extras_idle_secs: default_extras_idle_secs(),
             yield_to_foreground_secs: default_yield_to_foreground_secs(),
+            freshness_watchers_enabled: default_freshness_watchers_enabled(),
             force_tool_calls: default_force_tool_calls(),
             alternation_grammar: default_alternation_grammar(),
         }
@@ -445,6 +463,7 @@ fn default_extras_idle_secs() -> u64 { 0 }
 /// resumes. Set to `0` in `config.toml` to disable on batch hosts
 /// where ingest throughput trumps interactive latency.
 fn default_yield_to_foreground_secs() -> u64 { 60 }
+fn default_freshness_watchers_enabled() -> bool { true }
 
 fn default_force_tool_calls() -> bool { false }
 
@@ -728,6 +747,33 @@ embed = "/m/e.gguf"
 "#;
         let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(cfg.daemon.yield_to_foreground_secs, 60);
+    }
+
+    #[test]
+    fn freshness_watchers_enabled_defaults_to_true() {
+        let toml_str = r#"
+[models]
+primary = "/m/p.gguf"
+fast = "/m/f.gguf"
+embed = "/m/e.gguf"
+"#;
+        let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
+        assert!(cfg.daemon.freshness_watchers_enabled);
+    }
+
+    #[test]
+    fn freshness_watchers_enabled_explicit_false() {
+        let toml_str = r#"
+[models]
+primary = "/m/p.gguf"
+fast = "/m/f.gguf"
+embed = "/m/e.gguf"
+
+[daemon]
+freshness_watchers_enabled = false
+"#;
+        let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
+        assert!(!cfg.daemon.freshness_watchers_enabled);
     }
 
     #[test]

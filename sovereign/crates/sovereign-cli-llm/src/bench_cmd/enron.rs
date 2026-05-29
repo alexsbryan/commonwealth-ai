@@ -42,7 +42,7 @@ const HELP: Help = Help {
         "Phase 5 measurement loop for the architecture-over-Enron substrate.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench enron run --corpus <id> --split {train|test|holdout} [--policy {pre_reconciliation|tuned}] [--judge-trials N] [--unseal-holdout] [--bench-dir <path>] [--out <path>]",
+            "sovereign bench enron run --corpus <id> --split {train|test|holdout} [--policy {pre_reconciliation|tuned}] [--judge-trials N] [--name-similarity-threshold <0..1>] [--unseal-holdout] [--bench-dir <path>] [--out <path>]",
         ),
         HelpSection::Subcommands(&[
             ("run", "Score a corpus's reconciled atoms against the ground-truth split."),
@@ -93,6 +93,12 @@ struct Args {
     bench_dir: PathBuf,
     out: Option<PathBuf>,
     indexes_dir: PathBuf,
+    /// Optional override for `ReconciliationPolicy.name_similarity_threshold`.
+    /// `None` falls back to the policy's compile-time default (0.85).
+    /// Lets the operator sweep thresholds against an already-enriched
+    /// corpus without re-running ingest — the recon pass is purely a
+    /// function of the existing `atoms.json` entities.
+    name_similarity_threshold: Option<f32>,
 }
 
 fn parse_args(args: &[String]) -> Result<Args, String> {
@@ -104,6 +110,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
     let mut bench_dir: Option<PathBuf> = None;
     let mut out: Option<PathBuf> = None;
     let mut indexes_dir: Option<PathBuf> = None;
+    let mut name_similarity_threshold: Option<f32> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -170,6 +177,21 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
                         .ok_or_else(|| "--indexes-dir requires a value".to_string())?,
                 ));
             }
+            "--name-similarity-threshold" => {
+                i += 1;
+                let v = args.get(i).ok_or_else(|| {
+                    "--name-similarity-threshold requires a value".to_string()
+                })?;
+                let parsed = v
+                    .parse::<f32>()
+                    .map_err(|e| format!("--name-similarity-threshold: {e}"))?;
+                if !(0.0..=1.0).contains(&parsed) {
+                    return Err(format!(
+                        "--name-similarity-threshold must be in [0.0, 1.0]; got {parsed}"
+                    ));
+                }
+                name_similarity_threshold = Some(parsed);
+            }
             "--help" | "-h" => {
                 help::print(&HELP);
                 return Err("__HELP__".into());
@@ -191,6 +213,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         bench_dir,
         out,
         indexes_dir,
+        name_similarity_threshold,
     })
 }
 
@@ -395,6 +418,9 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
         Policy::Tuned => {
             let mut policy = ReconciliationPolicy::default();
             policy.judge_trials = parsed.judge_trials;
+            if let Some(t) = parsed.name_similarity_threshold {
+                policy.name_similarity_threshold = t;
+            }
             let outcome = reconcile(entities.clone(), &policy);
             let mut hist: BTreeMap<String, usize> = BTreeMap::new();
             for re in &outcome.entities {

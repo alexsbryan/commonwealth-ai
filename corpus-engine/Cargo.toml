@@ -203,4 +203,8 @@ wiremock = "0.6"
 # Encoder side is `compress` — only needed in tests, so pulled in
 # additively here to keep the library binary lean.
 sevenz-rust2 = { version = "0.21", default-features = false, features = ["bzip2", "util", "compress"] }
+# Write-side xlsx generator used to build fixture spreadsheets in
+# unit tests. Read-side `calamine` is already a runtime dep; the
+# writer is dev-only so the production binary stays lean.
+rust_xlsxwriter = "0.83"
 
