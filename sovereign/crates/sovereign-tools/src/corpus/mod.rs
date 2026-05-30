@@ -87,16 +87,24 @@ pub fn inference_to_inference_fn(
     inference: Arc<dyn InferenceProvider>,
 ) -> corpus_engine::InferenceFn {
     use sovereign_core::types::{CompletionRequest, Speed};
-    Arc::new(move |prompt: &str| {
+    Arc::new(move |prompt: &str, schema: Option<&serde_json::Value>| {
         let inf = Arc::clone(&inference);
+        // Schema (when the caller passes one) gates llama-cpp's
+        // structured-output sampler so the response is forced into a
+        // grammar matching the JSON Schema. Phase 1b on business_email
+        // sets this to drop the ~54% JSON-parse-failure tail observed
+        // on enron-sample-multi-wide; other phases pass None and get
+        // the legacy free-form path. Owned clone is required since
+        // the future moves the request.
+        let structured_output = schema.cloned();
         let request = CompletionRequest {
             prompt: prompt.to_string(),
             system_message: None,
             preferred_speed: Speed::Fast,  // fast model — structured extraction doesn't need 27B
-            max_tokens: Some(2048),        // skeleton extraction returns structured JSON for 4 passages
+            max_tokens: Some(4096),        // dropped 2026-05-29 (evening): once grammar-constrained decoding lands via `structured_output`, the cap stops being load-bearing for JSON validity — the schema guarantees valid array close at any token count. Bigger cap (8192) just gives a rambling model more rope: observed 286s batches generating 10358 tokens after grammar lit up, dragging mean latency to 110s/batch. 4096 caps wall clock at ~80s/batch worst case while still fitting most observed valid bodies; over-cap batches end with a smaller-but-valid entity list (acceptable recall hit vs the throughput win).
             temperature: Some(0.1),        // low temperature for consistent JSON output
             think_budget: Some(0),         // suppress thinking — hurts JSON, wastes tokens
-            structured_output: None,
+            structured_output,
             top_k: None,
             top_p: None,
             oicp: None,

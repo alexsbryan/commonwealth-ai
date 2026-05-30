@@ -53,6 +53,13 @@ use super::pipeline::atlas::{EnrichmentDepth, EntityType};
 const CONCURRENCY: usize = 1;
 
 /// Number of chunks per inference batch. Same as skeleton extraction.
+/// Held at 4 even after BusinessEmailDomain alias-emit pushed output
+/// past 4096 on ~60% of inbox batches: changing BATCH_SIZE
+/// invalidates `_phase_1b_parsed.jsonl`'s persisted batch_idx keys
+/// (the resume path skips `done_batches.contains(&i)`, but `batches[i]`
+/// covers different chunks when the size shifts), so a mid-run change
+/// would silently drop ~half the prior coverage. Cap-bump in the
+/// daemon-side `inference_to_inference_fn` is the safe lever instead.
 const BATCH_SIZE: usize = 4;
 
 /// Salience floor for synthesised entities. The personal /
@@ -410,6 +417,12 @@ async fn run_entity_extraction_raw(
         note: "",
     });
 
+    // Pull the domain's structured-output schema once. Cloning per
+    // call would re-build the same JSON Value each batch; clone the
+    // outer Arc to share it across the spawned futures instead.
+    let schema_arc: Option<Arc<serde_json::Value>> =
+        domain.entity_extraction_schema().map(Arc::new);
+
     // Build prompts only for batches we haven't already persisted.
     // Skipping by `batch_idx` keeps the index stable across runs as
     // long as `chunks` is supplied in the same order — which the
@@ -434,9 +447,13 @@ async fn run_entity_extraction_raw(
         >,
     >;
 
-    let spawn = |inference: InferenceFn, idx: usize, prompt: String| -> InferenceFuture {
+    let spawn = |inference: InferenceFn,
+                 idx: usize,
+                 prompt: String,
+                 schema: Option<Arc<serde_json::Value>>|
+     -> InferenceFuture {
         Box::pin(async move {
-            let r = (inference)(&prompt).await;
+            let r = (inference)(&prompt, schema.as_deref()).await;
             (idx, r)
         })
     };
@@ -445,7 +462,7 @@ async fn run_entity_extraction_raw(
     let mut in_flight: FuturesUnordered<InferenceFuture> = FuturesUnordered::new();
     for _ in 0..CONCURRENCY {
         if let Some((idx, p)) = iter.next() {
-            in_flight.push(spawn(inference.clone(), idx, p));
+            in_flight.push(spawn(inference.clone(), idx, p, schema_arc.clone()));
         }
     }
 
@@ -467,7 +484,12 @@ async fn run_entity_extraction_raw(
 
     while let Some((batch_idx, result)) = in_flight.next().await {
         if let Some((next_idx, next_p)) = iter.next() {
-            in_flight.push(spawn(inference.clone(), next_idx, next_p));
+            in_flight.push(spawn(
+                inference.clone(),
+                next_idx,
+                next_p,
+                schema_arc.clone(),
+            ));
         }
         batches_done += 1;
 
@@ -2502,7 +2524,7 @@ mod tests {
             // entity_extraction_prompt: default (None)
         }
 
-        let panicking_inference: InferenceFn = Arc::new(|_p: &str| {
+        let panicking_inference: InferenceFn = Arc::new(|_p: &str, _schema: Option<&serde_json::Value>| {
             Box::pin(async {
                 panic!("inference must not be called when domain opts out");
                 #[allow(unreachable_code)]
@@ -2742,7 +2764,7 @@ mod tests {
         // prompt (chunks 9,10,11,12).
         let invocations = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
         let invocations_for_inf = Arc::clone(&invocations);
-        let inference: InferenceFn = Arc::new(move |prompt: &str| {
+        let inference: InferenceFn = Arc::new(move |prompt: &str, _schema: Option<&serde_json::Value>| {
             let prompt = prompt.to_string();
             let inv = Arc::clone(&invocations_for_inf);
             Box::pin(async move {
@@ -2813,7 +2835,7 @@ mod tests {
 
         // First pass: inference returns success for batch 0,
         // hard error for batch 1.
-        let inference1: InferenceFn = Arc::new(|prompt: &str| {
+        let inference1: InferenceFn = Arc::new(|prompt: &str, _schema: Option<&serde_json::Value>| {
             let prompt = prompt.to_string();
             Box::pin(async move {
                 if prompt == "BATCH:1,2,3,4" {
@@ -2866,7 +2888,7 @@ mod tests {
 
         let invocations = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
         let invocations_for_inf = Arc::clone(&invocations);
-        let inference2: InferenceFn = Arc::new(move |prompt: &str| {
+        let inference2: InferenceFn = Arc::new(move |prompt: &str, _schema: Option<&serde_json::Value>| {
             let prompt = prompt.to_string();
             let inv = Arc::clone(&invocations_for_inf);
             Box::pin(async move {

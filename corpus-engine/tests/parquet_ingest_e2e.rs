@@ -104,7 +104,7 @@ fn mock_embed_fn() -> EmbedFn {
 /// Returns canned JSON responses for skeleton extraction, cluster
 /// labeling, fault line detection, and open question prompts.
 fn mock_inference_fn() -> InferenceFn {
-    Arc::new(|prompt: &str| {
+    Arc::new(|prompt: &str, _schema: Option<&serde_json::Value>| {
         let response = if prompt.contains("structure of philosophical debate")
             || prompt.contains("introductory passages")
         {

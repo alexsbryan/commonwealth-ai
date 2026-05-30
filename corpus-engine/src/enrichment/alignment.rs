@@ -101,7 +101,7 @@ pub async fn align_clusters(
             pos_name,
             chunk_text.join("\n---\n")
         );
-        let claim = (inference)(&prompt).await.unwrap_or_else(|_| pos_name.clone());
+        let claim = (inference)(&prompt, None).await.unwrap_or_else(|_| pos_name.clone());
 
         let discovered_id = format!("p_discovered_{}", cluster.id);
         aligned.insert(cluster.id, discovered_id);

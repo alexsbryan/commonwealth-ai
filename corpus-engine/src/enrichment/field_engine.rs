@@ -509,7 +509,13 @@ impl FieldModelEngine {
 
         let spawn_inference = |inference: InferenceFn, batch_idx: usize, prompt: String| -> InferenceFuture {
             Box::pin(async move {
-                let result = (inference)(&prompt).await;
+                // Skeleton extraction is currently free-form (no
+                // schema); Phase 1b is the only path that opts in
+                // via `Domain::entity_extraction_schema`. Pass None
+                // here to keep the rest of the field-engine pipeline
+                // unchanged. Future schema work for skeleton extract
+                // would add an analogous domain hook.
+                let result = (inference)(&prompt, None).await;
                 (batch_idx, result)
             })
         };
@@ -662,7 +668,7 @@ impl FieldModelEngine {
             let refs: Vec<&crate::index::StoredChunk> = chunks.iter().collect();
             let prompt = self.domain.cluster_labeling_prompt(&refs);
 
-            match (self.inference)(&prompt).await {
+            match (self.inference)(&prompt, None).await {
                 Ok(response) => {
                     let json_str = extract_json_from_response(&response);
                     match serde_json::from_str(json_str) {
@@ -919,7 +925,7 @@ domain = "astrology"
         .unwrap();
 
         let embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(vec![0.0; 768]) }));
-        let inference: InferenceFn = Arc::new(|_| Box::pin(async { Ok(String::new()) }));
+        let inference: InferenceFn = Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(String::new()) }));
         let result = FieldModelEngine::from_recipe(&recipe, embed, inference);
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -951,7 +957,7 @@ enabled = true
         .unwrap();
 
         let embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(vec![0.0; 768]) }));
-        let inference: InferenceFn = Arc::new(|_| Box::pin(async { Ok(String::new()) }));
+        let inference: InferenceFn = Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(String::new()) }));
         let engine = FieldModelEngine::from_recipe(&recipe, embed, inference).unwrap();
         assert_eq!(engine.domain.id(), "philosophy");
     }
@@ -983,7 +989,7 @@ domain = "{domain}"
             );
             let recipe = crate::recipe::Recipe::from_toml(&toml).unwrap();
             let embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(vec![0.0; 768]) }));
-            let inference: InferenceFn = Arc::new(|_| Box::pin(async { Ok(String::new()) }));
+            let inference: InferenceFn = Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(String::new()) }));
             let engine = FieldModelEngine::from_recipe(&recipe, embed, inference);
             assert!(
                 engine.is_ok(),

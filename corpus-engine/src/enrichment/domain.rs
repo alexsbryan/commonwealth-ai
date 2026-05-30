@@ -74,6 +74,20 @@ pub trait Domain: Send + Sync + 'static {
         None
     }
 
+    /// Optional JSON Schema (per OpenAI's `structured_output` shape, a
+    /// `serde_json::Value` describing the response object) the
+    /// inference adapter should constrain Phase 1b output to. When
+    /// `Some`, the daemon-side `inference_to_inference_fn` forwards it
+    /// as `CompletionRequest.structured_output`, letting llama-cpp's
+    /// grammar sampler force well-formed JSON — turning a 54%-parse-
+    /// fail Phase 1b (observed on enron-sample-multi-wide post-cap-
+    /// bump, 2026-05-29) into a near-0% failure path. `None` falls
+    /// back to free-form generation (the legacy path; domains that
+    /// haven't authored a schema keep working unchanged).
+    fn entity_extraction_schema(&self) -> Option<serde_json::Value> {
+        None
+    }
+
     // ── Clustering and alignment parameters ───────────────────────────────
     fn clustering_config(&self) -> ClusteringConfig;
     fn alignment_config(&self) -> AlignmentConfig;

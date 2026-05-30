@@ -54,7 +54,7 @@ pub async fn detect_open_questions(
         let refs: Vec<&_> = chunks.iter().collect();
         let prompt = domain.open_question_prompt(&refs);
 
-        let response = match (inference)(&prompt).await {
+        let response = match (inference)(&prompt, None).await {
             Ok(r) => r,
             Err(e) => {
                 tracing::warn!(error = %e, "Open question detection failed for cluster {}", cluster.id);
