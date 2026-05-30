@@ -81,7 +81,8 @@ impl AssetSubExtractor for XlsxSubExtractor {
                 ))
             })?;
             let (rows, cols) = range.get_size();
-            let headers = first_row_as_headers(&range);
+            let header_row = detect_header_row(&range);
+            let headers = header_values(&range, header_row);
 
             let head_sample: Vec<String> = headers
                 .iter()
@@ -102,7 +103,7 @@ impl AssetSubExtractor for XlsxSubExtractor {
                     continue;
                 }
                 let mut distinct = Vec::<String>::new();
-                for row_idx in 1..rows.min(50) {
+                for row_idx in (header_row + 1)..rows.min(header_row + 51) {
                     let v = cell_as_string(&range, row_idx, col_idx);
                     if v.is_empty() {
                         continue;
@@ -129,7 +130,7 @@ impl AssetSubExtractor for XlsxSubExtractor {
             // future structured-query path may widen to typed
             // columns; doing it now is premature without a known
             // consumer.
-            let batch = build_sheet_record_batch(&range, &headers)?;
+            let batch = build_sheet_record_batch(&range, &headers, header_row)?;
             parsed_sheets.push((sheet_name.clone(), batch));
         }
 
@@ -159,13 +160,38 @@ impl AssetSubExtractor for XlsxSubExtractor {
     }
 }
 
-fn first_row_as_headers(range: &calamine::Range<Data>) -> Vec<String> {
+/// Locate the real header row. Corporate spreadsheets routinely prepend
+/// a merged title/banner row, a blank separator, and a group-header row
+/// before the actual column headers — so the legacy "row 0 is the
+/// header" assumption reads a banner as headers, and the column-aware
+/// extractor then finds no typed columns (employee / counterparty / …)
+/// and emits nothing. Heuristic: the first row within the top 15 that
+/// carries ≥ 3 non-empty string cells. A banner or a merged group-header
+/// is a single populated cell; a blank row is none; a real header row is
+/// several text labels. Falls back to row 0 so simple, banner-free
+/// sheets (header already at the top) keep working unchanged.
+fn detect_header_row(range: &calamine::Range<Data>) -> usize {
+    let (rows, cols) = range.get_size();
+    for r in 0..rows.min(15) {
+        let string_cells = (0..cols)
+            .filter(|&c| {
+                matches!(range.get((r, c)), Some(Data::String(s)) if !s.trim().is_empty())
+            })
+            .count();
+        if string_cells >= 3 {
+            return r;
+        }
+    }
+    0
+}
+
+fn header_values(range: &calamine::Range<Data>, header_row: usize) -> Vec<String> {
     let (rows, cols) = range.get_size();
     if rows == 0 || cols == 0 {
         return Vec::new();
     }
     (0..cols)
-        .map(|c| cell_as_string(range, 0, c))
+        .map(|c| cell_as_string(range, header_row, c))
         .collect()
 }
 
@@ -194,9 +220,10 @@ fn format_number(f: f64) -> String {
 fn build_sheet_record_batch(
     range: &calamine::Range<Data>,
     headers: &[String],
+    header_row: usize,
 ) -> Result<RecordBatch> {
     let (rows, cols) = range.get_size();
-    let body_rows = rows.saturating_sub(1);
+    let body_rows = rows.saturating_sub(header_row + 1);
 
     // Schema: "_sheet_row" (string row-index as the join key Phase 4
     // uses) + one Utf8 column per header. The constant-prefix avoids
@@ -216,7 +243,7 @@ fn build_sheet_record_batch(
     let mut row_ids = Vec::with_capacity(body_rows);
     let mut columns: Vec<Vec<Option<String>>> = vec![Vec::with_capacity(body_rows); cols];
 
-    for r in 1..rows {
+    for r in (header_row + 1)..rows {
         row_ids.push(format!("r{r}"));
         for c in 0..cols {
             let v = cell_as_string(range, r, c);
@@ -455,5 +482,87 @@ mod tests {
             col_names.contains(&"counterparty"),
             "counterparty column must survive round-trip; got {col_names:?}"
         );
+    }
+
+    #[test]
+    fn header_detection_survives_banner_and_feeds_column_aware() {
+        // Realistic corporate sheets prepend a merged title banner + a
+        // blank row before the real column headers. The legacy "row 0 is
+        // the header" read the banner as headers, so the column-aware
+        // extractor saw no typed columns and emitted nothing. This proves
+        // detect_header_row skips the noise AND that the resulting parquet
+        // feeds column-aware the real typed columns (counterparty → Org,
+        // trader → Person).
+        use crate::enrichment::pipeline::atlas::EntityType;
+        use crate::extractors::column_aware::{
+            extract_entities_from_parquet, ColumnAwareConfig,
+        };
+        use rust_xlsxwriter::Workbook;
+
+        let mut workbook = Workbook::new();
+        let sheet = workbook.add_worksheet().set_name("Exposure").unwrap();
+        sheet
+            .write_string(0, 0, "FY2024 Counterparty Exposure — CONFIDENTIAL")
+            .unwrap();
+        // row 1 intentionally blank (separator noise)
+        sheet.write_string(2, 0, "counterparty").unwrap();
+        sheet.write_string(2, 1, "trader").unwrap();
+        sheet.write_string(2, 2, "notional").unwrap();
+        sheet.write_string(3, 0, "Dynegy").unwrap();
+        sheet.write_string(3, 1, "Jeff Skilling").unwrap();
+        sheet.write_string(3, 2, "100M").unwrap();
+        sheet.write_string(4, 0, "El Paso").unwrap();
+        sheet.write_string(4, 1, "Andy Fastow").unwrap();
+        sheet.write_string(4, 2, "50M").unwrap();
+        let bytes = workbook.save_to_buffer().unwrap();
+
+        let dir = tempfile::tempdir().unwrap();
+        let store = FilesystemAssetStore::new(dir.path()).unwrap();
+        use sha2::{Digest, Sha256};
+        let mut h = Sha256::new();
+        h.update(&bytes);
+        let sha: String = h.finalize().iter().map(|b| format!("{b:02x}")).collect();
+        let extraction = XlsxSubExtractor
+            .extract(
+                &std::path::PathBuf::from("/tmp/exposure.xlsx"),
+                &bytes,
+                &sha,
+                &store,
+            )
+            .expect("xlsx extract");
+
+        // Header detection skipped the banner → the description names the
+        // real headers, not the banner title.
+        assert!(
+            extraction.description.contains("counterparty")
+                && extraction.description.contains("trader"),
+            "real headers must be detected past the banner; got {:?}",
+            extraction.description
+        );
+
+        let parsed = extraction.parsed_form.expect("parquet parsed_form");
+        let entities = extract_entities_from_parquet(
+            &parsed,
+            "exposure.xlsx",
+            &ColumnAwareConfig::default(),
+        )
+        .expect("column_aware extraction");
+
+        let names: Vec<&str> = entities.iter().map(|e| e.canonical_name.as_str()).collect();
+        assert!(
+            names.contains(&"Dynegy") && names.contains(&"El Paso"),
+            "counterparty column must yield org entities through the banner; got {names:?}"
+        );
+        assert!(
+            names.contains(&"Jeff Skilling") && names.contains(&"Andy Fastow"),
+            "trader column must yield person entities through the banner; got {names:?}"
+        );
+        let dynegy = entities.iter().find(|e| e.canonical_name == "Dynegy").unwrap();
+        assert!(matches!(dynegy.entity_type, EntityType::Institution));
+        let jeff = entities
+            .iter()
+            .find(|e| e.canonical_name == "Jeff Skilling")
+            .unwrap();
+        assert!(matches!(jeff.entity_type, EntityType::Person));
     }
 }
