@@ -109,6 +109,46 @@ impl Domain for BusinessEmailDomain {
         self.inner.skeleton_storage()
     }
 
+    fn entity_extraction_schema(&self) -> Option<serde_json::Value> {
+        // **Lean schema with `name` required per entity.** A fully-
+        // typed schema (per-field unions like `["string", "null"]`,
+        // `additionalProperties: false`, distinct shapes per entity
+        // kind) caused llguidance's mask sampler to pathologically
+        // branch on enron-sample-multi-wide inbox batches — observed
+        // 2026-05-29: 300s per-batch timeouts with `schema=true,
+        // n_generated=5801` before the deadline aborted the call.
+        // A zero-constraint shape (just enforce top-level arrays)
+        // swung the other way: model omitted `name` on most entities
+        // and serde rejected 100% of batches with `missing field
+        // `name``. Middle path: every entity-array item is an object
+        // with `name` required (matches `PersonEntity`'s required
+        // field on the Rust side); everything else stays free-form
+        // so serde Optional / lenient_string_array soak up variants.
+        // One mandatory key per item is well under the mask threshold
+        // that exploded the rich schema.
+        let entity_object = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+            },
+            "required": ["name"],
+        });
+        let entity_array = serde_json::json!({
+            "type": "array",
+            "items": entity_object,
+        });
+        Some(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "persons":       entity_array,
+                "organizations": entity_array,
+                "works":         entity_array,
+                "concepts":      entity_array,
+                "initiatives":   entity_array,
+            },
+        }))
+    }
+
     fn entity_extraction_prompt(&self, chunks: &[&Chunk]) -> Option<String> {
         // Empty-slice probe matches conversational: returns Some("")
         // so the engine treats the domain as opting in before the

@@ -37,8 +37,17 @@ pub type BatchEmbedFn = Arc<
 /// Sovereign passes its Primary slot.
 /// Commonwealth passes the mesh inference endpoint.
 /// Tests pass a mock returning canned JSON.
+///
+/// The second argument is an optional JSON Schema (per OpenAI's
+/// `structured_output` shape) the inference adapter should constrain
+/// the response to. The corpus-engine side reads it from
+/// `Domain::entity_extraction_schema()` and threads it through;
+/// callers that pass `None` get the legacy free-form path. This is
+/// the structural fix for the Phase 1b parse-failure tail observed
+/// on enron-sample-multi-wide (2026-05-29): grammar-bounded output
+/// can't emit unclosed arrays or extraneous prose.
 pub type InferenceFn = Arc<
-    dyn Fn(&str) -> Pin<Box<dyn Future<Output = Result<String>> + Send>>
+    dyn Fn(&str, Option<&serde_json::Value>) -> Pin<Box<dyn Future<Output = Result<String>> + Send>>
         + Send
         + Sync,
 >;

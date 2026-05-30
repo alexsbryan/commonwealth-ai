@@ -78,7 +78,7 @@ pub(super) async fn resolve_inference(
 /// e2e harness's `stub_inference` plus an entity-extraction shape
 /// for the personal/conversational domains.
 fn mock_inference() -> InferenceFn {
-    Arc::new(|prompt: &str| {
+    Arc::new(|prompt: &str, _schema: Option<&serde_json::Value>| {
         let p = prompt.to_string();
         Box::pin(async move {
             // Entity extraction (personal or conversational). The
@@ -351,7 +351,7 @@ fn truncate_for_display(s: &str, max: usize) -> String {
 /// visually inspect what the production pipeline would send to the
 /// model without spending an inference call.
 fn dry_run_inference() -> InferenceFn {
-    Arc::new(|prompt: &str| {
+    Arc::new(|prompt: &str, _schema: Option<&serde_json::Value>| {
         let p = prompt.to_string();
         eprintln!("─── awareness --dry-run ───────────────────────────");
         eprintln!("{p}");
@@ -426,7 +426,7 @@ async fn real_inference(flags: &[(String, String)]) -> Result<InferenceFn, Strin
 
     let verbose = has_flag(flags, "verbose");
     let client = Arc::new(client);
-    let f: InferenceFn = Arc::new(move |prompt: &str| {
+    let f: InferenceFn = Arc::new(move |prompt: &str, _schema: Option<&serde_json::Value>| {
         let client = client.clone();
         let p = prompt.to_string();
         Box::pin(async move {

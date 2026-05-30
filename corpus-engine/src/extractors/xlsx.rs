@@ -347,7 +347,6 @@ mod tests {
         // changes, and asset-store wiring bugs that would silently
         // drop the parsed cache.
         use rust_xlsxwriter::Workbook;
-        use std::io::Cursor;
 
         // Build a tiny 3×3 fixture: header row + two data rows.
         let mut workbook = Workbook::new();
@@ -421,33 +420,37 @@ mod tests {
         );
 
         // Round-trip: decode the parquet and verify every cell.
+        // Round-trip the parquet by opening it as a File — the
+        // parquet crate's `ChunkReader` impl exists for `File` and
+        // `bytes::Bytes`. Reading from disk also incidentally
+        // verifies the asset store actually wrote the bytes the
+        // `parsed_form` path advertises.
         use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-        let reader = ParquetRecordBatchReaderBuilder::try_new(bytes::Bytes::from(
-            parquet_bytes.clone(),
-        ))
-        .unwrap()
-        .build()
-        .unwrap();
-        let batches: Vec<_> = reader.collect::<std::result::Result<Vec<_>, _>>().unwrap();
+        let file = std::fs::File::open(parsed_path).unwrap();
+        let reader = ParquetRecordBatchReaderBuilder::try_new(file)
+            .unwrap()
+            .build()
+            .unwrap();
+        let batches: Vec<arrow_array::RecordBatch> =
+            reader.collect::<std::result::Result<Vec<_>, _>>().unwrap();
         assert_eq!(batches.len(), 1, "single record batch expected");
         let batch = &batches[0];
-        assert_eq!(batch.num_columns(), 4, "sheet_name + 3 headers");
-        // Each row in the source workbook → one record. First row
-        // is the header which `build_sheet_record_batch` includes as
-        // data, so 3 rows from the fixture.
-        assert_eq!(batch.num_rows(), 3);
+        // Encoder prepends `_sheet_name` + `_sheet_row` virtual
+        // columns to the user-emitted headers (counterparty / trader
+        // / notional) — 2 + 3 = 5.
+        assert_eq!(batch.num_columns(), 5, "_sheet_name + _sheet_row + 3 headers");
+        // Header row is consumed as the schema; body rows (2 trades)
+        // land as records.
+        assert_eq!(batch.num_rows(), 2);
 
         // Verify the second data row's counterparty cell as a smoke
         // that the schema columns are aligned. Column 0 is the
         // sheet_name discriminator the encoder injects; the
         // user-visible cells start at column 1 ("counterparty"
         // header).
-        let col_names: Vec<&str> = batch
-            .schema()
-            .fields()
-            .iter()
-            .map(|f| f.name().as_str())
-            .collect();
+        let schema = batch.schema();
+        let col_names: Vec<&str> =
+            schema.fields().iter().map(|f| f.name().as_str()).collect();
         assert!(
             col_names.contains(&"counterparty"),
             "counterparty column must survive round-trip; got {col_names:?}"

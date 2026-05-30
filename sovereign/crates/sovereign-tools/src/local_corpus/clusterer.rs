@@ -198,7 +198,7 @@ impl Clusterer {
                 .map_err(|e| Error::Execution(format!("get_chunks: {e}")))?;
             let prompt = build_label_prompt(&chunks);
 
-            let raw = match (self.inference)(&prompt).await {
+            let raw = match (self.inference)(&prompt, None).await {
                 Ok(r) => r,
                 Err(e) => {
                     tracing::warn!(
