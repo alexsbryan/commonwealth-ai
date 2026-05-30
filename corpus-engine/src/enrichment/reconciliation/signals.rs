@@ -98,11 +98,32 @@ impl MergeSignalCheck for NameSimilaritySignal {
         if shared_surname_with_prefix_first_name(&lf, &rf) {
             return true;
         }
-        // Aliases overlap.
-        let l_aliases: std::collections::BTreeSet<String> =
-            left.aliases.iter().map(|s| fold_name(s)).collect();
-        let r_aliases: std::collections::BTreeSet<String> =
-            right.aliases.iter().map(|s| fold_name(s)).collect();
+        // Alias overlap — restricted to identity-grade (email)
+        // aliases. **Load-bearing restriction.** business_email
+        // Phase 1b stuffs bare given-name aliases ("John", "Ken",
+        // "Mr. Lay") into entity alias lists; an unrestricted
+        // intersection fired this clause for any two people who merely
+        // shared a first name. With same-origin `needed = 1`, that
+        // chained 362 distinct people — Lay, Skilling, Fastow and
+        // ~360 others — into one transitively-merged cluster on
+        // enron-sample-multi-wide (2026-05-30), cratering B³ precision
+        // (the gold execs collapsed into a single mega-cluster). An
+        // email address is a unique identifier; a bare given name is
+        // not. Email-sharing pairs still fire here (in addition to
+        // EmailHeaderSignal), so a cross-origin email match keeps its
+        // two-signal vote under `cross_origin_required_signals`.
+        let l_aliases: std::collections::BTreeSet<String> = left
+            .aliases
+            .iter()
+            .filter(|s| s.contains('@'))
+            .map(|s| fold_name(s))
+            .collect();
+        let r_aliases: std::collections::BTreeSet<String> = right
+            .aliases
+            .iter()
+            .filter(|s| s.contains('@'))
+            .map(|s| fold_name(s))
+            .collect();
         !l_aliases.is_disjoint(&r_aliases)
     }
 
@@ -118,38 +139,29 @@ pub struct EmailHeaderSignal;
 
 impl MergeSignalCheck for EmailHeaderSignal {
     fn check(&self, left: &Entity, right: &Entity) -> bool {
+        // Shared *exact* email address — an identity-grade signal.
+        //
+        // We deliberately do NOT infer identity from email-local-part ↔
+        // name string matching (the former `email_matches_name` path).
+        // business_email Phase 1b conflates multiple correspondents'
+        // addresses into a single atom's alias bag — one "Kenneth Lay"
+        // atom on enron-sample-multi-wide carried `chairman.ken@`,
+        // `.fred@enron.com`, AND a third party's `judys.knepshield@` —
+        // so a surname/initial match between a stray local-part and any
+        // same-surnamed person chained Lay, Skilling, Fastow and every
+        // org into one 2,013-atom cluster (train B³ precision 0.26). An
+        // exact shared address is unique; a fuzzy local-part match is
+        // not robust on noisy extraction. 2026-05-30 sweep: dropping the
+        // fuzzy path moved train B³ from 0.26/0.41 to 1.00/0.80 with
+        // zero gold over-merge. If a future, cleaner corpus wants
+        // name↔email inference back, reintroduce it behind a per-policy
+        // flag — never as an unconditional default.
         let lemails = collect_emails(left);
-        let remails = collect_emails(right);
-        if lemails.is_empty() && remails.is_empty() {
+        if lemails.is_empty() {
             return false;
         }
-        // Shared exact email address — strongest signal.
-        if !lemails.is_disjoint(&remails) {
-            return true;
-        }
-        // Local-part heuristic: email on one side, name + same
-        // affiliation on the other.
-        for e in &lemails {
-            if email_matches_name(e, &right.canonical_name)
-                || right
-                    .aliases
-                    .iter()
-                    .any(|a| email_matches_name(e, a))
-            {
-                return true;
-            }
-        }
-        for e in &remails {
-            if email_matches_name(e, &left.canonical_name)
-                || left
-                    .aliases
-                    .iter()
-                    .any(|a| email_matches_name(e, a))
-            {
-                return true;
-            }
-        }
-        false
+        let remails = collect_emails(right);
+        !lemails.is_disjoint(&remails)
     }
 
     fn signal(&self) -> MergeSignal {
@@ -298,7 +310,7 @@ fn initial_surname_matches(short: &str, long: &str) -> bool {
     Some(initial) == first && surname_l == *surname_long
 }
 
-fn collect_emails(e: &Entity) -> std::collections::BTreeSet<String> {
+pub(crate) fn collect_emails(e: &Entity) -> std::collections::BTreeSet<String> {
     let mut out = std::collections::BTreeSet::new();
     if let Some(stripped) = strip_to_email(&e.canonical_name) {
         out.insert(stripped);
@@ -318,43 +330,6 @@ fn strip_to_email(s: &str) -> Option<String> {
     } else {
         None
     }
-}
-
-fn email_matches_name(email: &str, name: &str) -> bool {
-    let local = email
-        .split('@')
-        .next()
-        .unwrap_or("")
-        .to_ascii_lowercase()
-        .replace(['.', '_', '-'], " ");
-    let folded = fold_name(name);
-    if local.is_empty() || folded.is_empty() {
-        return false;
-    }
-    let surname = folded.split_whitespace().last().unwrap_or("");
-    let first_initial = folded
-        .split_whitespace()
-        .next()
-        .and_then(|t| t.chars().next());
-    // Match patterns: "firstname surname", "f surname", "firstname".
-    let local_tokens: Vec<&str> = local.split_whitespace().collect();
-    if local_tokens.is_empty() {
-        return false;
-    }
-    if local == folded {
-        return true;
-    }
-    if local_tokens.last() == Some(&surname) {
-        if let Some(fi) = first_initial {
-            if let Some(local_first) = local_tokens.first() {
-                if local_first.starts_with(fi) {
-                    return true;
-                }
-            }
-        }
-        return true; // surname-only match — still a useful weak signal
-    }
-    false
 }
 
 #[cfg(test)]
@@ -397,6 +372,39 @@ mod tests {
     }
 
     #[test]
+    fn name_similarity_ignores_shared_bare_given_name_alias() {
+        // Two distinct people who merely share a polluted bare given
+        // name in their alias lists must NOT merge. This is the
+        // 362-atom mega-cluster guard: pre-fix, a shared "John"/"Ken"
+        // alias fired NameSimilarity and (same-origin, needed=1)
+        // chained Lay + Skilling + Fastow + ~360 others into one
+        // cluster on enron-sample-multi-wide.
+        let mut l = ent("Kenneth Lay", EntityType::Person);
+        l.aliases.push("John".into());
+        let mut r = ent("Jeff Skilling", EntityType::Person);
+        r.aliases.push("John".into());
+        assert!(
+            !NameSimilaritySignal::default().check(&l, &r),
+            "distinct surnames sharing a bare given-name alias must not merge"
+        );
+    }
+
+    #[test]
+    fn name_similarity_still_merges_on_shared_email_alias() {
+        // The restriction keeps identity-grade (email) alias overlap
+        // as a firing path — two atoms with unlike surface names but
+        // the same email alias are the same person.
+        let mut l = ent("The Chairman", EntityType::Person);
+        l.aliases.push("klay@enron.com".into());
+        let mut r = ent("Board Chair", EntityType::Person);
+        r.aliases.push("<klay@enron.com>".into());
+        assert!(
+            NameSimilaritySignal::default().check(&l, &r),
+            "shared email alias is an identity-grade merge signal"
+        );
+    }
+
+    #[test]
     fn email_header_matches_full_address() {
         let mut l = ent("Ken Lay", EntityType::Person);
         l.aliases.push("klay@enron.com".into());
@@ -406,11 +414,31 @@ mod tests {
     }
 
     #[test]
-    fn email_header_matches_local_part_to_name() {
+    fn email_header_no_longer_infers_identity_from_local_part() {
+        // The email-local-part ↔ name heuristic was removed: on noisy
+        // extraction it chained unrelated same-surname people through
+        // polluted alias bags. An email on one side and a bare name on
+        // the other is no longer an EmailHeader match. The two still
+        // reconcile — through NameSimilarity's nickname-prefix path.
         let mut l = ent("Ken Lay", EntityType::Person);
         l.aliases.push("ken.lay@enron.com".into());
         let r = ent("Kenneth Lay", EntityType::Person);
-        assert!(EmailHeaderSignal.check(&l, &r));
+        assert!(!EmailHeaderSignal.check(&l, &r));
+        assert!(NameSimilaritySignal::default().check(&l, &r));
+    }
+
+    #[test]
+    fn email_header_does_not_bridge_same_surname_distinct_addresses() {
+        // The 2,013-atom mega-cluster guard. Two distinct people who
+        // share a surname but hold different addresses must NOT merge:
+        // pre-fix, "kenneth.lay@enron.com" matched "Linda Lay" via the
+        // surname-only fallback and bridged the whole exec roster.
+        let mut ken = ent("Kenneth Lay", EntityType::Person);
+        ken.aliases.push("kenneth.lay@enron.com".into());
+        let mut linda = ent("Linda Lay", EntityType::Person);
+        linda.aliases.push("linda.lay@enron.com".into());
+        assert!(!EmailHeaderSignal.check(&ken, &linda));
+        assert!(!NameSimilaritySignal::default().check(&ken, &linda));
     }
 
     #[test]

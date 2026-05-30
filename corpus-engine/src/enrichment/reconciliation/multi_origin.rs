@@ -14,7 +14,9 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use super::oplog::OplogEntry;
-use super::signals::{default_signals, MergeSignal, MergeSignalCheck};
+use super::signals::{
+    collect_emails, default_signals, fold_name, MergeSignal, MergeSignalCheck,
+};
 use crate::enrichment::atlas::atoms::{AtomId, Entity, Provenance};
 
 /// Policy knobs for the merger. Mirrors the
@@ -129,48 +131,53 @@ pub fn reconcile_with_signals(
     let mut parent: Vec<usize> = (0..n).collect();
     let mut signal_log: HashMap<(usize, usize), Vec<MergeSignal>> = HashMap::new();
 
-    // Pairwise check. O(n²) — fine for Phase 4 demos (one user
-    // mailbox); Phase 5 introduces blocking by `entity_type` +
-    // first-letter to keep the full-corpus run tractable.
-    for i in 0..n {
-        for j in (i + 1)..n {
-            let mut fired: Vec<MergeSignal> = Vec::new();
-            for signal in signals {
-                if signal.check(&entities[i], &entities[j]) {
-                    fired.push(signal.signal());
-                }
+    // Candidate-blocked pairwise scan. The naive form is O(n²) — fine
+    // for one mailbox, but enron-sample-multi-wide (18,833 atoms) is
+    // 177M pairs and minutes of wall-clock. `candidate_pairs` returns a
+    // *superset* of every pair on which a signal could fire (every
+    // firing pair shares at least one blocking key — see its doc), so
+    // iterating it instead of all i<j is behaviour-identical while
+    // cutting the scan to ~274K pairs (~650×). The full signal check +
+    // cross-origin gate below still decides each candidate; blocking
+    // only skips pairs that provably cannot fire. Pairs are sorted, so
+    // iteration order (and thus the oplog) matches the naive scan.
+    for (i, j) in candidate_pairs(&entities) {
+        let mut fired: Vec<MergeSignal> = Vec::new();
+        for signal in signals {
+            if signal.check(&entities[i], &entities[j]) {
+                fired.push(signal.signal());
             }
-            if fired.is_empty() {
-                continue;
-            }
-            let cross_origin = entities[i].provenance.signal_kind
-                != entities[j].provenance.signal_kind;
-            let needed = if cross_origin {
-                policy.cross_origin_required_signals as usize
-            } else {
-                1
-            };
-            if fired.len() < needed {
-                tracing::debug!(
-                    left = %entities[i].canonical_name,
-                    right = %entities[j].canonical_name,
-                    cross_origin,
-                    fired_count = fired.len(),
-                    needed,
-                    "reconciliation: candidate rejected by signal-count gate"
-                );
-                continue;
-            }
+        }
+        if fired.is_empty() {
+            continue;
+        }
+        let cross_origin =
+            entities[i].provenance.signal_kind != entities[j].provenance.signal_kind;
+        let needed = if cross_origin {
+            policy.cross_origin_required_signals as usize
+        } else {
+            1
+        };
+        if fired.len() < needed {
             tracing::debug!(
                 left = %entities[i].canonical_name,
                 right = %entities[j].canonical_name,
                 cross_origin,
-                signals = ?fired.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
-                "reconciliation: merging candidate pair"
+                fired_count = fired.len(),
+                needed,
+                "reconciliation: candidate rejected by signal-count gate"
             );
-            signal_log.insert((i, j), fired);
-            union(&mut parent, i, j);
+            continue;
         }
+        tracing::debug!(
+            left = %entities[i].canonical_name,
+            right = %entities[j].canonical_name,
+            cross_origin,
+            signals = ?fired.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            "reconciliation: merging candidate pair"
+        );
+        signal_log.insert((i, j), fired);
+        union(&mut parent, i, j);
     }
 
     // Group indices by their root.
@@ -271,6 +278,103 @@ fn union(parent: &mut Vec<usize>, a: usize, b: usize) {
     if ra != rb {
         parent[ra] = rb;
     }
+}
+
+/// Surname blocking keys for an already-folded name. The merge signals
+/// that key on a surname are `NameSimilarity::initial_surname` (surname
+/// = the final token) and `nickname_prefix` (surname = the final token
+/// of length > 1, single-char middle initials filtered). Returning both
+/// covers both. Email-shaped names (`@`) yield none — their final token
+/// is a domain TLD ("com"), never a surname, and they block via the
+/// `c:`/`e:` keys instead; skipping them drops the single largest
+/// spurious bucket on real corpora.
+fn surname_keys(folded: &str) -> Vec<String> {
+    if folded.contains('@') {
+        return Vec::new();
+    }
+    let toks: Vec<&str> = folded.split_whitespace().collect();
+    let mut keys: Vec<String> = Vec::new();
+    if let Some(last) = toks.last() {
+        keys.push((*last).to_string());
+    }
+    if let Some(last_big) = toks.iter().rev().find(|t| t.chars().count() > 1) {
+        let s = (*last_big).to_string();
+        if !keys.contains(&s) {
+            keys.push(s);
+        }
+    }
+    keys
+}
+
+/// Generate a superset of every `(i, j)` pair (i < j) on which a
+/// [`MergeSignalCheck`] from the default stack could fire, by bucketing
+/// entities under shared blocking keys and emitting all within-bucket
+/// pairs. Every firing pair shares at least one key, so none is lost;
+/// the caller still runs the full signal check on each candidate. This
+/// is the blocking the naive O(n²) scan deferred — it turns the
+/// full-corpus reconcile from minutes into sub-second.
+///
+/// One key per firing path:
+/// - `c:<fold(canonical)>` — `NameSimilarity` exact fold-match
+/// - `s:<surname>`         — `NameSimilarity` initial-surname / nickname
+///   and `EmailHeader` email↔name. Sourced from the folded canonical,
+///   each folded alias, and each email local-part's last dotted token
+///   (so an address blocks with the name it encodes).
+/// - `e:<email>`           — `EmailHeader` shared-address and the
+///   (email-restricted) `NameSimilarity` alias overlap
+/// - `o:<aff>|<role>`      — `OrgRole` (both non-empty)
+///
+/// The returned vector is sorted so iteration order — and the resulting
+/// oplog — is deterministic and matches the old ascending i<j scan.
+fn candidate_pairs(entities: &[Entity]) -> Vec<(usize, usize)> {
+    use std::collections::{HashMap, HashSet};
+    let mut buckets: HashMap<String, Vec<usize>> = HashMap::new();
+    for (i, e) in entities.iter().enumerate() {
+        let fc = fold_name(&e.canonical_name);
+        if !fc.is_empty() {
+            buckets.entry(format!("c:{fc}")).or_default().push(i);
+            for k in surname_keys(&fc) {
+                buckets.entry(format!("s:{k}")).or_default().push(i);
+            }
+        }
+        for a in &e.aliases {
+            for k in surname_keys(&fold_name(a)) {
+                buckets.entry(format!("s:{k}")).or_default().push(i);
+            }
+        }
+        for em in collect_emails(e) {
+            buckets.entry(format!("e:{em}")).or_default().push(i);
+            if let Some(local) = em.split('@').next() {
+                if let Some(last) = local
+                    .split(|c| c == '.' || c == '_' || c == '-')
+                    .filter(|t| !t.is_empty())
+                    .last()
+                {
+                    buckets.entry(format!("s:{last}")).or_default().push(i);
+                }
+            }
+        }
+        if let (Some(aff), Some(role)) = (&e.affiliation, &e.role) {
+            if !aff.is_empty() && !role.is_empty() {
+                buckets
+                    .entry(format!("o:{}|{}", fold_name(aff), fold_name(role)))
+                    .or_default()
+                    .push(i);
+            }
+        }
+    }
+    let mut pairs: HashSet<(usize, usize)> = HashSet::new();
+    for members in buckets.values() {
+        for a in 0..members.len() {
+            for b in (a + 1)..members.len() {
+                let (x, y) = (members[a], members[b]);
+                pairs.insert(if x < y { (x, y) } else { (y, x) });
+            }
+        }
+    }
+    let mut out: Vec<(usize, usize)> = pairs.into_iter().collect();
+    out.sort_unstable();
+    out
 }
 
 fn pick_canonical(entities: &[Entity], members: &[usize]) -> usize {
@@ -384,5 +488,54 @@ mod tests {
         let outcome = reconcile(Vec::new(), &ReconciliationPolicy::default());
         assert!(outcome.entities.is_empty());
         assert!(outcome.oplog_entries.is_empty());
+    }
+
+    #[test]
+    fn candidate_pairs_is_superset_of_every_firing_pair() {
+        // The blocking invariant: `candidate_pairs` may emit pairs that
+        // do not fire, but must never DROP one that does. If it ever
+        // misses a firing pair, recall regresses silently — this is the
+        // guard. Fixture exercises every signal path (exact fold,
+        // nickname-prefix, initial-surname, email-alias overlap,
+        // email↔name, OrgRole).
+        let signals = default_signals();
+        let mut entities = vec![
+            ent("Ken Lay", "e1", SignalKind::LlmBatch, "m1"),
+            ent("Kenneth Lay", "e2", SignalKind::LlmBatch, "m1"),
+            ent("K. Lay", "e3", SignalKind::LlmBatch, "m1"),
+            ent("Jeff Skilling", "e4", SignalKind::LlmBatch, "m1"),
+            ent("J. Skilling", "e5", SignalKind::LlmBatch, "m1"),
+        ];
+        entities[0].aliases.push("klay@enron.com".into());
+        entities[1].aliases.push("kenneth.lay@enron.com".into());
+        let mut a = ent("Dynegy", "e6", SignalKind::ColumnHeader, "m2");
+        a.entity_type = EntityType::Institution;
+        a.affiliation = Some("Energy".into());
+        a.role = Some("Counterparty".into());
+        let mut b = ent("Dynegy Inc.", "e7", SignalKind::ColumnHeader, "m2");
+        b.entity_type = EntityType::Institution;
+        b.affiliation = Some("Energy".into());
+        b.role = Some("Counterparty".into());
+        entities.push(a);
+        entities.push(b);
+
+        let cands: std::collections::HashSet<(usize, usize)> =
+            candidate_pairs(&entities).into_iter().collect();
+        let n = entities.len();
+        let mut fired_any = false;
+        for i in 0..n {
+            for j in (i + 1)..n {
+                if signals.iter().any(|s| s.check(&entities[i], &entities[j])) {
+                    fired_any = true;
+                    assert!(
+                        cands.contains(&(i, j)),
+                        "blocking dropped firing pair ({i},{j}): {} / {}",
+                        entities[i].canonical_name,
+                        entities[j].canonical_name
+                    );
+                }
+            }
+        }
+        assert!(fired_any, "fixture should produce at least one firing pair");
     }
 }
