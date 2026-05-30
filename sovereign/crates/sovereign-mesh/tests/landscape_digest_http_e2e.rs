@@ -51,7 +51,7 @@ async fn bare_manager() -> Arc<KnowledgeViewManager> {
     let embed: corpus_engine::EmbedFn = Arc::new(|_| {
         Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) })
     });
-    let infer: corpus_engine::InferenceFn = Arc::new(|_| {
+    let infer: corpus_engine::InferenceFn = Arc::new(|_, _: Option<&serde_json::Value>| {
         Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
     });
     let engine = Arc::new(corpus_engine::CorpusEngine::new(

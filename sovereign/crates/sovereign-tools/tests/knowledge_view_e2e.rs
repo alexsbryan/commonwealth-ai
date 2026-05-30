@@ -68,7 +68,7 @@ fn stub_embed() -> EmbedFn {
 /// prompt method in `PersonalDomain` / `ConversationalDomain` has a
 /// distinctive marker phrase.
 fn stub_inference() -> corpus_engine::InferenceFn {
-    Arc::new(|prompt: &str| {
+    Arc::new(|prompt: &str, _schema: Option<&serde_json::Value>| {
         let p = prompt.to_string();
         Box::pin(async move {
             if p.contains("semantically similar") || p.contains("cluster together") {

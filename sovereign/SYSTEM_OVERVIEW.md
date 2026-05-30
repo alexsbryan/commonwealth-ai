@@ -95,6 +95,13 @@ Major modules under `corpus-engine/src/`:
   bank). See `ENRICHMENT_V2.md`. Plus `enrichment/reconciliation/`
   — the multi-origin merge primitive (Phase 4 of the architecture-
   over-Enron push) with reversible oplog + pluggable merge signals.
+  Signals are identity-grade only (exact name fold, nickname /
+  initial-surname, exact shared email or email-alias, org+role); the
+  fuzzy email↔name and bare-name-alias paths were removed after they
+  chained 2,013 polluted atoms — Lay + Skilling + Fastow + every org —
+  into one cluster (train B³ precision 0.26 → 1.00 once removed).
+  `candidate_pairs` blocking keeps the O(n²) scan sub-second on the
+  18.8k-atom multi-wide corpus (~650× fewer pairs, behaviour-identical).
 - `atlas_traversal/` — query layer over atlas graphs
 - `update/` — code/file watchers, delta updates, lint/test watchers
 - `notes.rs`, `features.rs`, `plan_items.rs` — NoteStore + ATOS

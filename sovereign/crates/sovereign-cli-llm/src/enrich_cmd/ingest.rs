@@ -156,7 +156,7 @@ pub async fn cmd_ingest(args: &[String]) -> i32 {
     // structure_first doesn't embed; wire a no-op EmbedFn so the
     // engine constructor succeeds without a model. A future strategy
     // that needs embeddings can override this.
-    let noop_embed: EmbedFn = Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(Vec::<f32>::new()) }));
+    let noop_embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(Vec::<f32>::new()) }));
     let engine = Arc::new(CorpusEngine::new(recipes_dir, indexes_dir, noop_embed.clone()));
 
     // Strategy config blob — strategy-internal shape.
