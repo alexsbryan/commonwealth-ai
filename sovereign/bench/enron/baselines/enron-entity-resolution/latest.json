@@ -4,7 +4,7 @@
   "policy_kind": "tuned",
   "split": "train",
   "corpus": "enron-sample-multi-wide",
-  "captured_ts_unix": 1780161324,
+  "captured_ts_unix": 1780165476,
   "policy": {
     "name_similarity_threshold": 0.85,
     "cross_origin_required_signals": 2,
@@ -13,8 +13,8 @@
   },
   "b_cubed": {
     "precision": 1.0,
-    "recall": 0.661111111111111,
-    "f1": 0.7959866220735785,
+    "recall": 0.75,
+    "f1": 0.8571428571428571,
     "n_aligned": 30,
     "unmatched_predicted": [
       "",
@@ -79,16 +79,16 @@
   },
   "pairwise": {
     "precision": 1.0,
-    "recall": 0.5652173913043478,
-    "f1": 0.7222222222222222,
+    "recall": 0.6521739130434783,
+    "f1": 0.7894736842105263,
     "n_aligned_pairs": 435
   },
   "signal_histogram": {
     "email_header": 247,
-    "name_similarity": 688,
+    "name_similarity": 806,
     "org_role": 28
   },
-  "surface_form_collapse_rate": 0.32444565896314803,
-  "delta_from_pre_reconciliation_f1": 0.1806020066889631,
+  "surface_form_collapse_rate": 0.33127732667083076,
+  "delta_from_pre_reconciliation_f1": 0.24175824175824168,
   "notes": "Written by `sovereign bench enron run`. Reads /Users/alexsbryan/.sovereign/indexes/enron-sample-multi-wide/atlas/atoms.json; ground truth at /Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/enron/ground_truth_entities.jsonl."
 }

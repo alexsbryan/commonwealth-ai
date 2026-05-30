@@ -102,6 +102,12 @@ Major modules under `corpus-engine/src/`:
   into one cluster (train B³ precision 0.26 → 1.00 once removed).
   `candidate_pairs` blocking keeps the O(n²) scan sub-second on the
   18.8k-atom multi-wide corpus (~650× fewer pairs, behaviour-identical).
+  Corporate-suffix normalization (`strip_org_suffixes`, Institution-only)
+  collapses "El Paso" / "El Paso Corp." / "El Paso Corporation" while
+  keeping distinct bases apart, lifting train B³ recall 0.66 → 0.75
+  (F1 0.86, precision held at 1.0). `sovereign bench enron diagnose`
+  is the glass-box: per-gold coverage + cluster spread + over-merge
+  bridges for the tuned policy.
 - `atlas_traversal/` — query layer over atlas graphs
 - `update/` — code/file watchers, delta updates, lint/test watchers
 - `notes.rs`, `features.rs`, `plan_items.rs` — NoteStore + ATOS

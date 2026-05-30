@@ -14,6 +14,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::enrichment::atlas::atoms::Entity;
+use crate::enrichment::pipeline::atlas::EntityType;
 
 /// Tag for a signal that fired on a candidate pair. Round-trips
 /// through the oplog so an auditor can reconstruct exactly which
@@ -86,6 +87,26 @@ impl MergeSignalCheck for NameSimilaritySignal {
         }
         if lf == rf {
             return true;
+        }
+        // Corporate-suffix normalization (organisations only). "El Paso",
+        // "El Paso Corp." and "El Paso Corporation" fold to three
+        // distinct strings and share no email, so nothing else merges
+        // them — they sit as singletons and cap org recall. Stripping a
+        // leading "The" and the trailing run of legal-form suffixes
+        // (Inc / Corp / Corporation / Cos / LLP / …) collapses the
+        // variants while keeping distinct bases apart: "El Paso Japan
+        // Co." → "el paso japan" ≠ "el paso", and "Williams Industries"
+        // (Industries is not a legal suffix) never collapses into
+        // "Williams". Org-only — a person's surname is never a legal
+        // suffix. Guarded on a ≥3-char normalized form so degenerate
+        // names ("Holdings Inc" → "") can't match.
+        if left.entity_type == EntityType::Institution
+            && right.entity_type == EntityType::Institution
+        {
+            let ln = strip_org_suffixes(&lf);
+            if ln.len() >= 3 && ln == strip_org_suffixes(&rf) {
+                return true;
+            }
         }
         // Initial + surname fold: "J. Skilling" → "j skilling"; we
         // also try to match against "jeff skilling" by treating
@@ -265,6 +286,45 @@ pub(crate) fn fold_name(s: &str) -> String {
     out.trim().to_string()
 }
 
+/// Strip a leading "the" and the trailing run of legal-form suffixes
+/// from an already-folded organisation name, so surface variants of one
+/// company collapse: "el paso corp" / "el paso corporation" / "el paso"
+/// → "el paso". Only the *trailing* run is removed, so a distinct base
+/// survives ("el paso japan co" → "el paso japan"). Never strips to
+/// empty — at least one token is always kept.
+pub(crate) fn strip_org_suffixes(folded: &str) -> String {
+    const SUFFIXES: &[&str] = &[
+        "inc",
+        "incorporated",
+        "corp",
+        "corporation",
+        "co",
+        "company",
+        "companies",
+        "cos",
+        "llp",
+        "llc",
+        "ltd",
+        "limited",
+        "lp",
+        "plc",
+        "gmbh",
+        "ag",
+        "sa",
+        "nv",
+        "group",
+        "holdings",
+    ];
+    let mut toks: Vec<&str> = folded.split_whitespace().collect();
+    if toks.first() == Some(&"the") && toks.len() > 1 {
+        toks.remove(0);
+    }
+    while toks.len() > 1 && SUFFIXES.contains(toks.last().unwrap()) {
+        toks.pop();
+    }
+    toks.join(" ")
+}
+
 fn shared_surname_with_prefix_first_name(a: &str, b: &str) -> bool {
     // a, b are already folded. Tokens are split on whitespace; we
     // ignore middle initials (single-char tokens between first and
@@ -402,6 +462,32 @@ mod tests {
             NameSimilaritySignal::default().check(&l, &r),
             "shared email alias is an identity-grade merge signal"
         );
+    }
+
+    #[test]
+    fn name_similarity_merges_corporate_suffix_variants() {
+        let full = ent("El Paso Corporation", EntityType::Institution);
+        let abbr = ent("El Paso Corp.", EntityType::Institution);
+        let bare = ent("El Paso", EntityType::Institution);
+        assert!(NameSimilaritySignal::default().check(&full, &abbr));
+        assert!(NameSimilaritySignal::default().check(&bare, &full));
+        // "The Williams Companies" ↔ "Williams" via leading-the + suffix.
+        let the_co = ent("The Williams Companies", EntityType::Institution);
+        let williams = ent("Williams", EntityType::Institution);
+        assert!(NameSimilaritySignal::default().check(&the_co, &williams));
+    }
+
+    #[test]
+    fn name_similarity_org_norm_keeps_distinct_bases_apart() {
+        // Suffix stripping must not over-merge: a non-suffix trailing
+        // token or a different base stays distinct. (Gold note:
+        // Williams Companies must NOT collapse into Williams Industries.)
+        let williams = ent("Williams", EntityType::Institution);
+        let industries = ent("Williams Industries", EntityType::Institution);
+        assert!(!NameSimilaritySignal::default().check(&williams, &industries));
+        let elpaso = ent("El Paso Corp.", EntityType::Institution);
+        let japan = ent("El Paso Japan Co.", EntityType::Institution);
+        assert!(!NameSimilaritySignal::default().check(&elpaso, &japan));
     }
 
     #[test]
