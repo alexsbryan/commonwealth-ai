@@ -4,7 +4,7 @@
   "policy_kind": "tuned",
   "split": "train",
   "corpus": "enron-sample-multi-wide",
-  "captured_ts_unix": 1780165476,
+  "captured_ts_unix": 1780180534,
   "policy": {
     "name_similarity_threshold": 0.85,
     "cross_origin_required_signals": 2,
@@ -85,10 +85,10 @@
   },
   "signal_histogram": {
     "email_header": 247,
-    "name_similarity": 806,
+    "name_similarity": 803,
     "org_role": 28
   },
-  "surface_form_collapse_rate": 0.33127732667083076,
+  "surface_form_collapse_rate": 0.33104309806371013,
   "delta_from_pre_reconciliation_f1": 0.24175824175824168,
   "notes": "Written by `sovereign bench enron run`. Reads /Users/alexsbryan/.sovereign/indexes/enron-sample-multi-wide/atlas/atoms.json; ground truth at /Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/enron/ground_truth_entities.jsonl."
 }
