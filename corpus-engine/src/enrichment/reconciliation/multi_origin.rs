@@ -15,9 +15,11 @@ use serde::{Deserialize, Serialize};
 
 use super::oplog::OplogEntry;
 use super::signals::{
-    collect_emails, default_signals, fold_name, MergeSignal, MergeSignalCheck,
+    collect_emails, default_signals, fold_name, strip_org_suffixes, MergeSignal,
+    MergeSignalCheck,
 };
 use crate::enrichment::atlas::atoms::{AtomId, Entity, Provenance};
+use crate::enrichment::pipeline::atlas::EntityType;
 
 /// Policy knobs for the merger. Mirrors the
 /// `[enrichment.reconciliation]` TOML schema.
@@ -335,6 +337,16 @@ fn candidate_pairs(entities: &[Entity]) -> Vec<(usize, usize)> {
             buckets.entry(format!("c:{fc}")).or_default().push(i);
             for k in surname_keys(&fc) {
                 buckets.entry(format!("s:{k}")).or_default().push(i);
+            }
+            // Org-suffix-normalized key so corporate-form variants
+            // ("El Paso" / "El Paso Corp." / "El Paso Corporation")
+            // become candidates — they share no canon-fold or surname
+            // key otherwise. Matches the NameSimilarity org branch.
+            if e.entity_type == EntityType::Institution {
+                let on = strip_org_suffixes(&fc);
+                if on.chars().count() >= 3 {
+                    buckets.entry(format!("o:{on}")).or_default().push(i);
+                }
             }
         }
         for a in &e.aliases {
