@@ -54,6 +54,11 @@ PEOPLE = {
         ["Sofia Larsen", "Larsen, Sofia", "S. Larsen", "sofia.larsen@acme.com"]),
     "person-omar-haddad": ("Omar Haddad",
         ["Omar Haddad", "Haddad, Omar", "O. Haddad", "omar.haddad@acme.com"]),
+    # GENERALIZATION PROBE — appears ONLY under cryptic headers
+    # ("DRI", "Resp. Party") the keyword map does not enumerate. Embed
+    # classification must catch these; keyword mode will miss them.
+    "person-tobias-vance": ("Tobias Vance",
+        ["Tobias Vance", "Vance, Tobias", "T. Vance"]),
 }
 ORGS = {
     "org-dynacorp": ("Dynacorp Industries Inc.",
@@ -68,6 +73,9 @@ ORGS = {
         ["Amazon Web Services, Inc.", "AWS", "Amazon Web Services"]),
     "org-globex": ("Globex Corporation",
         ["Globex Corporation", "Globex", "Globex Corp."]),
+    # GENERALIZATION PROBE — appears ONLY under a cryptic "Cpty" header.
+    "org-vanguard": ("Vanguard Holdings LLC",
+        ["Vanguard Holdings LLC", "Vanguard Holdings", "Vanguard"]),
 }
 
 # track which forms we actually emit + in which sheets / typed-or-noise
@@ -256,6 +264,30 @@ def headcount(path):
         if mgr: emit(mgr, pid_from_lastfirst(mgr), "headcount", False)  # Manager not a typed header
     widths(ws, [22, 18, 8, 12, 12]); wb.save(path)
 
+def risk_register(path):
+    # GENERALIZATION PROBE. Cryptic abbreviation headers the keyword map
+    # does NOT enumerate: "Cpty" (counterparty/org), "DRI" (directly
+    # responsible individual/person), "Resp. Party" (person). The planted
+    # gold here — Vanguard Holdings + Tobias Vance — appears in NO other
+    # sheet, so it is recovered only by the embed-centroid classifier
+    # (header+values semantics), never by substring keyword matching.
+    wb = Workbook(); ws = wb.active; ws.title = "Risk Register"
+    banner(ws, "Enterprise Risk Register — Q1 (Confidential)", 5)
+    ws.append([])
+    headerrow(ws, 3, ["Risk ID", "Cpty", "DRI", "Resp. Party", "Status"])
+    rows = [
+        ("R-001", "Vanguard Holdings", "Tobias Vance", "Vance, Tobias", "Open"),
+        ("R-002", "Vanguard Holdings LLC", "T. Vance", "Tobias Vance", "Mitigating"),
+        ("R-003", "Dynacorp", "Priya Anand", "Anand, Priya", "Closed"),
+        ("R-004", "Vanguard", "Tobias Vance", "Tobias Vance", "Open"),
+    ]
+    for rid, cpty, dri, resp, status in rows:
+        ws.append([rid, cpty, dri, resp, status])
+        emit(cpty, oid(cpty), "risk_register", True)   # Cpty → Org (cryptic)
+        emit(dri, pid(dri), "risk_register", True)     # DRI → Person (cryptic)
+        emit(resp, pid(resp), "risk_register", True)   # Resp. Party → Person (cryptic)
+    widths(ws, [10, 22, 16, 16, 12]); wb.save(path)
+
 # ── id resolvers (map a surface form back to its planted canonical) ─
 def _index():
     idx = {}
@@ -288,6 +320,7 @@ def main():
     dcf(OUT_DIR / "project_falcon_dcf.xlsx")
     vendor_master(OUT_DIR / "vendor_master.xlsx")
     headcount(OUT_DIR / "headcount_roster.xlsx")
+    risk_register(OUT_DIR / "risk_register.xlsx")
 
     # gold manifest: aggregate forms per canonical
     by_canon = {}

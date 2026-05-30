@@ -80,8 +80,11 @@ impl MergeSignalCheck for NameSimilaritySignal {
         if left.entity_type != right.entity_type {
             return false;
         }
-        let lf = fold_name(&left.canonical_name);
-        let rf = fold_name(&right.canonical_name);
+        // Normalize "Last, First" roster form → "First Last" (persons
+        // only) so org-chart / Reports-To / headcount entries reconcile
+        // with the body "First Last" form.
+        let lf = fold_name(&person_display_name(left));
+        let rf = fold_name(&person_display_name(right));
         if lf.len() < self.min_chars || rf.len() < self.min_chars {
             return false;
         }
@@ -325,6 +328,39 @@ pub(crate) fn strip_org_suffixes(folded: &str) -> String {
     toks.join(" ")
 }
 
+/// For a Person whose canonical name is in "Last, First" roster form
+/// ("O'Brien, James", "Lay, Kenneth", "Chen, Katherine"), return the
+/// natural "First Last" order so it reconciles with the same person
+/// written "First Last". Org charts, headcount rosters, and
+/// Reports-To / Manager columns use the comma form; without this they
+/// never merge with the body / email "First Last" form. Identity for
+/// non-Person atoms (an organisation's comma — "Salesforce.com, Inc." —
+/// must NOT be reordered) and for names without a single plausible
+/// "Last, First" comma.
+fn person_display_name(e: &Entity) -> String {
+    if e.entity_type == EntityType::Person {
+        if let Some(swapped) = lastfirst_swapped(&e.canonical_name) {
+            return swapped;
+        }
+    }
+    e.canonical_name.clone()
+}
+
+fn lastfirst_swapped(raw: &str) -> Option<String> {
+    let mut parts = raw.splitn(2, ',');
+    let last = parts.next()?.trim();
+    let first = parts.next()?.trim();
+    if last.is_empty() || first.is_empty() || first.contains(',') {
+        return None;
+    }
+    // Guard: real "Last, First" halves are short (1-3 tokens). A longer
+    // half is probably a descriptive string with an incidental comma.
+    if last.split_whitespace().count() > 3 || first.split_whitespace().count() > 3 {
+        return None;
+    }
+    Some(format!("{first} {last}"))
+}
+
 fn shared_surname_with_prefix_first_name(a: &str, b: &str) -> bool {
     // a, b are already folded. Tokens are split on whitespace; we
     // ignore middle initials (single-char tokens between first and
@@ -488,6 +524,23 @@ mod tests {
         let elpaso = ent("El Paso Corp.", EntityType::Institution);
         let japan = ent("El Paso Japan Co.", EntityType::Institution);
         assert!(!NameSimilaritySignal::default().check(&elpaso, &japan));
+    }
+
+    #[test]
+    fn name_similarity_merges_last_comma_first_roster_form() {
+        // Org charts / Reports-To / headcount columns write
+        // "Last, First"; it must reconcile with the body "First Last".
+        let roster = ent("O'Brien, James", EntityType::Person);
+        let body = ent("James O'Brien", EntityType::Person);
+        assert!(NameSimilaritySignal::default().check(&roster, &body));
+        let chen_roster = ent("Chen, Katherine", EntityType::Person);
+        let chen = ent("Katherine Chen", EntityType::Person);
+        assert!(NameSimilaritySignal::default().check(&chen_roster, &chen));
+        // An ORGANISATION's comma ("Salesforce.com, Inc.") must NOT be
+        // reordered — the swap is person-only.
+        let sf = ent("Salesforce.com, Inc.", EntityType::Institution);
+        let acme = ent("Inc. Acme", EntityType::Institution);
+        assert!(!NameSimilaritySignal::default().check(&sf, &acme));
     }
 
     #[test]
