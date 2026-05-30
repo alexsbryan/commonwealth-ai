@@ -140,7 +140,7 @@ pub struct ColumnAwareConfig {
 /// (fictional names / companies / places) so the centroids encode the
 /// *shape* of the class, not memorised gold.
 const PERSON_EXEMPLARS: &[&str] = &[
-    "employee: Maria Alvarez, Wei Chen, Tomas Becker",
+    "employee: Maria Alvarez, Wei Tanaka, Tomas Becker",
     "full name of the responsible person",
     "point of contact: Jane Okafor",
     "manager",
@@ -150,7 +150,7 @@ const PERSON_EXEMPLARS: &[&str] = &[
     "approver: Liam O'Sullivan",
 ];
 const ORG_EXEMPLARS: &[&str] = &[
-    "vendor: Acme Corporation, Globex Inc, Initech LLC",
+    "vendor: Brightway Corporation, Umbra Systems, Initech LLC",
     "company name",
     "counterparty: Northgate Trading, Brightwater Partners",
     "legal entity",
@@ -165,6 +165,32 @@ const PLACE_EXEMPLARS: &[&str] = &[
     "office location: Berlin, Singapore",
     "region",
     "site address",
+];
+/// Negative / abstain class. Columns whose `header + values` land
+/// nearest this centroid are NOT entity columns and abstain — the
+/// embed-router way to say "this isn't a person/org/place column"
+/// without enumerating noise headers by keyword. Catches the residual
+/// status / category / level / title / amount / date / line-item
+/// columns that otherwise leak as low-margin entity hits.
+const NON_ENTITY_EXEMPLARS: &[&str] = &[
+    "status: active, archived, draft",
+    "category: bronze, silver, platinum",
+    "type",
+    "level: senior, junior",
+    "priority",
+    "amount in dollars: 1200, 4500",
+    "total",
+    "date: 2024-01-15, 2023-09-02",
+    "quarter",
+    "fiscal year",
+    "line item: utilities, postage, insurance",
+    "department: legal, marketing, facilities",
+    "job title: analyst, director",
+    "ticker symbol: AAPL, MSFT",
+    "percentage",
+    "notes",
+    "description",
+    "rating",
 ];
 
 const HEADER_MIN_SIM: f32 = 0.34;
@@ -184,7 +210,10 @@ pub const COLUMN_SIGNAL_SAMPLES: usize = 5;
 /// per [`EntityType`] (Person / Institution / Place), built at runtime
 /// from [`PERSON_EXEMPLARS`] etc. via the caller's [`EmbedFn`].
 pub struct HeaderClassifier {
-    centroids: Vec<(EntityType, Vec<f32>)>,
+    /// `None` tags the non-entity / abstain centroid; `Some(t)` an
+    /// entity class. A column whose nearest centroid is the abstain one
+    /// is classified as "not an entity column".
+    centroids: Vec<(Option<EntityType>, Vec<f32>)>,
     min_sim: f32,
     min_margin: f32,
 }
@@ -195,9 +224,11 @@ impl HeaderClassifier {
     /// serialises anyway.
     pub async fn build(embed: &crate::types::EmbedFn) -> Result<Self> {
         let centroids = vec![
-            (EntityType::Person, centroid(PERSON_EXEMPLARS, embed).await?),
-            (EntityType::Institution, centroid(ORG_EXEMPLARS, embed).await?),
-            (EntityType::Place, centroid(PLACE_EXEMPLARS, embed).await?),
+            (Some(EntityType::Person), centroid(PERSON_EXEMPLARS, embed).await?),
+            (Some(EntityType::Institution), centroid(ORG_EXEMPLARS, embed).await?),
+            (Some(EntityType::Place), centroid(PLACE_EXEMPLARS, embed).await?),
+            // Abstain class: a column nearest this is not an entity column.
+            (None, centroid(NON_ENTITY_EXEMPLARS, embed).await?),
         ];
         // Gates are env-tunable (HEADER_MIN_SIM / HEADER_MIN_MARGIN) so
         // the abstain thresholds can be swept against a harness without
@@ -214,11 +245,11 @@ impl HeaderClassifier {
 
     /// Top class + its similarity + its margin over the runner-up,
     /// ignoring the gates. For logging / threshold tuning.
-    pub fn best(&self, emb: &[f32]) -> Option<(EntityType, f32, f32)> {
+    pub fn best(&self, emb: &[f32]) -> Option<(Option<EntityType>, f32, f32)> {
         if self.centroids.is_empty() || emb.len() != self.centroids[0].1.len() {
             return None;
         }
-        let mut scored: Vec<(EntityType, f32)> = self
+        let mut scored: Vec<(Option<EntityType>, f32)> = self
             .centroids
             .iter()
             .map(|(t, c)| (t.clone(), dot(emb, c)))
@@ -249,10 +280,26 @@ impl HeaderClassifier {
     /// nearest class only when it clears both the absolute and margin
     /// gates; otherwise `None` (abstain — the column is skipped).
     pub fn classify(&self, signal_emb_normalized: &[f32]) -> Option<EntityType> {
-        self.best(signal_emb_normalized).and_then(|(t, sim, margin)| {
-            (sim >= self.min_sim && margin >= self.min_margin).then_some(t)
-        })
+        let (top, sim, margin) = self.best(signal_emb_normalized)?;
+        // Nearest centroid is the abstain class → not an entity column.
+        let top = top?;
+        (sim >= self.min_sim && margin >= self.min_margin).then_some(top)
     }
+}
+
+/// True if a cell value plausibly *is* an entity name, by shape alone
+/// (no keyword lists). Rejects footnote/banner prose (too long) and
+/// numeric / date / currency / multiplier cells (digit-dominant or no
+/// letters). Entity names are short and letter-dominant; "Marcus Webb",
+/// "El Paso Corp.", "AWS" pass, while "* Annual spend in $000s…",
+/// "2019-02-01", "11.2x", "100M", "1,850" are dropped.
+fn is_name_shaped(v: &str) -> bool {
+    if v.chars().count() > 64 || v.split_whitespace().count() > 6 {
+        return false; // prose / footnote
+    }
+    let alpha = v.chars().filter(|c| c.is_alphabetic()).count();
+    let digit = v.chars().filter(|c| c.is_ascii_digit()).count();
+    alpha > 0 && digit <= alpha
 }
 
 fn env_f32(key: &str, default: f32) -> f32 {
@@ -469,7 +516,11 @@ fn emit_entities_from_batches(
                     continue;
                 }
                 let value = col.value(row).trim();
-                if value.is_empty() {
+                if value.is_empty() || !is_name_shaped(value) {
+                    // Drop footnote/banner prose and numeric/date/currency
+                    // cells that slip into a typed column (subtotal rows,
+                    // "Source: …" footers, dates). Shape-only — no keyword
+                    // lists — so it generalizes across corpora.
                     continue;
                 }
                 let key =
@@ -515,23 +566,27 @@ mod tests {
     fn header_classifier_gates_abstain_on_weak_or_ambiguous() {
         // Orthogonal unit centroids; exercise the gate logic without
         // any embedding model.
+        // 4-dim: Person / Institution / Place / abstain (None).
         let c = HeaderClassifier {
             centroids: vec![
-                (EntityType::Person, vec![1.0, 0.0, 0.0]),
-                (EntityType::Institution, vec![0.0, 1.0, 0.0]),
-                (EntityType::Place, vec![0.0, 0.0, 1.0]),
+                (Some(EntityType::Person), vec![1.0, 0.0, 0.0, 0.0]),
+                (Some(EntityType::Institution), vec![0.0, 1.0, 0.0, 0.0]),
+                (Some(EntityType::Place), vec![0.0, 0.0, 1.0, 0.0]),
+                (None, vec![0.0, 0.0, 0.0, 1.0]),
             ],
             min_sim: 0.5,
             min_margin: 0.1,
         };
         // Squarely a person → Person.
-        assert!(matches!(c.classify(&[1.0, 0.0, 0.0]), Some(EntityType::Person)));
+        assert!(matches!(c.classify(&[1.0, 0.0, 0.0, 0.0]), Some(EntityType::Person)));
         // No signal → absolute gate abstains.
-        assert!(c.classify(&[0.0, 0.0, 0.0]).is_none());
-        // Equidistant person/org → margin gate abstains (the Status /
-        // Category / dates failure mode).
+        assert!(c.classify(&[0.0, 0.0, 0.0, 0.0]).is_none());
+        // Equidistant person/org → margin gate abstains.
         let h = (0.5f32).sqrt();
-        assert!(c.classify(&[h, h, 0.0]).is_none());
+        assert!(c.classify(&[h, h, 0.0, 0.0]).is_none());
+        // Nearest the abstain centroid → not an entity column (the
+        // Status / Category / Level failure mode handled semantically).
+        assert!(c.classify(&[0.0, 0.0, 0.0, 1.0]).is_none());
     }
 
     fn build_test_xlsx(headers: &[&str], rows: &[Vec<&str>]) -> Vec<u8> {
