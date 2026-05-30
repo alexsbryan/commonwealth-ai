@@ -21,7 +21,7 @@
 //! `holdout` split without `--unseal-holdout`, which burns a counter
 //! in `peek_budget.json`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, Entity};
@@ -46,6 +46,7 @@ const HELP: Help = Help {
         ),
         HelpSection::Subcommands(&[
             ("run", "Score a corpus's reconciled atoms against the ground-truth split."),
+            ("diagnose", "Glass-box: per-gold coverage + cluster spread + over-merge bridges for the tuned policy."),
         ]),
         HelpSection::Notes(
             "Reads atlas/atoms.json from ~/.sovereign/indexes/<corpus>. Run \
@@ -280,6 +281,13 @@ pub async fn cmd_enron(args: &[String]) -> i32 {
     }
     match args[0].as_str() {
         "run" => match cmd_run(&args[1..]).await {
+            Ok(code) => code,
+            Err(e) => {
+                eprintln!("error: {e}");
+                1
+            }
+        },
+        "diagnose" => match cmd_diagnose(&args[1..]).await {
             Ok(code) => code,
             Err(e) => {
                 eprintln!("error: {e}");
@@ -538,6 +546,13 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
     }
 
     // ── Persist to JSON ────────────────────────────────────────
+    // The B³ `unmatched_*` arrays hold every noise surface form (25k+
+    // on a wide corpus), bloating the committed baseline to MBs of
+    // un-reviewable diff. Cap them to a sample, preserving the true
+    // counts as `*_total`, before serialising.
+    let mut b_cubed_value =
+        serde_json::to_value(&report.b_cubed).unwrap_or(serde_json::Value::Null);
+    cap_unmatched_arrays(&mut b_cubed_value, UNMATCHED_SAMPLE_CAP);
     let outcome = EnronBenchOutcome {
         schema_version: 1,
         bench_id: "enron-entity-resolution".into(),
@@ -546,7 +561,7 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
         corpus: parsed.corpus.clone(),
         captured_ts_unix: now_secs(),
         policy: recorded_policy,
-        b_cubed: serde_json::to_value(&report.b_cubed).unwrap_or(serde_json::Value::Null),
+        b_cubed: b_cubed_value,
         pairwise: serde_json::to_value(&report.pairwise).unwrap_or(serde_json::Value::Null),
         signal_histogram: signal_hist,
         surface_form_collapse_rate,
@@ -578,6 +593,145 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
         .map_err(|e| format!("write {}: {e}", out_path.display()))?;
     println!("  → {}", out_path.display());
 
+    Ok(0)
+}
+
+/// `sovereign bench enron diagnose` — glass-box view of WHY the tuned
+/// B³ is what it is, without re-deriving it by hand. For each gold
+/// entity in the split it reports coverage (forms present verbatim in
+/// the atoms) and how many predicted clusters those forms scatter
+/// across (under-merge); then it flags every predicted cluster that
+/// bridges more than one gold entity (over-merge — the precision
+/// killer). Reads the same atoms + runs the same tuned reconciliation
+/// as `run --policy tuned`, so its verdict matches the scored number.
+async fn cmd_diagnose(args: &[String]) -> Result<i32, String> {
+    let parsed = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) if e == "__HELP__" => return Ok(0),
+        Err(e) => return Err(e),
+    };
+
+    let atlas_dir = parsed.indexes_dir.join(&parsed.corpus).join("atlas");
+    let atoms_path = atlas_dir.join("atoms.json");
+    if !atoms_path.exists() {
+        eprintln!("error: no atoms.json at {}", atoms_path.display());
+        return Ok(2);
+    }
+    let atoms_file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
+        .map_err(|e| format!("read atoms.json ({}): {e}", atoms_path.display()))?;
+    let entities: Vec<Entity> = atoms_file
+        .atoms
+        .into_iter()
+        .filter_map(|env| match env {
+            AtomEnvelope::Entity(e) => Some(e),
+            _ => None,
+        })
+        .collect();
+
+    // Same tuned reconciliation `run --policy tuned` performs.
+    let mut policy = ReconciliationPolicy::default();
+    policy.judge_trials = parsed.judge_trials;
+    if let Some(t) = parsed.name_similarity_threshold {
+        policy.name_similarity_threshold = t;
+    }
+    let outcome = reconcile(entities.clone(), &policy);
+
+    // form -> predicted cluster id (last write wins, matching cmd_run).
+    let mut form_cluster: BTreeMap<String, String> = BTreeMap::new();
+    for re in &outcome.entities {
+        let cid = re.canonical_id.as_str().to_string();
+        for (sf, _) in &re.surface_forms {
+            form_cluster.insert(sf.clone(), cid.clone());
+        }
+        for atom_id in &re.source_atom_ids {
+            if let Some(orig) = entities.iter().find(|e| &e.id == atom_id) {
+                for alias in &orig.aliases {
+                    form_cluster.insert(alias.clone(), cid.clone());
+                }
+            }
+        }
+    }
+
+    let gt_path = parsed.bench_dir.join("ground_truth_entities.jsonl");
+    let gt = BenchGroundTruth::load(&gt_path)
+        .map_err(|e| format!("load ground truth ({}): {e}", gt_path.display()))?;
+    let gold = gt.by_split(parsed.split);
+
+    println!("─── enron diagnose: {} / {} ───", parsed.corpus, parsed.split.as_str());
+    println!("  entity atoms     : {}", entities.len());
+    println!("  reconciled into  : {} clusters", outcome.entities.len());
+    println!();
+    println!("  per-gold coverage + cluster spread:");
+    let mut cluster_to_gold: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let (mut total_forms, mut total_aligned) = (0usize, 0usize);
+    for g in &gold {
+        if g.is_sealed() {
+            continue;
+        }
+        let mut aligned = 0usize;
+        let mut clusters: BTreeSet<String> = BTreeSet::new();
+        for sf in &g.surface_forms {
+            if let Some(cid) = form_cluster.get(sf) {
+                aligned += 1;
+                clusters.insert(cid.clone());
+                cluster_to_gold
+                    .entry(cid.clone())
+                    .or_default()
+                    .insert(g.canonical_id.clone());
+            }
+        }
+        total_forms += g.surface_forms.len();
+        total_aligned += aligned;
+        let flag = if clusters.len() > 1 {
+            "  ⚠ UNDER-MERGE"
+        } else {
+            ""
+        };
+        println!(
+            "    {:<24} {}/{} forms aligned, {} cluster(s){}",
+            g.canonical_id,
+            aligned,
+            g.surface_forms.len(),
+            clusters.len(),
+            flag
+        );
+    }
+    println!();
+    println!(
+        "  coverage: {total_aligned}/{total_forms} gold forms present verbatim (extraction ceiling)"
+    );
+
+    let bridges: Vec<(&String, &BTreeSet<String>)> = cluster_to_gold
+        .iter()
+        .filter(|(_, gs)| gs.len() > 1)
+        .collect();
+    println!();
+    if bridges.is_empty() {
+        println!("  ✓ precision-safe: no predicted cluster bridges >1 gold entity");
+    } else {
+        println!(
+            "  ✗ OVER-MERGE — {} cluster(s) bridge multiple gold entities:",
+            bridges.len()
+        );
+        for (cid, gs) in bridges {
+            let re = outcome
+                .entities
+                .iter()
+                .find(|re| re.canonical_id.as_str() == cid.as_str());
+            let size = re.map(|re| re.source_atom_ids.len()).unwrap_or(0);
+            let sample: Vec<String> = re
+                .map(|re| {
+                    re.surface_forms
+                        .iter()
+                        .take(8)
+                        .map(|(s, _)| s.clone())
+                        .collect()
+                })
+                .unwrap_or_default();
+            println!("    cluster {cid} ({size} atoms) holds gold {gs:?}");
+            println!("       sample members: {sample:?}");
+        }
+    }
     Ok(0)
 }
 
@@ -637,6 +791,35 @@ fn sample_first_n(v: &[String], n: usize) -> String {
         .cloned()
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// How many `unmatched_*` surface forms to keep verbatim in a persisted
+/// baseline. The rest are summarised by a `*_total` count.
+const UNMATCHED_SAMPLE_CAP: usize = 50;
+
+/// Truncate the `unmatched_predicted` / `unmatched_gold` arrays in a
+/// serialised `B3Outcome` to a reviewable sample, recording the true
+/// length as a sibling `*_total` field first. Keeps committed baselines
+/// small and diff-friendly without losing the counts that matter (the
+/// arrays themselves are full of extractor noise — 25k+ forms on a wide
+/// corpus). No-op for arrays already within `cap`.
+fn cap_unmatched_arrays(value: &mut serde_json::Value, cap: usize) {
+    let Some(obj) = value.as_object_mut() else {
+        return;
+    };
+    for key in ["unmatched_predicted", "unmatched_gold"] {
+        let total = match obj.get(key).and_then(|v| v.as_array()) {
+            Some(arr) if arr.len() > cap => arr.len(),
+            _ => continue,
+        };
+        let sample: Vec<serde_json::Value> = obj
+            .get(key)
+            .and_then(|v| v.as_array())
+            .map(|a| a.iter().take(cap).cloned().collect())
+            .unwrap_or_default();
+        obj.insert(format!("{key}_total"), serde_json::json!(total));
+        obj.insert(key.to_string(), serde_json::Value::Array(sample));
+    }
 }
 
 #[cfg(test)]
