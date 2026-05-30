@@ -160,6 +160,19 @@ impl EmailIterator {
         let to = header(&parsed, "To");
         let cc = header(&parsed, "Cc");
         let bcc = header(&parsed, "Bcc");
+        // Enron-style exports (and many MTA archives) carry the
+        // *resolved* sender/recipient identities — real display names,
+        // often real addresses — in X-From/X-To/X-Cc, while From/To/Cc
+        // hold MTA-rewritten forms that for broadcast messages degrade
+        // to placeholder junk ("To: e-mail <.addison@enron.com>, …").
+        // Feeding that junk to entity extraction was the dominant
+        // alias-pollution source on enron-sample-multi-wide: 79 broadcast
+        // emails injected ~25 bogus `.name@` addresses each. Pull both
+        // forms; `combine_identity` sanitizes the standard field and
+        // folds in the resolved one so the preamble shows clean parties.
+        let x_from = header(&parsed, "X-From");
+        let x_to = header(&parsed, "X-To");
+        let x_cc = header(&parsed, "X-Cc");
         let date = header(&parsed, "Date");
         let subject = header(&parsed, "Subject");
         let message_id =
@@ -215,10 +228,13 @@ impl EmailIterator {
         // as Person atoms. Body chunks past the first inherit the
         // preamble too — the redundancy is cheap and keeps every chunk
         // self-describing for the LLM.
+        let from_id = combine_identity(from.as_deref(), x_from.as_deref());
+        let to_id = combine_identity(to.as_deref(), x_to.as_deref());
+        let cc_id = combine_identity(cc.as_deref(), x_cc.as_deref());
         let content_with_headers = build_header_preamble(
-            from.as_deref(),
-            to.as_deref(),
-            cc.as_deref(),
+            from_id.as_deref(),
+            to_id.as_deref(),
+            cc_id.as_deref(),
             date.as_deref(),
             subject.as_deref(),
         ) + &body;
@@ -548,6 +564,52 @@ fn build_header_preamble(
     out
 }
 
+/// Drop placeholder / malformed address tokens from a comma-separated
+/// recipient field. Enron MTA-rewritten broadcast headers replace real
+/// recipients with junk like `e-mail <.addison@enron.com>` — a
+/// placeholder display over a leading-dot local-part that is not a real
+/// address. Such tokens are pure noise to entity extraction. Drops any
+/// comma-entry whose address has a leading-dot local-part (`<.`) or that
+/// is the bare `e-mail` placeholder, keeping every well-formed party.
+///
+/// Splitting on ',' can over-split a `Surname, First <addr>` display,
+/// but that only ever keeps both halves (both well-formed) — it never
+/// drops a real party, which is the property that matters.
+fn sanitize_addr_field(field: &str) -> String {
+    field
+        .split(',')
+        .map(str::trim)
+        .filter(|e| !e.is_empty())
+        .filter(|e| {
+            let lower = e.to_ascii_lowercase();
+            !lower.contains("<.") && lower != "e-mail"
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Combine a standard header field (From/To/Cc) with its resolved
+/// counterpart (X-From/X-To/X-Cc) into the best identity string for the
+/// preamble. Both are sanitized; the non-empty, distinct forms are
+/// joined so the model sees the address AND the display name
+/// ("sherri.sera@enron.com; Sherri Sera"). A broadcast whose standard
+/// field sanitizes to nothing still surfaces its real recipients from
+/// the resolved field. Returns `None` when neither yields anything.
+fn combine_identity(standard: Option<&str>, resolved: Option<&str>) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    for raw in [standard, resolved].into_iter().flatten() {
+        let clean = sanitize_addr_field(raw);
+        if !clean.is_empty() && !parts.iter().any(|p| p == &clean) {
+            parts.push(clean);
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("; "))
+    }
+}
+
 fn synthesize_message_id(path: &Path) -> String {
     // Maildir messages typically don't carry a Message-ID. Synthesize
     // one from the path so the source_id is still stable across
@@ -657,6 +719,38 @@ mod tests {
     use super::*;
     use crate::asset_store::FilesystemAssetStore;
     use crate::extractors::described_asset::AssetSubExtractorRegistry;
+
+    #[test]
+    fn sanitize_drops_mta_placeholder_addresses() {
+        // The enron-multi-wide broadcast pattern: leading-dot placeholder
+        // addresses interleaved with a real one.
+        let field =
+            "e-mail <.addison@enron.com>, evgenis.eva@enron.com, e-mail <.lina@enron.com>";
+        assert_eq!(sanitize_addr_field(field), "evgenis.eva@enron.com");
+        // All-junk field sanitizes to empty.
+        assert_eq!(sanitize_addr_field("e-mail <.a@enron.com>, e-mail"), "");
+    }
+
+    #[test]
+    fn combine_identity_drops_garbage_and_recovers_resolved_recipients() {
+        // Broadcast: To is all placeholder junk; X-To carries the real
+        // people. The preamble must NOT carry ".addison@" and MUST carry
+        // the resolved names.
+        let to = "e-mail <.addison@enron.com>, e-mail <.breana@enron.com>";
+        let x_to =
+            "Addison Barry Rand (E-mail) <Abarryrand@aol.com>, Kenneth Lay <klay@enron.com>";
+        let got = combine_identity(Some(to), Some(x_to)).expect("some identity");
+        assert!(!got.contains(".addison@"), "placeholder leaked: {got}");
+        assert!(got.contains("Addison Barry Rand"), "lost real recipient: {got}");
+        assert!(got.contains("Kenneth Lay"), "lost gold entity: {got}");
+        // Clean email: address (From/To) and resolved name (X-*) both
+        // surface so the model gets the full identity.
+        let got2 = combine_identity(Some("greg.grissom@enron.com"), Some("Greg Grissom"))
+            .expect("some identity");
+        assert!(got2.contains("greg.grissom@enron.com") && got2.contains("Greg Grissom"));
+        // Nothing usable → None.
+        assert!(combine_identity(Some("e-mail <.x@enron.com>"), None).is_none());
+    }
 
     const SIMPLE_EMAIL: &str = "From: alice@example.com\r\n\
 To: bob@example.com\r\n\
