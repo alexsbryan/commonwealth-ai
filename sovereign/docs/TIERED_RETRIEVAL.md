@@ -137,6 +137,20 @@ Existing `inference.embed_batch` loop in `document_asset.rs::ingest`
 7. Returns a *partial* `DocumentSkeleton` with `overview` and
    `segments` empty — those are T3's responsibility
 
+> **Dual-layer entity extraction on the conversation path (added
+> 2026-05-26).** The LLM + `lark_grammar` extraction above is the
+> *document-asset* T2. For **conversations**, a second source layers on:
+> a real GLiNER ONNX model (`gline-rs`, `gliner_small-v2.1`, feature
+> `gliner-ner`, module `sovereign-tools/src/gliner_ner.rs`) runs per-chunk
+> NER, and `sovereign-core/src/conv_entity_graph.rs::from_layered` merges
+> RAPTOR's cluster-summary `primary_entities` with the GLiNER per-chunk
+> mentions into one entity graph (orthogonal signals: cluster-scale
+> distinctiveness + raw NER). The hybrid retrieval scorer
+> (`0.6·cosine + 0.4·jaccard`, MMR, `topic_context`) in
+> `runtime/retrieval.rs` is **default-on** since this landing. See
+> [`../../corpus-engine/ENRICHMENT.md`](../../corpus-engine/ENRICHMENT.md)
+> for how this fits the three-system picture.
+
 ### T3 — RAPTOR atlas + motifs + segments + overview
 
 Composed inside the `skeleton_future` async block in

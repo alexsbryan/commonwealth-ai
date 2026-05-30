@@ -23,6 +23,7 @@ pub mod atlas_resolve;
 pub mod atlas_tensions;
 pub mod atlas_tensions_classify;
 pub mod build;
+pub mod sheets_ingest;
 pub mod cascade;
 pub mod classify;
 pub mod config;
@@ -186,6 +187,7 @@ pub async fn run_enrich(args: &[String]) -> i32 {
         "classify" => classify::cmd_classify(rest).await,
         "extract" => extract::cmd_extract(rest).await,
         "extract-typed" => extract_typed::cmd_extract_typed(rest).await,
+        "sheets-ingest" => sheets_ingest::cmd_sheets_ingest(rest).await,
         "cluster" | "cluster-atlas" => atlas_phase_cmd::cmd_cluster_atlas(rest).await,
         "name" | "name-atlas-clusters" => {
             atlas_phase_cmd::cmd_name_atlas_clusters(rest).await
