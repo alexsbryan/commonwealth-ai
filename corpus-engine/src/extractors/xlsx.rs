@@ -299,28 +299,59 @@ fn encode_sheets_to_parquet(sheets: &[(String, RecordBatch)]) -> Result<Vec<u8>>
         tagged_batches.push(tagged);
     }
 
-    // Stable schema across all tagged batches: pick the union of
-    // columns. For Phase 1 every sheet shares the `_sheet_name +
-    // _sheet_row + col_*` prefix; we serialise each sheet's batch
-    // in its own writer invocation, but a single parquet file holds
-    // only one schema. Compromise: take the first schema as the
-    // canonical one and skip sheets whose schema diverges. Phase 4
-    // already reads per-sheet via `_sheet_name` so the skip just
-    // means "column-aware on the asymmetric sheet is best-effort
-    // until we tarball per-sheet parquets."
-    let canonical_schema = tagged_batches[0].schema();
+    // Union schema across all sheets so every sheet's typed columns
+    // survive into the parquet. Heterogeneous corporate workbooks
+    // (Opex vs Capex, DCF vs Comps) carry different column sets per
+    // sheet; the old code took the first sheet's schema as canonical
+    // and silently DROPPED every divergent sheet, so the column-aware
+    // extractor never saw e.g. a Capex `Counterparty` or a Comps
+    // `Company` column. Instead, take the ordered union of all field
+    // names and reindex each sheet's batch onto it — columns a sheet
+    // lacks are filled with nulls. One schema, every column present.
+    let mut order: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for b in &tagged_batches {
+        for f in b.schema().fields() {
+            if seen.insert(f.name().clone()) {
+                order.push(f.name().clone());
+            }
+        }
+    }
+    let union_fields: Vec<Field> = order
+        .iter()
+        .map(|name| Field::new(name, DataType::Utf8, name != "_sheet_name"))
+        .collect();
+    let union_schema = Arc::new(Schema::new(union_fields));
+
+    let mut aligned: Vec<RecordBatch> = Vec::with_capacity(tagged_batches.len());
+    for b in &tagged_batches {
+        let n = b.num_rows();
+        let mut cols: Vec<ArrayRef> = Vec::with_capacity(order.len());
+        for name in &order {
+            match b.schema().index_of(name) {
+                Ok(idx) => cols.push(b.column(idx).clone()),
+                Err(_) => {
+                    // Column absent in this sheet → all-null Utf8.
+                    let nulls: Vec<Option<String>> = vec![None; n];
+                    cols.push(Arc::new(StringArray::from(nulls)));
+                }
+            }
+        }
+        aligned.push(RecordBatch::try_new(union_schema.clone(), cols).map_err(|e| {
+            Error::Extraction(format!("xlsx: union-align batch: {e}"))
+        })?);
+    }
+
     let buf: Vec<u8> = Vec::new();
     let mut cursor = Cursor::new(buf);
     let props = WriterProperties::builder().build();
     {
-        let mut writer = ArrowWriter::try_new(&mut cursor, canonical_schema.clone(), Some(props))
+        let mut writer = ArrowWriter::try_new(&mut cursor, union_schema.clone(), Some(props))
             .map_err(|e| Error::Extraction(format!("xlsx: open parquet writer: {e}")))?;
-        for batch in &tagged_batches {
-            if batch.schema() == canonical_schema {
-                writer.write(batch).map_err(|e| {
-                    Error::Extraction(format!("xlsx: write parquet batch: {e}"))
-                })?;
-            }
+        for batch in &aligned {
+            writer.write(batch).map_err(|e| {
+                Error::Extraction(format!("xlsx: write parquet batch: {e}"))
+            })?;
         }
         writer
             .close()
@@ -564,5 +595,56 @@ mod tests {
             .find(|e| e.canonical_name == "Jeff Skilling")
             .unwrap();
         assert!(matches!(jeff.entity_type, EntityType::Person));
+    }
+
+    #[test]
+    fn multi_sheet_heterogeneous_schemas_all_reach_column_aware() {
+        // Two sheets with DIFFERENT column sets, each carrying a typed
+        // column. The old bundler took sheet 1's schema as canonical and
+        // dropped sheet 2 entirely; the union schema keeps both, so
+        // column-aware sees the counterparty AND the employee column.
+        use crate::extractors::column_aware::{
+            extract_entities_from_parquet, ColumnAwareConfig,
+        };
+        use rust_xlsxwriter::Workbook;
+
+        let mut wb = Workbook::new();
+        let s1 = wb.add_worksheet().set_name("Trades").unwrap();
+        s1.write_string(0, 0, "counterparty").unwrap();
+        s1.write_string(0, 1, "notional").unwrap();
+        s1.write_string(1, 0, "Dynegy").unwrap();
+        s1.write_string(1, 1, "100M").unwrap();
+        let s2 = wb.add_worksheet().set_name("Roster").unwrap();
+        s2.write_string(0, 0, "employee").unwrap();
+        s2.write_string(0, 1, "level").unwrap();
+        s2.write_string(1, 0, "Jeff Skilling").unwrap();
+        s2.write_string(1, 1, "E").unwrap();
+        let bytes = wb.save_to_buffer().unwrap();
+
+        let dir = tempfile::tempdir().unwrap();
+        let store = FilesystemAssetStore::new(dir.path()).unwrap();
+        use sha2::{Digest, Sha256};
+        let mut h = Sha256::new();
+        h.update(&bytes);
+        let sha: String = h.finalize().iter().map(|b| format!("{b:02x}")).collect();
+        let ext = XlsxSubExtractor
+            .extract(&std::path::PathBuf::from("/tmp/multi.xlsx"), &bytes, &sha, &store)
+            .unwrap();
+        let parsed = ext.parsed_form.expect("parsed_form");
+        let ents = extract_entities_from_parquet(
+            &parsed,
+            "multi.xlsx",
+            &ColumnAwareConfig::default(),
+        )
+        .unwrap();
+        let names: Vec<&str> = ents.iter().map(|e| e.canonical_name.as_str()).collect();
+        assert!(
+            names.contains(&"Dynegy"),
+            "sheet 1 counterparty must survive; got {names:?}"
+        );
+        assert!(
+            names.contains(&"Jeff Skilling"),
+            "sheet 2 employee must survive the schema union; got {names:?}"
+        );
     }
 }

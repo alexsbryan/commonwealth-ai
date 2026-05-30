@@ -289,20 +289,34 @@ distribution.
 
 ### Enrichment
 
-Two coexisting systems; opt-in per recipe.
+**Three coexisting systems**, selected per-corpus by `[enrichment] type`
+(dispatch at `engine/ingest.rs:1581`). See
+[`corpus-engine/ENRICHMENT.md`](../corpus-engine/ENRICHMENT.md) — the
+canonical umbrella that reconciles all three — before assuming "enrichment"
+means one thing.
 
-- **v1 — `enrichment/field_engine.rs`** — five-phase pipeline
-  (skeleton → cluster → align → fault lines → open questions).
-  `Domain` trait + `DomainRegistry`. Domains include `philosophy`
-  (full), `multi` (Wikipedia), `personal` / `conversational` /
-  `institutional` (KnowledgeView).
-- **v2 atlas — `enrichment/pipeline/`** — typed atom graph
-  (atom types include Entity, Claim, Event, Question, Position,
-  Opposition, ArgumentReconstruction, Concept). `Pipeline` trait
-  + registry + `ExemplarBank` + `PhaseCache`. Pipelines:
-  `literary`, `literary_atlas`, `philosophy_atlas`,
-  `referential_atlas`, `conversation_atlas`. State at
-  `~/.sovereign/indexes/<corpus>/atlas/`.
+- **`field_model` — System 1, `enrichment/field_engine.rs`** — five-phase
+  *whole-corpus* pipeline (skeleton → cluster → align → fault lines → open
+  questions). `Domain` trait + `DomainRegistry`. Domains include
+  `philosophy`, `multi` (Wikipedia), `personal` / `conversational` /
+  `institutional` (KnowledgeView). Legacy but live (KnowledgeView digests,
+  full-corpus SEP epistemic flow).
+- **`atlas` — System 2, `enrichment/pipeline/`** — *per-document* typed
+  atom graph (Entity, Claim, Event, Question, Position, Opposition,
+  ArgumentReconstruction, Configuration, Asset). `Pipeline` trait +
+  registry + `ExemplarBank` + `PhaseCache`. Pipelines: `literary`,
+  `literary_atlas`, `philosophy_atlas`, `referential_atlas`,
+  `engineering_atlas`, `conversation_atlas`. State at
+  `~/.sovereign/indexes/<corpus>/atlas/`. Deep-dive:
+  [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md).
+- **`tiered` — System 3, the RAPTOR + GLiNER gold standard** — three
+  progressive tiers (T1 embeddings → T2 entity-graph + PPR → T3 RAPTOR
+  cluster tree). The single RAPTOR builder lives in
+  `sovereign-tools/src/raptor_atlas.rs` and is injected into `corpus-engine`
+  via the `TieredEnrichmentProvider` trait (`enrichment/tiered.rs`) to
+  avoid a cyclic dep. GLiNER (real ONNX NER) augments the conversation
+  path. Used by attached docs, conversations, Obsidian / watched folders.
+  Deep-dive: [`docs/TIERED_RETRIEVAL.md`](./docs/TIERED_RETRIEVAL.md).
 
 See [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md)
 for status table, landing-by-landing scope, and validation targets.
