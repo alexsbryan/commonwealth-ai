@@ -1,22 +1,22 @@
 [commonwealth]
 url = "http://localhost:9741"
 
-# ── lint/test watchers TEMPORARILY DISABLED (2026-05-30) ──
-# The parallel cargo check/test fan over three workspaces spikes
-# 10-15GB of rustc memory. Stacked on the eager-pinned 27B primary
-# (~30GB RSS) it jetsam-killed the daemon during the drift-detect
-# monorepo embed. Disabled for the duration of the 27B drift run.
-# RESTORE with: cp .sovereign/sovereign.toml.with-watchers .sovereign/sovereign.toml
-# then `sovereign daemon restart`.
-#
-# [test_runner]
-# command = "scripts/sovereign-test.sh"
-# working_dir = "."
-# timeout_secs = 240
-# debounce_ms = 2000
-#
-# [lint_runner]
-# command = "scripts/sovereign-lint.sh"
-# working_dir = "."
-# timeout_secs = 240
-# debounce_ms = 800
+[test_runner]
+command = "scripts/sovereign-test.sh"
+working_dir = "."
+# Three-workspace parallel `cargo test` (corpus-engine + sovereign +
+# commonwealth) runs cold-cache in 60-180s. 120s left commonwealth
+# truncated mid-run and `test_status` looked stuck. Mirror the lint
+# runner's 240s headroom so the slowest workspace finishes cleanly.
+timeout_secs = 240
+debounce_ms = 2000
+
+[lint_runner]
+command = "scripts/sovereign-lint.sh"
+working_dir = "."
+# 60s wasn't enough — the parallel `cargo check` fan over
+# corpus-engine + sovereign + commonwealth consistently timed
+# out at the boundary, leaving lint_runs rows with exit_code=-2
+# and `watcher_active`-feeling-off symptoms (2026-05-06).
+timeout_secs = 240
+debounce_ms = 800
