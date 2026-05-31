@@ -279,6 +279,20 @@ pub(crate) fn fold_name(s: &str) -> String {
         } else if c == '@' {
             out.push('@');
             prev_space = false;
+        } else if c == '&' {
+            // Normalize "&" to the word "and" so "JPMorgan Chase & Co."
+            // and "JPMorgan Chase and Co." fold identically. Without this
+            // the ampersand survives as its own token and the org-suffix
+            // strip leaves "...chase &" vs "...chase and" — two strings
+            // that never merge (observed under-merge: org-jpmc sat in 3
+            // clusters, 2026-05-30 test-split diagnose). Faithful: "AT&T"
+            // → "at and t" matches a written-out "AT and T"; it conflates
+            // no genuinely distinct organisations.
+            if !out.is_empty() && !prev_space {
+                out.push(' ');
+            }
+            out.push_str("and ");
+            prev_space = true;
         } else if c == '<' || c == '>' || c == '"' || c == '\'' {
             // strip
         } else {
@@ -323,6 +337,13 @@ pub(crate) fn strip_org_suffixes(folded: &str) -> String {
         toks.remove(0);
     }
     while toks.len() > 1 && SUFFIXES.contains(toks.last().unwrap()) {
+        toks.pop();
+    }
+    // Drop a now-dangling trailing connector. "JPMorgan Chase & Co." folds
+    // to "jpmorgan chase and co"; stripping "co" leaves "...chase and",
+    // which would never match the plain "JPMorgan Chase". Removing the
+    // dangling "and" collapses all three forms to "jpmorgan chase".
+    if toks.len() > 1 && toks.last() == Some(&"and") {
         toks.pop();
     }
     toks.join(" ")
@@ -407,6 +428,15 @@ fn initial_surname_matches(short: &str, long: &str) -> bool {
 }
 
 pub(crate) fn collect_emails(e: &Entity) -> std::collections::BTreeSet<String> {
+    // Only *standalone* email aliases are harvested for merging — one
+    // address, no surrounding text. This is identity-grade and the
+    // proven-safe path (train/test B³ precision 1.0). Mining addresses
+    // out of blob aliases (forwarded/quoted header lines) was tried
+    // 2026-05-30 and reverted: even coherence-guarded, a Person atom with
+    // a descriptive multi-token "name" matched almost any address and
+    // became a cross-type merge bridge (a 1,116-atom over-merge spanning
+    // Causey + Houston + Lay + Dynegy). Cleaning blob-packed aliases is a
+    // job for extraction/persistence-time hygiene, not the merge signal.
     let mut out = std::collections::BTreeSet::new();
     if let Some(stripped) = strip_to_email(&e.canonical_name) {
         out.insert(stripped);
@@ -622,5 +652,51 @@ mod tests {
         assert_eq!(fold_name("Kenneth L. Lay"), "kenneth l lay");
         assert_eq!(fold_name("KEN-LAY"), "ken lay");
         assert_eq!(fold_name("<klay@enron.com>"), "klay@enron com");
+    }
+
+    #[test]
+    fn fold_name_normalizes_ampersand_to_and() {
+        // The org-jpmc under-merge: "& Co." vs "and Co." must fold alike.
+        assert_eq!(
+            fold_name("JPMorgan Chase & Co."),
+            fold_name("JPMorgan Chase and Co.")
+        );
+        assert_eq!(fold_name("JPMorgan Chase & Co."), "jpmorgan chase and co");
+        // No-space ampersand still gets word boundaries: "AT&T" → "at and t".
+        assert_eq!(fold_name("AT&T"), "at and t");
+    }
+
+    #[test]
+    fn name_similarity_merges_ampersand_against_written_and() {
+        let amp = ent("JPMorgan Chase & Co.", EntityType::Institution);
+        let written = ent("JPMorgan Chase and Co.", EntityType::Institution);
+        assert!(
+            NameSimilaritySignal::default().check(&amp, &written),
+            "'& Co.' and 'and Co.' name the same org"
+        );
+    }
+
+    #[test]
+    fn ampersand_normalization_does_not_overmerge_distinct_orgs() {
+        let pg = ent("Procter & Gamble", EntityType::Institution);
+        let jpm = ent("JPMorgan Chase & Co.", EntityType::Institution);
+        assert!(!NameSimilaritySignal::default().check(&pg, &jpm));
+    }
+
+    #[test]
+    fn collect_emails_harvests_standalone_only() {
+        // Standalone email aliases are identity-grade and harvested; a
+        // blob alias packing a third party's address is NOT mined for
+        // merging (that path bridged distinct entities and was reverted).
+        let mut lay = ent("Kenneth Lay", EntityType::Person);
+        lay.aliases.push("kenneth.lay@enron.com".into());
+        lay.aliases
+            .push("Fwd from Lynda.L.Phinney@williams.com re: budget".into());
+        let emails = collect_emails(&lay);
+        assert!(emails.contains("kenneth.lay@enron.com"));
+        assert!(
+            !emails.contains("lynda.l.phinney@williams.com"),
+            "blob-packed address must not be harvested for merging, got {emails:?}"
+        );
     }
 }

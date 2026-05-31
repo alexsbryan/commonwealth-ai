@@ -19,6 +19,7 @@ pub mod atlas_eval;
 pub mod atlas_gaps;
 pub mod atlas_phase_cmd;
 pub mod atlas_query;
+pub mod atlas_reconcile;
 pub mod atlas_resolve;
 pub mod atlas_tensions;
 pub mod atlas_tensions_classify;
@@ -193,6 +194,7 @@ pub async fn run_enrich(args: &[String]) -> i32 {
             atlas_phase_cmd::cmd_name_atlas_clusters(rest).await
         }
         "resolve" | "atlas-resolve" => atlas_resolve::cmd_atlas_resolve(rest).await,
+        "reconcile" | "atlas-reconcile" => atlas_reconcile::cmd_atlas_reconcile(rest).await,
         "tensions" | "atlas-tensions" => atlas_tensions::cmd_atlas_tensions(rest).await,
         "tensions-classify" | "atlas-tensions-classify" => {
             atlas_tensions_classify::cmd_atlas_tensions_classify(rest).await
