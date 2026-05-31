@@ -291,10 +291,25 @@ impl Runtime {
         label: &str,
         enabled_corpora: Option<&[String]>,
     ) -> usize {
+        // Score-decay for fanned-out (sub-query) hits. Default 1.0 keeps
+        // the original "compete on equal footing" behaviour. A value <1
+        // makes sub-query hits AUGMENT rather than DISPLACE the base
+        // query's hits: on an already-focused question (e.g. "the Dynegy
+        // transaction") the strong base hits stay atop the window so the
+        // answer doesn't diffuse, while a weak-base broad/multi-aspect
+        // question still surfaces its decayed-but-present sub-query hits.
+        // (Observed: undecayed expansion lifted broad categories +8/+17pt
+        // but regressed the focused `deal` question −25pt; decay targets
+        // exactly that displacement.) Env-tunable for tight iteration.
+        let decay: f32 = std::env::var("SOVEREIGN_DECOMP_DECAY")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+            .filter(|&d| d > 0.0 && d <= 1.0)
+            .unwrap_or(1.0);
         let mut added = 0usize;
         for sq in sub_queries {
             let emb = self.inference.embed_query(sq).await.unwrap_or_default();
-            let hits = self
+            let mut hits = self
                 .search_corpus_indexes_with_overrides(
                     &emb,
                     sq,
@@ -304,11 +319,17 @@ impl Runtime {
                     enabled_corpora,
                 )
                 .await;
+            if decay < 1.0 {
+                for h in &mut hits {
+                    h.score *= decay;
+                }
+            }
             added += hits.len();
             chunks.extend(hits);
         }
         added
     }
+
     /// Abstract-question → concrete article-title expansion.
     ///
     /// Targets the failure mode `decompose_question` doesn't reach:
@@ -387,17 +408,22 @@ impl Runtime {
             .join("\n");
 
         let prompt = format!(
-            "Given the conversation and the user's current question, name 2-3 \
-             specific Wikipedia article titles that would directly answer the \
-             question. Use the exact title an English Wikipedia article would \
-             have (e.g., \"Transistor\", \"Von Neumann architecture\", \
-             \"History of computing hardware\"). If the question pivots to a \
-             new topic, name the titles for the new topic — do not anchor on \
-             the prior subject.\n\n\
+            "Given the conversation and the user's current question, list 2-4 \
+             focused search queries that would retrieve the source documents \
+             answering it. Each query should name ONE specific entity, person, \
+             organization, concept, or subtopic the answer involves — concrete \
+             terms likely to appear verbatim in the documents, NOT a paraphrase \
+             of the broad question. For a multi-part question (\"X, Y, or Z\"), \
+             give a separate query per part so each aspect is retrieved on its \
+             own rather than averaged into one muddy query. Corpus-agnostic: \
+             these may be Wikipedia-style titles (\"Von Neumann architecture\") \
+             or corpus-specific names (\"Dynegy merger\", \"mark-to-market \
+             accounting\"). If the question pivots to a new topic, target the \
+             new topic.\n\n\
              Recent conversation:\n{recent_summary}\n\n\
              Current question: {message}\n\n\
              Reply with JSON only:\n\
-             {{\"titles\": [\"Title 1\", \"Title 2\"]}}"
+             {{\"titles\": [\"query 1\", \"query 2\"]}}"
         );
 
         let schema = serde_json::json!({
