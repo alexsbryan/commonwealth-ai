@@ -11,23 +11,29 @@ you change a subsystem, update its entry in the same PR.
 
 ---
 
-## 1. The four projects
+## 1. The projects
 
 ```
 commonwealth-ai/
-├── oicp-types/          # OICP wire types — no other deps
-├── corpus-engine/       # Knowledge layer (LanceDB + Tantivy)
-├── corpus-engine-scip/  # SCIP call graph + per-language exporter dispatch
-├── sovereign-recipes/   # Recipe TOMLs + generated data — pure data
-├── sovereign/           # Local AI assistant (CLI / desktop / server)
-└── commonwealth/        # Mesh coordination daemon
+├── oicp-types/                # OICP wire types — no other deps
+├── corpus-engine/             # Knowledge layer (LanceDB + Tantivy)
+├── corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
+├── corpus-engine-notes/       # NoteStore + project_docs index (carved out of corpus-engine)
+├── corpus-engine-atos/        # ATOS feature store + plan items + design signals (carved out)
+├── corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance (carved out)
+├── sovereign-recipes/         # Recipe TOMLs + generated data — pure data
+├── sovereign/                 # Local AI assistant (CLI / desktop / server)
+└── commonwealth/              # Mesh coordination daemon
 ```
 
 | Project              | Role                                          | Depends on                                            |
 |----------------------|-----------------------------------------------|-------------------------------------------------------|
 | `oicp-types`         | OICP v0.3 wire types + scoring helpers        | —                                                     |
-| `corpus-engine`      | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `corpus-engine-scip` (treesitter feature) |
+| `corpus-engine`      | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `corpus-engine-scip` (treesitter feature), `corpus-engine-notes`, `corpus-engine-atos` |
 | `corpus-engine-scip` | SCIP call graph store + exporter dispatch     | —                                                     |
+| `corpus-engine-notes`| NoteStore + project-docs index + notes↔alignment sync (carved out of corpus-engine for blast-radius control) | `rusqlite` |
+| `corpus-engine-atos` | ATOS feature store + plan items + DESIGN.md design signals (carved out) | `rusqlite` |
+| `corpus-engine-archaeology` | Git history mining + rough-edge surfacing + atom-provenance eval (carved out) | — |
 | `sovereign-recipes`  | Pure data — recipe TOMLs + bundled assets     | —                                                     |
 | `sovereign`          | Local agent runtime                           | `corpus-engine`, `corpus-engine-scip`, `oicp-types`   |
 | `commonwealth`       | Symmetric mesh daemon                         | `corpus-engine`, `oicp-types`                         |
@@ -110,11 +116,15 @@ Major modules under `corpus-engine/src/`:
   bridges for the tuned policy.
 - `atlas_traversal/` — query layer over atlas graphs
 - `update/` — code/file watchers, delta updates, lint/test watchers
-- `notes.rs`, `features.rs`, `plan_items.rs` — NoteStore + ATOS
-  FeatureStore (SQLite + FTS5)
 - `meta_atlas/` — cross-corpus articulation classifier + index
-- `rough_edges.rs`, `git_archaeology.rs`, `pii.rs`,
-  `alignment_projector.rs` — operator-facing scanners
+- `pii.rs`, `alignment_projector.rs` — operator-facing scanners
+- **Carved out into sibling crates** (see §1): NoteStore +
+  project-docs index → `corpus-engine-notes` (`notes.rs`,
+  `project_docs.rs`); ATOS FeatureStore + plan items + design
+  signals → `corpus-engine-atos` (`features.rs`, `plan_items.rs`,
+  `design_signals.rs`); git archaeology + rough-edges + provenance
+  eval → `corpus-engine-archaeology` (`git_archaeology.rs`,
+  `rough_edges.rs`, `archaeology_eval.rs`)
 
 ### sovereign
 
@@ -1207,15 +1217,20 @@ an entry is sequenced work.
 | Item | Location | Why deferred |
 |------|----------|--------------|
 | `project_cmd.rs` split | `sovereign-cli-dev/src/project_cmd.rs` (~7000 lines) | Subcommand-per-file is the obvious shape; gated on post-found project lifecycle settling so we know which subcommands are sticky vs exploratory. |
-| `embedded.rs` split | `sovereign-inference/src/embedded.rs` (~9500 lines) | Embedded daemon glue — slot management, lifecycle, HTTP handlers, MTP dispatch, sibling pool all cohere today; split when an alternate embedding mode forces the seam. |
-| `commands.rs` (Tauri) split | `sovereign-desktop/src-tauri/src/commands.rs` (~5100 lines) | Tauri command-registration surface; splitting requires re-grouping by feature without breaking the IPC name registry. Coordination cost > current pain. |
+| `embedded.rs` split | `sovereign-inference/src/embedded.rs` (~9636 lines) | Embedded daemon glue — slot management, lifecycle, HTTP handlers, MTP dispatch, sibling pool all cohere today; split when an alternate embedding mode forces the seam. |
+| `commands.rs` (Tauri) split | `sovereign-desktop/src-tauri/src/commands.rs` (~6557 lines) | Tauri command-registration surface; splitting requires re-grouping by feature without breaking the IPC name registry. Highest concurrent-edit rate of the god-objects → first target of the burn-down cadence. |
 | `atos_cmd/run.rs` split | `sovereign-cli-dev/src/atos_cmd/run.rs` (~4700 lines) | ATOS runner loop. Subprocess fan-out, MCP-tool brokerage, milestone advancement, reviewer loop, done-marker accept, run-record persistence all cohere as one state machine today. Split is one-file-per-stage when boundaries stabilise. |
 | `daemon_cmd.rs` split | `sovereign-cli-daemon/src/daemon_cmd.rs` (~3300 lines) | Daemon Runtime construction + serve loop + watcher wiring. Cohesive while watcher subsystems keep settling. |
-| `mesh_cmd.rs` split | `sovereign-cli-llm/src/mesh_cmd.rs` (~3000 lines) | Mesh CLI surface — peer ops, gossip introspection, partition tooling. Cohesive while peer-state semantics keep shifting under self-heal + cloud peering. |
+| `mesh_cmd.rs` split | `sovereign-cli-llm/src/mesh_cmd.rs` (~3546 lines) | Mesh CLI surface — peer ops, gossip introspection, partition tooling. Cohesive while peer-state semantics keep shifting under self-heal + cloud peering. (A stale duplicate `sovereign-cli-dev/src/mesh_cmd.rs` — never compiled — was deleted 2026-06-01.) |
 | `daemon.rs` split | `sovereign-mesh/src/daemon.rs` (~2600 lines) | `EmbeddedDaemon` is the in-process commonwealth+sovereign entry. Pure helpers (`mesh_discovery.rs`) extracted; load-bearing splits (`app_state_builder.rs` + `background_tasks.rs`) unblocked but stay deferred until `MemberRecord.client_port` lands and a real two-daemon integration test against `start_daemon` itself can be built. |
 | `inference_adapter.rs` split | `sovereign-mesh/src/inference_adapter.rs` (~2100 lines) | Pure helpers (`build_self_manifest`, `synthesize_slot_claims`) extracted to `oicp_synthesis.rs`. Wire-shape translation, tool-call envelope parsing, tool-profile policy stay until the tool-call envelope migration settles. |
 | `peer_inference.rs` split | `sovereign-mesh/src/peer_inference.rs` (~2280 lines) | `MeshInferenceProvider` + throughput observation + manifest caching + quarantine. `ThroughputObservedStream` extracted to `throughput_tracking.rs`. `complete_stream_with_id_and_finish` and `complete_stream_with_id` deduplication blocked on `select_route` enum extraction. |
 | `auto_ingest.rs` split | `sovereign-mesh/src/auto_ingest.rs` (~1200 lines) | Auto-collaborate orchestration — `Planning → Handoff → Active → Complete` state machine. Splitting before the cloud-peer flavour settles would re-merge. |
+| `types.rs` split | `sovereign-core/src/types.rs` (~3623 lines) | 17 type families, **228 importers** (leaf dep) — the workspace's #1 incremental-rebuild + merge-conflict bottleneck. Split into `types/{inference,completion,routing,conversation,execution,document,task,memory,ui}.rs` behind a `pub use` façade (zero external churn). Sequenced as PR3 of the tech-debt refactor program. |
+| `sqlite.rs` split | `sovereign-store/src/sqlite.rs` (~3678 lines) | `StateStore` trait-impl hotel — 14 sub-trait impls, one per store concern. Cleanly delineated by trait boundary; split into `stores/<concern>.rs` if it crosses ~4000 lines. |
+| `document_asset.rs` split | `sovereign-tools/src/document_asset.rs` (~3617 lines) | DocumentAssetManager — tiered (T1/T2/T3) ingest orchestration + skeleton/RAPTOR persistence. Splits along the tier boundary once the tiered surface stops evolving. |
+| `runtime/retrieval.rs` split | `sovereign-core/src/runtime/retrieval.rs` (~3385 lines) | Retrieval pipeline — chunk-fetch + atlas grounding + hybrid entity scorer + query expansion. Hot-iteration file (active query-expansion work); split when the retrieval algorithm settles. |
+| `found.rs` split | `sovereign-cli-dev/src/found.rs` (~2750 lines) | `sovereign project found` four-stage founding conversation. Splits one-file-per-stage when the founding flow stabilises. |
 | `MemberRecord.client_port` wire field | `commonwealth-core/src/mesh.rs` + `commonwealth-discovery/src/membership.rs` + `sovereign-mesh/src/daemon.rs::peer_inference_endpoints` + `sovereign-mesh/src/auto_ingest.rs` | Local-side port plumbing landed; **peer-uniformity assumption** remains: `peer_inference_endpoints` rewrites every peer URL with this daemon's client_port, and `auto_ingest` pins port `9742`. Mixed-port mesh deployments need a `client_port` field on `MemberRecord` and a matching slot in the join handshake. Until then, operators who set a non-default `client_port` should configure every peer the same. |
 | Atlas inspector Phase 2 — curation overlay | `sovereign-tools/src/atlas_view/` | Phase 1 ships read-only inspection. Phase 2 adds an `atlas/overlay.sqlite` keyed by `StableAtomKey` (content-hash) so user edits and approval state survive re-extraction. Forward-compat fields (`curation_status`, `overlay_supports`) already on every DTO. |
 | Imports tab — ChatGPT + Gemini extractors | `corpus-engine/src/extractors/` + `sovereign-recipes/conversations-{chatgpt,gemini}/` | v1 of Settings → Imports ships Anthropic only. Plumbing is source-agnostic; lights up once a new `<source>_export` extractor + recipe register. |
@@ -1226,7 +1241,8 @@ an entry is sequenced work.
 | Item | Location | Why deferred |
 |------|----------|--------------|
 | `recipe.rs` split | `corpus-engine/src/recipe.rs` (~3500 lines) | Recipe TOML schema + loader + recipe-authoring tools + parameter resolution + `bundled_recipe_toml(id: &str)` dispatch. The §2-style enumify of `bundled_recipe_toml` (RecipeId enum) is a prerequisite. |
-| `notes.rs` split | `corpus-engine/src/notes.rs` (~3200 lines) | NoteStore façade + FeatureStore schema + persistence migrations + lifecycle + decision-log tools. SQL schemas + migrations couple tightly. |
+| `notes.rs` split | `corpus-engine-notes/src/notes.rs` (~5634 lines) | NoteStore façade + persistence migrations + lifecycle + decision-log tools. **Carved out of `corpus-engine` into its own crate** (blast-radius control) — that isolation was the higher-priority move; the in-file split is still wanted. SQL schemas + migrations couple tightly. |
+| `entity_extraction.rs` split | `corpus-engine/src/enrichment/entity_extraction.rs` (~2930 lines) | Phase-1b entity extraction for personal + conversational domains. Active surface (recent enrichment work); split along the per-domain extractor boundary once it settles. |
 | `atlas/resolution.rs` split | `corpus-engine/src/enrichment/atlas/resolution.rs` (~4500 lines) | Atlas URI resolution + scoring. Hottest-iteration file; splitting churn-heavy code obscures git history while the algorithm is still settling. |
 | `pipeline/runner.rs` split | `corpus-engine/src/enrichment/pipeline/runner.rs` (~3100 lines) | v2 atlas orchestrator. Phase dispatch + ExemplarBank + PhaseCache + step retry all touch the same state. |
 | `engine/mod.rs` split | `corpus-engine/src/engine/mod.rs` (~3000 lines) | `CorpusEngine` façade. Plausible after watcher-driven recipes settle and `ingest_driver` enumify lands. |
@@ -1236,6 +1252,8 @@ an entry is sequenced work.
 
 | Item | Location | Why deferred |
 |------|----------|--------------|
+| `frontdoor.rs` split | `commonwealth-api/src/frontdoor.rs` (~5758 lines) | Harness-protocol → model-native normalizer — 9 concerns (harness detect, tool keeplist, heredoc diagnostics, distiller, path repair, nudges, allowlists, brief). Shares path-canon / tool-rewrite logic with `routes_responses.rs`; sequenced as the harness-unification PR (extract a shared reshaping core), not a bare size split. |
+| `routes_responses.rs` split | `commonwealth-api/src/routes_responses.rs` (~3140 lines) | `/v1/responses` OpenAI-adapter — request/SSE translation + tool rewriting + path canon. The path-canon + tool-rewrite halves dedupe with `frontdoor.rs` into the shared reshaping core (same PR). |
 | Multi-embed-model dispatch | `commonwealth-api/src/routes_inference.rs` | `/v1/embeddings` ignores the `model` field; gated on a second production embed model. |
 | `embed_batch` | `commonwealth-api/src/routes_inference.rs` | Inputs fan out one at a time; gated on a backend that batches more efficiently. |
 | Knowledge replica fanout | `commonwealth-api/src/routes_knowledge.rs` | Knowledge fan-out only hits non-hosted corpora today; gated on merge-dedupe hardening. |
