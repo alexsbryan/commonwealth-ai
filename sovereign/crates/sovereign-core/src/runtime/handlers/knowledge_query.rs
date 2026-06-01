@@ -528,6 +528,7 @@ impl Runtime {
                 "KnowledgeQuery: title-expand retrieval"
             );
         }
+
         audit_pipeline_stage(&chunks, "after_title_expand", message);
 
         // 2c. Noise floor — drop chunks with zero query-token overlap
@@ -546,6 +547,27 @@ impl Runtime {
             );
         }
         audit_pipeline_stage(&chunks, "after_noise_floor", message);
+
+        // 2c'. Entity-typed atom enumeration (opt-in SOVEREIGN_ATOM_ENUM=1).
+        //      For enumeration-class questions ("who were the executives",
+        //      "which companies") the answer is a SET the question never
+        //      names — surface the corpus's own top-degree typed atoms as
+        //      compact name+role virtual chunks. Injected POST noise-floor
+        //      on purpose: the chunks are metadata (no query-token overlap)
+        //      and the floor would drop them. See `enumerate_typed_atom_chunks`.
+        if let Some(atom_chunks) = self
+            .enumerate_typed_atom_chunks(
+                message,
+                context.conversation.enabled_corpora.as_deref(),
+            )
+            .await
+        {
+            tracing::info!(
+                count = atom_chunks.len(),
+                "KnowledgeQuery: atom-enum virtual chunks injected"
+            );
+            chunks.extend(atom_chunks);
+        }
 
         // 2d. Atlas grounding — graph-walk navigation when the
         //     provider exposes the graph layer; bag-of-atoms top-K
