@@ -735,7 +735,8 @@ impl Runtime {
             prominence: (usize, usize), // (degree, alias_count)
             salience: f32,
             corpus: String,
-            chunk_id: String, // first_appearance.chunk_id — the evidence to fetch
+            chunk_id: String,        // first_appearance.chunk_id (numeric OR "sec_NNNN")
+            preview: Option<String>, // passage_preview — FTS key for section-shaped ids
         }
         let outranks = |a: &Candidate, b: &Candidate| -> bool {
             a.prominence.cmp(&b.prominence) == std::cmp::Ordering::Greater
@@ -769,6 +770,7 @@ impl Runtime {
                     salience: e.salience,
                     corpus: id.clone(),
                     chunk_id: e.first_appearance.chunk_id.clone(),
+                    preview: e.first_appearance.passage_preview.clone(),
                 };
                 best.entry(name.to_string())
                     .and_modify(|cur| {
@@ -826,17 +828,47 @@ impl Runtime {
         // they survive corpus-isolation, dedup, and the synthesis
         // snapshot, and they earn their slot via `reweight_by_query_
         // relevance` on actual text instead of a hand-set score (which
-        // reweight would clobber anyway). Numeric chunk_id → direct
-        // LanceDB fetch; non-numeric (slug-shaped SEP/wiki) atoms are
-        // skipped here — their evidence is reachable through the FTS
-        // path in `apply_atlas_grounding`. A skip is a no-op.
+        // reweight would clobber anyway). Resolution is shape-aware:
+        // numeric chunk_id → direct LanceDB fetch; section-shaped id
+        // ("sec_0001", the modern pipelines) → FTS the passage_preview
+        // for the evidence chunk (per atom). An unresolvable atom is a
+        // no-op.
         let mut chunks: Vec<corpus_engine::ScoredChunk> = Vec::new();
         let mut fetched_names: Vec<&str> = Vec::new();
         for (i, (name, c)) in ranked.iter().enumerate() {
-            let Ok(cid) = c.chunk_id.trim().parse::<u64>() else {
-                continue;
+            // Shape-aware resolution to a REAL chunk. Numeric chunk_id
+            // (legacy corpus-mode atoms) → direct LanceDB fetch.
+            // Section-shaped id ("sec_0001", the modern pipelines) has no
+            // direct row → FTS the corpus for its passage_preview and
+            // take the top hit (the atom's evidence chunk). Either way
+            // the result is a real chunk (real id + content) that earns
+            // its rank via reweight and survives the pipeline.
+            let mut fetched = match c.chunk_id.trim().parse::<u64>() {
+                Ok(cid) => self.fetch_chunk_by_id(&c.corpus, cid).await,
+                Err(_) => None,
             };
-            let Some(mut chunk) = self.fetch_chunk_by_id(&c.corpus, cid).await else {
+            if fetched.is_none() {
+                if let Some(pv) = c
+                    .preview
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|p| !p.is_empty())
+                {
+                    fetched = self
+                        .search_corpus_indexes_with_overrides(
+                            &[],
+                            pv,
+                            1,
+                            "AtomEnum",
+                            None,
+                            enabled_corpora,
+                        )
+                        .await
+                        .into_iter()
+                        .next();
+                }
+            }
+            let Some(mut chunk) = fetched else {
                 continue;
             };
             // Seed score; reweight overwrites it from real content
