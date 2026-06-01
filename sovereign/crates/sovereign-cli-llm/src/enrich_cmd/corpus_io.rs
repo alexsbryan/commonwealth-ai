@@ -126,6 +126,59 @@ fn corpus_source_id(cfg: &EnrichConfig) -> Option<String> {
 ///
 /// The manifest's chunk_ids are pre-populated at init time, so this
 /// path doesn't need a chunker — it just fetches and concatenates.
+/// Fetch corpus chunks by LanceDB row id from `source_corpus_id`,
+/// preserving the real ids. Shared by `rebuild_corpus_state_from_corpus`
+/// (which flattens them into chapter bodies) and `build_corpus` (which
+/// needs the per-chunk REAL id so `first_appearance.chunk_id` resolves
+/// back to the retrieval corpus — the atlas-directs-retrieval contract).
+///
+/// Runs the async LanceDB read on a separate OS thread with its own
+/// current-thread runtime, to avoid "cannot start a runtime within a
+/// runtime" panics + `block_in_place` deadlocks with LanceDB's
+/// internal scheduling (every caller is reached from async context).
+fn fetch_enrichment_chunks(
+    source_corpus_id: &str,
+    needed_ids: &[u64],
+) -> Result<Vec<corpus_engine::EnrichmentChunkRow>> {
+    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.data.dir)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join(".sovereign")
+        });
+    let noop_embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(Vec::<f32>::new()) }));
+    let engine = CorpusEngine::new(
+        data_dir.join("recipes"),
+        data_dir.join("indexes"),
+        noop_embed,
+    );
+    let source_corpus = source_corpus_id.to_string();
+    let ids = needed_ids.to_vec();
+    std::thread::scope(|s| {
+        let handle = s.spawn(move || -> Result<Vec<corpus_engine::EnrichmentChunkRow>> {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| {
+                    Error::Database(format!("fetch_enrichment_chunks: tokio build: {e}"))
+                })?;
+            rt.block_on(async {
+                let index = engine
+                    .open_index_for_corpus(&source_corpus)
+                    .await
+                    .map_err(|e| {
+                        Error::Database(format!("open source corpus `{source_corpus}`: {e}"))
+                    })?;
+                index.chunks_by_ids(&ids).await
+            })
+        });
+        handle
+            .join()
+            .map_err(|_| Error::Database("fetch_enrichment_chunks: worker panicked".into()))?
+    })
+}
+
 fn rebuild_corpus_state_from_corpus(
     cfg: &EnrichConfig,
     source_corpus_id: &str,
@@ -141,28 +194,10 @@ fn rebuild_corpus_state_from_corpus(
         ))
     })?;
 
-    // Resolve indexes dir from setup config (mirrors the
-    // `--from-corpus` adapter in init.rs).
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
-        .map(|c| c.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join(".sovereign")
-        });
-    let recipes_dir = data_dir.join("recipes");
-    let indexes_dir = data_dir.join("indexes");
-    let noop_embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(Vec::<f32>::new()) }));
-    let engine = CorpusEngine::new(recipes_dir, indexes_dir, noop_embed);
-
-    // Collect every chunk_id referenced by the manifest. Subset
-    // extraction runs ask only for a few chapters, but every caller
-    // of `rebuild_corpus_state` still wants every chapter materialised
-    // in `inputs` (the selection filter runs downstream). Even so,
-    // the fetch is bounded by the manifest's chunk_ids, NOT the
-    // entire source corpus — this is the difference between loading
-    // a few hundred KB and loading the full Wikipedia LanceDB into
-    // memory. See `chunks_by_ids` doc-comment.
+    // Collect every chunk_id referenced by the manifest. The fetch is
+    // bounded by the manifest's chunk_ids, NOT the entire source corpus
+    // (see `chunks_by_ids`); subset runs still materialise every chapter
+    // — the selection filter runs downstream.
     let needed_ids: Vec<u64> = {
         let mut s: Vec<u64> = manifest
             .chapters
@@ -173,40 +208,7 @@ fn rebuild_corpus_state_from_corpus(
         s.dedup();
         s
     };
-
-    // The phase runner is sync; rebuild_corpus_state is sync too.
-    // Every caller is reached from an async context. To avoid both
-    // (a) "Cannot start a runtime from within a runtime" when
-    // building a fresh runtime, and (b) deadlocks with
-    // `block_in_place + Handle::current().block_on()` interacting
-    // with LanceDB's internal task scheduling, run the async read
-    // on a *separate OS thread* with its own current-thread tokio
-    // runtime. The parent runtime is untouched.
-    let source_corpus = source_corpus_id.to_string();
-    let chunks = std::thread::scope(|s| {
-        let handle = s.spawn(move || -> Result<Vec<corpus_engine::EnrichmentChunkRow>> {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .map_err(|e| {
-                    Error::Database(format!("rebuild_corpus_state: tokio build: {e}"))
-                })?;
-            rt.block_on(async {
-                let index = engine
-                    .open_index_for_corpus(&source_corpus)
-                    .await
-                    .map_err(|e| {
-                        Error::Database(format!(
-                            "open source corpus `{source_corpus}`: {e}"
-                        ))
-                    })?;
-                index.chunks_by_ids(&needed_ids).await
-            })
-        });
-        handle
-            .join()
-            .map_err(|_| Error::Database("rebuild_corpus_state: worker panicked".into()))?
-    })?;
+    let chunks = fetch_enrichment_chunks(source_corpus_id, &needed_ids)?;
 
     // Build a chunk_id → content map for fast lookup.
     let chunk_text: std::collections::HashMap<u64, String> =
@@ -248,23 +250,45 @@ fn rebuild_corpus_state_from_corpus(
 /// `chapter_regex` do not change.
 pub fn build_corpus(cfg: &EnrichConfig) -> Result<(CorpusContext, ChapterManifest)> {
     let (chapters, manifest) = rebuild_corpus_state(cfg)?;
-    if corpus_source_id(cfg).is_some() {
-        // Corpus mode — every chapter's chunk_ids point at LanceDB
-        // rows we already pulled in `rebuild_corpus_state_from_corpus`.
-        // For phases that consume `CorpusContext.chunks` (Phase 3+),
-        // synthesise paragraph-shaped `ChunkRecord`s directly from
-        // each chapter's body. The chapter is the section, so
-        // `section_id == chapter_id`.
+    if let Some(src) = corpus_source_id(cfg) {
+        // Corpus mode. Emit one `ChunkRecord` per REAL corpus chunk,
+        // carrying the actual LanceDB row id as `ChunkRecord.id`. This
+        // is the atlas-directs-retrieval contract: an atom's
+        // `first_appearance.chunk_id` (which derives from
+        // `ChunkRecord.id`) must resolve back to a row in the retrieval
+        // corpus so retrieval can fetch the evidence. The previous code
+        // split chapter bodies on "\n\n" and assigned fresh sequential
+        // ids — a *different* chunking than the source corpus — which
+        // severed the atom→chunk link (an atom said chunk 1; corpus row
+        // 1 was an unrelated email). One ChunkRecord per real chunk,
+        // real id preserved; `section_id == chapter_id`.
+        let needed_ids: Vec<u64> = {
+            let mut s: Vec<u64> = manifest
+                .chapters
+                .iter()
+                .flat_map(|c| c.chunk_ids.iter().copied())
+                .collect();
+            s.sort_unstable();
+            s.dedup();
+            s
+        };
+        let content_by_id: std::collections::HashMap<u64, String> =
+            fetch_enrichment_chunks(&src, &needed_ids)?
+                .into_iter()
+                .map(|r| (r.id, r.content))
+                .collect();
         let mut chunks = Vec::new();
-        let mut next_id: u64 = 0;
-        for ch in &chapters {
-            for para in ch.text.split("\n\n").filter(|p| !p.trim().is_empty()) {
-                chunks.push(ChunkRecord {
-                    id: next_id,
-                    section_id: ch.chapter_id.clone(),
-                    text: para.trim().to_string(),
-                });
-                next_id += 1;
+        for ch in &manifest.chapters {
+            let mut ids = ch.chunk_ids.clone();
+            ids.sort_unstable();
+            for cid in ids {
+                if let Some(text) = content_by_id.get(&cid) {
+                    chunks.push(ChunkRecord {
+                        id: cid, // REAL LanceDB row id — resolvable at retrieval time
+                        section_id: ch.id.clone(),
+                        text: text.clone(),
+                    });
+                }
             }
         }
         let chapter_titles: Vec<String> = chapters.iter().map(|c| c.title.clone()).collect();
