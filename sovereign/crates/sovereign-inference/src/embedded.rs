@@ -5055,21 +5055,40 @@ impl EmbeddedLlamaCpp {
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
         let fast_arch = read_gguf_arch(&fast.model);
-        let fast_short_unsafe_arch = is_recurrent_arch(&fast_arch);
+        // FastShort's `from_existing_model` cannot propagate `n_rs_seq`,
+        // so its ctx crashes (Decode Error -3) on any model whose decode
+        // path provisions recurrent-state seq slots: a genuinely
+        // recurrent arch, OR an MTP model (the speculative draft/verify
+        // needs n_rs_seq — same gate as `is_mtp_model` at slot load,
+        // which is `mtp_by_name || mtp_by_arch`). The prior check only
+        // covered the recurrent-arch half, so an MTP-by-NAME model whose
+        // arch isn't classified recurrent (e.g. Qwopus*-MTP on a qwen3
+        // arch) slipped through and crashed every continuous-batched
+        // call. Detect MTP by name here too; a `SOVEREIGN_MTP_DISABLE`d
+        // model runs single-token, so FastShort is safe for it. Skip for
+        // both unsafe cases — callers route to `fast` (n_seq_max=1),
+        // forfeiting the speedup rather than crashing.
+        // [[invariant_fast_short_recurrent_arch]]
+        let mtp_disabled_at_load = std::env::var("SOVEREIGN_MTP_DISABLE")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        let fast_short_unsafe = is_recurrent_arch(&fast_arch)
+            || (fast.model_id.to_lowercase().contains("mtp") && !mtp_disabled_at_load);
         let (fast_short, fast_short_coalescer) = if fast_short_disabled {
             tracing::info!(
                 slot = "fast_short",
                 "skipped (SOVEREIGN_FAST_SHORT_DISABLE=1)"
             );
             (None, None)
-        } else if fast_short_unsafe_arch {
+        } else if fast_short_unsafe {
             tracing::warn!(
                 slot = "fast_short",
                 arch = %fast_arch,
                 model_id = %fast.model_id,
-                "skipped — fast slot model has recurrent layers; FastShort \
-                 ctx would crash on first decode (n_rs_seq not propagated \
-                 through from_existing_model). All callers route to `fast`."
+                "skipped — fast slot model is MTP or recurrent; FastShort \
+                 ctx would crash on first decode (Decode Error -3: n_rs_seq \
+                 not propagated through from_existing_model). All callers \
+                 route to `fast`."
             );
             (None, None)
         } else {
