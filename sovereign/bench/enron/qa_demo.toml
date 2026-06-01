@@ -1,0 +1,66 @@
+# Enron demo question set — the 5 hero questions for the investor/partner
+# walkthrough (see DEMO_RUNBOOK.md). Curated from qa.toml for narrative
+# punch + coverage of the differentiated capabilities:
+#   1 exec_cast       → entity resolution / roles
+#   2 ljm_fraud       → grounded answer on the fraud-core structures
+#   3 dynegy_rescue   → the money shot (grounded in Lay's Nov-2001 mail, cited)
+#   4 financial_state → COMPOUND question → showcases query decomposition
+#   5 counterparties  → network (exercises the reconciled org entities)
+#
+# Run captured with:
+#   SOVEREIGN_TITLE_EXPAND=1 SOVEREIGN_DECOMP_DECAY=0.6 \
+#     sovereign bench all --synth --isolate --filter enron/qa_demo
+[bank]
+name = "enron-demo-v0"
+corpus = "enron-sample-multi-wide"
+description = "5 hero questions for the Enron investor/partner demo runbook."
+
+[[questions]]
+id = "exec_cast"
+category = "entity"
+question = """
+Who were the senior executives running Enron, and what was each one
+responsible for?
+"""
+expected_facts = ["Kenneth Lay", "chairman", "Jeffrey Skilling", "chief executive", "Andrew Fastow", "chief financial officer"]
+split = "demo"
+
+[[questions]]
+id = "ljm_fraud"
+category = "fraud_structure"
+question = """
+What do these communications reveal about the LJM and Raptor
+partnerships, and which executive was behind them?
+"""
+expected_facts = ["LJM", "Raptor", "Fastow", "off-balance-sheet", "partnership"]
+split = "demo"
+
+[[questions]]
+id = "dynegy_rescue"
+category = "deal"
+question = """
+Describe the proposed Dynegy rescue of Enron as it appears in Kenneth
+Lay's communications to employees.
+"""
+expected_facts = ["Dynegy", "merger", "Enron", "stock-for-stock"]
+split = "demo"
+
+[[questions]]
+id = "financial_state"
+category = "financial_structure"
+question = """
+What was being said internally about Enron's financial condition — its
+credit ratings, mark-to-market accounting, and off-balance-sheet exposure?
+"""
+expected_facts = ["credit rating", "mark-to-market", "off-balance-sheet", "bankruptcy"]
+split = "demo"
+
+[[questions]]
+id = "counterparty_network"
+category = "network"
+question = """
+Which energy companies appear as counterparties or competitors in the
+executives' correspondence?
+"""
+expected_facts = ["Dynegy", "Calpine", "Pacific Gas", "El Paso", "Williams"]
+split = "demo"
