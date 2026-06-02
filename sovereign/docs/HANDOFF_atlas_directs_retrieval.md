@@ -72,11 +72,18 @@ directs retrieval to the now-present gold.
 ## Model: Qwen3.6-35B-A3B-UD-MTP-IQ4_NL — fast, but disable MTP
 
 A3B MoE (3B active) at IQ4 → **~10× the 4B** for atlas extract (~15-25s/ch vs 155s/ch),
-clean (0 parse-fails). **GOTCHA:** with MTP on, sustained sequential extract hits
-`MTP verify decode failed: Decode Error 1: NoKvCacheSlot` (~chapter 109) and the build halts.
-Run with `SOVEREIGN_MTP_DISABLE=1` in the daemon env (pidfile-managed → inherits start-cmd
-env: `SOVEREIGN_MTP_DISABLE=1 sovereign daemon start`). Slot loads `mtp=false`, no slot errors,
-speed holds (MoE is fast natively). This is a real MTP bug worth reporting separately.
+clean (0 parse-fails). **MTP NoKvCacheSlot bug — ROOT-CAUSED + FIXED (`f8f8aea3`).** It was
+NOT a leak: `generate_sync_mtp`'s `clamp_max_tokens` reserved KV room for generated tokens but
+not for the `n_draft_max`(=3) speculative draft tokens the verify decode appends at `n_past`.
+A chapter whose prompt+output fills `n_ctx` (16128) leaves no slot for the draft window →
+`Decode Error 1: NoKvCacheSlot`. Small chapters always had headroom (ran clean for ~108), so it
+died on the first context-filling chapter. Fix: clamp MTP generation to `n_ctx - n_draft_max -
+1`. Validated: the exact failing chapter now runs through MTP (loads `mtp_disabled_at_load=false`)
+with no slot error. **MTP can stay on** (no `SOVEREIGN_MTP_DISABLE` needed). The daemon must run
+a binary built ≥ `f8f8aea3` (the release `target/release/sovereign-cli-daemon` is current).
+Note: one genuinely oversized chapter (`sec_03271`, a daily-power-report newsletter) still fails
+on a *separate* cause — output truncates at the context cap → invalid JSON — which `--skip-build`
+routes around; that's a per-chapter size issue, not MTP.
 
 ## Current daemon/atlas state (IMPORTANT)
 
