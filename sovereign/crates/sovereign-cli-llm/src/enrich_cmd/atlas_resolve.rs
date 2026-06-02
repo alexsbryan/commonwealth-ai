@@ -16,7 +16,7 @@
 //! recomputes 3a internally so the atom ids remain consistent
 //! across the two passes.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::atlas::{
     resolve_entities_and_events, resolve_step_3b, write_atlas, write_atlas_full, ATLAS_DIRNAME,
@@ -24,6 +24,7 @@ use corpus_engine::enrichment::atlas::{
 use corpus_engine::enrichment::pipeline::{
     ExtractedQuestion, Phase1Output, PhaseCache, PipelinePhase, PipelineRegistry, SectionExtraction,
 };
+use corpus_engine::types::EmbedFn;
 
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
@@ -169,19 +170,57 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
     };
     let (embed, _chat, _chat_with_tokens) = client.into_closures_with_tokens();
 
+    // Resolve into the live atlas dir. The `enrich delta` command
+    // calls `resolve_into_dir` directly with a staging tempdir; this
+    // wrapper preserves the original "write to the corpus's canonical
+    // atlas/" behaviour byte-for-byte.
+    let atlas_dir = atlas_dir_for(&cfg.corpus_id);
+    match resolve_into_dir(&cfg, &sections, &embed, &atlas_dir, parsed.phase).await {
+        Ok(()) => 0,
+        Err(e) => {
+            eprintln!("error: {e}");
+            1
+        }
+    }
+}
+
+/// Resolve the section sketches into `target_atlas_dir` (Step 3a +
+/// optional 3b/typed extensions), writing `atoms.json`, `edges.json`,
+/// `trajectories.json`, and `resolution_failures.json`.
+///
+/// Extracted from `cmd_atlas_resolve` so two callers can share the
+/// resolve→write body against *different* output directories:
+///   - `cmd_atlas_resolve` passes the corpus's live `atlas/` dir.
+///   - `enrich delta` (`delta_cmd::cmd_delta`) passes a throwaway
+///     staging tempdir, then content-hashes + merges the result into
+///     the live atlas via `apply_atom_delta` — never overwriting the
+///     live atlas wholesale.
+///
+/// Behaviour for the live-dir caller is identical to the pre-refactor
+/// in-lined body: 3a always runs; 3b/typed extensions run when
+/// `phase` is `P3b`/`All`; the writer overwrites atomically; failures
+/// are always persisted (even empty) so the aggregator can tell
+/// "ran cleanly" from "never ran".
+///
+/// On the error path the message is a complete sentence (the caller
+/// just prefixes `error: ` and returns nonzero) so this fn carries no
+/// process-exit policy of its own.
+pub(crate) async fn resolve_into_dir(
+    cfg: &EnrichConfig,
+    sections: &[SectionExtraction],
+    embed: &EmbedFn,
+    target_atlas_dir: &Path,
+    phase: ResolvePhase,
+) -> Result<(), String> {
     // Step 3a: always runs. Step 3b is re-resolved from 3a's
     // output so the atom ids remain consistent regardless of
     // whether the caller chose 3a-only or 3b/all.
-    let step_3a = match resolve_entities_and_events(&sections, &embed).await {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("error: atlas resolution (3a) failed: {e}");
-            return 1;
-        }
-    };
+    let step_3a = resolve_entities_and_events(sections, embed)
+        .await
+        .map_err(|e| format!("atlas resolution (3a) failed: {e}"))?;
 
-    let atlas_dir = atlas_dir_for(&cfg.corpus_id);
-    let want_3b = matches!(parsed.phase, ResolvePhase::P3b | ResolvePhase::All);
+    let atlas_dir = target_atlas_dir;
+    let want_3b = matches!(phase, ResolvePhase::P3b | ResolvePhase::All);
 
     // Collect structured drops across both resolution phases so the
     // aggregator (`sovereign enrich errors`) can surface them grouped
@@ -192,13 +231,8 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
     resolution_failures.extend(step_3a.failures.iter().cloned());
 
     let written = if want_3b {
-        let step_3b = match resolve_step_3b(&sections, &step_3a.entities, &step_3a.events) {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("error: atlas resolution (3b) failed: {e}");
-                return 1;
-            }
-        };
+        let step_3b = resolve_step_3b(sections, &step_3a.entities, &step_3a.events)
+            .map_err(|e| format!("atlas resolution (3b) failed: {e}"))?;
         resolution_failures.extend(step_3b.failures.iter().cloned());
 
         // Merge 3a + 3b edges — they use distinct id ranges so no
@@ -214,7 +248,7 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
         // Concedes edges can target already-resolved positions /
         // claims.
         let typed = corpus_engine::enrichment::atlas::resolution::resolve_type_extensions(
-            &sections,
+            sections,
             &step_3a.entities,
             &[], // no pre-existing positions on first run
             &step_3b.claims,
@@ -245,7 +279,7 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
         edges.extend(typed.new_edges.iter().cloned());
 
         let result = write_atlas_full(
-            &atlas_dir,
+            atlas_dir,
             &entities,
             &step_3a.events,
             &step_3b.states,
@@ -281,14 +315,13 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
                 w
             }
             Err(e) => {
-                eprintln!("error: writing atlas files: {e}");
-                return 1;
+                return Err(format!("writing atlas files: {e}"));
             }
         }
     } else {
         // 3a-only path — mirrors the original behaviour.
         match write_atlas(
-            &atlas_dir,
+            atlas_dir,
             &step_3a.entities,
             &step_3a.events,
             &step_3a.edges,
@@ -300,8 +333,7 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
                 w
             }
             Err(e) => {
-                eprintln!("error: writing atlas files: {e}");
-                return 1;
+                return Err(format!("writing atlas files: {e}"));
             }
         }
     };
@@ -322,7 +354,7 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
     // the file exists. The schema-versioned file is atomic-safe so
     // a mid-run interrupt leaves the prior state intact.
     match corpus_engine::enrichment::atlas::write_atlas_failures(
-        &atlas_dir,
+        atlas_dir,
         &resolution_failures,
     ) {
         Ok(path) => {
@@ -342,10 +374,17 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
         }
     }
 
-    0
+    Ok(())
 }
 
-fn collect_section_extractions(chapters: &[ExtractedQuestion]) -> Vec<SectionExtraction> {
+/// Collect the per-section atlas sketches from a cached
+/// `Phase1Output`'s chapters. Chapters that don't carry a
+/// `section_extraction` (legacy / pre-atlas runs) are skipped.
+/// Shared with `delta_cmd` (the `enrich delta` subcommand reuses the
+/// same filter against its subset cache).
+pub(crate) fn collect_section_extractions(
+    chapters: &[ExtractedQuestion],
+) -> Vec<SectionExtraction> {
     chapters
         .iter()
         .filter_map(|c| c.section_extraction.clone())
@@ -357,7 +396,7 @@ fn atlas_dir_for(corpus_id: &str) -> PathBuf {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ResolvePhase {
+pub(crate) enum ResolvePhase {
     P3a,
     P3b,
     All,

@@ -467,6 +467,11 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
         rows,
         parsed.limit_articles,
         parsed.include_articles.clone(),
+        // First-run init numbers chapters from `sec_00001`. The
+        // incremental `enrich delta-manifest` path passes a higher
+        // start ordinal so newly-appended chapters continue past the
+        // existing manifest length.
+        1,
     ) {
         Ok(m) => m,
         Err(e) => {
@@ -592,11 +597,20 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
 /// Falls back to `title` as the article-grouping key when
 /// `source_doc_id` is absent — older ingestions may have one but
 /// not the other.
-fn build_manifest_from_corpus_rows(
+///
+/// `start_ordinal` is the first chapter ordinal to assign. First-run
+/// `enrich init --from-corpus` passes `1` (chapters are
+/// `sec_00001 …`). The incremental `enrich delta-manifest` path passes
+/// `existing_manifest_len + 1` so newly-detected chapters get
+/// `sec_NNNNN` ids that continue past the live manifest without
+/// colliding — the `chapter` field + `ordinal` metadata follow the
+/// same numbering.
+pub(crate) fn build_manifest_from_corpus_rows(
     corpus_id: &str,
     rows: Vec<corpus_engine::EnrichmentChunkRow>,
     limit_articles: Option<usize>,
     include_articles: Option<Vec<String>>,
+    start_ordinal: u32,
 ) -> Result<ChapterManifest, String> {
     use corpus_engine::WikipediaChunkMetadata;
 
@@ -741,9 +755,12 @@ fn build_manifest_from_corpus_rows(
         kept_articles.len(),
     );
 
-    // Emit one ChapterEntry per surviving (article, section).
+    // Emit one ChapterEntry per surviving (article, section). The
+    // loop pre-increments `chapter_ord`, so seed it one below
+    // `start_ordinal` (saturating so a stray `0` still yields a valid
+    // `sec_00001` rather than underflowing).
     let mut manifest = ChapterManifest::new(corpus_id);
-    let mut chapter_ord: u32 = 0;
+    let mut chapter_ord: u32 = start_ordinal.saturating_sub(1);
     for ((article_key, _section_key), mut bucket) in buckets {
         if !kept_articles.contains(&article_key) {
             continue;
