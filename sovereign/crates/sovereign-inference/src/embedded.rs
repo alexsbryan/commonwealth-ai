@@ -2204,7 +2204,21 @@ impl ModelSlot {
         }
 
         let n_ctx = target_ctx.n_ctx() as usize;
-        let max_tokens = clamp_max_tokens(request.max_tokens, tokens.len(), n_ctx)?;
+        // Reserve KV headroom for the verify batch's speculative draft
+        // tokens. Each verify decode places [last_token, ..n_draft_max]
+        // at positions starting at `n_past`; if generation is allowed to
+        // fill all of n_ctx, that batch overflows the KV cache and
+        // llama_decode returns "Decode Error 1: NoKvCacheSlot". Observed
+        // 2026-06-02: a 196-chapter referential atlas delta on a 16128-ctx
+        // primary slot ran clean for ~108 small chapters, then died on the
+        // first entity-rich chapter whose prompt+output filled the
+        // context — MTP had no slot left for its drafts. Clamping
+        // generation to leave n_draft_max+1 free slots fixes it (a prompt
+        // that's itself within the draft window of n_ctx makes
+        // clamp_max_tokens error, which the outer quarantine demotes to
+        // SingleToken — the correct fallback for a near-full context).
+        let mtp_ctx = n_ctx.saturating_sub(n_draft_max as usize + 1);
+        let max_tokens = clamp_max_tokens(request.max_tokens, tokens.len(), mtp_ctx)?;
 
         // Prefill: decode the entire prompt as one batch with
         // logits=true on every position. MTP needs that flag set
