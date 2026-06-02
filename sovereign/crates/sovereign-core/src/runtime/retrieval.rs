@@ -594,20 +594,28 @@ impl Runtime {
         let prompt = format!(
             "Classify the question on ONE axis: ENUMERATE or LOOKUP.\n\n\
              ENUMERATE — its core ask is for MULTIPLE same-typed entities (a \
-             LIST of several) that the question does NOT name. The requested \
-             category must be PLURAL: people, companies / organizations, \
-             places, concepts, works. A trailing descriptive clause (\"… and \
-             what each did\", \"… and how they relate\") does NOT change this; \
-             the core ask is still the set, so it is still ENUMERATE.\n\
+             LIST of several) that the question does NOT name — it asks \
+             WHICH or WHO without naming the members, expecting the set as \
+             the answer. The requested category must be PLURAL: people, \
+             companies / organizations, places, concepts, works. A trailing \
+             descriptive clause (\"… and what each did\", \"… and how they \
+             relate\") does NOT change this; the core ask is still the set, \
+             so it is still ENUMERATE.\n\
              - \"which organizations were involved\" -> enumerate / institution\n\
              - \"who were the members, and what did each contribute\" -> enumerate / person\n\
              - \"what concepts do these texts discuss\" -> enumerate / concept\n\
              - \"what places are mentioned\" -> enumerate / place\n\n\
-             LOOKUP — it asks for ONE entity, names its subject(s), or asks to \
-             explain / describe / justify a specific thing or event. Asking \
+             LOOKUP — it asks for ONE entity, NAMES the specific entit(ies) \
+             it is about, or asks to explain / describe / justify a specific \
+             thing or event. The decisive test: if the question already \
+             names the entities it concerns, it is LOOKUP — it investigates \
+             those named things, it does NOT enumerate an unknown set. This \
+             holds even when SEVERAL entities are named and even when the \
+             phrasing is plural (\"the X and Y partnerships\"). Asking \
              \"which/who\" about a SINGLE entity is LOOKUP, not enumerate.\n\
              - \"who led the negotiation\" (one entity) -> lookup\n\
-             - \"what does this say about a specific named deal\" (names its subjects) -> lookup\n\
+             - \"what does this say about a specific named deal\" (names its subject) -> lookup\n\
+             - \"what do these reveal about the Alpha and Beta partnerships\" (names its subjects, even though several) -> lookup\n\
              - \"describe the agreement\" -> lookup\n\
              - \"why did the project fail\" -> lookup\n\n\
              If enumerate, name the entity_type from: person, institution, \
@@ -747,6 +755,7 @@ impl Runtime {
             corpus: String,
             chunk_id: String,        // first_appearance.chunk_id (numeric OR "sec_NNNN")
             preview: Option<String>, // passage_preview — FTS key for section-shaped ids
+            embed_text: String,      // "name. description" — relevance-rank key
         }
         let outranks = |a: &Candidate, b: &Candidate| -> bool {
             a.prominence.cmp(&b.prominence) == std::cmp::Ordering::Greater
@@ -756,6 +765,12 @@ impl Runtime {
         // keeping the most-prominent record. The cap then bounds the
         // injection regardless of how many atoms of a type the corpus
         // holds (4,525 institutions here, most address-book noise).
+        let filter_disabled =
+            std::env::var("SOVEREIGN_ATOM_ENUM_NOFILTER").ok().as_deref() == Some("1");
+        // Relation-evidence candidates (default on; SOVEREIGN_ATOM_ENUM_RELATIONS=0
+        // to ablate). See the relation loop below for the rationale.
+        let include_relations =
+            std::env::var("SOVEREIGN_ATOM_ENUM_RELATIONS").ok().as_deref() != Some("0");
         let mut best: HashMap<String, Candidate> = HashMap::new();
         for id in &corpus_ids {
             let Some(graph) = provider.graph(id) else {
@@ -772,15 +787,72 @@ impl Runtime {
                 if name.is_empty() {
                     continue;
                 }
+                // Collective-noun filter (person enumeration). The
+                // extractor sometimes types group phrases as person
+                // entities ("Enron executives", "Enron management",
+                // "Enron analysts"). These paraphrase a "who were the
+                // executives" question, so cosine ranks them highly, yet
+                // they name no individual and pollute the enumerated set
+                // (and crowd out real people like Fastow). A real
+                // individual's name never contains a generic group noun;
+                // drop person atoms whose name does. Person-only:
+                // institutions legitimately contain "Committee"/"Board"
+                // (e.g. the Special Committee on Related Party
+                // Transactions that actually investigated LJM). Env hatch
+                // SOVEREIGN_ATOM_ENUM_NOFILTER=1 disables for ablation.
+                if target_type == "person" && !filter_disabled {
+                    const GROUP_NOUNS: &[&str] = &[
+                        "executives",
+                        "executive",
+                        "management",
+                        "mgmt",
+                        "employees",
+                        "employee",
+                        "team",
+                        "staff",
+                        "analysts",
+                        "analyst",
+                        "representatives",
+                        "representative",
+                        "board",
+                        "directors",
+                        "director",
+                        "members",
+                        "member",
+                        "officials",
+                        "official",
+                        "personnel",
+                        "leadership",
+                        "committee",
+                        "everyone",
+                        "people",
+                        "folks",
+                        "others",
+                    ];
+                    let lname = name.to_lowercase();
+                    if lname
+                        .split(|c: char| !c.is_alphanumeric())
+                        .any(|tok| GROUP_NOUNS.contains(&tok))
+                    {
+                        continue;
+                    }
+                }
                 let atom_id = atom.id().as_str();
                 let degree = graph.edges_by_source.get(atom_id).map_or(0, Vec::len)
                     + graph.edges_by_target.get(atom_id).map_or(0, Vec::len);
+                let desc = e.description.trim();
+                let embed_text = if desc.is_empty() {
+                    name.to_string()
+                } else {
+                    format!("{name}. {desc}")
+                };
                 let cand = Candidate {
                     prominence: (degree, e.aliases.len()),
                     salience: e.salience,
                     corpus: id.clone(),
                     chunk_id: e.first_appearance.chunk_id.clone(),
                     preview: e.first_appearance.passage_preview.clone(),
+                    embed_text,
                 };
                 best.entry(name.to_string())
                     .and_modify(|cur| {
@@ -789,6 +861,71 @@ impl Runtime {
                         }
                     })
                     .or_insert(cand);
+            }
+
+            // Relation-evidence candidates. For PREDICATE enumerations
+            // ("which energy companies are COUNTERPARTIES / competitors")
+            // the answer set is defined by a RELATIONSHIP, not an entity
+            // type — and an entity's first_appearance chunk proves only
+            // that it exists, not that it holds the relationship (so the
+            // counterparty turn could name Calpine but never ground it as
+            // a counterparty). Relation atoms carry the relationship-
+            // bearing evidence chunk directly ("beat out Reliant and TXU",
+            // "competing for partnership", "potential acquisition target
+            // of"). We add them to the same candidate pool and let the
+            // relevance/RRF re-rank surface them when the query is
+            // relational — the relation's `label + participants` embeds
+            // near the predicate, and the fetched evidence chunk STATES
+            // the relationship. On non-relational ("who were the X")
+            // queries relations cosine-rank low and the entity atoms win,
+            // so this is additive, not a regression to entity enumeration.
+            // Keyed by display string so identical relations dedup without
+            // colliding with entity names.
+            if include_relations {
+                for atom in graph.atoms_by_id.values() {
+                    let AtomEnvelope::Relation(r) = atom else {
+                        continue;
+                    };
+                    let label = r.label.trim();
+                    if label.is_empty() || r.evidence.is_empty() {
+                        continue;
+                    }
+                    let parts: Vec<&str> = r
+                        .participants
+                        .iter()
+                        .filter_map(|pid| graph.atoms_by_id.get(pid.as_str()))
+                        .filter_map(|a| match a {
+                            AtomEnvelope::Entity(e) => {
+                                let n = e.canonical_name.trim();
+                                (!n.is_empty()).then_some(n)
+                            }
+                            _ => None,
+                        })
+                        .collect();
+                    let ev = &r.evidence[0];
+                    let display = if parts.is_empty() {
+                        label.to_string()
+                    } else {
+                        format!("{label} ({})", parts.join(", "))
+                    };
+                    let embed_text = if parts.is_empty() {
+                        label.to_string()
+                    } else {
+                        format!("{label}. {}", parts.join(", "))
+                    };
+                    let cand = Candidate {
+                        // Relations carry no graph degree; cosine rank is
+                        // their only RRF signal, which is exactly what a
+                        // predicate query rewards.
+                        prominence: (0, 0),
+                        salience: 0.5,
+                        corpus: id.clone(),
+                        chunk_id: ev.chunk_id.clone(),
+                        preview: ev.passage_preview.clone(),
+                        embed_text,
+                    };
+                    best.entry(display).or_insert(cand);
+                }
             }
         }
         if best.is_empty() {
@@ -803,7 +940,9 @@ impl Runtime {
         }
 
         let mut ranked: Vec<(String, Candidate)> = best.into_iter().collect();
-        // Prominence desc; name asc as a deterministic final tie-break.
+        // Base order: prominence (degree) desc, salience, name asc. This
+        // is the deterministic fallback when the embedder is unavailable,
+        // and the prefilter base when the type-pool exceeds the cost cap.
         ranked.sort_by(|a, b| {
             b.1.prominence
                 .cmp(&a.1.prominence)
@@ -814,6 +953,110 @@ impl Runtime {
                 })
                 .then_with(|| a.0.cmp(&b.0))
         });
+
+        // Cost bound for wiki-scale atlases: cap the pool we embed. Enron
+        // (284 institutions / 622 persons) is far under the default 800,
+        // so this is a no-op here; it stops a 50k-atom type from issuing
+        // a 50k-text embed batch. Prefilter is by degree (keeps the real
+        // cast); logged so the truncation is never silent.
+        let pool_cap: usize = std::env::var("SOVEREIGN_ATOM_ENUM_POOL")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|&n| n > 0)
+            .unwrap_or(800);
+        let pool_truncated = ranked.len() > pool_cap;
+        if pool_truncated {
+            ranked.truncate(pool_cap);
+        }
+
+        // HYBRID RE-RANK (default = RRF). Neither raw signal generalizes
+        // across entity types:
+        //   - DEGREE alone ranks the custodian's ego-network (high-degree
+        //     address-book hubs — United Way, Moody's) above the sparse
+        //     orgs an institution question enumerates (Calpine / El Paso /
+        //     Williams, LJM / Marlin).
+        //   - RELEVANCE (cosine) alone ranks query-PARAPHRASE atoms
+        //     ("Enron executives", "Enron upper mgmt") above the real
+        //     people a person question enumerates (Lay / Skilling /
+        //     Fastow), because the question text embeds nearest to atoms
+        //     that restate it rather than answer it.
+        // Reciprocal Rank Fusion (k=60, the codebase's hybrid-search
+        // idiom) demands BOTH: a real answer entity ranks well on at
+        // least one signal and decently on the other, beating junk that
+        // spikes on only one. RRF is also robust to degree's extreme skew
+        // (Lay ~923 edges dwarfs every other person), where a linear blend
+        // would let one hub crush the normalisation. Embedding is
+        // on-the-fly (not the precomputed bag) because a re-enriched atlas
+        // has a stale embeddings cache (atoms.json newer than
+        // atoms.embeddings.bin). Env hatch SOVEREIGN_ATOM_ENUM_RANK ∈
+        // {rrf (default), relevance, degree}; any embedder failure falls
+        // back to degree order.
+        let rank_mode =
+            std::env::var("SOVEREIGN_ATOM_ENUM_RANK").unwrap_or_else(|_| "rrf".into());
+        let mut ranked_by = "degree";
+        if rank_mode != "degree" && !ranked.is_empty() {
+            // `ranked` is already degree-sorted, so position == degree rank.
+            let texts: Vec<String> =
+                ranked.iter().map(|(_, c)| c.embed_text.clone()).collect();
+            match (
+                self.inference.embed_query(message).await,
+                self.inference.embed_batch(&texts).await,
+            ) {
+                (Ok(q), Ok(embs)) if embs.len() == ranked.len() && !q.is_empty() => {
+                    let n = ranked.len();
+                    let cosines: Vec<f32> = (0..n)
+                        .map(|i| crate::atlas_context::cosine(&q, &embs[i]))
+                        .collect();
+                    if rank_mode == "relevance" {
+                        // Pure cosine (ablation).
+                        let mut order: Vec<usize> = (0..n).collect();
+                        order.sort_by(|&a, &b| {
+                            cosines[b]
+                                .partial_cmp(&cosines[a])
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                                .then_with(|| ranked[a].0.cmp(&ranked[b].0))
+                        });
+                        ranked = order.into_iter().map(|i| ranked[i].clone()).collect();
+                        ranked_by = "relevance";
+                    } else {
+                        // RRF of degree rank (position) + cosine rank.
+                        let mut by_cos: Vec<usize> = (0..n).collect();
+                        by_cos.sort_by(|&a, &b| {
+                            cosines[b]
+                                .partial_cmp(&cosines[a])
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        });
+                        let mut cos_rank = vec![0usize; n];
+                        for (r, &i) in by_cos.iter().enumerate() {
+                            cos_rank[i] = r;
+                        }
+                        const RRF_K: f32 = 60.0;
+                        let rrf = |i: usize| -> f32 {
+                            1.0 / (RRF_K + i as f32) + 1.0 / (RRF_K + cos_rank[i] as f32)
+                        };
+                        let mut order: Vec<usize> = (0..n).collect();
+                        order.sort_by(|&a, &b| {
+                            rrf(b)
+                                .partial_cmp(&rrf(a))
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                                .then_with(|| ranked[a].0.cmp(&ranked[b].0))
+                        });
+                        ranked = order.into_iter().map(|i| ranked[i].clone()).collect();
+                        ranked_by = "rrf";
+                    }
+                }
+                _ => { /* embedder unavailable / dim mismatch → keep degree order */ }
+            }
+        }
+        tracing::info!(
+            target: "retrieval_audit",
+            event = "atom_enum_rank",
+            target_type = %target_type,
+            ranked_by,
+            pool = ranked.len(),
+            pool_truncated,
+            "atom_enum: candidate ranking ({ranked_by})"
+        );
         ranked.truncate(top_k);
 
         // Inject the enumerated entities DIRECTLY as compact virtual
@@ -2857,6 +3100,12 @@ impl Runtime {
                 );
             }
         }
+        // Atlas-directed reservation — mirrors the KnowledgeQuery
+        // wiring. atom-enum chunks (no query embedding → vector_distance
+        // None) sort below every base chunk and the truncate drops them
+        // wholesale; pin them so the atlas-directed set survives into
+        // synthesis. See `reserve_atom_enum_chunks`.
+        all_chunks = reserve_atom_enum_chunks(all_chunks);
         all_chunks.truncate(KQ_MERGED_LIMIT);
 
         // Multi-source cohesion expansion. DeepQuery is the path
@@ -2895,6 +3144,16 @@ impl Runtime {
             }
             let mut corpus_pairs: Vec<(String, usize)> = by_corpus.into_iter().collect();
             corpus_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+            // Atom-enum survival — see the KnowledgeQuery post_merge
+            // event for the rationale. 0 with an "injected count=N"
+            // upstream is the synth-boundary bug; N means the
+            // reservation pinned the directed set through truncate.
+            let atom_enum_survived = all_chunks
+                .iter()
+                .filter(|c| {
+                    c.metadata.get("source").map(|s| s == "atom-enum").unwrap_or(false)
+                })
+                .count();
             let query_preview: String = message.chars().take(80).collect();
             tracing::info!(
                 target: "retrieval_audit",
@@ -2903,6 +3162,7 @@ impl Runtime {
                 query = %query_preview,
                 final_chunks = all_chunks.len(),
                 distinct_sources = seen.len(),
+                atom_enum_survived,
                 final_by_corpus = ?corpus_pairs,
                 sources_expanded,
                 meta_atlas_hits = meta_atlas_hits.len(),
