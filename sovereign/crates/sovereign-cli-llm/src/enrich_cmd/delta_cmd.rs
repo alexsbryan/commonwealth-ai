@@ -235,30 +235,38 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
     // Skip everything except extract/cluster/name. A subset run is
     // promoted into cache/questions.json by `build` so we can read it
     // back. `Selection::Chapters` bypasses build's idempotency gate.
-    let skip_list: Vec<String> = ["seed", "resolve", "tensions", "gaps", "configure", "report"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    let parsed_build = match ParsedBuild::from_inputs(
-        cfg.corpus_id.clone(),
-        Some(parsed.chapters.clone()),
-        &skip_list,
-        parsed.dry_run,
-    ) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("error: constructing subset build: {e}");
-            return 1;
+    if parsed.skip_build {
+        println!(
+            "  · --skip-build: skipping subset extract; resolving existing \
+             cache/questions.json (promote a run file there first)."
+        );
+    } else {
+        let skip_list: Vec<String> =
+            ["seed", "resolve", "tensions", "gaps", "configure", "report"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+        let parsed_build = match ParsedBuild::from_inputs(
+            cfg.corpus_id.clone(),
+            Some(parsed.chapters.clone()),
+            &skip_list,
+            parsed.dry_run,
+        ) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("error: constructing subset build: {e}");
+                return 1;
+            }
+        };
+        println!(
+            "  · subset extract → cluster → name on {} chapter(s) ...",
+            parsed.chapters.len()
+        );
+        let build_code = build::build_with_progress(&parsed_build, None).await;
+        if build_code != 0 {
+            eprintln!("error: subset build failed (exit {build_code}); not merging.");
+            return build_code;
         }
-    };
-    println!(
-        "  · subset extract → cluster → name on {} chapter(s) ...",
-        parsed.chapters.len()
-    );
-    let build_code = build::build_with_progress(&parsed_build, None).await;
-    if build_code != 0 {
-        eprintln!("error: subset build failed (exit {build_code}); not merging.");
-        return build_code;
     }
 
     if parsed.dry_run {
@@ -729,6 +737,14 @@ struct ParsedDelta {
     yes: bool,
     dry_run: bool,
     keep_staging: bool,
+    /// Skip the subset extract/cluster/name (build) step and resolve
+    /// whatever is already in `cache/questions.json`. Salvage path: when
+    /// a long subset extract succeeded for most chapters but the build
+    /// halted on one unparseable chapter, promote the run file
+    /// (`runs/questions-subset-NNN.json`) to `cache/questions.json` and
+    /// re-run with `--skip-build` to resolve + merge the recovered
+    /// sketches without re-extracting. `--chapters` is optional here.
+    skip_build: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<ParsedDelta, String> {
@@ -738,6 +754,7 @@ fn parse_args(args: &[String]) -> Result<ParsedDelta, String> {
     let mut yes = false;
     let mut dry_run = false;
     let mut keep_staging = false;
+    let mut skip_build = false;
 
     let mut i = 0;
     while i < args.len() {
@@ -785,6 +802,10 @@ fn parse_args(args: &[String]) -> Result<ParsedDelta, String> {
                 keep_staging = true;
                 i += 1;
             }
+            "--skip-build" => {
+                skip_build = true;
+                i += 1;
+            }
             other if other.starts_with("--") => {
                 return Err(format!("unknown flag: {other}"));
             }
@@ -800,12 +821,20 @@ fn parse_args(args: &[String]) -> Result<ParsedDelta, String> {
     }
 
     let corpus_id = corpus_id.ok_or_else(|| "missing <corpus-id>".to_string())?;
-    let chapters = chapters.ok_or_else(|| {
-        "missing --chapters <ids> (the chapter subset to enrich; required)".to_string()
-    })?;
-    if chapters.is_empty() {
-        return Err("--chapters list is empty".to_string());
-    }
+    // --chapters drives the subset extract; with --skip-build there is no
+    // extract (we resolve whatever is already in cache), so it's optional.
+    let chapters = match chapters {
+        Some(c) if !c.is_empty() => c,
+        Some(_) => return Err("--chapters list is empty".to_string()),
+        None if skip_build => Vec::new(),
+        None => {
+            return Err(
+                "missing --chapters <ids> (the chapter subset to enrich; required \
+                 unless --skip-build)"
+                    .to_string(),
+            )
+        }
+    };
     Ok(ParsedDelta {
         corpus_id,
         chapters,
@@ -813,6 +842,7 @@ fn parse_args(args: &[String]) -> Result<ParsedDelta, String> {
         yes,
         dry_run,
         keep_staging,
+        skip_build,
     })
 }
 
