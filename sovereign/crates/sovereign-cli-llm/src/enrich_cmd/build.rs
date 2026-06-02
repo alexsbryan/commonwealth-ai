@@ -599,11 +599,22 @@ async fn run_extract_step(parsed: &ParsedBuild) -> i32 {
             retriable_count - remaining_retriable,
             remaining.len()
         );
-        // Subset runs still need to promote the retry output.
-        // The terse retry path in the runner already merges into
-        // cache/questions.json (Landing 2 wiring), so a subset
-        // retry lands in cache without our help — don't double-
-        // promote.
+        // Promote the (now-complete) subset extract to cache so the
+        // downstream phases have input. The first-pass promote above is
+        // gated on `first_code == 0`; when auto-retry ran, that gate was
+        // false, so the full subset never landed — and the terse-retry
+        // path only merges the *retried* chapter's output, not the whole
+        // subset. Promote the full subset explicitly here. (Observed
+        // 2026-06-01: a single parse_drift triggered auto-retry, the
+        // first-pass promote was skipped, and cluster then failed
+        // "questions cache is missing".)
+        if matches!(&parsed.selection, Selection::Chapters(_)) {
+            if let Err(e) = promote_subset_to_cache(corpus) {
+                eprintln!("error: promoting subset run to cache after retry: {e}");
+                return 1;
+            }
+            println!("  · promoted subset run → cache/questions.json");
+        }
         return 0;
     }
 
