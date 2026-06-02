@@ -718,10 +718,20 @@ impl Runtime {
             .filter(|&k| k > 0 && k <= 100)
             .unwrap_or(16);
 
-        let mut corpus_ids = provider.loaded_corpus_ids();
-        if let Some(enabled) = enabled_corpora {
-            corpus_ids.retain(|id| enabled.iter().any(|e| e == id));
-        }
+        // Use the enabled-corpora list directly when scoped. The atlas
+        // GRAPH can be loaded even when its embedding-bag CONTEXT isn't:
+        // a freshly re-enriched atlas has a new atoms.json but a stale
+        // embeddings cache, so `load_one` skips the context — yet
+        // `AtlasGraph::load_from_disk` still loaded the graph. Keying off
+        // `loaded_corpus_ids()` (contexts only) would drop exactly that
+        // corpus (observed: enron-sample-multi-wide right after re-enrich
+        // → corpora=[] → no enumeration). `provider.graph(id)` below
+        // returns None for any id that genuinely has no graph, so an
+        // unscoped fallback to loaded contexts is still safe.
+        let corpus_ids: Vec<String> = match enabled_corpora {
+            Some(enabled) if !enabled.is_empty() => enabled.to_vec(),
+            _ => provider.loaded_corpus_ids(),
+        };
 
         // Prominence per atom: graph degree (in + out edges), tie-broken
         // by alias count then salience. Degree is the real signal — this
@@ -782,8 +792,11 @@ impl Runtime {
             }
         }
         if best.is_empty() {
-            tracing::debug!(
+            tracing::info!(
+                target: "retrieval_audit",
+                event = "atom_enum_empty",
                 target_type = %target_type,
+                corpora = ?corpus_ids,
                 "atom_enum: no atoms of chosen type in enabled corpora; skipping"
             );
             return None;
@@ -887,10 +900,13 @@ impl Runtime {
             fetched_names.push(name.as_str());
         }
         if chunks.is_empty() {
-            tracing::debug!(
+            tracing::info!(
+                target: "retrieval_audit",
+                event = "atom_enum_nofetch",
                 target_type = %target_type,
                 candidates = ranked.len(),
-                "atom_enum: no fetchable evidence chunks (non-numeric ids?); skipping"
+                sample = ?ranked.iter().take(3).map(|(n, c)| format!("{n}|cid={}|pv={}", c.chunk_id, c.preview.is_some())).collect::<Vec<_>>(),
+                "atom_enum: candidates found but no evidence chunks fetched"
             );
             return None;
         }
