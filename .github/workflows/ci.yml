@@ -1,0 +1,90 @@
+# Workspace CI — the unified root workspace (35 crates: oicp-types,
+# corpus-engine + carve-outs, sovereign/*, commonwealth/*).
+#
+# Why this lives at the repo root: GitHub Actions only executes workflows in
+# the *root* `.github/workflows/`. `commonwealth/.github/workflows/ci.yml` is a
+# leftover from when commonwealth was its own repo and NEVER runs — this file
+# replaces it. Before this landed the only active workflow was desktop-release,
+# i.e. there was no continuous check/test gate at all.
+#
+# Ratchet plan (PR2 of the tech-debt program):
+#   - check / test / arch-gate are BLOCKING now.
+#   - fmt + clippy are ADVISORY (continue-on-error) because the workspace
+#     carries pre-existing format + ~150 warning debt. Flip each to blocking
+#     once that debt is swept:
+#       fmt    → drop continue-on-error after one `cargo fmt --all`.
+#       clippy → add `-- -D warnings` + drop continue-on-error after the
+#                unused-import / dead-code sweep (the per-handler import blocks
+#                in sovereign-core/runtime/handlers/ are the bulk).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check (workspace)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # protoc: LanceDB (lance-table). cmake: llama.cpp (sovereign-inference).
+      - name: System deps
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
+      - run: cargo check --workspace --all-targets
+
+  test:
+    name: Test (workspace)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: System deps
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
+      # Tests are CI-safe by contract (no GPU / network / model weights —
+      # ARCH_PRINCIPLES §12.4): DeterministicInference + in-memory SQLite + FTS5.
+      - run: cargo test --workspace
+
+  arch-gate:
+    name: Arch-gate (file-size ratchet + §1 doc-contract)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # No protoc/cmake needed — xtask only reads files.
+      - run: cargo run -p xtask -- arch-gate
+
+  fmt:
+    name: Format (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  clippy:
+    name: Clippy (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: System deps
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
+      - run: cargo clippy --workspace --all-targets

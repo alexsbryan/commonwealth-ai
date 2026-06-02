@@ -1007,9 +1007,11 @@ or `systemctl --user restart sovereign` (Linux).
 
 ### Build / test
 
-Each project is its own Cargo workspace. Use the **sovereign
-watcher** (`lint_status` / `test_status` MCP tools) for compilation
-feedback — running `cargo build` / `cargo test` directly via Bash
+The repo is **one unified Cargo workspace** — 35 members under the root
+`Cargo.toml` (`sovereign/`, `commonwealth/`, `corpus-engine` + its carve-outs
+are directories of member crates, **not** separate workspaces). Use the
+**sovereign watcher** (`lint_status` / `test_status` MCP tools) for
+compilation feedback — running `cargo build` / `cargo test` directly via Bash
 contends with the watcher for the file lock and idles.
 
 **Watcher liveness is heartbeat-driven and self-healing.** The
@@ -1031,15 +1033,17 @@ check cannot. If the runner sections are commented out in
 `.sovereign/sovereign.toml.with-watchers`.
 
 ```sh
-cd corpus-engine && cargo build --release   # bundled assets copied via build.rs
-cd sovereign     && cargo build --release
-cd commonwealth  && cargo build --release
+# One workspace — build / check / test everything from the repo root:
+cargo build --release --workspace          # bundled assets copied via build.rs
+cargo check  --workspace --all-targets      # what CI's `check` job runs
+# The user-facing CLI execs into 4 sibling binaries — rebuild all of them
+# (editing one + rebuilding only the dispatcher is a silent no-op):
+cargo build --release -p sovereign-cli -p sovereign-cli-daemon \
+            -p sovereign-cli-dev -p sovereign-cli-llm
 ```
 
 ```sh
-cd corpus-engine && cargo test
-cd sovereign     && cargo test --workspace
-cd commonwealth  && cargo test --workspace
+cargo test --workspace                      # no GPU / network / model weights (§12.4)
 ```
 
 No tests require GPU, models, or network. Sovereign uses
@@ -1226,7 +1230,6 @@ an entry is sequenced work.
 | `inference_adapter.rs` split | `sovereign-mesh/src/inference_adapter.rs` (~2100 lines) | Pure helpers (`build_self_manifest`, `synthesize_slot_claims`) extracted to `oicp_synthesis.rs`. Wire-shape translation, tool-call envelope parsing, tool-profile policy stay until the tool-call envelope migration settles. |
 | `peer_inference.rs` split | `sovereign-mesh/src/peer_inference.rs` (~2280 lines) | `MeshInferenceProvider` + throughput observation + manifest caching + quarantine. `ThroughputObservedStream` extracted to `throughput_tracking.rs`. `complete_stream_with_id_and_finish` and `complete_stream_with_id` deduplication blocked on `select_route` enum extraction. |
 | `auto_ingest.rs` split | `sovereign-mesh/src/auto_ingest.rs` (~1200 lines) | Auto-collaborate orchestration — `Planning → Handoff → Active → Complete` state machine. Splitting before the cloud-peer flavour settles would re-merge. |
-| `types.rs` split | `sovereign-core/src/types.rs` (~3623 lines) | 17 type families, **228 importers** (leaf dep) — the workspace's #1 incremental-rebuild + merge-conflict bottleneck. Split into `types/{inference,completion,routing,conversation,execution,document,task,memory,ui}.rs` behind a `pub use` façade (zero external churn). Sequenced as PR3 of the tech-debt refactor program. |
 | `sqlite.rs` split | `sovereign-store/src/sqlite.rs` (~3678 lines) | `StateStore` trait-impl hotel — 14 sub-trait impls, one per store concern. Cleanly delineated by trait boundary; split into `stores/<concern>.rs` if it crosses ~4000 lines. |
 | `document_asset.rs` split | `sovereign-tools/src/document_asset.rs` (~3617 lines) | DocumentAssetManager — tiered (T1/T2/T3) ingest orchestration + skeleton/RAPTOR persistence. Splits along the tier boundary once the tiered surface stops evolving. |
 | `runtime/retrieval.rs` split | `sovereign-core/src/runtime/retrieval.rs` (~3385 lines) | Retrieval pipeline — chunk-fetch + atlas grounding + hybrid entity scorer + query expansion. Hot-iteration file (active query-expansion work); split when the retrieval algorithm settles. |

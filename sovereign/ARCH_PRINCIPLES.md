@@ -201,7 +201,11 @@ handler modules); the residual `runtime.rs` is ~3,060 lines holding
 the `Runtime` struct, builders, lifecycle, and top-level dispatch.
 `atos_cmd.rs` (2673 lines) and `local.rs` (1183 lines) were split into
 folders in the spring 2026 refactor pass — they were the prior
-occupants of this list.
+occupants of this list. `sovereign-core/src/types.rs` (3623 lines, 17
+type families, 228 importers) was decomposed 2026-06-02 into `types/`
+(`mod.rs` façade at ~1194 + `completion` / `routing` / `conversation` /
+`narration` / `document` / `ui` submodules) behind `pub use` re-exports —
+zero importer churn, workspace `cargo check` green.
 
 ---
 
