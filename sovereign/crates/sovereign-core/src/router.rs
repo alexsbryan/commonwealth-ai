@@ -44,38 +44,8 @@ enum SelfAssessment {
     NeedsWebSearch,
 }
 
-const SELF_ASSESSMENT_PROMPT: &str = r#"You are about to answer this question from memory:
-
-"{message}"
-
-Installed knowledge sources: {corpus_list}
-
-Before answering, assess your confidence honestly.
-
-Ask yourself:
-1. Does this question ask for a SPECIFIC LIST, ROSTER, or ENUMERATION of items?
-   (squad members, episode list, ingredients, rankings)
-2. Does this question ask for a SPECIFIC STATISTIC, RECORD, or DATE
-   that has a single correct answer?
-3. Might a reasonable person fact-check this answer?
-4. Could one of the installed knowledge sources have a more accurate
-   answer than your training data?
-
-Respond with exactly ONE word:
-
-CONFIDENT   — You are certain of the full, complete, accurate answer
-              and it does not involve specific lists or statistics
-              that might be wrong.
-
-UNCERTAIN   — The question involves specific facts, lists, names, or
-              statistics where you might be incomplete or wrong.
-              A local knowledge source should be checked first.
-
-WEB         — The question requires current information (today's news,
-              live scores, current prices) that no local corpus
-              could have.
-
-Answer:"#;
+const SELF_ASSESSMENT_PROMPT: &str =
+    include_str!("../assets/self_assessment_prompt.md");
 
 /// Compute the `routing_log.message_hash` for a given user input.
 /// Stable across router + runtime so PR4 redirect-signal updates
@@ -185,6 +155,10 @@ pub(crate) fn suggest_alternatives(
             .iter()
             .find(|t| t.name.contains("web_search") || t.name == "search")
         {
+            tracing::debug!(
+                tool = %t.id,
+                "router:web_search_candidate — temporal signal + web tool present, offering web_search"
+            );
             out.push(IntentCandidate {
                 intent: Intent::SimpleAction {
                     tool: t.id.clone(),
@@ -1092,6 +1066,19 @@ Reply with JSON only:
         let pass2_prompt = Self::build_pass2_action_prompt(message, context, available_tools);
         let pass2_response = self.classify_call(pass2_prompt).await?;
         let refined = Self::parse_letter(&pass2_response);
+        // §9.1 glassbox: the pass-2 letter decides the whole execution path
+        // (action vs knowledge vs complex). Surface it so an operator can see
+        // why a request was routed the way it was without re-running.
+        let intent_label = match refined {
+            'A' => "SimpleAction",
+            'C' => "KnowledgeQuery",
+            _ => "ComplexTask",
+        };
+        tracing::debug!(
+            refined_char = %refined,
+            intent = intent_label,
+            "router:intent_decision — pass-2 refined classification"
+        );
         Ok(match refined {
             'A' => {
                 let tool = self

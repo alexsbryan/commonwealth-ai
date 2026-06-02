@@ -11,18 +11,35 @@
 # `PersonEntity` / `OrganizationEntity` and the BusinessEmailDomain
 # prompt that explicitly enumerates alias forms.
 #
+# Counterparty substrate (added 2026-06-02). The Lay+Skilling executive
+# slices establish the cast (Lay/Skilling/Fastow) and exec-level deals
+# (the Dynegy merger), but they do NOT carry the granular trading
+# counterparties — Calpine, El Paso, Williams as power-trade counterparts
+# live in the *traders'* mailboxes, not the executives'. The
+# `counterparty_network` demo question scored 1/5 purely because that
+# substrate was never ingested (the answer named the real exec-visible
+# rivals — Dynegy/Reliant/TXU — none of the trade-desk counterparties).
+# Fix: add four targeted symes-k (Kevin Symes, power trader) folders that
+# carry the trade substrate without the 28k-message whole-mailbox blowup:
+#   ctpy_contacts (the literal counterparty contact list), confirms (trade
+#   confirmations), deal_communication, power_marketer. ~1280 messages.
+#
 # Operator setup: extend the symlink dir at
-# `~/.sovereign/corpora-staging/enron-multi-tiny/` (shared with the
-# narrower multi-tiny recipe) so each mailbox slice is a sibling:
-#   lay-k_sent_link      → enron/maildir/lay-k/_sent
-#   lay-k_inbox_link     → enron/maildir/lay-k/inbox
-#   skilling-j_sent_link → enron/maildir/skilling-j/sent
-#   skilling-j_inbox_link → enron/maildir/skilling-j/inbox
+# `~/.sovereign/corpora-staging/enron-multi-wide/` so each slice is a
+# sibling:
+#   lay-k_sent_link                 → enron/maildir/lay-k/_sent
+#   lay-k_inbox_link                → enron/maildir/lay-k/inbox
+#   skilling-j_sent_link            → enron/maildir/skilling-j/sent
+#   skilling-j_inbox_link           → enron/maildir/skilling-j/inbox
+#   symes-k_power_marketer_link     → enron/maildir/symes-k/power_marketer
+#   symes-k_deal_communication_link → enron/maildir/symes-k/deal_communication
+#   symes-k_confirms_link           → enron/maildir/symes-k/confirms
+#   symes-k_ctpy_contacts_link      → enron/maildir/symes-k/ctpy_contacts
 
 [corpus]
 id = "enron-sample-multi-wide"
-name = "Enron Email (Lay+Skilling sent+inbox)"
-description = "Stage C cross-origin substrate exerciser — Lay + Skilling sent + inbox slices (~3170 messages, 4 X-Origin folds, two-way correspondence)."
+name = "Enron Email (Lay+Skilling exec + symes-k trade desk)"
+description = "Stage C cross-origin substrate exerciser — Lay + Skilling sent+inbox exec slices plus four symes-k trade-desk folders (counterparty substrate: ctpy_contacts/confirms/deal_communication/power_marketer). ~4450 messages, 8 X-Origin folds."
 license = "public-domain"
 schema_version = 1
 mesh_sharing = false
