@@ -28,6 +28,7 @@ pub mod sheets_ingest;
 pub mod cascade;
 pub mod classify;
 pub mod config;
+pub mod delta_cmd;
 pub mod extract_typed;
 pub mod corpus_io;
 pub mod triage;
@@ -71,6 +72,8 @@ const HELP: Help = Help {
             &[
                 ("init", "Scaffold a new corpus's enrichment state."),
                 ("build", "One-shot: run every atlas phase for a corpus (seed → extract → cluster → name → resolve → tensions → gaps → configure → report)."),
+                ("delta", "Incrementally enrich a chapter subset and merge the resulting atoms+edges into the EXISTING atlas (additive; no full rebuild)."),
+                ("delta-manifest", "Mint sec_NNNNN chapter ids for freshly-appended chunks (by --source-prefix) and append them to chapters.json."),
                 ("ingest", "Run an AtlasIngestion strategy end-to-end (today: structure_first deterministic Wikipedia parser)."),
                 ("triage-candidates", "Rank atlas entities by inbound link degree to pick Tier-1.5 / Tier-2 enrichment candidates."),
                 ("atlas-eval", "Score the structural atlas against a question bank by tokenized title-overlap retrieval."),
@@ -167,6 +170,8 @@ pub async fn run_enrich(args: &[String]) -> i32 {
         // ── Primary flow ──────────────────────────────────────
         "init" => init::cmd_init(rest).await,
         "build" => build::cmd_build(rest).await,
+        "delta" => delta_cmd::cmd_delta(rest).await,
+        "delta-manifest" => delta_cmd::cmd_delta_manifest(rest).await,
         "ingest" => ingest::cmd_ingest(rest).await,
         "triage-candidates" | "triage" => triage::cmd_triage(rest).await,
         "atlas-eval" => atlas_eval::cmd_atlas_eval(rest).await,

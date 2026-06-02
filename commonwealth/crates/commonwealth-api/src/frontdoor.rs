@@ -159,12 +159,23 @@ impl Harness {
 /// 4. Default → Generic
 pub fn detect_harness(headers: &HeaderMap) -> Harness {
     if let Ok(forced) = std::env::var("SOVEREIGN_HARNESS") {
-        match forced.to_ascii_lowercase().as_str() {
-            "codex" => return Harness::Codex,
-            "opencode" => return Harness::Opencode,
-            "bare" => return Harness::Bare,
-            "generic" => return Harness::Generic,
-            _ => {} // fall through to UA / legacy detection
+        let forced_lc = forced.to_ascii_lowercase();
+        let forced_harness = match forced_lc.as_str() {
+            "codex" => Some(Harness::Codex),
+            "opencode" => Some(Harness::Opencode),
+            "bare" => Some(Harness::Bare),
+            "generic" => Some(Harness::Generic),
+            _ => None, // fall through to UA / legacy detection
+        };
+        if let Some(h) = forced_harness {
+            // §9.1 glassbox: an env override silently dictates the whole
+            // reshape profile — surface it so codex/opencode behaviour is
+            // explainable from the logs.
+            tracing::debug!(
+                forced = %forced_lc,
+                "frontdoor:harness_forced — SOVEREIGN_HARNESS env override"
+            );
+            return h;
         }
     }
     if let Some(ua) = headers.get("user-agent").and_then(|v| v.to_str().ok()) {

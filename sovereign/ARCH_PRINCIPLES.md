@@ -179,13 +179,17 @@ The pattern:
 
 ### 3.3 Files we haven't split *yet* are flagged, not hidden
 
-Current outliers (all > 5000 lines):
+Current outliers (the largest; `SYSTEM_OVERVIEW.md` §10 carries the
+full set with per-file deferral rationale):
 
-- `sovereign-cli-dev/src/project_cmd.rs` (~7000 lines) — the project subcommand surface. Moved out of `sovereign-cli` in the 2026-05-22 binary split; still wants an in-file §3.2 split.
-- `sovereign-cli-daemon/src/daemon_cmd.rs` (~3300 lines) — the daemon Runtime construction. Same story — moved binaries, still wants an in-file split.
-- `sovereign-cli-dev/src/atos_cmd/run.rs` (~4700 lines) — ATOS lifecycle dispatcher.
-- `sovereign-inference/src/embedded.rs` (~5300 lines) — embedded daemon glue.
-- `sovereign-desktop/src-tauri/src/commands.rs` (~5100 lines) — Tauri command surface.
+- `sovereign-inference/src/embedded.rs` (~9636 lines) — embedded daemon glue.
+- `sovereign-cli-dev/src/project_cmd.rs` (~7040 lines) — the project subcommand surface. Moved out of `sovereign-cli` in the 2026-05-22 binary split; still wants an in-file §3.2 split.
+- `sovereign-desktop/src-tauri/src/commands.rs` (~6557 lines) — Tauri command surface.
+- `commonwealth-api/src/frontdoor.rs` (~5758 lines) — harness-protocol → model-native normalizer.
+- `corpus-engine-notes/src/notes.rs` (~5634 lines) — NoteStore (carved-out crate; still wants an in-file split).
+- `corpus-engine/src/enrichment/atlas/resolution.rs` (~5189 lines) — atlas URI resolution + scoring.
+- `sovereign-cli-dev/src/atos_cmd/run.rs` (~4659 lines) — ATOS lifecycle dispatcher.
+- `sovereign-cli-daemon/src/daemon_cmd.rs` (~3746 lines) — the daemon Runtime construction. Moved binaries, still wants an in-file split.
 
 All are listed in `SYSTEM_OVERVIEW.md` §10 Architecture Roadmap with
 their deferral rationale. Big files without a roadmap entry are

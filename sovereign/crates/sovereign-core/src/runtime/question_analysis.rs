@@ -484,6 +484,18 @@ pub(crate) fn cap_chunks_per_article(
     let mut section_counts: HashMap<(String, String, String), usize> = HashMap::new();
     let mut out = Vec::with_capacity(chunks.len());
     for c in chunks {
+        // Atom-directed chunks bypass the anti-flood cap. The cap exists
+        // to stop one *organically*-retrieved article from dominating
+        // the merge; the atom-enum set is an intentional one-chunk-per-
+        // entity selection the atlas directed (already bounded upstream
+        // by SOVEREIGN_ATOM_ENUM_TOPK). Capping it by (corpus, title)
+        // would silently drop entities whose first_appearance evidence
+        // happens to live in a shared document — exactly the entities
+        // enumeration needs. Tagged in `enumerate_typed_atom_chunks`.
+        if c.metadata.get("source").map(|s| s == "atom-enum").unwrap_or(false) {
+            out.push(c);
+            continue;
+        }
         let title = c.title.as_deref().unwrap_or("").to_string();
         let section = section_from_url(c.url.as_deref());
         let article_key = (c.corpus_id.clone(), title.clone());
@@ -568,4 +580,48 @@ pub(crate) fn reserve_chunks_per_entity(
     let mut out = reserved;
     out.extend(rest);
     out
+}
+
+/// Pin atom-directed chunks to the front of the merge so the
+/// `KQ_MERGED_LIMIT` truncate cannot drop them.
+///
+/// Atom-enum chunks are fetched by chunk-id / FTS (no query embedding,
+/// see `enumerate_typed_atom_chunks` → `fetch_chunk_by_id`), so they
+/// carry `vector_distance = None`. `cross_corpus_sort_cmp` sorts every
+/// `None`-distance chunk *after* every cosine-scored base chunk
+/// (`(Some, None) => Less`), so on any corpus that returns ≥
+/// `KQ_MERGED_LIMIT` base hits the entire directed set lands past the
+/// truncation cut — injected but never seen by synthesis (survival 0,
+/// measured: exec_cast / counterparty enumeration both 0/16 survivors).
+///
+/// This is the same contract `reserve_chunks_per_entity` enforces for
+/// ComparisonQuery + title-expand: an upstream step made an intentional
+/// source selection the cross-corpus sort must not silently demote.
+/// Here the selector is the atlas itself — "these are the entities the
+/// question enumerates" — which is the foundational atlas-directs-
+/// retrieval premise. The set is already bounded by
+/// `SOVEREIGN_ATOM_ENUM_TOPK`, so all of it is pinned (no per-entity
+/// quota); relative order is preserved (atom-enum injects in descending
+/// atom prominence). No-op when nothing is tagged `source=atom-enum`.
+pub(crate) fn reserve_atom_enum_chunks(chunks: Vec<ScoredChunk>) -> Vec<ScoredChunk> {
+    let is_atom_enum = |c: &ScoredChunk| {
+        c.metadata
+            .get("source")
+            .map(|s| s == "atom-enum")
+            .unwrap_or(false)
+    };
+    if !chunks.iter().any(is_atom_enum) {
+        return chunks;
+    }
+    let mut reserved: Vec<ScoredChunk> = Vec::new();
+    let mut rest: Vec<ScoredChunk> = Vec::new();
+    for c in chunks {
+        if is_atom_enum(&c) {
+            reserved.push(c);
+        } else {
+            rest.push(c);
+        }
+    }
+    reserved.extend(rest);
+    reserved
 }
