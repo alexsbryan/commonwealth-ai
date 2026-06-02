@@ -666,6 +666,14 @@ impl Runtime {
                 );
             }
         }
+        // Atlas-directed reservation. The atom-enum set (when
+        // SOVEREIGN_ATOM_ENUM fired) is fetched without a query
+        // embedding, so cross_corpus_sort_cmp demotes it below every
+        // cosine-scored base chunk and the truncate below drops it
+        // wholesale (the synth-boundary bug: injected N, survived 0).
+        // Pin it like the title-expand selection — the atlas chose
+        // these chunks; the merge sort must not silently demote them.
+        chunks = reserve_atom_enum_chunks(chunks);
         audit_pipeline_stage(&chunks, "after_cap_and_reserve", message);
         chunks.truncate(KQ_MERGED_LIMIT);
         audit_pipeline_stage(&chunks, "after_truncate", message);
@@ -700,10 +708,25 @@ impl Runtime {
                 .take(5)
                 .map(|((cid, t), n)| (cid, t, n))
                 .collect();
+            // Atom-enum survival — the load-bearing glassbox number for
+            // the atlas-directs-retrieval contract. atom-enum injects a
+            // directed set post-noise-floor; this counts how many of
+            // them are still in the merge after sort + cap + reserve +
+            // truncate. 0 here with a non-zero "injected count=N"
+            // upstream is the synth-boundary bug; N here means the
+            // reservation pinned them through (per-corpus can't show it —
+            // atom-enum chunks share the source corpus_id).
+            let atom_enum_survived = chunks
+                .iter()
+                .filter(|c| {
+                    c.metadata.get("source").map(|s| s == "atom-enum").unwrap_or(false)
+                })
+                .count();
             tracing::info!(
                 target: "retrieval_audit",
                 event = "post_merge",
                 total = chunks.len(),
+                atom_enum_survived,
                 by_corpus = ?corpus_pairs,
                 top5_articles = ?article_top,
                 "retrieval_audit: post_merge"
@@ -811,8 +834,28 @@ impl Runtime {
         // canonical failure case. The real variance lever is upstream
         // (why don't title-expand'd Lovelace chunks survive merge?),
         // not in synth routing. Reverted.
+        // Enumeration turns (atom-enum fired) pin PrimarySynthesis. The
+        // directed set is many low-cosine entity chunks, so the evidence
+        // shape reads as weak/single-focus and route_from_evidence picks
+        // FastFocused — which runs synth on the FAST slot and emits a
+        // per-passage "let me scan the documents…" narration that burns
+        // the whole token budget before the LIST is ever written (fatal:
+        // the counterparty turn rambled through 3 irrelevant passages and
+        // never enumerated, despite 16 energy-company chunks pinned in
+        // front). Enumeration IS multi-source breadth — pin it to the
+        // primary slot so it writes the clean list. Gated: `has_atom_enum`
+        // is only true when SOVEREIGN_ATOM_ENUM is on AND a set question
+        // fired, so non-enumeration turns and other corpora are untouched.
+        let has_atom_enum = chunks.iter().any(|c| {
+            c.metadata
+                .get("source")
+                .map(|s| s == "atom-enum")
+                .unwrap_or(false)
+        });
         let route = if matches!(intent, Intent::ComparisonQuery) {
             SynthesisRoute::FastFocused
+        } else if has_atom_enum {
+            SynthesisRoute::PrimarySynthesis
         } else {
             route_from_evidence(&shape)
         };
