@@ -8,10 +8,10 @@ publish = false
 name = "xtask"
 path = "src/main.rs"
 
+# arch-gate (the sole remaining command) uses only std. The recipe/registry
+# snapshot sync that needed reqwest+toml was retired when corpus-engine/build.rs
+# took over vendoring the canonical sovereign-recipes tree at compile time.
 [dependencies]
-reqwest = { version = "0.12", features = ["blocking"] }
-serde = { version = "1", features = ["derive"] }
-toml = "0.8"
 
 [lints]
 workspace = true

@@ -14,7 +14,7 @@ Grouped by what each tool actually protects, not by where the code lives.
 
 | Tool | Command | Protects | Source |
 |---|---|---|---|
-| **Wikipedia eval (routing-only)** | `sovereign eval run --bank sovereign-recipes/wikipedia/eval/wikipedia_questions.toml --routing-only` | Classifier accuracy: predicted intent vs `expected_intent` per question. Fast iteration — no retrieval, no synthesis. The "did the routing logic regress" gate the user is referring to. | `sovereign/crates/sovereign-cli/src/eval_cmd/mod.rs` |
+| **Wikipedia eval (routing-only)** | `sovereign eval run --bank sovereign/bench/wikipedia/questions.toml --routing-only` | Classifier accuracy: predicted intent vs `expected_intent` per question. Fast iteration — no retrieval, no synthesis. The "did the routing logic regress" gate the user is referring to. | `sovereign/crates/sovereign-cli/src/eval_cmd/mod.rs` |
 | **Voice eval — base (centre)** | `sovereign voice eval --all` (or `--scenario <id>`) | Voice-contract adherence over the 12 base scenarios — well-formed witness moves on common shapes. Deterministic checks (length, question density, banned phrases) + LLM-as-judge against 8 principles + 4 avoid-list patterns. `--canned-response "<text>"` scores an arbitrary string without the daemon. Default scenarios dir is `bench/voice/`. | `sovereign/crates/sovereign-cli/src/voice_eval/mod.rs`; bank at `sovereign/bench/voice/*.toml` |
 | **Voice eval — hard mode (edges)** | `sovereign voice eval --all --scenarios-dir bench/voice/hard --report bench/voice/baseline/<run>.json` | Adversarial / chaos-monkey companion: 8 scenarios (H01–H08) probing flattery bait, memory gaslight, prompt injection, binary pressure, identity probes, multi-thread, crisis-adjacent, recursive meta. Same scoring harness — point it at a different scenarios dir. Pin `--judge-model` to the 35B across both modes so chat-model variance doesn't get conflated with judge variance. Archived runs at `sovereign/bench/voice/baseline/`. | bank at `sovereign/bench/voice/hard/H0*.toml` (see its `README.md` for the "fair adversarial" rules) |
 
@@ -22,7 +22,7 @@ Grouped by what each tool actually protects, not by where the code lives.
 
 | Tool | Command | Protects | Source |
 |---|---|---|---|
-| **Wikipedia eval (synth)** | `sovereign eval run --bank … --synth [--no-judge]` | End-to-end recall + synthesis facts on the 52-question Wikipedia bank. Strict scorer + LLM-as-judge for paraphrased coverage. The headline number for retrieval+synthesis. | `sovereign/crates/sovereign-cli/src/eval_cmd/mod.rs`; bank at `sovereign-recipes/wikipedia/eval/` |
+| **Wikipedia eval (synth)** | `sovereign eval run --bank … --synth [--no-judge]` | End-to-end recall + synthesis facts on the 52-question Wikipedia bank. Strict scorer + LLM-as-judge for paraphrased coverage. The headline number for retrieval+synthesis. | `sovereign/crates/sovereign-cli/src/eval_cmd/mod.rs`; bank at `sovereign/bench/wikipedia/` |
 | **Atlas-grounded retrieval gate** | `sovereign eval run --bank … --with-atlas <id> [--atlas-top-k N]` | Same bank, but fuses atlas Entity embeddings into retrieval. Used to measure source-lift from atlas grounding (e.g. the 50→82.8% jump on 2026-05-02). | same as above |
 | **Atlas retrieval eval** | `sovereign enrich atlas-eval --corpus <id>` | Tokenized title-overlap retrieval against a resolved atlas. Per-phase precision/recall/F1 by entity type. | `sovereign/crates/sovereign-cli/src/enrich_cmd/atlas_eval.rs` |
 | **Reading-surface diag** | `sovereign reading-diag query "<q>" [--corpus <id>]` | The desktop citation chain: chunk retrieval → neighbor deref → atom-span detection → atom card → cross-corpus links. Validates the reading surface without launching the UI. | `sovereign/crates/sovereign-cli/src/reading_diag_cmd.rs` |
@@ -120,7 +120,7 @@ Separate from the everyday CLIs above; used for longer experiments where you wan
 
 ## Where things land
 
-- Eval banks: `sovereign-recipes/<corpus>/eval/*.toml`, `sovereign/bench/voice/*.toml`.
-- Eval reports: pass `--output <path>` to anything that supports it; archived runs at `sovereign-recipes/wikipedia/eval/runs/`.
+- Eval banks: `sovereign/bench/<corpus>/*.toml` (e.g. `sovereign/bench/voice/*.toml`, `sovereign/bench/wikipedia/questions.toml`).
+- Eval reports: pass `--output <path>` to anything that supports it. Run outputs are not committed — write them under `target/` or a `sovereign/bench/<corpus>/baselines/` dir as needed.
 - TTFI reports: `sovereign/crates/sovereign-desktop/tests/e2e/.ttfi-report.json`; baseline at `.ttfi-baseline.json`.
 - Bench harness internals: `sovereign/docs/BENCHMARKING.md` (embed) and `sovereign/crates/sovereign-desktop/tests/e2e/TTFI.md` (UI).

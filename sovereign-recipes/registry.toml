@@ -1,5 +1,13 @@
+# sovereign-recipes registry — the canonical corpus catalog.
+#
+# SINGLE SOURCE OF TRUTH. corpus-engine vendors this file at build time
+# (build.rs → OUT_DIR) as the offline bundled fallback — there is no
+# separate hand-maintained snapshot to keep in sync. To add or change a
+# corpus: edit its recipe under sovereign-recipes/<id>/recipe.toml and
+# update the matching [[recipes]] entry here. Each entry's catalog_status
+# drives the desktop picker bucket: featured | preview | hidden.
+#
 schema_version = 1
-generated_at = "2026-04-09T00:00:00Z"
 registry_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/registry.toml"
 
 [[recipes]]
@@ -13,11 +21,12 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia/recipe.toml"
 sha256 = ""
+catalog_status = "featured"
 
 [recipes.prebuilt]
 hf_repo = "svrnmesh/wikipedia-index"
-hf_filename = "wikipedia-qwen-embedding-0.6b-2026-05-13.tar.zst"
-sha256 = "65fa045c95d6ffdaa92b7634ea95acb2d9d4bac6c9f6cd20bc831c098c10c6bd"
+hf_filename = "wikipedia-qwen-embedding-0.6b-2026-05-23.tar.zst"
+sha256 = "f1dc0851b4684f1b5d7afffadc862541a711243fb4d8f79771b1a482f8ab74e0"
 compatible_embedding_model = "qwen-embedding-0.6b"
 
 [[recipes]]
@@ -31,31 +40,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-simple/recipe.toml"
 sha256 = ""
-
-[[recipes]]
-id = "wikipedia-catalog"
-name = "Wikipedia Catalog"
-description = "Catalog of all ~7.4M English Wikipedia articles (titles + abstracts + section anchors only — no full text). When a query lands on a catalog hit not yet indexed, the agent's `wikipedia_fetch` tool ingests that single article on-demand under `parent_corpus_id = wikipedia` so it surfaces under the user's existing Wikipedia corpus and is mesh-shared like any other Wikipedia content."
-license = "CC-BY-SA-4.0"
-size_compressed_gb = 0.3
-size_indexed_gb = 4.0
-enrichment_enabled = false
-mesh_sharing = true
-parent_corpus_id = "wikipedia"
-toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-catalog/recipe.toml"
-sha256 = ""
-
-[[recipes]]
-id = "wikipedia-article"
-name = "Wikipedia — Single Article"
-description = "On-demand single-article ingest from the MediaWiki Action API. Not installed standalone — invoked by the `wikipedia-catalog` content_recipe pipeline (and the `wikipedia_fetch` agent tool) when a catalog hit needs full-text. Produces section-level chunks indistinguishable from bulk-dump articles."
-license = "CC-BY-SA-4.0"
-size_compressed_gb = 0.001
-size_indexed_gb = 0.005
-enrichment_enabled = true
-mesh_sharing = true
-toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-article/recipe.toml"
-sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "sep"
@@ -68,6 +53,7 @@ enrichment_enabled = true
 mesh_sharing = false
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/sep/recipe.toml"
 sha256 = ""
+catalog_status = "featured"
 
 [[recipes]]
 id = "stackexchange"
@@ -80,6 +66,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/stackexchange/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "stackexchange-knowledge"
@@ -92,6 +79,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/stackexchange-knowledge/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "openalex"
@@ -104,6 +92,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/openalex/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "gutenberg"
@@ -116,6 +105,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/gutenberg/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "gutenberg-work"
@@ -128,6 +118,34 @@ enrichment_enabled = true
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/gutenberg-work/recipe.toml"
 sha256 = ""
+catalog_status = "hidden"
+
+[[recipes]]
+id = "wikipedia-catalog"
+name = "Wikipedia Catalog"
+description = "Catalog of all ~6.8M English Wikipedia articles (titles + abstracts + section anchors). Pairs with the `wikipedia` chunk corpus and the `wikipedia-article` on-demand recipe — the chat-with-wikipedia surface that gracefully fetches any article on miss."
+license = "CC-BY-SA-4.0"
+size_compressed_gb = 0.07
+size_indexed_gb = 4.0
+enrichment_enabled = false
+mesh_sharing = true
+parent_corpus_id = "wikipedia"
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-catalog/recipe.toml"
+sha256 = ""
+catalog_status = "preview"
+
+[[recipes]]
+id = "wikipedia-article"
+name = "Wikipedia — Single Article"
+description = "On-demand single-article ingest from the MediaWiki Action API. Triggered by a `wikipedia-catalog` hit; lands as part of the `wikipedia` corpus so retrieval and mesh sharing treat fetched articles uniformly with curated L5 content."
+license = "CC-BY-SA-4.0"
+size_compressed_gb = 0.001
+size_indexed_gb = 0.005
+enrichment_enabled = true
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-article/recipe.toml"
+sha256 = ""
+catalog_status = "hidden"
 
 [[recipes]]
 id = "crs_reports"
@@ -140,18 +158,20 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/crs_reports/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
-id = "codebase"
-name = "Codebase"
-description = "Tree-sitter indexed local code corpus — symbol-level chunks for Rust, TypeScript, JavaScript, Go, and Python. Requires corpus-engine built with --features treesitter."
+id = "alignment"
+name = "Alignment workspace"
+description = "Mutable-merge replication of the user's ~/.claude/ plans + auto-memory entries + plan template across the user's own mesh peers. Newest-mtime-wins per file. Pairs with the post-merge projector so a fresh machine reaches parity in one corpus install."
 license = "private"
-size_compressed_gb = 0.0
-size_indexed_gb = 0.0
+size_compressed_gb = 0.001
+size_indexed_gb = 0.005
 enrichment_enabled = false
-mesh_sharing = false
-toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/codebase/recipe.toml"
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/alignment/recipe.toml"
 sha256 = ""
+catalog_status = "hidden"
 
 [[recipes]]
 id = "us-code"
@@ -164,6 +184,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/us-code/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "olc-opinions"
@@ -176,6 +197,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/olc-opinions/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "scotus-opinions"
@@ -188,6 +210,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/scotus-opinions/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "federal-register-presidential"
@@ -200,6 +223,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/federal-register-presidential/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "wikipedia-newsworthy"
@@ -213,6 +237,7 @@ mesh_sharing = true
 parent_corpus_id = "wikipedia"
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-newsworthy/recipe.toml"
 sha256 = ""
+catalog_status = "preview"
 
 [[recipes]]
 id = "conversations-anthropic"
@@ -225,6 +250,7 @@ enrichment_enabled = true
 mesh_sharing = false
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/conversations-anthropic/recipe.toml"
 sha256 = ""
+catalog_status = "hidden"
 
 [[recipes]]
 id = "enron-sample"

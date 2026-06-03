@@ -6,7 +6,7 @@ Same shape as `bench/sep/` — retrieval + LLM-judge, not atom F1.
 ## Shape
 
 `questions.toml` is a symlink to
-`sovereign-recipes/wikipedia/eval/wikipedia_questions.toml`. 20
+`sovereign/bench/wikipedia/questions.toml`. 20
 challenging questions across six categories: factual recall,
 multi-article synthesis, causal / historical, comparative,
 boundary / coverage, contested / atlas-relevant.
@@ -32,4 +32,4 @@ Synced 2026-05-15 from `commonwealth-ai.pre-monorepo/sovereign-recipes/wikipedia
 - Recipe: `sovereign-recipes/wikipedia/recipe.toml`.
 - Pipeline: `referential_atlas` (per `corpus-engine/src/enrichment/pipeline/pipelines/referential_atlas.rs`).
 - Atlas state: `~/.sovereign/indexes/wikipedia/atlas/` (atoms.json + edges.json present locally).
-- Bonus banks: `sovereign-recipes/wikipedia/eval/{single_atomic,single_roman}.toml` — single-article ablation banks; not yet wired into the rollup.
+- Bonus banks: `sovereign/bench/wikipedia/{single_atomic,single_roman}.toml` — single-article ablation banks; not yet wired into the rollup.

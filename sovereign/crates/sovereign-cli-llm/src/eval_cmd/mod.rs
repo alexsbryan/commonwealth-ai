@@ -54,7 +54,7 @@ const HELP: Help = Help {
         HelpSection::Notes(
             "Operates against the running daemon at localhost:9741 (override with \
              --daemon). Retrieval-only — does not call the chat model. The bank \
-             format lives at sovereign-recipes/<corpus>/eval/*.toml.",
+             format lives at sovereign/bench/<corpus>/*.toml.",
         ),
     ],
 };
@@ -67,7 +67,7 @@ const RUN_HELP: Help = Help {
             "sovereign eval run --bank <path> [--synth] [--limit N] [--inspect] [--format text|json] [--output <path>]",
         ),
         HelpSection::Flags(&[
-            ("--bank <path>",  "Path to the bank TOML (e.g. sovereign-recipes/wikipedia/eval/wikipedia_questions.toml)."),
+            ("--bank <path>",  "Path to the bank TOML (e.g. sovereign/bench/wikipedia/questions.toml)."),
             ("--synth",        "Drive each question through the full chat pipeline (routing → retrieval → synthesis). Slower, but exercises the model + routing layers."),
             ("--routing-only", "Call the classifier per question and score the routing decision against `expected_intent` (or category default). Skips retrieval and synthesis — fast iteration loop for tuning the classifier prompt."),
             ("--isolate",      "Per-corpus isolation (with --synth). Seeds each question's conversation with enabled_corpora=[bank.corpus] so retrieval is scoped to the bank's target corpus alone — measures corpus integrity without cross-corpus dilution."),
@@ -418,7 +418,7 @@ async fn cmd_run(args: &[String]) -> i32 {
 
     if a.bank.as_os_str().is_empty() {
         eprintln!("error: --bank is required");
-        eprintln!("hint: try sovereign-recipes/wikipedia/eval/wikipedia_questions.toml");
+        eprintln!("hint: try sovereign/bench/wikipedia/questions.toml");
         return 2;
     }
 

@@ -1,6 +1,6 @@
 # Q/A retrieval bank for Alex Bryan's personal vault root essays.
 #
-# Schema mirrors `sovereign-recipes/sep/eval/sep_questions.toml`
+# Schema mirrors `sovereign/bench/sep/questions.toml`
 # (consumed by `eval_cmd::runner::run_bank`).
 #
 # Same vault scope as `golden.toml`: root essays only, COMMONWEALTH/

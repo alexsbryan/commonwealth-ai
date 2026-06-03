@@ -1,7 +1,7 @@
 //! `sovereign knowledge-gym …` — correctness harness for the
 //! unified `knowledge_lookup` tool (Tool-Mastery framework Phase 5).
 //!
-//! Each fixture under `sovereign-recipes/knowledge-gym/fixtures/`
+//! Each fixture under `sovereign/bench/knowledge-gym/fixtures/`
 //! is a self-contained replay: an `input.json` (OpenAI-compatible
 //! chat completion request with the `knowledge_lookup` tool
 //! declared), a `mock_evidence.json` (the canned response we
@@ -22,7 +22,7 @@ use std::time::Duration;
 use serde_json::Value;
 
 const DEFAULT_BASE_URL: &str = "http://localhost:9741";
-const DEFAULT_FIXTURES_DIR: &str = "sovereign-recipes/knowledge-gym/fixtures";
+const DEFAULT_FIXTURES_DIR: &str = "sovereign/bench/knowledge-gym/fixtures";
 const HTTP_TIMEOUT: Duration = Duration::from_secs(120);
 const DEFAULT_REPLAYS: u32 = 3;
 

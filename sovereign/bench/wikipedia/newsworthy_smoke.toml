@@ -4,7 +4,7 @@
 # this to measure whether the freshness daemon actually surfaces
 # recent events that L5 Wikipedia alone wouldn't carry.
 #
-# Schema mirrors `sovereign-recipes/wikipedia/eval/wikipedia_questions.toml`:
+# Schema mirrors `sovereign/bench/wikipedia/questions.toml`:
 # see that file for the canonical field semantics. Scoring is
 # keyword-fuzzy on `expected_facts` and case-insensitive
 # underscore-folded on `expected_sources`.

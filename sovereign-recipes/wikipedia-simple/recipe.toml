@@ -10,10 +10,11 @@ by Core on overlapping topics once Core lands; kept around because simpler prose
 cleaner synthesis from small models.\
 """
 license = "CC-BY-SA-4.0"
-# Parked in the desktop "Coming soon" bucket (catalog_status = preview
-# in the registry snapshot) until it ships as a proper HF subset of
-# Core. Standalone corpus for now — NOT a `parent_corpus_id` child, so
-# it does not render as a Wikipedia add-on toggle.
+# Layer 0 satellite of `wikipedia`. The desktop picker hides children
+# with a `parent_corpus_id` from the top-level list and renders them as
+# toggles under the parent's row instead. Data layer is unchanged —
+# own id, own index, own mesh-sharing rules.
+parent_corpus_id = "wikipedia"
 mesh_sharing = true
 size_compressed_gb = 0.4
 size_indexed_gb = 1.0

@@ -1,0 +1,86 @@
+# Annotated recipe template — copy this, delete what you don't need.
+#
+# A recipe declares one pipeline:
+#   acquire → extract → filter → chunk → embed → index → (optional) enrich
+#
+# Every key, allowed value, and default is in ../../SCHEMA.md (generated from
+# the engine source). The comments below cover the common path; see SCHEMA.md
+# for the full menu of acquirer / extractor / chunker / filter types.
+#
+# Validate before you run:  sovereign recipe validate ./recipe.toml
+# Dry-run on a sample:       sovereign recipe test ./recipe.toml --sample-size 50
+
+# ── Identity + catalog metadata (CorpusMeta) ─────────────────────────────────
+[corpus]
+id   = "my-corpus"                 # REQUIRED. Must equal the directory name.
+name = "My Corpus"                 # REQUIRED. Human-facing title.
+description = "One sentence a newcomer could understand."
+license = "CC-BY-4.0"              # License of the SOURCE DATA (not this file).
+mesh_sharing = false               # May peers replicate this index? Honor the license.
+# query_sharing = true             # Allow federated query against your local copy.
+# kind = "standard"                # or "catalog" for a titles-only catalog corpus.
+
+# ── Where the bytes come from (AcquirerConfig — tagged by `type`) ────────────
+# Pick ONE acquirer. Common choices:
+[acquire]
+type = "bulk_download"             # Download a dump/archive over HTTP (with resume).
+url  = "https://example.org/data/dump.jsonl.gz"
+resume = true
+#
+# type = "huggingface_dataset"     # repo = "...", subset = "...", file_indices = [...]
+# type = "local_file"             # path = "~/data/my-folder"  (already on disk)
+# type = "http_api"               # paginated REST — see SCHEMA.md → AcquirerConfig
+# type = "web_crawl"              # seed_urls + link_pattern + max_pages
+
+# ── Raw bytes → documents (ExtractorConfig — tagged by `type`) ───────────────
+# Match your data's format. Common choices:
+[extract]
+type = "jsonl"                     # one JSON object per line
+content_field = "text"             # the field holding the body text
+title_field   = "title"            # the field holding the title (optional)
+#
+# type = "parquet"                # content_column = "...", label_column = "..."
+# type = "csv"                    # content_column = "..."
+# type = "html"                   # title_selector, content_selector (CSS)
+# type = "email"                  # RFC-5322 mailboxes (maildir)
+# type = "markdown" | "plaintext"
+# type = "wikipedia_jsonl"        # Wikimedia structured dumps
+
+# ── Optional document filters (FilterConfig) — repeatable [[filter]] ─────────
+# Drop documents BEFORE chunking. Omit entirely to keep everything.
+# [[filter]]
+# type = "boilerplate"            # strip signatures / quoted replies / disclaimers
+# strip_signatures = true
+#
+# [[filter]]
+# type = "title_list"             # keep only titles in a list file
+# list_file = "data/keep_titles.txt"
+
+# ── Documents → chunks (ChunkerConfig — tagged by `type`) ────────────────────
+[chunk]
+type = "paragraph"                 # paragraph | sentence | fixed | semantic | passthrough
+max_chars = 2048                   # target chunk size
+overlap_chars = 256                # carry-over between adjacent chunks
+
+# ── Index settings (IndexConfig) ─────────────────────────────────────────────
+[index]
+fts = true                         # full-text (BM25) index
+vector = true                      # dense vector index
+# embedding_model / embedding_dimensions auto-detect from the loaded model.
+# Only set them to pin a specific model.
+
+# ── Optional: prebuilt cold-start snapshot (PrebuiltConfig) ──────────────────
+# Lets users skip a full ingest by downloading a prebuilt index.
+# [prebuilt]
+# hf_repo = "your-org/my-corpus-index"
+# hf_filename = "my-corpus-qwen-embedding-0.6b.tar.zst"
+# sha256 = "…"
+# compatible_embedding_model = "qwen-embedding-0.6b"
+
+# ── Optional: enrichment / atlas (EnrichmentConfig) — advanced ───────────────
+# LLM-heavy. Leave OFF for your first recipe; see SCHEMA.md → EnrichmentConfig.
+# [enrichment]
+# enabled = true
+# type = "atlas"
+# domain = "multi"
+# prompt_version = "1.0.0"

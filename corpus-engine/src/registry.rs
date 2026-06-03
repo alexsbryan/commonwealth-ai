@@ -27,7 +27,10 @@ use crate::types::BuiltinCorpus;
 
 // ── Bundled snapshot ─────────────────────────────────────────────────────────
 
-const BUNDLED_SNAPSHOT: &str = include_str!("../registry_snapshot.toml");
+// The bundled catalog is `sovereign-recipes/registry.toml`, vendored by
+// build.rs into OUT_DIR (single source of truth — no checked-in snapshot
+// copy in this crate). See `corpus-engine/build.rs`.
+const BUNDLED_SNAPSHOT: &str = include_str!(concat!(env!("OUT_DIR"), "/registry_snapshot.toml"));
 
 // ── Registry snapshot schema ─────────────────────────────────────────────────
 
@@ -329,7 +332,10 @@ impl RecipeRegistry {
     /// Fetch and parse the recipe TOML for `id`.
     ///
     /// Resolution order:
-    /// 1. `<overrides_dir>/<id>.toml` — local file, no network.
+    /// 1. `<overrides_dir>/<id>.toml` (or `<id>/recipe.toml`) — local file,
+    ///    no network. This is `~/.sovereign/recipes/`: user + local-only recipes.
+    /// 1b. `$SOVEREIGN_RECIPES_DIR/<id>/recipe.toml` — opt-in dev source dir
+    ///    for hot-editing the canonical `sovereign-recipes` tree without a rebuild.
     /// 2. `toml_url` from the registry entry — fetched via HTTP, SHA-256 verified.
     /// 3. Compile-time bundled TOML via [`crate::recipe_builtin::bundled_recipe_toml`]
     ///    — last-resort fallback. Lets a corpus install without the
@@ -349,6 +355,26 @@ impl RecipeRegistry {
             if sub.is_file() {
                 tracing::debug!(corpus = %id, path = %sub.display(), "Loading recipe from local override (subdir)");
                 return Recipe::from_file(&sub);
+            }
+        }
+
+        // 1b. Dev / contributor source dir. `$SOVEREIGN_RECIPES_DIR` points at
+        // a `sovereign-recipes` checkout so a contributor can edit the
+        // canonical recipe and load it live — no copy into `~/.sovereign`, no
+        // rebuild. Explicit opt-in: env unset → skipped, so it never shadows
+        // the bundled fallback in normal installs or tests.
+        if let Ok(dir) = std::env::var("SOVEREIGN_RECIPES_DIR") {
+            if !dir.is_empty() {
+                let dir = Path::new(&dir);
+                let sub = dir.join(id).join("recipe.toml");
+                if sub.is_file() {
+                    tracing::debug!(corpus = %id, path = %sub.display(), "Loading recipe from $SOVEREIGN_RECIPES_DIR");
+                    return Recipe::from_file(&sub);
+                }
+                let flat = dir.join(format!("{id}.toml"));
+                if flat.is_file() {
+                    return Recipe::from_file(&flat);
+                }
             }
         }
 
@@ -467,11 +493,18 @@ fn verify_sha256(data: &[u8], expected_hex: &str) -> std::result::Result<(), Str
 
 // ── Path helper (used by engine and xtask) ───────────────────────────────────
 
-/// Resolve the path to the bundled snapshot file within the corpus-engine crate.
-/// Returns `None` outside a cargo workspace (e.g. when installed as a binary).
+/// Resolve the path to the canonical registry catalog
+/// (`sovereign-recipes/registry.toml`, the single source of truth that
+/// build.rs vendors into the bundled snapshot). Returns `None` outside a
+/// cargo workspace (e.g. when installed as a standalone binary).
 pub fn snapshot_path_in_workspace() -> Option<PathBuf> {
     // CARGO_MANIFEST_DIR is set at build time; use it at runtime via env! fallback.
-    option_env!("CARGO_MANIFEST_DIR").map(|d| Path::new(d).join("registry_snapshot.toml"))
+    // corpus-engine/ → ../sovereign-recipes/registry.toml.
+    option_env!("CARGO_MANIFEST_DIR").and_then(|d| {
+        Path::new(d)
+            .parent()
+            .map(|ws| ws.join("sovereign-recipes").join("registry.toml"))
+    })
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

@@ -2196,6 +2196,7 @@ dependencies = [
  "petgraph 0.6.5",
  "pulldown-cmark",
  "quick-xml 0.36.2",
+ "quote",
  "regex",
  "reqwest 0.12.28",
  "reqwest-eventsource",
@@ -2207,6 +2208,7 @@ dependencies = [
  "sevenz-rust2",
  "sha2 0.10.9",
  "streaming-iterator",
+ "syn 2.0.117",
  "tar",
  "tempfile",
  "thiserror 2.0.18",
@@ -14380,11 +14382,6 @@ checksum = "66fee0b777b0f5ac1c69bb06d361268faafa61cd4682ae064a171c16c433e9e4"
 [[package]]
 name = "xtask"
 version = "0.1.0"
-dependencies = [
- "reqwest 0.12.28",
- "serde",
- "toml 0.8.2",
-]
 
 [[package]]
 name = "xxhash-rust"

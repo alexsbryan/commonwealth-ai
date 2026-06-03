@@ -207,6 +207,11 @@ sevenz-rust2 = { version = "0.21", default-features = false, features = ["bzip2"
 # unit tests. Read-side `calamine` is already a runtime dep; the
 # writer is dev-only so the production binary stays lean.
 rust_xlsxwriter = "0.83"
+# Dev-only: the `recipe_schema` test parses recipe.rs's AST to generate
+# sovereign-recipes/SCHEMA.md and gate it against drift. No runtime dep —
+# the recipe types stay free of doc-gen derives.
+syn = { version = "2", features = ["full", "extra-traits"] }
+quote = "1"
 
 
 [lints]
