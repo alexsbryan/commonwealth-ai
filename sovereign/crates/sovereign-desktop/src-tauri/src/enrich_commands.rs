@@ -1191,7 +1191,7 @@ mod tests {
         release_corpus(corpus, job);
         let reg = registry().lock().unwrap();
         assert!(
-            reg.job_id_by_corpus.get(corpus).is_none(),
+            !reg.job_id_by_corpus.contains_key(corpus),
             "release should clear the reverse lookup"
         );
     }

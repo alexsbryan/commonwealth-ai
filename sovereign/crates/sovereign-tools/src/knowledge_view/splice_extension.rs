@@ -706,6 +706,6 @@ mod tests {
         let map = load_chunk_timestamps(&db_path);
         assert_eq!(map.get("m1"), Some(&100));
         assert_eq!(map.get("c1"), Some(&500));
-        assert!(map.get("m-deleted").is_none(), "deleted memories excluded");
+        assert!(!map.contains_key("m-deleted"), "deleted memories excluded");
     }
 }
