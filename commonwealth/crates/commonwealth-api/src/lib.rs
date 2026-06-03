@@ -21,6 +21,7 @@ pub mod headers;
 pub mod middleware;
 pub mod frontdoor;
 pub mod openai_types;
+pub mod reshaping;
 pub mod responses_types;
 pub mod routes_app_internal;
 pub mod routes_apps;

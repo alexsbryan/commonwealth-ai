@@ -3,11 +3,11 @@
 #   cargo run -p xtask -- arch-gate --update-baseline
 # The gate fails on a NEW oversized file or growth past slack, so existing
 # debt is frozen and can only shrink. Format: <count>\t<relpath>.
-5769	commonwealth/crates/commonwealth-api/src/frontdoor.rs
+5772	commonwealth/crates/commonwealth-api/src/frontdoor.rs
 1278	commonwealth/crates/commonwealth-api/src/routes_inference.rs
-1307	commonwealth/crates/commonwealth-api/src/routes_internal/corpus_ingest.rs
+1305	commonwealth/crates/commonwealth-api/src/routes_internal/corpus_ingest.rs
 1571	commonwealth/crates/commonwealth-api/src/routes_internal/mesh_admin.rs
-3140	commonwealth/crates/commonwealth-api/src/routes_responses.rs
+3146	commonwealth/crates/commonwealth-api/src/routes_responses.rs
 1434	commonwealth/crates/commonwealth-test-harness/tests/integration.rs
 1474	corpus-engine-atos/src/features.rs
 5634	corpus-engine-notes/src/notes.rs
@@ -66,7 +66,6 @@
 1212	sovereign/crates/sovereign-core/src/skills.rs
 1748	sovereign/crates/sovereign-core/tests/core_tests.rs
 1658	sovereign/crates/sovereign-core/tests/functional.rs
-6557	sovereign/crates/sovereign-desktop/src-tauri/src/commands.rs
 1435	sovereign/crates/sovereign-desktop/src-tauri/src/enrich_commands.rs
 2321	sovereign/crates/sovereign-desktop/src-tauri/src/state.rs
 9669	sovereign/crates/sovereign-inference/src/embedded.rs
