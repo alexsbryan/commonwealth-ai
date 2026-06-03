@@ -27,8 +27,6 @@ mod predicate;
 mod runner;
 mod score;
 
-#[cfg(test)]
-pub use predicate::Predicate;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;

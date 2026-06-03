@@ -170,3 +170,6 @@ tracing-subscriber = { workspace = true }
 # without an on-disk SQLite file. Same pattern as the
 # `sovereign-tools/tests/local_corpus_e2e.rs` harness.
 sovereign-store = { workspace = true }
+
+[lints]
+workspace = true

@@ -14,3 +14,6 @@ thiserror = { workspace = true }
 getrandom = "0.3"
 hex = "0.4"
 tracing = "0.1"
+
+[lints]
+workspace = true

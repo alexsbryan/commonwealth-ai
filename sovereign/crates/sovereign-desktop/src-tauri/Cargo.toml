@@ -80,3 +80,6 @@ axum = { workspace = true }
 # Used by enrich_commands.rs tests for isolated tempdir fixtures
 # (JSONL synthesizer smoke + future filesystem-touching tests).
 tempfile = "3"
+
+[lints]
+workspace = true

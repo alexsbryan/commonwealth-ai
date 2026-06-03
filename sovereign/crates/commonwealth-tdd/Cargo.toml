@@ -58,3 +58,6 @@ tempfile = { workspace = true }
 # solver loop emits — the glassbox principle (§9.1) is only useful
 # if the events are visible when an engineer runs the test suite.
 tracing-subscriber = { workspace = true }
+
+[lints]
+workspace = true

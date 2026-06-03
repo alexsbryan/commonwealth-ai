@@ -209,7 +209,7 @@ async fn subset_run_does_not_update_cache() {
 
 #[tokio::test]
 async fn config_require_errors_before_init() {
-    let home: HomeGuard = scoped_home();
+    let _home: HomeGuard = scoped_home();
     let err = EnrichConfig::require("never-init-ed").unwrap_err();
     let msg = format!("{err}");
     assert!(

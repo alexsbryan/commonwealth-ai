@@ -1122,7 +1122,7 @@ mod tests {
         }
         for i in 2..=6 {
             for _ in 0..100 {
-                let target = ((i % 5) + 2);
+                let target = (i % 5) + 2;
                 edges.push(Edge {
                     id: EdgeId::new(next_edge as usize),
                     edge_type: EdgeType::Involves,

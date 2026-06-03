@@ -67,3 +67,6 @@ tempfile = { workspace = true }
 # `dev-tools` gates the `sovereign awareness` development CLI.
 # Pulls in `sovereign-tools` for its `knowledge_view` modules.
 dev-tools = ["dep:sovereign-tools"]
+
+[lints]
+workspace = true

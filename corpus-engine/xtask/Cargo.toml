@@ -12,3 +12,6 @@ path = "src/main.rs"
 reqwest = { version = "0.12", features = ["blocking"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
+
+[lints]
+workspace = true

@@ -17,3 +17,6 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 bytes = { workspace = true }
 reqwest = { workspace = true }
+
+[lints]
+workspace = true
