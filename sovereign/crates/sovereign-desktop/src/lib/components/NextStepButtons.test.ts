@@ -5,7 +5,7 @@
 // in ChatView-level tests and by the Rust integration suite.
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/svelte";
-import NextStepButtons from "./NextStepButtons.svelte";
+import { NextStepButtons } from "@sovereign/chat-ui";
 import type { NextStepOffer } from "../types";
 
 function offer(overrides: Partial<NextStepOffer> = {}): NextStepOffer {

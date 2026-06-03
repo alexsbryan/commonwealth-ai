@@ -1,0 +1,13 @@
+# Rust
+/src-tauri/target/
+/src-tauri/Cargo.lock
+
+# Tauri mobile generated projects (created by `tauri {ios,android} init`)
+/src-tauri/gen/
+
+# Node / Vite
+/node_modules/
+/dist/
+
+# Dev-only credential placeholder (see keychain.rs)
+**/keychain-dev/

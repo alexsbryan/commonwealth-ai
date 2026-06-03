@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "default",
+  "description": "Core permissions for the Sovereign mobile shell. The app talks to the host over HTTP/WS from the Rust core, so no extra capability surface is exposed to the WebView in v1.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

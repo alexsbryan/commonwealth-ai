@@ -1,0 +1,41 @@
+# Detached from the repo Cargo workspace on purpose: this crate's deps
+# (Tauri mobile + plugins) differ from the main workspace and cannot be
+# verified on a CI/Linux box without the mobile toolchain, so it must
+# not be able to red the workspace `cargo check`. Promote to a workspace
+# member once it builds cleanly on the pinned toolchain.
+[workspace]
+
+[package]
+name = "sovereign-mobile"
+version = "0.1.0"
+edition = "2021"
+description = "Thin Tauri mobile client for a Sovereign host (tailnet, tenant-auth, streamed chat)."
+
+[lib]
+# Tauri mobile requires a cdylib (the iOS/Android entrypoint) plus an
+# rlib so the desktop-dev `main.rs` shim can link `run()`.
+name = "sovereign_mobile_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+tokio-tungstenite = "0.29"
+futures-util = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+
+# Pin-time decision (see connection/keychain.rs): the crate that backs
+# iOS Keychain *and* Android Keystore under Tauri 2 mobile. Candidates:
+# a `tauri-plugin-*` secure-storage plugin, or a thin per-platform
+# plugin (Swift SecItem / Kotlin KeyStore). Until chosen, keychain.rs
+# uses a clearly-marked dev-only file store.
+# tauri-plugin-keychain = "..."

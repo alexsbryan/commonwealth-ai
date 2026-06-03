@@ -38,7 +38,7 @@
   import StarterChips from "./StarterChips.svelte";
   import BrandMark from "./BrandMark.svelte";
   import { MAX_TURN_MESSAGE_CHARS, OVERSIZE_MESSAGE_HINT } from "../types";
-  import { WordBufferedStream } from "../stream-buffer";
+  import { WordBufferedStream } from "@sovereign/chat-ui";
   import { chatMachine } from "../machines/chat.machine";
   import { routingStore } from "../stores/routing.svelte";
   import MessageBubble from "./MessageBubble.svelte";

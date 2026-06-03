@@ -1,0 +1,52 @@
+:root {
+  --bg: #0f1115;
+  --surface: #181b22;
+  --text: #e6e8ec;
+  --muted: #9aa3b2;
+  --accent: #6ea8fe;
+  --danger: #ff6b6b;
+  --warn: #f0b429;
+  font-family: -apple-system, system-ui, "IBM Plex Sans", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  /* Respect notches / home indicator on iOS. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  color: #0b1020;
+  font-weight: 600;
+}
+
+input,
+textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid #2a2f3a;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+}
