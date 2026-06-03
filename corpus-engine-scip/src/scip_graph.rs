@@ -383,10 +383,7 @@ impl ScipGraph {
             // only the first row — any non-"ok" value means quarantine.
             let verdict: rusqlite::Result<String> =
                 conn.query_row("PRAGMA integrity_check", [], |row| row.get(0));
-            let quarantined = match verdict {
-                Ok(v) if v == "ok" => false,
-                _ => true,
-            };
+            let quarantined = !matches!(verdict, Ok(v) if v == "ok");
             if quarantined {
                 drop(conn);
                 let moved_to = corrupt_quarantine_path(db_path);
@@ -450,6 +447,7 @@ impl ScipGraph {
             .create(true)
             .write(true)
             .read(true)
+            .truncate(false)
             .open(&lock_path)?;
 
         // fs4's flock wrapper returns Ok(()) on acquire and
@@ -880,7 +878,7 @@ impl ScipGraph {
             return Ok((vec![], StalenessCaution::None));
         };
 
-        let depth = depth.min(2).max(1);
+        let depth = depth.clamp(1, 2);
         let mut all_callers = Vec::new();
         let mut seen = HashSet::new();
         seen.insert(resolved.clone());
@@ -1454,8 +1452,8 @@ impl ScipGraph {
         max_depth: usize,
         max_symbols: usize,
     ) -> Result<BlastRadiusResult> {
-        let max_depth = max_depth.min(5).max(1);
-        let max_symbols = max_symbols.min(200).max(1);
+        let max_depth = max_depth.clamp(1, 5);
+        let max_symbols = max_symbols.clamp(1, 200);
 
         let resolved = self.resolve_symbol(symbol_name).await?;
         let Some(resolved) = resolved else {

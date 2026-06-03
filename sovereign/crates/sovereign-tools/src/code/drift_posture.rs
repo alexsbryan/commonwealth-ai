@@ -477,7 +477,7 @@ mod tests {
         let dir = tmp_dir("never");
         let narrative = dir.join("doc.md");
         std::fs::write(&narrative, b"hello").unwrap();
-        let posture = compute_posture(&dir, &[narrative.clone()]);
+        let posture = compute_posture(&dir, std::slice::from_ref(&narrative));
         assert_eq!(posture.status, PostureStatus::NeverRun);
         assert!(posture.last_run_at_unix.is_none());
         std::fs::remove_dir_all(&dir).ok();
@@ -490,8 +490,8 @@ mod tests {
         std::fs::write(&narrative, b"first version").unwrap();
         let output = dir.join("latest.md");
         std::fs::write(&output, b"# report").unwrap();
-        write_fingerprint(&dir, &[narrative.clone()], &output).unwrap();
-        let posture = compute_posture(&dir, &[narrative.clone()]);
+        write_fingerprint(&dir, std::slice::from_ref(&narrative), &output).unwrap();
+        let posture = compute_posture(&dir, std::slice::from_ref(&narrative));
         assert_eq!(posture.status, PostureStatus::Fresh);
         assert!(posture.stale_paths.is_empty());
         std::fs::remove_dir_all(&dir).ok();
@@ -504,7 +504,7 @@ mod tests {
         std::fs::write(&narrative, b"first version").unwrap();
         let output = dir.join("latest.md");
         std::fs::write(&output, b"# report").unwrap();
-        write_fingerprint(&dir, &[narrative.clone()], &output).unwrap();
+        write_fingerprint(&dir, std::slice::from_ref(&narrative), &output).unwrap();
         // Modify the narrative after the fingerprint is written.
         let mut f = std::fs::OpenOptions::new()
             .write(true)
@@ -513,7 +513,7 @@ mod tests {
             .unwrap();
         f.write_all(b"changed version").unwrap();
         drop(f);
-        let posture = compute_posture(&dir, &[narrative.clone()]);
+        let posture = compute_posture(&dir, std::slice::from_ref(&narrative));
         assert_eq!(posture.status, PostureStatus::Stale);
         assert_eq!(posture.stale_paths.len(), 1);
         std::fs::remove_dir_all(&dir).ok();
@@ -529,7 +529,7 @@ mod tests {
         let output = dir.join("latest.md");
         std::fs::write(&output, b"# report").unwrap();
         // Fingerprint covers only a.md.
-        write_fingerprint(&dir, &[a.clone()], &output).unwrap();
+        write_fingerprint(&dir, std::slice::from_ref(&a), &output).unwrap();
         // Query asks about both — b.md is uncovered.
         let posture = compute_posture(&dir, &[a.clone(), b.clone()]);
         assert_eq!(posture.status, PostureStatus::Partial);
