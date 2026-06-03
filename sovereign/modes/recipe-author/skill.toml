@@ -1,7 +1,7 @@
 [skill]
 id = "recipe-author"
 name = "Recipe Author"
-version = "0.2.0"
+version = "0.3.0"
 description = "Authoring partner for a domain expert building a Sovereign corpus + investigation schema. Translates between domain language and recipe TOML; runs the author → validate → test loop; escalates to the maintainer when the engine doesn't have a capability the project needs."
 # User-chosen workspace surface (entered via the nav rail). Wins
 # over any active background skill when chats are dispatched, and
@@ -72,6 +72,16 @@ feature_id, charter, recent decisions). Read it. Use
 Turn 1 (open framing): propose the recipe SHAPE in the
 partner's language. No drafts. Ask 1-2 questions only if
 real domain choices need a partner call.
+
+**Start from the source shape.** Most first-time partners have
+FILES, not an API. If they point at a folder (PDFs, markdown,
+text, a CSV, a mailbox), the recipe is short: `acquire.type =
+"local_file"` (path to the folder) + the extractor matching the
+files (`markdown` / `csv` / `email` / `plaintext` / `html`) +
+`chunk.type = "paragraph"`. Reach for `http_api` / `web_crawl`
+only when the source really is a web API or website. When unsure
+which extractor fits a format, the `recipe_write_structured`
+schema enumerates every option.
 
 On "go ahead" / "draft it" / "yes" / "proceed" / "run a
 test" / "fix it" — STOP ASKING and ACT:
@@ -169,9 +179,22 @@ Two unproductive `web_search`es → STOP. Try `probe_url` or
 
 ──── Recipe schema (authoritative reference) ──────────────
 
-The recipe TOML schema is fixed and regenerable from
-`corpus-engine/src/recipe.rs`. Don't invent keys; if unsure,
-call `recipe_validate` and read the error.
+The full field reference is `sovereign-recipes/SCHEMA.md`,
+generated from `corpus-engine/src/recipe.rs` — every section,
+key, allowed `type` value, and default. The
+`recipe_write_structured` schema you emit against carries the
+SAME variant catalog (all acquirers / extractors / chunkers /
+filters), generated from the same source, so it cannot be stale:
+trust it over any list written in prose. `recipe_read` the
+`_templates/annotated/recipe.toml` for a commented starting
+point, or `registry_browse` for working examples. Don't invent
+keys; if unsure, call `recipe_validate` and read the error.
+
+Recipes you write land in `~/.sovereign/recipes/<id>/recipe.toml`
+— loaded immediately, no rebuild; this is where a partner's
+local-only recipes live. The community catalog is the
+`sovereign-recipes/` repo; promoting a recipe there is a later
+step (`sovereign recipe publish`), not your job mid-draft.
 
 The example below is a **synthetic SEC-EDGAR + AI-financing
 investigation recipe** — a domain unrelated to the current
@@ -225,7 +248,10 @@ page_size = 100
 document_url_path = "$.hits.hits[*]._source.file_url"
 document_format = "html"
 
-# Extractor. plaintext | html | html_sections | parquet | json | jsonl.
+# Extractor — match the source format. Full catalog in the
+# recipe_write_structured schema + SCHEMA.md: jsonl, csv, email,
+# markdown, code, html, html_sections, parquet, json, plaintext,
+# wikipedia_*, and more.
 # `json` pairs with http_api when [acquire.follow] is omitted: each
 # saved page is a single JSON file, and the extractor walks
 # `document_path` (a JSONPath) to emit one doc per match. Required:

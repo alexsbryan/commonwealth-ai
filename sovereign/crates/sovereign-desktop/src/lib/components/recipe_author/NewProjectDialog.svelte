@@ -15,6 +15,48 @@
   let saving = $state(false);
   let error: string | null = $state(null);
 
+  // Optional one-click starting points so a first-time author doesn't face an
+  // empty box. A chip seeds the charter (and the title, if still blank); the
+  // recipe-author agent turns the source shape into the right recipe
+  // (local_file + matching extractor, http_api, web_crawl, …).
+  const ARCHETYPES: { label: string; title: string; charter: string }[] = [
+    {
+      label: "Folder of files",
+      title: "My documents",
+      charter:
+        "# Charter\n\nBuild a corpus from a folder of files already on my\ncomputer (markdown, text, or PDFs).\n\n- Source: a local folder — I'll give the path\n- What it's for: \n- Anything to exclude: ",
+    },
+    {
+      label: "CSV / spreadsheet",
+      title: "My table",
+      charter:
+        "# Charter\n\nBuild a corpus from a CSV / spreadsheet of records.\n\n- Source: a local .csv — I'll give the path\n- Column holding the main text: \n- What it's for: ",
+    },
+    {
+      label: "Mailbox",
+      title: "My mail",
+      charter:
+        "# Charter\n\nBuild a corpus from an email mailbox.\n\n- Source: a local maildir / mailbox folder — I'll give the path\n- What it's for: \n- Strip quoted replies + signatures: yes",
+    },
+    {
+      label: "Web API",
+      title: "API corpus",
+      charter:
+        "# Charter\n\nBuild a corpus from a public web API.\n\n- API: name + docs URL\n- Which records I want: \n- Auth (if any): ",
+    },
+    {
+      label: "Website",
+      title: "Website corpus",
+      charter:
+        "# Charter\n\nBuild a corpus by crawling a website.\n\n- Site: starting URL\n- Which pages to follow: \n- What it's for: ",
+    },
+  ];
+
+  function applyArchetype(a: { title: string; charter: string }) {
+    if (!title.trim()) title = a.title;
+    charter = a.charter;
+  }
+
   async function submit(e: SubmitEvent) {
     e.preventDefault();
     if (!title.trim()) {
@@ -46,6 +88,15 @@
       framing — what the corpus is, who it's for, and the boundary
       decisions you've already made. The agent reads it on every turn.
     </p>
+
+    <div class="archetypes" role="group" aria-label="Starting points">
+      <span class="archetypes-label">Start from a source (optional):</span>
+      {#each ARCHETYPES as a}
+        <button type="button" class="chip" onclick={() => applyArchetype(a)}>
+          {a.label}
+        </button>
+      {/each}
+    </div>
 
     <label for="np-title">Title</label>
     <input
@@ -118,6 +169,31 @@
     color: var(--muted, #8a8c93);
     font-size: 0.85rem;
     margin: 0 0 0.5rem;
+  }
+  .archetypes {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0 0 0.3rem;
+  }
+  .archetypes-label {
+    font-size: 0.78rem;
+    color: var(--muted, #8a8c93);
+    margin-right: 0.2rem;
+  }
+  .chip {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.8rem;
+    border-radius: 999px;
+    border: 1px solid var(--border, #2a2c33);
+    background: var(--bg-elevated, transparent);
+    color: inherit;
+    cursor: pointer;
+  }
+  .chip:hover {
+    background: color-mix(in srgb, var(--lavender) 18%, transparent);
+    border-color: color-mix(in srgb, var(--lavender) 40%, transparent);
   }
   label {
     font-size: 0.8rem;
