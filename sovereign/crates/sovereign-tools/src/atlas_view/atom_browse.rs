@@ -287,7 +287,7 @@ fn filter_and_page(
     // Recency is the *only* reordering signal — salience etc. are left
     // to the per-type tiebreak that insertion order already encodes.
     if !freshness.is_empty() {
-        matches.sort_by(|a, b| atom_freshness(b, freshness).cmp(&atom_freshness(a, freshness)));
+        matches.sort_by_key(|b| std::cmp::Reverse(atom_freshness(b, freshness)));
     }
 
     let total_matching = matches.len() as u64;

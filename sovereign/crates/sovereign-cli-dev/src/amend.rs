@@ -691,7 +691,7 @@ pub fn changed_design_sections(
         }
     }
     // Section deletions: heading present in old, gone in new.
-    for (heading, _) in &old_m {
+    for heading in old_m.keys() {
         let Some(id) = design_section_id(heading) else {
             continue;
         };

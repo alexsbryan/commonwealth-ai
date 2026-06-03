@@ -1276,11 +1276,10 @@ fn consolidate_typo_aliases(
             continue;
         }
         let a_first = a_folded.chars().next();
-        for j in (i + 1)..entities.len() {
+        for (j, b) in entities.iter().enumerate().skip(i + 1) {
             if remap.contains_key(&j) {
                 continue;
             }
-            let b = &entities[j];
             if a.entity_type != b.entity_type {
                 continue;
             }

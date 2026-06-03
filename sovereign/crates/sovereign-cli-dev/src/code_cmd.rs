@@ -1193,7 +1193,7 @@ fn default_data_dir() -> Option<PathBuf> {
     // `util::dirs::sovereign_indexes()` but keep the Option return so
     // existing `.or_else(default_data_dir)` callers stay stable.
     let p = crate::util::dirs::sovereign_indexes();
-    if p == PathBuf::from(".") {
+    if p == std::path::Path::new(".") {
         None
     } else {
         Some(p)
