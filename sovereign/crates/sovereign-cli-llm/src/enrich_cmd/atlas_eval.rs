@@ -41,7 +41,7 @@ const HELP: Help = Help {
         HelpSection::Flags(&[
             (
                 "--bank <path>",
-                "Path to the eval bank TOML (e.g. sovereign-recipes/wikipedia/eval/wikipedia_questions.toml). Required.",
+                "Path to the eval bank TOML (e.g. sovereign/bench/wikipedia/questions.toml). Required.",
             ),
             (
                 "--top-k <N>",
@@ -58,7 +58,7 @@ const HELP: Help = Help {
         ]),
         HelpSection::Examples(&[
             (
-                "sovereign enrich atlas-eval wiki-l5-struct --bank sovereign-recipes/wikipedia/eval/wikipedia_questions.toml --top-k 10",
+                "sovereign enrich atlas-eval wiki-l5-struct --bank sovereign/bench/wikipedia/questions.toml --top-k 10",
                 "Score the structural-only retrieval against the wiki-core-v2 bank.",
             ),
         ]),

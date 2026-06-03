@@ -8,7 +8,7 @@ enrichment-eval goldens under `bench/{obsidian,literary,philosophy}/`
 ## Shape
 
 `questions.toml` is a symlink to
-`sovereign-recipes/sep/eval/sep_questions.toml`. 21 questions
+`sovereign/bench/sep/questions.toml`. 21 questions
 calibrated for the Harvard undergrad-philosophy-essay bar. Each
 question has `expected_facts` (keyword-fuzzy substrings) +
 `expected_sources` (canonical SEP article slugs).

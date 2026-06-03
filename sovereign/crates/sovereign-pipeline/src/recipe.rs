@@ -13,7 +13,7 @@
 //!
 //! [source]
 //! type = "slug_list"
-//! path = "sovereign-recipes/sep/eval/sep_slugs.txt"
+//! path = "sep_slugs.txt"   # operator-supplied slug list, relative to CWD
 //!
 //! [enrich]
 //! # `{key}` is replaced with the work-unit key. The command is

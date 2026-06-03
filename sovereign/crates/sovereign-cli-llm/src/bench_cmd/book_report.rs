@@ -1,6 +1,6 @@
 //! `sovereign bench book-report` — attach-document benchmark.
 //!
-//! See `sovereign-recipes/book-report/README.md` for the full design.
+//! See `sovereign/bench/book-report/README.md` for the full design.
 //!
 //! v1 scope (this file): stages 1-3 only — fetch the Gutenberg book,
 //! attach it via `DocumentAssetManager::ingest()`, record per-phase
@@ -35,7 +35,7 @@ use crate::util::help::{self, Help, HelpSection};
 /// Bench configuration baked in at compile time. Changing the questions
 /// requires rebuilding the CLI; that's intentional — the bench is
 /// versioned with the codebase, not authored at runtime.
-const BENCH_TOML: &str = include_str!("../../../../../sovereign-recipes/book-report/bench.toml");
+const BENCH_TOML: &str = include_str!("../../../../bench/book-report/bench.toml");
 
 /// Gutenberg URL for The Secret Agent (book id 974). Pinned to the
 /// canonical UTF-8 plaintext mirror; the SHA-256 in `bench.toml` locks
@@ -258,7 +258,7 @@ pub async fn cmd_book_report(args: &[String]) -> i32 {
 
     if opts.wire {
         eprintln!("error: --wire mode is not yet implemented. v1 ships direct in-process only.");
-        eprintln!("       See sovereign-recipes/book-report/README.md for the wire-mode roadmap.");
+        eprintln!("       See sovereign/bench/book-report/README.md for the wire-mode roadmap.");
         return 2;
     }
 

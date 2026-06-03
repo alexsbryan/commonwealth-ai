@@ -1,7 +1,7 @@
 //! Question-bank parsing.
 //!
 //! A bank is a TOML file with one `[bank]` block + N `[[questions]]` rows.
-//! See `sovereign-recipes/wikipedia/eval/wikipedia_questions.toml` for the
+//! See `sovereign/bench/wikipedia/questions.toml` for the
 //! reference shape. The schema is intentionally narrow — every field is
 //! either a bare string or a list of strings — so an analyst can hand-edit
 //! the file without learning a new format.

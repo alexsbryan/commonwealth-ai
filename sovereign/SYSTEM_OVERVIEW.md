@@ -21,7 +21,7 @@ commonwealth-ai/
 ├── corpus-engine-notes/       # NoteStore + project_docs index (carved out of corpus-engine)
 ├── corpus-engine-atos/        # ATOS feature store + plan items + design signals (carved out)
 ├── corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance (carved out)
-├── sovereign-recipes/         # Recipe TOMLs + generated data — pure data
+├── sovereign-recipes/         # Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build)
 ├── sovereign/                 # Local AI assistant (CLI / desktop / server)
 └── commonwealth/              # Mesh coordination daemon
 ```
@@ -34,7 +34,7 @@ commonwealth-ai/
 | `corpus-engine-notes`| NoteStore + project-docs index + notes↔alignment sync (carved out of corpus-engine for blast-radius control) | `rusqlite` |
 | `corpus-engine-atos` | ATOS feature store + plan items + DESIGN.md design signals (carved out) | `rusqlite` |
 | `corpus-engine-archaeology` | Git history mining + rough-edge surfacing + atom-provenance eval (carved out) | — |
-| `sovereign-recipes`  | Pure data — recipe TOMLs + bundled assets     | —                                                     |
+| `sovereign-recipes`  | Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build) | —                                       |
 | `sovereign`          | Local agent runtime                           | `corpus-engine`, `corpus-engine-scip`, `oicp-types`   |
 | `commonwealth`       | Symmetric mesh daemon                         | `corpus-engine`, `oicp-types`                         |
 
@@ -175,15 +175,25 @@ crates/
 
 ### sovereign-recipes
 
-Recipe catalog (`registry.toml`) plus one directory per recipe.
+The **single source of truth** for corpus recipes — recipe definitions only.
+corpus-engine vendors this tree at build time (`build.rs` → `OUT_DIR`) for the
+offline bundle, so there is no second copy. Catalog is `registry.toml`; field
+reference is `SCHEMA.md` (generated from `corpus-engine/src/recipe.rs` and gated
+by the `recipe_schema` test); `GETTING_STARTED.md` + `_templates/` onboard
+contributors.
+
 Current set: `wikipedia`, `wikipedia-simple`, `wikipedia-newsworthy`,
 `wikipedia-article`, `wikipedia-catalog`, `sep`, `stackexchange`,
 `stackexchange-knowledge`, `openalex`, `gutenberg`, `gutenberg-work`,
-`crs_reports`, `codebase`, `conversations-anthropic`, `routing`,
+`crs_reports`, `alignment`, `codebase`, `conversations-anthropic`,
 `scotus-opinions`, `olc-opinions`, `federal-register-presidential`,
-`us-code`, `book-report`, `knowledge-gym`, `search-gym`,
-`arch-principles`, `system-overview`. Underscore directories like
+`us-code`, `arch-principles`, `system-overview`. Underscore directories like
 `_templates` carry scaffolding.
+
+Bench/eval harnesses (`knowledge-gym`, `search-gym`, `routing`, `book-report`,
+per-corpus question banks) live under `sovereign/bench/`, not here — the gym
+*commands* (`sovereign search-gym`, `knowledge-gym`) still exist; only their
+fixtures moved.
 
 ---
 
@@ -336,11 +346,12 @@ for status table, landing-by-landing scope, and validation targets.
 Six-plus recipes shipped in `sovereign-recipes`, consumed via
 `RecipeRegistry`:
 
-- **Bundled snapshot** — `registry_snapshot.toml` is `include_str!`'d
-  so the engine works fully offline.
-- **Bundled fallback** — `recipe.rs::bundled_recipe_toml(id)`
-  returns the full recipe TOML for snapshot entries when the live
-  URL is unreachable.
+- **Bundled snapshot** — `build.rs` vendors `sovereign-recipes/registry.toml`
+  into `OUT_DIR` and `registry.rs` `include_str!`s it from there, so the engine
+  works fully offline with no checked-in snapshot copy to drift.
+- **Bundled fallback** — `recipe_builtin.rs::bundled_recipe_toml(id)` returns the
+  full recipe TOML (also vendored from `sovereign-recipes/` into `OUT_DIR`) for
+  snapshot entries when the live URL is unreachable.
 - **Live refresh** — `RecipeRegistry::refresh()` pulls the latest
   from GitHub.
 - **Resolution order** — local override on disk → remote → bundled.
@@ -1144,8 +1155,9 @@ Default ports:
 - **Recipe** — A TOML file in `sovereign-recipes` describing how
   to ingest one corpus end-to-end.
 - **Registry** — The recipe catalog at
-  `sovereign-recipes/registry.toml`. `corpus-engine` ships a
-  compile-time bundled snapshot; can refresh from GitHub.
+  `sovereign-recipes/registry.toml` (single source of truth).
+  `corpus-engine`'s `build.rs` vendors it into `OUT_DIR` as the
+  compile-time bundled snapshot; can refresh from GitHub at runtime.
 - **DocumentFilter** — Trait between extract and chunk that drops
   `ExtractedDoc`s by predicate. Composable via `[[filter]]`.
 - **FilterPipeline / ScopeMeta** — A recipe's filter set + its

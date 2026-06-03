@@ -17,12 +17,13 @@
 /// enum aligned with the catalog.
 ///
 /// To add a new bundled recipe:
-///   1. Drop `recipes/<id>/recipe.toml` in the crate.
+///   1. Drop `<id>/recipe.toml` in the canonical `sovereign-recipes/`
+///      tree (build.rs vendors it into `OUT_DIR` at compile time).
 ///   2. Add a `RecipeId` variant here.
 ///   3. Extend `RecipeId::id()`, `RecipeId::bundled_toml()`, and
 ///      `RecipeId::from_id()` — `rustc` flags any of these you miss.
-///   4. Add the catalog entry to `registry_snapshot.toml` +
-///      `sovereign-recipes/registry.toml`.
+///   4. Add the catalog entry to `sovereign-recipes/registry.toml`
+///      (the single source of truth — there is no separate snapshot).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RecipeId {
     Wikipedia,
@@ -137,50 +138,126 @@ impl RecipeId {
         }
     }
 
-    /// The compile-time bundled recipe TOML for this id. Each arm is
-    /// an `include_str!` of the recipe file in `recipes/<id>/`.
+    /// The compile-time bundled recipe TOML for this id.
+    ///
+    /// Each arm `include_str!`s a recipe vendored by `build.rs` from the
+    /// canonical `sovereign-recipes/` tree into `OUT_DIR/recipes/<id>/`
+    /// — there is no second checked-in copy in this crate, so the bundle
+    /// cannot drift from the source tree.
     pub fn bundled_toml(self) -> &'static str {
         match self {
-            Self::Wikipedia => include_str!("../recipes/wikipedia/recipe.toml"),
-            Self::WikipediaSimple => include_str!("../recipes/wikipedia-simple/recipe.toml"),
-            Self::StackExchange => include_str!("../recipes/stackexchange/recipe.toml"),
+            Self::Wikipedia => {
+                include_str!(concat!(env!("OUT_DIR"), "/recipes/wikipedia/recipe.toml"))
+            }
+            Self::WikipediaSimple => {
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/wikipedia-simple/recipe.toml"
+                ))
+            }
+            Self::StackExchange => {
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/stackexchange/recipe.toml"
+                ))
+            }
             Self::StackExchangeKnowledge => {
-                include_str!("../recipes/stackexchange-knowledge/recipe.toml")
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/stackexchange-knowledge/recipe.toml"
+                ))
             }
-            Self::OpenAlex => include_str!("../recipes/openalex/recipe.toml"),
-            Self::Gutenberg => include_str!("../recipes/gutenberg/recipe.toml"),
-            Self::GutenbergWork => include_str!("../recipes/gutenberg-work/recipe.toml"),
-            Self::WikipediaCatalog => include_str!("../recipes/wikipedia-catalog/recipe.toml"),
-            Self::WikipediaArticle => include_str!("../recipes/wikipedia-article/recipe.toml"),
+            Self::OpenAlex => {
+                include_str!(concat!(env!("OUT_DIR"), "/recipes/openalex/recipe.toml"))
+            }
+            Self::Gutenberg => {
+                include_str!(concat!(env!("OUT_DIR"), "/recipes/gutenberg/recipe.toml"))
+            }
+            Self::GutenbergWork => {
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/gutenberg-work/recipe.toml"
+                ))
+            }
+            Self::WikipediaCatalog => {
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/wikipedia-catalog/recipe.toml"
+                ))
+            }
+            Self::WikipediaArticle => {
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/wikipedia-article/recipe.toml"
+                ))
+            }
             Self::WikipediaNewsworthy => {
-                include_str!("../recipes/wikipedia-newsworthy/recipe.toml")
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/wikipedia-newsworthy/recipe.toml"
+                ))
             }
-            Self::Alignment => include_str!("../recipes/alignment/recipe.toml"),
-            Self::Sep => include_str!("../recipes/sep/recipe.toml"),
-            Self::CrsReports => include_str!("../recipes/crs_reports/recipe.toml"),
+            Self::Alignment => {
+                include_str!(concat!(env!("OUT_DIR"), "/recipes/alignment/recipe.toml"))
+            }
+            Self::Sep => include_str!(concat!(env!("OUT_DIR"), "/recipes/sep/recipe.toml")),
+            Self::CrsReports => {
+                include_str!(concat!(env!("OUT_DIR"), "/recipes/crs_reports/recipe.toml"))
+            }
             Self::FederalRegisterPresidential => {
-                include_str!("../recipes/federal-register-presidential/recipe.toml")
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/federal-register-presidential/recipe.toml"
+                ))
             }
-            Self::UsCode => include_str!("../recipes/us-code/recipe.toml"),
-            Self::OlcOpinions => include_str!("../recipes/olc-opinions/recipe.toml"),
+            Self::UsCode => include_str!(concat!(env!("OUT_DIR"), "/recipes/us-code/recipe.toml")),
+            Self::OlcOpinions => {
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/olc-opinions/recipe.toml"
+                ))
+            }
             Self::ScotusOpinions => {
-                include_str!("../recipes/scotus-opinions/recipe.toml")
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/scotus-opinions/recipe.toml"
+                ))
             }
             Self::ConversationsAnthropic => {
-                include_str!("../recipes/conversations-anthropic/recipe.toml")
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/conversations-anthropic/recipe.toml"
+                ))
             }
-            Self::EnronSample => include_str!("../recipes/enron-sample/recipe.toml"),
+            Self::EnronSample => {
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/enron-sample/recipe.toml"
+                ))
+            }
             Self::EnronSampleOneMailbox => {
-                include_str!("../recipes/enron-sample-onemailbox/recipe.toml")
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/enron-sample-onemailbox/recipe.toml"
+                ))
             }
             Self::EnronSampleTiny => {
-                include_str!("../recipes/enron-sample-tiny/recipe.toml")
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/enron-sample-tiny/recipe.toml"
+                ))
             }
             Self::EnronSampleMultiTiny => {
-                include_str!("../recipes/enron-sample-multi-tiny/recipe.toml")
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/enron-sample-multi-tiny/recipe.toml"
+                ))
             }
             Self::EnronSampleMultiWide => {
-                include_str!("../recipes/enron-sample-multi-wide/recipe.toml")
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/enron-sample-multi-wide/recipe.toml"
+                ))
             }
         }
     }

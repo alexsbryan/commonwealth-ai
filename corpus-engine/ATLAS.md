@@ -338,9 +338,9 @@ sovereign enrich ingest wiki-l5-struct \
 
 # 7. Eval — measure retrieval quality before/after enrichment.
 sovereign eval run \
-    --bank sovereign-recipes/wikipedia/eval/wikipedia_questions.toml
+    --bank sovereign/bench/wikipedia/questions.toml
 sovereign eval run \
-    --bank sovereign-recipes/wikipedia/eval/wikipedia_questions.toml \
+    --bank sovereign/bench/wikipedia/questions.toml \
     --with-atlas wiki-l5-tier2-full --atlas-depth extracted
 ```
 

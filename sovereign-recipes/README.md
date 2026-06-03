@@ -1,89 +1,80 @@
 # sovereign-recipes
 
-Declarative corpus recipe definitions for [corpus-engine](../corpus-engine). Each recipe is a TOML file that tells the engine how to acquire, extract, chunk, index, and optionally enrich a knowledge base.
+Declarative **corpus recipes** for the Sovereign knowledge engine. Each recipe is
+one TOML file that tells the engine how to turn a data source into a searchable
+corpus, through a single pipeline:
 
-## Recipes
+```
+acquire → extract → filter → chunk → embed → index → (optional) enrich
+```
 
-| ID | Name | Compressed | Indexed | Enrichment | License | Mesh Sharing |
-|----|------|-----------|---------|------------|---------|--------------|
-| `wikipedia` | Wikipedia (English) | 13 GB | 60 GB | Field model (multi-domain) | CC-BY-SA-4.0 | Yes |
-| `sep` | Stanford Encyclopedia of Philosophy | 1.4 GB | 6 GB | Field model (philosophy) | Copyright Stanford (edu/research) | No |
-| `stackexchange` | Stack Exchange Q&A | 85 GB | 120 GB | No | CC-BY-SA-4.0 | Yes |
-| `openalex` | OpenAlex Scholarly Papers | 330 GB | 500 GB | No | CC0-1.0 | Yes |
-| `gutenberg` | Project Gutenberg Books | 9 GB | 25 GB | No | Public Domain | Yes |
-| `crs_reports` | CRS Reports | 2 GB | 5 GB | No | Public Domain | Yes |
+No code — you pick an acquirer, extractor, and chunker from a fixed menu and
+point them at your data.
 
-## Structure
+## Start here
+
+- **[GETTING_STARTED.md](./GETTING_STARTED.md)** — build your first recipe, end to end.
+- **[SCHEMA.md](./SCHEMA.md)** — every section, key, allowed value, and default.
+  Generated from the engine source (`corpus-engine/src/recipe.rs`) and gated by a
+  test, so it never drifts.
+- **[`_templates/annotated/recipe.toml`](./_templates/annotated/recipe.toml)** —
+  a heavily commented file to copy as your starting point.
+
+## This repo is the single source of truth
+
+These recipes are the **only** authored copy. corpus-engine vendors this tree at
+build time (`build.rs` → `OUT_DIR` → `include_str!`) to bundle an offline copy
+into the binary and the desktop app — that bundle is a build artifact regenerated
+from this tree on every build, so there is no second copy to keep in sync.
+
+`registry.toml` is the catalog: one `[[recipes]]` entry per corpus, with metadata
+and a `catalog_status` (`featured` | `preview` | `hidden`) that drives the desktop
+picker. It is the authoritative list of what's in the catalog — browse it rather
+than a hand-maintained table here.
 
 ```
 sovereign-recipes/
-├── registry.toml              # Recipe catalog (schema_version 1)
-├── wikipedia/recipe.toml      # Each corpus gets its own directory
+├── registry.toml              # catalog (schema_version 1) — the source of truth
+├── SCHEMA.md                  # generated field reference
+├── GETTING_STARTED.md         # tutorial
+├── _templates/                # copy-paste starting points
+│   ├── annotated/             #   fully-commented general template
+│   └── narrative-markdown/    #   template for stable markdown docs
+├── wikipedia/recipe.toml      # one directory per corpus
 ├── sep/recipe.toml
-├── stackexchange/recipe.toml
-├── openalex/recipe.toml
-├── gutenberg/recipe.toml
-└── crs_reports/recipe.toml
+└── …
 ```
 
-## How recipes are consumed
+## How a recipe is resolved at runtime
 
-`corpus-engine` fetches recipes through its `RecipeRegistry`:
+When you `sovereign corpus install <id>`, the engine takes the first hit:
 
-1. A **bundled snapshot** (`corpus-engine/registry_snapshot.toml`) is compiled into the crate via `include_str!` so the engine works fully offline.
-2. When online, `RecipeRegistry::refresh()` fetches the latest `registry.toml` from this repository. Each entry has a `toml_url` pointing to the raw recipe file on GitHub.
-3. **Resolution order**: local override on disk -> fetch from `toml_url` -> error.
-4. When the `sha256` field is non-empty, fetched recipes are verified before use.
-5. `cargo xtask update-registry-snapshot` (in the corpus-engine repo) refreshes the bundled snapshot.
+1. `~/.sovereign/recipes/<id>/recipe.toml` — your local + local-only recipes. No
+   network, no rebuild. Drop a file here and it just works.
+2. `$SOVEREIGN_RECIPES_DIR/<id>/recipe.toml` — opt-in. Point it at a clone of this
+   repo to hot-edit a catalog recipe and load it live.
+3. The published catalog (`registry.toml` → each entry's `toml_url`), SHA-256
+   verified when `sha256` is set.
+4. The copy bundled into the binary (offline fallback).
 
-## Recipe TOML schema
+## Contributing a recipe
 
-Each recipe defines a pipeline:
+1. Get it working locally first (see GETTING_STARTED.md) — recipes in
+   `~/.sovereign/recipes/` need no rebuild.
+2. Move the directory here: `sovereign-recipes/<id>/recipe.toml`.
+3. Add a `[[recipes]]` entry to `registry.toml` (copy a neighbor; set `id`, `name`,
+   `description`, `license`, sizes, `catalog_status`).
+4. To ship inside the app's offline bundle, add the id to the `RecipeId` enum in
+   `corpus-engine/src/recipe_builtin.rs`. The
+   `bundled_recipe_covers_every_snapshot_entry` test flags anything you missed.
+5. `sovereign recipe test <path> --sample-size 50 --output TEST_REPORT.md`, commit
+   the report, open a PR.
 
-```toml
-[corpus]
-id = "wikipedia"
-name = "Wikipedia (English)"
-license = "CC-BY-SA-4.0"
-mesh_sharing = true
-
-[acquire]
-type = "huggingface_dataset"     # or bulk_download, local_file
-dataset = "wikimedia/structured-wikipedia"
-subset = "20240901.en"
-
-[extract]
-type = "wikipedia_jsonl"         # format-specific extractor
-section_level = true
-
-[chunk]
-type = "paragraph"               # or sentence, fixed, semantic
-max_chars = 1024
-overlap_chars = 128
-
-[index]
-embedding_model = "qwen3-embedding-0.6b"
-embedding_dimensions = 768
-
-[enrichment]                     # optional
-enabled = true
-domain = "multi"                 # philosophy, science, policy, etc.
-
-[update]                         # optional
-manifest_url = "https://updates.sovereign.dev/manifests/wikipedia-en.json"
-auto_update = true
-```
-
-## Contributing a new recipe
-
-1. Create a directory: `<corpus-id>/recipe.toml`
-2. Add an entry to `registry.toml` with metadata (id, name, description, license, sizes, toml_url)
-3. Test the recipe: `sovereign recipe test ./<corpus-id>/recipe.toml --sample-size 50 --no-embed`
-4. Include the generated `TEST_REPORT.md` in the directory
-5. Open a pull request
-
-See the [corpus-engine README](../corpus-engine/README.md#recipe-test-harness) for details on the test harness and pass criteria.
+Editing recipe fields? Run `UPDATE_RECIPE_SCHEMA=1 cargo test -p corpus-engine
+--test recipe_schema` to regenerate `SCHEMA.md`; CI fails if it's stale.
 
 ## License
 
-Recipe files are configuration, not code. Each recipe's `license` field describes the license of the **source data**, not the recipe file itself. The recipe TOML files in this repository are Apache-2.0.
+Recipe files are configuration, not data. Each recipe's `license` field describes
+the license of the **source data**; it does not relicense the data. The TOML files
+in this repository are Apache-2.0.

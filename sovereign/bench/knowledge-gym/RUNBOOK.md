@@ -44,7 +44,7 @@ Every chat-side bug should follow the same loop.
    "Report this turn" button to do this automatically; until
    then, copy the transcript manually.
 2. **Build the fixture directory** at
-   `sovereign-recipes/knowledge-gym/fixtures/NN_<slug>/`:
+   `sovereign/bench/knowledge-gym/fixtures/NN_<slug>/`:
    - `input.json` — the chat completion request that reproduces
      the issue. Includes the system prompt, the user message,
      the tool declarations. The simplest path: copy the JSON
@@ -82,7 +82,7 @@ Every chat-side bug should follow the same loop.
 - [ ] `cargo test -p sovereign-inference --lib evidence_id_constraint` — green
 - [ ] `cargo test -p sovereign-tools --lib knowledge_lookup` — green
 - [ ] `sovereign knowledge-gym run --replays 3` — ≥ 90% per fixture
-- [ ] `sovereign eval run --bank sovereign-recipes/routing/cells_v1.toml --routing-only`
+- [ ] `sovereign eval run --bank sovereign/bench/routing/cells_v1.toml --routing-only`
       — within 1 of baseline (25/27)
 - [ ] `sovereign eval run --threads --bank sovereign/bench/wikipedia_learn/threads.toml`
       — thread baselines hold (T14: 4/6, T15: 3/4)
@@ -114,7 +114,7 @@ you.
 
 ## Sister gyms
 
-- `sovereign-recipes/routing/*.toml` — routing-only banks
+- `sovereign/bench/routing/*.toml` — routing-only banks
   (cells_v1, voice_routing_v1, future_timeline_v1, skills_migration_smoke).
   Run via `sovereign eval run --bank <path> --routing-only`.
   Routing is the surface-level dispatch correctness check;
