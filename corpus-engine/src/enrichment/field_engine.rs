@@ -671,12 +671,11 @@ impl FieldModelEngine {
         // iteration so the daemon's HTTP progress endpoint can
         // describe the stall to a watching operator.
         const STUCK_THRESHOLD: usize = 16;
-        let mut clusters_done = 0usize;
         let mut clusters_failed = 0usize;
         let mut consecutive_failures = 0usize;
         let mut last_error: Option<String> = None;
 
-        for cluster in &mut clusters.clusters {
+        for (idx, cluster) in clusters.clusters.iter_mut().enumerate() {
             let chunks = index.get_chunks(&cluster.central_chunks).await?;
             let refs: Vec<&crate::index::StoredChunk> = chunks.iter().collect();
             let prompt = self.domain.cluster_labeling_prompt(&refs);
@@ -706,9 +705,8 @@ impl FieldModelEngine {
                 }
             }
 
-            clusters_done += 1;
             progress(EnrichmentProgress::Phase2bProgress {
-                clusters_done,
+                clusters_done: idx + 1,
                 clusters_total: total,
                 clusters_failed,
                 consecutive_failures,

@@ -97,11 +97,7 @@ pub(crate) fn repair_unquoted_strings(s: &str) -> String {
 
     while i < len {
         // Look for pattern: `": ` followed by a letter (not `"`, `[`, `{`, digit, `n` for null, `t`/`f` for true/false)
-        if i + 3 < len
-            && bytes[i] == b'"'
-            && bytes[i + 1] == b':'
-            && bytes[i + 2] == b' '
-        {
+        if i + 3 < len && bytes[i] == b'"' && bytes[i + 1] == b':' && bytes[i + 2] == b' ' {
             let next = bytes[i + 3];
             // Check if the next char starts an unquoted string value:
             // - It's a letter (but not the start of null/true/false)

@@ -824,8 +824,7 @@ impl ModelSlot {
                     );
                 }
                 let ctx = unsafe {
-                    let model_ref: &'static LlamaModel =
-                        &*(Arc::as_ptr(&model));
+                    let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model));
                     model_ref
                         .new_context(backend, build_ctx_params(false))
                         .map_err(|e| Error::Inference(format!("Failed to create context: {e}")))?
@@ -1078,8 +1077,7 @@ impl ModelSlot {
                     );
                 }
                 let ctx = unsafe {
-                    let model_ref: &'static LlamaModel =
-                        &*(Arc::as_ptr(&model));
+                    let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model));
                     model_ref
                         .new_context(backend, build_ctx_params(false))
                         .map_err(|e| {

@@ -3004,7 +3004,7 @@ mod tests {
         ];
         let mut chapters = Vec::new();
         let mut chapter_titles = Vec::new();
-        for gi in 0..3 {
+        for (gi, group) in groups.iter().enumerate() {
             for ci in 0..3 {
                 let id = format!("ch_{:02}", gi * 3 + ci + 1);
                 let title = format!("Chapter {}", gi * 3 + ci + 1);
@@ -3012,18 +3012,18 @@ mod tests {
                 chapters.push(chapter(
                     &id,
                     &title,
-                    &format!("{}, variation {}.", groups[gi].1, ci),
+                    &format!("{}, variation {}.", group.1, ci),
                 ));
             }
         }
         let mut chunks: Vec<ChunkRecord> = Vec::new();
         let mut cid = 0u64;
-        for gi in 0..3 {
+        for (gi, group) in groups.iter().enumerate() {
             for ci in 0..6 {
                 chunks.push(ChunkRecord {
                     id: cid,
                     section_id: format!("sec_{:04}", gi + 1),
-                    text: format!("{} variation {}", groups[gi].1, ci),
+                    text: format!("{} variation {}", group.1, ci),
                 });
                 cid += 1;
             }

@@ -398,13 +398,12 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             // logs from 2026-04-21). Running corpus_collaborate first
             // lets `has_active_queue_handoff` below observe the handoff
             // we just registered and cleanly hand ownership to pull_loops.
-            let should_collab =
-                !(active_ingests.contains(corpus_id) && !new_peer_appeared && !new_ingest_appeared)
-                    && !(triggered
+            let should_collab = new_peer_appeared
+                || new_ingest_appeared
+                || (!active_ingests.contains(corpus_id)
+                    && triggered
                         .get(corpus_id)
-                        .is_some_and(|t| t.elapsed() < COOLDOWN)
-                        && !new_peer_appeared
-                        && !new_ingest_appeared);
+                        .is_none_or(|t| t.elapsed() >= COOLDOWN));
 
             if should_collab {
                 tracing::info!(

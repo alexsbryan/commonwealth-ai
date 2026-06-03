@@ -1695,47 +1695,45 @@ pub async fn bootstrap_with_progress(
     // which the collaborative ingestion planner uses to validate that peers
     // are embedding with the same model before assigning them a partition.
     if config.embed_model_path.is_some() {
-        match inference.embed("probe").await {
-            Ok(probe_vec) => {
-                let dims = probe_vec.len();
-                if let Err(e) = corpus_engine.validate_embed_dimensions(dims).await {
-                    tracing::warn!(
-                        "Embed dimension mismatch detected at startup: {} \
+        // Err => embed not configured or failed — skip validation.
+        if let Ok(probe_vec) = inference.embed("probe").await {
+            let dims = probe_vec.len();
+            if let Err(e) = corpus_engine.validate_embed_dimensions(dims).await {
+                tracing::warn!(
+                    "Embed dimension mismatch detected at startup: {} \
                          Retrieval results may be incorrect until the affected \
                          corpus is rebuilt (Settings → Knowledge → Rebuild).",
-                        e
-                    );
-                }
-
-                // Derive pooling and normalization from the embed family quirks
-                // (set at model-load time). Unknown/mean-pool models have no
-                // quirks entry and correctly default to Mean + Application.
-                let embed_quirks = config.embed_family.default_quirks().embed;
-                let pooling = embed_quirks
-                    .as_ref()
-                    .map(|q| q.pooling)
-                    .unwrap_or(PoolingStrategy::Mean);
-                let normalization = embed_quirks
-                    .as_ref()
-                    .map(|q| q.normalize)
-                    .unwrap_or(NormalizationStrategy::Application);
-                let embed_info = EmbedModelInfo {
-                    model_id: embed_model_name.clone(),
-                    dimensions: dims,
-                    pooling,
-                    normalization,
-                };
-                tracing::info!(
-                    model_id = %embed_info.model_id,
-                    dims,
-                    pooling = ?embed_info.pooling,
-                    "embed model info: advertising to mesh peers"
+                    e
                 );
-                if let Some(mesh) = state.mesh.as_ref() {
-                    mesh.set_embed_model_info(embed_info).await;
-                }
             }
-            Err(_) => {} // embed not configured or failed — skip validation
+
+            // Derive pooling and normalization from the embed family quirks
+            // (set at model-load time). Unknown/mean-pool models have no
+            // quirks entry and correctly default to Mean + Application.
+            let embed_quirks = config.embed_family.default_quirks().embed;
+            let pooling = embed_quirks
+                .as_ref()
+                .map(|q| q.pooling)
+                .unwrap_or(PoolingStrategy::Mean);
+            let normalization = embed_quirks
+                .as_ref()
+                .map(|q| q.normalize)
+                .unwrap_or(NormalizationStrategy::Application);
+            let embed_info = EmbedModelInfo {
+                model_id: embed_model_name.clone(),
+                dimensions: dims,
+                pooling,
+                normalization,
+            };
+            tracing::info!(
+                model_id = %embed_info.model_id,
+                dims,
+                pooling = ?embed_info.pooling,
+                "embed model info: advertising to mesh peers"
+            );
+            if let Some(mesh) = state.mesh.as_ref() {
+                mesh.set_embed_model_info(embed_info).await;
+            }
         }
     }
 

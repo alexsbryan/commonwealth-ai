@@ -1224,8 +1224,6 @@ fn capabilities_for_gpu(gpu_name: &str) -> sovereign_mesh::pinned_worker_source:
         192
     } else if upper.contains("L40S") || upper.contains("A6000") || upper.contains("L40") {
         128
-    } else if upper.contains("RTX 4090") || upper.contains("RTX_4090") {
-        64
     } else {
         64
     };

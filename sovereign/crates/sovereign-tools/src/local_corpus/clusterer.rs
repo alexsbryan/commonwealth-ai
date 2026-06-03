@@ -170,15 +170,14 @@ impl Clusterer {
         });
         let bridge_cb: Arc<dyn Fn(LocalCorpusProgress) + Send + Sync> = Arc::clone(&on_progress);
         let stage_cb = move |p: EnrichmentProgress| {
-            if let EnrichmentProgress::ClusteringStep { step, .. } = &p {
-                match *step {
-                    "running-hdbscan" | "hdbscan" => {
-                        bridge_cb(LocalCorpusProgress::Clustering {
-                            stage: ClusterStage::HdbscanRun,
-                        });
-                    }
-                    _ => {}
-                }
+            if let EnrichmentProgress::ClusteringStep {
+                step: "running-hdbscan" | "hdbscan",
+                ..
+            } = &p
+            {
+                bridge_cb(LocalCorpusProgress::Clustering {
+                    stage: ClusterStage::HdbscanRun,
+                });
             }
         };
         let cluster_result = cluster_embeddings(&index, &cluster_cfg, &stage_cb)

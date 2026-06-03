@@ -285,8 +285,7 @@ pub(crate) async fn cmd_end_milestone(args: &[String]) -> i32 {
         .cloned()
         .or_else(|| {
             runs.iter()
-                .filter(|r| r.milestone_id == milestone.id)
-                .last()
+                .rfind(|r| r.milestone_id == milestone.id)
                 .cloned()
         });
     if let Some(run) = target_run.as_ref() {
