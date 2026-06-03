@@ -67,8 +67,8 @@ fn plan_roundtrip() {
                 },
                 requires_approval: false,
                 inputs: vec![],
-            sampling: None,
-            evaluation: None,
+                sampling: None,
+                evaluation: None,
             },
             Step {
                 id: 1,
@@ -79,23 +79,31 @@ fn plan_roundtrip() {
                 },
                 requires_approval: false,
                 inputs: vec![],
-            sampling: None,
-            evaluation: None,
+                sampling: None,
+                evaluation: None,
             },
             Step {
                 id: 2,
                 description: "Compare and decide".to_string(),
                 kind: StepKind::Reason {
-                    prompt_template: "Given flights {0.output} and calendar {1.output}, pick the best option.".to_string(),
+                    prompt_template:
+                        "Given flights {0.output} and calendar {1.output}, pick the best option."
+                            .to_string(),
                     speed: Speed::Slow,
                 },
                 requires_approval: false,
                 inputs: vec![
-                    StepInput { step_id: 0, key: "output".to_string() },
-                    StepInput { step_id: 1, key: "output".to_string() },
+                    StepInput {
+                        step_id: 0,
+                        key: "output".to_string(),
+                    },
+                    StepInput {
+                        step_id: 1,
+                        key: "output".to_string(),
+                    },
                 ],
-            sampling: None,
-            evaluation: None,
+                sampling: None,
+                evaluation: None,
             },
         ],
         edges: vec![(0, 2), (1, 2)],
@@ -118,32 +126,47 @@ fn plan_topological_batches() {
             Step {
                 id: 0,
                 description: "A".to_string(),
-                kind: StepKind::Reason { prompt_template: "a".to_string(), speed: Speed::Fast },
+                kind: StepKind::Reason {
+                    prompt_template: "a".to_string(),
+                    speed: Speed::Fast,
+                },
                 requires_approval: false,
                 inputs: vec![],
-            sampling: None,
-            evaluation: None,
+                sampling: None,
+                evaluation: None,
             },
             Step {
                 id: 1,
                 description: "B".to_string(),
-                kind: StepKind::Reason { prompt_template: "b".to_string(), speed: Speed::Fast },
+                kind: StepKind::Reason {
+                    prompt_template: "b".to_string(),
+                    speed: Speed::Fast,
+                },
                 requires_approval: false,
                 inputs: vec![],
-            sampling: None,
-            evaluation: None,
+                sampling: None,
+                evaluation: None,
             },
             Step {
                 id: 2,
                 description: "C".to_string(),
-                kind: StepKind::Reason { prompt_template: "c".to_string(), speed: Speed::Slow },
+                kind: StepKind::Reason {
+                    prompt_template: "c".to_string(),
+                    speed: Speed::Slow,
+                },
                 requires_approval: false,
                 inputs: vec![
-                    StepInput { step_id: 0, key: "output".to_string() },
-                    StepInput { step_id: 1, key: "output".to_string() },
+                    StepInput {
+                        step_id: 0,
+                        key: "output".to_string(),
+                    },
+                    StepInput {
+                        step_id: 1,
+                        key: "output".to_string(),
+                    },
                 ],
-            sampling: None,
-            evaluation: None,
+                sampling: None,
+                evaluation: None,
             },
         ],
         edges: vec![(0, 2), (1, 2)],
@@ -218,7 +241,8 @@ fn completion_response_as_bool() {
         latency_ms: 10,
         oicp_meta: None,
         finish_reason: None,
-        completion_tokens: None,    };
+        completion_tokens: None,
+    };
     assert!(yes.as_bool());
 
     let no = CompletionResponse {
@@ -229,6 +253,7 @@ fn completion_response_as_bool() {
         latency_ms: 10,
         oicp_meta: None,
         finish_reason: None,
-        completion_tokens: None,    };
+        completion_tokens: None,
+    };
     assert!(!no.as_bool());
 }

@@ -45,14 +45,12 @@ use std::sync::Arc;
 
 use serde::Deserialize;
 
+use crate::engine::CorpusEngine;
 use crate::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Entity};
 use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
-use crate::enrichment::atlas::ingestion::{
-    AtlasData, AtlasIngestion, AtlasIngestionConfig,
-};
+use crate::enrichment::atlas::ingestion::{AtlasData, AtlasIngestion, AtlasIngestionConfig};
 use crate::enrichment::atlas::registry::AtlasIngestionRegistry;
 use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
-use crate::engine::CorpusEngine;
 use crate::error::{Error, Result};
 use crate::extractors::wikipedia_types::WikipediaChunkMetadata;
 use crate::progress::{IngestProgress, ProgressCallback};
@@ -182,11 +180,12 @@ impl AtlasIngestion for StructureFirstIngestion {
                     .unwrap_or(false);
                 if is_code_corpus {
                     drop(chunks); // free before code_walk re-streams.
-                    let walk_cfg = crate::enrichment::atlas::strategies::code_walk::CodeWalkConfig {
-                        source_corpus_id: cfg.source_corpus_id.clone(),
-                        include_functions: cfg.include_functions,
-                        include_private: cfg.include_private,
-                    };
+                    let walk_cfg =
+                        crate::enrichment::atlas::strategies::code_walk::CodeWalkConfig {
+                            source_corpus_id: cfg.source_corpus_id.clone(),
+                            include_functions: cfg.include_functions,
+                            include_private: cfg.include_private,
+                        };
                     return crate::enrichment::atlas::strategies::code_walk::extract_code_corpus(
                         corpus, &walk_cfg, progress,
                     )
@@ -215,8 +214,7 @@ impl AtlasIngestion for StructureFirstIngestion {
             if let Some(cap) = cfg.limit_articles {
                 article_titles.truncate(cap);
             }
-            let _kept_article_set: HashSet<String> =
-                article_titles.iter().cloned().collect();
+            let _kept_article_set: HashSet<String> = article_titles.iter().cloned().collect();
 
             // ── Build Entity atoms ──────────────────────────────
             //
@@ -271,9 +269,9 @@ impl AtlasIngestion for StructureFirstIngestion {
                     affiliation: None,
                     role: None,
                     participants: Vec::new(),
-                                    provenance: Default::default(),
-                                    concept_kind: None,
-});
+                    provenance: Default::default(),
+                    concept_kind: None,
+                });
             }
 
             // Pass 2: scan kept articles' outgoing links for targets
@@ -281,8 +279,7 @@ impl AtlasIngestion for StructureFirstIngestion {
             // target becomes one placeholder Entity. Track the
             // (chunk_id, link_text) of the FIRST mention so the
             // placeholder anchors somewhere meaningful.
-            let mut placeholder_targets: BTreeMap<String, (u64, String)> =
-                BTreeMap::new();
+            let mut placeholder_targets: BTreeMap<String, (u64, String)> = BTreeMap::new();
             for title in &article_titles {
                 let agg = articles.get(title).expect("kept article must exist");
                 for (target, link) in &agg.outgoing {
@@ -291,14 +288,14 @@ impl AtlasIngestion for StructureFirstIngestion {
                     {
                         continue;
                     }
-                    placeholder_targets
-                        .insert(target.clone(), (link.first_seen_chunk, link.link_text.clone()));
+                    placeholder_targets.insert(
+                        target.clone(),
+                        (link.first_seen_chunk, link.link_text.clone()),
+                    );
                 }
             }
 
-            for (i, (target, (chunk_id, link_text))) in
-                placeholder_targets.iter().enumerate()
-            {
+            for (i, (target, (chunk_id, link_text))) in placeholder_targets.iter().enumerate() {
                 let atom_id = AtomId::entity(article_titles.len() + i + 1);
                 title_to_atom.insert(target.clone(), atom_id.clone());
                 entities.push(Entity {
@@ -318,9 +315,9 @@ impl AtlasIngestion for StructureFirstIngestion {
                     affiliation: None,
                     role: None,
                     participants: Vec::new(),
-                                    provenance: Default::default(),
-                                    concept_kind: None,
-});
+                    provenance: Default::default(),
+                    concept_kind: None,
+                });
             }
 
             tracing::info!(
@@ -376,10 +373,8 @@ impl AtlasIngestion for StructureFirstIngestion {
             });
 
             // ── Compose AtlasData payload ───────────────────────
-            let atom_envelopes: Vec<AtomEnvelope> = entities
-                .into_iter()
-                .map(AtomEnvelope::Entity)
-                .collect();
+            let atom_envelopes: Vec<AtomEnvelope> =
+                entities.into_iter().map(AtomEnvelope::Entity).collect();
             let atoms_file = AtomsFile::new(atom_envelopes);
             let edges_file = EdgesFile::new(edges);
 
@@ -511,9 +506,8 @@ pub fn aggregate_articles_from_chunks(
             entry.source_doc_id = chunk.source_doc_id.clone();
         }
 
-        let is_lead = meta.section_type == "lead"
-            || meta.section_depth == 0
-            || meta.section_path.is_empty();
+        let is_lead =
+            meta.section_type == "lead" || meta.section_depth == 0 || meta.section_path.is_empty();
         if is_lead && entry.lead.is_none() {
             entry.lead = Some(LeadChunk {
                 chunk_id: chunk.id,
@@ -686,14 +680,11 @@ pub fn extract_atoms_for_articles(
     // Build title → AtomId via content-hash. Every article's id is
     // stable across re-extractions of the same canonical_name.
     let entity_type = structural_entity_type();
-    let mut title_to_atom: HashMap<String, AtomId> =
-        HashMap::with_capacity(articles.len());
-    let mut upserted_docs: Vec<(String, Vec<AtomEnvelope>)> =
-        Vec::with_capacity(articles.len());
+    let mut title_to_atom: HashMap<String, AtomId> = HashMap::with_capacity(articles.len());
+    let mut upserted_docs: Vec<(String, Vec<AtomEnvelope>)> = Vec::with_capacity(articles.len());
 
     for (title, agg) in articles.iter() {
-        let atom_id =
-            AtomId::entity_content_hash(title, &entity_type, corpus_id);
+        let atom_id = AtomId::entity_content_hash(title, &entity_type, corpus_id);
         title_to_atom.insert(title.clone(), atom_id.clone());
 
         let (first_chunk_id, lead_text) = match agg.lead.as_ref() {
@@ -746,9 +737,7 @@ pub fn extract_atoms_for_articles(
         std::collections::BTreeMap::new();
     for (_, agg) in articles.iter() {
         for (target, link) in &agg.outgoing {
-            if title_to_atom.contains_key(target)
-                || placeholder_targets.contains_key(target)
-            {
+            if title_to_atom.contains_key(target) || placeholder_targets.contains_key(target) {
                 continue;
             }
             placeholder_targets.insert(
@@ -759,8 +748,7 @@ pub fn extract_atoms_for_articles(
     }
     let mut placeholder_atoms: Vec<AtomEnvelope> = Vec::new();
     for (target, (chunk_id, link_text)) in &placeholder_targets {
-        let atom_id =
-            AtomId::entity_content_hash(target, &entity_type, corpus_id);
+        let atom_id = AtomId::entity_content_hash(target, &entity_type, corpus_id);
         title_to_atom.insert(target.clone(), atom_id.clone());
         placeholder_atoms.push(AtomEnvelope::Entity(Entity {
             id: atom_id,
@@ -888,12 +876,10 @@ mod move6_p3_tests {
             is_flagged_stable: None,
             outgoing_links: outgoing
                 .into_iter()
-                .map(
-                    |(t, lt)| crate::extractors::wikipedia_types::WikiLink {
-                        target_title: t.into(),
-                        link_text: lt.into(),
-                    },
-                )
+                .map(|(t, lt)| crate::extractors::wikipedia_types::WikiLink {
+                    target_title: t.into(),
+                    link_text: lt.into(),
+                })
                 .collect(),
             revision_id: None,
             wikidata_qid: None,
@@ -960,13 +946,7 @@ mod move6_p3_tests {
 
     #[test]
     fn aggregate_articles_skips_chunks_without_metadata() {
-        let mut chunks = vec![wiki_chunk(
-            1,
-            "Albert Einstein",
-            "lead",
-            "lead",
-            vec![],
-        )];
+        let mut chunks = vec![wiki_chunk(1, "Albert Einstein", "lead", "lead", vec![])];
         chunks.push(crate::index::EnrichmentChunkRow {
             id: 2,
             content: "no metadata".into(),
@@ -1033,12 +1013,7 @@ mod move6_p3_tests {
         let mut articles = BTreeMap::new();
         articles.insert(
             "Einstein".to_string(),
-            aggregated_article_for_test(
-                "Einstein".to_string(),
-                "lead text".to_string(),
-                1,
-                vec![],
-            ),
+            aggregated_article_for_test("Einstein".to_string(), "lead text".to_string(), 1, vec![]),
         );
 
         let d1 = extract_atoms_for_articles(&articles, "wikipedia", &default_cfg());
@@ -1065,7 +1040,11 @@ mod move6_p3_tests {
                 "lead".to_string(),
                 1,
                 vec![
-                    ("Special_Relativity".to_string(), "special relativity".to_string(), 2),
+                    (
+                        "Special_Relativity".to_string(),
+                        "special relativity".to_string(),
+                        2,
+                    ),
                     ("Quantum_Mechanics".to_string(), "QM".to_string(), 3),
                 ],
             ),
@@ -1128,12 +1107,7 @@ mod move6_p3_tests {
         let mut articles = BTreeMap::new();
         articles.insert(
             "Einstein".to_string(),
-            aggregated_article_for_test(
-                "Einstein".to_string(),
-                "".to_string(),
-                1,
-                vec![],
-            ),
+            aggregated_article_for_test("Einstein".to_string(), "".to_string(), 1, vec![]),
         );
         let d_a = extract_atoms_for_articles(&articles, "wikipedia", &default_cfg());
         let d_b = extract_atoms_for_articles(&articles, "obsidian-vault", &default_cfg());
@@ -1145,7 +1119,10 @@ mod move6_p3_tests {
             AtomEnvelope::Entity(e) => e.id.clone(),
             _ => unreachable!(),
         };
-        assert_ne!(id_a, id_b, "same article in different corpora → different ids");
+        assert_ne!(
+            id_a, id_b,
+            "same article in different corpora → different ids"
+        );
     }
 }
 

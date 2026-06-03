@@ -246,10 +246,7 @@ fn trim_to_cap(bytes: &[u8], cap: usize) -> String {
     }
     let slice = &bytes[..cap];
     let mut out = String::from_utf8_lossy(slice).into_owned();
-    out.push_str(&format!(
-        "\n\n… [truncated {} bytes]\n",
-        bytes.len() - cap
-    ));
+    out.push_str(&format!("\n\n… [truncated {} bytes]\n", bytes.len() - cap));
     out
 }
 
@@ -374,7 +371,10 @@ Stop conditions for Phase 3+ are **intentionally deferred**.
     fn phase0_extracts_single_backtick_command() {
         let phases = parse_phases(SAMPLE);
         let p0 = phases.iter().find(|p| p.ordinal == 0).unwrap();
-        assert_eq!(p0.stop_command.as_deref(), Some("cargo build && cargo test"));
+        assert_eq!(
+            p0.stop_command.as_deref(),
+            Some("cargo build && cargo test")
+        );
     }
 
     #[test]

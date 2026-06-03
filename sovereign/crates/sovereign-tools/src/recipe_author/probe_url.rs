@@ -83,10 +83,7 @@ impl ProbeUrlTool {
     /// Without this the tool sends placeholders verbatim — fine for
     /// public APIs, broken for any auth header that pulls the token
     /// from `[parameters]`.
-    pub fn with_parameters(
-        mut self,
-        parameters: Arc<BTreeMap<String, String>>,
-    ) -> Self {
+    pub fn with_parameters(mut self, parameters: Arc<BTreeMap<String, String>>) -> Self {
         self.parameters = Some(parameters);
         self
     }
@@ -98,8 +95,7 @@ impl Tool for ProbeUrlTool {
         ToolDescriptor {
             id: "probe_url".into(),
             name: "ProbeUrl".into(),
-            description:
-                "Send a single HTTP GET to `url` and report back: status \
+            description: "Send a single HTTP GET to `url` and report back: status \
                  code, content-type, the top-level JSON keys (if the \
                  body parses as JSON), a sniff of the response's \
                  pagination shape (`next_url` / `cursor` / \
@@ -113,7 +109,7 @@ impl Tool for ProbeUrlTool {
                  cross-check against the raw body excerpt before \
                  committing to a recipe shape. Single request only — \
                  follow-ups are the recipe's job."
-                    .into(),
+                .into(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -175,17 +171,11 @@ impl Tool for ProbeUrlTool {
         vec![Permission::Network]
     }
 
-    async fn execute(
-        &self,
-        params: &Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let raw_url = params
             .get("url")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::InvalidInput("ProbeUrlTool requires `url`".into())
-            })?
+            .ok_or_else(|| Error::InvalidInput("ProbeUrlTool requires `url`".into()))?
             .to_string();
         let raw_headers: BTreeMap<String, String> = params
             .get("headers")
@@ -208,16 +198,12 @@ impl Tool for ProbeUrlTool {
             .as_ref()
             .map(|p| p.as_ref())
             .unwrap_or(&empty);
-        let url = render_template(&raw_url, "", bindings).map_err(|e| {
-            Error::InvalidInput(format!("probe_url: rendering url: {e}"))
-        })?;
-        let mut headers: BTreeMap<String, String> =
-            BTreeMap::new();
+        let url = render_template(&raw_url, "", bindings)
+            .map_err(|e| Error::InvalidInput(format!("probe_url: rendering url: {e}")))?;
+        let mut headers: BTreeMap<String, String> = BTreeMap::new();
         for (k, v) in &raw_headers {
             let rendered = render_template(v, "", bindings).map_err(|e| {
-                Error::InvalidInput(format!(
-                    "probe_url: rendering header `{k}`: {e}"
-                ))
+                Error::InvalidInput(format!("probe_url: rendering header `{k}`: {e}"))
             })?;
             headers.insert(k.clone(), rendered);
         }
@@ -230,9 +216,7 @@ impl Tool for ProbeUrlTool {
 
         let client = reqwest::Client::builder()
             .timeout(REQUEST_TIMEOUT)
-            .user_agent(
-                "Sovereign recipe-author probe (https://sovereign.dev/corpus-engine)",
-            )
+            .user_agent("Sovereign recipe-author probe (https://sovereign.dev/corpus-engine)")
             .build()
             .map_err(|e| Error::Execution(format!("probe_url: build client: {e}")))?;
 
@@ -373,14 +357,8 @@ pub fn detect_pagination_hint(body: &Value) -> PaginationHint {
     };
 
     const NEXT_URL_FIELDS: &[&str] = &["next", "next_url", "next_page_url"];
-    const CURSOR_FIELDS: &[&str] = &[
-        "next_cursor",
-        "next_page_token",
-        "nextPageToken",
-        "cursor",
-    ];
-    const PAGE_NUMBER_FIELDS: &[&str] =
-        &["page", "current_page", "page_number"];
+    const CURSOR_FIELDS: &[&str] = &["next_cursor", "next_page_token", "nextPageToken", "cursor"];
+    const PAGE_NUMBER_FIELDS: &[&str] = &["page", "current_page", "page_number"];
 
     for field in NEXT_URL_FIELDS {
         if let Some(v) = obj.get(*field).and_then(|v| v.as_str()) {
@@ -568,12 +546,7 @@ mod tests {
         // (undeclared placeholder) end-to-end through execute().
         let mut p: BTreeMap<String, String> = BTreeMap::new();
         p.insert("court".into(), "ca9".into());
-        let rendered = render_template(
-            "https://example.com/api/?court={court}",
-            "",
-            &p,
-        )
-        .unwrap();
+        let rendered = render_template("https://example.com/api/?court={court}", "", &p).unwrap();
         assert_eq!(rendered, "https://example.com/api/?court=ca9");
     }
 

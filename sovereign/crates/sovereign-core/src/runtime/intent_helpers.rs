@@ -71,9 +71,7 @@ pub(crate) fn default_oicp_for_intent(
             // retrieval against the world corpus.
             (CapabilityHint::general(), LatencyClass::Fast)
         }
-        Intent::SimpleQuery
-        | Intent::SimpleAction { .. }
-        | Intent::Continuation { .. } => {
+        Intent::SimpleQuery | Intent::SimpleAction { .. } | Intent::Continuation { .. } => {
             return None;
         }
     };
@@ -178,7 +176,10 @@ pub(crate) fn parse_intent_hint(hint: &str) -> Intent {
             }
         }
         _ => {
-            tracing::warn!(hint, "parse_intent_hint: unknown hint, falling back to SimpleQuery");
+            tracing::warn!(
+                hint,
+                "parse_intent_hint: unknown hint, falling back to SimpleQuery"
+            );
             Intent::SimpleQuery
         }
     }

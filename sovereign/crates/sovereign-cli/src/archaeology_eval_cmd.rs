@@ -42,7 +42,10 @@ pub async fn run(args: &[String]) -> i32 {
     if let Some(b) = &parsed.baseline {
         println!("  baseline     = {}", b.display());
     } else {
-        println!("  baseline     = <auto: ~/.sovereign/eval/baselines/{}.eval.json>", parsed.atlas_corpus_id);
+        println!(
+            "  baseline     = <auto: ~/.sovereign/eval/baselines/{}.eval.json>",
+            parsed.atlas_corpus_id
+        );
     }
     println!();
 
@@ -146,10 +149,11 @@ pub async fn run(args: &[String]) -> i32 {
     // ── Render report ─────────────────────────────────────────
     let md = render_markdown(&report, diff.as_ref());
 
-    let output_md = parsed
-        .output
-        .clone()
-        .unwrap_or_else(|| home_dir().join(".sovereign/eval").join(format!("{}.eval.md", parsed.atlas_corpus_id)));
+    let output_md = parsed.output.clone().unwrap_or_else(|| {
+        home_dir()
+            .join(".sovereign/eval")
+            .join(format!("{}.eval.md", parsed.atlas_corpus_id))
+    });
     if let Some(parent) = output_md.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
@@ -333,8 +337,7 @@ fn default_baseline_path(atlas: &str) -> PathBuf {
 }
 
 fn load_archaeology(path: &Path) -> Result<GitArchaeologyReport, String> {
-    let raw = std::fs::read_to_string(path)
-        .map_err(|e| format!("read {}: {e}", path.display()))?;
+    let raw = std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", path.display()))
 }
 
@@ -346,10 +349,10 @@ fn load_baseline(path: &Path) -> Option<EvalReport> {
 fn load_inquiries(paths: &[PathBuf]) -> Result<Vec<Inquiry>, String> {
     let mut out = Vec::new();
     for p in paths {
-        let raw = std::fs::read_to_string(p)
-            .map_err(|e| format!("read inquiry {}: {e}", p.display()))?;
-        let inq = parse_inquiry_toml(&raw)
-            .map_err(|e| format!("parse inquiry {}: {e}", p.display()))?;
+        let raw =
+            std::fs::read_to_string(p).map_err(|e| format!("read inquiry {}: {e}", p.display()))?;
+        let inq =
+            parse_inquiry_toml(&raw).map_err(|e| format!("parse inquiry {}: {e}", p.display()))?;
         out.push(inq);
     }
     Ok(out)
@@ -361,15 +364,10 @@ fn append_history_row(
     diff: Option<&BaselineDiff>,
 ) -> Result<(), String> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
     }
     let need_header = !path.exists();
-    let inquiries_passing = report
-        .inquiry_verdicts
-        .iter()
-        .filter(|v| v.passing)
-        .count();
+    let inquiries_passing = report.inquiry_verdicts.iter().filter(|v| v.passing).count();
     let inquiries_total = report.inquiry_verdicts.len();
     let delta = diff.map(|d| d.witness_rate_delta).unwrap_or(0.0);
     let row = format!(
@@ -389,12 +387,10 @@ fn append_history_row(
             "timestamp,atlas,atoms,witness_rate,fabricated,baseline_score_changes,inquiries_passing,witness_rate_delta\n",
         )
     } else {
-        std::fs::read_to_string(path)
-            .map_err(|e| format!("read {}: {e}", path.display()))?
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?
     };
     existing.push_str(&row);
-    std::fs::write(path, existing)
-        .map_err(|e| format!("write {}: {e}", path.display()))
+    std::fs::write(path, existing).map_err(|e| format!("write {}: {e}", path.display()))
 }
 
 fn iso_timestamp(ts: i64) -> String {
@@ -422,11 +418,7 @@ fn render_markdown(report: &EvalReport, diff: Option<&BaselineDiff>) -> String {
         report.witness_rate * 100.0,
         report.fabricated_atoms,
         report.inquiry_verdicts.len(),
-        report
-            .inquiry_verdicts
-            .iter()
-            .filter(|v| v.passing)
-            .count(),
+        report.inquiry_verdicts.iter().filter(|v| v.passing).count(),
     ));
     out.push_str(&format!("Repo: `{}`\n\n", report.repo_root.display()));
 

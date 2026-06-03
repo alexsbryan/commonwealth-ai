@@ -44,12 +44,30 @@ pub fn code_meta_from_json(metadata: Option<&serde_json::Value>) -> InsertCodeMe
         return InsertCodeMeta::default();
     };
     InsertCodeMeta {
-        symbol_name: obj.get("symbol_name").and_then(|v| v.as_str()).map(String::from),
-        symbol_kind: obj.get("symbol_kind").and_then(|v| v.as_str()).map(String::from),
-        file_path: obj.get("file_path").and_then(|v| v.as_str()).map(String::from),
-        line_start: obj.get("line_start").and_then(|v| v.as_i64()).map(|n| n as i32),
-        line_end: obj.get("line_end").and_then(|v| v.as_i64()).map(|n| n as i32),
-        language: obj.get("language").and_then(|v| v.as_str()).map(String::from),
+        symbol_name: obj
+            .get("symbol_name")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        symbol_kind: obj
+            .get("symbol_kind")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        file_path: obj
+            .get("file_path")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        line_start: obj
+            .get("line_start")
+            .and_then(|v| v.as_i64())
+            .map(|n| n as i32),
+        line_end: obj
+            .get("line_end")
+            .and_then(|v| v.as_i64())
+            .map(|n| n as i32),
+        language: obj
+            .get("language")
+            .and_then(|v| v.as_str())
+            .map(String::from),
         mtime: obj.get("mtime").and_then(|v| v.as_i64()),
     }
 }
@@ -532,10 +550,7 @@ pub fn read_provenance(index_dir: &Path) -> CorpusProvenance {
 ///
 /// Reads `<index_dir>/_corpus_meta.json`, sets the `stream` field,
 /// rewrites. Errors if the meta is missing.
-pub fn set_stream_axes(
-    index_dir: &Path,
-    axes: crate::stream_axes::StreamAxes,
-) -> Result<()> {
+pub fn set_stream_axes(index_dir: &Path, axes: crate::stream_axes::StreamAxes) -> Result<()> {
     let mut meta = read_meta(index_dir)?;
     meta.stream = Some(axes);
     write_meta(index_dir, &meta)
@@ -644,15 +659,14 @@ fn read_meta(index_dir: &Path) -> Result<IndexMeta> {
     let content = std::fs::read_to_string(&path).map_err(|e| {
         Error::IndexNotFound(format!("Missing metadata at {}: {e}", path.display()))
     })?;
-    serde_json::from_str(&content).map_err(|e| {
-        Error::Serialization(format!("Bad index metadata: {e}"))
-    })
+    serde_json::from_str(&content)
+        .map_err(|e| Error::Serialization(format!("Bad index metadata: {e}")))
 }
 
 fn write_meta(index_dir: &Path, meta: &IndexMeta) -> Result<()> {
     let path = meta_path(index_dir);
-    let json = serde_json::to_string_pretty(meta)
-        .map_err(|e| Error::Serialization(e.to_string()))?;
+    let json =
+        serde_json::to_string_pretty(meta).map_err(|e| Error::Serialization(e.to_string()))?;
     std::fs::write(&path, json)?;
     Ok(())
 }
@@ -810,10 +824,7 @@ impl CorpusIndex {
     }
 
     /// Set shard metadata.
-    pub fn set_shard_meta(
-        &self,
-        chunk_range: ChunkRange,
-    ) -> Result<()> {
+    pub fn set_shard_meta(&self, chunk_range: ChunkRange) -> Result<()> {
         let index_dir = Path::new(self.db.uri());
         let mut meta = read_meta(index_dir)?;
         meta.is_shard = true;
@@ -837,7 +848,9 @@ impl CorpusIndex {
     /// Used by the `sovereign code watch` subcommand.
     pub fn source_path(&self) -> Option<PathBuf> {
         let index_dir = Path::new(self.db.uri());
-        read_meta(index_dir).ok().and_then(|m| m.source_path.map(PathBuf::from))
+        read_meta(index_dir)
+            .ok()
+            .and_then(|m| m.source_path.map(PathBuf::from))
     }
 
     /// Stamp the corpus kind + parent (catalog) corpus id onto the
@@ -958,7 +971,6 @@ impl CorpusIndex {
             Err(_) => false,
         }
     }
-
 }
 
 // ─── Free helpers ──────────────────────────────────────────
@@ -1152,11 +1164,7 @@ mod tests {
         idx.insert_batch(&batch).await.unwrap();
 
         // Middle of doc-a → both neighbors present, both in doc-a.
-        let win = idx
-            .neighbors(2, 1)
-            .await
-            .unwrap()
-            .expect("center exists");
+        let win = idx.neighbors(2, 1).await.unwrap().expect("center exists");
         assert_eq!(win.center.content, "A1");
         assert_eq!(win.prev.len(), 1);
         assert_eq!(win.prev[0].content, "A0");
@@ -1166,11 +1174,7 @@ mod tests {
         // End of doc-a (id 3 → A2) → prev is A1; next must be
         // empty even though chunk id 4 (B0) exists, because B0 is
         // in doc-b.
-        let win = idx
-            .neighbors(3, 1)
-            .await
-            .unwrap()
-            .expect("center exists");
+        let win = idx.neighbors(3, 1).await.unwrap().expect("center exists");
         assert_eq!(win.center.content, "A2");
         assert_eq!(win.prev.len(), 1);
         assert_eq!(win.prev[0].content, "A1");
@@ -1182,11 +1186,7 @@ mod tests {
 
         // Start of doc-b (id 4 → B0) → no prev (doc-b has no
         // earlier chunks), next is B1.
-        let win = idx
-            .neighbors(4, 1)
-            .await
-            .unwrap()
-            .expect("center exists");
+        let win = idx.neighbors(4, 1).await.unwrap().expect("center exists");
         assert_eq!(win.center.content, "B0");
         assert!(win.prev.is_empty());
         assert_eq!(win.next.len(), 1);
@@ -1582,10 +1582,7 @@ mod tests {
         )];
         idx.insert_batch(&chunks).await.unwrap();
 
-        let results = idx
-            .fetch_chunks_by_title("Joan's Note", 10)
-            .await
-            .unwrap();
+        let results = idx.fetch_chunks_by_title("Joan's Note", 10).await.unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].title.as_deref(), Some("Joan's Note"));
     }
@@ -1780,7 +1777,10 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(one.len(), 1);
-        assert_eq!(one[0].source_doc_id.as_deref(), Some("https://rust-lang.org"));
+        assert_eq!(
+            one[0].source_doc_id.as_deref(),
+            Some("https://rust-lang.org")
+        );
 
         let both = idx
             .chunks_by_source_doc_ids(&[
@@ -1828,10 +1828,7 @@ mod tests {
         let idx = create_test_index(dir.path()).await;
         idx.insert_batch(&sample_chunks()).await.unwrap();
 
-        let results = idx
-            .fetch_chunks_by_title("No Such Doc", 10)
-            .await
-            .unwrap();
+        let results = idx.fetch_chunks_by_title("No Such Doc", 10).await.unwrap();
         assert!(results.is_empty());
     }
 
@@ -1903,8 +1900,14 @@ mod tests {
                 make_embedding(&[0.0, 0.0, 0.0, 0.0]),
             )
         };
-        idx_a.insert_batch(&[mk("aaa"), mk("bbb"), mk("ccc")]).await.unwrap();
-        idx_b.insert_batch(&[mk("ccc"), mk("aaa"), mk("bbb")]).await.unwrap();
+        idx_a
+            .insert_batch(&[mk("aaa"), mk("bbb"), mk("ccc")])
+            .await
+            .unwrap();
+        idx_b
+            .insert_batch(&[mk("ccc"), mk("aaa"), mk("bbb")])
+            .await
+            .unwrap();
 
         let fp_a = idx_a.compute_canonical_fingerprint().await.unwrap();
         let fp_b = idx_b.compute_canonical_fingerprint().await.unwrap();
@@ -1940,7 +1943,10 @@ mod tests {
         idx.insert_batch(&[mk("ccc")]).await.unwrap();
         let fp_after = idx.compute_canonical_fingerprint().await.unwrap();
 
-        assert_ne!(fp_before, fp_after, "fingerprint must change with new content");
+        assert_ne!(
+            fp_before, fp_after,
+            "fingerprint must change with new content"
+        );
     }
 
     /// `compute_and_stamp_fingerprint` writes the value into the

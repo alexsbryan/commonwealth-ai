@@ -26,11 +26,10 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine_notes::{NoteStore};
 use corpus_engine_atos::{FeatureRow, FeatureState, FeatureStore};
+use corpus_engine_notes::NoteStore;
 use sovereign_tools::recipe_author::{
-    capability_request::CapabilityRequest, maintainer_inbox_dir, situated_context,
-    RecipeProject,
+    capability_request::CapabilityRequest, maintainer_inbox_dir, situated_context, RecipeProject,
 };
 
 fn print_help() {
@@ -63,9 +62,7 @@ pub async fn run_recipe_agent(args: &[String]) -> i32 {
         "new" => run_new(&args[1..]).await,
         "show" => run_show(&args[1..]).await,
         "list" => run_list(&args[1..]).await,
-        "live-trial" => {
-            crate::recipe_agent_live_trial::run_live_trial(&args[1..]).await
-        }
+        "live-trial" => crate::recipe_agent_live_trial::run_live_trial(&args[1..]).await,
         other => {
             eprintln!("recipe-agent: unknown subcommand `{other}`");
             print_help();
@@ -233,10 +230,7 @@ async fn run_inbox() -> i32 {
             .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("json"))
             .collect(),
         Err(e) => {
-            eprintln!(
-                "maintainer inbox: failed to read {}: {e}",
-                dir.display()
-            );
+            eprintln!("maintainer inbox: failed to read {}: {e}", dir.display());
             return 2;
         }
     };
@@ -259,10 +253,7 @@ async fn run_inbox() -> i32 {
             Ok(req) => {
                 println!(
                     "- {} [{}] project={} format={}",
-                    req.request_id,
-                    req.status,
-                    req.feature_id,
-                    req.format_or_source
+                    req.request_id, req.status, req.feature_id, req.format_or_source
                 );
                 println!("  analysis: {}", req.analysis);
                 if !req.failure_modes.is_empty() {
@@ -272,10 +263,7 @@ async fn run_inbox() -> i32 {
                     }
                 }
                 if !req.blocked_recipe_parts.is_empty() {
-                    println!(
-                        "  blocked: {}",
-                        req.blocked_recipe_parts.join(", ")
-                    );
+                    println!("  blocked: {}", req.blocked_recipe_parts.join(", "));
                 }
                 println!("  file: {}", path.display());
                 println!();

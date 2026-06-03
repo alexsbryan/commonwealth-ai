@@ -74,10 +74,7 @@ pub(super) async fn cmd_scenario(args: &[String]) -> i32 {
         }
     };
 
-    println!(
-        "═══ Scenario: {} ═══",
-        script.scenario.name
-    );
+    println!("═══ Scenario: {} ═══", script.scenario.name);
     if !script.scenario.description.is_empty() {
         println!("{}", script.scenario.description);
     }
@@ -186,12 +183,7 @@ pub(super) async fn cmd_scenario(args: &[String]) -> i32 {
     let mut failed = 0usize;
     let mut report_blocks: Vec<serde_json::Value> = Vec::new();
     for (idx, assertion) in script.assertions.iter().enumerate() {
-        let result = run_assertion(
-            &sandbox,
-            assertion,
-            &golden,
-            &detected_suggestions,
-        );
+        let result = run_assertion(&sandbox, assertion, &golden, &detected_suggestions);
         match &result.outcome {
             Outcome::Pass => passed += 1,
             Outcome::Fail => failed += 1,
@@ -201,11 +193,7 @@ pub(super) async fn cmd_scenario(args: &[String]) -> i32 {
     }
 
     println!();
-    println!(
-        "Result: {}/{} assertions passed",
-        passed,
-        passed + failed
-    );
+    println!("Result: {}/{} assertions passed", passed, passed + failed);
 
     // Output dir.
     if let Some(dir) = output_dir {
@@ -399,13 +387,7 @@ fn print_assertion_result(index: usize, a: &Assertion, r: &AssertionResult) {
         Outcome::Pass => "✓",
         Outcome::Fail => "✗",
     };
-    println!(
-        "  {} #{} {}: {}",
-        mark,
-        index,
-        assertion_kind(a),
-        r.detail
-    );
+    println!("  {} #{} {}: {}", mark, index, assertion_kind(a), r.detail);
 }
 
 fn run_assertion(
@@ -448,7 +430,11 @@ fn run_assertion(
         }
         Assertion::EntityPresent { name } => {
             let folded = name.trim().to_lowercase();
-            if counts.names.iter().any(|n| n.trim().to_lowercase() == folded) {
+            if counts
+                .names
+                .iter()
+                .any(|n| n.trim().to_lowercase() == folded)
+            {
                 AssertionResult::pass(format!("\"{name}\" extracted"))
             } else {
                 AssertionResult::fail(format!("\"{name}\" not in extracted set"))
@@ -597,22 +583,26 @@ fn render_digest_block(sandbox: &Path, which: &str) -> String {
     let no_strat_goals = |_: &str| Vec::new();
 
     match which {
-        "relational" => format_relational(
-            &all_timelines,
-            &no_rel_notes,
-            &in_conv,
-            now,
-            ViewKind::Relational.default_budget_tokens(),
-        )
-        .0,
-        "strategic" => format_strategic(
-            &all_timelines,
-            &no_strat_goals,
-            &in_conv,
-            now,
-            ViewKind::Strategic.default_budget_tokens(),
-        )
-        .0,
+        "relational" => {
+            format_relational(
+                &all_timelines,
+                &no_rel_notes,
+                &in_conv,
+                now,
+                ViewKind::Relational.default_budget_tokens(),
+            )
+            .0
+        }
+        "strategic" => {
+            format_strategic(
+                &all_timelines,
+                &no_strat_goals,
+                &in_conv,
+                now,
+                ViewKind::Strategic.default_budget_tokens(),
+            )
+            .0
+        }
         _ => String::new(),
     }
 }
@@ -689,8 +679,18 @@ fn build_detection_prompt(c: &sovereign_core::types::Conversation, turn_idx: usi
             sovereign_core::types::Role::Assistant => "assistant",
             sovereign_core::types::Role::System => "system",
         };
-        let marker = if i == turn_idx { " ← current turn" } else { "" };
-        window.push_str(&format!("[Turn {}, {}{}]\n{}\n\n", i + 1, role, marker, m.content));
+        let marker = if i == turn_idx {
+            " ← current turn"
+        } else {
+            ""
+        };
+        window.push_str(&format!(
+            "[Turn {}, {}{}]\n{}\n\n",
+            i + 1,
+            role,
+            marker,
+            m.content
+        ));
     }
     format!(
         r#"You are a development-time evaluator for the Sovereign suggest_note pipeline.
@@ -847,9 +847,7 @@ f1_min = 0.6
             "entity_count"
         );
         assert_eq!(
-            assertion_kind(&Assertion::EntityPresent {
-                name: "x".into()
-            }),
+            assertion_kind(&Assertion::EntityPresent { name: "x".into() }),
             "entity_present"
         );
         assert_eq!(

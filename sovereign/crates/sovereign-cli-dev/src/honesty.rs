@@ -104,7 +104,10 @@ pub enum Resolution {
     /// The source was fetched and indexed. `source` is the effective
     /// URL/path that the fetcher consumed (may differ from the
     /// best guess if the user supplied a custom one).
-    Fetched { source: String, bytes_indexed: usize },
+    Fetched {
+        source: String,
+        bytes_indexed: usize,
+    },
     /// The user declined, OR the fetcher failed. The gap is
     /// documented but not resolved. The protocol will NOT re-ask;
     /// the caller is expected to re-prompt only when the gap
@@ -259,16 +262,10 @@ impl Interlocutor for StdinInterlocutor {
         let _ = writeln!(self.writer, "? {}", gap.description);
         if let Some(g) = gap.best_guess.as_ref() {
             let _ = writeln!(self.writer, "  Best guess: {}", render_guess(g));
-            let _ = write!(
-                self.writer,
-                "  Fetch it? [Y/n, or paste a different URL] "
-            );
+            let _ = write!(self.writer, "  Fetch it? [Y/n, or paste a different URL] ");
         } else {
             let _ = writeln!(self.writer, "  No guess — can you point me somewhere?");
-            let _ = write!(
-                self.writer,
-                "  [paste a URL, or leave blank to skip] "
-            );
+            let _ = write!(self.writer, "  [paste a URL, or leave blank to skip] ");
         }
         let _ = self.writer.flush();
 
@@ -388,7 +385,9 @@ mod tests {
     impl RecordingFetcher {
         fn ok(bytes: usize) -> Self {
             Self {
-                result: FetchOutcome::Ok { bytes_indexed: bytes },
+                result: FetchOutcome::Ok {
+                    bytes_indexed: bytes,
+                },
                 calls: RefCell::new(Vec::new()),
             }
         }
@@ -432,7 +431,10 @@ mod tests {
             }
         );
         // Fetcher saw the source.
-        assert_eq!(protocol.fetcher.fetched(), vec!["https://polygon.io/docs/ws"]);
+        assert_eq!(
+            protocol.fetcher.fetched(),
+            vec!["https://polygon.io/docs/ws"]
+        );
         // Memory remembers.
         assert!(protocol.memory.previously_asked(&gap.id).is_some());
     }
@@ -444,7 +446,10 @@ mod tests {
         let mut protocol = HonestyProtocol::new(interloc, fetcher, InMemoryGapMemory::new());
         let res = protocol.confront(&url_gap());
         assert_eq!(res, Resolution::Deferred);
-        assert!(protocol.fetcher.fetched().is_empty(), "declined gap must not fetch");
+        assert!(
+            protocol.fetcher.fetched().is_empty(),
+            "declined gap must not fetch"
+        );
     }
 
     #[test]
@@ -558,6 +563,9 @@ mod tests {
             other => panic!("expected Custom, got {other:?}"),
         }
         // Junk → Decline (safer than fetching gibberish)
-        assert_eq!(parse_answer("maybe later\n", true), InterlocutorAnswer::Decline);
+        assert_eq!(
+            parse_answer("maybe later\n", true),
+            InterlocutorAnswer::Decline
+        );
     }
 }

@@ -152,12 +152,13 @@ pub async fn apply_edit(
             // content of line N). That's a 1-line replace producing
             // body.lines + 1 lines of output.
             let abs = ctx.workdir.join(source_file);
-            let existing = tokio::fs::read_to_string(&abs)
-                .await
-                .map_err(|e| ToolError::Filesystem {
-                    primitive: "insert_before",
-                    reason: format!("read {source_file}: {e}"),
-                })?;
+            let existing =
+                tokio::fs::read_to_string(&abs)
+                    .await
+                    .map_err(|e| ToolError::Filesystem {
+                        primitive: "insert_before",
+                        reason: format!("read {source_file}: {e}"),
+                    })?;
             let lines: Vec<&str> = existing.lines().collect();
             let line_idx = (*line as usize).saturating_sub(1);
             if line_idx > lines.len() {
@@ -174,7 +175,10 @@ pub async fn apply_edit(
             let new_content = if line_idx >= lines.len() {
                 response.body.clone()
             } else {
-                format!("{}\n{existing_at_line}", response.body.trim_end_matches('\n'))
+                format!(
+                    "{}\n{existing_at_line}",
+                    response.body.trim_end_matches('\n')
+                )
             };
             Primitive::PatchFile(PatchFileArgs {
                 path: source_file.to_string(),
@@ -206,7 +210,13 @@ pub fn snapshot_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
 }
 
 fn copy_dir_filtered(src: &Path, dst: &Path) -> std::io::Result<()> {
-    const SKIP: &[&str] = &["target", "node_modules", ".git", "__pycache__", ".pytest_cache"];
+    const SKIP: &[&str] = &[
+        "target",
+        "node_modules",
+        ".git",
+        "__pycache__",
+        ".pytest_cache",
+    ];
     std::fs::create_dir_all(dst)?;
     for entry in std::fs::read_dir(src)? {
         let entry = entry?;
@@ -328,8 +338,16 @@ fn walk_for_sources(root: &Path, dir: &Path, depth: usize, exts: &[&str], out: &
         return;
     }
     const SKIP: &[&str] = &[
-        "target", "node_modules", ".git", "__pycache__", ".pytest_cache",
-        "tests", "test", "dist", "build", "vendor",
+        "target",
+        "node_modules",
+        ".git",
+        "__pycache__",
+        ".pytest_cache",
+        "tests",
+        "test",
+        "dist",
+        "build",
+        "vendor",
     ];
     let Ok(rd) = std::fs::read_dir(dir) else {
         return;
@@ -608,7 +626,10 @@ if c == "<"
         let dst_parent = tempfile::tempdir().unwrap();
         let dst = dst_parent.path().join("snap");
         snapshot_dir(src.path(), &dst).unwrap();
-        assert_eq!(std::fs::read_to_string(dst.join("a.py")).unwrap(), "x = 1\n");
+        assert_eq!(
+            std::fs::read_to_string(dst.join("a.py")).unwrap(),
+            "x = 1\n"
+        );
         assert_eq!(
             std::fs::read_to_string(dst.join("tests/test_a.py")).unwrap(),
             "def test_a(): pass\n"

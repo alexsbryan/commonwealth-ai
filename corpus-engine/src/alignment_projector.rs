@@ -135,7 +135,13 @@ pub async fn project(canonical_path: &Path, home: &Path) -> Result<ProjectReport
             let source_doc_id = source_col.value(row);
             let content = content_col.value(row);
             let chunk_mtime = mtime_col
-                .and_then(|c| if c.is_null(row) { None } else { Some(c.value(row)) })
+                .and_then(|c| {
+                    if c.is_null(row) {
+                        None
+                    } else {
+                        Some(c.value(row))
+                    }
+                })
                 .unwrap_or(0);
 
             // Notes branch: defer to the SQLite upsert path.
@@ -174,9 +180,7 @@ pub async fn project(canonical_path: &Path, home: &Path) -> Result<ProjectReport
     // than a partial write.
     if !note_chunks.is_empty() {
         let notes_db = home.join(".sovereign").join("notes.db");
-        let pairs = note_chunks
-            .iter()
-            .map(|(s, c)| (s.as_str(), c.as_str()));
+        let pairs = note_chunks.iter().map(|(s, c)| (s.as_str(), c.as_str()));
         match import_notes_compat(&notes_db, pairs) {
             Ok(notes_report) => {
                 report.notes_upserted = notes_report.upserted;
@@ -310,10 +314,9 @@ fn sweep_stale_incoming(claude_dir: &Path) -> usize {
                 // file at the top level.
                 walk(&path, count);
             } else if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                if name.ends_with(".alignment-incoming")
-                    && fs::remove_file(&path).is_ok() {
-                        *count += 1;
-                    }
+                if name.ends_with(".alignment-incoming") && fs::remove_file(&path).is_ok() {
+                    *count += 1;
+                }
             }
         }
     }
@@ -340,10 +343,7 @@ struct NotesImportReportShim {
 }
 
 #[cfg(feature = "treesitter")]
-fn import_notes_compat<'a, I>(
-    notes_db: &Path,
-    chunks: I,
-) -> Result<NotesImportReportShim>
+fn import_notes_compat<'a, I>(notes_db: &Path, chunks: I) -> Result<NotesImportReportShim>
 where
     I: IntoIterator<Item = (&'a str, &'a str)>,
 {
@@ -355,10 +355,7 @@ where
 }
 
 #[cfg(not(feature = "treesitter"))]
-fn import_notes_compat<'a, I>(
-    _notes_db: &Path,
-    _chunks: I,
-) -> Result<NotesImportReportShim>
+fn import_notes_compat<'a, I>(_notes_db: &Path, _chunks: I) -> Result<NotesImportReportShim>
 where
     I: IntoIterator<Item = (&'a str, &'a str)>,
 {
@@ -381,7 +378,9 @@ impl LockFile {
             .create_new(true)
             .write(true)
             .open(path)?;
-        Ok(Self { path: path.to_path_buf() })
+        Ok(Self {
+            path: path.to_path_buf(),
+        })
     }
 }
 
@@ -404,7 +403,13 @@ mod tests {
     async fn alignment_canonical(dir: &Path, rows: &[(&str, i64, &str)]) -> PathBuf {
         let path = dir.join("alignment-canonical");
         let index = CorpusIndex::create(
-            &path, "alignment", "Alignment", "test-model", 8, true, "private",
+            &path,
+            "alignment",
+            "Alignment",
+            "test-model",
+            8,
+            true,
+            "private",
         )
         .await
         .unwrap();
@@ -527,11 +532,7 @@ mod tests {
         let stale = plans.join("foo.md.alignment-incoming");
         std::fs::write(&stale, "leftover").unwrap();
 
-        let canonical = alignment_canonical(
-            work.path(),
-            &[("plans/bar.md", 100, "fresh")],
-        )
-        .await;
+        let canonical = alignment_canonical(work.path(), &[("plans/bar.md", 100, "fresh")]).await;
         let report = project(&canonical, home.path()).await.unwrap();
         assert_eq!(report.swept_incoming, 1);
         assert!(!stale.exists());
@@ -615,11 +616,9 @@ mod tests {
         let home = tempfile::tempdir().unwrap();
         // Build a canonical without setting mutable_merge.
         let path = work.path().join("classic");
-        let index = CorpusIndex::create(
-            &path, "classic", "Classic", "test-model", 8, true, "MIT",
-        )
-        .await
-        .unwrap();
+        let index = CorpusIndex::create(&path, "classic", "Classic", "test-model", 8, true, "MIT")
+            .await
+            .unwrap();
         index
             .insert_batch(&[(
                 InsertChunk {

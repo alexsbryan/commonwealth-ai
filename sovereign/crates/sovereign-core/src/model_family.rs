@@ -44,7 +44,6 @@ pub enum ModelFamily {
     Unknown,
 }
 
-
 /// All family-specific runtime behaviour in one place.
 ///
 /// Every field has a clear owner: the model manifest sets the base values
@@ -213,27 +212,27 @@ impl ModelFamily {
         match self {
             ModelFamily::Qwen3 => ModelQuirks {
                 thinking: ThinkingControl::SystemPromptToken {
-                    enable:  "/think".into(),
+                    enable: "/think".into(),
                     disable: "/no_think".into(),
                 },
                 // Think profile (thinking-general).
-                default_temperature:      1.0,
-                default_top_k:            Some(20),
-                default_top_p:            0.95,
+                default_temperature: 1.0,
+                default_top_k: Some(20),
+                default_top_p: 0.95,
                 default_presence_penalty: 1.5,
                 // Qwen card recommends these across all three modes.
-                default_min_p:             0.0,
+                default_min_p: 0.0,
                 default_repetition_penalty: 1.0,
-                default_frequency_penalty:  0.0,
+                default_frequency_penalty: 0.0,
                 // Instruct profile (thinking off).
-                instruct_temperature:      Some(0.7),
-                instruct_top_k:            Some(20),
-                instruct_top_p:            Some(0.80),
+                instruct_temperature: Some(0.7),
+                instruct_top_k: Some(20),
+                instruct_top_p: Some(0.80),
                 instruct_presence_penalty: Some(1.5),
                 // Code profile (thinking + tools).
-                code_temperature:      Some(0.6),
-                code_top_k:            Some(20),
-                code_top_p:            Some(0.95),
+                code_temperature: Some(0.6),
+                code_top_k: Some(20),
+                code_top_p: Some(0.95),
                 code_presence_penalty: Some(0.0),
                 embed: None,
                 rerank: None,
@@ -249,23 +248,23 @@ impl ModelFamily {
             // on recurrent layers; full-clear required).
             ModelFamily::Qwen35 => ModelQuirks {
                 thinking: ThinkingControl::SystemPromptToken {
-                    enable:  "/think".into(),
+                    enable: "/think".into(),
                     disable: "/no_think".into(),
                 },
-                default_temperature:      0.7,
-                default_top_k:            Some(20),
-                default_top_p:            0.95,
+                default_temperature: 0.7,
+                default_top_k: Some(20),
+                default_top_p: 0.95,
                 default_presence_penalty: 1.5,
-                default_min_p:              0.0,
+                default_min_p: 0.0,
                 default_repetition_penalty: 1.0,
-                default_frequency_penalty:  0.0,
-                instruct_temperature:      Some(0.7),
-                instruct_top_k:            Some(20),
-                instruct_top_p:            Some(0.80),
+                default_frequency_penalty: 0.0,
+                instruct_temperature: Some(0.7),
+                instruct_top_k: Some(20),
+                instruct_top_p: Some(0.80),
                 instruct_presence_penalty: Some(1.5),
-                code_temperature:      Some(0.6),
-                code_top_k:            Some(20),
-                code_top_p:            Some(0.95),
+                code_temperature: Some(0.6),
+                code_top_k: Some(20),
+                code_top_p: Some(0.95),
                 code_presence_penalty: Some(0.0),
                 embed: None,
                 rerank: None,
@@ -279,32 +278,32 @@ impl ModelFamily {
             //   0.6B → 1024, 4B → 2560, 8B → 4096.
             ModelFamily::Qwen3Embedding => ModelQuirks {
                 thinking: ThinkingControl::None,
-                default_temperature:      0.0,
-                default_top_k:            Option::None,
-                default_top_p:            1.0,
+                default_temperature: 0.0,
+                default_top_k: Option::None,
+                default_top_p: 1.0,
                 default_presence_penalty: 0.0,
                 // llama-cpp tradition defaults for sampler-stage
                 // params not on this family's card.
-                default_min_p:              0.05,
+                default_min_p: 0.05,
                 default_repetition_penalty: 1.15,
-                default_frequency_penalty:  0.1,
-                instruct_temperature:      None,
-                instruct_top_k:            None,
-                instruct_top_p:            None,
+                default_frequency_penalty: 0.1,
+                instruct_temperature: None,
+                instruct_top_k: None,
+                instruct_top_p: None,
                 instruct_presence_penalty: None,
-                code_temperature:      None,
-                code_top_k:            None,
-                code_top_p:            None,
+                code_temperature: None,
+                code_top_k: None,
+                code_top_p: None,
                 code_presence_penalty: None,
                 embed: Some(EmbedQuirks {
-                    pooling:              PoolingStrategy::Last,
-                    normalize:            NormalizationStrategy::Application,
-                    query_instruction:    "Instruct: Given a search query, retrieve \
+                    pooling: PoolingStrategy::Last,
+                    normalize: NormalizationStrategy::Application,
+                    query_instruction: "Instruct: Given a search query, retrieve \
                                           relevant passages that answer the query\nQuery: "
-                                          .into(),
+                        .into(),
                     document_instruction: String::new(),
-                    append_eos_token:     true,
-                    output_dimensions:    1024, // overridden in manifest for 4B (2560) / 8B (4096)
+                    append_eos_token: true,
+                    output_dimensions: 1024, // overridden in manifest for 4B (2560) / 8B (4096)
                 }),
                 rerank: None,
                 has_recurrent_layers: false,
@@ -312,22 +311,22 @@ impl ModelFamily {
 
             ModelFamily::Gemma3 => ModelQuirks {
                 thinking: ThinkingControl::None,
-                default_temperature:      1.0,
-                default_top_k:            Some(64),
-                default_top_p:            0.95,
+                default_temperature: 1.0,
+                default_top_k: Some(64),
+                default_top_p: 0.95,
                 default_presence_penalty: 0.0,
                 // llama-cpp tradition defaults for sampler-stage
                 // params not on this family's card.
-                default_min_p:              0.05,
+                default_min_p: 0.05,
                 default_repetition_penalty: 1.15,
-                default_frequency_penalty:  0.1,
-                instruct_temperature:      None,
-                instruct_top_k:            None,
-                instruct_top_p:            None,
+                default_frequency_penalty: 0.1,
+                instruct_temperature: None,
+                instruct_top_k: None,
+                instruct_top_p: None,
                 instruct_presence_penalty: None,
-                code_temperature:      None,
-                code_top_k:            None,
-                code_top_p:            None,
+                code_temperature: None,
+                code_top_k: None,
+                code_top_p: None,
                 code_presence_penalty: None,
                 embed: None,
                 rerank: None,
@@ -342,13 +341,13 @@ impl ModelFamily {
                 thinking: ThinkingControl::None,
                 // Default profile uses the model card's universal
                 // recommendation (T=1.0, top_p=0.95, top_k=64).
-                default_temperature:      1.0,
-                default_top_k:            Some(64),
-                default_top_p:            0.95,
+                default_temperature: 1.0,
+                default_top_k: Some(64),
+                default_top_p: 0.95,
                 default_presence_penalty: 0.0,
-                default_min_p:              0.05,
+                default_min_p: 0.05,
                 default_repetition_penalty: 1.15,
-                default_frequency_penalty:  0.1,
+                default_frequency_penalty: 0.1,
                 // Per-mode tuning beyond the card. The card publishes
                 // one universal T=1.0 but in practice constrained
                 // tool / instruct work benefits from a tighter
@@ -363,17 +362,17 @@ impl ModelFamily {
                 // argument-content beats positional bias, but stay
                 // higher than greedy so multi-modal choices have
                 // sampling latitude.
-                instruct_temperature:      Some(0.7),
-                instruct_top_k:            Some(50),
-                instruct_top_p:            Some(0.95),
+                instruct_temperature: Some(0.7),
+                instruct_top_k: Some(50),
+                instruct_top_p: Some(0.95),
                 instruct_presence_penalty: Some(0.0),
                 // Code = composing structured emission. Tightest T —
                 // schema-constrained output benefits from low T to
                 // avoid sampling drift inside string bodies, JSON
                 // escape sequences, and TOML body lines.
-                code_temperature:      Some(0.4),
-                code_top_k:            Some(40),
-                code_top_p:            Some(0.95),
+                code_temperature: Some(0.4),
+                code_top_k: Some(40),
+                code_top_p: Some(0.95),
                 code_presence_penalty: Some(0.0),
                 embed: None,
                 rerank: None,
@@ -382,22 +381,22 @@ impl ModelFamily {
 
             ModelFamily::Llama3 => ModelQuirks {
                 thinking: ThinkingControl::None,
-                default_temperature:      0.6,
-                default_top_k:            Option::None,
-                default_top_p:            0.9,
+                default_temperature: 0.6,
+                default_top_k: Option::None,
+                default_top_p: 0.9,
                 default_presence_penalty: 0.0,
                 // llama-cpp tradition defaults for sampler-stage
                 // params not on this family's card.
-                default_min_p:              0.05,
+                default_min_p: 0.05,
                 default_repetition_penalty: 1.15,
-                default_frequency_penalty:  0.1,
-                instruct_temperature:      None,
-                instruct_top_k:            None,
-                instruct_top_p:            None,
+                default_frequency_penalty: 0.1,
+                instruct_temperature: None,
+                instruct_top_k: None,
+                instruct_top_p: None,
                 instruct_presence_penalty: None,
-                code_temperature:      None,
-                code_top_k:            None,
-                code_top_p:            None,
+                code_temperature: None,
+                code_top_k: None,
+                code_top_p: None,
                 code_presence_penalty: None,
                 embed: None,
                 rerank: None,
@@ -406,22 +405,22 @@ impl ModelFamily {
 
             ModelFamily::Phi4 => ModelQuirks {
                 thinking: ThinkingControl::None,
-                default_temperature:      0.7,
-                default_top_k:            Option::None,
-                default_top_p:            1.0,
+                default_temperature: 0.7,
+                default_top_k: Option::None,
+                default_top_p: 1.0,
                 default_presence_penalty: 0.0,
                 // llama-cpp tradition defaults for sampler-stage
                 // params not on this family's card.
-                default_min_p:              0.05,
+                default_min_p: 0.05,
                 default_repetition_penalty: 1.15,
-                default_frequency_penalty:  0.1,
-                instruct_temperature:      None,
-                instruct_top_k:            None,
-                instruct_top_p:            None,
+                default_frequency_penalty: 0.1,
+                instruct_temperature: None,
+                instruct_top_k: None,
+                instruct_top_p: None,
                 instruct_presence_penalty: None,
-                code_temperature:      None,
-                code_top_k:            None,
-                code_top_p:            None,
+                code_temperature: None,
+                code_top_k: None,
+                code_top_p: None,
                 code_presence_penalty: None,
                 embed: None,
                 rerank: None,
@@ -434,22 +433,22 @@ impl ModelFamily {
             // for this: all Primary calls will include a thinking block.
             ModelFamily::Phi4Reasoning => ModelQuirks {
                 thinking: ThinkingControl::AlwaysOn,
-                default_temperature:      0.8,
-                default_top_k:            Option::None,
-                default_top_p:            0.95,
+                default_temperature: 0.8,
+                default_top_k: Option::None,
+                default_top_p: 0.95,
                 default_presence_penalty: 0.0,
                 // llama-cpp tradition defaults for sampler-stage
                 // params not on this family's card.
-                default_min_p:              0.05,
+                default_min_p: 0.05,
                 default_repetition_penalty: 1.15,
-                default_frequency_penalty:  0.1,
-                instruct_temperature:      None,
-                instruct_top_k:            None,
-                instruct_top_p:            None,
+                default_frequency_penalty: 0.1,
+                instruct_temperature: None,
+                instruct_top_k: None,
+                instruct_top_p: None,
                 instruct_presence_penalty: None,
-                code_temperature:      None,
-                code_top_k:            None,
-                code_top_p:            None,
+                code_temperature: None,
+                code_top_k: None,
+                code_top_p: None,
                 code_presence_penalty: None,
                 embed: None,
                 rerank: None,
@@ -465,27 +464,27 @@ impl ModelFamily {
             // variants (512-ctx) override via `quirks_override`.
             ModelFamily::Reranker => ModelQuirks {
                 thinking: ThinkingControl::None,
-                default_temperature:      0.0,
-                default_top_k:            Option::None,
-                default_top_p:            1.0,
+                default_temperature: 0.0,
+                default_top_k: Option::None,
+                default_top_p: 1.0,
                 default_presence_penalty: 0.0,
                 // llama-cpp tradition defaults for sampler-stage
                 // params not on this family's card.
-                default_min_p:              0.05,
+                default_min_p: 0.05,
                 default_repetition_penalty: 1.15,
-                default_frequency_penalty:  0.1,
-                instruct_temperature:      None,
-                instruct_top_k:            None,
-                instruct_top_p:            None,
+                default_frequency_penalty: 0.1,
+                instruct_temperature: None,
+                instruct_top_k: None,
+                instruct_top_p: None,
                 instruct_presence_penalty: None,
-                code_temperature:      None,
-                code_top_k:            None,
-                code_top_p:            None,
+                code_temperature: None,
+                code_top_k: None,
+                code_top_p: None,
                 code_presence_penalty: None,
                 embed: None,
                 rerank: Some(RerankQuirks {
                     max_context: 8192,
-                    max_batch:   50,
+                    max_batch: 50,
                 }),
                 has_recurrent_layers: false,
             },
@@ -494,25 +493,25 @@ impl ModelFamily {
             // established by HuggingFace in its post-training alignment.
             ModelFamily::SmolLM3 => ModelQuirks {
                 thinking: ThinkingControl::SystemPromptToken {
-                    enable:  "/think".into(),
+                    enable: "/think".into(),
                     disable: "/no_think".into(),
                 },
-                default_temperature:      0.7,
-                default_top_k:            Option::None,
-                default_top_p:            0.9,
+                default_temperature: 0.7,
+                default_top_k: Option::None,
+                default_top_p: 0.9,
                 default_presence_penalty: 0.0,
                 // llama-cpp tradition defaults for sampler-stage
                 // params not on this family's card.
-                default_min_p:              0.05,
+                default_min_p: 0.05,
                 default_repetition_penalty: 1.15,
-                default_frequency_penalty:  0.1,
-                instruct_temperature:      None,
-                instruct_top_k:            None,
-                instruct_top_p:            None,
+                default_frequency_penalty: 0.1,
+                instruct_temperature: None,
+                instruct_top_k: None,
+                instruct_top_p: None,
                 instruct_presence_penalty: None,
-                code_temperature:      None,
-                code_top_k:            None,
-                code_top_p:            None,
+                code_temperature: None,
+                code_top_k: None,
+                code_top_p: None,
                 code_presence_penalty: None,
                 embed: None,
                 rerank: None,
@@ -524,22 +523,22 @@ impl ModelFamily {
             // specify a quirks_override in models.toml.
             ModelFamily::Unknown => ModelQuirks {
                 thinking: ThinkingControl::None,
-                default_temperature:      0.7,
-                default_top_k:            Option::None,
-                default_top_p:            0.9,
+                default_temperature: 0.7,
+                default_top_k: Option::None,
+                default_top_p: 0.9,
                 default_presence_penalty: 0.0,
                 // llama-cpp tradition defaults for sampler-stage
                 // params not on this family's card.
-                default_min_p:              0.05,
+                default_min_p: 0.05,
                 default_repetition_penalty: 1.15,
-                default_frequency_penalty:  0.1,
-                instruct_temperature:      None,
-                instruct_top_k:            None,
-                instruct_top_p:            None,
+                default_frequency_penalty: 0.1,
+                instruct_temperature: None,
+                instruct_top_k: None,
+                instruct_top_p: None,
                 instruct_presence_penalty: None,
-                code_temperature:      None,
-                code_top_k:            None,
-                code_top_p:            None,
+                code_temperature: None,
+                code_top_k: None,
+                code_top_p: None,
                 code_presence_penalty: None,
                 embed: None,
                 rerank: None,
@@ -557,7 +556,10 @@ mod tests {
     fn qwen3_thinking_tokens() {
         let quirks = ModelFamily::Qwen3.default_quirks();
         match quirks.thinking {
-            ThinkingControl::SystemPromptToken { ref enable, ref disable } => {
+            ThinkingControl::SystemPromptToken {
+                ref enable,
+                ref disable,
+            } => {
                 assert_eq!(enable, "/think");
                 assert_eq!(disable, "/no_think");
             }
@@ -569,7 +571,10 @@ mod tests {
     fn qwen35_thinking_tokens() {
         let quirks = ModelFamily::Qwen35.default_quirks();
         match quirks.thinking {
-            ThinkingControl::SystemPromptToken { ref enable, ref disable } => {
+            ThinkingControl::SystemPromptToken {
+                ref enable,
+                ref disable,
+            } => {
                 assert_eq!(enable, "/think");
                 assert_eq!(disable, "/no_think");
             }

@@ -93,9 +93,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
     while i < args.len() {
         match args[i].as_str() {
             "--source-path" => {
-                let v = args
-                    .get(i + 1)
-                    .ok_or("--source-path requires a value")?;
+                let v = args.get(i + 1).ok_or("--source-path requires a value")?;
                 out.source_path = Some(PathBuf::from(v));
                 i += 2;
             }
@@ -129,10 +127,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
 fn resolve_source_path(args: &Args) -> Result<PathBuf, String> {
     if let Some(p) = &args.source_path {
         if !p.exists() {
-            return Err(format!(
-                "--source-path {} does not exist",
-                p.display()
-            ));
+            return Err(format!("--source-path {} does not exist", p.display()));
         }
         return Ok(p.clone());
     }
@@ -161,8 +156,8 @@ fn resolve_source_path(args: &Args) -> Result<PathBuf, String> {
     };
     let raw = std::fs::read_to_string(&meta_path)
         .map_err(|e| format!("read {}: {e}", meta_path.display()))?;
-    let v: serde_json::Value = serde_json::from_str(&raw)
-        .map_err(|e| format!("parse {}: {e}", meta_path.display()))?;
+    let v: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", meta_path.display()))?;
     let s = v
         .get("source_path")
         .and_then(|x| x.as_str())
@@ -228,11 +223,7 @@ fn summary_line(findings: &[RoughEdgeFinding]) -> String {
     )
 }
 
-fn render_markdown(
-    corpus_id: &str,
-    source_path: &Path,
-    findings: &[RoughEdgeFinding],
-) -> String {
+fn render_markdown(corpus_id: &str, source_path: &Path, findings: &[RoughEdgeFinding]) -> String {
     let mut out = String::new();
     out.push_str(&format!(
         "# Rough Edges — `{corpus_id}`\n\n*{}*\n\n",

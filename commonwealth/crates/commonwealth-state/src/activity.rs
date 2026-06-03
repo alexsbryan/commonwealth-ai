@@ -18,8 +18,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use bytes::Bytes;
 
 use commonwealth_core::activity::{
-    aggregate_activity, ActivityEvent, ActivityEventKind, ActivitySummary,
-    ServedFor,
+    aggregate_activity, ActivityEvent, ActivityEventKind, ActivitySummary, ServedFor,
 };
 use commonwealth_core::ids::NodeId;
 
@@ -75,9 +74,9 @@ impl ActivityEmitter {
             }
         };
         let key = self.unique_key(now);
-        if let Err(e) =
-            self.store
-                .set(ACTIVITY_APP_ID, &key, payload, self.self_node_id)
+        if let Err(e) = self
+            .store
+            .set(ACTIVITY_APP_ID, &key, payload, self.self_node_id)
         {
             tracing::warn!(
                 error = %e,
@@ -130,10 +129,7 @@ fn read_activity_events(store: &MeshStore) -> Result<Vec<ActivityEvent>> {
 /// Aggregate stored activity into the single self-view summary.
 /// Convenience wrapper around
 /// [`commonwealth_core::activity::aggregate_activity`].
-pub fn current_activity(
-    store: &MeshStore,
-    window_days: u32,
-) -> Result<ActivitySummary> {
+pub fn current_activity(store: &MeshStore, window_days: u32) -> Result<ActivitySummary> {
     let events = read_activity_events(store)?;
     let now = now_secs();
     let window_secs = (window_days as u64) * 86_400;
@@ -292,9 +288,6 @@ mod tests {
     #[test]
     fn served_for_maps_requester_option() {
         assert!(matches!(served_for(None), ServedFor::Local));
-        assert!(matches!(
-            served_for(Some(nid(3))),
-            ServedFor::Peer { .. }
-        ));
+        assert!(matches!(served_for(Some(nid(3))), ServedFor::Peer { .. }));
     }
 }

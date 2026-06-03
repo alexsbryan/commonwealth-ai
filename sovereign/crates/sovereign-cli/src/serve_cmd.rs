@@ -265,8 +265,7 @@ fn truncate_if_oversize(path: &Path) {
 }
 
 fn write_pid(path: &Path, pid: i32) -> Result<(), String> {
-    std::fs::write(path, format!("{pid}\n"))
-        .map_err(|e| format!("write {}: {e}", path.display()))
+    std::fs::write(path, format!("{pid}\n")).map_err(|e| format!("write {}: {e}", path.display()))
 }
 
 fn read_pid(path: &Path) -> Option<i32> {
@@ -285,7 +284,10 @@ fn process_alive(pid: i32) -> bool {
     if r == 0 {
         return true;
     }
-    matches!(std::io::Error::last_os_error().raw_os_error(), Some(libc::EPERM))
+    matches!(
+        std::io::Error::last_os_error().raw_os_error(),
+        Some(libc::EPERM)
+    )
 }
 
 #[cfg(not(unix))]
@@ -342,8 +344,7 @@ async fn reachable(url: &str) -> bool {
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
     command: "sovereign serve",
-    summary:
-        "Run the MCP code-intelligence server. \
+    summary: "Run the MCP code-intelligence server. \
          Default is foreground; pass --background to detach.",
     sections: &[
         crate::util::help::HelpSection::Usage("sovereign serve [--background] [--port <n>]"),
@@ -368,7 +369,11 @@ mod tests {
 
     #[test]
     fn parse_mode_strips_background_flag() {
-        let argv = vec!["--background".to_string(), "--port".to_string(), "9741".to_string()];
+        let argv = vec![
+            "--background".to_string(),
+            "--port".to_string(),
+            "9741".to_string(),
+        ];
         let (mode, args) = parse_mode(&argv);
         assert_eq!(mode, Mode::Background);
         assert_eq!(args, vec!["--port".to_string(), "9741".to_string()]);
@@ -376,7 +381,11 @@ mod tests {
 
     #[test]
     fn parse_mode_background_can_appear_anywhere() {
-        let argv = vec!["--port".to_string(), "9741".to_string(), "--background".to_string()];
+        let argv = vec![
+            "--port".to_string(),
+            "9741".to_string(),
+            "--background".to_string(),
+        ];
         let (mode, args) = parse_mode(&argv);
         assert_eq!(mode, Mode::Background);
         assert_eq!(args, vec!["--port".to_string(), "9741".to_string()]);

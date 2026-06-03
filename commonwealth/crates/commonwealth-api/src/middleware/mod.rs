@@ -330,16 +330,11 @@ impl MiddlewareRegistry {
     /// An unknown id returns an error — a typo in
     /// `default_pipelines.toml` should fail loud at request time, not
     /// silently skip the middleware.
-    pub fn build_pipeline(
-        &self,
-        ids: &[String],
-    ) -> Result<Pipeline, MiddlewareError> {
+    pub fn build_pipeline(&self, ids: &[String]) -> Result<Pipeline, MiddlewareError> {
         let mut chain = Vec::with_capacity(ids.len());
         for id in ids {
             let mw = self.get(id).ok_or_else(|| {
-                MiddlewareError::Infra(format!(
-                    "unknown middleware id in pipeline: '{id}'"
-                ))
+                MiddlewareError::Infra(format!("unknown middleware id in pipeline: '{id}'"))
             })?;
             chain.push(mw);
         }
@@ -372,12 +367,12 @@ mod tests {
             chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         }
     }
 
@@ -416,7 +411,8 @@ mod tests {
             _session: &mut MiddlewareSession,
             _ctx: &PipelineContext,
         ) -> Result<(), MiddlewareError> {
-            self.count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.count
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             Ok(())
         }
     }
@@ -463,7 +459,10 @@ mod tests {
         let mut req = make_request();
         let mut session = MiddlewareSession::default();
         let ctx = make_ctx();
-        let err = pipeline.run(&mut req, &mut session, &ctx).await.unwrap_err();
+        let err = pipeline
+            .run(&mut req, &mut session, &ctx)
+            .await
+            .unwrap_err();
         assert!(matches!(err, MiddlewareError::ApprovalRequired { .. }));
         assert_eq!(a.count.load(std::sync::atomic::Ordering::Relaxed), 1);
         assert_eq!(
@@ -515,8 +514,7 @@ mod tests {
         registry.register(Arc::new(DecisionExtractor::new()));
 
         // Resolve the toml-declared chain.
-        let table =
-            commonwealth_core::pipeline_aliases::PipelineAliasTable::default_table();
+        let table = commonwealth_core::pipeline_aliases::PipelineAliasTable::default_table();
         let resolution = table
             .resolve("sovereign-coder")
             .expect("sovereign-coder pipeline must exist in default_pipelines.toml");

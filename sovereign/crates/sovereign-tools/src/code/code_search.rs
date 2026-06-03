@@ -15,8 +15,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::TryStreamExt;
-use lancedb::query::{ExecutableQuery, QueryBase};
 use lancedb::index::scalar::FullTextSearchQuery;
+use lancedb::query::{ExecutableQuery, QueryBase};
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, Tool};
@@ -156,11 +156,7 @@ impl Tool for CodeSearchTool {
         Ok(())
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -185,8 +181,11 @@ impl Tool for CodeSearchTool {
             None => "symbol_name IS NOT NULL".to_string(),
         };
 
-        let indexes =
-            self.engine.installed_indexes().await.map_err(|e| Error::Tool {
+        let indexes = self
+            .engine
+            .installed_indexes()
+            .await
+            .map_err(|e| Error::Tool {
                 tool_id: "code_search".to_string(),
                 message: format!("enumerate corpora: {e}"),
             })?;
@@ -204,11 +203,7 @@ impl Tool for CodeSearchTool {
             // Vector-first if we have an embedding, else FTS.
             let batches_result = if !embedding.is_empty() {
                 match table.query().nearest_to(embedding.clone()) {
-                    Ok(q) => q
-                        .only_if(base_filter.clone())
-                        .limit(16)
-                        .execute()
-                        .await,
+                    Ok(q) => q.only_if(base_filter.clone()).limit(16).execute().await,
                     Err(e) => {
                         tracing::debug!(corpus = %info.corpus_id, "vector query build failed: {e}");
                         continue;

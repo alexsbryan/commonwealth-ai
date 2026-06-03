@@ -233,9 +233,7 @@ pub(crate) fn build_retrieval_query(message: &str, context: &ConversationContext
 /// always rank above chunks without (None is treated as +infinity).
 pub(crate) fn cross_corpus_sort_cmp(a: &ScoredChunk, b: &ScoredChunk) -> std::cmp::Ordering {
     match (a.vector_distance, b.vector_distance) {
-        (Some(ad), Some(bd)) => ad
-            .partial_cmp(&bd)
-            .unwrap_or(std::cmp::Ordering::Equal),
+        (Some(ad), Some(bd)) => ad.partial_cmp(&bd).unwrap_or(std::cmp::Ordering::Equal),
         (Some(_), None) => std::cmp::Ordering::Less,
         (None, Some(_)) => std::cmp::Ordering::Greater,
         (None, None) => b
@@ -368,9 +366,7 @@ pub(crate) fn inject_meta_atlas_hits(
         // the meta-atlas cohort.
         let lifted_score = top_score + 1e-4 * (*rank as f32);
         if let Some(existing) = chunks.iter_mut().find(|c| {
-            c.corpus_id == hit.corpus_id
-                && c.chunk_id.is_some()
-                && c.chunk_id == hit.chunk_id
+            c.corpus_id == hit.corpus_id && c.chunk_id.is_some() && c.chunk_id == hit.chunk_id
         }) {
             // Already-present: lift score + tag metadata in place.
             existing.score = lifted_score;
@@ -411,7 +407,10 @@ pub(crate) fn inject_meta_atlas_hits(
 /// value enables.
 pub(crate) fn atlas_grounding_enabled() -> bool {
     match std::env::var("SOVEREIGN_ATLAS_GROUNDING") {
-        Ok(v) => !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "off" | "no"),
+        Ok(v) => !matches!(
+            v.to_ascii_lowercase().as_str(),
+            "0" | "false" | "off" | "no"
+        ),
         Err(_) => true,
     }
 }
@@ -432,10 +431,7 @@ pub(crate) fn atlas_grounding_enabled() -> bool {
 /// negative. Reverted. See `bench/wikipedia_learn/V36_FINDINGS.md`
 /// for the full trace + the principled reservation-only path
 /// (option C) handed to the next iteration.
-pub(crate) fn drop_no_overlap_chunks(
-    chunks: Vec<ScoredChunk>,
-    query: &str,
-) -> Vec<ScoredChunk> {
+pub(crate) fn drop_no_overlap_chunks(chunks: Vec<ScoredChunk>, query: &str) -> Vec<ScoredChunk> {
     let query_tokens = extract_tokens(query, EVIDENCE_TITLE_MIN_TOKEN_LEN);
     if query_tokens.is_empty() {
         return chunks;
@@ -452,7 +448,9 @@ pub(crate) fn drop_no_overlap_chunks(
                 return true;
             }
             let content_lower = c.content.to_lowercase();
-            query_tokens.iter().any(|q| content_lower.contains(q.as_str()))
+            query_tokens
+                .iter()
+                .any(|q| content_lower.contains(q.as_str()))
         })
         .collect()
 }
@@ -486,7 +484,8 @@ mod query_relevance_tests {
     /// content-overlap with the query boost it above the SEP chunk.
     #[test]
     fn wikipedia_chunk_outranks_off_domain_after_reweight() {
-        let mut chunks = vec![
+        let mut chunks =
+            vec![
             // sep-al-farabi: an unrelated philosophy entry whose
             // RRF rank-1 happens to match the numeric score of
             // Wikipedia's hit. Title doesn't share tokens with the
@@ -503,7 +502,11 @@ mod query_relevance_tests {
             ),
         ];
         reweight_by_query_relevance(&mut chunks, "Why did Operation Barbarossa fail?");
-        chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        chunks.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         assert_eq!(
             chunks[0].title.as_deref(),
             Some("Operation Barbarossa"),
@@ -521,7 +524,12 @@ mod query_relevance_tests {
     #[test]
     fn within_corpus_ranking_is_stable_under_reweight() {
         let mut chunks = vec![
-            chunk("wiki", "Yalta Conference", "Yalta Conference details", 0.030),
+            chunk(
+                "wiki",
+                "Yalta Conference",
+                "Yalta Conference details",
+                0.030,
+            ),
             chunk("wiki", "Yalta Conference", "Yalta Conference more", 0.020),
             chunk("wiki", "Yalta Conference", "Yalta Conference still", 0.010),
         ];

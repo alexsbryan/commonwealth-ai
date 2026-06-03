@@ -77,8 +77,8 @@ fn read_optional_json<T: serde::de::DeserializeOwned>(p: &Path) -> Result<Option
         return Ok(None);
     }
     let text = std::fs::read_to_string(p).with_context(|| format!("reading {}", p.display()))?;
-    let v = serde_json::from_str(&text)
-        .with_context(|| format!("parsing JSON at {}", p.display()))?;
+    let v =
+        serde_json::from_str(&text).with_context(|| format!("parsing JSON at {}", p.display()))?;
     Ok(Some(v))
 }
 
@@ -147,65 +147,58 @@ pub fn render(a: &ScoreBundle, b: &ScoreBundle) -> String {
     }
 
     out.push_str("\n== Scope compliance ==\n");
-    let render_scope = |label: &str, sr: &Option<ScopeReport>, out: &mut String| {
-        match sr {
-            Some(s) => out.push_str(&format!(
-                "  {}: {:.1}%  ({} in-scope / {} total; {} OOS additions, {} OOS deletions)\n",
-                label,
-                s.scope_compliance * 100.0,
-                s.in_scope_changes.len(),
-                s.total_changes,
-                s.additions_out_of_scope,
-                s.deletions_out_of_scope
-            )),
-            None => out.push_str(&format!("  {}: (scope.json absent)\n", label)),
-        }
+    let render_scope = |label: &str, sr: &Option<ScopeReport>, out: &mut String| match sr {
+        Some(s) => out.push_str(&format!(
+            "  {}: {:.1}%  ({} in-scope / {} total; {} OOS additions, {} OOS deletions)\n",
+            label,
+            s.scope_compliance * 100.0,
+            s.in_scope_changes.len(),
+            s.total_changes,
+            s.additions_out_of_scope,
+            s.deletions_out_of_scope
+        )),
+        None => out.push_str(&format!("  {}: (scope.json absent)\n", label)),
     };
     render_scope("Run A", &a.scope, &mut out);
     render_scope("Run B", &b.scope, &mut out);
 
     out.push_str("\n== Test regressions ==\n");
-    let render_reg = |label: &str, rr: &Option<RegressionReport>, out: &mut String| {
-        match rr {
-            Some(r) => out.push_str(&format!(
-                "  {}: regressions={}, fixes={}, baseline {}/{} → current {}/{}\n",
-                label,
-                r.regression_count,
-                r.fixes.len(),
-                r.baseline_passed,
-                r.baseline_total,
-                r.current_passed,
-                r.current_total
-            )),
-            None => out.push_str(&format!("  {}: (regression.json absent)\n", label)),
-        }
+    let render_reg = |label: &str, rr: &Option<RegressionReport>, out: &mut String| match rr {
+        Some(r) => out.push_str(&format!(
+            "  {}: regressions={}, fixes={}, baseline {}/{} → current {}/{}\n",
+            label,
+            r.regression_count,
+            r.fixes.len(),
+            r.baseline_passed,
+            r.baseline_total,
+            r.current_passed,
+            r.current_total
+        )),
+        None => out.push_str(&format!("  {}: (regression.json absent)\n", label)),
     };
     render_reg("Run A", &a.regression, &mut out);
     render_reg("Run B", &b.regression, &mut out);
 
     out.push_str("\n== Tool grades (replay vs. oracle) ==\n");
-    let render_grades = |label: &str, tg: &Option<ToolGradeReport>, out: &mut String| {
-        match tg {
-            Some(g) => {
-                let acc = if g.graded_calls == 0 {
-                    0.0
-                } else {
-                    let correct: u32 =
-                        g.per_tool_summary.values().map(|s| s.correct_count).sum();
-                    correct as f64 / g.graded_calls as f64
-                };
-                out.push_str(&format!(
-                    "  {}: graded {}/{} ({:.1}% accuracy); {} ungradeable; {} replay errors\n",
-                    label,
-                    g.graded_calls,
-                    g.total_calls,
-                    acc * 100.0,
-                    g.ungradeable_calls,
-                    g.replay_errors
-                ));
-            }
-            None => out.push_str(&format!("  {}: (tool_grades.json absent)\n", label)),
+    let render_grades = |label: &str, tg: &Option<ToolGradeReport>, out: &mut String| match tg {
+        Some(g) => {
+            let acc = if g.graded_calls == 0 {
+                0.0
+            } else {
+                let correct: u32 = g.per_tool_summary.values().map(|s| s.correct_count).sum();
+                correct as f64 / g.graded_calls as f64
+            };
+            out.push_str(&format!(
+                "  {}: graded {}/{} ({:.1}% accuracy); {} ungradeable; {} replay errors\n",
+                label,
+                g.graded_calls,
+                g.total_calls,
+                acc * 100.0,
+                g.ungradeable_calls,
+                g.replay_errors
+            ));
         }
+        None => out.push_str(&format!("  {}: (tool_grades.json absent)\n", label)),
     };
     render_grades("Run A", &a.tool_grades, &mut out);
     render_grades("Run B", &b.tool_grades, &mut out);

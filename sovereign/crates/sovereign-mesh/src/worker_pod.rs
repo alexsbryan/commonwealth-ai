@@ -38,7 +38,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use ed25519_dalek::pkcs8::EncodePrivateKey;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
@@ -539,7 +539,7 @@ impl std::fmt::Debug for WorkerHandle {
 // is correct but bloated (each byte becomes its own JSON number).
 // Encoding as hex keeps the blob compact and human-debuggable.
 mod serde_bytes_32 {
-    use serde::{Deserialize, Deserializer, Serializer, de::Error as _};
+    use serde::{de::Error as _, Deserialize, Deserializer, Serializer};
 
     pub fn serialize<S>(bytes: &[u8; 32], s: S) -> Result<S::Ok, S::Error>
     where

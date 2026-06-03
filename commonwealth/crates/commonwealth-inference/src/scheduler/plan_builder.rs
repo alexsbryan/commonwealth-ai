@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use tracing::info;
 
+use crate::inference_plan::{InferencePlan, ShardPlan};
+use crate::model::ModelInfo;
 use commonwealth_core::capabilities::NodeCapabilities;
 use commonwealth_core::config::DaemonConfig;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::latency::LatencyMatrix;
-use crate::model::ModelInfo;
-use crate::inference_plan::{InferencePlan, ShardPlan};
 
 use super::layer_assignment::{assign_layers, AssignmentError, EligibleNode};
 
@@ -159,10 +159,10 @@ fn estimate_performance(model: &ModelInfo, num_nodes: &usize) -> (f32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commonwealth_core::capabilities::*;
-    use commonwealth_core::ids::ModelId;
     use crate::model::*;
     use crate::oicp::CapabilityProfile;
+    use commonwealth_core::capabilities::*;
+    use commonwealth_core::ids::ModelId;
 
     fn test_model(id: u128, layers: u32, size_gb: u64) -> ModelInfo {
         ModelInfo {
@@ -216,7 +216,7 @@ mod tests {
             embed_model: None,
             benchmark: None,
             current_in_flight: None,
-            }
+        }
     }
 
     fn test_node_config() -> NodeConfig {

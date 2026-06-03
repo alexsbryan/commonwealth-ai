@@ -9,8 +9,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use commonwealth_core::ids::{NodeId, PlanId};
 use crate::inference_plan::ShardPlan;
+use commonwealth_core::ids::{NodeId, PlanId};
 
 // ─── MeshPlan ────────────────────────────────────────────────
 
@@ -39,9 +39,7 @@ pub struct MeshPlan {
 pub enum SchedulingStrategy {
     /// One instance, potentially sharded across multiple nodes.
     /// Best quality. Latency scales with inter-node bandwidth.
-    SingleInstance {
-        shard_plan: ShardPlan,
-    },
+    SingleInstance { shard_plan: ShardPlan },
 
     /// Independent instances across eligible nodes.
     /// Best throughput. Quality capped by what fits on one node.
@@ -62,9 +60,7 @@ pub enum SchedulingStrategy {
 
     /// Mesh too small or degraded to run any model.
     /// Requests return 503 with a clear explanation.
-    Unavailable {
-        reason: UnavailableReason,
-    },
+    Unavailable { reason: UnavailableReason },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,10 +85,7 @@ pub enum UnavailableReason {
 pub enum PlanTrigger {
     NodeJoined(NodeId),
     NodeDeparted(NodeId),
-    ModelBecameAvailable {
-        node_id: NodeId,
-        model_id: String,
-    },
+    ModelBecameAvailable { node_id: NodeId, model_id: String },
     ScheduledRebalance,
     LeaderElected(NodeId),
     FairnessThresholdExceeded(NodeId),

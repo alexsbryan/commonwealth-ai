@@ -111,7 +111,10 @@ impl ViewKind {
     /// `Relational`, `Strategic`) that are assembled from other
     /// views' outputs at splice time.
     pub const fn has_own_index(&self) -> bool {
-        matches!(self, Self::Personal | Self::Conversational | Self::Institutional)
+        matches!(
+            self,
+            Self::Personal | Self::Conversational | Self::Institutional
+        )
     }
 
     /// Parse a canonical id back to a `ViewKind`. Returns `None` for

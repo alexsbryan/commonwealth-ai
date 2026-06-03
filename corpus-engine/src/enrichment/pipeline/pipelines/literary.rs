@@ -19,31 +19,36 @@ use super::super::types::*;
 use crate::enrichment::domain::ClusteringConfig;
 use crate::error::{Error, Result};
 
-static PHASE1_SYSTEM: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+static PHASE1_SYSTEM: ::std::sync::LazyLock<&'static str> = ::std::sync::LazyLock::new(|| {
+    crate::enrichment::pipeline::prompts::load_or_baked(
         "literary/phase1_system.md",
         include_str!("literary_prompts/phase1_system.md"),
-    ));
-static PHASE3_SYSTEM: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+    )
+});
+static PHASE3_SYSTEM: ::std::sync::LazyLock<&'static str> = ::std::sync::LazyLock::new(|| {
+    crate::enrichment::pipeline::prompts::load_or_baked(
         "literary/phase3_system.md",
         include_str!("literary_prompts/phase3_system.md"),
-    ));
-static PHASE5_SYSTEM: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+    )
+});
+static PHASE5_SYSTEM: ::std::sync::LazyLock<&'static str> = ::std::sync::LazyLock::new(|| {
+    crate::enrichment::pipeline::prompts::load_or_baked(
         "literary/phase5_system.md",
         include_str!("literary_prompts/phase5_system.md"),
-    ));
-static PHASE6_SYSTEM: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+    )
+});
+static PHASE6_SYSTEM: ::std::sync::LazyLock<&'static str> = ::std::sync::LazyLock::new(|| {
+    crate::enrichment::pipeline::prompts::load_or_baked(
         "literary/phase6_system.md",
         include_str!("literary_prompts/phase6_system.md"),
-    ));
-static PHASE7_SYSTEM: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+    )
+});
+static PHASE7_SYSTEM: ::std::sync::LazyLock<&'static str> = ::std::sync::LazyLock::new(|| {
+    crate::enrichment::pipeline::prompts::load_or_baked(
         "literary/phase7_system.md",
         include_str!("literary_prompts/phase7_system.md"),
-    ));
+    )
+});
 
 /// Landing-1 literary pipeline. See module doc for scope.
 pub struct LiteraryPipeline {
@@ -105,11 +110,7 @@ impl Pipeline for LiteraryPipeline {
 
     // ── Phase 1 — full implementation ─────────────────────────
 
-    fn compose_phase1(
-        &self,
-        chapter: &ChapterInput,
-        exemplars: &[&Exemplar],
-    ) -> ChatPrompt {
+    fn compose_phase1(&self, chapter: &ChapterInput, exemplars: &[&Exemplar]) -> ChatPrompt {
         let mut user = String::new();
 
         if !exemplars.is_empty() {
@@ -135,9 +136,7 @@ impl Pipeline for LiteraryPipeline {
         user.push_str("**Body:**\n\n");
         user.push_str(&chapter.text);
         user.push_str("\n\n---\n\n");
-        user.push_str(
-            "Respond with a single JSON object per the schema in the system message.",
-        );
+        user.push_str("Respond with a single JSON object per the schema in the system message.");
 
         ChatPrompt::new(self.phase1_system(), user)
     }
@@ -224,7 +223,10 @@ impl Pipeline for LiteraryPipeline {
             user.push_str("---\n\n");
         }
 
-        user.push_str(&format!("# Question cluster to name (id: {})\n\n", cluster.id));
+        user.push_str(&format!(
+            "# Question cluster to name (id: {})\n\n",
+            cluster.id
+        ));
         user.push_str("The following per-chapter questions have been grouped by similarity:\n\n");
         for (i, q) in cluster.question_refs.iter().enumerate() {
             // Question text isn't in QuestionRef; the runner passes
@@ -242,7 +244,10 @@ impl Pipeline for LiteraryPipeline {
             user.push_str("\n## Chapter excerpts\n\n");
             for ex in chapter_excerpts {
                 let snippet: String = ex.text.chars().take(280).collect();
-                user.push_str(&format!("**{} — {}:**\n{}…\n\n", ex.chapter_id, ex.title, snippet));
+                user.push_str(&format!(
+                    "**{} — {}:**\n{}…\n\n",
+                    ex.chapter_id, ex.title, snippet
+                ));
             }
         }
 
@@ -374,8 +379,7 @@ impl Pipeline for LiteraryPipeline {
             .collect();
         if grounding.is_empty() {
             return Err(Error::Serialization(
-                "phase 5 response had grounding entries but none carried a valid `chunk_id`"
-                    .into(),
+                "phase 5 response had grounding entries but none carried a valid `chunk_id`".into(),
             ));
         }
 
@@ -531,12 +535,9 @@ impl Pipeline for LiteraryPipeline {
             .map_err(|e| Error::Serialization(format!("phase 7 JSON parse error: {e}")))?;
         let mut out = Vec::new();
         for (i, g) in raw.gaps.into_iter().enumerate() {
-            let gap_text = g
-                .gap_text
-                .filter(|s| !s.trim().is_empty())
-                .ok_or_else(|| {
-                    Error::Serialization(format!("phase 7 gaps[{i}] missing `gap_text`"))
-                })?;
+            let gap_text = g.gap_text.filter(|s| !s.trim().is_empty()).ok_or_else(|| {
+                Error::Serialization(format!("phase 7 gaps[{i}] missing `gap_text`"))
+            })?;
             out.push(Phase7ParseItem {
                 gap_text,
                 evidence: g.evidence.unwrap_or_default(),
@@ -613,7 +614,9 @@ where
     use serde::Deserialize;
     let m: std::collections::HashMap<String, Option<String>> =
         std::collections::HashMap::deserialize(d)?;
-    Ok(m.into_iter().filter_map(|(k, v)| v.map(|s| (k, s))).collect())
+    Ok(m.into_iter()
+        .filter_map(|(k, v)| v.map(|s| (k, s)))
+        .collect())
 }
 
 /// Strip `<think>…</think>` reasoning tags, extract the first JSON
@@ -821,9 +824,7 @@ mod tests {
     #[test]
     fn parse_phase1_rejects_missing_questions() {
         let p = LiteraryPipeline::new();
-        let err = p
-            .parse_phase1(r#"{"reveals":"r"}"#)
-            .unwrap_err();
+        let err = p.parse_phase1(r#"{"reveals":"r"}"#).unwrap_err();
         let msg = format!("{err:?}");
         assert!(msg.contains("questions"), "{msg}");
     }
@@ -831,9 +832,7 @@ mod tests {
     #[test]
     fn parse_phase1_rejects_empty_question_strings() {
         let p = LiteraryPipeline::new();
-        let err = p
-            .parse_phase1(r#"{"questions":["   ", ""]}"#)
-            .unwrap_err();
+        let err = p.parse_phase1(r#"{"questions":["   ", ""]}"#).unwrap_err();
         let msg = format!("{err:?}");
         assert!(msg.contains("empty"), "{msg}");
     }
@@ -875,8 +874,14 @@ mod tests {
             "plot": "Parents argue over courting a wealthy newcomer."
         }"#;
         let got = p.parse_phase1(raw).unwrap();
-        assert_eq!(got.setting.as_deref(), Some("English country drawing-room, circa 1810"));
-        assert_eq!(got.plot.as_deref(), Some("Parents argue over courting a wealthy newcomer."));
+        assert_eq!(
+            got.setting.as_deref(),
+            Some("English country drawing-room, circa 1810")
+        );
+        assert_eq!(
+            got.plot.as_deref(),
+            Some("Parents argue over courting a wealthy newcomer.")
+        );
     }
 
     #[test]
@@ -978,7 +983,10 @@ mod tests {
         }"#;
         let got = p.parse_phase5(raw).unwrap();
         assert_eq!(got.position_text, "X");
-        assert_eq!(got.extensions.get("stance").map(String::as_str), Some("affirmative"));
+        assert_eq!(
+            got.extensions.get("stance").map(String::as_str),
+            Some("affirmative")
+        );
         assert!(
             !got.extensions.contains_key("confidence"),
             "null value must be filtered, not stored as empty string"

@@ -31,9 +31,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use crate::enrichment::atlas::AtomEnvelope;
-use crate::enrichment::pipeline::atlas::{
-    DiscourseAct, EntityType, EventType,
-};
+use crate::enrichment::pipeline::atlas::{DiscourseAct, EntityType, EventType};
 use crate::stream_axes::ArticulationVector;
 
 /// Top-level entry. Classify a single atom into an articulation
@@ -45,10 +43,7 @@ use crate::stream_axes::ArticulationVector;
 /// carries no articulation signal). Pass empty string when no
 /// preview is available — the fallback will return
 /// [`ArticulationVector::balanced`].
-pub fn classify_articulation(
-    env: &AtomEnvelope,
-    chunk_preview: &str,
-) -> ArticulationVector {
+pub fn classify_articulation(env: &AtomEnvelope, chunk_preview: &str) -> ArticulationVector {
     match env {
         AtomEnvelope::Entity(e) => {
             // defining_quote is the strongest single signal: the
@@ -102,9 +97,7 @@ pub fn classify_articulation(
             // Enact / Commit — performative speech acts. The claim
             // does something rather than just states it. Trace-leaning
             // because the claim IS the action.
-            DiscourseAct::Enact | DiscourseAct::Commit => {
-                ArticulationVector::new(0.10, 0.40, 0.50)
-            }
+            DiscourseAct::Enact | DiscourseAct::Commit => ArticulationVector::new(0.10, 0.40, 0.50),
             DiscourseAct::Other(_) => ArticulationVector::new(0.10, 0.80, 0.10),
         },
         AtomEnvelope::Event(e) => match e.event_type {
@@ -219,8 +212,7 @@ static WIKI_OPENER: LazyLock<Regex> = LazyLock::new(|| {
 /// First-person markers — case-insensitive whole-word. Catches
 /// journals, chat transcripts, codex sessions.
 static FIRST_PERSON: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\b(i|we|my|our|me|us|i've|i'm|we've|we're)\b"#)
-        .expect("FIRST_PERSON regex")
+    Regex::new(r#"(?i)\b(i|we|my|our|me|us|i've|i'm|we've|we're)\b"#).expect("FIRST_PERSON regex")
 });
 
 /// Date markers — explicit dates, relative-time markers, month
@@ -255,8 +247,8 @@ mod tests {
     use super::*;
     use crate::enrichment::atlas::{
         atoms::{
-            ArgumentReconstruction, Claim, Configuration, Entity, Event, Opposition,
-            Position, Question, Relation, ResolutionStatus, State,
+            ArgumentReconstruction, Claim, Configuration, Entity, Event, Opposition, Position,
+            Question, Relation, ResolutionStatus, State,
         },
         AtomEnvelope, AtomId, ChunkRef, SectionPosition, SectionRange,
     };
@@ -266,7 +258,12 @@ mod tests {
     };
     use crate::stream_axes::Articulation;
 
-    fn entity(et: EntityType, salience: f32, aliases: Vec<&str>, quote: Option<&str>) -> AtomEnvelope {
+    fn entity(
+        et: EntityType,
+        salience: f32,
+        aliases: Vec<&str>,
+        quote: Option<&str>,
+    ) -> AtomEnvelope {
         AtomEnvelope::Entity(Entity {
             id: AtomId::entity(1),
             canonical_name: "Test".into(),
@@ -321,7 +318,12 @@ mod tests {
 
     #[test]
     fn entity_with_defining_quote_is_argument_dominant() {
-        let env = entity(EntityType::Person, 0.5, vec![], Some("X is the practice of Y."));
+        let env = entity(
+            EntityType::Person,
+            0.5,
+            vec![],
+            Some("X is the practice of Y."),
+        );
         let v = classify_articulation(&env, "");
         assert_eq!(v.dominant(), Articulation::Argument);
         assert!(v.argument >= 0.7);
@@ -346,7 +348,7 @@ mod tests {
         let env = entity(EntityType::Person, 0.1, vec![], None);
         let v = classify_articulation(&env, "");
         assert_eq!(v.dominant(), Articulation::Inventory);
-        assert!(v.argument >= 0.35);  // softer Argument component
+        assert!(v.argument >= 0.35); // softer Argument component
     }
 
     #[test]
@@ -429,7 +431,11 @@ mod tests {
 
     #[test]
     fn event_action_encounter_external_force_trace_dominant() {
-        for et in [EventType::Action, EventType::Encounter, EventType::ExternalForce] {
+        for et in [
+            EventType::Action,
+            EventType::Encounter,
+            EventType::ExternalForce,
+        ] {
             let v = classify_articulation(&event(et), "");
             assert_eq!(v.dominant(), Articulation::Trace);
             assert!(v.trace >= 0.7);
@@ -470,7 +476,10 @@ mod tests {
             interpretive_note: "".into(),
             enrichment_depth: EnrichmentDepth::Extracted,
         });
-        assert_eq!(classify_articulation(&conf, "").dominant(), Articulation::Argument);
+        assert_eq!(
+            classify_articulation(&conf, "").dominant(),
+            Articulation::Argument
+        );
 
         let pos = AtomEnvelope::Position(Position {
             id: AtomId::position(1),
@@ -484,7 +493,10 @@ mod tests {
             salience: 0.5,
             enrichment_depth: EnrichmentDepth::Extracted,
         });
-        assert_eq!(classify_articulation(&pos, "").dominant(), Articulation::Argument);
+        assert_eq!(
+            classify_articulation(&pos, "").dominant(),
+            Articulation::Argument
+        );
 
         let opp = AtomEnvelope::Opposition(Opposition {
             id: AtomId::opposition(1),
@@ -500,7 +512,10 @@ mod tests {
             salience: 0.5,
             enrichment_depth: EnrichmentDepth::Extracted,
         });
-        assert_eq!(classify_articulation(&opp, "").dominant(), Articulation::Argument);
+        assert_eq!(
+            classify_articulation(&opp, "").dominant(),
+            Articulation::Argument
+        );
     }
 
     #[test]
@@ -515,7 +530,10 @@ mod tests {
             confidence: None,
             enrichment_depth: EnrichmentDepth::Extracted,
         });
-        assert_eq!(classify_articulation(&st, "").dominant(), Articulation::Argument);
+        assert_eq!(
+            classify_articulation(&st, "").dominant(),
+            Articulation::Argument
+        );
 
         let rel = AtomEnvelope::Relation(Relation {
             id: AtomId::relation(1),
@@ -526,7 +544,10 @@ mod tests {
             section_range: SectionRange::point("sec_0001"),
             enrichment_depth: EnrichmentDepth::Extracted,
         });
-        assert_eq!(classify_articulation(&rel, "").dominant(), Articulation::Argument);
+        assert_eq!(
+            classify_articulation(&rel, "").dominant(),
+            Articulation::Argument
+        );
     }
 
     #[test]
@@ -540,7 +561,10 @@ mod tests {
             resolution_status: ResolutionStatus::Open,
             enrichment_depth: EnrichmentDepth::Extracted,
         });
-        assert_eq!(classify_articulation(&q, "").dominant(), Articulation::Argument);
+        assert_eq!(
+            classify_articulation(&q, "").dominant(),
+            Articulation::Argument
+        );
 
         let arg = AtomEnvelope::ArgumentReconstruction(ArgumentReconstruction {
             id: AtomId::argument_reconstruction(1),
@@ -553,7 +577,10 @@ mod tests {
             section_position: SectionPosition::section("sec_0001"),
             enrichment_depth: EnrichmentDepth::Extracted,
         });
-        assert_eq!(classify_articulation(&arg, "").dominant(), Articulation::Argument);
+        assert_eq!(
+            classify_articulation(&arg, "").dominant(),
+            Articulation::Argument
+        );
     }
 
     // ── chunk-preview fallback ─────────────────────────────

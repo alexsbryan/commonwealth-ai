@@ -3,15 +3,15 @@ use std::path::Path;
 use serde::Deserialize;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::types::{TrustLevel, compute_trust_level};
+use sovereign_core::types::{compute_trust_level, TrustLevel};
 
-use super::CorpusParser;
 use super::gutenberg::GutenbergParser;
 use super::html_crawl::HtmlCrawlParser;
 use super::openalex::OpenAlexParser;
 use super::parquet_reader::ParquetParser;
 use super::stackexchange::StackExchangeParser;
 use super::wikipedia::WikimediaDumpParser;
+use super::CorpusParser;
 
 // ─── TOML Schema ───────────��──────────────────────────────────
 
@@ -120,7 +120,11 @@ impl CorpusRegistry {
         match id {
             "wikipedia" => Some(Box::new(WikimediaDumpParser::new("wikipedia"))),
             "stackexchange" => Some(Box::new(StackExchangeParser::new("stackexchange", 3))),
-            "sep" => Some(Box::new(ParquetParser::new("sep", "text", Some("category")))),
+            "sep" => Some(Box::new(ParquetParser::new(
+                "sep",
+                "text",
+                Some("category"),
+            ))),
             "crs_reports" => Some(Box::new(HtmlCrawlParser::new("crs_reports"))),
             "gutenberg" => Some(Box::new(GutenbergParser::new("gutenberg"))),
             "openalex" => Some(Box::new(OpenAlexParser::new("openalex"))),

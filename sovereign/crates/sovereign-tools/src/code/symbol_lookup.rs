@@ -23,8 +23,8 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine_scip::scip_graph::SymbolRow;
 use corpus_engine::CorpusEngine;
+use corpus_engine_scip::scip_graph::SymbolRow;
 
 use super::callees::ScipGraphHandle;
 use super::is_valid_symbol_name;
@@ -117,19 +117,13 @@ impl Tool for SymbolLookupTool {
         Ok(())
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let name = params
             .get("name")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::InvalidInput("missing 'name'".to_string()))?;
         if !is_valid_symbol_name(name) {
-            return Err(Error::InvalidInput(format!(
-                "invalid symbol name '{name}'"
-            )));
+            return Err(Error::InvalidInput(format!("invalid symbol name '{name}'")));
         }
         let kind = params
             .get("kind")
@@ -234,12 +228,21 @@ async fn read_symbol_body(path: &str, line_start: i32, line_end: i32) -> std::io
     let slice: Vec<&str> = content
         .lines()
         .enumerate()
-        .filter_map(|(i, l)| if i >= start && i <= end { Some(l) } else { None })
+        .filter_map(|(i, l)| {
+            if i >= start && i <= end {
+                Some(l)
+            } else {
+                None
+            }
+        })
         .collect();
     if slice.is_empty() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            format!("line range {start}-{end} out of bounds for {}", resolved.display()),
+            format!(
+                "line range {start}-{end} out of bounds for {}",
+                resolved.display()
+            ),
         ));
     }
     Ok(slice.join("\n"))

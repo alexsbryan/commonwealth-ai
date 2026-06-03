@@ -80,10 +80,7 @@ pub fn validate_crawl_scope(seed_urls: &[String], link_pattern: &str) -> Result<
 }
 
 /// Check if a download size is suspiciously large compared to the estimate.
-pub fn check_download_size(
-    actual_bytes: u64,
-    estimated_gb: f64,
-) -> Option<String> {
+pub fn check_download_size(actual_bytes: u64, estimated_gb: f64) -> Option<String> {
     if estimated_gb <= 0.0 {
         return None;
     }
@@ -142,11 +139,7 @@ mod tests {
     #[test]
     fn validate_scope_relative_pattern() {
         // Relative patterns (no domain) are always ok.
-        assert!(validate_crawl_scope(
-            &["https://example.com/pages/".into()],
-            "/pages/*",
-        )
-        .is_ok());
+        assert!(validate_crawl_scope(&["https://example.com/pages/".into()], "/pages/*",).is_ok());
     }
 
     #[test]

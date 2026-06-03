@@ -217,8 +217,7 @@ async fn main() {
     let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference));
     let batch_embed_fn =
         sovereign_tools::corpus::inference_to_batch_embed_fn(Arc::clone(&inference));
-    let inference_fn =
-        sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference));
+    let inference_fn = sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference));
     let corpus_engine = Arc::new(
         corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir.clone(), embed_fn)
             .with_batch_embed_fn(batch_embed_fn)
@@ -274,9 +273,8 @@ async fn main() {
         // Install as the store's observer now that the manager exists.
         // The store was Arc-wrapped earlier; interior mutability on the
         // observer slot lets us swap it in without restructuring.
-        store_concrete.set_observer(
-            mgr.clone() as sovereign_core::observer::SharedStateStoreObserver,
-        );
+        store_concrete
+            .set_observer(mgr.clone() as sovereign_core::observer::SharedStateStoreObserver);
         // Kick off initial ingest in the background. First-run ingest
         // can take 10–60s on a populated DB; blocking startup on it
         // would delay the /v1/* listener binding for no good reason —
@@ -295,9 +293,7 @@ async fn main() {
     // Register tools. Tier 4 — shared tool-result cache so the
     // sovereign-server (standalone HTTP daemon) gets the same
     // per-conversation cache the CLI / desktop bootstrap wire.
-    let tool_cache = Arc::new(
-        sovereign_core::tool_result_cache::ToolResultCache::new(),
-    );
+    let tool_cache = Arc::new(sovereign_core::tool_result_cache::ToolResultCache::new());
     let mut tools = ToolRegistry::new().with_cache(Arc::clone(&tool_cache));
     tools.register(Box::new(ShellTool));
     tools.register(Box::new(sovereign_tools::document::DocumentTool::new(
@@ -318,9 +314,9 @@ async fn main() {
         Arc::clone(&corpus_engine),
     )));
     tools.register(Box::new(sovereign_tools::compute::ComputeTool));
-    tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(
-        Arc::clone(&corpus_engine),
-    )));
+    tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(Arc::clone(
+        &corpus_engine,
+    ))));
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
@@ -334,12 +330,17 @@ async fn main() {
     // Built before the code-intel tools below so `SymbolLookupTool`
     // can share the handle (exact-name lookup reads SCIP directly
     // since the SCIP-as-truth refactor).
-    let scip_db_path = home.join(".sovereign").join("indexes").join("_scip_graph.db");
-    let scip_graph = corpus_engine_scip::ScipGraph::open(&scip_db_path, "default")
-        .expect("SCIP graph database");
+    let scip_db_path = home
+        .join(".sovereign")
+        .join("indexes")
+        .join("_scip_graph.db");
+    let scip_graph =
+        corpus_engine_scip::ScipGraph::open(&scip_db_path, "default").expect("SCIP graph database");
     let scip_graph: sovereign_tools::ScipGraphHandle =
         Arc::new(arc_swap::ArcSwap::from_pointee(scip_graph));
-    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(&scip_graph)));
+    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(
+        &scip_graph,
+    )));
 
     // Code Intelligence tools.
     tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
@@ -353,14 +354,14 @@ async fn main() {
     tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
         Arc::clone(&corpus_engine),
     )));
-    tools.register(Box::new(sovereign_tools::FindCalleesTool::new(
-        Arc::clone(&corpus_engine),
-        Arc::clone(&scip_graph),
-    ).with_health_checker(Arc::clone(&health_checker))));
-    tools.register(Box::new(sovereign_tools::FindCallersTool::new(
-        Arc::clone(&corpus_engine),
-        Arc::clone(&scip_graph),
-    ).with_health_checker(Arc::clone(&health_checker))));
+    tools.register(Box::new(
+        sovereign_tools::FindCalleesTool::new(Arc::clone(&corpus_engine), Arc::clone(&scip_graph))
+            .with_health_checker(Arc::clone(&health_checker)),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::FindCallersTool::new(Arc::clone(&corpus_engine), Arc::clone(&scip_graph))
+            .with_health_checker(Arc::clone(&health_checker)),
+    ));
 
     // Working notes tools — persist across sessions, used for session attribution.
     let notes_db_path = home.join(".sovereign").join("notes.db");
@@ -368,9 +369,15 @@ async fn main() {
         match corpus_engine_notes::NoteStore::open(&notes_db_path) {
             Ok(store) => {
                 let store = Arc::new(store);
-                tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(&store))));
-                tools.register(Box::new(sovereign_tools::ReadNotesTool::new(Arc::clone(&store))));
-                tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(Arc::clone(&store))));
+                tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
+                    &store,
+                ))));
+                tools.register(Box::new(sovereign_tools::ReadNotesTool::new(Arc::clone(
+                    &store,
+                ))));
+                tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(Arc::clone(
+                    &store,
+                ))));
                 tracing::info!("Notes: tools registered ({})", notes_db_path.display());
                 Some(store)
             }
@@ -390,11 +397,8 @@ async fn main() {
     }
 
     // Connect MCP servers (stdio and HTTP+SSE).
-    let _mcp_manager = sovereign_tools::mcp::McpServerManager::from_config(
-        &config.mcp.servers,
-        &mut tools,
-    )
-    .await;
+    let _mcp_manager =
+        sovereign_tools::mcp::McpServerManager::from_config(&config.mcp.servers, &mut tools).await;
 
     tracing::info!("Tools: {} registered", tools.count());
 
@@ -445,7 +449,7 @@ async fn main() {
     // identical to pre-KnowledgeView behaviour.
     if let Some(ref mgr) = knowledge_view_manager {
         runtime_builder = runtime_builder.with_landscape_digests(
-            Arc::clone(mgr) as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>,
+            Arc::clone(mgr) as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>
         );
     }
     // Atlas Layer 0: load any installed Wikipedia link graph at
@@ -482,15 +486,16 @@ async fn main() {
              atlas grounding will be skipped"
         );
     } else {
-        let atlas_mgr = Arc::new(sovereign_tools::atlas_context_manager::AtlasContextManager::new(
-            indexes_dir.clone(),
-            Arc::clone(&inference),
-            embed_model_id,
-        ));
-        runtime_builder = runtime_builder.with_atlas_context_provider(
-            Arc::clone(&atlas_mgr)
-                as Arc<dyn sovereign_core::atlas_context::AtlasContextProvider>,
+        let atlas_mgr = Arc::new(
+            sovereign_tools::atlas_context_manager::AtlasContextManager::new(
+                indexes_dir.clone(),
+                Arc::clone(&inference),
+                embed_model_id,
+            ),
         );
+        runtime_builder = runtime_builder
+            .with_atlas_context_provider(Arc::clone(&atlas_mgr)
+                as Arc<dyn sovereign_core::atlas_context::AtlasContextProvider>);
         let _atlas_init = Arc::clone(&atlas_mgr).spawn_init();
         // Phase B2 — bump flusher writes adaptive triage priors to
         // disk every 30s so the next rebuild picks them up.
@@ -557,10 +562,9 @@ async fn main() {
     // the dedicated config section lands.
     let tdd_provider_url = std::env::var("SOVEREIGN_TDD_PROVIDER_URL")
         .unwrap_or_else(|_| format!("http://{}", config.server.bind));
-    let tdd_backend: Arc<dyn commonwealth_tdd::ChatBackend> =
-        Arc::new(commonwealth_tdd::ReqwestChatBackend::new(
-            format!("{tdd_provider_url}/v1"),
-        ));
+    let tdd_backend: Arc<dyn commonwealth_tdd::ChatBackend> = Arc::new(
+        commonwealth_tdd::ReqwestChatBackend::new(format!("{tdd_provider_url}/v1")),
+    );
     let tdd_state = routes_tdd::TddState(Arc::clone(&tdd_backend));
 
     let app = authed
@@ -610,8 +614,7 @@ async fn load_wikipedia_graph_for_server(
 ) -> Option<Arc<corpus_engine::WikipediaGraph>> {
     let infos = engine.installed_indexes().await.ok()?;
     for info in infos {
-        let db_path =
-            corpus_engine::WikipediaGraph::default_db_path(indexes_dir, &info.corpus_id);
+        let db_path = corpus_engine::WikipediaGraph::default_db_path(indexes_dir, &info.corpus_id);
         if !db_path.exists() {
             continue;
         }

@@ -1,10 +1,10 @@
-pub mod paragraph;
-pub mod sentence;
 pub mod fixed;
-pub mod semantic;
+pub mod paragraph;
 pub mod passthrough;
 pub mod portal_event_bullet;
 pub mod sectioned;
+pub mod semantic;
+pub mod sentence;
 pub mod threaded_turns;
 
 /// A text chunk produced by a chunker.
@@ -117,7 +117,10 @@ pub(crate) fn floor_char_boundary(text: &str, pos: usize) -> usize {
     if text.is_char_boundary(pos) {
         return pos;
     }
-    (0..pos).rev().find(|&i| text.is_char_boundary(i)).unwrap_or(0)
+    (0..pos)
+        .rev()
+        .find(|&i| text.is_char_boundary(i))
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -231,10 +234,7 @@ mod chunk_delta_tests {
     fn duplicate_paragraphs_match_distinct_ids() {
         // Two paragraphs with identical content map to two distinct
         // old chunk ids. After delta, both stay kept_unchanged.
-        let old = vec![
-            old_chunk(1, "same"),
-            old_chunk(2, "same"),
-        ];
+        let old = vec![old_chunk(1, "same"), old_chunk(2, "same")];
         let new = vec![new_chunk(0, "same"), new_chunk(1, "same")];
         let diff = chunk_delta(&old, new, fake_hash);
         assert_eq!(diff.kept_unchanged.len(), 2);

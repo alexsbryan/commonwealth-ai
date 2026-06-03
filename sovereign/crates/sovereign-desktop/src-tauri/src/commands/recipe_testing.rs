@@ -111,7 +111,10 @@ pub async fn recipe_test(
     let markdown = report.to_markdown();
 
     if let Err(e) = std::fs::write(&output_path, &markdown) {
-        tracing::warn!("Failed to write TEST_REPORT.md to {}: {e}", output_path.display());
+        tracing::warn!(
+            "Failed to write TEST_REPORT.md to {}: {e}",
+            output_path.display()
+        );
     }
 
     let (records_attempted, records_succeeded, extraction_rate) = report
@@ -145,9 +148,8 @@ pub async fn recipe_test(
 /// Build a `CorpusEngine` with a stub embed function for recipe testing.
 /// The stub is never called because the embed phase is always disabled.
 fn recipe_stub_engine() -> corpus_engine::CorpusEngine {
-    let stub: corpus_engine::EmbedFn = std::sync::Arc::new(|_| {
-        Box::pin(async { Ok(vec![0f32; 768]) })
-    });
+    let stub: corpus_engine::EmbedFn =
+        std::sync::Arc::new(|_| Box::pin(async { Ok(vec![0f32; 768]) }));
     let tmp = std::env::temp_dir().join("sovereign-recipe-test");
     corpus_engine::CorpusEngine::new(tmp.clone(), tmp, stub)
 }
@@ -209,4 +211,3 @@ pub(crate) async fn start_tier_installs(
         });
     }
 }
-

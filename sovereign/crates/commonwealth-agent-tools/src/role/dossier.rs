@@ -162,12 +162,7 @@ impl RoleDossier {
     /// the compiler's line + caret + source context. The `ok` flag
     /// drives `smoke_just_passed()` and the §B grammar-termination
     /// path. Capped.
-    pub fn record_verification(
-        &mut self,
-        primitive: PrimitiveKind,
-        ok: bool,
-        output: &str,
-    ) {
+    pub fn record_verification(&mut self, primitive: PrimitiveKind, ok: bool, output: &str) {
         // Only meaningful for the verifier primitives.
         debug_assert!(matches!(
             primitive,
@@ -222,8 +217,10 @@ impl RoleDossier {
             }
         }
         if let Some(diagnosis) = self.diagnosis.as_deref() {
-            out.push_str(&format!("Diagnosis from {}: {diagnosis}\n",
-                self.from_role.map(|r| r.id()).unwrap_or("?")));
+            out.push_str(&format!(
+                "Diagnosis from {}: {diagnosis}\n",
+                self.from_role.map(|r| r.id()).unwrap_or("?")
+            ));
         }
         if let Some(summary) = self.last_action_summary.as_deref() {
             out.push_str(&format!("Last action: {summary}\n"));
@@ -373,7 +370,11 @@ pub fn summarize(primitive: PrimitiveKind, result: &ToolResult) -> String {
             format!("wrote {path} ({bytes} bytes)")
         }
         PrimitiveKind::Build => {
-            let ok = result.payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+            let ok = result
+                .payload
+                .get("ok")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             if ok {
                 "build ok".to_string()
             } else {
@@ -387,10 +388,26 @@ pub fn summarize(primitive: PrimitiveKind, result: &ToolResult) -> String {
             }
         }
         PrimitiveKind::Smoke => {
-            let ok = result.payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
-            let passed = result.payload.get("passed").and_then(|v| v.as_u64()).unwrap_or(0);
-            let failed = result.payload.get("failed").and_then(|v| v.as_u64()).unwrap_or(0);
-            let total = result.payload.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
+            let ok = result
+                .payload
+                .get("ok")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let passed = result
+                .payload
+                .get("passed")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let failed = result
+                .payload
+                .get("failed")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let total = result
+                .payload
+                .get("total")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
             if total > 0 {
                 format!(
                     "smoke {}: {}/{} passed, {} failed",
@@ -481,10 +498,12 @@ mod tests {
         assert_eq!(d.recent_outcomes.len(), MAX_DOSSIER_OUTCOMES);
         // Oldest dropped, newest retained.
         assert!(d.recent_outcomes[0].summary.contains("#5"));
-        assert!(d.recent_outcomes.last().unwrap().summary.contains(&format!(
-            "#{}",
-            MAX_DOSSIER_OUTCOMES + 4
-        )));
+        assert!(d
+            .recent_outcomes
+            .last()
+            .unwrap()
+            .summary
+            .contains(&format!("#{}", MAX_DOSSIER_OUTCOMES + 4)));
     }
 
     #[test]

@@ -35,12 +35,13 @@ pub async fn apply_edit(
             // Matches the bench runner's behavior exactly (lifted from
             // sovereign-agent-bench/src/runners/shared.rs).
             let abs = ctx.workdir.join(source_file);
-            let existing = tokio::fs::read_to_string(&abs)
-                .await
-                .map_err(|e| ToolError::Filesystem {
-                    primitive: "insert_before",
-                    reason: format!("read {source_file}: {e}"),
-                })?;
+            let existing =
+                tokio::fs::read_to_string(&abs)
+                    .await
+                    .map_err(|e| ToolError::Filesystem {
+                        primitive: "insert_before",
+                        reason: format!("read {source_file}: {e}"),
+                    })?;
             let lines: Vec<&str> = existing.lines().collect();
             let line_idx = (*line as usize).saturating_sub(1);
             if line_idx > lines.len() {
@@ -56,7 +57,10 @@ pub async fn apply_edit(
             let new_content = if line_idx >= lines.len() {
                 response.body.clone()
             } else {
-                format!("{}\n{existing_at_line}", response.body.trim_end_matches('\n'))
+                format!(
+                    "{}\n{existing_at_line}",
+                    response.body.trim_end_matches('\n')
+                )
             };
             Primitive::PatchFile(PatchFileArgs {
                 path: source_file.to_string(),

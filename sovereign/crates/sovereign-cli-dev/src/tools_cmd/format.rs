@@ -30,8 +30,9 @@ pub(super) fn render_step_output(output: &StepOutput, mode: OutputMode) -> Strin
     match output {
         StepOutput::Text(s) => match mode {
             OutputMode::Text => s.clone(),
-            OutputMode::Json => serde_json::to_string(&Value::String(s.clone()))
-                .unwrap_or_else(|_| s.clone()),
+            OutputMode::Json => {
+                serde_json::to_string(&Value::String(s.clone())).unwrap_or_else(|_| s.clone())
+            }
         },
         StepOutput::Json(v) => match mode {
             OutputMode::Text => serde_json::to_string_pretty(v).unwrap_or_else(|_| v.to_string()),

@@ -285,7 +285,10 @@ pub struct SectionRange {
 impl SectionRange {
     pub fn point(section_id: impl Into<String>) -> Self {
         let s: String = section_id.into();
-        Self { start: s.clone(), end: s }
+        Self {
+            start: s.clone(),
+            end: s,
+        }
     }
 }
 
@@ -345,7 +348,6 @@ pub enum SignalKind {
     /// Reserved escape hatch for downstream callers.
     Other(String),
 }
-
 
 /// Atom origin record (AD-4).
 ///
@@ -1139,8 +1141,18 @@ mod tests {
             AtomId::entity_content_hash("e", &EntityType::Person, "c"),
             AtomId::event_content_hash("d", &EventType::Action, "s0", "c"),
             AtomId::state_content_hash(&parent, &StateType::Epistemic, "l", "c"),
-            AtomId::relation_content_hash(&[parent.clone()], &RelationType::Interpersonal, "l", "c"),
-            AtomId::claim_content_hash("c", &DiscourseAct::Assert, &EpistemicStatus::Confident, "c"),
+            AtomId::relation_content_hash(
+                &[parent.clone()],
+                &RelationType::Interpersonal,
+                "l",
+                "c",
+            ),
+            AtomId::claim_content_hash(
+                "c",
+                &DiscourseAct::Assert,
+                &EpistemicStatus::Confident,
+                "c",
+            ),
             AtomId::question_content_hash("q", &QuestionType::Thematic, "c"),
             AtomId::configuration_content_hash("cfg", "c"),
             AtomId::argument_reconstruction_content_hash("arg", "c"),
@@ -1148,7 +1160,11 @@ mod tests {
             AtomId::opposition_content_hash("X vs Y", "c"),
         ];
         for id in &ids {
-            assert!(id.is_content_hash(), "expected content-hash shape: {}", id.as_str());
+            assert!(
+                id.is_content_hash(),
+                "expected content-hash shape: {}",
+                id.as_str()
+            );
         }
         // All distinct (different prefixes + different inputs).
         let mut sorted: Vec<&str> = ids.iter().map(|a| a.as_str()).collect();
@@ -1178,9 +1194,9 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-                    provenance: Default::default(),
-                    concept_kind: None,
-};
+            provenance: Default::default(),
+            concept_kind: None,
+        };
         let env = AtomEnvelope::Entity(entity.clone());
         let json = serde_json::to_string(&env).unwrap();
         // Pin the on-disk shape — atom_type as PascalCase, data nested.
@@ -1234,7 +1250,10 @@ mod tests {
             label: "Reluctant attraction — Jane watches Rochester with increasing intensity".into(),
             state_type: StateType::Psychological,
             evidence: vec![ChunkRef::new("ch015", None), ChunkRef::new("ch017", None)],
-            section_range: SectionRange { start: "ch014".into(), end: "ch018".into() },
+            section_range: SectionRange {
+                start: "ch014".into(),
+                end: "ch018".into(),
+            },
             confidence: Some(0.82),
             enrichment_depth: EnrichmentDepth::Extracted,
         };
@@ -1288,16 +1307,19 @@ mod tests {
             discourse_act: DiscourseAct::Argue,
             epistemic_status: EpistemicStatus::Confident,
             scope: ClaimScope::Universal,
-            evidence: vec![ChunkRef::new("ch_5_p3", Some("love in dreams is greedy".into()))],
+            evidence: vec![ChunkRef::new(
+                "ch_5_p3",
+                Some("love in dreams is greedy".into()),
+            )],
             quotable_excerpt: None,
             attributed_to: Some(AtomId::entity(7)),
             confidence: Some(0.91),
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-                    claim_kind: None,
+            claim_kind: None,
             concession_outcome: None,
             evidence_kind: None,
-};
+        };
         let json = serde_json::to_string(&AtomEnvelope::Claim(claim.clone())).unwrap();
         assert!(json.contains("\"discourse_act\":\"argue\""));
         assert!(json.contains("\"epistemic_status\":\"confident\""));
@@ -1336,10 +1358,10 @@ mod tests {
             confidence: None,
             anchor: Some("open_index_for_corpus".into()),
             enrichment_depth: EnrichmentDepth::Extracted,
-                    claim_kind: None,
+            claim_kind: None,
             concession_outcome: None,
             evidence_kind: None,
-};
+        };
         let json = serde_json::to_string(&AtomEnvelope::Claim(claim.clone())).unwrap();
         assert!(
             json.contains("\"anchor\":\"open_index_for_corpus\""),
@@ -1387,10 +1409,10 @@ mod tests {
             confidence: None,
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-                    claim_kind: None,
+            claim_kind: None,
             concession_outcome: None,
             evidence_kind: None,
-};
+        };
         let json = serde_json::to_string(&AtomEnvelope::Claim(no_anchor)).unwrap();
         assert!(
             !json.contains("\"anchor\""),
@@ -1402,7 +1424,9 @@ mod tests {
     fn question_atom_resolution_status_variants_roundtrip() {
         use crate::enrichment::pipeline::atlas::QuestionType;
         for status in [
-            ResolutionStatus::Resolved { claim_id: AtomId::claim(1) },
+            ResolutionStatus::Resolved {
+                claim_id: AtomId::claim(1),
+            },
             ResolutionStatus::Contested {
                 claim_ids: vec![AtomId::claim(1), AtomId::claim(2)],
             },
@@ -1488,9 +1512,9 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-                    provenance: Default::default(),
-                    concept_kind: None,
-};
+            provenance: Default::default(),
+            concept_kind: None,
+        };
         let env = AtomEnvelope::Entity(entity);
         assert_eq!(env.id().as_str(), "entity-0005");
         assert_eq!(env.enrichment_depth(), EnrichmentDepth::Structural);

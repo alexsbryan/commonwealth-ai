@@ -82,19 +82,25 @@ impl From<&BootstrapMode> for BootstrapSnapshot {
                 desktop_setup_complete: false, // unused in Attach path
                 client_port: *client_port,
             },
-            BootstrapMode::Local { source: ConfigSource::CliSetup(c) } => Self {
+            BootstrapMode::Local {
+                source: ConfigSource::CliSetup(c),
+            } => Self {
                 daemon_running: false,
                 cli_config_present: true,
                 desktop_setup_complete: false,
                 client_port: c.daemon.client_port,
             },
-            BootstrapMode::Local { source: ConfigSource::DesktopLegacy } => Self {
+            BootstrapMode::Local {
+                source: ConfigSource::DesktopLegacy,
+            } => Self {
                 daemon_running: false,
                 cli_config_present: false,
                 desktop_setup_complete: true,
                 client_port: 9741,
             },
-            BootstrapMode::Local { source: ConfigSource::Fresh } => Self {
+            BootstrapMode::Local {
+                source: ConfigSource::Fresh,
+            } => Self {
                 daemon_running: false,
                 cli_config_present: false,
                 desktop_setup_complete: false,
@@ -130,16 +136,25 @@ pub async fn detect() -> BootstrapMode {
     // Nothing listening. Pick the best available config source.
     let (mode, label) = if let Ok(cfg) = SetupConfig::load() {
         (
-            BootstrapMode::Local { source: ConfigSource::CliSetup(cfg) },
+            BootstrapMode::Local {
+                source: ConfigSource::CliSetup(cfg),
+            },
             "CliSetup",
         )
     } else if DesktopConfig::load().setup_complete {
         (
-            BootstrapMode::Local { source: ConfigSource::DesktopLegacy },
+            BootstrapMode::Local {
+                source: ConfigSource::DesktopLegacy,
+            },
             "DesktopLegacy",
         )
     } else {
-        (BootstrapMode::Local { source: ConfigSource::Fresh }, "Fresh")
+        (
+            BootstrapMode::Local {
+                source: ConfigSource::Fresh,
+            },
+            "Fresh",
+        )
     };
     // Glassbox: Local mode means this desktop runs its OWN embedded
     // daemon. If a separate daemon is in fact serving the mesh on this
@@ -251,7 +266,7 @@ mod tests {
 
     #[tokio::test]
     async fn is_daemon_live_true_when_v1_models_answers() {
-        use axum::{routing::get, Router, Json};
+        use axum::{routing::get, Json, Router};
 
         // Stand up a tiny axum server that answers GET /v1/models.
         // Bind to a kernel-assigned port so parallel test runs don't
@@ -280,7 +295,9 @@ mod tests {
         let app = Router::new().route("/other", get(|| async { "hi" }));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
-        tokio::spawn(async move { axum::serve(listener, app).await.ok(); });
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.ok();
+        });
         tokio::time::sleep(Duration::from_millis(50)).await;
 
         assert!(!is_daemon_live(port).await);
@@ -316,7 +333,9 @@ mod tests {
             watched_folders: Default::default(),
             memory: Default::default(),
         };
-        let mode = BootstrapMode::Local { source: ConfigSource::CliSetup(cfg) };
+        let mode = BootstrapMode::Local {
+            source: ConfigSource::CliSetup(cfg),
+        };
         let snap = BootstrapSnapshot::from(&mode);
         assert!(!snap.daemon_running);
         assert!(snap.cli_config_present);
@@ -325,7 +344,9 @@ mod tests {
 
     #[test]
     fn snapshot_from_fresh_signals_no_state() {
-        let mode = BootstrapMode::Local { source: ConfigSource::Fresh };
+        let mode = BootstrapMode::Local {
+            source: ConfigSource::Fresh,
+        };
         let snap = BootstrapSnapshot::from(&mode);
         assert!(!snap.daemon_running);
         assert!(!snap.cli_config_present);

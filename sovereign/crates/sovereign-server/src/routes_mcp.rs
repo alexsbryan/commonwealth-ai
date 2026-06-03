@@ -154,7 +154,11 @@ async fn mcp_initialize(
         "sessionId": session_id
     });
 
-    (StatusCode::OK, Json(JsonRpcResponse::result(req.id, result))).into_response()
+    (
+        StatusCode::OK,
+        Json(JsonRpcResponse::result(req.id, result)),
+    )
+        .into_response()
 }
 
 /// Generate a session ID that encodes the username for cross-session note attribution.
@@ -167,16 +171,30 @@ fn generate_session_id(params: &Option<Value>) -> String {
             p.get("clientInfo")
                 .and_then(|c| c.get("name"))
                 .and_then(|v| v.as_str())
-                .or_else(|| p.get("meta").and_then(|m| m.get("userName")).and_then(|v| v.as_str()))
+                .or_else(|| {
+                    p.get("meta")
+                        .and_then(|m| m.get("userName"))
+                        .and_then(|v| v.as_str())
+                })
         })
         .unwrap_or("user");
     let slug: String = username
         .chars()
-        .map(|c| if c.is_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
         .collect::<String>()
         .trim_matches('-')
         .to_string();
-    let slug = if slug.is_empty() { "user".to_string() } else { slug };
+    let slug = if slug.is_empty() {
+        "user".to_string()
+    } else {
+        slug
+    };
     let ts = chrono::Utc::now().format("%Y-%m-%dT%H:%M");
     let uid = &uuid::Uuid::new_v4().to_string()[..6];
     format!("{slug}-{ts}-{uid}")
@@ -184,8 +202,7 @@ fn generate_session_id(params: &Option<Value>) -> String {
 
 async fn mcp_sse(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
-) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, StatusCode>
-{
+) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, StatusCode> {
     if !is_localhost(&peer) {
         return Err(StatusCode::FORBIDDEN);
     }
@@ -246,7 +263,11 @@ async fn mcp_stats(
     Extension(runtime): Extension<Arc<Runtime>>,
 ) -> impl IntoResponse {
     if !is_localhost(&peer) {
-        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "local-only"}))).into_response();
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "local-only"})),
+        )
+            .into_response();
     }
 
     let counts = runtime.tools.call_counts();
@@ -257,10 +278,14 @@ async fn mcp_stats(
         .map(|(name, count)| serde_json::json!({ "tool": name, "calls": count }))
         .collect();
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "total_calls": total,
-        "tools": tools_json,
-    }))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "total_calls": total,
+            "tools": tools_json,
+        })),
+    )
+        .into_response()
 }
 
 // ─── tools/list ───────────────────────────────────────────────
@@ -376,16 +401,10 @@ pub(crate) async fn handle_tools_call(
             let text = serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string());
             JsonRpcResponse::result(id, call_tool_text(text, false))
         }
-        Ok(other) => JsonRpcResponse::result(
-            id,
-            call_tool_text(format!("{other:?}"), false),
-        ),
+        Ok(other) => JsonRpcResponse::result(id, call_tool_text(format!("{other:?}"), false)),
         Err(e) => JsonRpcResponse::result(
             id,
-            call_tool_text(
-                format!("Tool `{name}` failed: {e}"),
-                true,
-            ),
+            call_tool_text(format!("Tool `{name}` failed: {e}"), true),
         ),
     }
 }
@@ -503,7 +522,6 @@ async fn dispatch_tdd_tool(
     params: Option<Value>,
     id: Value,
 ) -> JsonRpcResponse {
-    
     use commonwealth_tdd::{run_trial, Polarity, Trial, TrialConfig, Workdir};
     use std::sync::Arc;
 
@@ -517,7 +535,10 @@ async fn dispatch_tdd_tool(
     if name == "tdd_bdd_cycle" {
         return dispatch_bdd_cycle(tdd, arguments, id).await;
     }
-    debug_assert_eq!(name, "tdd_solve", "only tdd_solve and tdd_bdd_cycle route here");
+    debug_assert_eq!(
+        name, "tdd_solve",
+        "only tdd_solve and tdd_bdd_cycle route here"
+    );
 
     let workdir_str = match arguments.get("workdir").and_then(|v| v.as_str()) {
         Some(s) => s.to_string(),
@@ -528,7 +549,10 @@ async fn dispatch_tdd_tool(
             );
         }
     };
-    let force = arguments.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
+    let force = arguments
+        .get("force")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let model = arguments
         .get("model")
         .and_then(|v| v.as_str())
@@ -555,7 +579,10 @@ async fn dispatch_tdd_tool(
         Some(v) => match v.get("kind").and_then(|k| k.as_str()) {
             Some("maximize_passing") => Polarity::MaximizePassing,
             Some("generate_one_failing") => Polarity::GenerateOneFailing {
-                test_name_hint: v.get("test_name_hint").and_then(|h| h.as_str()).map(String::from),
+                test_name_hint: v
+                    .get("test_name_hint")
+                    .and_then(|h| h.as_str())
+                    .map(String::from),
             },
             other => {
                 return JsonRpcResponse::result(
@@ -608,7 +635,10 @@ async fn dispatch_bdd_cycle(
             );
         }
     };
-    let force = arguments.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
+    let force = arguments
+        .get("force")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let model = arguments
         .get("model")
         .and_then(|v| v.as_str())
@@ -650,9 +680,18 @@ async fn dispatch_bdd_cycle(
         workdir,
         model,
         intent,
-        test_file_hint: arguments.get("test_file_hint").and_then(|v| v.as_str()).map(String::from),
-        task_hint: arguments.get("task_hint").and_then(|v| v.as_str()).map(String::from),
-        test_command: arguments.get("test_command").and_then(|v| v.as_str()).map(String::from),
+        test_file_hint: arguments
+            .get("test_file_hint")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        task_hint: arguments
+            .get("task_hint")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        test_command: arguments
+            .get("test_command")
+            .and_then(|v| v.as_str())
+            .map(String::from),
         config: None,
         review_mode,
     };
@@ -677,35 +716,27 @@ mod tests {
     use sovereign_core::registry::ToolRegistry;
 
     fn empty_engine() -> Arc<corpus_engine::CorpusEngine> {
-        let tmp = std::env::temp_dir().join(format!(
-            "sov-mcp-test-{}",
-            std::process::id()
-        ));
+        let tmp = std::env::temp_dir().join(format!("sov-mcp-test-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&tmp);
         let embed: corpus_engine::EmbedFn = Arc::new(|_text: &str| {
             Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 768]) })
         });
-        Arc::new(corpus_engine::CorpusEngine::new(
-            tmp.clone(),
-            tmp,
-            embed,
-        ))
+        Arc::new(corpus_engine::CorpusEngine::new(tmp.clone(), tmp, embed))
     }
 
     fn registry_with_code_tools() -> ToolRegistry {
         let engine = empty_engine();
         let graph: sovereign_tools::ScipGraphHandle = Arc::new(arc_swap::ArcSwap::from_pointee(
-            corpus_engine_scip::ScipGraph::open_in_memory("test")
-                .expect("in-memory ScipGraph"),
+            corpus_engine_scip::ScipGraph::open_in_memory("test").expect("in-memory ScipGraph"),
         ));
         let mut registry = ToolRegistry::new();
         registry.register(Box::new(sovereign_tools::SymbolLookupTool::new(
             Arc::clone(&engine),
             Arc::clone(&graph),
         )));
-        registry.register(Box::new(sovereign_tools::CodeSearchTool::new(
-            Arc::clone(&engine),
-        )));
+        registry.register(Box::new(sovereign_tools::CodeSearchTool::new(Arc::clone(
+            &engine,
+        ))));
         registry.register(Box::new(sovereign_tools::RecentChangesTool::new(
             Arc::clone(&engine),
         )));
@@ -799,10 +830,7 @@ mod tests {
 
         let result = resp.result.expect("tools/list returns a result");
         let tools = result["tools"].as_array().expect("tools array");
-        let names: Vec<&str> = tools
-            .iter()
-            .filter_map(|t| t["name"].as_str())
-            .collect();
+        let names: Vec<&str> = tools.iter().filter_map(|t| t["name"].as_str()).collect();
 
         // Canonical (renamed) ids appear.
         for required in &["symbols", "callers", "callees"] {
@@ -970,7 +998,10 @@ mod tests {
             "clientInfo": { "name": "alice" }
         }));
         let id = generate_session_id(&params);
-        assert!(id.starts_with("alice-"), "session id must start with the slugified username");
+        assert!(
+            id.starts_with("alice-"),
+            "session id must start with the slugified username"
+        );
     }
 
     #[test]
@@ -979,13 +1010,19 @@ mod tests {
             "meta": { "userName": "BobSmith" }
         }));
         let id = generate_session_id(&params);
-        assert!(id.starts_with("bobsmith-"), "meta.userName must be used when clientInfo absent");
+        assert!(
+            id.starts_with("bobsmith-"),
+            "meta.userName must be used when clientInfo absent"
+        );
     }
 
     #[test]
     fn session_id_falls_back_to_user_when_no_params() {
         let id = generate_session_id(&None);
-        assert!(id.starts_with("user-"), "no params must produce 'user-...' session id");
+        assert!(
+            id.starts_with("user-"),
+            "no params must produce 'user-...' session id"
+        );
     }
 
     #[test]
@@ -1015,7 +1052,8 @@ mod tests {
         // Second part should be a year (4 digits starting with 20xx)
         assert!(
             parts[1].parse::<u32>().is_ok() && parts[1].starts_with("20"),
-            "second segment must be a year: {}", parts[1]
+            "second segment must be a year: {}",
+            parts[1]
         );
     }
 

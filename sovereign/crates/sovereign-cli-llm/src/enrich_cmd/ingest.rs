@@ -13,9 +13,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::enrichment::atlas::{
-    AtlasData, AtlasIngestionConfig, AtlasIngestionRegistry,
-};
+use corpus_engine::enrichment::atlas::{AtlasData, AtlasIngestionConfig, AtlasIngestionRegistry};
 use corpus_engine::{CorpusEngine, EmbedFn, IngestProgress, ProgressCallback};
 
 use super::paths;
@@ -117,10 +115,7 @@ pub async fn cmd_ingest(args: &[String]) -> i32 {
         return 2;
     };
 
-    let strategy_id = parsed
-        .strategy
-        .as_deref()
-        .unwrap_or("structure_first");
+    let strategy_id = parsed.strategy.as_deref().unwrap_or("structure_first");
     let strategy = match registry.get(strategy_id) {
         Some(s) => s,
         None => {
@@ -131,11 +126,7 @@ pub async fn cmd_ingest(args: &[String]) -> i32 {
         }
     };
 
-    println!(
-        "  using strategy '{}' ({})",
-        strategy.id(),
-        strategy.name()
-    );
+    println!("  using strategy '{}' ({})", strategy.id(), strategy.name());
     println!("  source corpus = {source_corpus}");
     if let Some(n) = parsed.limit_articles {
         println!("  limit_articles = {n}");
@@ -157,7 +148,11 @@ pub async fn cmd_ingest(args: &[String]) -> i32 {
     // engine constructor succeeds without a model. A future strategy
     // that needs embeddings can override this.
     let noop_embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(Vec::<f32>::new()) }));
-    let engine = Arc::new(CorpusEngine::new(recipes_dir, indexes_dir, noop_embed.clone()));
+    let engine = Arc::new(CorpusEngine::new(
+        recipes_dir,
+        indexes_dir,
+        noop_embed.clone(),
+    ));
 
     // Strategy config blob — strategy-internal shape.
     let mut strategy_config = serde_json::json!({
@@ -187,11 +182,10 @@ pub async fn cmd_ingest(args: &[String]) -> i32 {
     // ALSO emits free-form `tracing::info!` messages between events
     // for richer status; both surface together when RUST_LOG=info).
     let started = std::time::Instant::now();
-    let progress: Arc<ProgressCallback> =
-        Arc::new(Box::new(move |ev: IngestProgress| {
-            let secs = started.elapsed().as_secs();
-            tracing::info!(elapsed_s = secs, ?ev, "ingest progress");
-        }));
+    let progress: Arc<ProgressCallback> = Arc::new(Box::new(move |ev: IngestProgress| {
+        let secs = started.elapsed().as_secs();
+        tracing::info!(elapsed_s = secs, ?ev, "ingest progress");
+    }));
 
     let inference_fn: Option<corpus_engine::InferenceFn> = None;
 

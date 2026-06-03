@@ -50,8 +50,7 @@ impl HybridProvider {
     pub fn start_health_loop(self: &Arc<Self>, interval_secs: u64) {
         let this = Arc::clone(self);
         tokio::spawn(async move {
-            let mut interval =
-                tokio::time::interval(std::time::Duration::from_secs(interval_secs));
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
             loop {
                 interval.tick().await;
                 for (i, provider) in this.providers.iter().enumerate() {
@@ -63,20 +62,20 @@ impl HybridProvider {
                         max_tokens: Some(1),
                         temperature: Some(0.0),
                         structured_output: None,
-            think_budget: None,
+                        think_budget: None,
                         top_k: None,
                         top_p: None,
                         oicp: None,
-            tools: None,
-            tool_choice: None,
-                                model_id: None,
-                                enable_thinking: None,
-                    sampling_mode: None,
-                    assistant_prefix: None,
-                    cmd_prefix: None,
-                    url_allowlist: None,
-                    evidence_id_allowlist: None,
-                    lark_grammar: None,
+                        tools: None,
+                        tool_choice: None,
+                        model_id: None,
+                        enable_thinking: None,
+                        sampling_mode: None,
+                        assistant_prefix: None,
+                        cmd_prefix: None,
+                        url_allowlist: None,
+                        evidence_id_allowlist: None,
+                        lark_grammar: None,
                     };
 
                     match provider.complete(&probe).await {
@@ -132,7 +131,9 @@ impl InferenceProvider for HybridProvider {
                 .collect();
 
             if filtered.is_empty() {
-                return Err(Error::Inference("No healthy backends available".to_string()));
+                return Err(Error::Inference(
+                    "No healthy backends available".to_string(),
+                ));
             }
 
             // Build a contiguous slice for the selector.
@@ -213,8 +214,7 @@ impl InferenceProvider for HybridProvider {
     ) -> Result<String> {
         for (idx, entry) in self.entries.iter().enumerate() {
             if entry.is_local {
-                return self.providers[idx]
-                    .load_extra_slot(slot_name, path, context_size);
+                return self.providers[idx].load_extra_slot(slot_name, path, context_size);
             }
         }
         Err(Error::Inference(
@@ -290,7 +290,8 @@ mod tests {
                 latency_ms: 10,
                 oicp_meta: None,
                 finish_reason: None,
-                completion_tokens: None,            })
+                completion_tokens: None,
+            })
         }
 
         async fn complete_stream(

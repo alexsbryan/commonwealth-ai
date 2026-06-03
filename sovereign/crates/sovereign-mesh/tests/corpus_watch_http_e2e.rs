@@ -103,11 +103,7 @@ async fn install_singleton_and_spawn() -> (PathBuf, SocketAddr) {
     entry
 }
 
-async fn post_json(
-    addr: SocketAddr,
-    path: &str,
-    body: serde_json::Value,
-) -> reqwest::Response {
+async fn post_json(addr: SocketAddr, path: &str, body: serde_json::Value) -> reqwest::Response {
     reqwest::Client::new()
         .post(format!("http://{addr}{path}"))
         .json(&body)
@@ -190,11 +186,7 @@ async fn register_then_list_then_status_round_trip() {
     );
 
     // (3) /status returns a well-formed StatusResponse for that id.
-    let status = get(
-        addr,
-        &format!("/internal/corpus/watch/status/{corpus_id}"),
-    )
-    .await;
+    let status = get(addr, &format!("/internal/corpus/watch/status/{corpus_id}")).await;
     assert_eq!(
         status.status(),
         reqwest::StatusCode::OK,
@@ -235,11 +227,7 @@ async fn pause_resume_round_trip_flips_status() {
     );
 
     // Status should now reflect PausedManual.
-    let status_paused = get(
-        addr,
-        &format!("/internal/corpus/watch/status/{corpus_id}"),
-    )
-    .await;
+    let status_paused = get(addr, &format!("/internal/corpus/watch/status/{corpus_id}")).await;
     assert_eq!(status_paused.status(), reqwest::StatusCode::OK);
     let paused_json: serde_json::Value = status_paused.json().await.unwrap();
     let paused_marker = paused_json["status"].to_string();
@@ -264,17 +252,12 @@ async fn pause_resume_round_trip_flips_status() {
     );
 
     // Status should no longer be PausedManual.
-    let status_resumed = get(
-        addr,
-        &format!("/internal/corpus/watch/status/{corpus_id}"),
-    )
-    .await;
+    let status_resumed = get(addr, &format!("/internal/corpus/watch/status/{corpus_id}")).await;
     assert_eq!(status_resumed.status(), reqwest::StatusCode::OK);
     let resumed_json: serde_json::Value = status_resumed.json().await.unwrap();
     let resumed_marker = resumed_json["status"].to_string();
     assert!(
-        !resumed_marker.contains("paused_manual")
-            && !resumed_marker.contains("PausedManual"),
+        !resumed_marker.contains("paused_manual") && !resumed_marker.contains("PausedManual"),
         "after resume, status MUST NOT remain PausedManual; \
          got status body: {resumed_json}"
     );
@@ -287,11 +270,7 @@ async fn delete_unregisters_corpus_and_subsequent_status_404s() {
     let corpus_id = register_one(addr, folder, "Delete Target").await;
 
     // DELETE /{corpus_id} tears down.
-    let del = delete(
-        addr,
-        &format!("/internal/corpus/watch/{corpus_id}"),
-    )
-    .await;
+    let del = delete(addr, &format!("/internal/corpus/watch/{corpus_id}")).await;
     assert_eq!(
         del.status(),
         reqwest::StatusCode::OK,
@@ -300,11 +279,7 @@ async fn delete_unregisters_corpus_and_subsequent_status_404s() {
     );
 
     // Subsequent status MUST 404 (the corpus is gone).
-    let status_after = get(
-        addr,
-        &format!("/internal/corpus/watch/status/{corpus_id}"),
-    )
-    .await;
+    let status_after = get(addr, &format!("/internal/corpus/watch/status/{corpus_id}")).await;
     assert_eq!(
         status_after.status(),
         reqwest::StatusCode::NOT_FOUND,

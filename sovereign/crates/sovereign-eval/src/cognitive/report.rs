@@ -109,39 +109,43 @@ pub fn build(opts: BuildOpts<'_>, outcomes: Vec<Outcome>) -> Report {
         .iter()
         .filter(|o| o.completion_tokens.is_some() && o.elapsed_ms > 0)
         .collect();
-    let (completion_tokens_total, prompt_tokens_total, completion_tok_per_s, completion_tok_per_s_p50) =
-        if usage_items.is_empty() {
-            (None, None, None, None)
+    let (
+        completion_tokens_total,
+        prompt_tokens_total,
+        completion_tok_per_s,
+        completion_tok_per_s_p50,
+    ) = if usage_items.is_empty() {
+        (None, None, None, None)
+    } else {
+        let comp_total: u64 = usage_items
+            .iter()
+            .map(|o| o.completion_tokens.unwrap_or(0) as u64)
+            .sum();
+        let prompt_total: u64 = usage_items
+            .iter()
+            .map(|o| o.prompt_tokens.unwrap_or(0) as u64)
+            .sum();
+        let elapsed_total_ms_used: u64 = usage_items.iter().map(|o| o.elapsed_ms).sum();
+        let aggregate_tps = if elapsed_total_ms_used > 0 {
+            Some(comp_total as f32 * 1000.0 / elapsed_total_ms_used as f32)
         } else {
-            let comp_total: u64 = usage_items
-                .iter()
-                .map(|o| o.completion_tokens.unwrap_or(0) as u64)
-                .sum();
-            let prompt_total: u64 = usage_items
-                .iter()
-                .map(|o| o.prompt_tokens.unwrap_or(0) as u64)
-                .sum();
-            let elapsed_total_ms_used: u64 = usage_items.iter().map(|o| o.elapsed_ms).sum();
-            let aggregate_tps = if elapsed_total_ms_used > 0 {
-                Some(comp_total as f32 * 1000.0 / elapsed_total_ms_used as f32)
-            } else {
-                None
-            };
-            let mut per_item_tps: Vec<f32> = usage_items
-                .iter()
-                .map(|o| {
-                    let c = o.completion_tokens.unwrap_or(0) as f32;
-                    c * 1000.0 / o.elapsed_ms as f32
-                })
-                .collect();
-            per_item_tps.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-            let p50 = if per_item_tps.is_empty() {
-                None
-            } else {
-                Some(per_item_tps[(per_item_tps.len() - 1) / 2])
-            };
-            (Some(comp_total), Some(prompt_total), aggregate_tps, p50)
+            None
         };
+        let mut per_item_tps: Vec<f32> = usage_items
+            .iter()
+            .map(|o| {
+                let c = o.completion_tokens.unwrap_or(0) as f32;
+                c * 1000.0 / o.elapsed_ms as f32
+            })
+            .collect();
+        per_item_tps.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let p50 = if per_item_tps.is_empty() {
+            None
+        } else {
+            Some(per_item_tps[(per_item_tps.len() - 1) / 2])
+        };
+        (Some(comp_total), Some(prompt_total), aggregate_tps, p50)
+    };
 
     Report {
         run_id: opts.run_id.to_string(),
@@ -185,8 +189,7 @@ pub struct BaselineDiff {
 }
 
 pub fn diff_baseline(baseline: &Report, current: &Report) -> BaselineDiff {
-    let mut baseline_pass: std::collections::HashMap<&str, bool> =
-        std::collections::HashMap::new();
+    let mut baseline_pass: std::collections::HashMap<&str, bool> = std::collections::HashMap::new();
     for o in &baseline.outcomes {
         baseline_pass.insert(&o.item_id, o.passed);
     }
@@ -266,11 +269,7 @@ pub fn render_text(report: &Report, diff: Option<&BaselineDiff>) -> String {
     }
     if let Some(d) = diff {
         let _ = writeln!(out, "\n--- vs baseline {} ---", d.baseline_run_id);
-        let _ = writeln!(
-            out,
-            "  pass-rate delta: {:+.1}%",
-            d.pass_rate_delta * 100.0
-        );
+        let _ = writeln!(out, "  pass-rate delta: {:+.1}%", d.pass_rate_delta * 100.0);
         for (cat, delta) in &d.per_category_delta {
             let _ = writeln!(out, "    {:<22}  {:+.1}%", cat, delta * 100.0);
         }

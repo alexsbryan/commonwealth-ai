@@ -11,9 +11,9 @@ use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use commonwealth_api::server::internal_router;
 use commonwealth_api::state::AppState;
+use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_discovery::membership;
 use tower::ServiceExt;
 
@@ -45,7 +45,7 @@ fn mesh_with_known_key() -> (AppState, String) {
         embed_model: None,
         benchmark: None,
         current_in_flight: None,
-        };
+    };
 
     let founder = MemberRecord {
         node_id: founder_id,

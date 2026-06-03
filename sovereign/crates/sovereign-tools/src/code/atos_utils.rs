@@ -29,13 +29,11 @@ pub fn is_weak_verify(cmd: &str, is_scaffold: bool) -> bool {
     // `-- test_name` filter. Without the filter cargo accepts an
     // empty test target, so the verify passes vacuously when the
     // step never wrote any tests.
-    let rest_after_test = trimmed
-        .strip_prefix("cargo test --test ")
-        .or_else(|| {
-            trimmed
-                .strip_prefix("cargo test -p ")
-                .and_then(|s| s.split_once(" --test ").map(|(_, after)| after))
-        });
+    let rest_after_test = trimmed.strip_prefix("cargo test --test ").or_else(|| {
+        trimmed
+            .strip_prefix("cargo test -p ")
+            .and_then(|s| s.split_once(" --test ").map(|(_, after)| after))
+    });
     if let Some(rest) = rest_after_test {
         let separator = " -- ";
         match rest.find(separator) {
@@ -80,7 +78,9 @@ pub fn detect_missing_scaffold(
         ("pytest", "requirements.txt"),
     ];
     for (sentinel, required_file) in build_sentinels {
-        let uses_tool = verify_cmds.iter().any(|cmd| cmd_invokes_tool(cmd, sentinel));
+        let uses_tool = verify_cmds
+            .iter()
+            .any(|cmd| cmd_invokes_tool(cmd, sentinel));
         if !uses_tool {
             continue;
         }
@@ -368,11 +368,7 @@ mod tests {
         // missing, because "cargo test" contains "go test" as a
         // substring.
         let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(
-            tmp.path().join("Cargo.toml"),
-            "[package]\nname = \"foo\"\n",
-        )
-        .unwrap();
+        std::fs::write(tmp.path().join("Cargo.toml"), "[package]\nname = \"foo\"\n").unwrap();
         let verify_cmds = vec!["cargo test --test test_foo -- bar".to_string()];
         let step01_files = vec!["Cargo.toml".to_string(), "src/lib.rs".to_string()];
         let result = detect_missing_scaffold(&verify_cmds, &step01_files, tmp.path());
@@ -390,7 +386,10 @@ mod tests {
         let step01_files = vec!["src/main.rs".to_string()];
         let result = detect_missing_scaffold(&verify_cmds, &step01_files, tmp.path());
         let msg = result.expect("expected scaffold gap detection");
-        assert!(msg.contains("Cargo.toml"), "msg should mention Cargo.toml: {msg}");
+        assert!(
+            msg.contains("Cargo.toml"),
+            "msg should mention Cargo.toml: {msg}"
+        );
     }
 
     #[test]
@@ -432,4 +431,3 @@ mod tests {
         assert_eq!(extract_verify_cmd("cargo build"), "cargo build");
     }
 }
-

@@ -2,11 +2,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use corpus_engine::{ChunkRange, CorpusEngine, IndexInfo, ShardInfo};
 use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{HandoffId, NodeId};
 use commonwealth_core::knowledge::{IngestionHandoff, KnowledgeShardAssignment, PartitionStatus};
 use commonwealth_state::{ContributionEmitter, MeshStore};
+use corpus_engine::{ChunkRange, CorpusEngine, IndexInfo, ShardInfo};
 
 pub struct ShardManager {
     engine: Arc<CorpusEngine>,
@@ -60,10 +60,7 @@ impl ShardManager {
     /// `HandoffQueue.participating_peers`. Without it, queue-mode
     /// merges log a warning and become a no-op rather than
     /// crashing — the legacy partition-list path is unaffected.
-    pub fn with_work_queue(
-        mut self,
-        work_queue: Arc<crate::work_queue::WorkQueueManager>,
-    ) -> Self {
+    pub fn with_work_queue(mut self, work_queue: Arc<crate::work_queue::WorkQueueManager>) -> Self {
         self.work_queue = Some(work_queue);
         self
     }
@@ -116,10 +113,7 @@ impl ShardManager {
     }
 
     /// Merge all local shard directories for a corpus into a complete index.
-    pub async fn consolidate_shards(
-        &self,
-        corpus_id: &str,
-    ) -> corpus_engine::Result<IndexInfo> {
+    pub async fn consolidate_shards(&self, corpus_id: &str) -> corpus_engine::Result<IndexInfo> {
         let shard_dirs: Vec<PathBuf> = self
             .engine
             .installed_indexes()
@@ -231,14 +225,13 @@ impl ShardManager {
 
             let (participating, completed_at, source) = match self.work_queue.as_ref() {
                 Some(wq) => match wq.snapshot(&handoff_id).await {
-                    Some(snap) => {
-                        (snap.participating_peers.clone(), snap.last_mutation_ms, "work queue")
-                    }
+                    Some(snap) => (
+                        snap.participating_peers.clone(),
+                        snap.last_mutation_ms,
+                        "work queue",
+                    ),
                     None => (
-                        participating_peers_from_gossip(
-                            &self.mesh_store,
-                            &handoff.corpus_id,
-                        ),
+                        participating_peers_from_gossip(&self.mesh_store, &handoff.corpus_id),
                         now_ms,
                         "gossip fallback (live queue missing — coordinator restart?)",
                     ),
@@ -274,9 +267,7 @@ impl ShardManager {
                     node_id,
                     file_indices: Vec::new(),
                     article_range: None,
-                    status: PartitionStatus::Complete {
-                        completed_at,
-                    },
+                    status: PartitionStatus::Complete { completed_at },
                 })
                 .collect();
             tracing::info!(
@@ -297,11 +288,12 @@ impl ShardManager {
 
         let mut updated = false;
         for p in &mut handoff.partitions {
-            if p.node_id == local_node_id
-                && !matches!(p.status, PartitionStatus::Complete { .. }) {
-                    p.status = PartitionStatus::Complete { completed_at: now_ms };
-                    updated = true;
-                }
+            if p.node_id == local_node_id && !matches!(p.status, PartitionStatus::Complete { .. }) {
+                p.status = PartitionStatus::Complete {
+                    completed_at: now_ms,
+                };
+                updated = true;
+            }
         }
         if updated {
             handoff.updated_at = now_ms;
@@ -364,7 +356,9 @@ impl ShardManager {
         // Local shard. Machine A may have ingested into the original corpus
         // path instead of a partition path (when it had existing partial data).
         {
-            let partition_path = self.engine.index_dir()
+            let partition_path = self
+                .engine
+                .index_dir()
                 .join(format!("{}-partition-{}", handoff.corpus_id, local_node_id));
             let original_path = self.engine.index_dir().join(&handoff.corpus_id);
             if partition_path.exists() {
@@ -404,16 +398,13 @@ impl ShardManager {
                 continue;
             };
 
-            let dest_dir = self.engine.index_dir()
-                .join(format!("{}-partition-{}", handoff.corpus_id, partition.node_id));
+            let dest_dir = self.engine.index_dir().join(format!(
+                "{}-partition-{}",
+                handoff.corpus_id, partition.node_id
+            ));
 
             match self
-                .fetch_remote_shard(
-                    &handoff.corpus_id,
-                    &base_url,
-                    &dest_dir,
-                    local_node_id,
-                )
+                .fetch_remote_shard(&handoff.corpus_id, &base_url, &dest_dir, local_node_id)
                 .await
             {
                 Ok(bytes_received) => {
@@ -444,9 +435,9 @@ impl ShardManager {
         }
 
         if shard_dirs.is_empty() {
-            return Err(corpus_engine::Error::NoShardsFound(
-                format!("no shard dirs for handoff {handoff_id}")
-            ));
+            return Err(corpus_engine::Error::NoShardsFound(format!(
+                "no shard dirs for handoff {handoff_id}"
+            )));
         }
 
         let output_dir = self.engine.index_dir().join(&handoff.corpus_id);
@@ -457,7 +448,10 @@ impl ShardManager {
             "coordinate_merge: merging partitions"
         );
 
-        let info = self.engine.merge_partitions(&shard_dirs, &output_dir).await?;
+        let info = self
+            .engine
+            .merge_partitions(&shard_dirs, &output_dir)
+            .await?;
 
         for shard_dir in &shard_dirs {
             std::fs::remove_dir_all(shard_dir).ok();
@@ -506,10 +500,7 @@ impl ShardManager {
             .await?;
 
         if !resp.status().is_success() {
-            anyhow::bail!(
-                "index/serve returned {} from {base_url}",
-                resp.status()
-            );
+            anyhow::bail!("index/serve returned {} from {base_url}", resp.status());
         }
 
         let bytes = resp.bytes().await?;
@@ -567,7 +558,9 @@ impl ShardManager {
         }
 
         // Create a temporary tar archive.
-        let tar_path = self.engine.index_dir()
+        let tar_path = self
+            .engine
+            .index_dir()
             .join(format!(".{corpus_id}.transfer.tar"));
 
         let tar_status = std::process::Command::new("tar")
@@ -601,9 +594,7 @@ impl ShardManager {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            anyhow::bail!(
-                "index/transfer returned {status} from {target_base_url}: {body}"
-            );
+            anyhow::bail!("index/transfer returned {status} from {target_base_url}: {body}");
         }
 
         tracing::info!(

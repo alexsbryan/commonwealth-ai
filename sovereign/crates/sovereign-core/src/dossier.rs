@@ -149,9 +149,8 @@ pub fn render_tool_dossier(dossier: &ToolDossier, now_unix: i64) -> String {
     // Section 1 — tools available.
     let mut tools_block = String::from("Tools available for this turn:");
     if dossier.tools_available.is_empty() {
-        tools_block.push_str(
-            "\n(no tools registered — the active skill expects pure-LLM reasoning)",
-        );
+        tools_block
+            .push_str("\n(no tools registered — the active skill expects pure-LLM reasoning)");
     } else {
         for entry in &dossier.tools_available {
             let desc = entry.description.trim();
@@ -170,9 +169,8 @@ pub fn render_tool_dossier(dossier: &ToolDossier, now_unix: i64) -> String {
     // Section 2 — outcome history this conversation.
     let mut history_block = String::from("Outcome history this conversation:");
     if dossier.outcome_history.is_empty() {
-        history_block.push_str(
-            "\n(no prior tool outcomes recorded — first tool call this conversation)",
-        );
+        history_block
+            .push_str("\n(no prior tool outcomes recorded — first tool call this conversation)");
     } else {
         for outcome in &dossier.outcome_history {
             let age = format_age_since(now_unix, outcome.applied_at_unix);
@@ -233,9 +231,7 @@ pub fn render_tool_dossier(dossier: &ToolDossier, now_unix: i64) -> String {
         // approach. This is general advice (not bank-specific
         // vocabulary) and applies to any outcome history.
         let has_negative = dossier.outcome_history.iter().any(|o| {
-            o.outcome == "no-results"
-                || o.outcome == "stale"
-                || o.outcome == "wrong-tool"
+            o.outcome == "no-results" || o.outcome == "stale" || o.outcome == "wrong-tool"
         });
         if has_negative {
             history_block.push_str(
@@ -414,14 +410,8 @@ mod tests {
 
     #[test]
     fn evidence_id_range_sparse_renders_as_list() {
-        let ids = vec![
-            "ev-T2-0001".to_string(),
-            "ev-T2-0004".to_string(),
-        ];
-        assert_eq!(
-            format_evidence_id_range(&ids),
-            "[ev-T2-0001, ev-T2-0004]"
-        );
+        let ids = vec!["ev-T2-0001".to_string(), "ev-T2-0004".to_string()];
+        assert_eq!(format_evidence_id_range(&ids), "[ev-T2-0001, ev-T2-0004]");
     }
 
     #[test]
@@ -479,8 +469,18 @@ mod tests {
                 ("code_search", "Approximate semantic search"),
             ],
             &[
-                ("symbol_lookup", "useful", "found EmbedFn at line 70", now - 120),
-                ("code_search", "no-results", "no semantically similar code", now - 30),
+                (
+                    "symbol_lookup",
+                    "useful",
+                    "found EmbedFn at line 70",
+                    now - 120,
+                ),
+                (
+                    "code_search",
+                    "no-results",
+                    "no semantically similar code",
+                    now - 30,
+                ),
             ],
         );
         let rendered = render_tool_dossier(&dossier, now);

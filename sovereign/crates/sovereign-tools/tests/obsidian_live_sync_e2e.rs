@@ -67,8 +67,7 @@ async fn boot() -> Fixture {
     std::fs::create_dir_all(&snapshots).unwrap();
 
     let engine = Arc::new(
-        CorpusEngine::new(recipes_dir, indexes_dir, stub_embed())
-            .with_embedding_model("test-mock"),
+        CorpusEngine::new(recipes_dir, indexes_dir, stub_embed()).with_embedding_model("test-mock"),
     );
     let store: Arc<dyn StateStore> = Arc::new(InMemoryStateStore::new());
     let manager = Arc::new(
@@ -126,10 +125,8 @@ async fn obsidian_vault_source_is_reconcilable() {
     // `should_reconcile=true` and `reconcile_kind=ObsidianVault`,
     // which is what makes the daemon's auto-resume loop pick it up
     // alongside watched folders.
-    let cfg = LocalCorpusConfig::obsidian_vault(
-        PathBuf::from("/tmp/vault"),
-        PathBuf::from("/tmp/snap"),
-    );
+    let cfg =
+        LocalCorpusConfig::obsidian_vault(PathBuf::from("/tmp/vault"), PathBuf::from("/tmp/snap"));
     assert!(cfg.source_type.should_reconcile());
     assert_eq!(
         cfg.source_type.reconcile_kind(),

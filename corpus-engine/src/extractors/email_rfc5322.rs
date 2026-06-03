@@ -36,10 +36,10 @@ use super::{slug, ExtractedDoc, Extractor};
 use crate::asset_store::AssetStoreHandle;
 use crate::enrichment::atlas::atoms::{Asset, AtomEnvelope, AtomId};
 use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
+use crate::error::{Error, Result};
 use crate::extractors::described_asset::{
     build_asset_atom, AssetSubExtractor, AssetSubExtractorRegistry, OpaqueFallback,
 };
-use crate::error::{Error, Result};
 
 /// Configuration knob shared between the recipe schema and the
 /// extractor implementation. See
@@ -308,12 +308,9 @@ impl EmailIterator {
     ) -> Result<serde_json::Value> {
         // 1. Put raw bytes into the asset store (idempotent on
         //    duplicate attachments shared across messages).
-        let receipt = dispatch.store.put_raw(
-            bytes,
-            Some(filename),
-            Some(mime),
-            message_id,
-        )?;
+        let receipt = dispatch
+            .store
+            .put_raw(bytes, Some(filename), Some(mime), message_id)?;
         // 2. Pick a sub-extractor + run it. Falls through to opaque
         //    fallback if the asset exceeds the configured cap.
         let max_bytes = if self.config.max_attachment_bytes == 0 {
@@ -322,7 +319,12 @@ impl EmailIterator {
             self.config.max_attachment_bytes
         };
         let extraction = if bytes.len() as u64 > max_bytes {
-            OpaqueFallback.extract(Path::new(filename), bytes, &receipt.sha256, dispatch.store.as_ref())?
+            OpaqueFallback.extract(
+                Path::new(filename),
+                bytes,
+                &receipt.sha256,
+                dispatch.store.as_ref(),
+            )?
         } else {
             let head = &bytes[..512.min(bytes.len())];
             let extractors = dispatch.registry.snapshot();
@@ -338,10 +340,17 @@ impl EmailIterator {
                     "email: no sub-extractor matched attachment {filename} — register OpaqueFallback last"
                 ))
             })?;
-            sub.extract(Path::new(filename), bytes, &receipt.sha256, dispatch.store.as_ref())?
+            sub.extract(
+                Path::new(filename),
+                bytes,
+                &receipt.sha256,
+                dispatch.store.as_ref(),
+            )?
         };
         if let Some(parsed_path) = extraction.parsed_form.as_deref() {
-            dispatch.store.record_parsed_form(&receipt.sha256, parsed_path)?;
+            dispatch
+                .store
+                .record_parsed_form(&receipt.sha256, parsed_path)?;
         }
 
         let asset_kind = extraction.asset_kind.clone();
@@ -395,7 +404,10 @@ impl EmailIterator {
 // ── Helpers ──────────────────────────────────────────────────
 
 fn header(parsed: &ParsedMail, name: &str) -> Option<String> {
-    parsed.headers.get_first_value(name).filter(|s| !s.is_empty())
+    parsed
+        .headers
+        .get_first_value(name)
+        .filter(|s| !s.is_empty())
 }
 
 fn split_msgids(refs: &str) -> Vec<String> {
@@ -405,7 +417,10 @@ fn split_msgids(refs: &str) -> Vec<String> {
             if s.is_empty() {
                 None
             } else {
-                Some(s.trim_matches(|c: char| c == '<' || c == '>' || c.is_whitespace()).to_string())
+                Some(
+                    s.trim_matches(|c: char| c == '<' || c == '>' || c.is_whitespace())
+                        .to_string(),
+                )
             }
         })
         .filter(|s| !s.is_empty())
@@ -614,10 +629,7 @@ fn synthesize_message_id(path: &Path) -> String {
     // Maildir messages typically don't carry a Message-ID. Synthesize
     // one from the path so the source_id is still stable across
     // re-ingest.
-    format!(
-        "synth-{}",
-        short_hash(&path.to_string_lossy())
-    )
+    format!("synth-{}", short_hash(&path.to_string_lossy()))
 }
 
 fn synthetic_message_atom_id(message_id: &str) -> AtomId {
@@ -635,9 +647,7 @@ fn short_hash(input: &str) -> String {
 fn default_ext_for_mime(mime: &str) -> &'static str {
     match mime {
         "application/pdf" => "pdf",
-        m if m.starts_with("application/vnd.openxmlformats-officedocument.spreadsheetml") => {
-            "xlsx"
-        }
+        m if m.starts_with("application/vnd.openxmlformats-officedocument.spreadsheetml") => "xlsx",
         m if m.starts_with("application/vnd.openxmlformats-officedocument.wordprocessingml") => {
             "docx"
         }
@@ -652,17 +662,12 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
         out.push(dir.to_path_buf());
         return Ok(());
     }
-    let entries = fs::read_dir(dir).map_err(|e| {
-        Error::Extraction(format!("email: read_dir {}: {e}", dir.display()))
-    })?;
+    let entries = fs::read_dir(dir)
+        .map_err(|e| Error::Extraction(format!("email: read_dir {}: {e}", dir.display())))?;
     for entry in entries {
-        let entry = entry
-            .map_err(|e| Error::Extraction(format!("email: dir entry: {e}")))?;
+        let entry = entry.map_err(|e| Error::Extraction(format!("email: dir entry: {e}")))?;
         let path = entry.path();
-        let name = path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("");
+        let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
         if name.starts_with('.') || name == "Thumbs.db" {
             continue;
         }
@@ -680,9 +685,8 @@ fn append_asset_atom(sidecar: &Path, atom: &Asset) -> Result<()> {
         fs::create_dir_all(parent).map_err(Error::Io)?;
     }
     let envelope = AtomEnvelope::Asset(atom.clone());
-    let line = serde_json::to_string(&envelope).map_err(|e| {
-        Error::Extraction(format!("email: serialise asset atom: {e}"))
-    })?;
+    let line = serde_json::to_string(&envelope)
+        .map_err(|e| Error::Extraction(format!("email: serialise asset atom: {e}")))?;
     let mut f = fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -699,9 +703,8 @@ fn append_edge(sidecar: &Path, edge: &Edge) -> Result<()> {
     if let Some(parent) = sidecar.parent() {
         fs::create_dir_all(parent).map_err(Error::Io)?;
     }
-    let line = serde_json::to_string(edge).map_err(|e| {
-        Error::Extraction(format!("email: serialise edge: {e}"))
-    })?;
+    let line = serde_json::to_string(edge)
+        .map_err(|e| Error::Extraction(format!("email: serialise edge: {e}")))?;
     let mut f = fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -724,8 +727,7 @@ mod tests {
     fn sanitize_drops_mta_placeholder_addresses() {
         // The enron-multi-wide broadcast pattern: leading-dot placeholder
         // addresses interleaved with a real one.
-        let field =
-            "e-mail <.addison@enron.com>, evgenis.eva@enron.com, e-mail <.lina@enron.com>";
+        let field = "e-mail <.addison@enron.com>, evgenis.eva@enron.com, e-mail <.lina@enron.com>";
         assert_eq!(sanitize_addr_field(field), "evgenis.eva@enron.com");
         // All-junk field sanitizes to empty.
         assert_eq!(sanitize_addr_field("e-mail <.a@enron.com>, e-mail"), "");
@@ -737,11 +739,13 @@ mod tests {
         // people. The preamble must NOT carry ".addison@" and MUST carry
         // the resolved names.
         let to = "e-mail <.addison@enron.com>, e-mail <.breana@enron.com>";
-        let x_to =
-            "Addison Barry Rand (E-mail) <Abarryrand@aol.com>, Kenneth Lay <klay@enron.com>";
+        let x_to = "Addison Barry Rand (E-mail) <Abarryrand@aol.com>, Kenneth Lay <klay@enron.com>";
         let got = combine_identity(Some(to), Some(x_to)).expect("some identity");
         assert!(!got.contains(".addison@"), "placeholder leaked: {got}");
-        assert!(got.contains("Addison Barry Rand"), "lost real recipient: {got}");
+        assert!(
+            got.contains("Addison Barry Rand"),
+            "lost real recipient: {got}"
+        );
         assert!(got.contains("Kenneth Lay"), "lost gold entity: {got}");
         // Clean email: address (From/To) and resolved name (X-*) both
         // surface so the model gets the full identity.
@@ -850,7 +854,12 @@ Notes body here.\r\n\
         assert_eq!(docs.len(), 2);
         let thread_ids: Vec<_> = docs
             .iter()
-            .map(|d| d.metadata.as_ref().unwrap()["thread_id"].as_str().unwrap().to_string())
+            .map(|d| {
+                d.metadata.as_ref().unwrap()["thread_id"]
+                    .as_str()
+                    .unwrap()
+                    .to_string()
+            })
             .collect();
         // Both messages collapse to the original Message-ID as the
         // thread root.
@@ -865,8 +874,7 @@ Notes body here.\r\n\
         std::fs::create_dir_all(&inbox).unwrap();
         write_msg(&inbox, "1.eml", EMAIL_WITH_TEXT_ATTACHMENT);
         let assets_root = dir.path().join("assets");
-        let store: AssetStoreHandle =
-            Arc::new(FilesystemAssetStore::new(&assets_root).unwrap());
+        let store: AssetStoreHandle = Arc::new(FilesystemAssetStore::new(&assets_root).unwrap());
         let dispatch = EmailAssetDispatch {
             store: store.clone(),
             registry: AssetSubExtractorRegistry::defaults(),
@@ -990,4 +998,3 @@ body";
         assert!(docs[0].content.contains("body truncated"));
     }
 }
-

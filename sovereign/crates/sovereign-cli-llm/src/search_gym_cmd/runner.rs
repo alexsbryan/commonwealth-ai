@@ -179,8 +179,7 @@ pub async fn run_fixture(
         // sprint. The flag exists today so callers compile against
         // the final API.
         tx.runner_error = Some(
-            "search-gym: --synth mode not yet wired (Phase 2g). Use --mock for now."
-                .to_string(),
+            "search-gym: --synth mode not yet wired (Phase 2g). Use --mock for now.".to_string(),
         );
         return tx;
     }
@@ -248,14 +247,12 @@ pub async fn run_fixture(
             }
         };
 
-        let message = match resp_json
-            .pointer("/choices/0/message")
-            .cloned()
-        {
+        let message = match resp_json.pointer("/choices/0/message").cloned() {
             Some(m) => m,
             None => {
-                tx.runner_error =
-                    Some(format!("daemon response missing choices[0].message turn={turn}"));
+                tx.runner_error = Some(format!(
+                    "daemon response missing choices[0].message turn={turn}"
+                ));
                 return tx;
             }
         };
@@ -297,9 +294,8 @@ pub async fn run_fixture(
                 .pointer("/function/arguments")
                 .and_then(|v| v.as_str())
                 .unwrap_or("{}");
-            let arguments: Value = serde_json::from_str(raw_args).unwrap_or_else(|_| {
-                serde_json::json!({ "__unparseable_args__": raw_args })
-            });
+            let arguments: Value = serde_json::from_str(raw_args)
+                .unwrap_or_else(|_| serde_json::json!({ "__unparseable_args__": raw_args }));
             tx.tool_calls.push(ObservedToolCall {
                 name,
                 arguments,
@@ -349,8 +345,11 @@ pub async fn run_fixture(
 
             let content = match resolve_mock_subdir(&name, &cfg.mock_corpus) {
                 Some((subdir, is_web)) => {
-                    let backend = SearchBackend::Mock { corpus_path: subdir };
-                    match exec_mock_search(client, &backend, raw_args, cfg.max_search_results).await {
+                    let backend = SearchBackend::Mock {
+                        corpus_path: subdir,
+                    };
+                    match exec_mock_search(client, &backend, raw_args, cfg.max_search_results).await
+                    {
                         Ok((rendered, urls)) => {
                             if is_web {
                                 tx.mock_urls.extend(urls);
@@ -409,10 +408,7 @@ pub async fn run_fixture(
         // emitted the tool_calls, then the tool-result messages.
         // OpenAI wire format requires assistant-with-tool_calls
         // followed by role:tool messages, one per call.
-        let messages = match request
-            .get_mut("messages")
-            .and_then(|v| v.as_array_mut())
-        {
+        let messages = match request.get_mut("messages").and_then(|v| v.as_array_mut()) {
             Some(m) => m,
             None => {
                 tx.runner_error = Some("input.json has no messages array".into());
@@ -555,9 +551,7 @@ async fn exec_mock_search(
     let query = args
         .get("query")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            format!("model search call missing 'query' field, args={raw_args}")
-        })?;
+        .ok_or_else(|| format!("model search call missing 'query' field, args={raw_args}"))?;
 
     let results = backend_search(client, backend, query, max_results)
         .await
@@ -590,7 +584,9 @@ async fn exec_mock_search(
     // hoping it'll reconstruct URLs from the numbered list above.
     // Production search results should render the same trailer when
     // citation-faithfulness matters.
-    rendered.push_str("\n--- ALLOWED URLS (use ONLY these verbatim in citations; do not invent or modify) ---\n");
+    rendered.push_str(
+        "\n--- ALLOWED URLS (use ONLY these verbatim in citations; do not invent or modify) ---\n",
+    );
     for u in &urls {
         rendered.push_str(&format!("  {u}\n"));
     }
@@ -780,10 +776,7 @@ mod tests {
                 if msg.get("role").and_then(|v| v.as_str()) != Some("system") {
                     continue;
                 }
-                let sys = msg
-                    .get("content")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                let sys = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
                 if sys.trim() != production_sys {
                     mismatches.push(format!(
                         "{slug}: system message differs from SEARCH_SYSTEM_PROMPT"
@@ -827,19 +820,27 @@ mod tests {
 
 {"name":"search","parameters":{"query":"NVDA current stock price"}}"#;
         let v = promote_content_tool_call(content).expect("should promote");
-        assert_eq!(v.pointer("/function/name").unwrap().as_str().unwrap(), "search");
-        let args: Value = serde_json::from_str(
-            v.pointer("/function/arguments").unwrap().as_str().unwrap(),
-        )
-        .unwrap();
-        assert_eq!(args.get("query").unwrap().as_str().unwrap(), "NVDA current stock price");
+        assert_eq!(
+            v.pointer("/function/name").unwrap().as_str().unwrap(),
+            "search"
+        );
+        let args: Value =
+            serde_json::from_str(v.pointer("/function/arguments").unwrap().as_str().unwrap())
+                .unwrap();
+        assert_eq!(
+            args.get("query").unwrap().as_str().unwrap(),
+            "NVDA current stock price"
+        );
     }
 
     #[test]
     fn promote_content_tool_call_recognises_arguments_shape() {
         let content = r#"{"name":"search","arguments":{"query":"x"}}"#;
         let v = promote_content_tool_call(content).expect("should promote");
-        assert_eq!(v.pointer("/function/name").unwrap().as_str().unwrap(), "search");
+        assert_eq!(
+            v.pointer("/function/name").unwrap().as_str().unwrap(),
+            "search"
+        );
     }
 
     #[test]
@@ -851,7 +852,10 @@ mod tests {
 
     #[test]
     fn strip_think_blocks_handles_multiple() {
-        assert_eq!(strip_think_blocks("<think>a</think>x<think>b</think>y"), "xy");
+        assert_eq!(
+            strip_think_blocks("<think>a</think>x<think>b</think>y"),
+            "xy"
+        );
         assert_eq!(strip_think_blocks("plain"), "plain");
         assert_eq!(strip_think_blocks("<think>unclosed and..."), "");
     }

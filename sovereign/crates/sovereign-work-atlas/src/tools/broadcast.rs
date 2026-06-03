@@ -80,7 +80,8 @@ impl ClaimBroadcaster for DeferredBroadcaster {
             inner.as_ref().broadcast(app_id, key).await;
         } else {
             tracing::debug!(
-                app_id, key,
+                app_id,
+                key,
                 "work_atlas:broadcast deferred (real broadcaster not yet wired); \
                  next gossip round will catch up"
             );

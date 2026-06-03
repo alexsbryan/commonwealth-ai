@@ -69,10 +69,7 @@ impl Extractor for MarkdownExtractor {
         source_path: &Path,
     ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send>> {
         let raw = fs::read_to_string(source_path).map_err(|e| {
-            Error::Extraction(format!(
-                "markdown: read {}: {e}",
-                source_path.display()
-            ))
+            Error::Extraction(format!("markdown: read {}: {e}", source_path.display()))
         })?;
         let label = source_path
             .file_name()
@@ -85,9 +82,8 @@ impl Extractor for MarkdownExtractor {
         let docs: Vec<Result<ExtractedDoc>> = sections
             .into_iter()
             .map(|sec| {
-                let metadata = serde_json::to_value(&sec.metadata).map_err(|e| {
-                    Error::Extraction(format!("markdown: serialise metadata: {e}"))
-                })?;
+                let metadata = serde_json::to_value(&sec.metadata)
+                    .map_err(|e| Error::Extraction(format!("markdown: serialise metadata: {e}")))?;
                 Ok(ExtractedDoc {
                     title: Some(sec.metadata.section_name.clone()),
                     // Every section from the same file shares a
@@ -222,7 +218,9 @@ impl<'a> Walker<'a> {
                 }
             }
             Event::Start(Tag::Link {
-                link_type, dest_url, ..
+                link_type,
+                dest_url,
+                ..
             }) => {
                 self.current.in_link = true;
                 self.current.pending_link_text.clear();
@@ -337,8 +335,7 @@ impl<'a> Walker<'a> {
         }
 
         let (depth, name) = self.heading_stack.last().cloned().unwrap();
-        let section_path: Vec<String> =
-            self.heading_stack.iter().map(|(_, n)| n.clone()).collect();
+        let section_path: Vec<String> = self.heading_stack.iter().map(|(_, n)| n.clone()).collect();
         let heading_anchor = slugify(&name);
         self.out.push(MarkdownSection {
             content: body,
@@ -400,19 +397,35 @@ Detail of alpha-one.
 Body of beta.
 ";
         let sections = MarkdownExtractor::extract_sections(src, "test.md");
-        let names: Vec<_> = sections.iter().map(|s| s.metadata.section_name.as_str()).collect();
+        let names: Vec<_> = sections
+            .iter()
+            .map(|s| s.metadata.section_name.as_str())
+            .collect();
         assert_eq!(names, vec!["Top", "Alpha", "Alpha-One", "Beta"]);
 
-        let alpha_one = sections.iter().find(|s| s.metadata.section_name == "Alpha-One").unwrap();
+        let alpha_one = sections
+            .iter()
+            .find(|s| s.metadata.section_name == "Alpha-One")
+            .unwrap();
         assert_eq!(
             alpha_one.metadata.section_path,
-            vec!["Top".to_string(), "Alpha".to_string(), "Alpha-One".to_string()]
+            vec![
+                "Top".to_string(),
+                "Alpha".to_string(),
+                "Alpha-One".to_string()
+            ]
         );
         assert_eq!(alpha_one.metadata.section_depth, 3);
         assert_eq!(alpha_one.metadata.heading_anchor, "alpha-one");
 
-        let beta = sections.iter().find(|s| s.metadata.section_name == "Beta").unwrap();
-        assert_eq!(beta.metadata.section_path, vec!["Top".to_string(), "Beta".to_string()]);
+        let beta = sections
+            .iter()
+            .find(|s| s.metadata.section_name == "Beta")
+            .unwrap();
+        assert_eq!(
+            beta.metadata.section_path,
+            vec!["Top".to_string(), "Beta".to_string()]
+        );
     }
 
     #[test]
@@ -424,9 +437,18 @@ The `Runtime` orchestrates `Router`, `Planner`, and `Executor`.
 Module path: `sovereign_core::runtime::Runtime`.
 ";
         let sections = MarkdownExtractor::extract_sections(src, "test.md");
-        let doc = sections.iter().find(|s| s.metadata.section_name == "Doc").unwrap();
-        assert!(doc.metadata.inline_code_spans.contains(&"Runtime".to_string()));
-        assert!(doc.metadata.inline_code_spans.contains(&"Router".to_string()));
+        let doc = sections
+            .iter()
+            .find(|s| s.metadata.section_name == "Doc")
+            .unwrap();
+        assert!(doc
+            .metadata
+            .inline_code_spans
+            .contains(&"Runtime".to_string()));
+        assert!(doc
+            .metadata
+            .inline_code_spans
+            .contains(&"Router".to_string()));
         assert!(doc
             .metadata
             .inline_code_spans
@@ -461,7 +483,10 @@ let foo = `not-a-span`;
 ";
         let sections = MarkdownExtractor::extract_sections(src, "test.md");
         let doc = &sections[0];
-        assert!(doc.metadata.inline_code_spans.contains(&"Runtime".to_string()));
+        assert!(doc
+            .metadata
+            .inline_code_spans
+            .contains(&"Runtime".to_string()));
         assert!(!doc
             .metadata
             .inline_code_spans

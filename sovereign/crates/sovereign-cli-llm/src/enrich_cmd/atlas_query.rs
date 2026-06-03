@@ -12,10 +12,7 @@
 
 use std::path::PathBuf;
 
-use corpus_engine::atlas_traversal::{
-    assemble_brief, classify_query, traverse,
-    engine::AtlasView,
-};
+use corpus_engine::atlas_traversal::{assemble_brief, classify_query, engine::AtlasView, traverse};
 use corpus_engine::enrichment::atlas::{
     read_atlas_atoms, read_atlas_edges, AtomEnvelope, ATLAS_DIRNAME,
 };
@@ -28,9 +25,7 @@ const HELP: Help = Help {
     command: "sovereign enrich atlas-query",
     summary: "Classify + traverse a query against the resolved atlas (no LLM).",
     sections: &[
-        HelpSection::Usage(
-            "sovereign enrich atlas-query <corpus-id> \"<query>\" [--json]",
-        ),
+        HelpSection::Usage("sovereign enrich atlas-query <corpus-id> \"<query>\" [--json]"),
         HelpSection::Flags(&[(
             "--json",
             "Emit the TraversalResult as pretty JSON instead of the assembled brief.",
@@ -241,12 +236,7 @@ mod tests {
 
     #[test]
     fn parse_args_accepts_json_flag() {
-        let p = parse_args(&[
-            "bk".into(),
-            "Who is Alyosha?".into(),
-            "--json".into(),
-        ])
-        .unwrap();
+        let p = parse_args(&["bk".into(), "Who is Alyosha?".into(), "--json".into()]).unwrap();
         assert!(p.as_json);
     }
 

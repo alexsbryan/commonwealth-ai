@@ -438,7 +438,11 @@ mod tests {
     use crate::recipe::Recipe;
 
     fn echo_recipe(keys: &[&str]) -> Recipe {
-        let keys_toml = keys.iter().map(|k| format!("\"{k}\"")).collect::<Vec<_>>().join(", ");
+        let keys_toml = keys
+            .iter()
+            .map(|k| format!("\"{k}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
         let toml = format!(
             r#"
 [recipe]
@@ -589,7 +593,10 @@ concurrency = 1
         // not finish everything).
         assert!(summary.paused, "summary should report paused=true");
         let stats = wl.lock().await.stats("drain-test").unwrap();
-        assert!(stats.pending + stats.claimed >= 1, "second unit not consumed");
+        assert!(
+            stats.pending + stats.claimed >= 1,
+            "second unit not consumed"
+        );
     }
 
     #[test]

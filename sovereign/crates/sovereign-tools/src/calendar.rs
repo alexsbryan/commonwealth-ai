@@ -55,11 +55,7 @@ impl Tool for CalendarTool {
         vec![Permission::CalendarRead]
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let action = params
             .get("action")
             .and_then(|v| v.as_str())
@@ -70,22 +66,26 @@ impl Tool for CalendarTool {
                 // PROPFIND to list events.
                 let response = self
                     .client
-                    .request(reqwest::Method::from_bytes(b"PROPFIND").unwrap(), &self.caldav_url)
+                    .request(
+                        reqwest::Method::from_bytes(b"PROPFIND").unwrap(),
+                        &self.caldav_url,
+                    )
                     .basic_auth(&self.username, Some(&self.password))
                     .header("Depth", "1")
                     .header("Content-Type", "application/xml")
-                    .body(r#"<?xml version="1.0"?>
+                    .body(
+                        r#"<?xml version="1.0"?>
                         <propfind xmlns="DAV:">
                             <prop><displayname/><getcontenttype/></prop>
-                        </propfind>"#)
+                        </propfind>"#,
+                    )
                     .send()
                     .await
                     .map_err(|e| Error::Execution(format!("CalDAV request failed: {e}")))?;
 
-                let text = response
-                    .text()
-                    .await
-                    .map_err(|e| Error::Execution(format!("Failed to read CalDAV response: {e}")))?;
+                let text = response.text().await.map_err(|e| {
+                    Error::Execution(format!("Failed to read CalDAV response: {e}"))
+                })?;
 
                 Ok(StepOutput::Text(text))
             }
@@ -93,7 +93,9 @@ impl Tool for CalendarTool {
                 let summary = params
                     .get("summary")
                     .and_then(|v| v.as_str())
-                    .ok_or_else(|| Error::InvalidInput("Missing 'summary' for create".to_string()))?;
+                    .ok_or_else(|| {
+                        Error::InvalidInput("Missing 'summary' for create".to_string())
+                    })?;
 
                 let start = params
                     .get("start")

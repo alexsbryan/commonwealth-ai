@@ -22,9 +22,8 @@
 use commonwealth_core::capabilities::NodeCapabilities;
 
 use crate::oicp::{
-    self, cold_start_weight, effective_affinity, load_penalty,
-    locality_bonus, throughput_factor, throughput_factor_source,
-    InferenceRequirements, NodeLocality, NodeObservations,
+    self, cold_start_weight, effective_affinity, load_penalty, locality_bonus, throughput_factor,
+    throughput_factor_source, InferenceRequirements, NodeLocality, NodeObservations,
     ProviderManifest,
 };
 
@@ -59,18 +58,12 @@ impl<'a> BackendCandidate<'a> {
         }
     }
 
-    pub fn with_node_capabilities(
-        mut self,
-        caps: &'a NodeCapabilities,
-    ) -> Self {
+    pub fn with_node_capabilities(mut self, caps: &'a NodeCapabilities) -> Self {
         self.node_capabilities = Some(caps);
         self
     }
 
-    pub fn with_observations(
-        mut self,
-        obs: &'a NodeObservations,
-    ) -> Self {
+    pub fn with_observations(mut self, obs: &'a NodeObservations) -> Self {
         self.observations = Some(obs);
         self
     }
@@ -101,16 +94,13 @@ fn best_score_for_manifest(
     let mut best: Option<(f32, f32, Option<f32>)> = None;
     for model in manifest.models.iter().filter(|m| m.status.available) {
         for claim in &model.claims {
-            let Some(score) = oicp::score_claim_for_request(claim, req)
-            else {
+            let Some(score) = oicp::score_claim_for_request(claim, req) else {
                 continue;
             };
             let claim_affinity = claim.effective_affinity();
             let candidate = (score, claim_affinity, model.size_gb);
             best = Some(match best {
-                Some((best_score, _, _)) if best_score >= score => {
-                    best.unwrap()
-                }
+                Some((best_score, _, _)) if best_score >= score => best.unwrap(),
                 _ => candidate,
             });
         }
@@ -179,16 +169,13 @@ pub fn pick_slot_for_oicp<'a>(
             let locality = locality_bonus(c.locality);
             let cold_start = cold_start_weight(obs.samples);
 
-            let baseline_benchmark =
-                c.node_capabilities.and_then(|nc| nc.benchmark.as_ref());
+            let baseline_benchmark = c.node_capabilities.and_then(|nc| nc.benchmark.as_ref());
             let candidate_size = model_size_gb.unwrap_or(0.0);
-            let throughput =
-                throughput_factor(obs, candidate_size, baseline_benchmark);
+            let throughput = throughput_factor(obs, candidate_size, baseline_benchmark);
             tracing::debug!(
                 idx,
                 factor = throughput,
-                source =
-                    throughput_factor_source(obs, baseline_benchmark),
+                source = throughput_factor_source(obs, baseline_benchmark),
                 obs_samples = obs.samples,
                 obs_tg_tok_s = obs.tg_tok_s_ewma,
                 candidate_size_gb = candidate_size,
@@ -210,22 +197,18 @@ pub fn pick_slot_for_oicp<'a>(
                 * availability;
             Some((idx, weighted))
         })
-        .max_by(|(_, a), (_, b)| {
-            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
-        })
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .map(|(idx, _)| idx)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commonwealth_core::capabilities::{
-        AvailableResources, HardwareProfile, NodeCapabilities,
-    };
     use crate::oicp::{
-        CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass,
-        ModelStatus, ProviderManifest, ProviderModel,
+        CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass, ModelStatus,
+        ProviderManifest, ProviderModel,
     };
+    use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 
     fn make_caps(availability: f32) -> NodeCapabilities {
         NodeCapabilities {
@@ -289,7 +272,12 @@ mod tests {
     }
 
     fn simple_general_request() -> InferenceRequirements {
-        v03_req(CapabilityHint::general(), LatencyClass::Normal, 4_000, 1_000)
+        v03_req(
+            CapabilityHint::general(),
+            LatencyClass::Normal,
+            4_000,
+            1_000,
+        )
     }
 
     fn simple_general_manifest(affinity: f32) -> ProviderManifest {
@@ -421,12 +409,7 @@ mod tests {
             BackendCandidate::new(&llama_70b).with_node_capabilities(&idle),
             BackendCandidate::new(&qwen_coder).with_node_capabilities(&idle),
         ];
-        let req = v03_req(
-            CapabilityHint::code(),
-            LatencyClass::Normal,
-            16_000,
-            2_000,
-        );
+        let req = v03_req(CapabilityHint::code(), LatencyClass::Normal, 16_000, 2_000);
         assert_eq!(
             pick_slot_for_oicp(&candidates, &req),
             Some(1),
@@ -442,7 +425,7 @@ mod tests {
         let local_small = manifest_with_claims(vec![CapabilityClaim::new(
             CapabilityHint::general(),
             LatencyClass::Fast,
-            8_000,   // not enough for 16K request
+            8_000, // not enough for 16K request
             1_000,
             0.9,
         )]);
@@ -496,15 +479,8 @@ mod tests {
             ),
         ]);
         let idle = make_caps(1.0);
-        let candidates = vec![
-            BackendCandidate::new(&dual).with_node_capabilities(&idle),
-        ];
-        let fast_req = v03_req(
-            CapabilityHint::general(),
-            LatencyClass::Fast,
-            2_000,
-            200,
-        );
+        let candidates = vec![BackendCandidate::new(&dual).with_node_capabilities(&idle)];
+        let fast_req = v03_req(CapabilityHint::general(), LatencyClass::Fast, 2_000, 200);
         assert_eq!(pick_slot_for_oicp(&candidates, &fast_req), Some(0));
         let normal_req = v03_req(
             CapabilityHint::general(),
@@ -540,17 +516,11 @@ mod tests {
             BackendCandidate::new(&prose_peer).with_node_capabilities(&idle),
             BackendCandidate::new(&general_peer).with_node_capabilities(&idle),
         ];
-        let req = v03_req(
-            CapabilityHint::code(),
-            LatencyClass::Normal,
-            16_000,
-            2_000,
-        );
+        let req = v03_req(CapabilityHint::code(), LatencyClass::Normal, 16_000, 2_000);
         assert_eq!(
             pick_slot_for_oicp(&candidates, &req),
             Some(1),
             "wrong specialization must be eliminated; general fallback wins"
         );
     }
-
 }

@@ -48,13 +48,11 @@ use std::sync::Arc;
 use commonwealth_api::server::{client_router, internal_router};
 use commonwealth_api::state::AppState;
 use commonwealth_app::registry::AppRegistry;
-use commonwealth_core::capabilities::{
-    AvailableResources, HardwareProfile, NodeCapabilities,
-};
+use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
+use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::knowledge::CorpusShardInfo;
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_state::MeshStore;
 use corpus_engine::index::{CorpusIndex, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
@@ -68,12 +66,7 @@ fn mock_embed_fn() -> EmbedFn {
     Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; EMBED_DIM]) }))
 }
 
-async fn install_corpus(
-    indexes_dir: &std::path::Path,
-    id: &str,
-    name: &str,
-    chunk_content: &str,
-) {
+async fn install_corpus(indexes_dir: &std::path::Path, id: &str, name: &str, chunk_content: &str) {
     let path = indexes_dir.join(id);
     let index = CorpusIndex::create(
         &path,
@@ -250,13 +243,8 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
         members: members_b,
         peers: vec![],
     };
-    let state_b = AppState::new_with_platform_and_engine(
-        id_b,
-        mesh_b,
-        store_b,
-        app_registry_b,
-        None,
-    );
+    let state_b =
+        AppState::new_with_platform_and_engine(id_b, mesh_b, store_b, app_registry_b, None);
     let addr_b = spawn_router(client_router(state_b.clone())).await;
 
     // === Client request ===
@@ -318,8 +306,7 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
         .as_str()
         .expect("result rows have a content field");
     assert!(
-        first_content.contains("Compatibilism")
-            || first_content.contains("compatibilism"),
+        first_content.contains("Compatibilism") || first_content.contains("compatibilism"),
         "first result should carry A's installed chunk content; got: {first_content:?}"
     );
 }

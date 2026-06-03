@@ -130,8 +130,12 @@ pub enum MessageContent {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ResponsesContentPart {
-    InputText { text: String },
-    OutputText { text: String },
+    InputText {
+        text: String,
+    },
+    OutputText {
+        text: String,
+    },
     #[serde(other)]
     Other,
 }
@@ -246,10 +250,8 @@ mod tests {
 
     #[test]
     fn deserialize_string_input() {
-        let req: ResponsesRequest = serde_json::from_str(
-            r#"{"model":"x","input":"hello"}"#,
-        )
-        .unwrap();
+        let req: ResponsesRequest =
+            serde_json::from_str(r#"{"model":"x","input":"hello"}"#).unwrap();
         match req.input {
             ResponsesInput::Text(s) => assert_eq!(s, "hello"),
             _ => panic!("expected text input"),

@@ -22,9 +22,7 @@ use async_trait::async_trait;
 use tauri::Emitter;
 
 use sovereign_core::traits::RoutingEventSink;
-use sovereign_core::types::{
-    ClarificationRequest, InterpretationProposed, TurnNarration,
-};
+use sovereign_core::types::{ClarificationRequest, InterpretationProposed, TurnNarration};
 
 /// Emits the three routing events to the frontend via `AppHandle::emit`.
 /// Event names intentionally match the strings the Svelte listener

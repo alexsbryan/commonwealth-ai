@@ -41,12 +41,11 @@ impl Tool for RecipeWriteTool {
         ToolDescriptor {
             id: "recipe_write".into(),
             name: "RecipeWrite".into(),
-            description:
-                "Write a recipe TOML to ~/.sovereign/recipes/<id>/recipe.toml. \
+            description: "Write a recipe TOML to ~/.sovereign/recipes/<id>/recipe.toml. \
                  Creates parent directories if needed. ALWAYS read an existing \
                  example recipe first (RecipeRead) so the new recipe matches \
                  the schema; the validator will reject malformed shapes."
-                    .into(),
+                .into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -64,10 +63,9 @@ impl Tool for RecipeWriteTool {
                 "required": ["path", "content"],
             }),
             examples: vec![ToolExample {
-                situation:
-                    "Draft a SEC investigation recipe based on patterns observed \
+                situation: "Draft a SEC investigation recipe based on patterns observed \
                      in an existing one."
-                        .into(),
+                    .into(),
                 call: serde_json::json!({
                     "path": "sec-ai-investigation",
                     "content": "[corpus]\nid = \"sec-ai-investigation\"\n…"
@@ -91,37 +89,25 @@ impl Tool for RecipeWriteTool {
         vec![Permission::RecipeAuthoring]
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let raw_path = params
             .get("path")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::InvalidInput("RecipeWriteTool requires `path`".into())
-            })?;
+            .ok_or_else(|| Error::InvalidInput("RecipeWriteTool requires `path`".into()))?;
         let content = params
             .get("content")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::InvalidInput("RecipeWriteTool requires `content`".into())
-            })?;
+            .ok_or_else(|| Error::InvalidInput("RecipeWriteTool requires `content`".into()))?;
 
         let resolved = resolve_recipe_path(raw_path, self.recipes_dir.as_ref())?;
         if let Some(parent) = resolved.parent() {
             fs::create_dir_all(parent).map_err(|e| {
-                Error::InvalidInput(format!(
-                    "failed to create parent {}: {e}",
-                    parent.display()
-                ))
+                Error::InvalidInput(format!("failed to create parent {}: {e}", parent.display()))
             })?;
         }
         let part = resolved.with_extension("toml.part");
-        fs::write(&part, content).map_err(|e| {
-            Error::InvalidInput(format!("failed to write {}: {e}", part.display()))
-        })?;
+        fs::write(&part, content)
+            .map_err(|e| Error::InvalidInput(format!("failed to write {}: {e}", part.display())))?;
         fs::rename(&part, &resolved).map_err(|e| {
             Error::InvalidInput(format!(
                 "failed to commit {} → {}: {e}",

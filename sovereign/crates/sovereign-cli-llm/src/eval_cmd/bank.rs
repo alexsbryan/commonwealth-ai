@@ -127,9 +127,9 @@ impl Question {
     pub fn default_expected_intent(&self) -> ExpectedIntent {
         match self.category.as_str() {
             "factual_recall" => ExpectedIntent::Exact("knowledge_query"),
-            "multi_article_synthesis"
-            | "causal_reasoning"
-            | "contested" => ExpectedIntent::Exact("deep_query"),
+            "multi_article_synthesis" | "causal_reasoning" | "contested" => {
+                ExpectedIntent::Exact("deep_query")
+            }
             // `comparative` is the bounded two-entity contrast shape
             // — split off from DeepQuery in the comparison-pre-check
             // landed in the v20 routing pass. Per-question override
@@ -142,9 +142,7 @@ impl Question {
             "conation" => ExpectedIntent::Exact("conation_query"),
             "commissive" => ExpectedIntent::Exact("commissive_query"),
             "expressive" => ExpectedIntent::Exact("expressive_query"),
-            "boundary_coverage" => {
-                ExpectedIntent::AnyOf(&["knowledge_query", "deep_query"])
-            }
+            "boundary_coverage" => ExpectedIntent::AnyOf(&["knowledge_query", "deep_query"]),
             _ => ExpectedIntent::AnyOf(&["knowledge_query", "deep_query"]),
         }
     }
@@ -174,8 +172,7 @@ impl ExpectedIntent {
 }
 
 pub fn load_bank(path: &Path) -> Result<EvalBank, String> {
-    let bytes =
-        fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let bytes = fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     let bank: EvalBank =
         toml::from_str(&bytes).map_err(|e| format!("parse {}: {e}", path.display()))?;
     validate(&bank)?;
@@ -239,8 +236,7 @@ impl Thread {
 }
 
 pub fn load_thread_bank(path: &Path) -> Result<EvalThreadBank, String> {
-    let bytes =
-        fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let bytes = fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     let bank: EvalThreadBank =
         toml::from_str(&bytes).map_err(|e| format!("parse {}: {e}", path.display()))?;
     validate_threads(&bank)?;
@@ -271,10 +267,7 @@ fn validate_threads(bank: &EvalThreadBank) -> Result<(), String> {
         }
         for (i, turn) in th.turns.iter().enumerate() {
             if turn.question.trim().is_empty() {
-                return Err(format!(
-                    "thread `{}` turn {i} has empty `question`",
-                    th.id
-                ));
+                return Err(format!("thread `{}` turn {i} has empty `question`", th.id));
             }
             if turn.expected_facts.is_empty() && turn.expected_sources.is_empty() {
                 return Err(format!(
@@ -321,12 +314,7 @@ fn validate(bank: &EvalBank) -> Result<(), String> {
         //     authoring where the author hasn't seen the corpus's
         //     atom inventory). See sovereign/bench/conversation/
         //     README.md.
-        let qualitative_archetypes = [
-            "negative",
-            "cross_conv_synth",
-            "trend",
-            "temporal_slice",
-        ];
+        let qualitative_archetypes = ["negative", "cross_conv_synth", "trend", "temporal_slice"];
         if !qualitative_archetypes.contains(&q.category.as_str())
             && q.expected_facts.is_empty()
             && q.expected_sources.is_empty()
@@ -448,7 +436,10 @@ expected_sources = ["Albert Einstein"]
         assert_eq!(b.threads[0].turns.len(), 2);
         assert_eq!(b.threads[0].turn_id(1), "t1_t1");
         let agg = b.threads[0].aggregated_expected_facts();
-        assert_eq!(agg, vec!["physicist".to_string(), "photoelectric".to_string()]);
+        assert_eq!(
+            agg,
+            vec!["physicist".to_string(), "photoelectric".to_string()]
+        );
     }
 
     #[test]

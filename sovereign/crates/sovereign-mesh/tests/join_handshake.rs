@@ -47,12 +47,8 @@ async fn spawn_internal_router(state: AppState) -> SocketAddr {
 fn build_founder() -> (AppState, NodeId, String, Arc<AtomicUsize>) {
     let founder_id = NodeId::from_u128(0xF0F0_F0F0_F0F0_F0F0);
     let founder_addr: SocketAddr = "127.0.0.1:9742".parse().unwrap();
-    let (mesh, join_key) = membership::init_mesh_with_node_id(
-        "Test Mesh",
-        "Founder",
-        vec![founder_addr],
-        founder_id,
-    );
+    let (mesh, join_key) =
+        membership::init_mesh_with_node_id("Test Mesh", "Founder", vec![founder_addr], founder_id);
     let state = AppState::new(founder_id, mesh);
 
     let counter = Arc::new(AtomicUsize::new(0));
@@ -100,10 +96,7 @@ async fn valid_join_key_admits_new_member_and_fires_hook() {
     let assigned_id_value = body
         .get("assigned_node_id")
         .expect("response must carry assigned_node_id");
-    assert!(
-        !assigned_id_value.is_null(),
-        "assigned_node_id present"
-    );
+    assert!(!assigned_id_value.is_null(), "assigned_node_id present");
 
     // The returned mesh snapshot must contain both members. MeshWire
     // flattens to `members: Vec<MemberRecord>` for transport.
@@ -119,8 +112,14 @@ async fn valid_join_key_admits_new_member_and_fires_hook() {
         .iter()
         .filter_map(|m| m.get("name").and_then(|n| n.as_str()))
         .collect();
-    assert!(names.contains(&"Founder"), "founder absent in response: {names:?}");
-    assert!(names.contains(&"Joiner"), "joiner absent in response: {names:?}");
+    assert!(
+        names.contains(&"Founder"),
+        "founder absent in response: {names:?}"
+    );
+    assert!(
+        names.contains(&"Joiner"),
+        "joiner absent in response: {names:?}"
+    );
 
     // The founder's live AppState mesh must now contain the joiner
     // — proves the handshake actually mutated state, not just
@@ -252,12 +251,10 @@ async fn joiner_can_adopt_founder_mesh_after_handshake() {
     // round-trip-equivalence check that catches drift between
     // `Mesh` and `MeshWire`.
     let live = founder_state.inner.mesh.read().await;
-    let mut live_names: Vec<&str> =
-        live.members.values().map(|m| m.name.as_str()).collect();
+    let mut live_names: Vec<&str> = live.members.values().map(|m| m.name.as_str()).collect();
     live_names.sort();
     assert_eq!(
-        live_names,
-        sorted,
+        live_names, sorted,
         "founder's AppState mesh must match the wire snapshot served to the joiner"
     );
 
@@ -280,8 +277,7 @@ async fn joiner_can_adopt_founder_mesh_after_handshake() {
     // proves the wire-shape consumption path doesn't panic on the
     // adopted mesh.
     let wire_members: Vec<commonwealth_core::mesh::MemberRecord> =
-        serde_json::from_value(body["mesh"]["members"].clone())
-            .expect("members must deserialise");
+        serde_json::from_value(body["mesh"]["members"].clone()).expect("members must deserialise");
     let mut hm = HashMap::new();
     for m in wire_members {
         hm.insert(m.node_id, m);
@@ -289,8 +285,7 @@ async fn joiner_can_adopt_founder_mesh_after_handshake() {
     let joiner_mesh = Mesh {
         id: serde_json::from_value(body["mesh"]["id"].clone()).unwrap(),
         name: body["mesh"]["name"].as_str().unwrap().to_string(),
-        join_key_hash: serde_json::from_value(body["mesh"]["join_key_hash"].clone())
-            .unwrap(),
+        join_key_hash: serde_json::from_value(body["mesh"]["join_key_hash"].clone()).unwrap(),
         members: hm,
         peers: serde_json::from_value(body["mesh"]["peers"].clone()).unwrap_or_default(),
     };

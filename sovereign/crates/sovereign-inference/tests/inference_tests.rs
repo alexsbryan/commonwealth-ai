@@ -87,7 +87,13 @@ fn health_tracker_mixed_success_and_failure() {
 
 // ─── BackendSelector Tests ─────────────────────────────────────
 
-fn make_backend(name: &str, priority: u32, cost: Option<f64>, healthy: bool, latency: u64) -> BackendEntry {
+fn make_backend(
+    name: &str,
+    priority: u32,
+    cost: Option<f64>,
+    healthy: bool,
+    latency: u64,
+) -> BackendEntry {
     let health = Arc::new(HealthTracker::new());
     if latency > 0 {
         health.record_success(latency);
@@ -119,7 +125,10 @@ async fn priority_selector_picks_lowest_priority() {
         make_backend("mid", 5, None, true, 50),
     ];
 
-    let idx = PrioritySelector.select(&dummy_request(), &backends).await.unwrap();
+    let idx = PrioritySelector
+        .select(&dummy_request(), &backends)
+        .await
+        .unwrap();
     assert_eq!(backends[idx].name, "low");
 }
 
@@ -130,7 +139,10 @@ async fn priority_selector_skips_unhealthy() {
         make_backend("second", 2, None, true, 50),
     ];
 
-    let idx = PrioritySelector.select(&dummy_request(), &backends).await.unwrap();
+    let idx = PrioritySelector
+        .select(&dummy_request(), &backends)
+        .await
+        .unwrap();
     assert_eq!(backends[idx].name, "second");
 }
 
@@ -154,7 +166,10 @@ async fn cost_selector_prefers_free() {
         make_backend("local", 2, None, true, 50),
     ];
 
-    let idx = CostMinimizingSelector.select(&dummy_request(), &backends).await.unwrap();
+    let idx = CostMinimizingSelector
+        .select(&dummy_request(), &backends)
+        .await
+        .unwrap();
     assert_eq!(backends[idx].name, "local");
 }
 
@@ -165,7 +180,10 @@ async fn cost_selector_picks_cheapest() {
         make_backend("cheap", 2, Some(0.01), true, 50),
     ];
 
-    let idx = CostMinimizingSelector.select(&dummy_request(), &backends).await.unwrap();
+    let idx = CostMinimizingSelector
+        .select(&dummy_request(), &backends)
+        .await
+        .unwrap();
     assert_eq!(backends[idx].name, "cheap");
 }
 
@@ -179,7 +197,10 @@ async fn latency_selector_picks_fastest() {
         make_backend("mid", 3, None, true, 100),
     ];
 
-    let idx = LatencyMinimizingSelector.select(&dummy_request(), &backends).await.unwrap();
+    let idx = LatencyMinimizingSelector
+        .select(&dummy_request(), &backends)
+        .await
+        .unwrap();
     assert_eq!(backends[idx].name, "fast");
 }
 
@@ -192,7 +213,10 @@ async fn local_first_prefers_local() {
         make_backend("local", 2, None, true, 100),
     ];
 
-    let idx = LocalFirstSelector.select(&dummy_request(), &backends).await.unwrap();
+    let idx = LocalFirstSelector
+        .select(&dummy_request(), &backends)
+        .await
+        .unwrap();
     assert_eq!(backends[idx].name, "local");
 }
 
@@ -203,7 +227,10 @@ async fn local_first_falls_back_to_remote() {
         make_backend("local", 2, None, false, 0),
     ];
 
-    let idx = LocalFirstSelector.select(&dummy_request(), &backends).await.unwrap();
+    let idx = LocalFirstSelector
+        .select(&dummy_request(), &backends)
+        .await
+        .unwrap();
     assert_eq!(backends[idx].name, "remote");
 }
 
@@ -241,13 +268,7 @@ fn make_model(id: &str, caps: &[(Capability, u8)], context: u32) -> ProviderMode
     .max()
     .unwrap_or(0);
     let affinity = (best as f32 / 4.0).clamp(0.0, 1.0);
-    let claim = CapabilityClaim::new(
-        hint,
-        LatencyClass::Normal,
-        context,
-        context / 4,
-        affinity,
-    );
+    let claim = CapabilityClaim::new(hint, LatencyClass::Normal, context, context / 4, affinity);
     ProviderModel {
         id: id.to_string(),
         base_model: None,
@@ -320,12 +341,32 @@ async fn capability_selector_respects_local_only() {
 
 #[tokio::test]
 async fn capability_selector_picks_best_match() {
-    let code_model = make_model("coder", &[(Capability::Code, 4), (Capability::General, 2)], 32768);
-    let general_model = make_model("general", &[(Capability::General, 3), (Capability::Analysis, 3)], 32768);
+    let code_model = make_model(
+        "coder",
+        &[(Capability::Code, 4), (Capability::General, 2)],
+        32768,
+    );
+    let general_model = make_model(
+        "general",
+        &[(Capability::General, 3), (Capability::Analysis, 3)],
+        32768,
+    );
 
     let backends = vec![
-        make_oicp_backend("code-backend", 2, Some(make_manifest(vec![code_model])), false).await,
-        make_oicp_backend("general-backend", 1, Some(make_manifest(vec![general_model])), false).await,
+        make_oicp_backend(
+            "code-backend",
+            2,
+            Some(make_manifest(vec![code_model])),
+            false,
+        )
+        .await,
+        make_oicp_backend(
+            "general-backend",
+            1,
+            Some(make_manifest(vec![general_model])),
+            false,
+        )
+        .await,
     ];
 
     // Request asks for general work → general-backend's claim
@@ -354,7 +395,13 @@ async fn capability_selector_filters_by_required() {
 
     let backends = vec![
         make_oicp_backend("weak-be", 1, Some(make_manifest(vec![weak_model])), false).await,
-        make_oicp_backend("strong-be", 2, Some(make_manifest(vec![strong_model])), false).await,
+        make_oicp_backend(
+            "strong-be",
+            2,
+            Some(make_manifest(vec![strong_model])),
+            false,
+        )
+        .await,
     ];
 
     // Request asks for code hint. weak_model has Code:1 (below the

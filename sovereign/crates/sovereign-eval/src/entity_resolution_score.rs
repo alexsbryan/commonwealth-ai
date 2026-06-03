@@ -110,9 +110,7 @@ pub fn b_cubed(predicted: &Clustering, gold: &Clustering) -> B3Outcome {
     for &m in &aligned {
         let pc = predicted.get(m).expect("aligned key");
         let gc = gold.get(m).expect("aligned key");
-        let p_members = predicted_cluster_members
-            .get(pc)
-            .expect("cluster present");
+        let p_members = predicted_cluster_members.get(pc).expect("cluster present");
         let g_members = gold_cluster_members.get(gc).expect("cluster present");
         let intersect = p_members.intersection(g_members).count();
         p_sum += intersect as f64 / p_members.len() as f64;
@@ -151,10 +149,7 @@ pub struct PairwiseOutcome {
 /// number of mentions — fine for benches under a few thousand
 /// mentions; the operator should bucket by chunk for larger sets.
 pub fn pairwise(predicted: &Clustering, gold: &Clustering) -> PairwiseOutcome {
-    let aligned: Vec<&String> = predicted
-        .keys()
-        .filter(|k| gold.contains_key(*k))
-        .collect();
+    let aligned: Vec<&String> = predicted.keys().filter(|k| gold.contains_key(*k)).collect();
     let n = aligned.len();
     if n < 2 {
         return PairwiseOutcome {
@@ -271,7 +266,11 @@ mod tests {
         // Perfect precision (every singleton trivially "purely
         // contains" its one gold member). Recall floor at 1/3 (each
         // mention recovers only itself out of 3 gold-cluster members).
-        assert!((r.precision - 1.0).abs() < 1e-9, "precision {}", r.precision);
+        assert!(
+            (r.precision - 1.0).abs() < 1e-9,
+            "precision {}",
+            r.precision
+        );
         assert!((r.recall - 1.0 / 3.0).abs() < 1e-9, "recall {}", r.recall);
         assert!(r.f1 < 0.6);
     }
@@ -279,14 +278,8 @@ mod tests {
     #[test]
     fn over_merged_cluster_drops_precision() {
         // Predicted merges Lay + Skilling into one cluster.
-        let predicted = clustering(&[
-            ("Ken Lay", "C1"),
-            ("Jeff Skilling", "C1"),
-        ]);
-        let gold = clustering(&[
-            ("Ken Lay", "G1"),
-            ("Jeff Skilling", "G2"),
-        ]);
+        let predicted = clustering(&[("Ken Lay", "C1"), ("Jeff Skilling", "C1")]);
+        let gold = clustering(&[("Ken Lay", "G1"), ("Jeff Skilling", "G2")]);
         let r = b_cubed(&predicted, &gold);
         // Per-mention precision: both have cluster size 2, intersect
         // 1 → 0.5 each → mean 0.5.

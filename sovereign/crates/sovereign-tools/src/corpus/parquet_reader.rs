@@ -33,12 +33,10 @@ impl ParquetParser {
 }
 
 impl CorpusParser for ParquetParser {
-    fn parse(
-        &self,
-        source_path: &Path,
-    ) -> Result<Box<dyn Iterator<Item = Result<DocumentChunk>>>> {
-        let file = File::open(source_path)
-            .map_err(|e| Error::Storage(format!("Failed to open {}: {e}", source_path.display())))?;
+    fn parse(&self, source_path: &Path) -> Result<Box<dyn Iterator<Item = Result<DocumentChunk>>>> {
+        let file = File::open(source_path).map_err(|e| {
+            Error::Storage(format!("Failed to open {}: {e}", source_path.display()))
+        })?;
 
         let builder = ParquetRecordBatchReaderBuilder::try_new(file)
             .map_err(|e| Error::Storage(format!("Failed to read Parquet: {e}")))?;
@@ -178,10 +176,10 @@ fn slug(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use arrow::array::StringArray;
     use arrow::datatypes::{Field, Schema};
     use parquet::arrow::ArrowWriter;
+    use std::sync::Arc;
 
     fn make_test_parquet(path: &Path) {
         let schema = Arc::new(Schema::new(vec![
@@ -194,17 +192,11 @@ mod tests {
             "Epistemology is the branch of philosophy concerned with the nature and scope of knowledge.",
             "",  // empty row should be skipped
         ]);
-        let category = StringArray::from(vec![
-            Some("Bergson"),
-            Some("Epistemology"),
-            Some("Empty"),
-        ]);
+        let category =
+            StringArray::from(vec![Some("Bergson"), Some("Epistemology"), Some("Empty")]);
 
-        let batch = RecordBatch::try_new(
-            schema.clone(),
-            vec![Arc::new(text), Arc::new(category)],
-        )
-        .unwrap();
+        let batch =
+            RecordBatch::try_new(schema.clone(), vec![Arc::new(text), Arc::new(category)]).unwrap();
 
         let file = File::create(path).unwrap();
         let mut writer = ArrowWriter::try_new(file, schema, None).unwrap();

@@ -15,17 +15,19 @@ use futures::Stream;
 use tokio::sync::Mutex;
 
 use crate::llama::cpp::context::params::{LlamaContextParams, LlamaContextType};
-use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::llama_backend::LlamaBackend;
 use crate::llama::cpp::llama_batch::LlamaBatch;
 use crate::llama::cpp::model::params::LlamaModelParams;
 use crate::llama::cpp::model::{AddBos, LlamaChatMessage, LlamaModel};
+use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
 use sovereign_core::error::Error;
-use sovereign_core::model_family::{EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl};
+use sovereign_core::model_family::{
+    EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
+};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::*;
 use sovereign_core::Result;
@@ -200,9 +202,8 @@ impl SlotContext {
                     .into(),
             ));
         };
-        let rebuilt = MtpSession::new(&*target_ctx, &*draft_ctx, 1, *n_draft_max).map_err(|e| {
-            Error::Inference(format!("MTP session rebuild failed: {e:?}"))
-        })?;
+        let rebuilt = MtpSession::new(&*target_ctx, &*draft_ctx, 1, *n_draft_max)
+            .map_err(|e| Error::Inference(format!("MTP session rebuild failed: {e:?}")))?;
         // Drop the old session *after* the rebuild succeeds. Holding
         // two sessions pointing at the same contexts simultaneously
         // would be UB inside `common_speculative_*`, so we use
@@ -239,27 +240,23 @@ impl SlotContext {
     /// MTP-side failures, so this branch shouldn't reach a non-MTP
     /// slot).
     fn demote_to_single_token(&mut self, model_id: &str) -> Result<()> {
-        let rebuild = self
-            .mtp_rebuild
-            .as_ref()
-            .ok_or_else(|| {
-                Error::Inference(
-                    "demote_to_single_token: slot has no MtpRebuildParams (was it ever built \
+        let rebuild = self.mtp_rebuild.as_ref().ok_or_else(|| {
+            Error::Inference(
+                "demote_to_single_token: slot has no MtpRebuildParams (was it ever built \
                      as speculative?)"
-                        .into(),
-                )
-            })?;
+                    .into(),
+            )
+        })?;
         // Materialise the new target FIRST so a rebuild failure
         // surfaces before we discard the old (mutated, but still
         // serving) state. If `build_target_ctx_for_slot` fails the
         // slot is wedged anyway, but at least the error is loud and
         // diagnosable rather than silent.
-        let new_target = build_target_ctx_for_slot(&self._model, rebuild)
-            .map_err(|e| {
-                Error::Inference(format!(
-                    "demote_to_single_token: failed to rebuild target ctx: {e}"
-                ))
-            })?;
+        let new_target = build_target_ctx_for_slot(&self._model, rebuild).map_err(|e| {
+            Error::Inference(format!(
+                "demote_to_single_token: failed to rebuild target ctx: {e}"
+            ))
+        })?;
         // Replace the mode in one step. Dropping the old
         // `Speculative` variant runs the destructors for
         // `target_ctx`, `draft_ctx`, and `session` in declaration
@@ -331,8 +328,7 @@ fn build_target_ctx_for_slot(
     // never propagated into a fallback SingleToken ctx.
     let _ = params.n_rs_seq;
     unsafe {
-        let model_ref: &'static LlamaModel =
-            &*(Arc::as_ptr(model) as *const LlamaModel);
+        let model_ref: &'static LlamaModel = &*(Arc::as_ptr(model) as *const LlamaModel);
         model_ref
             .new_context(&params.backend, ctx_params)
             .map_err(|e| Error::Inference(format!("Failed to create target context: {e}")))
@@ -405,10 +401,7 @@ fn try_upgrade_to_speculative(
     n_draft_max: i32,
 ) -> std::result::Result<
     SlotInferenceMode,
-    (
-        crate::llama::cpp::context::LlamaContext<'static>,
-        Error,
-    ),
+    (crate::llama::cpp::context::LlamaContext<'static>, Error),
 > {
     let mut target_ctx = target;
     let draft_ctx_res = unsafe {
@@ -516,7 +509,10 @@ pub(crate) struct GenerationOutcome {
 /// boundary. Single-token path uses its real exit-branch signal
 /// instead — see `GenerationOutcome` construction at the end of the
 /// single-token loop in `generate_sync`.
-pub(crate) fn finish_reason_from_counts(request: &CompletionRequest, completion_tokens: usize) -> FinishReason {
+pub(crate) fn finish_reason_from_counts(
+    request: &CompletionRequest,
+    completion_tokens: usize,
+) -> FinishReason {
     match request.max_tokens {
         Some(budget) if completion_tokens >= budget => FinishReason::Length,
         _ => FinishReason::Stop,
@@ -612,10 +608,7 @@ pub(crate) struct PrimarySiblingPool {
 
 impl PrimarySiblingPool {
     pub(crate) fn pick(&self) -> (usize, Arc<ModelSlot>) {
-        let i = self
-            .next
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            % self.slots.len();
+        let i = self.next.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % self.slots.len();
         (i, Arc::clone(&self.slots[i]))
     }
 
@@ -652,8 +645,7 @@ impl ModelSlot {
             .unwrap_or(false);
         let effective_gpu_layers = if force_cpu { 0 } else { n_gpu_layers };
 
-        let model_params =
-            LlamaModelParams::default().with_n_gpu_layers(effective_gpu_layers);
+        let model_params = LlamaModelParams::default().with_n_gpu_layers(effective_gpu_layers);
 
         let model = LlamaModel::load_from_file(backend, model_path, &model_params)
             .map_err(|e| Error::Inference(format!("Failed to load model: {e}")))?;
@@ -685,9 +677,8 @@ impl ModelSlot {
         // fallback to CPU is what made the original embed regression
         // invisible. Always log the actual backend so operators can
         // spot a silent fallback.
-        let wants_gpu = !force_cpu
-            && cfg!(any(target_os = "macos", target_os = "linux"))
-            && n_gpu_layers > 0;
+        let wants_gpu =
+            !force_cpu && cfg!(any(target_os = "macos", target_os = "linux")) && n_gpu_layers > 0;
         if force_cpu {
             tracing::warn!(
                 model_id = %model_id,
@@ -801,22 +792,21 @@ impl ModelSlot {
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
                 .with_offload_kqv(gpu)
-                // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
-                // **2026-05-17 KV-Q8 experiment (REVERTED).** Tried
-                // `with_type_k(Q8_0)` + `with_type_v(Q8_0)` to halve
-                // KV bandwidth. SEP profile: total wall -5.6% (within
-                // run variance), Phase 1 -9% throughput regression
-                // (the dominant phase). Net negative on the workload
-                // that matters. Likely the per-token quant/dequant
-                // overhead on Vulkan eats the bandwidth savings.
-                // Reverted to F16 KV. See git history for the
-                // experiment.
+            // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
+            // **2026-05-17 KV-Q8 experiment (REVERTED).** Tried
+            // `with_type_k(Q8_0)` + `with_type_v(Q8_0)` to halve
+            // KV bandwidth. SEP profile: total wall -5.6% (within
+            // run variance), Phase 1 -9% throughput regression
+            // (the dominant phase). Net negative on the workload
+            // that matters. Likely the per-token quant/dequant
+            // overhead on Vulkan eats the bandwidth savings.
+            // Reverted to F16 KV. See git history for the
+            // experiment.
         };
 
         let (ctx, used_gpu) = match if wants_gpu {
             unsafe {
-                let model_ref: &'static LlamaModel =
-                    &*(Arc::as_ptr(&model) as *const LlamaModel);
+                let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model) as *const LlamaModel);
                 model_ref
                     .new_context(backend, build_ctx_params(true))
                     .map(|c| (c, true))
@@ -838,9 +828,7 @@ impl ModelSlot {
                         &*(Arc::as_ptr(&model) as *const LlamaModel);
                     model_ref
                         .new_context(backend, build_ctx_params(false))
-                        .map_err(|e| {
-                            Error::Inference(format!("Failed to create context: {e}"))
-                        })?
+                        .map_err(|e| Error::Inference(format!("Failed to create context: {e}")))?
                 };
                 (ctx, false)
             }
@@ -890,7 +878,11 @@ impl ModelSlot {
             n_threads: n_threads as i32,
             n_batch: context_size,
             n_ubatch: 512,
-            n_rs_seq: if is_mtp_model { Some(mtp_n_rs_seq) } else { None },
+            n_rs_seq: if is_mtp_model {
+                Some(mtp_n_rs_seq)
+            } else {
+                None
+            },
             used_gpu,
         };
         let mode: SlotInferenceMode = if is_mtp_model {
@@ -903,13 +895,7 @@ impl ModelSlot {
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
                 .with_offload_kqv(used_gpu);
-            match try_upgrade_to_speculative(
-                ctx,
-                &model,
-                backend,
-                draft_params,
-                n_draft_max,
-            ) {
+            match try_upgrade_to_speculative(ctx, &model, backend, draft_params, n_draft_max) {
                 Ok(mode) => {
                     tracing::info!(
                         model_id = %model_id,
@@ -935,8 +921,8 @@ impl ModelSlot {
                          lacks MTP heads, or upstream rejected the pairing at \
                          common_speculative_init.)"
                     );
-                    let fresh = build_target_ctx_for_slot(&model, &rebuild_params)
-                        .map_err(|e| {
+                    let fresh =
+                        build_target_ctx_for_slot(&model, &rebuild_params).map_err(|e| {
                             Error::Inference(format!(
                                 "Failed to rebuild target ctx after MTP upgrade failure: {e}"
                             ))
@@ -995,9 +981,7 @@ impl ModelSlot {
         // the loaded size can differ enough to swing budget
         // accounting on tight hardware.
         let loaded_size = model.size();
-        let file_size = std::fs::metadata(model_path)
-            .map(|m| m.len())
-            .unwrap_or(0);
+        let file_size = std::fs::metadata(model_path).map(|m| m.len()).unwrap_or(0);
         let size_bytes = if loaded_size > 0 {
             loaded_size
         } else {
@@ -1071,13 +1055,12 @@ impl ModelSlot {
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
                 .with_offload_kqv(gpu)
-                // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
+            // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
         };
 
         let (ctx, used_gpu) = match if wants_gpu {
             unsafe {
-                let model_ref: &'static LlamaModel =
-                    &*(Arc::as_ptr(&model) as *const LlamaModel);
+                let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model) as *const LlamaModel);
                 model_ref
                     .new_context(backend, build_ctx_params(true))
                     .map(|c| (c, true))
@@ -1100,9 +1083,7 @@ impl ModelSlot {
                     model_ref
                         .new_context(backend, build_ctx_params(false))
                         .map_err(|e| {
-                            Error::Inference(format!(
-                                "FastShort context creation failed: {e}"
-                            ))
+                            Error::Inference(format!("FastShort context creation failed: {e}"))
                         })?
                 };
                 (ctx, false)
@@ -1208,8 +1189,7 @@ impl ModelSlot {
                     // MTP would require touching the draft+verify loop's
                     // exit branches; deferred until the verify-side
                     // acceptance-rate work settles.
-                    let finish_reason =
-                        finish_reason_from_counts(request, completion_tokens);
+                    let finish_reason = finish_reason_from_counts(request, completion_tokens);
                     return Ok(GenerationOutcome {
                         text,
                         prompt_tokens,
@@ -1313,8 +1293,7 @@ impl ModelSlot {
         //    "qwopus" — those decisions are now declared once on the
         //    family, not re-derived from filenames at every dispatch.
         let arch_says_recurrent = is_recurrent_arch(&slot_ctx.arch);
-        let quirks_say_recurrent =
-            slot_ctx.arch.is_empty() && quirks.has_recurrent_layers;
+        let quirks_say_recurrent = slot_ctx.arch.is_empty() && quirks.has_recurrent_layers;
         let speculative_active = slot_ctx.is_speculative();
         let prefix_cache_safe =
             !speculative_active && !arch_says_recurrent && !quirks_say_recurrent;
@@ -1357,11 +1336,7 @@ impl ModelSlot {
 
         let n_batch = ctx.n_batch() as usize;
         let n_ctx = ctx.n_ctx() as usize;
-        let max_tokens = clamp_max_tokens(
-            request.max_tokens,
-            tokens.len(),
-            n_ctx,
-        )?;
+        let max_tokens = clamp_max_tokens(request.max_tokens, tokens.len(), n_ctx)?;
 
         // **Prefix caching.** Compute the longest common prefix
         // between what's currently in the KV cache (cached_tokens)
@@ -1473,8 +1448,7 @@ impl ModelSlot {
         // (typically 100s of ms in the pathological state) past the
         // deadline before we clean up and return.
         let deadline_secs = inference_deadline_secs();
-        let deadline = Instant::now()
-            + std::time::Duration::from_secs(deadline_secs);
+        let deadline = Instant::now() + std::time::Duration::from_secs(deadline_secs);
         let started_at = Instant::now();
 
         // Think-block budget forcing: track position inside <think>…</think>
@@ -1519,8 +1493,7 @@ impl ModelSlot {
         // markdown bullet → false-positive stop at n_generated=87,
         // observed 2026-05-21. The marker stop (`</tool_call>`,
         // shape A) stays unconditional below.
-        let tools_grammar_locked =
-            tools_present && request.structured_output.is_some();
+        let tools_grammar_locked = tools_present && request.structured_output.is_some();
         let mut tc_json_depth = 0i32;
         let mut tc_json_in_string = false;
         let mut tc_json_escape_next = false;
@@ -1568,8 +1541,7 @@ impl ModelSlot {
         // (2048+) and covers all realistic JSON-skeleton runs we've
         // measured (typically 3-15 tokens).
         let jump_fwd_enabled = jump_fwd_enabled_from_env(|k| std::env::var(k).ok());
-        let jump_fwd_t2_enabled =
-            jump_fwd_t2_enabled_from_env(|k| std::env::var(k).ok());
+        let jump_fwd_t2_enabled = jump_fwd_t2_enabled_from_env(|k| std::env::var(k).ok());
         const MAX_JUMP_FWD_RUN: usize = 32;
         const MAX_FORCED_BYTES: usize = 64;
         let mut jump_fwd_n: usize = 0;
@@ -1959,7 +1931,10 @@ impl ModelSlot {
             }
 
             // Budget forcing: inject </think> if the think block runs too long.
-            if in_think && think_tokens >= request.think_budget.unwrap_or(THINK_BUDGET) && !think_budget_fired {
+            if in_think
+                && think_tokens >= request.think_budget.unwrap_or(THINK_BUDGET)
+                && !think_budget_fired
+            {
                 think_budget_fired = true;
                 let force = "\n</think>\n\n";
                 if let Ok(close_tokens) = model.str_to_token(force, AddBos::Never) {
@@ -2263,11 +2238,8 @@ impl ModelSlot {
         // requests out), so the sampler behaves as a plain chain
         // of {temp/top-p/top-k/penalties} per the request quirks.
         let mut sampler = build_sampler(model, request, quirks);
-        let mut last_token = sampler.sample(
-            &*target_ctx,
-            prefill.n_tokens() - 1,
-            SamplerRole::Explore,
-        );
+        let mut last_token =
+            sampler.sample(&*target_ctx, prefill.n_tokens() - 1, SamplerRole::Explore);
         sampler.accept(last_token);
 
         let mut output = String::new();
@@ -2285,8 +2257,7 @@ impl ModelSlot {
         // Jump-forward state. Reads same env gates as generate_sync so
         // the MTP path picks up the operating default automatically.
         let jump_fwd_enabled = jump_fwd_enabled_from_env(|k| std::env::var(k).ok());
-        let jump_fwd_t2_enabled =
-            jump_fwd_t2_enabled_from_env(|k| std::env::var(k).ok());
+        let jump_fwd_t2_enabled = jump_fwd_t2_enabled_from_env(|k| std::env::var(k).ok());
         const MAX_JUMP_FWD_RUN: usize = 32;
         const MAX_FORCED_BYTES: usize = 64;
         let mut jump_fwd_n: usize = 0;
@@ -2357,14 +2328,12 @@ impl ModelSlot {
             // exclusively here since on the MTP path we need the
             // full run length to make the threshold call.
             const MIN_FORCED_RUN_FOR_MTP: usize = 3;
-            let forced_peek: Vec<LlamaToken> = if jump_fwd_enabled
-                && jump_fwd_t2_enabled
-                && n_generated < max_tokens
-            {
-                sampler.forced_next_run(MAX_FORCED_BYTES)
-            } else {
-                Vec::new()
-            };
+            let forced_peek: Vec<LlamaToken> =
+                if jump_fwd_enabled && jump_fwd_t2_enabled && n_generated < max_tokens {
+                    sampler.forced_next_run(MAX_FORCED_BYTES)
+                } else {
+                    Vec::new()
+                };
             // Commit only when the run clears the threshold. Cap at
             // MAX_JUMP_FWD_RUN so the verify batch stays bounded.
             let mut forced_run: Vec<LlamaToken> = Vec::new();
@@ -2444,11 +2413,7 @@ impl ModelSlot {
                 // `verify.add(last_token, n_past, ...)` would then
                 // try to add a token at a position libllama already
                 // owns, surfacing as `Decode Error -1: n_tokens == 0`.
-                let next_token = sampler.sample(
-                    &*target_ctx,
-                    k as i32,
-                    SamplerRole::Explore,
-                );
+                let next_token = sampler.sample(&*target_ctx, k as i32, SamplerRole::Explore);
                 sampler.accept(next_token);
                 if !model.is_eog_token(next_token) {
                     let piece = model
@@ -2503,7 +2468,9 @@ impl ModelSlot {
             // positions clash on the second pass.
             draft_ctx
                 .clear_kv_cache_seq(Some(0), Some(n_past as u32), None)
-                .map_err(|e| Error::Inference(format!("MTP draft KV pre-verify rollback failed: {e:?}")))?;
+                .map_err(|e| {
+                    Error::Inference(format!("MTP draft KV pre-verify rollback failed: {e:?}"))
+                })?;
 
             target_ctx
                 .decode(&mut verify)
@@ -2526,11 +2493,8 @@ impl ModelSlot {
                 if next_token == *draft {
                     n_accepted = i + 1;
                     if (i + 1) < n_verify as usize {
-                        next_token = sampler.sample(
-                            &*target_ctx,
-                            (i + 1) as i32,
-                            SamplerRole::Explore,
-                        );
+                        next_token =
+                            sampler.sample(&*target_ctx, (i + 1) as i32, SamplerRole::Explore);
                         sampler.accept(next_token);
                     }
                 } else {
@@ -2552,10 +2516,14 @@ impl ModelSlot {
             if (n_accepted as i32) < drafts.len() as i32 {
                 target_ctx
                     .clear_kv_cache_seq(Some(0), Some(new_n_past as u32), None)
-                    .map_err(|e| Error::Inference(format!("MTP target KV rollback failed: {e:?}")))?;
+                    .map_err(|e| {
+                        Error::Inference(format!("MTP target KV rollback failed: {e:?}"))
+                    })?;
                 draft_ctx
                     .clear_kv_cache_seq(Some(0), Some(new_n_past as u32), None)
-                    .map_err(|e| Error::Inference(format!("MTP draft KV rollback failed: {e:?}")))?;
+                    .map_err(|e| {
+                        Error::Inference(format!("MTP draft KV rollback failed: {e:?}"))
+                    })?;
             }
 
             session
@@ -2641,7 +2609,6 @@ impl ModelSlot {
         Ok((output, tokens.len(), n_generated))
     }
 
-
     /// Multi-sequence batched autoregressive decode for short-call
     /// enrichment phases routed to the FastShort slot. Caller supplies
     /// up to the slot's `n_seq_max` requests; we run one packed
@@ -2698,7 +2665,9 @@ impl ModelSlot {
                     // diagnostic for any future batched-prefill
                     // failure mode. Gated by SOVEREIGN_FORENSIC=1.
                     let mut end = prompt.len().min(400);
-                    while end > 0 && !prompt.is_char_boundary(end) { end -= 1; }
+                    while end > 0 && !prompt.is_char_boundary(end) {
+                        end -= 1;
+                    }
                     tracing::warn!(
                         slot_idx = idx,
                         prompt_chars = prompt.len(),
@@ -2724,9 +2693,7 @@ impl ModelSlot {
         let max_outputs: Vec<usize> = requests
             .iter()
             .zip(tokenized.iter())
-            .map(|(r, toks)| {
-                clamp_max_tokens(r.max_tokens, toks.len(), n_ctx_per_seq)
-            })
+            .map(|(r, toks)| clamp_max_tokens(r.max_tokens, toks.len(), n_ctx_per_seq))
             .collect::<Result<_>>()?;
 
         // ── Prefill: pack every prompt into one batch ───────────────
@@ -2739,9 +2706,7 @@ impl ModelSlot {
                 let need_logits = pos == last;
                 batch
                     .add(tok, pos as i32, &[seq as i32], need_logits)
-                    .map_err(|e| {
-                        Error::Inference(format!("Batched prefill add failed: {e}"))
-                    })?;
+                    .map_err(|e| Error::Inference(format!("Batched prefill add failed: {e}")))?;
                 if need_logits {
                     current_logit_idx.push(batch_pos);
                 }
@@ -2789,10 +2754,7 @@ impl ModelSlot {
             .collect();
         let mut outputs: Vec<String> = vec![String::new(); requests.len()];
         let mut n_generated: Vec<usize> = vec![0; requests.len()];
-        let mut next_pos: Vec<i32> = tokenized
-            .iter()
-            .map(|t| t.len() as i32)
-            .collect();
+        let mut next_pos: Vec<i32> = tokenized.iter().map(|t| t.len() as i32).collect();
         let mut active = vec![true; requests.len()];
 
         // ── Autoregressive decode loop ──────────────────────────────
@@ -2816,9 +2778,7 @@ impl ModelSlot {
                     continue;
                 }
 
-                if let Ok(piece) =
-                    model.token_to_piece(token, &mut decoders[seq], true, None)
-                {
+                if let Ok(piece) = model.token_to_piece(token, &mut decoders[seq], true, None) {
                     outputs[seq].push_str(&piece);
                 }
                 n_generated[seq] += 1;
@@ -2855,18 +2815,15 @@ impl ModelSlot {
                 };
                 batch
                     .add(tok, next_pos[seq], &[seq as i32], true)
-                    .map_err(|e| {
-                        Error::Inference(format!("Batched decode add failed: {e}"))
-                    })?;
+                    .map_err(|e| Error::Inference(format!("Batched decode add failed: {e}")))?;
                 new_logit_idx[seq] = bi;
                 next_pos[seq] += 1;
                 bi += 1;
             }
             current_logit_idx = new_logit_idx;
 
-            ctx.decode(&mut batch).map_err(|e| {
-                Error::Inference(format!("Batched decode step failed: {e}"))
-            })?;
+            ctx.decode(&mut batch)
+                .map_err(|e| Error::Inference(format!("Batched decode step failed: {e}")))?;
         }
 
         // Cleanup — leave the KV cache empty so the next caller (or a
@@ -2900,11 +2857,7 @@ impl ModelSlot {
             .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
 
         let n_ctx = ctx.n_ctx() as usize;
-        let max_tokens = clamp_max_tokens(
-            request.max_tokens,
-            tokens.len(),
-            n_ctx,
-        )?;
+        let max_tokens = clamp_max_tokens(request.max_tokens, tokens.len(), n_ctx)?;
 
         let mut batch = LlamaBatch::new(tokens.len().max(512), 1);
         let last_idx = tokens.len() - 1;
@@ -2928,8 +2881,7 @@ impl ModelSlot {
         // for the case where the sample step itself is slow enough
         // that cancel-checks fire too rarely to help.
         let deadline_secs = inference_deadline_secs();
-        let deadline = Instant::now()
-            + std::time::Duration::from_secs(deadline_secs);
+        let deadline = Instant::now() + std::time::Duration::from_secs(deadline_secs);
         let started_at = Instant::now();
 
         let mut tail = String::with_capacity(32);
@@ -2948,8 +2900,7 @@ impl ModelSlot {
         // avoid false-positive stops on prose `{...}` — see fn-scope
         // note on the sync path.
         let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
-        let tools_grammar_locked =
-            tools_present && request.structured_output.is_some();
+        let tools_grammar_locked = tools_present && request.structured_output.is_some();
         let mut tc_json_depth = 0i32;
         let mut tc_json_in_string = false;
         let mut tc_json_escape_next = false;
@@ -3107,7 +3058,10 @@ impl ModelSlot {
             ctx.decode(&mut batch)
                 .map_err(|e| Error::Inference(format!("Decode failed: {e}")))?;
 
-            if in_think && think_tokens >= request.think_budget.unwrap_or(THINK_BUDGET) && !think_budget_fired {
+            if in_think
+                && think_tokens >= request.think_budget.unwrap_or(THINK_BUDGET)
+                && !think_budget_fired
+            {
                 think_budget_fired = true;
                 let force = "\n</think>\n\n";
                 if let Ok(close_tokens) = model.str_to_token(force, AddBos::Never) {
@@ -3174,11 +3128,7 @@ impl ModelSlot {
             .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
 
         let n_ctx = ctx.n_ctx() as usize;
-        let max_tokens = clamp_max_tokens(
-            request.max_tokens,
-            tokens.len(),
-            n_ctx,
-        )?;
+        let max_tokens = clamp_max_tokens(request.max_tokens, tokens.len(), n_ctx)?;
         let prompt_tokens = tokens.len();
 
         let mut batch = LlamaBatch::new(tokens.len().max(512), 1);
@@ -3213,8 +3163,7 @@ impl ModelSlot {
         // avoid false-positive stops on prose `{...}` — see fn-scope
         // note on the sync path.
         let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
-        let tools_grammar_locked =
-            tools_present && request.structured_output.is_some();
+        let tools_grammar_locked = tools_present && request.structured_output.is_some();
         let mut tc_json_depth = 0i32;
         let mut tc_json_in_string = false;
         let mut tc_json_escape_next = false;
@@ -3358,7 +3307,10 @@ impl ModelSlot {
             ctx.decode(&mut batch)
                 .map_err(|e| Error::Inference(format!("Decode failed: {e}")))?;
 
-            if in_think && think_tokens >= request.think_budget.unwrap_or(THINK_BUDGET) && !think_budget_fired {
+            if in_think
+                && think_tokens >= request.think_budget.unwrap_or(THINK_BUDGET)
+                && !think_budget_fired
+            {
                 think_budget_fired = true;
                 let force = "\n</think>\n\n";
                 if let Ok(close_tokens) = model.str_to_token(force, AddBos::Never) {
@@ -3408,4 +3360,3 @@ impl ModelSlot {
         Ok(())
     }
 }
-

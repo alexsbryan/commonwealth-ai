@@ -14,20 +14,15 @@ use crate::error::Result;
 /// Sovereign passes its local Embed slot.
 /// Commonwealth passes an HTTP client to /v1/embeddings.
 /// Tests pass a mock returning zero vectors.
-pub type EmbedFn = Arc<
-    dyn Fn(&str) -> Pin<Box<dyn Future<Output = Result<Vec<f32>>> + Send>>
-        + Send
-        + Sync,
->;
+pub type EmbedFn =
+    Arc<dyn Fn(&str) -> Pin<Box<dyn Future<Output = Result<Vec<f32>>> + Send>> + Send + Sync>;
 
 /// Batch embedding function — embeds multiple texts in a single call.
 /// When available, this is significantly faster than calling `EmbedFn`
 /// in a loop because the backend can process multiple sequences in
 /// one forward pass on the GPU.
 pub type BatchEmbedFn = Arc<
-    dyn Fn(&[String]) -> Pin<Box<dyn Future<Output = Result<Vec<Vec<f32>>>> + Send>>
-        + Send
-        + Sync,
+    dyn Fn(&[String]) -> Pin<Box<dyn Future<Output = Result<Vec<Vec<f32>>>> + Send>> + Send + Sync,
 >;
 
 // ─── Inference Function ─────────────────────────────────
@@ -176,8 +171,7 @@ pub struct RerankConfig {
 
 /// Which signal the per-article dedup pass uses to pick the
 /// best chunk within each source.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DedupPicker {
     /// Use the fused score (RRF or rerank-blended) — the simplest
     /// rule: keep the first chunk we encounter per source in the
@@ -192,7 +186,6 @@ pub enum DedupPicker {
     /// (FTS-only matches) sort last.
     VectorDistance,
 }
-
 
 impl Default for RerankConfig {
     fn default() -> Self {
@@ -500,4 +493,3 @@ pub enum CorpusSpec {
     RecipePath(PathBuf),
     Inline(Box<crate::recipe::Recipe>),
 }
-

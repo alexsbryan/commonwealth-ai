@@ -86,8 +86,8 @@ fn extract_sections(
     element: &str,
     title_attr: Option<&str>,
 ) -> Result<Vec<ExtractedDoc>> {
-    let file = File::open(path)
-        .map_err(|e| Error::Extraction(format!("open {}: {e}", path.display())))?;
+    let file =
+        File::open(path).map_err(|e| Error::Extraction(format!("open {}: {e}", path.display())))?;
     let mut reader = XmlReader::from_reader(BufReader::new(file));
     reader.config_mut().trim_text(false);
 
@@ -132,8 +132,7 @@ fn extract_sections(
                         let content = normalise_whitespace(&buffer);
                         if !content.is_empty() {
                             emit_count += 1;
-                            let source_id =
-                                derive_source_id(path, title.as_deref(), emit_count);
+                            let source_id = derive_source_id(path, title.as_deref(), emit_count);
                             docs.push(ExtractedDoc {
                                 title: title.clone(),
                                 content,
@@ -218,9 +217,8 @@ fn collect_xml_files(dir: &Path) -> Result<Vec<PathBuf>> {
 }
 
 fn collect(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
-    let entries = fs::read_dir(dir).map_err(|e| {
-        Error::Extraction(format!("read_dir {}: {e}", dir.display()))
-    })?;
+    let entries = fs::read_dir(dir)
+        .map_err(|e| Error::Extraction(format!("read_dir {}: {e}", dir.display())))?;
     for entry in entries {
         let entry = entry.map_err(|e| Error::Extraction(format!("dir entry: {e}")))?;
         let path = entry.path();
@@ -296,7 +294,9 @@ mod tests {
             .unwrap();
         assert_eq!(docs.len(), 2);
         assert_eq!(docs[0].title.as_deref(), Some("/us/usc/t15/s1"));
-        assert!(docs[0].content.contains("Trusts, etc., in restraint of trade illegal"));
+        assert!(docs[0]
+            .content
+            .contains("Trusts, etc., in restraint of trade illegal"));
         assert!(docs[0].content.contains("Every contract, combination"));
         assert_eq!(docs[1].title.as_deref(), Some("/us/usc/t15/s2"));
     }
@@ -360,7 +360,11 @@ mod tests {
             .unwrap()
             .collect::<std::result::Result<Vec<_>, _>>()
             .unwrap();
-        assert_eq!(docs.len(), 1, "outer section is one doc; inner sections are merged into its content");
+        assert_eq!(
+            docs.len(),
+            1,
+            "outer section is one doc; inner sections are merged into its content"
+        );
         assert_eq!(docs[0].title.as_deref(), Some("/a"));
         let c = &docs[0].content;
         assert!(c.contains("sub one"));

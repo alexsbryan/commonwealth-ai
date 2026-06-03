@@ -166,7 +166,11 @@ fn symbolic_ref(repo_root: &Path, name: &str) -> Option<String> {
         return None;
     }
     let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if s.is_empty() { None } else { Some(s) }
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
 }
 
 fn ref_exists(repo_root: &Path, refname: &str) -> bool {
@@ -183,13 +187,7 @@ fn ref_exists(repo_root: &Path, refname: &str) -> bool {
 fn detect_recent_commits(repo_root: &Path, hours: u64) -> Result<Vec<PathBuf>, WorkingSetError> {
     let since = format!("{hours} hours ago");
     let out = Command::new("git")
-        .args([
-            "log",
-            "--since",
-            &since,
-            "--name-only",
-            "--pretty=format:",
-        ])
+        .args(["log", "--since", &since, "--name-only", "--pretty=format:"])
         .current_dir(repo_root)
         .output()
         .map_err(WorkingSetError::GitNotInstalled)?;
@@ -346,8 +344,14 @@ mod tests {
         write_and_commit(repo, "feat.rs", "fn b() {}\n", "feat");
 
         // No `from` — should auto-resolve to `main`.
-        let ws =
-            detect_working_set(repo, Strategy::BranchDiff { from: None, to: None }).unwrap();
+        let ws = detect_working_set(
+            repo,
+            Strategy::BranchDiff {
+                from: None,
+                to: None,
+            },
+        )
+        .unwrap();
         assert_eq!(ws, vec![PathBuf::from("feat.rs")]);
     }
 
@@ -360,7 +364,11 @@ mod tests {
         let year_ago = "2024-05-01T12:00:00 +0000";
         let p = repo.join("old.rs");
         std::fs::write(&p, "fn old() {}\n").unwrap();
-        Cmd::new("git").args(["add", "old.rs"]).current_dir(repo).status().unwrap();
+        Cmd::new("git")
+            .args(["add", "old.rs"])
+            .current_dir(repo)
+            .status()
+            .unwrap();
         Cmd::new("git")
             .args(["commit", "-m", "old"])
             .env("GIT_AUTHOR_DATE", year_ago)
@@ -375,9 +383,11 @@ mod tests {
         let ws = detect_working_set(repo, Strategy::RecentCommits { hours: 24 }).unwrap();
         assert_eq!(ws, vec![PathBuf::from("fresh.rs")]);
         // 100,000h ≈ 11 years should catch both.
-        let wide =
-            detect_working_set(repo, Strategy::RecentCommits { hours: 100_000 }).unwrap();
-        assert_eq!(wide, vec![PathBuf::from("fresh.rs"), PathBuf::from("old.rs")]);
+        let wide = detect_working_set(repo, Strategy::RecentCommits { hours: 100_000 }).unwrap();
+        assert_eq!(
+            wide,
+            vec![PathBuf::from("fresh.rs"), PathBuf::from("old.rs")]
+        );
     }
 
     #[test]
@@ -400,7 +410,11 @@ mod tests {
         }
         // Need at least one commit so refs/heads/trunk exists.
         std::fs::write(repo.join("x.rs"), "fn x() {}\n").unwrap();
-        Cmd::new("git").args(["add", "."]).current_dir(repo).status().unwrap();
+        Cmd::new("git")
+            .args(["add", "."])
+            .current_dir(repo)
+            .status()
+            .unwrap();
         Cmd::new("git")
             .args(["commit", "-m", "init"])
             .current_dir(repo)

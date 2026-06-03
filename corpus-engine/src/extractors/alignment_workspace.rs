@@ -15,8 +15,8 @@ use std::time::UNIX_EPOCH;
 
 use serde_json::json;
 
-use crate::error::{Error, Result};
 use super::{ExtractedDoc, Extractor};
+use crate::error::{Error, Result};
 
 /// Yields one `ExtractedDoc` per `.md` file under the source root that
 /// matches the canonical alignment subset:
@@ -164,10 +164,7 @@ fn read_md_file(path: &Path, root: &Path) -> Result<Option<ExtractedDoc>> {
         .unwrap_or(path)
         .to_string_lossy()
         .into_owned();
-    let title = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .map(String::from);
+    let title = path.file_stem().and_then(|s| s.to_str()).map(String::from);
     let mtime = fs::metadata(path)
         .ok()
         .and_then(|m| m.modified().ok())
@@ -218,15 +215,15 @@ mod tests {
         );
         write(root, "plans/.hidden.md", "should skip");
         write(root, "plans/foo.md.alignment-incoming", "should skip");
-        write(root, "projects/-Users-alex-repo/other/note.md", "skip non-memory");
+        write(
+            root,
+            "projects/-Users-alex-repo/other/note.md",
+            "skip non-memory",
+        );
         write(root, "elsewhere/x.md", "skip elsewhere");
 
         let ext = AlignmentWorkspaceExtractor;
-        let mut docs: Vec<ExtractedDoc> = ext
-            .extract(root)
-            .unwrap()
-            .map(|r| r.unwrap())
-            .collect();
+        let mut docs: Vec<ExtractedDoc> = ext.extract(root).unwrap().map(|r| r.unwrap()).collect();
         docs.sort_by(|a, b| a.source_id.cmp(&b.source_id));
 
         let ids: Vec<&str> = docs.iter().map(|d| d.source_id.as_str()).collect();

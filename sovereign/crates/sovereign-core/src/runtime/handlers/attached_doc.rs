@@ -3,8 +3,6 @@
 //! against the DocumentAsset until the model issues a `final` or hits
 //! the iteration cap.
 
-
-
 use crate::error::Result;
 use crate::traits::*;
 
@@ -37,8 +35,7 @@ impl Runtime {
         // Order matters for the model: list `attached_doc_search`
         // first to bias toward the most direct path. The model can
         // still pick the others when the question demands it.
-        let available_tools: &[&str] =
-            &["attached_doc_search", "knowledge_lookup", "web_fetch"];
+        let available_tools: &[&str] = &["attached_doc_search", "knowledge_lookup", "web_fetch"];
         const MAX_ITERATIONS: usize = 4;
 
         let turn_start = std::time::Instant::now();
@@ -226,10 +223,7 @@ impl Runtime {
                 // `try_emit_narration` per the explicit contract on
                 // `NarrationPhase::ToolInvocation*`.
                 let call_id = uuid::Uuid::new_v4().to_string();
-                let summary = format!(
-                    "{tool_id}: \"{}\"",
-                    truncate_for_chip(&query, 60)
-                );
+                let summary = format!("{tool_id}: \"{}\"", truncate_for_chip(&query, 60));
                 let start_phase = NarrationPhase::ToolInvocationStart {
                     call_id: call_id.clone(),
                     tool_id: tool_id.clone(),
@@ -276,11 +270,7 @@ impl Runtime {
                                         query, chunks, preview
                                     );
                                 }
-                                (
-                                    t.clone(),
-                                    true,
-                                    format!("Retrieved {chunks} passage(s)"),
-                                )
+                                (t.clone(), true, format!("Retrieved {chunks} passage(s)"))
                             }
                             Ok(StepOutput::Json(v)) => {
                                 let txt = v
@@ -290,16 +280,8 @@ impl Runtime {
                                     .to_string();
                                 (txt, true, "Retrieved JSON payload".to_string())
                             }
-                            Ok(_) => (
-                                "(no results)".to_string(),
-                                true,
-                                "Empty result".to_string(),
-                            ),
-                            Err(e) => (
-                                format!("Tool error: {e}"),
-                                false,
-                                format!("Failed: {e}"),
-                            ),
+                            Ok(_) => ("(no results)".to_string(), true, "Empty result".to_string()),
+                            Err(e) => (format!("Tool error: {e}"), false, format!("Failed: {e}")),
                         }
                     }
                     Err(_) => (
@@ -405,9 +387,7 @@ impl Runtime {
             // them. Force at least two *distinct* queries before
             // accepting a final answer, unless the model has
             // exhausted iterations trying.
-            if distinct_queries.len() < MIN_DISTINCT_QUERIES
-                && iterations < MAX_ITERATIONS
-            {
+            if distinct_queries.len() < MIN_DISTINCT_QUERIES && iterations < MAX_ITERATIONS {
                 tracing::warn!(
                     distinct = distinct_queries.len(),
                     iterations,
@@ -608,7 +588,11 @@ impl Runtime {
             .await
             .unwrap_or_default();
         let chunk_contents: Vec<String> = chunks.into_iter().map(|c| c.content).collect();
-        let raptor_nodes = self.store.list_raptor_nodes(&asset.id).await.unwrap_or_default();
+        let raptor_nodes = self
+            .store
+            .list_raptor_nodes(&asset.id)
+            .await
+            .unwrap_or_default();
         let verbatim_spans: Vec<String> = raptor_nodes
             .iter()
             .flat_map(|n| n.quote_spans.iter().map(|q| q.text.clone()))
@@ -625,11 +609,21 @@ impl Runtime {
             .await
         {
             Ok(Some(s)) => s,
-            _ => return ("(no attached document briefing available)".to_string(), Vec::new()),
+            _ => {
+                return (
+                    "(no attached document briefing available)".to_string(),
+                    Vec::new(),
+                )
+            }
         };
         let asset = match self.store.get_document_asset(&session.source).await {
             Ok(Some(a)) => a,
-            _ => return ("(no attached document briefing available)".to_string(), Vec::new()),
+            _ => {
+                return (
+                    "(no attached document briefing available)".to_string(),
+                    Vec::new(),
+                )
+            }
         };
 
         let mut s = String::new();
@@ -650,9 +644,7 @@ impl Runtime {
         // degrades to title + type only — still useful, just not
         // vocabulary-priming.
         let Some(skeleton) = asset.skeleton.as_ref() else {
-            s.push_str(
-                "\n(structural skeleton not yet built — query the document directly)\n",
-            );
+            s.push_str("\n(structural skeleton not yet built — query the document directly)\n");
             return (s, entity_names);
         };
 
@@ -684,10 +676,7 @@ impl Runtime {
                     .get(&ent.name)
                     .and_then(|app| app.quote_samples.first())
                     .map(|q| {
-                        let cleaned = q
-                            .split_whitespace()
-                            .collect::<Vec<_>>()
-                            .join(" ");
+                        let cleaned = q.split_whitespace().collect::<Vec<_>>().join(" ");
                         let trimmed: String = cleaned.chars().take(140).collect();
                         format!(" — e.g. \"{trimmed}…\"")
                     })
@@ -739,10 +728,8 @@ impl Runtime {
                 let passage = chunk_by_index
                     .get(&chunk_idx)
                     .map(|content| {
-                        let cleaned: String = content
-                            .split_whitespace()
-                            .collect::<Vec<_>>()
-                            .join(" ");
+                        let cleaned: String =
+                            content.split_whitespace().collect::<Vec<_>>().join(" ");
                         let snippet: String = cleaned.chars().take(280).collect();
                         format!("\n    > [chunk {chunk_idx}] {snippet}…")
                     })
@@ -864,7 +851,10 @@ impl Runtime {
                         .collect::<Vec<_>>()
                         .join(" ");
                     let snippet: String = cleaned.chars().take(320).collect();
-                    let entities = chunk_associations.get(chunk_idx).cloned().unwrap_or_default();
+                    let entities = chunk_associations
+                        .get(chunk_idx)
+                        .cloned()
+                        .unwrap_or_default();
                     s.push_str(&format!(
                         "- [chunk {chunk_idx}, associated with {count} entities: {}] {snippet}…\n",
                         entities.join(", "),
@@ -1080,14 +1070,22 @@ impl Runtime {
         {
             Ok(Some(s)) => s,
             other => {
-                if debug { eprintln!("[prefetch] no session: {:?}", other.is_ok()); }
+                if debug {
+                    eprintln!("[prefetch] no session: {:?}", other.is_ok());
+                }
                 return String::new();
             }
         };
         let asset = match self.store.get_document_asset(&session.source).await {
             Ok(Some(a)) => a,
             other => {
-                if debug { eprintln!("[prefetch] no asset for source={}: {:?}", session.source, other.is_ok()); }
+                if debug {
+                    eprintln!(
+                        "[prefetch] no asset for source={}: {:?}",
+                        session.source,
+                        other.is_ok()
+                    );
+                }
                 return String::new();
             }
         };
@@ -1096,7 +1094,9 @@ impl Runtime {
         let embedding = match self.inference.embed_query(message).await {
             Ok(v) => v,
             Err(e) => {
-                if debug { eprintln!("[prefetch] embed failed: {e}"); }
+                if debug {
+                    eprintln!("[prefetch] embed failed: {e}");
+                }
                 return String::new();
             }
         };
@@ -1108,14 +1108,12 @@ impl Runtime {
         // asset. Bumping K gives the current asset's chunks a chance
         // to make it through the post-filter. Cost is bounded — 64
         // chunks × a few hundred bytes is still trivial.
-        let chunks = match self
-            .store
-            .search_documents(&embedding, message, 64)
-            .await
-        {
+        let chunks = match self.store.search_documents(&embedding, message, 64).await {
             Ok(c) => c,
             Err(e) => {
-                if debug { eprintln!("[prefetch] search_documents failed: {e}"); }
+                if debug {
+                    eprintln!("[prefetch] search_documents failed: {e}");
+                }
                 return String::new();
             }
         };
@@ -1145,20 +1143,16 @@ impl Runtime {
         let mut s = String::new();
         s.push_str("\n\n**Passages most relevant to the user's question** (embedded the full question and ran RAG; the model can cite these chunks immediately):\n");
         for c in &relevant {
-            let cleaned: String = c
-                .content
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
+            let cleaned: String = c.content.split_whitespace().collect::<Vec<_>>().join(" ");
             let snippet: String = cleaned.chars().take(350).collect();
             if debug {
-                eprintln!("[prefetch] chunk {}: {}", c.chunk_index, snippet.chars().take(100).collect::<String>());
+                eprintln!(
+                    "[prefetch] chunk {}: {}",
+                    c.chunk_index,
+                    snippet.chars().take(100).collect::<String>()
+                );
             }
-            s.push_str(&format!(
-                "- [chunk {}] {}…\n",
-                c.chunk_index,
-                snippet,
-            ));
+            s.push_str(&format!("- [chunk {}] {}…\n", c.chunk_index, snippet,));
         }
         s
     }

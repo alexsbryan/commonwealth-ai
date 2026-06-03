@@ -95,7 +95,12 @@ fn parse() -> Args {
         eprintln!("error: --model is required");
         std::process::exit(2);
     });
-    Args { model, grammar, gpu_layers, prompt }
+    Args {
+        model,
+        grammar,
+        gpu_layers,
+        prompt,
+    }
 }
 
 fn main() {
@@ -108,8 +113,8 @@ fn main() {
 
     let backend = Arc::new(LlamaBackend::init().expect("LlamaBackend::init"));
     let model_params = LlamaModelParams::default().with_n_gpu_layers(args.gpu_layers);
-    let model = LlamaModel::load_from_file(&backend, &args.model, &model_params)
-        .expect("load model");
+    let model =
+        LlamaModel::load_from_file(&backend, &args.model, &model_params).expect("load model");
     println!(
         "model loaded: layers={} size_mb={}",
         model.n_layer(),
@@ -137,7 +142,9 @@ fn main() {
         .with_n_batch(n_ctx_smoke)
         .with_n_ubatch(512)
         .with_offload_kqv(true);
-    let mut ctx = model.new_context(&backend, ctx_params).expect("new_context");
+    let mut ctx = model
+        .new_context(&backend, ctx_params)
+        .expect("new_context");
 
     // SMOKE_CHAT_TEMPLATE path retired with the 0.1.x → 0.2.x
     // llama-cpp migration: `apply_chat_template(&LlamaChatTemplate, ...)`
@@ -159,7 +166,9 @@ fn main() {
     let mut batch = LlamaBatch::new(tokens.len().max(8), 1);
     let last_idx = tokens.len() - 1;
     for (i, &tok) in tokens.iter().enumerate() {
-        batch.add(tok, i as i32, &[0], i == last_idx).expect("batch add");
+        batch
+            .add(tok, i as i32, &[0], i == last_idx)
+            .expect("batch add");
     }
     ctx.decode(&mut batch).expect("prefill decode");
     println!("prefill ok: {} tokens", tokens.len());
@@ -170,14 +179,19 @@ fn main() {
     // without this; the daemon crashes on the second-request grammar
     // attach. If THIS crashes, the trigger is "grammar attached to
     // a context that previously decoded".
-    if std::env::var("SMOKE_WARMUP").map(|v| v == "1").unwrap_or(false) {
+    if std::env::var("SMOKE_WARMUP")
+        .map(|v| v == "1")
+        .unwrap_or(false)
+    {
         println!("warmup: decoding 5 tokens without grammar…");
         let mut warmup_sampler = LlamaSampler::chain_simple([LlamaSampler::dist(0xCAFE)]);
         let mut pos = tokens.len() as i32;
         for _ in 0..5 {
             let tok = warmup_sampler.sample(&ctx, -1);
             warmup_sampler.accept(tok);
-            if model.is_eog_token(tok) { break; }
+            if model.is_eog_token(tok) {
+                break;
+            }
             let mut b = LlamaBatch::new(1, 1);
             b.add(tok, pos, &[0], true).expect("batch add");
             ctx.decode(&mut b).expect("warmup decode");
@@ -190,7 +204,9 @@ fn main() {
         ctx.clear_kv_cache();
         let mut batch2 = LlamaBatch::new(tokens.len().max(8), 1);
         for (i, &tok) in tokens.iter().enumerate() {
-            batch2.add(tok, i as i32, &[0], i == tokens.len() - 1).expect("batch add");
+            batch2
+                .add(tok, i as i32, &[0], i == tokens.len() - 1)
+                .expect("batch add");
         }
         ctx.decode(&mut batch2).expect("re-prefill decode");
         println!("re-prefill ok");

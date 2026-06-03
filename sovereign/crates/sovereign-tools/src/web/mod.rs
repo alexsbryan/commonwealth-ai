@@ -12,8 +12,7 @@ use sovereign_core::types::*;
 
 use self::extract::fetch_and_extract;
 use self::search::{
-    BudgetView, SearchBackend, SearchOrchestrator, SearchPrivacy, SearchResult,
-    SelectInputs,
+    BudgetView, SearchBackend, SearchOrchestrator, SearchPrivacy, SearchResult, SelectInputs,
 };
 
 // ─── WebSearchTool ─────────────────────────────────────────────
@@ -58,10 +57,7 @@ impl WebSearchTool {
     /// Create with a specific search backend. Legacy path; kept for
     /// back-compat with the eight existing call sites that pass a
     /// `SearchBackend` enum value.
-    pub fn with_backend(
-        inference: Arc<dyn InferenceProvider>,
-        backend: SearchBackend,
-    ) -> Self {
+    pub fn with_backend(inference: Arc<dyn InferenceProvider>, backend: SearchBackend) -> Self {
         Self {
             inference,
             client: default_client(),
@@ -129,7 +125,9 @@ impl WebSearchTool {
                     .lines()
                     .map(|l| {
                         l.trim()
-                            .trim_start_matches(|c: char| c == '-' || c == '*' || c.is_numeric() || c == '.' || c == ')')
+                            .trim_start_matches(|c: char| {
+                                c == '-' || c == '*' || c.is_numeric() || c == '.' || c == ')'
+                            })
                             .trim()
                             .to_string()
                     })
@@ -353,11 +351,7 @@ impl Tool for WebSearchTool {
         Ok(())
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -465,10 +459,9 @@ impl Tool for WebFetchTool {
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        let url = params
-            .get("url")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::InvalidInput("Web fetch requires a 'url' parameter".to_string()))?;
+        let url = params.get("url").and_then(|v| v.as_str()).ok_or_else(|| {
+            Error::InvalidInput("Web fetch requires a 'url' parameter".to_string())
+        })?;
 
         if !url.starts_with("http://") && !url.starts_with("https://") {
             return Err(Error::InvalidInput(
@@ -478,11 +471,7 @@ impl Tool for WebFetchTool {
         Ok(())
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let url = params
             .get("url")
             .and_then(|v| v.as_str())

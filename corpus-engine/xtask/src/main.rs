@@ -135,7 +135,11 @@ fn cmd_update_registry_snapshot() -> i32 {
             "  entries: {} → {} ({}{})",
             current_entries,
             live_entries,
-            if live_entries > current_entries { "+" } else { "" },
+            if live_entries > current_entries {
+                "+"
+            } else {
+                ""
+            },
             live_entries as i64 - current_entries as i64,
         );
     } else {
@@ -263,15 +267,16 @@ fn doc_contract_failures(root: &Path) -> Vec<String> {
             continue;
         }
         if in_sec1 && fences_seen == 1 {
-            let trimmed =
-                line.trim_start_matches(['│', ' ', '├', '└', '─']);
+            let trimmed = line.trim_start_matches(['│', ' ', '├', '└', '─']);
             if let Some(tok) = trimmed.split_whitespace().next() {
                 let dir = tok.trim_end_matches('/');
                 if dir.is_empty() || dir == "commonwealth-ai" {
                     continue;
                 }
                 if !root.join(dir).exists() {
-                    fails.push(format!("§1 names project `{dir}/` but it does not exist on disk"));
+                    fails.push(format!(
+                        "§1 names project `{dir}/` but it does not exist on disk"
+                    ));
                 }
             }
         }
@@ -367,6 +372,10 @@ fn print_usage() {
     eprintln!("Usage: cargo xtask <command>");
     eprintln!();
     eprintln!("Commands:");
-    eprintln!("  update-registry-snapshot       Fetch live registry.toml and update the bundled snapshot");
-    eprintln!("  arch-gate [--update-baseline]  Enforce the §3.1 file-size ratchet + §1 doc-contract");
+    eprintln!(
+        "  update-registry-snapshot       Fetch live registry.toml and update the bundled snapshot"
+    );
+    eprintln!(
+        "  arch-gate [--update-baseline]  Enforce the §3.1 file-size ratchet + §1 doc-contract"
+    );
 }

@@ -442,11 +442,7 @@ impl Tool for KnowledgeLookupTool {
         Ok(())
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -454,10 +450,8 @@ impl Tool for KnowledgeLookupTool {
             .trim()
             .to_string();
 
-        let requested_kinds: Option<Vec<String>> = params
-            .get("kinds")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
+        let requested_kinds: Option<Vec<String>> =
+            params.get("kinds").and_then(|v| v.as_array()).map(|arr| {
                 arr.iter()
                     .filter_map(|x| x.as_str().map(str::to_string))
                     .collect()
@@ -537,11 +531,10 @@ impl Tool for KnowledgeLookupTool {
         let mut web_count = 0usize;
         if self.auto_escalate_to_web {
             if let Some(orchestrator) = self.web.as_ref() {
-                let local_thin = merged.is_empty()
-                    || merged.iter().take(3).all(|e| e.confidence < 0.4);
+                let local_thin =
+                    merged.is_empty() || merged.iter().take(3).all(|e| e.confidence < 0.4);
                 if local_thin {
-                    let web_evidence =
-                        self.web_search_evidence(orchestrator, &query).await;
+                    let web_evidence = self.web_search_evidence(orchestrator, &query).await;
                     web_count = web_evidence.len();
                     merged.extend(web_evidence);
                     merged.sort_by(|a, b| {
@@ -592,7 +585,12 @@ fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         return s.to_string();
     }
-    let cut = s.char_indices().take(max).last().map(|(i, _)| i).unwrap_or(max);
+    let cut = s
+        .char_indices()
+        .take(max)
+        .last()
+        .map(|(i, _)| i)
+        .unwrap_or(max);
     let mut out = s[..cut].to_string();
     out.push_str(" …");
     out
@@ -669,8 +667,14 @@ mod tests {
         assert_eq!(EvidenceId::from_index(7).as_str(), "ev-T0-0007");
         assert_eq!(EvidenceId::from_index(123).as_str(), "ev-T0-0123");
         // Turn-aware constructor uses an explicit turn index.
-        assert_eq!(EvidenceId::from_index_with_turn(1, 2).as_str(), "ev-T2-0001");
-        assert_eq!(EvidenceId::from_index_with_turn(0, 22).as_str(), "ev-T22-0000");
+        assert_eq!(
+            EvidenceId::from_index_with_turn(1, 2).as_str(),
+            "ev-T2-0001"
+        );
+        assert_eq!(
+            EvidenceId::from_index_with_turn(0, 22).as_str(),
+            "ev-T22-0000"
+        );
     }
 
     #[test]
@@ -678,7 +682,10 @@ mod tests {
         let tool = mock_tool();
         let desc = tool.descriptor();
         assert_eq!(desc.id, "knowledge_lookup");
-        assert!(desc.description.len() > 50, "tool description must come from asset");
+        assert!(
+            desc.description.len() > 50,
+            "tool description must come from asset"
+        );
         // The descriptor should warn against fabrication — load-
         // bearing for the "no ev-xxx fabrication" structural
         // predicate in the knowledge-gym. The vocabulary may
@@ -710,7 +717,7 @@ mod tests {
     fn validate_rejects_missing_query() {
         let tool = mock_tool();
         let err = tool
-            .validate(&serde_json::json!({ }))
+            .validate(&serde_json::json!({}))
             .expect_err("should reject missing query");
         let msg = format!("{err}");
         assert!(msg.contains("requires"));

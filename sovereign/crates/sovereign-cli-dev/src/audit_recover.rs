@@ -121,26 +121,24 @@ pub async fn cmd_audit_recover() -> i32 {
     let rows = match store.tool_call_log_rows(0, 10_000).await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!(
-                "  sovereign audit --recover: failed to read tool_call_log: {e}"
-            );
+            eprintln!("  sovereign audit --recover: failed to read tool_call_log: {e}");
             return 1;
         }
     };
 
     if rows.is_empty() {
-        println!(
-            "  sovereign audit --recover: tool_call_log is empty; nothing to recover."
-        );
+        println!("  sovereign audit --recover: tool_call_log is empty; nothing to recover.");
         return 0;
     }
 
     // Group rows by session_id. The reader returns newest-first,
     // which is what `ToolPatternMatcher::scan` expects.
-    let mut by_session: HashMap<String, Vec<corpus_engine_notes::ToolCallLogRow>> =
-        HashMap::new();
+    let mut by_session: HashMap<String, Vec<corpus_engine_notes::ToolCallLogRow>> = HashMap::new();
     for row in rows {
-        by_session.entry(row.session_id.clone()).or_default().push(row);
+        by_session
+            .entry(row.session_id.clone())
+            .or_default()
+            .push(row);
     }
     if by_session.len() > MAX_RECOVER_SESSIONS {
         // Take the most-recent N sessions by their newest row's
@@ -149,9 +147,10 @@ pub async fn cmd_audit_recover() -> i32 {
         // process the latest than time out.
         let mut sessions: Vec<(String, Vec<_>)> = by_session.into_iter().collect();
         sessions.sort_by(|(_, a), (_, b)| {
-            b.first().map(|r| r.called_at).unwrap_or(0).cmp(
-                &a.first().map(|r| r.called_at).unwrap_or(0),
-            )
+            b.first()
+                .map(|r| r.called_at)
+                .unwrap_or(0)
+                .cmp(&a.first().map(|r| r.called_at).unwrap_or(0))
         });
         sessions.truncate(MAX_RECOVER_SESSIONS);
         by_session = sessions.into_iter().collect();
@@ -168,10 +167,8 @@ pub async fn cmd_audit_recover() -> i32 {
     for (session_id, session_rows) in &by_session {
         // Trim per-session rows to the recovery cap. They're
         // already newest-first thanks to the reader's ORDER BY.
-        let limited: Vec<&corpus_engine_notes::ToolCallLogRow> = session_rows
-            .iter()
-            .take(MAX_ROWS_PER_SESSION)
-            .collect();
+        let limited: Vec<&corpus_engine_notes::ToolCallLogRow> =
+            session_rows.iter().take(MAX_ROWS_PER_SESSION).collect();
 
         // Pure scan — fresh cooldown set so all rule fires are
         // considered. The recovery path doesn't model the
@@ -226,8 +223,7 @@ pub async fn cmd_audit_recover() -> i32 {
     // we log a warning and skip. The observed-source pass above
     // already wrote whatever it could; the audit floor stays
     // non-empty.
-    let (inferred_total, conversations_touched) =
-        recover_inferred_from_messages(&store).await;
+    let (inferred_total, conversations_touched) = recover_inferred_from_messages(&store).await;
 
     println!();
     println!(
@@ -252,9 +248,7 @@ pub async fn cmd_audit_recover() -> i32 {
 /// rather than the harvest crashing.
 async fn recover_inferred_from_messages(notes: &Arc<NoteStore>) -> (usize, usize) {
     let Some(state_db) = locate_state_db() else {
-        tracing::info!(
-            "audit_recover: no state.db reachable; skipping inferred-source pass"
-        );
+        tracing::info!("audit_recover: no state.db reachable; skipping inferred-source pass");
         return (0, 0);
     };
 
@@ -282,10 +276,7 @@ async fn recover_inferred_with_store(
     // `list_conversations` orders by `updated_at DESC` so the cap
     // takes the most-recent ones. Soft-deleted conversations are
     // already excluded by the WHERE clause.
-    let convos = match store
-        .list_conversations(MAX_RECOVER_CONVERSATIONS, 0)
-        .await
-    {
+    let convos = match store.list_conversations(MAX_RECOVER_CONVERSATIONS, 0).await {
         Ok(c) => c,
         Err(e) => {
             tracing::warn!(
@@ -338,8 +329,7 @@ async fn recover_inferred_with_store(
                 if dedup_seed.contains(&hit.sentence) {
                     continue;
                 }
-                if let Err(e) = persist_inferred(notes, &convo.id, &hit.sentence).await
-                {
+                if let Err(e) = persist_inferred(notes, &convo.id, &hit.sentence).await {
                     tracing::warn!(
                         conversation_id = %convo.id,
                         error = %e,
@@ -377,7 +367,10 @@ fn locate_state_db() -> Option<PathBuf> {
             return Some(p);
         }
     }
-    let cwd = std::env::current_dir().ok()?.join(".sovereign").join("state.db");
+    let cwd = std::env::current_dir()
+        .ok()?
+        .join(".sovereign")
+        .join("state.db");
     if cwd.exists() {
         Some(cwd)
     } else {
@@ -395,15 +388,9 @@ fn short_id(id: &str) -> String {
 /// pass. Same dedup-by-body strategy: a recovered note is keyed
 /// off its full body text, so repeated `--recover` runs are
 /// idempotent.
-async fn existing_inferred_bodies(
-    store: &NoteStore,
-    session_id: &str,
-) -> HashSet<String> {
+async fn existing_inferred_bodies(store: &NoteStore, session_id: &str) -> HashSet<String> {
     let mut out = HashSet::new();
-    let rows = match store
-        .read_notes(None, &[], &[], &[], 500, false)
-        .await
-    {
+    let rows = match store.read_notes(None, &[], &[], &[], 500, false).await {
         Ok(r) => r,
         Err(e) => {
             tracing::warn!(
@@ -414,9 +401,7 @@ async fn existing_inferred_bodies(
         }
     };
     for n in rows {
-        if n.session_id == session_id
-            && n.source == NoteSource::Inferred.as_str()
-        {
+        if n.session_id == session_id && n.source == NoteSource::Inferred.as_str() {
             out.insert(n.content);
         }
     }
@@ -476,18 +461,12 @@ fn locate_notes_db() -> Option<PathBuf> {
 /// Read the bodies of every active observed-source note for a
 /// given session. Used to dedup before persisting the matcher's
 /// output during recovery.
-async fn existing_observed_bodies(
-    store: &NoteStore,
-    session_id: &str,
-) -> HashSet<String> {
+async fn existing_observed_bodies(store: &NoteStore, session_id: &str) -> HashSet<String> {
     let mut out = HashSet::new();
     // No source-filtered reader exists; pull a window of recent
     // notes and post-filter. 500 rows comfortably covers a single
     // session's observation set for the typical agent workflow.
-    let rows = match store
-        .read_notes(None, &[], &[], &[], 500, false)
-        .await
-    {
+    let rows = match store.read_notes(None, &[], &[], &[], 500, false).await {
         Ok(r) => r,
         Err(e) => {
             tracing::warn!(
@@ -498,9 +477,7 @@ async fn existing_observed_bodies(
         }
     };
     for n in rows {
-        if n.session_id == session_id
-            && n.source == NoteSource::Observed.as_str()
-        {
+        if n.session_id == session_id && n.source == NoteSource::Observed.as_str() {
             out.insert(n.content);
         }
     }
@@ -559,13 +536,17 @@ mod tests {
 
         // Hand-roll the recovery flow over this store.
         let rows = store.tool_call_log_rows(0, 100).await.unwrap();
-        let session_rows: Vec<&corpus_engine_notes::ToolCallLogRow> =
-            rows.iter().filter(|r| r.session_id == "recover-sess-1").collect();
+        let session_rows: Vec<&corpus_engine_notes::ToolCallLogRow> = rows
+            .iter()
+            .filter(|r| r.session_id == "recover-sess-1")
+            .collect();
         let mut cooldowns = HashMap::new();
         let hits = ToolPatternMatcher::scan_for_recovery(&session_rows, &mut cooldowns);
         assert!(!hits.is_empty(), "matcher should fire on blast→build");
         for hit in &hits {
-            persist_recovered(&store, "recover-sess-1", hit).await.unwrap();
+            persist_recovered(&store, "recover-sess-1", hit)
+                .await
+                .unwrap();
         }
 
         let post = existing_observed_bodies(&store, "recover-sess-1").await;
@@ -589,8 +570,10 @@ mod tests {
             .unwrap();
 
         let rows = store.tool_call_log_rows(0, 100).await.unwrap();
-        let session_rows: Vec<&corpus_engine_notes::ToolCallLogRow> =
-            rows.iter().filter(|r| r.session_id == "idem-sess").collect();
+        let session_rows: Vec<&corpus_engine_notes::ToolCallLogRow> = rows
+            .iter()
+            .filter(|r| r.session_id == "idem-sess")
+            .collect();
 
         // First pass.
         let mut cooldowns = HashMap::new();
@@ -636,8 +619,10 @@ mod tests {
             .unwrap();
 
         let rows = store.tool_call_log_rows(0, 100).await.unwrap();
-        let session_rows: Vec<&corpus_engine_notes::ToolCallLogRow> =
-            rows.iter().filter(|r| r.session_id == "solo-sess").collect();
+        let session_rows: Vec<&corpus_engine_notes::ToolCallLogRow> = rows
+            .iter()
+            .filter(|r| r.session_id == "solo-sess")
+            .collect();
         let mut cooldowns = HashMap::new();
         let hits = ToolPatternMatcher::scan_for_recovery(&session_rows, &mut cooldowns);
         assert!(
@@ -718,8 +703,7 @@ mod tests {
             .await
             .unwrap();
 
-        let (wrote, touched) =
-            recover_inferred_with_store(&notes, state.as_ref()).await;
+        let (wrote, touched) = recover_inferred_with_store(&notes, state.as_ref()).await;
         assert_eq!(wrote, 2, "expected 2 inferred notes from 2 decision rows");
         assert_eq!(touched, 1, "one conversation touched");
 
@@ -787,8 +771,7 @@ mod tests {
             .await
             .unwrap();
 
-        let (wrote, touched) =
-            recover_inferred_with_store(&notes, state.as_ref()).await;
+        let (wrote, touched) = recover_inferred_with_store(&notes, state.as_ref()).await;
         assert_eq!(wrote, 0, "user-role decision should not fire response_mine");
         assert_eq!(touched, 0);
     }
@@ -837,8 +820,7 @@ mod tests {
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
 
         let state = Arc::new(SqliteStateStore::open_in_memory().unwrap());
-        let (wrote, touched) =
-            recover_inferred_with_store(&notes, state.as_ref()).await;
+        let (wrote, touched) = recover_inferred_with_store(&notes, state.as_ref()).await;
         assert_eq!(wrote, 0);
         assert_eq!(touched, 0);
     }

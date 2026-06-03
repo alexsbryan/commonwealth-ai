@@ -90,17 +90,15 @@ const HELP: Help = Help {
 /// `--finalize` mode: read the per-chapter checkpoint, collapse it
 /// to a `Phase1Output`, write the canonical run-file, and update the
 /// cache (so phases 2+ see a complete questions set). Zero LLM calls.
-async fn cmd_finalize(
-    cfg: &EnrichConfig,
-    checkpoint_path: &std::path::Path,
-) -> i32 {
-    use corpus_engine::enrichment::pipeline::{
-        types::PipelinePhase, Phase1Output,
-    };
+async fn cmd_finalize(cfg: &EnrichConfig, checkpoint_path: &std::path::Path) -> i32 {
+    use corpus_engine::enrichment::pipeline::{types::PipelinePhase, Phase1Output};
     let entries = match read_phase1_checkpoint(checkpoint_path) {
         Ok(e) => e,
         Err(e) => {
-            eprintln!("error: reading checkpoint {}: {e}", checkpoint_path.display());
+            eprintln!(
+                "error: reading checkpoint {}: {e}",
+                checkpoint_path.display()
+            );
             return 1;
         }
     };
@@ -248,10 +246,8 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
     let selection = match parsed.selection {
         SelectionArg::Subset(ids) => {
             // Validate every id exists before dispatching.
-            let known: std::collections::HashSet<_> = inputs
-                .iter()
-                .map(|c| c.chapter_id.as_str())
-                .collect();
+            let known: std::collections::HashSet<_> =
+                inputs.iter().map(|c| c.chapter_id.as_str()).collect();
             let missing: Vec<String> = ids
                 .iter()
                 .filter(|id| !known.contains(id.as_str()))
@@ -272,10 +268,7 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
             let source = read_failures_for_retry(&runs_dir, &checkpoint_path);
             match source {
                 Ok(Some((path, ids))) if ids.is_empty() => {
-                    println!(
-                        "  · no failures in {} — nothing to retry.",
-                        path.display()
-                    );
+                    println!("  · no failures in {} — nothing to retry.", path.display());
                     return 0;
                 }
                 Ok(Some((path, ids))) => {
@@ -327,10 +320,8 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
                     );
                     // Filter to ids actually present in the manifest
                     // (a manifest edit could have renumbered them).
-                    let known: std::collections::HashSet<_> = inputs
-                        .iter()
-                        .map(|c| c.chapter_id.as_str())
-                        .collect();
+                    let known: std::collections::HashSet<_> =
+                        inputs.iter().map(|c| c.chapter_id.as_str()).collect();
                     let (present, missing): (Vec<_>, Vec<_>) = targeted
                         .into_iter()
                         .map(|(id, _)| id)
@@ -376,13 +367,15 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
     // re-attempt — those WILL be in the checkpoint as failures, so
     // applying the resume "skip processed" filter would remove every
     // candidate and exit. Suppress resume in that case.
-    let resume_active = parsed.resume
-        && !matches!(selection, ChapterSelection::RetryFailed(_));
+    let resume_active = parsed.resume && !matches!(selection, ChapterSelection::RetryFailed(_));
     let selection = if resume_active {
         let entries = match read_phase1_checkpoint(&checkpoint_path) {
             Ok(e) => e,
             Err(e) => {
-                eprintln!("error: reading checkpoint {}: {e}", checkpoint_path.display());
+                eprintln!(
+                    "error: reading checkpoint {}: {e}",
+                    checkpoint_path.display()
+                );
                 return 1;
             }
         };
@@ -476,21 +469,38 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
     );
 
     let progress = |ev: Phase1Progress<'_>| match ev {
-        Phase1Progress::Start { total, exemplars_loaded } => {
+        Phase1Progress::Start {
+            total,
+            exemplars_loaded,
+        } => {
             println!("    · {exemplars_loaded} exemplar(s) loaded, {total} chapter(s) to process");
         }
-        Phase1Progress::ChapterStart { i, total, chapter_id } => {
+        Phase1Progress::ChapterStart {
+            i,
+            total,
+            chapter_id,
+        } => {
             print!("    [{i}/{total}] {chapter_id}… ");
             use std::io::Write;
             std::io::stdout().flush().ok();
         }
-        Phase1Progress::ChapterDone { chapter_id: _, question_count } => {
+        Phase1Progress::ChapterDone {
+            chapter_id: _,
+            question_count,
+        } => {
             println!("{question_count} q");
         }
-        Phase1Progress::ChapterFailed { chapter_id: _, reason } => {
+        Phase1Progress::ChapterFailed {
+            chapter_id: _,
+            reason,
+        } => {
             println!("FAILED: {reason}");
         }
-        Phase1Progress::Done { produced, failed, run_path } => {
+        Phase1Progress::Done {
+            produced,
+            failed,
+            run_path,
+        } => {
             println!(
                 "  ✓ {produced} ok, {failed} failed — {}",
                 run_path.display()
@@ -536,23 +546,15 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
             flusher.abort();
             // Persist the partial spend so the operator can see how
             // many tokens were burned even on a failed run.
-            let _ = write_token_snapshot(
-                &tokens_path,
-                &cfg.corpus_id,
-                started_at_ms,
-                &usage_ledger,
-            );
+            let _ =
+                write_token_snapshot(&tokens_path, &cfg.corpus_id, started_at_ms, &usage_ledger);
             eprintln!("error: phase 1 run failed: {e}");
             return 1;
         }
     };
     flusher.abort();
-    if let Err(e) = write_token_snapshot(
-        &tokens_path,
-        &cfg.corpus_id,
-        started_at_ms,
-        &usage_ledger,
-    ) {
+    if let Err(e) = write_token_snapshot(&tokens_path, &cfg.corpus_id, started_at_ms, &usage_ledger)
+    {
         tracing::warn!(
             path = %tokens_path.display(),
             error = %e,
@@ -592,14 +594,10 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
     } else {
         match &selection {
             ChapterSelection::RetryFailed(_) => {
-                println!(
-                    "  · retry produced no new successes — cache/questions.json unchanged"
-                );
+                println!("  · retry produced no new successes — cache/questions.json unchanged");
             }
             _ => {
-                println!(
-                    "  · subset run — cache NOT updated (re-run with --full to promote)"
-                );
+                println!("  · subset run — cache NOT updated (re-run with --full to promote)");
             }
         }
     }
@@ -632,7 +630,10 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
             ids.join(",")
         );
         eprintln!("    Or, from the latest run file:");
-        eprintln!("      sovereign enrich extract {} --retry-failed", cfg.corpus_id);
+        eprintln!(
+            "      sovereign enrich extract {} --retry-failed",
+            cfg.corpus_id
+        );
         return 1;
     }
     0
@@ -733,7 +734,8 @@ fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
         if selection_count > 0 || terse || resume {
             return Err(
                 "--finalize is a read-only checkpoint-to-runfile pass; do not pair with \
-                 --chapters / --full / --retry-failed / --terse / --resume".into(),
+                 --chapters / --full / --retry-failed / --terse / --resume"
+                    .into(),
             );
         }
         // Finalize mode short-circuits the whole flow; we use Full
@@ -750,7 +752,8 @@ fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
     if terse && full {
         return Err(
             "--terse is a recovery pass; pair it with --retry-failed or --chapters, \
-             not --full".into(),
+             not --full"
+                .into(),
         );
     }
     let selection = if retry_failed {
@@ -794,9 +797,7 @@ fn read_failures_for_retry(
     runs_dir: &std::path::Path,
     checkpoint_path: &std::path::Path,
 ) -> Result<Option<(PathBuf, Vec<(String, PhaseFailureKind)>)>, String> {
-    use corpus_engine::enrichment::pipeline::{
-        read_phase1_checkpoint, Phase1CheckpointEntry,
-    };
+    use corpus_engine::enrichment::pipeline::{read_phase1_checkpoint, Phase1CheckpointEntry};
 
     if checkpoint_path.exists() {
         let entries = read_phase1_checkpoint(checkpoint_path)
@@ -813,13 +814,15 @@ fn read_failures_for_retry(
                     Phase1CheckpointEntry::Success { chapter_id, .. } => {
                         latest_failure.remove(&chapter_id);
                     }
-                    Phase1CheckpointEntry::Failure { chapter_id, failure } => {
+                    Phase1CheckpointEntry::Failure {
+                        chapter_id,
+                        failure,
+                    } => {
                         latest_failure.insert(chapter_id, failure.failure_kind);
                     }
                 }
             }
-            let mut ids: Vec<(String, PhaseFailureKind)> =
-                latest_failure.into_iter().collect();
+            let mut ids: Vec<(String, PhaseFailureKind)> = latest_failure.into_iter().collect();
             ids.sort_by(|a, b| a.0.cmp(&b.0));
             return Ok(Some((checkpoint_path.to_path_buf(), ids)));
         }
@@ -846,7 +849,9 @@ pub(super) fn read_latest_failures(
         return Ok(None);
     }
     let mut candidates: Vec<(u64, PathBuf)> = Vec::new();
-    for entry in fs::read_dir(runs_dir).map_err(|e| format!("reading {}: {e}", runs_dir.display()))? {
+    for entry in
+        fs::read_dir(runs_dir).map_err(|e| format!("reading {}: {e}", runs_dir.display()))?
+    {
         let entry = entry.map_err(|e| format!("iterating {}: {e}", runs_dir.display()))?;
         let name = entry.file_name().to_string_lossy().to_string();
         if !name.starts_with("questions-") || !name.ends_with(".json") {
@@ -865,10 +870,13 @@ pub(super) fn read_latest_failures(
     let Some((_, latest)) = candidates.first() else {
         return Ok(None);
     };
-    let raw = fs::read_to_string(latest)
-        .map_err(|e| format!("reading {}: {e}", latest.display()))?;
+    let raw =
+        fs::read_to_string(latest).map_err(|e| format!("reading {}: {e}", latest.display()))?;
     let parsed: Phase1Output = serde_json::from_str(&raw).map_err(|e| {
-        format!("parsing {}: {e} (file may predate the failures field)", latest.display())
+        format!(
+            "parsing {}: {e} (file may predate the failures field)",
+            latest.display()
+        )
     })?;
     let ids: Vec<(String, PhaseFailureKind)> = parsed
         .failures
@@ -910,7 +918,10 @@ pub async fn run_with_closures_for_test(
         .await
         .map_err(|e| e.to_string())?;
     let _ = _manifest; // silence unused — the CLI path does manifest merging; tests don't need to
-    Ok((result.output.questions_by_chapter.len(), result.cache_updated))
+    Ok((
+        result.output.questions_by_chapter.len(),
+        result.cache_updated,
+    ))
 }
 
 // Suppress unused-import warnings for `ChapterManifest` in non-test
@@ -968,8 +979,7 @@ pub fn write_token_snapshot(
         std::fs::create_dir_all(parent)?;
     }
     let tmp = path.with_extension("json.tmp");
-    let bytes = serde_json::to_vec_pretty(&record)
-        .map_err(std::io::Error::other)?;
+    let bytes = serde_json::to_vec_pretty(&record).map_err(std::io::Error::other)?;
     std::fs::write(&tmp, bytes)?;
     std::fs::rename(&tmp, path)
 }
@@ -993,8 +1003,7 @@ mod tests {
 
     #[test]
     fn parse_args_subset() {
-        let args = ["ak".into(), "--chapters".into(), "a,b , c".into()]
-            .to_vec();
+        let args = ["ak".into(), "--chapters".into(), "a,b , c".into()].to_vec();
         let p = parse_args(&args).unwrap();
         assert_eq!(p.corpus_id, "ak");
         match p.selection {
@@ -1012,9 +1021,12 @@ mod tests {
 
     #[test]
     fn parse_args_rejects_both_chapters_and_full() {
-        let err = parse_args(
-            &["ak".into(), "--chapters".into(), "a".into(), "--full".into()],
-        )
+        let err = parse_args(&[
+            "ak".into(),
+            "--chapters".into(),
+            "a".into(),
+            "--full".into(),
+        ])
         .unwrap_err();
         assert!(err.contains("mutually exclusive"), "got: {err}");
     }
@@ -1039,12 +1051,7 @@ mod tests {
 
     #[test]
     fn parse_args_accepts_terse_with_retry_failed() {
-        let p = parse_args(&[
-            "ak".into(),
-            "--retry-failed".into(),
-            "--terse".into(),
-        ])
-        .unwrap();
+        let p = parse_args(&["ak".into(), "--retry-failed".into(), "--terse".into()]).unwrap();
         assert!(matches!(p.selection, SelectionArg::RetryFailed));
         assert!(p.terse);
     }
@@ -1064,8 +1071,7 @@ mod tests {
 
     #[test]
     fn parse_args_rejects_terse_with_full() {
-        let err = parse_args(&["ak".into(), "--full".into(), "--terse".into()])
-            .unwrap_err();
+        let err = parse_args(&["ak".into(), "--full".into(), "--terse".into()]).unwrap_err();
         assert!(err.contains("recovery pass"), "got: {err}");
     }
 
@@ -1095,7 +1101,11 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(1100));
         fs::write(runs.join("questions-full-002.json"), new).unwrap();
         let (path, ids) = read_latest_failures(&runs).unwrap().unwrap();
-        assert!(path.ends_with("questions-full-002.json"), "got: {}", path.display());
+        assert!(
+            path.ends_with("questions-full-002.json"),
+            "got: {}",
+            path.display()
+        );
         let id_only: Vec<String> = ids.into_iter().map(|(id, _)| id).collect();
         assert_eq!(
             id_only,
@@ -1157,11 +1167,9 @@ mod tests {
                     | PhaseFailureKind::DeadlineExceeded
             )
         });
-        let targeted_ids: Vec<&str> =
-            targeted.iter().map(|(id, _)| id.as_str()).collect();
+        let targeted_ids: Vec<&str> = targeted.iter().map(|(id, _)| id.as_str()).collect();
         assert_eq!(targeted_ids, vec!["sec_0001", "sec_0003"]);
-        let filtered_ids: Vec<&str> =
-            filtered_out.iter().map(|(id, _)| id.as_str()).collect();
+        let filtered_ids: Vec<&str> = filtered_out.iter().map(|(id, _)| id.as_str()).collect();
         assert_eq!(filtered_ids, vec!["sec_0002", "sec_0004"]);
     }
 
@@ -1173,10 +1181,7 @@ mod tests {
 
     #[test]
     fn parse_args_rejects_empty_chapter_list() {
-        let err = parse_args(
-            &["ak".into(), "--chapters".into(), "  ,  ,".into()],
-        )
-        .unwrap_err();
+        let err = parse_args(&["ak".into(), "--chapters".into(), "  ,  ,".into()]).unwrap_err();
         assert!(err.contains("at least one"));
     }
 }

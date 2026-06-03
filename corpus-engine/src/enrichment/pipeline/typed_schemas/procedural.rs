@@ -11,8 +11,7 @@ use crate::enrichment::pipeline::atlas::{
 use crate::enrichment::pipeline::types::strip_reasoning_tags;
 use crate::error::{Error, Result};
 
-pub const PHASE1_PROCEDURAL_SYSTEM: &str =
-    include_str!("procedural_phase1_system.md");
+pub const PHASE1_PROCEDURAL_SYSTEM: &str = include_str!("procedural_phase1_system.md");
 
 pub fn phase1_procedural_schema() -> serde_json::Value {
     serde_json::json!({
@@ -100,7 +99,10 @@ pub fn phase1_procedural_schema() -> serde_json::Value {
 }
 
 fn str_field(v: &serde_json::Value, key: &str) -> String {
-    v.get(key).and_then(|x| x.as_str()).unwrap_or("").to_string()
+    v.get(key)
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string()
 }
 
 fn required_str(v: &serde_json::Value, key: &str) -> Option<String> {
@@ -153,9 +155,7 @@ pub fn parse_phase1_procedural(response: &str) -> Result<ProceduralExtension> {
                         .and_then(|x| x.as_array())
                         .map(|a| {
                             a.iter()
-                                .filter_map(|p| {
-                                    p.as_str().map(str::trim).filter(|s| !s.is_empty())
-                                })
+                                .filter_map(|p| p.as_str().map(str::trim).filter(|s| !s.is_empty()))
                                 .map(str::to_string)
                                 .collect::<Vec<_>>()
                         })
@@ -246,7 +246,9 @@ pub fn parse_phase1_procedural(response: &str) -> Result<ProceduralExtension> {
 }
 
 pub fn parse_phase1_procedural_extension(response: &str) -> Result<TypeExtension> {
-    Ok(TypeExtension::Procedural(parse_phase1_procedural(response)?))
+    Ok(TypeExtension::Procedural(parse_phase1_procedural(
+        response,
+    )?))
 }
 
 #[cfg(test)]

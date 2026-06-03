@@ -93,9 +93,8 @@ impl OplogWriter {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent).map_err(Error::Io)?;
         }
-        let line = serde_json::to_string(entry).map_err(|e| {
-            Error::Extraction(format!("reconciliation_oplog: serialise: {e}"))
-        })?;
+        let line = serde_json::to_string(entry)
+            .map_err(|e| Error::Extraction(format!("reconciliation_oplog: serialise: {e}")))?;
         let mut f = OpenOptions::new()
             .create(true)
             .append(true)
@@ -186,11 +185,7 @@ impl OplogEntry {
         }
     }
 
-    pub fn split(
-        input: AtomId,
-        outputs: Vec<AtomId>,
-        rationale: impl Into<String>,
-    ) -> Self {
+    pub fn split(input: AtomId, outputs: Vec<AtomId>, rationale: impl Into<String>) -> Self {
         Self {
             op: OpKind::Split,
             inputs: vec![input],
@@ -213,7 +208,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let writer = OplogWriter::new(dir.path());
         let entry = OplogEntry::merge(
-            vec![AtomId::from_raw("entity-001"), AtomId::from_raw("entity-002")],
+            vec![
+                AtomId::from_raw("entity-001"),
+                AtomId::from_raw("entity-002"),
+            ],
             AtomId::from_raw("entity-canonical-ken-lay"),
             vec![MergeSignal::NameSimilarity, MergeSignal::EmailHeader],
             None,

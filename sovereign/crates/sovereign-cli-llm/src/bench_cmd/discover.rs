@@ -149,9 +149,7 @@ pub fn discover_benches(bench_root: &Path) -> Vec<DiscoveredBench> {
             }
         }
     }
-    out.sort_by(|a, b| {
-        a.group.cmp(&b.group).then_with(|| a.id.cmp(&b.id))
-    });
+    out.sort_by(|a, b| a.group.cmp(&b.group).then_with(|| a.id.cmp(&b.id)));
     out
 }
 
@@ -178,12 +176,7 @@ fn classify(path: &Path, group: &str) -> Option<DiscoveredBench> {
             .and_then(|v| v.as_array())
             .map(|arr| {
                 arr.iter()
-                    .filter_map(|q| {
-                        q.as_table()?
-                            .get("category")?
-                            .as_str()
-                            .map(String::from)
-                    })
+                    .filter_map(|q| q.as_table()?.get("category")?.as_str().map(String::from))
                     .collect()
             })
             .unwrap_or_default();
@@ -250,9 +243,18 @@ fn enrichment_levers(val: &toml::Value) -> Vec<String> {
     // Base atom-kind fields (not in the catalog but still scoring
     // signals). Order: alphabetical, deduped against catalog keys.
     let base_kinds = [
-        "person", "concept", "work", "event", "state", "relation",
-        "question", "claim", "fault_line", "open_question",
-        "configuration", "position",
+        "person",
+        "concept",
+        "work",
+        "event",
+        "state",
+        "relation",
+        "question",
+        "claim",
+        "fault_line",
+        "open_question",
+        "configuration",
+        "position",
     ];
     for kind in base_kinds {
         let field = format!("expected_{kind}_atoms");
@@ -389,7 +391,10 @@ canonical_name_contains_any = ["Karamazov"]
         let benches = discover_benches(tmp.path());
         assert_eq!(benches.len(), 1);
         assert_eq!(benches[0].corpus_id, "bk-book-1");
-        assert_eq!(benches[0].corpus_id_source, CorpusIdSource::InferredFromFilename);
+        assert_eq!(
+            benches[0].corpus_id_source,
+            CorpusIdSource::InferredFromFilename
+        );
     }
 
     #[test]
@@ -445,7 +450,10 @@ canonical_name_contains_any = ["x"]
             );
         }
         let benches = discover_benches(tmp.path());
-        let ids: Vec<_> = benches.iter().map(|b| (b.group.as_str(), b.id.as_str())).collect();
+        let ids: Vec<_> = benches
+            .iter()
+            .map(|b| (b.group.as_str(), b.id.as_str()))
+            .collect();
         assert_eq!(
             ids,
             vec![

@@ -56,7 +56,12 @@ pub struct BlastRadiusTool {
 
 impl BlastRadiusTool {
     pub fn new(graph: ScipGraphHandleRef) -> Self {
-        Self { graph, project_root: None, checker: None, atlas: None }
+        Self {
+            graph,
+            project_root: None,
+            checker: None,
+            atlas: None,
+        }
     }
 
     /// Enable the supplementary macro text scan. Call this when the project
@@ -239,7 +244,9 @@ impl Tool for BlastRadiusTool {
         // Supplementary macro scan — runs regardless of SCIP results so
         // agents see macro hints even when SCIP finds callers (the macro
         // call sites are *additional* to the SCIP ones, not a replacement).
-        let macro_hints = self.project_root.as_ref()
+        let macro_hints = self
+            .project_root
+            .as_ref()
             .map(|root| macro_scan(symbol, root, 20));
 
         // Spec §8: every blast response carries a `concurrent` field,
@@ -389,8 +396,14 @@ const SOURCE_EXTS: &[&str] = &["rs", "ts", "tsx", "js", "jsx", "py", "go"];
 
 /// Directories to skip entirely during the walk.
 const SKIP_DIRS: &[&str] = &[
-    "target", "node_modules", ".git", ".sovereign",
-    "dist", "build", ".cache", "__pycache__",
+    "target",
+    "node_modules",
+    ".git",
+    ".sovereign",
+    "dist",
+    "build",
+    ".cache",
+    "__pycache__",
 ];
 
 /// Walk `root` looking for lines that contain both `symbol` and a macro
@@ -423,9 +436,7 @@ fn walk_source_files(
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            let name = path.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("");
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if SKIP_DIRS.contains(&name) {
                 continue;
             }
@@ -434,10 +445,9 @@ fn walk_source_files(
             }
         } else if path.is_file() {
             let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-            if SOURCE_EXTS.contains(&ext)
-                && !visitor(&path) {
-                    return false;
-                }
+            if SOURCE_EXTS.contains(&ext) && !visitor(&path) {
+                return false;
+            }
         }
     }
     true
@@ -461,8 +471,7 @@ fn has_word(line: &str, symbol: &str) -> bool {
     while pos + sym_len <= bytes.len() {
         if bytes[pos..pos + sym_len] == *sym {
             let before_ok = pos == 0 || !is_ident_char(bytes[pos - 1]);
-            let after_ok = pos + sym_len >= bytes.len()
-                || !is_ident_char(bytes[pos + sym_len]);
+            let after_ok = pos + sym_len >= bytes.len() || !is_ident_char(bytes[pos + sym_len]);
             if before_ok && after_ok {
                 return true;
             }

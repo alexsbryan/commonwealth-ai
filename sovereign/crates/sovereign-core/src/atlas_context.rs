@@ -283,9 +283,7 @@ fn atom_verbatim_excerpt(graph: &AtlasGraph, atom_id: &str) -> Option<String> {
             s.push_str(&format!("Argument: {}", a.name));
             // Resolve proponent to canonical name when possible.
             if let Some(prop_id) = a.proponent.as_ref() {
-                if let Some(AtomEnvelope::Entity(e)) =
-                    graph.atoms_by_id.get(prop_id.as_str())
-                {
+                if let Some(AtomEnvelope::Entity(e)) = graph.atoms_by_id.get(prop_id.as_str()) {
                     s.push_str(&format!(" ({})", e.canonical_name));
                 }
             }
@@ -336,13 +334,10 @@ fn atom_verbatim_excerpt(graph: &AtlasGraph, atom_id: &str) -> Option<String> {
             // The Claim atom holds an AtomId — look it up in the
             // graph for the human-readable label. Fallback: bare id.
             let attribution = c.attributed_to.as_ref().and_then(|aid| {
-                graph
-                    .atoms_by_id
-                    .get(aid.as_str())
-                    .and_then(|a| match a {
-                        AtomEnvelope::Entity(e) => Some(e.canonical_name.clone()),
-                        _ => None,
-                    })
+                graph.atoms_by_id.get(aid.as_str()).and_then(|a| match a {
+                    AtomEnvelope::Entity(e) => Some(e.canonical_name.clone()),
+                    _ => None,
+                })
             });
             // Tag contested-status claims so the essay-judge sees them
             // as counter-position content rather than mainline support.
@@ -363,7 +358,10 @@ fn atom_verbatim_excerpt(graph: &AtlasGraph, atom_id: &str) -> Option<String> {
                     "[{} ({}){}]: \"{}\"",
                     name, graph.article_slug, contested_tag, q
                 )),
-                None => Some(format!("[{}{}]: \"{}\"", graph.article_slug, contested_tag, q)),
+                None => Some(format!(
+                    "[{}{}]: \"{}\"",
+                    graph.article_slug, contested_tag, q
+                )),
             }
         }
         _ => None,
@@ -639,9 +637,12 @@ pub fn atlas_navigate(
             }
             let preview = ev.passage_preview.as_deref().unwrap_or("").trim();
             let key = (graph.article_slug.clone(), chunk_id.to_string());
-            let entry = chunk_scores
-                .entry(key)
-                .or_insert((0.0, preview.to_string(), Vec::new(), Vec::new()));
+            let entry = chunk_scores.entry(key).or_insert((
+                0.0,
+                preview.to_string(),
+                Vec::new(),
+                Vec::new(),
+            ));
             entry.0 += atom_weight;
             // Take the longest preview seen for this chunk_id — more
             // discriminating for paragraph-level targeting later.
@@ -817,10 +818,7 @@ pub fn cosine(a: &[f32], b: &[f32]) -> f32 {
 ///     extracted entries (see `AtlasContextFilter::default`); a
 ///     future per-entry tier would land here when the loader
 ///     surfaces mixed depths.
-pub fn atlas_top_k_as_chunks(
-    query_embedding: &[f32],
-    ctx: &AtlasContext,
-) -> Vec<ScoredChunk> {
+pub fn atlas_top_k_as_chunks(query_embedding: &[f32], ctx: &AtlasContext) -> Vec<ScoredChunk> {
     atlas_top_k_across(query_embedding, std::slice::from_ref(&ctx), ctx.top_k)
 }
 

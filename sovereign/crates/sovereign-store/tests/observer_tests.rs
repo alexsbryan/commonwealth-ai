@@ -138,7 +138,11 @@ async fn observer_fires_on_message_write_with_conversation_id() {
     // for coalescing. The observer's job is faithful per-write delivery.
     assert_eq!(
         observer.conversation_ids.lock().unwrap().as_slice(),
-        &["conv-a".to_string(), "conv-a".to_string(), "conv-b".to_string()]
+        &[
+            "conv-a".to_string(),
+            "conv-a".to_string(),
+            "conv-b".to_string()
+        ]
     );
 }
 
@@ -209,7 +213,10 @@ async fn store_catches_naked_observer_panic() {
 
     // These would abort the test before the hardening fix.
     store.save_memory(&mem("m-panic-1")).await.unwrap();
-    store.save_message(&msg("msg-panic", "conv-panic")).await.unwrap();
+    store
+        .save_message(&msg("msg-panic", "conv-panic"))
+        .await
+        .unwrap();
 
     // Store is still usable after a panicking handler.
     let all = store.get_all_memories().await.unwrap();

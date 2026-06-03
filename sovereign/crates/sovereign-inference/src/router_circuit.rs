@@ -23,10 +23,7 @@ pub struct RouterCircuitChecker {
 }
 
 impl RouterCircuitChecker {
-    pub fn new(
-        tracker: Arc<HealthTracker>,
-        inference: Arc<dyn InferenceProvider>,
-    ) -> Self {
+    pub fn new(tracker: Arc<HealthTracker>, inference: Arc<dyn InferenceProvider>) -> Self {
         Self { tracker, inference }
     }
 }
@@ -59,9 +56,8 @@ impl HealthCheckable for RouterCircuitChecker {
     fn repair(
         &self,
         issue: &HealthIssue,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<RepairOutcome>> + Send + '_>,
-    > {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<RepairOutcome>> + Send + '_>>
+    {
         let issue = issue.clone();
         Box::pin(async move {
             match &issue {
@@ -78,16 +74,16 @@ impl HealthCheckable for RouterCircuitChecker {
                         top_k: None,
                         top_p: None,
                         oicp: None,
-            tools: None,
-            tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-                    sampling_mode: None,
-                    assistant_prefix: None,
-                    cmd_prefix: None,
-                    url_allowlist: None,
-                    evidence_id_allowlist: None,
-                    lark_grammar: None,
+                        tools: None,
+                        tool_choice: None,
+                        model_id: None,
+                        enable_thinking: None,
+                        sampling_mode: None,
+                        assistant_prefix: None,
+                        cmd_prefix: None,
+                        url_allowlist: None,
+                        evidence_id_allowlist: None,
+                        lark_grammar: None,
                     };
                     match self.inference.complete(&probe).await {
                         Ok(_) => {

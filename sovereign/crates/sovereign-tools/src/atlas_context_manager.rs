@@ -328,11 +328,7 @@ impl AtlasContextManager {
                         .write()
                         .await
                         .insert(corpus_id.clone(), Arc::new(ctx));
-                    tracing::info!(
-                        corpus = corpus_id,
-                        entries = count,
-                        "atlas-context: loaded"
-                    );
+                    tracing::info!(corpus = corpus_id, entries = count, "atlas-context: loaded");
                 }
                 Err(e) => {
                     tracing::debug!(
@@ -347,7 +343,8 @@ impl AtlasContextManager {
             // path skipped the embeddings, the graph itself is cheap
             // to parse and we want it available for graph-walk
             // navigation regardless.
-            match sovereign_core::atlas_context::AtlasGraph::load_from_disk(&corpus_id, &atlas_dir) {
+            match sovereign_core::atlas_context::AtlasGraph::load_from_disk(&corpus_id, &atlas_dir)
+            {
                 Ok(graph) => {
                     let atom_count = graph.atoms_by_id.len();
                     let edge_out_count: usize =
@@ -475,8 +472,8 @@ impl AtlasContextManager {
         cache_only: bool,
     ) -> Result<AtlasContext, String> {
         let filter_sig = self.filter.signature();
-        let atoms_hash = atoms_content_hash(atlas_dir)
-            .map_err(|e| format!("hash atoms.json: {e}"))?;
+        let atoms_hash =
+            atoms_content_hash(atlas_dir).map_err(|e| format!("hash atoms.json: {e}"))?;
 
         // Try cache first.
         match read_atlas_embeddings(atlas_dir, &self.embed_model, &atoms_hash, &filter_sig) {
@@ -628,8 +625,7 @@ impl AtlasContextManager {
                             break;
                         }
                     }
-                    let mut text =
-                        format!("[Configuration: {}] {}", cfg.label, cfg.description);
+                    let mut text = format!("[Configuration: {}] {}", cfg.label, cfg.description);
                     if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
                         text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
                     }
@@ -692,11 +688,8 @@ impl AtlasContextManager {
         // shared cache key is symmetric. Missing edges.json (older
         // atlases without Phase 6) is non-fatal — log and skip.
         if self.filter.include_tensions {
-            let atoms_by_id: HashMap<&str, &AtomEnvelope> = atoms
-                .atoms
-                .iter()
-                .map(|a| (a.id().as_str(), a))
-                .collect();
+            let atoms_by_id: HashMap<&str, &AtomEnvelope> =
+                atoms.atoms.iter().map(|a| (a.id().as_str(), a)).collect();
             match read_atlas_edges(atlas_dir) {
                 Ok(edges_file) => {
                     for edge in &edges_file.edges {
@@ -879,8 +872,7 @@ fn write_bump_state(atlas_dir: &Path, counts: &HashMap<String, u64>) -> std::io:
         schema_version: BUMPS_SCHEMA,
         bumps: counts.clone(),
     };
-    let bytes = serde_json::to_vec_pretty(&body)
-        .map_err(std::io::Error::other)?;
+    let bytes = serde_json::to_vec_pretty(&body).map_err(std::io::Error::other)?;
     std::fs::write(&tmp, bytes)?;
     std::fs::rename(&tmp, &path)
 }

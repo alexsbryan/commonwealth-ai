@@ -18,8 +18,14 @@ const HELP: Help = Help {
             "sovereign enrich query <corpus-id> \"<text>\" [--show-traversal] [--threshold <f>]",
         ),
         HelpSection::Flags(&[
-            ("--show-traversal", "Print the full LOCATE/TRAVERSE/GROUNDING breakdown (default on)."),
-            ("--threshold <f>", "Cosine similarity threshold for LOCATE inclusion (default 0.5)."),
+            (
+                "--show-traversal",
+                "Print the full LOCATE/TRAVERSE/GROUNDING breakdown (default on).",
+            ),
+            (
+                "--threshold <f>",
+                "Cosine similarity threshold for LOCATE inclusion (default 0.5).",
+            ),
         ]),
         HelpSection::Notes(
             "Requires phase 3 (concerns) cache. Phase 5/6/7 caches are optional; missing caches \
@@ -50,7 +56,10 @@ pub async fn cmd_query(args: &[String]) -> i32 {
         }
     };
     if !probe_daemon(&cfg.base_url).await {
-        eprintln!("error: daemon is not responding at {} — start it first", cfg.base_url);
+        eprintln!(
+            "error: daemon is not responding at {} — start it first",
+            cfg.base_url
+        );
         return 2;
     }
 
@@ -70,14 +79,13 @@ pub async fn cmd_query(args: &[String]) -> i32 {
     };
     let (embed, _chat) = client.into_closures();
 
-    let traversal =
-        match traverse_atlas(&atlas, &parsed.query, &embed, parsed.threshold).await {
-            Ok(t) => t,
-            Err(e) => {
-                eprintln!("error: traversal failed: {e}");
-                return 1;
-            }
-        };
+    let traversal = match traverse_atlas(&atlas, &parsed.query, &embed, parsed.threshold).await {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("error: traversal failed: {e}");
+            return 1;
+        }
+    };
 
     println!("Query: {}", parsed.query);
     println!();
@@ -177,9 +185,7 @@ fn parse_args(args: &[String]) -> Result<ParsedQuery, String> {
                 let v = args
                     .get(i + 1)
                     .ok_or("--threshold requires a numeric value".to_string())?;
-                threshold = v
-                    .parse::<f32>()
-                    .map_err(|e| format!("--threshold: {e}"))?;
+                threshold = v.parse::<f32>().map_err(|e| format!("--threshold: {e}"))?;
                 i += 2;
             }
             other if other.starts_with("--") => {
@@ -199,7 +205,12 @@ fn parse_args(args: &[String]) -> Result<ParsedQuery, String> {
     }
     let corpus_id = corpus_id.ok_or_else(|| "missing <corpus-id>".to_string())?;
     let query = query.ok_or_else(|| "missing query text".to_string())?;
-    Ok(ParsedQuery { corpus_id, query, show, threshold })
+    Ok(ParsedQuery {
+        corpus_id,
+        query,
+        show,
+        threshold,
+    })
 }
 
 #[cfg(test)]
@@ -218,12 +229,7 @@ mod tests {
 
     #[test]
     fn parse_query_with_threshold() {
-        let args = vec![
-            "ak".into(),
-            "q".into(),
-            "--threshold".into(),
-            "0.7".into(),
-        ];
+        let args = vec!["ak".into(), "q".into(), "--threshold".into(), "0.7".into()];
         let p = parse_args(&args).unwrap();
         assert!((p.threshold - 0.7).abs() < 0.001);
     }

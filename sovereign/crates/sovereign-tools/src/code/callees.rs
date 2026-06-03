@@ -14,8 +14,8 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine_scip::scip_graph::{CallKind, ScipGraph};
 use corpus_engine::CorpusEngine;
+use corpus_engine_scip::scip_graph::{CallKind, ScipGraph};
 
 use super::index_health::IndexHealthChecker;
 use super::is_valid_symbol_name;
@@ -34,7 +34,11 @@ pub struct FindCalleesTool {
 
 impl FindCalleesTool {
     pub fn new(engine: Arc<CorpusEngine>, graph: ScipGraphHandle) -> Self {
-        Self { engine, graph, checker: None }
+        Self {
+            engine,
+            graph,
+            checker: None,
+        }
     }
 
     pub fn with_health_checker(mut self, checker: Arc<IndexHealthChecker>) -> Self {
@@ -106,24 +110,17 @@ impl Tool for FindCalleesTool {
         Ok(())
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let symbol = params
             .get("symbol")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::InvalidInput("missing 'symbol'".to_string()))?;
 
         let graph = self.graph.load_full();
-        let (callees, caution) = graph
-            .find_callees(symbol)
-            .await
-            .map_err(|e| Error::Tool {
-                tool_id: "callees".to_string(),
-                message: e.to_string(),
-            })?;
+        let (callees, caution) = graph.find_callees(symbol).await.map_err(|e| Error::Tool {
+            tool_id: "callees".to_string(),
+            message: e.to_string(),
+        })?;
 
         if callees.is_empty() {
             return Ok(StepOutput::Text(format!(
@@ -142,10 +139,7 @@ impl Tool for FindCalleesTool {
         // Group by file for readability.
         let mut by_file: BTreeMap<&str, Vec<_>> = BTreeMap::new();
         for callee in &callees {
-            by_file
-                .entry(&callee.file_path)
-                .or_default()
-                .push(callee);
+            by_file.entry(&callee.file_path).or_default().push(callee);
         }
 
         for (file, calls) in &by_file {

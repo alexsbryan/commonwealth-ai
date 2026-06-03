@@ -58,10 +58,7 @@ impl TesseractError {
 /// Run tesseract on one page image. Returns the raw text exactly as
 /// tesseract emits it (line breaks, hyphenation artifacts, page
 /// headers — all preserved). The cleanup pass is what reformats it.
-pub fn recognize_page(
-    image: &DynamicImage,
-    ctx: &OcrCtx,
-) -> Result<String, TesseractError> {
+pub fn recognize_page(image: &DynamicImage, ctx: &OcrCtx) -> Result<String, TesseractError> {
     let temp = tempfile::Builder::new()
         .prefix("sovereign-ocr-")
         .suffix(".png")

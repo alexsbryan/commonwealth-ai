@@ -17,9 +17,7 @@ const HELP: Help = Help {
     command: "sovereign atlas status",
     summary: "Show atlas readiness for every installed corpus (or just one).",
     sections: &[
-        HelpSection::Usage(
-            "sovereign atlas status [<corpus_id>] [--data-dir <path>] [--json]",
-        ),
+        HelpSection::Usage("sovereign atlas status [<corpus_id>] [--data-dir <path>] [--json]"),
         HelpSection::Flags(&[
             (
                 "--data-dir <path>",

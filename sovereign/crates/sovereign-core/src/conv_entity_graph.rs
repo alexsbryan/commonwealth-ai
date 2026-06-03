@@ -339,11 +339,7 @@ impl ConvEntityGraph {
     /// surface form and PPR diffusion of "what's related to
     /// swift" should reach both. Future refinement: typed nodes
     /// when label-typed retrieval becomes load-bearing.
-    pub fn from_chunk_entities(
-        corpus_id: &str,
-        conv_uuid: &str,
-        rows: &[ChunkEntityRow],
-    ) -> Self {
+    pub fn from_chunk_entities(corpus_id: &str, conv_uuid: &str, rows: &[ChunkEntityRow]) -> Self {
         let mut graph = ConvEntityGraph {
             corpus_id: corpus_id.to_string(),
             conv_uuid: conv_uuid.to_string(),
@@ -605,7 +601,8 @@ impl ConvEntityGraph {
             return;
         }
         if !self.name_to_idx.contains_key(&key) {
-            self.name_to_idx.insert(key.clone(), self.entity_names.len());
+            self.name_to_idx
+                .insert(key.clone(), self.entity_names.len());
             self.entity_names.push(raw.to_string());
         }
     }
@@ -666,10 +663,8 @@ fn is_word_boundary_match(haystack: &str, needle: &str) -> bool {
         if let Some(found) = haystack[start..].find(needle) {
             let i = start + found;
             let j = i + needle_bytes.len();
-            let before_ok = i == 0
-                || !haystack_bytes[i - 1].is_ascii_alphanumeric();
-            let after_ok = j == haystack_bytes.len()
-                || !haystack_bytes[j].is_ascii_alphanumeric();
+            let before_ok = i == 0 || !haystack_bytes[i - 1].is_ascii_alphanumeric();
+            let after_ok = j == haystack_bytes.len() || !haystack_bytes[j].is_ascii_alphanumeric();
             if before_ok && after_ok {
                 return true;
             }
@@ -686,10 +681,9 @@ mod tests {
     use super::*;
 
     fn mk_node(id: &str, entities: &[&str], coherence: f64, chunks: &[u64]) -> ConvRaptorNodeRow {
-        let ents_json = serde_json::to_string(
-            &entities.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-        )
-        .unwrap();
+        let ents_json =
+            serde_json::to_string(&entities.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+                .unwrap();
         let chunks_json = if chunks.is_empty() {
             None
         } else {
@@ -805,10 +799,19 @@ mod tests {
 
     #[test]
     fn seed_indices_token_split_for_multi_word_entities() {
-        let nodes = vec![mk_node("n1", &["Jonathan Swift", "Toni Morrison"], 0.9, &[1])];
+        let nodes = vec![mk_node(
+            "n1",
+            &["Jonathan Swift", "Toni Morrison"],
+            0.9,
+            &[1],
+        )];
         let g = ConvEntityGraph::from_raptor_nodes("c", "u", &nodes);
         // Surname-only query should still hit the multi-word entity.
-        assert_eq!(g.seed_indices_from_query("modern Swift satirical works").len(), 1);
+        assert_eq!(
+            g.seed_indices_from_query("modern Swift satirical works")
+                .len(),
+            1
+        );
         assert_eq!(g.seed_indices_from_query("Morrison's prose style").len(), 1);
         // Both surnames in one query.
         assert_eq!(g.seed_indices_from_query("Swift and Morrison").len(), 2);
@@ -970,7 +973,10 @@ mod tests {
         // borges↔calvino only conv-clique = 0.1
         let bb = weight_pair(borges, bach);
         let bc = weight_pair(borges, calvino);
-        assert!(bb > bc, "expected borges↔bach ({bb}) > borges↔calvino ({bc})");
+        assert!(
+            bb > bc,
+            "expected borges↔bach ({bb}) > borges↔calvino ({bc})"
+        );
         assert!((bb - 0.6).abs() < 0.001, "bb = {bb}");
         assert!((bc - 0.1).abs() < 0.001, "bc = {bc}");
     }

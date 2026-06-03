@@ -278,10 +278,11 @@ pub fn reading_router(daemon: Arc<EmbeddedDaemon>) -> Router {
             "/internal/corpus/{corpus}/atoms/{atom_id}/elsewhere",
             get(get_atom_elsewhere),
         )
-        .layer(axum::middleware::from_fn(crate::loopback_guard::loopback_only))
+        .layer(axum::middleware::from_fn(
+            crate::loopback_guard::loopback_only,
+        ))
         .layer(Extension(daemon))
 }
-
 
 // ─── Handlers ──────────────────────────────────────────────────
 
@@ -310,8 +311,7 @@ async fn get_chunk(
     };
     let atlas_atoms = load_atlas_atoms(&engine, &corpus).await;
     let conv = maybe_resolve_conversation_meta(&daemon, &corpus, &row).await;
-    let record =
-        chunk_record_from_row_with_conv(&corpus, &row, atlas_atoms.as_deref(), conv);
+    let record = chunk_record_from_row_with_conv(&corpus, &row, atlas_atoms.as_deref(), conv);
     (StatusCode::OK, Json(record)).into_response()
 }
 
@@ -350,10 +350,8 @@ async fn get_neighbors(
     // adjacent paragraphs in the same conversation incur the same
     // (cheap) SQLite hit; we don't bother memoising across the
     // three-chunk radius.
-    let center_conv =
-        maybe_resolve_conversation_meta(&daemon, &corpus, &window.center).await;
-    let center =
-        chunk_record_from_row_with_conv(&corpus, &window.center, atoms_ref, center_conv);
+    let center_conv = maybe_resolve_conversation_meta(&daemon, &corpus, &window.center).await;
+    let center = chunk_record_from_row_with_conv(&corpus, &window.center, atoms_ref, center_conv);
     let outbound_url = center.url.clone();
     let mut prev_records = Vec::with_capacity(window.prev.len());
     for r in &window.prev {
@@ -403,7 +401,9 @@ async fn get_atom_card(
         return not_found("atom not found");
     };
 
-    let edges = read_atlas_edges(&atlas_dir).map(|f| f.edges).unwrap_or_default();
+    let edges = read_atlas_edges(&atlas_dir)
+        .map(|f| f.edges)
+        .unwrap_or_default();
     let cross_edges = read_atlas_cross_corpus_edges(&atlas_dir)
         .map(|f| f.edges)
         .unwrap_or_default();
@@ -734,7 +734,9 @@ pub(crate) async fn maybe_resolve_conversation_meta(
 fn not_found(msg: &str) -> axum::response::Response {
     (
         StatusCode::NOT_FOUND,
-        Json(ErrorBody { error: msg.to_string() }),
+        Json(ErrorBody {
+            error: msg.to_string(),
+        }),
     )
         .into_response()
 }
@@ -742,7 +744,9 @@ fn not_found(msg: &str) -> axum::response::Response {
 fn internal_error(msg: &str) -> axum::response::Response {
     (
         StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ErrorBody { error: msg.to_string() }),
+        Json(ErrorBody {
+            error: msg.to_string(),
+        }),
     )
         .into_response()
 }
@@ -750,7 +754,9 @@ fn internal_error(msg: &str) -> axum::response::Response {
 fn service_unavailable(msg: &str) -> axum::response::Response {
     (
         StatusCode::SERVICE_UNAVAILABLE,
-        Json(ErrorBody { error: msg.to_string() }),
+        Json(ErrorBody {
+            error: msg.to_string(),
+        }),
     )
         .into_response()
 }
@@ -774,8 +780,7 @@ mod tests {
             metadata_raw: Some(r#"{"section_id":"sec_0001","other":"x"}"#.into()),
             source_doc_id: Some("brothers_karamazov".into()),
         };
-        let record =
-            chunk_record_from_row_with_conv("brothers_karamazov", &row, None, None);
+        let record = chunk_record_from_row_with_conv("brothers_karamazov", &row, None, None);
         assert_eq!(record.chunk_id, 7);
         assert_eq!(record.section_id.as_deref(), Some("sec_0001"));
         assert_eq!(record.source_doc_id.as_deref(), Some("brothers_karamazov"));
@@ -830,7 +835,10 @@ mod tests {
         let segs = parse_conversation_segments(content);
         assert_eq!(segs.len(), 3);
         assert_eq!(segs[0].content, "What about [bracket] inside?");
-        assert_eq!(segs[1].content, "Brackets like [foo] in prose stay attached.");
+        assert_eq!(
+            segs[1].content,
+            "Brackets like [foo] in prose stay attached."
+        );
         assert_eq!(segs[2].content, "Got it.");
     }
 

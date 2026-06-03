@@ -20,13 +20,10 @@ use async_trait::async_trait;
 use futures::Stream;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::memory_compaction::{
-    CompactionConfig, CompactionMode, CompactionWorker,
-};
+use sovereign_core::memory_compaction::{CompactionConfig, CompactionMode, CompactionWorker};
 use sovereign_core::traits::{InferenceProvider, MemoryStore};
 use sovereign_core::types::{
-    CompletionRequest, CompletionResponse, Depth, Memory, MemoryKind,
-    ProviderCapabilities, Speed,
+    CompletionRequest, CompletionResponse, Depth, Memory, MemoryKind, ProviderCapabilities, Speed,
 };
 use sovereign_store::memory::InMemoryStateStore;
 
@@ -59,14 +56,17 @@ impl InferenceProvider for StubInference {
             latency_ms: 0,
             oicp_meta: None,
             finish_reason: None,
-            completion_tokens: None,        })
+            completion_tokens: None,
+        })
     }
 
     async fn complete_stream(
         &self,
         _request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        Err(Error::NotImplemented("StubInference: streaming unused".into()))
+        Err(Error::NotImplemented(
+            "StubInference: streaming unused".into(),
+        ))
     }
 
     async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
@@ -99,8 +99,7 @@ fn raw_mem(id: &str, conv: &str, created_at: i64, content: &str) -> Memory {
 
 #[tokio::test]
 async fn worker_folds_oldest_batch_when_threshold_crossed() {
-    let store: Arc<dyn MemoryStore> =
-        Arc::new(InMemoryStateStore::new());
+    let store: Arc<dyn MemoryStore> = Arc::new(InMemoryStateStore::new());
     let inference: Arc<dyn InferenceProvider> =
         Arc::new(StubInference::new("Synthesised summary of three entries."));
     let cfg = CompactionConfig {
@@ -110,11 +109,7 @@ async fn worker_folds_oldest_batch_when_threshold_crossed() {
         max_summary_chars: 200,
         synthesis_prompt: "Distill:\n{entries}".into(),
     };
-    let worker = CompactionWorker::spawn(
-        Arc::clone(&store),
-        Arc::clone(&inference),
-        cfg,
-    );
+    let worker = CompactionWorker::spawn(Arc::clone(&store), Arc::clone(&inference), cfg);
 
     let conv = "conv-A";
     for i in 0..6 {
@@ -137,10 +132,7 @@ async fn worker_folds_oldest_batch_when_threshold_crossed() {
     assert_eq!(pass.source_memory_ids, vec!["m0", "m1", "m2"]);
     assert!(pass.summary_id.is_some());
 
-    let active = store
-        .list_memories_for_conversation(conv)
-        .await
-        .unwrap();
+    let active = store.list_memories_for_conversation(conv).await.unwrap();
     assert_eq!(active.len(), 4, "1 summary + 3 untouched raws");
     let summary = active
         .iter()
@@ -164,8 +156,7 @@ async fn worker_folds_oldest_batch_when_threshold_crossed() {
 
 #[tokio::test]
 async fn worker_under_threshold_is_noop() {
-    let store: Arc<dyn MemoryStore> =
-        Arc::new(InMemoryStateStore::new());
+    let store: Arc<dyn MemoryStore> = Arc::new(InMemoryStateStore::new());
     let inference: Arc<dyn InferenceProvider> =
         Arc::new(StubInference::new("would never be called"));
     let cfg = CompactionConfig {
@@ -189,22 +180,20 @@ async fn worker_under_threshold_is_noop() {
             .unwrap();
     }
     let pass = worker.run_one_sync(conv).await.unwrap();
-    assert!(pass.is_none(), "5 memories is under threshold=6; should no-op");
+    assert!(
+        pass.is_none(),
+        "5 memories is under threshold=6; should no-op"
+    );
 
-    let active = store
-        .list_memories_for_conversation(conv)
-        .await
-        .unwrap();
+    let active = store.list_memories_for_conversation(conv).await.unwrap();
     assert_eq!(active.len(), 5);
     assert!(active.iter().all(|m| matches!(m.kind, MemoryKind::Raw)));
 }
 
 #[tokio::test]
 async fn disabled_mode_skips_compaction_even_above_threshold() {
-    let store: Arc<dyn MemoryStore> =
-        Arc::new(InMemoryStateStore::new());
-    let inference: Arc<dyn InferenceProvider> =
-        Arc::new(StubInference::new("never used"));
+    let store: Arc<dyn MemoryStore> = Arc::new(InMemoryStateStore::new());
+    let inference: Arc<dyn InferenceProvider> = Arc::new(StubInference::new("never used"));
     let cfg = CompactionConfig {
         threshold: 6,
         batch: 3,
@@ -216,30 +205,21 @@ async fn disabled_mode_skips_compaction_even_above_threshold() {
     let conv = "conv-C";
     for i in 0..10 {
         store
-            .save_memory(&raw_mem(
-                &format!("p{i}"),
-                conv,
-                1_700_000_000 + i,
-                "entry",
-            ))
+            .save_memory(&raw_mem(&format!("p{i}"), conv, 1_700_000_000 + i, "entry"))
             .await
             .unwrap();
     }
     // maybe_enqueue is a no-op when mode=Disabled — verify by
     // confirming retrieval still sees all 10 raws untouched.
     worker.maybe_enqueue(conv);
-    let active = store
-        .list_memories_for_conversation(conv)
-        .await
-        .unwrap();
+    let active = store.list_memories_for_conversation(conv).await.unwrap();
     assert_eq!(active.len(), 10);
     assert!(active.iter().all(|m| matches!(m.kind, MemoryKind::Raw)));
 }
 
 #[tokio::test]
 async fn summary_truncates_at_max_summary_chars() {
-    let store: Arc<dyn MemoryStore> =
-        Arc::new(InMemoryStateStore::new());
+    let store: Arc<dyn MemoryStore> = Arc::new(InMemoryStateStore::new());
     let long = "x".repeat(2000);
     let inference: Arc<dyn InferenceProvider> = Arc::new(StubInference::new(&long));
     let cfg = CompactionConfig {
@@ -254,12 +234,7 @@ async fn summary_truncates_at_max_summary_chars() {
     let conv = "conv-D";
     for i in 0..3 {
         store
-            .save_memory(&raw_mem(
-                &format!("q{i}"),
-                conv,
-                1_700_000_000 + i,
-                "x",
-            ))
+            .save_memory(&raw_mem(&format!("q{i}"), conv, 1_700_000_000 + i, "x"))
             .await
             .unwrap();
     }
@@ -269,10 +244,7 @@ async fn summary_truncates_at_max_summary_chars() {
         .unwrap()
         .expect("threshold crossed");
     let summary_id = pass.summary_id.unwrap();
-    let active = store
-        .list_memories_for_conversation(conv)
-        .await
-        .unwrap();
+    let active = store.list_memories_for_conversation(conv).await.unwrap();
     let summary = active
         .iter()
         .find(|m| m.id == summary_id)

@@ -35,15 +35,12 @@ use crate::util::help::{self, Help, HelpSection};
 /// Bench configuration baked in at compile time. Changing the questions
 /// requires rebuilding the CLI; that's intentional — the bench is
 /// versioned with the codebase, not authored at runtime.
-const BENCH_TOML: &str = include_str!(
-    "../../../../../sovereign-recipes/book-report/bench.toml"
-);
+const BENCH_TOML: &str = include_str!("../../../../../sovereign-recipes/book-report/bench.toml");
 
 /// Gutenberg URL for The Secret Agent (book id 974). Pinned to the
 /// canonical UTF-8 plaintext mirror; the SHA-256 in `bench.toml` locks
 /// the content version once first run completes.
-const GUTENBERG_URL: &str =
-    "https://www.gutenberg.org/cache/epub/974/pg974.txt";
+const GUTENBERG_URL: &str = "https://www.gutenberg.org/cache/epub/974/pg974.txt";
 
 const HELP: Help = Help {
     command: "sovereign bench book-report",
@@ -335,8 +332,7 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
             }
             "--reuse-asset" => {
                 i += 1;
-                reuse_asset =
-                    Some(args.get(i).ok_or("--reuse-asset requires an id")?.clone());
+                reuse_asset = Some(args.get(i).ok_or("--reuse-asset requires an id")?.clone());
             }
             "--list-assets" => list_assets = true,
             "--tier" => {
@@ -418,10 +414,8 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
     let session = build_session(&globals)
         .await
         .map_err(|e| format!("daemon bootstrap failed: {e}. Is the daemon running?"))?;
-    let manager = DocumentAssetManager::new(
-        Arc::clone(&session.inference),
-        Arc::clone(&session.store),
-    );
+    let manager =
+        DocumentAssetManager::new(Arc::clone(&session.inference), Arc::clone(&session.store));
     let chat_model = Some(session.inference.model_id_for(Speed::Slow));
 
     // ── --list-assets exits here ───────────────────────────────
@@ -430,93 +424,101 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
         // Return a stub report so the caller's pattern still works.
         // The CLI treats list-assets as a success diagnostic, not a
         // bench run, so persistence is skipped.
-        return Ok(stub_report(bench_id, started_at.timestamp() as u64, source, chat_model));
+        return Ok(stub_report(
+            bench_id,
+            started_at.timestamp() as u64,
+            source,
+            chat_model,
+        ));
     }
 
     // ── Stage 3: attach OR reuse ───────────────────────────────
-    let (asset, attach_ms, transitions_vec, terminal_phase) =
-        if let Some(reuse_id) = &opts.reuse_asset {
-            eprintln!("[3/3] reuse — looking up existing asset {reuse_id}");
-            match session.store.get_document_asset(reuse_id).await {
-                Ok(Some(found)) => {
-                    eprintln!(
-                        "      found: title=\"{}\" state={:?}",
-                        found.title, found.state
-                    );
-                    let asset_to_use = if opts.rebuild_skeleton {
-                        eprintln!("      --rebuild-skeleton: re-running skeleton extraction (uses current build_skeleton speed)");
-                        let rebuild_start = std::time::Instant::now();
-                        match manager.rebuild_skeleton(reuse_id).await {
-                            Ok(new_skeleton) => {
-                                let secs = rebuild_start.elapsed().as_secs();
-                                eprintln!(
-                                    "      rebuild ok in {secs}s: {} entities, {} moments, {} actions",
-                                    new_skeleton.main_entities.len(),
-                                    new_skeleton.structural_moments.len(),
-                                    new_skeleton.actions.len(),
-                                );
-                                // Reload the asset to pick up the new skeleton.
-                                match session.store.get_document_asset(reuse_id).await {
-                                    Ok(Some(refreshed)) => refreshed,
-                                    _ => found,
-                                }
-                            }
-                            Err(e) => {
-                                eprintln!("      rebuild_skeleton failed: {e}; using existing skeleton");
-                                found
+    let (asset, attach_ms, transitions_vec, terminal_phase) = if let Some(reuse_id) =
+        &opts.reuse_asset
+    {
+        eprintln!("[3/3] reuse — looking up existing asset {reuse_id}");
+        match session.store.get_document_asset(reuse_id).await {
+            Ok(Some(found)) => {
+                eprintln!(
+                    "      found: title=\"{}\" state={:?}",
+                    found.title, found.state
+                );
+                let asset_to_use = if opts.rebuild_skeleton {
+                    eprintln!("      --rebuild-skeleton: re-running skeleton extraction (uses current build_skeleton speed)");
+                    let rebuild_start = std::time::Instant::now();
+                    match manager.rebuild_skeleton(reuse_id).await {
+                        Ok(new_skeleton) => {
+                            let secs = rebuild_start.elapsed().as_secs();
+                            eprintln!(
+                                "      rebuild ok in {secs}s: {} entities, {} moments, {} actions",
+                                new_skeleton.main_entities.len(),
+                                new_skeleton.structural_moments.len(),
+                                new_skeleton.actions.len(),
+                            );
+                            // Reload the asset to pick up the new skeleton.
+                            match session.store.get_document_asset(reuse_id).await {
+                                Ok(Some(refreshed)) => refreshed,
+                                _ => found,
                             }
                         }
-                    } else {
-                        found
-                    };
-                    if opts.rebuild_raptor {
-                        eprintln!("      --rebuild-raptor: populating RAPTOR atlas + motif index on the existing asset");
-                        let raptor_start = std::time::Instant::now();
-                        match manager.rebuild_raptor_atlas(reuse_id).await {
-                            Ok(()) => {
-                                let secs = raptor_start.elapsed().as_secs();
-                                let node_count = session
-                                    .store
-                                    .list_raptor_nodes(reuse_id)
-                                    .await
-                                    .map(|v| v.len())
-                                    .unwrap_or(0);
-                                let motif_count = session
-                                    .store
-                                    .list_asset_motifs(reuse_id)
-                                    .await
-                                    .map(|v| v.iter().filter(|m| m.is_distinctive).count())
-                                    .unwrap_or(0);
-                                eprintln!(
-                                    "      raptor rebuild ok in {secs}s: {node_count} nodes, {motif_count} distinctive motifs"
-                                );
-                            }
-                            Err(e) => {
-                                eprintln!("      rebuild_raptor_atlas failed: {e}; continuing without RAPTOR data");
-                            }
+                        Err(e) => {
+                            eprintln!(
+                                "      rebuild_skeleton failed: {e}; using existing skeleton"
+                            );
+                            found
                         }
                     }
-                    (
-                        Some(asset_to_use),
-                        0u64,
-                        vec![StateTransition {
-                            ms_since_attach: 0,
-                            phase: "reused".to_string(),
-                            detail: serde_json::json!({ "asset_id": reuse_id }),
-                        }],
-                        "reused".to_string(),
-                    )
+                } else {
+                    found
+                };
+                if opts.rebuild_raptor {
+                    eprintln!("      --rebuild-raptor: populating RAPTOR atlas + motif index on the existing asset");
+                    let raptor_start = std::time::Instant::now();
+                    match manager.rebuild_raptor_atlas(reuse_id).await {
+                        Ok(()) => {
+                            let secs = raptor_start.elapsed().as_secs();
+                            let node_count = session
+                                .store
+                                .list_raptor_nodes(reuse_id)
+                                .await
+                                .map(|v| v.len())
+                                .unwrap_or(0);
+                            let motif_count = session
+                                .store
+                                .list_asset_motifs(reuse_id)
+                                .await
+                                .map(|v| v.iter().filter(|m| m.is_distinctive).count())
+                                .unwrap_or(0);
+                            eprintln!(
+                                    "      raptor rebuild ok in {secs}s: {node_count} nodes, {motif_count} distinctive motifs"
+                                );
+                        }
+                        Err(e) => {
+                            eprintln!("      rebuild_raptor_atlas failed: {e}; continuing without RAPTOR data");
+                        }
+                    }
                 }
-                Ok(None) => {
-                    return Err(format!(
-                        "no asset with id {reuse_id} in the daemon's store. Try --list-assets."
-                    ))
-                }
-                Err(e) => return Err(format!("lookup asset {reuse_id}: {e}")),
+                (
+                    Some(asset_to_use),
+                    0u64,
+                    vec![StateTransition {
+                        ms_since_attach: 0,
+                        phase: "reused".to_string(),
+                        detail: serde_json::json!({ "asset_id": reuse_id }),
+                    }],
+                    "reused".to_string(),
+                )
             }
-        } else {
-            attach_and_stream(&manager, &source).await
-        };
+            Ok(None) => {
+                return Err(format!(
+                    "no asset with id {reuse_id} in the daemon's store. Try --list-assets."
+                ))
+            }
+            Err(e) => return Err(format!("lookup asset {reuse_id}: {e}")),
+        }
+    } else {
+        attach_and_stream(&manager, &source).await
+    };
     let asset_id = asset.as_ref().map(|a| a.id.clone()).unwrap_or_default();
 
     let time_to_rag_ready_ms = transitions_vec
@@ -529,10 +531,13 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
         .map(|t| t.ms_since_attach);
 
     // ── Stage 4-5: parse bench.toml, fire questions, score ────
-    let bench_cfg: BenchConfig = toml::from_str(BENCH_TOML)
-        .map_err(|e| format!("parse embedded bench.toml: {e}"))?;
-    let filtered_questions =
-        filter_questions(&bench_cfg.questions, opts.tier, opts.question_ids.as_deref());
+    let bench_cfg: BenchConfig =
+        toml::from_str(BENCH_TOML).map_err(|e| format!("parse embedded bench.toml: {e}"))?;
+    let filtered_questions = filter_questions(
+        &bench_cfg.questions,
+        opts.tier,
+        opts.question_ids.as_deref(),
+    );
     eprintln!(
         "      bench has {} question(s); {} match filters",
         bench_cfg.questions.len(),
@@ -563,8 +568,7 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
         tier_summary,
     };
 
-    persist_report(&report, opts.output.as_deref())
-        .map_err(|e| format!("persist report: {e}"))?;
+    persist_report(&report, opts.output.as_deref()).map_err(|e| format!("persist report: {e}"))?;
     Ok(report)
 }
 
@@ -612,7 +616,11 @@ async fn run_questions(
     eprintln!(
         "[4/4] questions — firing {} question(s) across {} tier(s)",
         questions.len(),
-        questions.iter().map(|q| q.tier).collect::<std::collections::BTreeSet<_>>().len(),
+        questions
+            .iter()
+            .map(|q| q.tier)
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
     );
 
     for q in questions {
@@ -632,12 +640,8 @@ async fn run_questions(
         // shared interior mutability that could observe a
         // half-poisoned state. On panic we record a dispatch_err and
         // continue with the next question.
-        let dispatch_future = AssertUnwindSafe(dispatch_question(
-            &runtime,
-            &store,
-            asset_ref,
-            &q.prompt,
-        ));
+        let dispatch_future =
+            AssertUnwindSafe(dispatch_question(&runtime, &store, asset_ref, &q.prompt));
         let dispatch = match dispatch_future.catch_unwind().await {
             Ok(r) => r,
             Err(payload) => {
@@ -665,8 +669,7 @@ async fn run_questions(
         // Mechanical scoring on expected_facts — always runs even on
         // Tier 2-5 because the substring hit/miss is data the operator
         // wants to see alongside the judge score.
-        let (facts_hit, facts_missed, mechanical_score_pct) =
-            score_question(q, &response);
+        let (facts_hit, facts_missed, mechanical_score_pct) = score_question(q, &response);
 
         // Hallucination detection — applies to all tiers because any
         // quoted passage in an answer is verifiable against the source.
@@ -938,10 +941,7 @@ fn resolve_reference_passages(refs: &[RefPassage], source: &str) -> Vec<String> 
 fn parse_line_range(spec: &str) -> (usize, usize) {
     let spec = spec.trim();
     match spec.split_once('-') {
-        Some((a, b)) => (
-            a.trim().parse().unwrap_or(0),
-            b.trim().parse().unwrap_or(0),
-        ),
+        Some((a, b)) => (a.trim().parse().unwrap_or(0), b.trim().parse().unwrap_or(0)),
         None => {
             let n = spec.parse().unwrap_or(0);
             (n, n)
@@ -1151,9 +1151,11 @@ fn narration_phase_tag(phase: &sovereign_core::types::NarrationPhase) -> String 
     let v = serde_json::to_value(phase).unwrap_or(serde_json::Value::Null);
     match v {
         serde_json::Value::String(s) => s,
-        serde_json::Value::Object(map) => {
-            map.keys().next().cloned().unwrap_or_else(|| "unknown".to_string())
-        }
+        serde_json::Value::Object(map) => map
+            .keys()
+            .next()
+            .cloned()
+            .unwrap_or_else(|| "unknown".to_string()),
         _ => "unknown".to_string(),
     }
 }
@@ -1204,8 +1206,8 @@ fn summarize_tiers(results: &[QuestionResult]) -> Vec<TierSummary> {
     }
     by_tier
         .into_iter()
-        .map(|(tier, (ran, skipped, sum_mech, sum_lat, sum_judge, judge_n, hallu))| {
-            TierSummary {
+        .map(
+            |(tier, (ran, skipped, sum_mech, sum_lat, sum_judge, judge_n, hallu))| TierSummary {
                 tier,
                 questions_run: ran,
                 questions_skipped: skipped,
@@ -1219,14 +1221,10 @@ fn summarize_tiers(results: &[QuestionResult]) -> Vec<TierSummary> {
                 } else {
                     Some(sum_judge as f32 / judge_n as f32)
                 },
-                mean_latency_ms: if ran == 0 {
-                    0
-                } else {
-                    sum_lat / ran as u64
-                },
+                mean_latency_ms: if ran == 0 { 0 } else { sum_lat / ran as u64 },
                 hallucination_flag_count: hallu,
-            }
-        })
+            },
+        )
         .collect()
 }
 
@@ -1302,10 +1300,7 @@ async fn attach_and_stream(
             (None, "failed".to_string())
         }
     };
-    let transitions_vec = transitions
-        .lock()
-        .map(|g| g.clone())
-        .unwrap_or_default();
+    let transitions_vec = transitions.lock().map(|g| g.clone()).unwrap_or_default();
     (asset, attach_ms, transitions_vec, terminal_phase)
 }
 
@@ -1361,11 +1356,7 @@ fn stub_report(
 
 /// Filter the bench's question list by tier and/or explicit id list.
 /// Both filters compose AND; passing neither returns the full bank.
-fn filter_questions(
-    all: &[Question],
-    tier: Option<u8>,
-    ids: Option<&[String]>,
-) -> Vec<Question> {
+fn filter_questions(all: &[Question], tier: Option<u8>, ids: Option<&[String]>) -> Vec<Question> {
     all.iter()
         .filter(|q| tier.is_none_or(|t| q.tier == t))
         .filter(|q| ids.is_none_or(|ids| ids.iter().any(|target| target == &q.id)))
@@ -1398,10 +1389,9 @@ fn render_progress(p: &IngestProgress) -> (&'static str, serde_json::Value) {
             "indexing",
             serde_json::json!({ "done": done, "total": total }),
         ),
-        IngestProgress::RagAvailable { asset_id } => (
-            "rag_available",
-            serde_json::json!({ "asset_id": asset_id }),
-        ),
+        IngestProgress::RagAvailable { asset_id } => {
+            ("rag_available", serde_json::json!({ "asset_id": asset_id }))
+        }
         IngestProgress::BuildingSkeleton { done, total } => (
             "building_skeleton",
             serde_json::json!({ "done": done, "total": total }),
@@ -1422,10 +1412,7 @@ fn render_progress(p: &IngestProgress) -> (&'static str, serde_json::Value) {
                 "structural_moments": structural_moments,
             }),
         ),
-        IngestProgress::Failed { reason } => (
-            "failed",
-            serde_json::json!({ "reason": reason }),
-        ),
+        IngestProgress::Failed { reason } => ("failed", serde_json::json!({ "reason": reason })),
     }
 }
 
@@ -1442,15 +1429,11 @@ async fn fetch_source(cache_dir: &Path, force_refresh: bool) -> Result<SourceInf
         if !resp.status().is_success() {
             return Err(format!("Gutenberg returned HTTP {}", resp.status()));
         }
-        let bytes = resp
-            .bytes()
-            .await
-            .map_err(|e| format!("read body: {e}"))?;
+        let bytes = resp.bytes().await.map_err(|e| format!("read body: {e}"))?;
         std::fs::write(&local_path, &bytes)
             .map_err(|e| format!("write {}: {e}", local_path.display()))?;
     }
-    let bytes_on_disk =
-        std::fs::metadata(&local_path).map(|m| m.len()).unwrap_or(0);
+    let bytes_on_disk = std::fs::metadata(&local_path).map(|m| m.len()).unwrap_or(0);
     let sha256 = sha256_of_file(&local_path)?;
     Ok(SourceInfo {
         kind: "gutenberg",
@@ -1479,24 +1462,21 @@ fn persist_report(report: &BookReportRun, explicit_output: Option<&Path>) -> Res
 
     // JSON — machine-readable timings + raw results.
     let json_path = default_dir.join("timings.json");
-    let json = serde_json::to_string_pretty(report)
-        .map_err(|e| format!("serialize report: {e}"))?;
-    std::fs::write(&json_path, &json)
-        .map_err(|e| format!("write {}: {e}", json_path.display()))?;
+    let json =
+        serde_json::to_string_pretty(report).map_err(|e| format!("serialize report: {e}"))?;
+    std::fs::write(&json_path, &json).map_err(|e| format!("write {}: {e}", json_path.display()))?;
 
     // Markdown — human-readable rollup.
     let md_path = default_dir.join("report.md");
     let md = render_markdown(report);
-    std::fs::write(&md_path, &md)
-        .map_err(|e| format!("write {}: {e}", md_path.display()))?;
+    std::fs::write(&md_path, &md).map_err(|e| format!("write {}: {e}", md_path.display()))?;
 
     eprintln!("      report:    {}", md_path.display());
     eprintln!("      timings:   {}", json_path.display());
 
     if let Some(extra) = explicit_output {
         if extra != json_path {
-            std::fs::write(extra, &json)
-                .map_err(|e| format!("write {}: {e}", extra.display()))?;
+            std::fs::write(extra, &json).map_err(|e| format!("write {}: {e}", extra.display()))?;
             eprintln!("      timings:   {}", extra.display());
         }
     }
@@ -1644,11 +1624,7 @@ fn render_markdown(r: &BookReportRun) -> String {
                 q.sources_count, q.latency_ms, score_summary, hallu_marker,
             );
             let _ = writeln!(s, "**Q:** {}\n", q.prompt.trim());
-            let _ = writeln!(
-                s,
-                "**A:**\n\n> {}\n",
-                indent_quoted(&q.response)
-            );
+            let _ = writeln!(s, "**A:**\n\n> {}\n", indent_quoted(&q.response));
             if let Some(rationale) = &q.judge_rationale {
                 let _ = writeln!(s, "**Judge rationale:** {}\n", rationale.trim());
             }
@@ -1706,12 +1682,26 @@ fn facts_list(facts: &[String]) -> String {
 
 fn print_summary(r: &BookReportRun) {
     eprintln!();
-    eprintln!("─── book-report run {} ──────────────────────────", r.bench_id);
-    eprintln!("  source:       {} ({} bytes)", r.source.local_path.display(), r.source.bytes);
-    eprintln!("  chat model:   {}", r.chat_model.as_deref().unwrap_or("<unknown>"));
+    eprintln!(
+        "─── book-report run {} ──────────────────────────",
+        r.bench_id
+    );
+    eprintln!(
+        "  source:       {} ({} bytes)",
+        r.source.local_path.display(),
+        r.source.bytes
+    );
+    eprintln!(
+        "  chat model:   {}",
+        r.chat_model.as_deref().unwrap_or("<unknown>")
+    );
     eprintln!(
         "  asset id:     {}",
-        if r.asset_id.is_empty() { "<failed>" } else { &r.asset_id },
+        if r.asset_id.is_empty() {
+            "<failed>"
+        } else {
+            &r.asset_id
+        },
     );
     eprintln!("  attach ms:    {}", r.attach_ms);
     if let Some(rag) = r.time_to_rag_ready_ms {
@@ -1761,7 +1751,11 @@ mod tests {
     use sovereign_core::types::NarrationPhase;
 
     fn evt(phase: NarrationPhase) -> NarrationEvent {
-        NarrationEvent { phase, text: String::new(), elapsed_ms: 0 }
+        NarrationEvent {
+            phase,
+            text: String::new(),
+            elapsed_ms: 0,
+        }
     }
 
     #[test]

@@ -64,10 +64,9 @@ pub fn read_latest<T: DeserializeOwned>(
     if !path.exists() {
         return Ok(None);
     }
-    let bytes = fs::read_to_string(&path)
-        .map_err(|e| format!("read {}: {e}", path.display()))?;
-    let parsed: T = serde_json::from_str(&bytes)
-        .map_err(|e| format!("parse {}: {e}", path.display()))?;
+    let bytes = fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let parsed: T =
+        serde_json::from_str(&bytes).map_err(|e| format!("parse {}: {e}", path.display()))?;
     Ok(Some(parsed))
 }
 
@@ -114,9 +113,7 @@ pub fn write_dated_and_update_latest<T: Serialize>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bench_cmd::discover::{
-        BenchSurface, CorpusIdSource, CorpusState, DiscoveredBench,
-    };
+    use crate::bench_cmd::discover::{BenchSurface, CorpusIdSource, CorpusState, DiscoveredBench};
     use serde::{Deserialize, Serialize};
     use tempfile::TempDir;
 
@@ -184,7 +181,10 @@ mod tests {
         let _ = write_dated_and_update_latest(
             tmp.path(),
             &bench,
-            &Sample { v: 1, msg: "old".into() },
+            &Sample {
+                v: 1,
+                msg: "old".into(),
+            },
         )
         .unwrap();
         // Second write — overwrites because dated path resolves to
@@ -192,7 +192,10 @@ mod tests {
         let _ = write_dated_and_update_latest(
             tmp.path(),
             &bench,
-            &Sample { v: 2, msg: "new".into() },
+            &Sample {
+                v: 2,
+                msg: "new".into(),
+            },
         )
         .unwrap();
         let got: Option<Sample> = read_latest(tmp.path(), &bench).unwrap();

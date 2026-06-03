@@ -2,16 +2,14 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use commonwealth_core::glob::glob_match;
 use crate::oicp::{
-    infer_hint_from_profile, Capability, CapabilityHint, CapabilityProfile,
-    LatencyClass,
+    infer_hint_from_profile, Capability, CapabilityHint, CapabilityProfile, LatencyClass,
 };
+use commonwealth_core::glob::glob_match;
 
 /// The built-in default aliases, embedded at compile time.
 /// Re-uses the same TOML file from commonwealth-core.
-const DEFAULT_ALIASES_TOML: &str =
-    include_str!("../../commonwealth-core/src/default_aliases.toml");
+const DEFAULT_ALIASES_TOML: &str = include_str!("../../commonwealth-core/src/default_aliases.toml");
 
 /// A single model alias: maps glob patterns to inferred v0.3 routing
 /// properties (hint + latency class). The TOML source format still
@@ -74,8 +72,9 @@ impl ModelAliasTable {
     }
 
     pub fn parse_toml(toml_str: &str) -> commonwealth_core::Result<Self> {
-        let file: AliasFile = toml::from_str(toml_str)
-            .map_err(|e| commonwealth_core::Error::Config(format!("failed to parse alias table: {e}")))?;
+        let file: AliasFile = toml::from_str(toml_str).map_err(|e| {
+            commonwealth_core::Error::Config(format!("failed to parse alias table: {e}"))
+        })?;
         Ok(Self::from_config(&file.aliases))
     }
 
@@ -101,10 +100,7 @@ impl ModelAliasTable {
                 // profile where `code` is the highest-proficiency
                 // entry routes as code; otherwise fall through to
                 // the stricter model-profile inference.
-                let code_level = preferred
-                    .get(&Capability::Code)
-                    .copied()
-                    .unwrap_or(0);
+                let code_level = preferred.get(&Capability::Code).copied().unwrap_or(0);
                 let max_level = preferred.values().copied().max().unwrap_or(0);
                 let hint = if code_level > 0 && code_level >= max_level {
                     CapabilityHint::code()

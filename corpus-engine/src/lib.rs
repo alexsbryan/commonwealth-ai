@@ -20,8 +20,6 @@ pub mod asset_store;
 pub mod atlas_canonical;
 pub mod atlas_traversal;
 pub mod canonical_sync;
-pub mod meta_atlas;
-pub mod stream_axes;
 pub mod chunkers;
 pub mod engine;
 pub mod enrichment;
@@ -30,6 +28,7 @@ pub mod extractors;
 pub mod filters;
 pub mod freshness;
 pub mod index;
+pub mod meta_atlas;
 pub mod pii;
 pub mod progress;
 pub mod recipe;
@@ -41,6 +40,7 @@ pub mod sharding;
 pub mod snapshot;
 mod snapshot_restore;
 pub mod sovereign_config;
+pub mod stream_axes;
 pub mod testing;
 pub mod types;
 pub mod update;
@@ -64,9 +64,9 @@ pub mod wikipedia_graph;
 
 // Test / lint result stores (rusqlite). Gated by `stores`.
 #[cfg(feature = "stores")]
-pub mod test_results;
-#[cfg(feature = "stores")]
 pub mod lint_results;
+#[cfg(feature = "stores")]
+pub mod test_results;
 
 // NoteStore + project_docs live in `corpus-engine-notes` (carved out
 // 2026-05-23, step 3 of the decomposition plan). `notes_sync` (the
@@ -89,14 +89,14 @@ pub use engine::{
     CancellationFlag, CancellationRegistry, CorpusDiskStatus, CorpusEngine, CustomAcquirerFn,
     CustomExtractorFn,
 };
-pub use enrichment::{
-    Domain, EnrichmentProgress, FieldModelEngine, FieldModelStats, FieldSkeleton,
-    reprocess_skeleton_failures,
-};
 pub use enrichment::atlas::atlas_teardown;
+pub use enrichment::{
+    reprocess_skeleton_failures, Domain, EnrichmentProgress, FieldModelEngine, FieldModelStats,
+    FieldSkeleton,
+};
+pub use error::{Error, Result};
 pub use extractors::html_sections::MissReport as SectionMissReport;
 pub use extractors::wikipedia_types::{WikiLink, WikipediaChunkMetadata};
-pub use error::{Error, Result};
 pub use filters::{
     build_filter_pipeline, compute_signature as compute_filter_signature, ComposeMode,
     DocumentFilter, FilterConfig, FilterPipeline, PageviewRankFilter, TitleListFilter,
@@ -111,16 +111,11 @@ pub use progress::{
     SourceFileManifest, SourceFileRecord, SourceFileStatus,
 };
 pub use recipe::{
-    Comparison, DisplayMeta, DocFormat, EnrichmentConfig, EntityTypeDecl, FollowConfig,
-    HttpMethod, PaginationStrategy, ParameterKind, ParameterSpec, ParameterValue, PatternDecl,
-    PrebuiltConfig, Recipe, RelationshipTypeDecl, RequestTemplate, ResolvedParameters,
+    Comparison, DisplayMeta, DocFormat, EnrichmentConfig, EntityTypeDecl, FollowConfig, HttpMethod,
+    PaginationStrategy, ParameterKind, ParameterSpec, ParameterValue, PatternDecl, PrebuiltConfig,
+    Recipe, RelationshipTypeDecl, RequestTemplate, ResolvedParameters,
 };
 pub use registry::{RecipeRegistry, RegistryEntry, RegistryPrebuilt, RegistrySnapshot};
-pub use testing::{
-    AcquisitionResult, ChunkingResult, CorpusEstimate, ExtractionResult,
-    FailedRecord, SampleChunk, TestOptions, TestQueryResult, TestReport,
-    ValidationResult,
-};
 pub use sharding::{
     append_partition_to_canonical, merge_partitions_into_canonical, AppendReport,
     MergePhaseProgress, PartitionMergeReport,
@@ -134,6 +129,10 @@ pub use snapshot::{
 };
 pub use snapshot_restore::{restore_snapshot_archive, RestoreOutcome};
 pub use sovereign_config::{RunnerConfig, SovereignConfig};
+pub use testing::{
+    AcquisitionResult, ChunkingResult, CorpusEstimate, ExtractionResult, FailedRecord, SampleChunk,
+    TestOptions, TestQueryResult, TestReport, ValidationResult,
+};
 pub use types::{
     BatchEmbedFn, BuiltinCorpus, ChunkRange, CorpusKind, CorpusSpec, DedupPicker, EmbedFn,
     IndexInfo, IndexStats, InferenceFn, IngestResult, RerankConfig, RerankFn, ScoredChunk,
@@ -167,15 +166,15 @@ pub use update::watcher_coordinator::{
 };
 
 #[cfg(feature = "stores")]
-pub use test_results::TestResultStore;
-#[cfg(feature = "stores")]
 pub use lint_results::LintResultStore;
-#[cfg(feature = "treesitter")]
-pub use update::test_watcher::TestWatcher;
+#[cfg(feature = "stores")]
+pub use test_results::TestResultStore;
 #[cfg(feature = "treesitter")]
 pub use update::lint_watcher::LintWatcher;
 #[cfg(feature = "treesitter")]
 pub use update::project_index_watcher::ProjectIndexWatcher;
+#[cfg(feature = "treesitter")]
+pub use update::test_watcher::TestWatcher;
 
 // notes / project_docs moved to corpus-engine-notes (step 3 of the
 // decomposition plan, 2026-05-23). No shim left here — external

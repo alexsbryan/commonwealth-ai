@@ -142,7 +142,10 @@ pub(super) async fn cmd_eval(args: &[String]) -> i32 {
             },
             "combined": render_score(&combined),
         });
-        println!("{}", serde_json::to_string_pretty(&report).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).unwrap_or_default()
+        );
     }
 
     // Exit 0 on healthy F1 (>= 0.5), 1 otherwise — useful for
@@ -169,10 +172,7 @@ pub(super) fn resolve_golden(
     if let Some(p) = positional {
         return load_jsonl(p);
     }
-    Err(
-        "pass --from-template <name> or --golden <path-to-jsonl> (or a positional path)"
-            .into(),
-    )
+    Err("pass --from-template <name> or --golden <path-to-jsonl> (or a positional path)".into())
 }
 
 fn load_jsonl(path: &str) -> Result<GoldenSet, String> {
@@ -201,11 +201,7 @@ fn classify_kind(t: &EntityType) -> Option<&'static str> {
 /// what we want — extraction either picks up a person by their
 /// name or it doesn't, and we don't penalise extracting the right
 /// name with the wrong kind in this simple report.
-fn score_kind(
-    expected: &[ExpectedEntity],
-    extracted_names: &[String],
-    kind: &str,
-) -> EntityScore {
+fn score_kind(expected: &[ExpectedEntity], extracted_names: &[String], kind: &str) -> EntityScore {
     let kind_expected: Vec<ExpectedEntity> = expected
         .iter()
         .filter(|e| e.kind == kind)
@@ -258,10 +254,7 @@ fn print_text_report(
     }
 
     println!();
-    println!(
-        "Overall: {}",
-        verdict(combined.f1())
-    );
+    println!("Overall: {}", verdict(combined.f1()));
 }
 
 fn print_score_block(s: &EntityScore) {
@@ -322,7 +315,10 @@ mod tests {
     #[test]
     fn classify_kind_filters_relational() {
         assert_eq!(classify_kind(&EntityType::Person), Some("person"));
-        assert_eq!(classify_kind(&EntityType::Institution), Some("organization"));
+        assert_eq!(
+            classify_kind(&EntityType::Institution),
+            Some("organization")
+        );
         assert_eq!(classify_kind(&EntityType::Initiative), Some("initiative"));
         assert_eq!(classify_kind(&EntityType::Concept), None);
     }

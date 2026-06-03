@@ -43,10 +43,7 @@ pub fn split_document(raw: &str) -> SplitDocument<'_> {
     // A frontmatter block opens with `---` on line 1 and closes with
     // `---` on its own line. Anything else → no frontmatter.
     let opener_variants = [("---\r\n", 5), ("---\n", 4)];
-    let (after_open, _open_len) = match opener_variants
-        .iter()
-        .find(|(p, _)| raw.starts_with(p))
-    {
+    let (after_open, _open_len) = match opener_variants.iter().find(|(p, _)| raw.starts_with(p)) {
         Some((_, n)) => (&raw[*n..], *n),
         None => {
             return SplitDocument {
@@ -65,9 +62,7 @@ pub fn split_document(raw: &str) -> SplitDocument<'_> {
         let abs = search_from + rel;
         let at_line_start = abs == 0 || after_open.as_bytes()[abs - 1] == b'\n';
         let tail = &after_open[abs + 3..];
-        let line_end = tail.is_empty()
-            || tail.starts_with('\n')
-            || tail.starts_with("\r\n");
+        let line_end = tail.is_empty() || tail.starts_with('\n') || tail.starts_with("\r\n");
         if at_line_start && line_end {
             let fm = &after_open[..abs];
             // Strip a trailing CR from the frontmatter body if we
@@ -77,13 +72,15 @@ pub fn split_document(raw: &str) -> SplitDocument<'_> {
             } else {
                 fm
             };
-            let body_start = abs + 3 + if tail.starts_with("\r\n") {
-                2
-            } else if tail.starts_with('\n') {
-                1
-            } else {
-                0
-            };
+            let body_start = abs
+                + 3
+                + if tail.starts_with("\r\n") {
+                    2
+                } else if tail.starts_with('\n') {
+                    1
+                } else {
+                    0
+                };
             let body = &after_open[body_start..];
             return SplitDocument {
                 raw_frontmatter: Some(fm),
@@ -395,7 +392,11 @@ mod tests {
     #[test]
     fn merge_preserves_user_tags() {
         let doc = "---\ntags:\n  - mind\n  - consciousness\n---\n# Body";
-        let merged = merge_frontmatter(doc, &inputs("sovereign/epistemology/philosophy-of-mind"), "sovereign");
+        let merged = merge_frontmatter(
+            doc,
+            &inputs("sovereign/epistemology/philosophy-of-mind"),
+            "sovereign",
+        );
         let map = parse_fm(&merged);
         if let Value::Sequence(s) = map.get(Value::String("tags".into())).unwrap() {
             let tag_strings: Vec<&str> = s.iter().filter_map(|v| v.as_str()).collect();

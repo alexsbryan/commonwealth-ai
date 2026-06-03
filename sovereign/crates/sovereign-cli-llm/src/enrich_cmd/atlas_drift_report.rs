@@ -184,9 +184,14 @@ pub async fn cmd_atlas_drift_report(args: &[String]) -> i32 {
     }
 
     println!();
-    println!("  ✓ wrote {} ({} findings rendered)", output_md.display(), findings.rendered_count(max_findings));
+    println!(
+        "  ✓ wrote {} ({} findings rendered)",
+        output_md.display(),
+        findings.rendered_count(max_findings)
+    );
     println!("  ✓ wrote {} (full sidecar)", output_json.display());
-    println!("  · {} dual-attested  ·  {} drift candidates  ·  {} notes",
+    println!(
+        "  · {} dual-attested  ·  {} drift candidates  ·  {} notes",
         findings.dual_attested.len(),
         findings.critical.len() + findings.likely.len(),
         findings.notes.len(),
@@ -281,7 +286,10 @@ struct StructuralIndex {
 }
 
 impl StructuralIndex {
-    fn build(atoms: &corpus_engine::enrichment::atlas::AtomsFile, in_degree: &HashMap<String, usize>) -> Self {
+    fn build(
+        atoms: &corpus_engine::enrichment::atlas::AtomsFile,
+        in_degree: &HashMap<String, usize>,
+    ) -> Self {
         let mut by_id = HashMap::new();
         let mut by_name = BTreeMap::new();
         let mut degrees: Vec<usize> = Vec::new();
@@ -301,7 +309,9 @@ impl StructuralIndex {
                 };
                 by_name.insert(normalise_name(&ent.canonical_name), id.clone());
                 for alias in &ent.aliases {
-                    by_name.entry(normalise_name(alias)).or_insert_with(|| id.clone());
+                    by_name
+                        .entry(normalise_name(alias))
+                        .or_insert_with(|| id.clone());
                 }
                 by_id.insert(id, view);
             }
@@ -404,13 +414,23 @@ impl NarrativeIndex {
         let mut matched: BTreeMap<String, String> = BTreeMap::new();
         for edge_obj in cross {
             // Each entry is { edge: { source, target, ... }, peer: { ... } }
-            let Some(edge) = edge_obj.get("edge") else { continue };
-            let Some(source) = edge.get("source").and_then(|v| v.as_str()) else { continue };
-            let Some(target) = edge.get("target").and_then(|v| v.as_str()) else { continue };
+            let Some(edge) = edge_obj.get("edge") else {
+                continue;
+            };
+            let Some(source) = edge.get("source").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let Some(target) = edge.get("target").and_then(|v| v.as_str()) else {
+                continue;
+            };
             matched.insert(source.to_string(), target.to_string());
         }
 
-        Self { atlas_id, atoms: views, matched }
+        Self {
+            atlas_id,
+            atoms: views,
+            matched,
+        }
     }
 }
 
@@ -491,10 +511,7 @@ struct DualAttested {
 
 // ── Findings computation ─────────────────────────────────────
 
-fn compute_findings(
-    narratives: &[NarrativeIndex],
-    structural: &StructuralIndex,
-) -> FindingSet {
+fn compute_findings(narratives: &[NarrativeIndex], structural: &StructuralIndex) -> FindingSet {
     let mut set = FindingSet::default();
 
     // Track which structural atoms got at least one narrative match.
@@ -755,9 +772,7 @@ fn render_markdown(
     let mut md = String::new();
     md.push_str(&format!(
         "# Drift Report — {} actionable · {} confirmed · {} queued\n\n",
-        actionable,
-        confirmed,
-        queue.total,
+        actionable, confirmed, queue.total,
     ));
     md.push_str(&format!(
         "**Code**: `{}`  ·  **Narrative**: {}\n\n",
@@ -791,7 +806,13 @@ fn render_markdown(
         names.dedup();
         let cap = 30;
         let show: Vec<&String> = names.iter().take(cap).collect();
-        md.push_str(&show.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", "));
+        md.push_str(
+            &show
+                .iter()
+                .map(|s| format!("`{}`", s))
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
         if names.len() > cap {
             md.push_str(&format!(", _+{} more_", names.len() - cap));
         }
@@ -814,7 +835,12 @@ fn render_markdown(
                 "- **{}** ({}): {}\n",
                 bucket.label,
                 bucket.count,
-                bucket.examples.iter().map(|e| format!("`{}`", e)).collect::<Vec<_>>().join(", "),
+                bucket
+                    .examples
+                    .iter()
+                    .map(|e| format!("`{}`", e))
+                    .collect::<Vec<_>>()
+                    .join(", "),
             ));
         }
         md.push('\n');
@@ -933,10 +959,7 @@ fn render_rough_edges_section(md: &mut String, rough: &RoughEdgesReport) {
         if group.is_empty() {
             continue;
         }
-        md.push_str(&format!(
-            "- **{label}** ({}): ",
-            group.len()
-        ));
+        md.push_str(&format!("- **{label}** ({}): ", group.len()));
         let cap = 5;
         let examples: Vec<String> = group
             .iter()
@@ -1227,16 +1250,18 @@ fn headline_short(f: &Finding) -> String {
                 let prose = tail[prose_part + " — ".len()..]
                     .trim_matches('`')
                     .to_string();
-                return format!(
-                    "normative claim _(anchor `{anchor}` not in atlas)_ — {prose}"
-                );
+                return format!("normative claim _(anchor `{anchor}` not in atlas)_ — {prose}");
             }
         }
     }
     if let Some(idx) = h.find(" — ") {
         let (kind, rest) = h.split_at(idx);
         let rest = rest.trim_start_matches(" — ");
-        format!("{} _(no anchor)_ — {}", short_kind(kind), rest.trim_matches('`'))
+        format!(
+            "{} _(no anchor)_ — {}",
+            short_kind(kind),
+            rest.trim_matches('`')
+        )
     } else {
         h.clone()
     }
@@ -1328,15 +1353,22 @@ fn bucket_for(name: &str) -> &'static str {
     let lower = name.to_lowercase();
 
     // File paths: ends in a source extension, or contains a slash.
-    let exts = [".rs", ".toml", ".json", ".md", ".yaml", ".yml", ".scm", ".sh"];
+    let exts = [
+        ".rs", ".toml", ".json", ".md", ".yaml", ".yml", ".scm", ".sh",
+    ];
     if exts.iter().any(|e| lower.ends_with(e)) || name.contains('/') {
         return "file path";
     }
 
     // Self/config references: known top-level docs and dotfiles.
     let self_refs = [
-        "ARCH_PRINCIPLES", "SYSTEM_OVERVIEW", "CHARTER", "CLAUDE",
-        "_corpus_meta", "models.toml", "sovereign-server.toml",
+        "ARCH_PRINCIPLES",
+        "SYSTEM_OVERVIEW",
+        "CHARTER",
+        "CLAUDE",
+        "_corpus_meta",
+        "models.toml",
+        "sovereign-server.toml",
         "registry.toml",
     ];
     if self_refs.iter().any(|s| name.contains(s)) {
@@ -1346,9 +1378,23 @@ fn bucket_for(name: &str) -> &'static str {
     // Model identifiers (Qwen3.5-9B.Q8_0, Llama-3-8B-Instruct, etc.):
     // contain a model-family stem plus dotted version/quant suffix.
     let model_stems = [
-        "Qwen", "qwen", "Llama", "llama", "Gemma", "gemma", "Mistral",
-        "mistral", "Phi", "phi", "Claude", "claude", "GPT-", "gpt-",
-        "Bonsai", "bonsai", "FINAL-Bench",
+        "Qwen",
+        "qwen",
+        "Llama",
+        "llama",
+        "Gemma",
+        "gemma",
+        "Mistral",
+        "mistral",
+        "Phi",
+        "phi",
+        "Claude",
+        "claude",
+        "GPT-",
+        "gpt-",
+        "Bonsai",
+        "bonsai",
+        "FINAL-Bench",
     ];
     if model_stems.iter().any(|s| name.starts_with(s)) {
         return "external library";
@@ -1394,11 +1440,32 @@ fn bucket_for(name: &str) -> &'static str {
 
     // Known external libraries / vocabulary.
     let externals = [
-        "Tantivy", "tantivy", "LanceDB", "lance", "tokio", "serde", "reqwest",
-        "rustfmt", "rustdoc", "cargo", "rust-analyzer", "tree-sitter",
-        "llama-cpp-2", "llama.cpp", "Ollama", "ollama", "vLLM", "TGI",
-        "Tailscale", "WireGuard", "mDNS", "DNS-SD", "IVF-PQ",
-        "SOLID", "SICP", "OpenAlex",
+        "Tantivy",
+        "tantivy",
+        "LanceDB",
+        "lance",
+        "tokio",
+        "serde",
+        "reqwest",
+        "rustfmt",
+        "rustdoc",
+        "cargo",
+        "rust-analyzer",
+        "tree-sitter",
+        "llama-cpp-2",
+        "llama.cpp",
+        "Ollama",
+        "ollama",
+        "vLLM",
+        "TGI",
+        "Tailscale",
+        "WireGuard",
+        "mDNS",
+        "DNS-SD",
+        "IVF-PQ",
+        "SOLID",
+        "SICP",
+        "OpenAlex",
     ];
     if externals.contains(&name) {
         return "external library";
@@ -1495,7 +1562,11 @@ fn narrative_view(atlas_id: &str, atom: &AtomEnvelope) -> NarrativeAtomView {
             NarrativeAtomView {
                 atlas_id: atlas_id.to_string(),
                 id,
-                atom_type: format!("{:?}", other).split('(').next().unwrap_or("Other").to_string(),
+                atom_type: format!("{:?}", other)
+                    .split('(')
+                    .next()
+                    .unwrap_or("Other")
+                    .to_string(),
                 canonical_name: String::new(),
                 aliases: Vec::new(),
                 entity_type: String::new(),
@@ -1563,13 +1634,44 @@ fn is_narrative_noise(atom_type: &str, canonical: &str) -> bool {
     // Lowercase single-word common nouns the pipeline picks up.
     if !canonical.contains(' ') && !canonical.contains(':') && canonical == lower {
         const COMMON: &[&str] = &[
-            "contract", "assertions", "invariant", "mechanism", "principle",
-            "principles", "policy", "design", "constraint", "constraints",
-            "convention", "conventions", "test", "tests", "doc", "docs",
-            "documentation", "feature", "features", "component", "components",
-            "module", "modules", "system", "systems", "service", "services",
-            "interface", "interfaces", "spec", "specs", "specification",
-            "rule", "rules", "guideline", "guidelines", "principle", "code",
+            "contract",
+            "assertions",
+            "invariant",
+            "mechanism",
+            "principle",
+            "principles",
+            "policy",
+            "design",
+            "constraint",
+            "constraints",
+            "convention",
+            "conventions",
+            "test",
+            "tests",
+            "doc",
+            "docs",
+            "documentation",
+            "feature",
+            "features",
+            "component",
+            "components",
+            "module",
+            "modules",
+            "system",
+            "systems",
+            "service",
+            "services",
+            "interface",
+            "interfaces",
+            "spec",
+            "specs",
+            "specification",
+            "rule",
+            "rules",
+            "guideline",
+            "guidelines",
+            "principle",
+            "code",
         ];
         if COMMON.contains(&lower.as_str()) {
             return true;
@@ -1641,7 +1743,11 @@ fn compute_in_degree(edges_path: &Path) -> HashMap<String, usize> {
     let Ok(value): Result<Value, _> = serde_json::from_str(&raw) else {
         return counts;
     };
-    let edges = value.get("edges").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let edges = value
+        .get("edges")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
     for e in edges {
         if let Some(target) = e.get("target").and_then(|v| v.as_str()) {
             *counts.entry(target.to_string()).or_insert(0) += 1;
@@ -1656,4 +1762,3 @@ fn load_cross_corpus(path: &Path) -> Option<Vec<Value>> {
     let edges = value.get("edges")?.as_array()?.clone();
     Some(edges)
 }
-

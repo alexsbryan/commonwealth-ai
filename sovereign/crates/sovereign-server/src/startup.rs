@@ -113,7 +113,10 @@ mod tests {
     fn unavailable_model_is_excluded_from_hint() {
         let json = status_json_with_model(2, "huge-model", false);
         let line = parse_status_json(&json).unwrap();
-        assert!(!line.contains("best model"), "unavailable model must not appear in hint");
+        assert!(
+            !line.contains("best model"),
+            "unavailable model must not appear in hint"
+        );
     }
 
     #[test]

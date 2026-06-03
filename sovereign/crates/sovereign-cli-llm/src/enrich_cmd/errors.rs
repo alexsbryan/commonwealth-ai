@@ -26,9 +26,8 @@ use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::atlas::{ResolutionFailuresFile, ATLAS_DIRNAME};
 use corpus_engine::enrichment::pipeline::{
-    Phase1Output, Phase2AtlasOutput, Phase2Output, Phase3AtlasOutput, Phase3Output,
-    Phase4Output, Phase5Output, Phase6Output, Phase7Output, PhaseFailure,
-    PhaseFailureKind, PipelinePhase,
+    Phase1Output, Phase2AtlasOutput, Phase2Output, Phase3AtlasOutput, Phase3Output, Phase4Output,
+    Phase5Output, Phase6Output, Phase7Output, PhaseFailure, PhaseFailureKind, PipelinePhase,
 };
 
 use super::config::EnrichConfig;
@@ -140,8 +139,7 @@ pub async fn cmd_errors(args: &[String]) -> i32 {
                 remediation: f.kind.remediation_hint(),
             })
             .collect();
-        let json = serde_json::to_string_pretty(&views)
-            .unwrap_or_else(|_| "[]".into());
+        let json = serde_json::to_string_pretty(&views).unwrap_or_else(|_| "[]".into());
         println!("{json}");
         return 0;
     }
@@ -249,10 +247,7 @@ where
             }
         },
         Err(e) => {
-            eprintln!(
-                "warning: reading {}: {e} (skipping)",
-                path.display()
-            );
+            eprintln!("warning: reading {}: {e} (skipping)", path.display());
             None
         }
     }
@@ -335,15 +330,11 @@ fn group_by_phase_kind(
     // PhaseFailureKind are Eq + Hash but not Ord — we sort the groups
     // explicitly below rather than rely on a BTreeMap's ordering, so
     // the sort contract is visible in one place.
-    let mut map: HashMap<(PipelinePhase, PhaseFailureKind), Vec<&PhaseFailure>> =
-        HashMap::new();
+    let mut map: HashMap<(PipelinePhase, PhaseFailureKind), Vec<&PhaseFailure>> = HashMap::new();
     for f in failures {
         map.entry((f.phase, f.kind)).or_default().push(f);
     }
-    let mut out: Vec<_> = map
-        .into_iter()
-        .map(|((p, k), v)| (p, k, v))
-        .collect();
+    let mut out: Vec<_> = map.into_iter().map(|((p, k), v)| (p, k, v)).collect();
     out.sort_by(|a, b| {
         b.2.len()
             .cmp(&a.2.len())
@@ -361,30 +352,18 @@ fn retry_command(phase: PipelinePhase, corpus_id: &str) -> Option<String> {
         PipelinePhase::Questions => Some(format!(
             "sovereign enrich extract {corpus_id} --retry-failed"
         )),
-        PipelinePhase::Concerns => Some(format!(
-            "sovereign enrich name-concerns {corpus_id}"
-        )),
-        PipelinePhase::AtlasClusters => Some(format!(
-            "sovereign enrich cluster-atlas {corpus_id}"
-        )),
-        PipelinePhase::AtlasNamedClusters => Some(format!(
-            "sovereign enrich name-atlas-clusters {corpus_id}"
-        )),
-        PipelinePhase::Positions => Some(format!(
-            "sovereign enrich extract-positions {corpus_id}"
-        )),
-        PipelinePhase::Tensions => Some(format!(
-            "sovereign enrich detect-tensions {corpus_id}"
-        )),
-        PipelinePhase::Gaps => Some(format!(
-            "sovereign enrich detect-gaps {corpus_id}"
-        )),
-        PipelinePhase::SeedExtraction => Some(format!(
-            "sovereign enrich seed {corpus_id} --force"
-        )),
-        PipelinePhase::Ingest
-        | PipelinePhase::QuestionClusters
-        | PipelinePhase::ChunkClusters => None,
+        PipelinePhase::Concerns => Some(format!("sovereign enrich name-concerns {corpus_id}")),
+        PipelinePhase::AtlasClusters => Some(format!("sovereign enrich cluster-atlas {corpus_id}")),
+        PipelinePhase::AtlasNamedClusters => {
+            Some(format!("sovereign enrich name-atlas-clusters {corpus_id}"))
+        }
+        PipelinePhase::Positions => Some(format!("sovereign enrich extract-positions {corpus_id}")),
+        PipelinePhase::Tensions => Some(format!("sovereign enrich detect-tensions {corpus_id}")),
+        PipelinePhase::Gaps => Some(format!("sovereign enrich detect-gaps {corpus_id}")),
+        PipelinePhase::SeedExtraction => Some(format!("sovereign enrich seed {corpus_id} --force")),
+        PipelinePhase::Ingest | PipelinePhase::QuestionClusters | PipelinePhase::ChunkClusters => {
+            None
+        }
     }
 }
 
@@ -417,12 +396,8 @@ fn parse_kind(s: &str) -> Option<PhaseFailureKind> {
         "skipped" => Some(PhaseFailureKind::Skipped),
         "unresolved_entity_name" => Some(PhaseFailureKind::UnresolvedEntityName),
         "entity_merge_ambiguous" => Some(PhaseFailureKind::EntityMergeAmbiguous),
-        "unresolved_relation_participant" => {
-            Some(PhaseFailureKind::UnresolvedRelationParticipant)
-        }
-        "unresolved_claim_attribution" => {
-            Some(PhaseFailureKind::UnresolvedClaimAttribution)
-        }
+        "unresolved_relation_participant" => Some(PhaseFailureKind::UnresolvedRelationParticipant),
+        "unresolved_claim_attribution" => Some(PhaseFailureKind::UnresolvedClaimAttribution),
         "no_clusterable_items" => Some(PhaseFailureKind::NoClusterableItems),
         "cluster_naming_failed" => Some(PhaseFailureKind::ClusterNamingFailed),
         "other" => Some(PhaseFailureKind::Other),
@@ -463,19 +438,16 @@ fn parse_args(args: &[String]) -> Result<ParsedErrors, String> {
                 let v = args
                     .get(i + 1)
                     .ok_or_else(|| "--phase requires a phase id".to_string())?;
-                phase_filter = Some(
-                    PipelinePhase::from_str(v)
-                        .map_err(|e| format!("--phase: {e}"))?,
-                );
+                phase_filter =
+                    Some(PipelinePhase::from_str(v).map_err(|e| format!("--phase: {e}"))?);
                 i += 2;
             }
             "--kind" => {
                 let v = args
                     .get(i + 1)
                     .ok_or_else(|| "--kind requires a kind name".to_string())?;
-                kind_filter = Some(
-                    parse_kind(v).ok_or_else(|| format!("--kind: unknown kind `{v}`"))?,
-                );
+                kind_filter =
+                    Some(parse_kind(v).ok_or_else(|| format!("--kind: unknown kind `{v}`"))?);
                 i += 2;
             }
             "--json" => {
@@ -623,12 +595,7 @@ mod tests {
 
     #[test]
     fn parse_args_rejects_unknown_kind() {
-        let err = parse_args(&[
-            "bk".into(),
-            "--kind".into(),
-            "nonsense_kind".into(),
-        ])
-        .unwrap_err();
+        let err = parse_args(&["bk".into(), "--kind".into(), "nonsense_kind".into()]).unwrap_err();
         assert!(err.contains("unknown kind"));
     }
 
@@ -649,9 +616,7 @@ mod tests {
         // run after Landing 3.C added a second mutex here.
         use crate::enrich_cmd::test_env::scoped_home;
         use corpus_engine::enrichment::atlas::{write_atlas_failures, ATLAS_DIRNAME};
-        use corpus_engine::enrichment::pipeline::{
-            Phase1Failure, Phase1Output, PhaseCache,
-        };
+        use corpus_engine::enrichment::pipeline::{Phase1Failure, Phase1Output, PhaseCache};
         use std::fs;
 
         let guard = scoped_home();
@@ -718,17 +683,14 @@ mod tests {
             collected.len()
         );
         // Every kind shows up.
-        let kinds: Vec<PhaseFailureKind> =
-            collected.iter().map(|f| f.kind).collect();
+        let kinds: Vec<PhaseFailureKind> = collected.iter().map(|f| f.kind).collect();
         assert!(kinds.contains(&PhaseFailureKind::ThinkTruncated));
         assert!(kinds.contains(&PhaseFailureKind::ParseDrift));
         assert!(kinds.contains(&PhaseFailureKind::UnresolvedEntityName));
         assert!(kinds.contains(&PhaseFailureKind::UnresolvedClaimAttribution));
         // Phase-1 legacy subjects gain the `chapter:` prefix via
         // `Phase1Failure::to_phase_failure`.
-        assert!(collected
-            .iter()
-            .any(|f| f.subject == "chapter:sec_0001"));
+        assert!(collected.iter().any(|f| f.subject == "chapter:sec_0001"));
     }
 }
 

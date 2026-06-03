@@ -105,10 +105,7 @@ pub struct TopCritical {
 /// Compute the drift posture. Cheap — reads two small files and
 /// SHA-256s the narrative docs (which are small markdown files).
 /// No network, no LLM.
-pub fn compute_posture(
-    drift_dir: &Path,
-    narrative_paths: &[PathBuf],
-) -> DriftPosture {
+pub fn compute_posture(drift_dir: &Path, narrative_paths: &[PathBuf]) -> DriftPosture {
     let fingerprint_path = drift_dir.join(FINGERPRINT_FILE);
     let fingerprint: Option<DriftFingerprint> = std::fs::read_to_string(&fingerprint_path)
         .ok()
@@ -312,7 +309,10 @@ impl DriftPostureTool {
             .unwrap_or_else(|| PathBuf::from("/"))
             .join(".sovereign")
             .join("drift");
-        Self { workspace_root: None, drift_dir }
+        Self {
+            workspace_root: None,
+            drift_dir,
+        }
     }
 
     pub fn with_workspace_root(mut self, root: PathBuf) -> Self {
@@ -406,19 +406,15 @@ impl Tool for DriftPostureTool {
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
-        let narrative_paths = resolve_narratives(
-            params,
-            self.workspace_root.as_deref(),
-        );
+        let narrative_paths = resolve_narratives(params, self.workspace_root.as_deref());
         let posture = compute_posture(&self.drift_dir, &narrative_paths);
-        Ok(StepOutput::Json(serde_json::to_value(&posture).unwrap_or(json!({}))))
+        Ok(StepOutput::Json(
+            serde_json::to_value(&posture).unwrap_or(json!({})),
+        ))
     }
 
     async fn signal(&self) -> Option<String> {
-        let narrative_paths = resolve_narratives(
-            &json!({}),
-            self.workspace_root.as_deref(),
-        );
+        let narrative_paths = resolve_narratives(&json!({}), self.workspace_root.as_deref());
         let posture = compute_posture(&self.drift_dir, &narrative_paths);
         match posture.status {
             PostureStatus::Stale => Some(format!(
@@ -433,21 +429,18 @@ impl Tool for DriftPostureTool {
     }
 }
 
-fn resolve_narratives(
-    params: &serde_json::Value,
-    workspace_root: Option<&Path>,
-) -> Vec<PathBuf> {
-    let explicit: Option<Vec<String>> = params
-        .get("narrative")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|x| x.as_str().map(|s| s.to_string()))
-                .collect()
-        });
-    let raw = explicit.unwrap_or_else(|| {
-        DEFAULT_NARRATIVES.iter().map(|s| s.to_string()).collect()
-    });
+fn resolve_narratives(params: &serde_json::Value, workspace_root: Option<&Path>) -> Vec<PathBuf> {
+    let explicit: Option<Vec<String>> =
+        params
+            .get("narrative")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                    .collect()
+            });
+    let raw =
+        explicit.unwrap_or_else(|| DEFAULT_NARRATIVES.iter().map(|s| s.to_string()).collect());
     raw.into_iter()
         .map(|p| canonicalize_or_join(&p, workspace_root))
         .collect()
@@ -473,7 +466,8 @@ mod tests {
     use std::io::Write;
 
     fn tmp_dir(label: &str) -> PathBuf {
-        let p = std::env::temp_dir().join(format!("drift_posture_test_{label}_{}", std::process::id()));
+        let p =
+            std::env::temp_dir().join(format!("drift_posture_test_{label}_{}", std::process::id()));
         std::fs::create_dir_all(&p).unwrap();
         p
     }

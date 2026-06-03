@@ -83,13 +83,7 @@ fn build_state(self_id: NodeId) -> AppState {
     };
     let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
     let app_registry = Arc::new(AppRegistry::new());
-    AppState::new_with_platform_and_engine(
-        self_id,
-        mesh,
-        mesh_store,
-        app_registry,
-        None,
-    )
+    AppState::new_with_platform_and_engine(self_id, mesh, mesh_store, app_registry, None)
 }
 
 #[tokio::test]
@@ -125,10 +119,7 @@ async fn locally_owned_model_appears_in_v1_models_response() {
         "envelope must use `object: list`; got: {json}"
     );
     let data = json["data"].as_array().expect("data must be an array");
-    let ids: Vec<&str> = data
-        .iter()
-        .filter_map(|m| m["id"].as_str())
-        .collect();
+    let ids: Vec<&str> = data.iter().filter_map(|m| m["id"].as_str()).collect();
     assert!(
         ids.contains(&"test-local-model"),
         "locally-owned model MUST appear in /v1/models data[]. \
@@ -204,10 +195,7 @@ async fn offline_peer_only_model_is_filtered_out_of_v1_models() {
     assert_eq!(resp.status(), reqwest::StatusCode::OK);
     let json: serde_json::Value = resp.json().await.unwrap();
     let data = json["data"].as_array().expect("data must be an array");
-    let ids: Vec<&str> = data
-        .iter()
-        .filter_map(|m| m["id"].as_str())
-        .collect();
+    let ids: Vec<&str> = data.iter().filter_map(|m| m["id"].as_str()).collect();
     assert!(
         !ids.contains(&"ghost-model"),
         "offline-peer-only model MUST be filtered out of /v1/models — \

@@ -28,8 +28,8 @@ use commonwealth_inference::oicp::ProviderManifest;
 use futures::{Stream, StreamExt};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{
-    CompletionRequest, FinishReason as CoreFinishReason,
-    StreamFrame as CoreStreamFrame, StreamUsage as CoreStreamUsage,
+    CompletionRequest, FinishReason as CoreFinishReason, StreamFrame as CoreStreamFrame,
+    StreamUsage as CoreStreamUsage,
 };
 
 /// Translate `sovereign_core` stream framing into the wire shape
@@ -111,9 +111,7 @@ fn translate_stream_usage(u: CoreStreamUsage) -> wire::StreamUsage {
 /// completes). For ATOS-style agentic workflows that's acceptable —
 /// tool turns are short bursts, and the round-trip clients care about
 /// is the structured tool_call payload, not the keystroke cadence.
-fn synthesize_tool_stream(
-    resp: ChatCompletionResponse,
-) -> Vec<wire::StreamFrame> {
+fn synthesize_tool_stream(resp: ChatCompletionResponse) -> Vec<wire::StreamFrame> {
     let mut frames: Vec<wire::StreamFrame> = Vec::with_capacity(3);
 
     let choice = resp.choices.into_iter().next();
@@ -165,9 +163,7 @@ fn synthesize_tool_stream(
     // `from_openai_str`; leave a breadcrumb when the upstream value
     // wasn't recognised so a vocabulary regression surfaces in
     // telemetry. "stop" is the silent default.
-    if matches!(parsed_reason, wire::FinishReason::Stop)
-        && finish_reason_str != "stop"
-    {
+    if matches!(parsed_reason, wire::FinishReason::Stop) && finish_reason_str != "stop" {
         tracing::debug!(
             finish_reason = %finish_reason_str,
             "inference_adapter:synthesize_tool_stream_unknown_finish_reason"
@@ -281,15 +277,14 @@ impl SovereignInferenceAdapter {
     /// Translate OpenAI tool defs into Sovereign core `ToolSchema`.
     /// Kept as a separate helper so the adapter stays testable without
     /// needing a live inference provider.
-    fn forward_tools(request: &ChatCompletionRequest) -> Option<Vec<sovereign_core::types::ToolSchema>> {
+    fn forward_tools(
+        request: &ChatCompletionRequest,
+    ) -> Option<Vec<sovereign_core::types::ToolSchema>> {
         let tools = request.tools.as_ref()?;
         if tools.is_empty() {
             return None;
         }
-        tracing::debug!(
-            tool_count = tools.len(),
-            "inference_adapter:forward_tools"
-        );
+        tracing::debug!(tool_count = tools.len(), "inference_adapter:forward_tools");
         Some(
             tools
                 .iter()
@@ -310,10 +305,7 @@ impl SovereignInferenceAdapter {
     /// default to Slow and fire up the primary slot regardless of
     /// whether a smaller, faster slot would already satisfy the
     /// request's capability requirements.
-    fn build_completion_request(
-        &self,
-        request: &ChatCompletionRequest,
-    ) -> CompletionRequest {
+    fn build_completion_request(&self, request: &ChatCompletionRequest) -> CompletionRequest {
         let (prompt, system) = Self::flatten(request);
         // Build a skeleton request with the OICP envelope attached
         // BEFORE choosing a slot — the slot picker reads the
@@ -428,9 +420,10 @@ impl SovereignInferenceAdapter {
             // token 0 normally and the prefix appears as a `pattern`
             // on the cmd field, enforced by the existing string-body
             // walker. So we only suppress envelope install for R1.
-            if let Some(envelope) =
-                tool_envelope_schema_for_with_env_and_cmd_prefix(request, request.cmd_prefix.as_deref())
-            {
+            if let Some(envelope) = tool_envelope_schema_for_with_env_and_cmd_prefix(
+                request,
+                request.cmd_prefix.as_deref(),
+            ) {
                 // **Alternation grammar path (2026-05-21).** When
                 // `SOVEREIGN_ALTERNATION_GRAMMAR` is on, route the
                 // envelope schema through llguidance's Lark grammar
@@ -551,14 +544,16 @@ pub(crate) fn parse_tool_envelope_direct(
     // doesn't break the parse. This closes all "model emits envelope
     // then arbitrary trailing content" variants structurally —
     // including ones not yet observed.
-    let obj_opt = parse_first_json_value(trimmed)
-        .or_else(|| {
-            // Fall back to escape-fixup once. Qwen-Coder sometimes
-            // emits unescaped raw newlines inside string values.
-            let fixed = sovereign_inference::embedded::escape_unescaped_control_chars_in_string_values(trimmed);
-            parse_first_json_value(&fixed)
-        });
-    let Some(obj) = obj_opt else { return Vec::new() };
+    let obj_opt = parse_first_json_value(trimmed).or_else(|| {
+        // Fall back to escape-fixup once. Qwen-Coder sometimes
+        // emits unescaped raw newlines inside string values.
+        let fixed =
+            sovereign_inference::embedded::escape_unescaped_control_chars_in_string_values(trimmed);
+        parse_first_json_value(&fixed)
+    });
+    let Some(obj) = obj_opt else {
+        return Vec::new();
+    };
     let Some(name) = obj.get("name").and_then(|v| v.as_str()) else {
         return Vec::new();
     };
@@ -579,8 +574,7 @@ pub(crate) fn parse_tool_envelope_direct(
 /// envelopes, control chars). Returns `None` when no leading JSON
 /// value parses.
 fn parse_first_json_value(text: &str) -> Option<serde_json::Value> {
-    let mut stream =
-        serde_json::Deserializer::from_str(text).into_iter::<serde_json::Value>();
+    let mut stream = serde_json::Deserializer::from_str(text).into_iter::<serde_json::Value>();
     match stream.next() {
         Some(Ok(v)) => Some(v),
         _ => None,
@@ -883,10 +877,7 @@ pub(crate) fn tool_envelope_schema_for(
             "name".to_string(),
             serde_json::json!({ "type": "string", "enum": [t.function.name] }),
         );
-        props.insert(
-            "arguments".to_string(),
-            t.function.parameters.clone(),
-        );
+        props.insert("arguments".to_string(), t.function.parameters.clone());
         variants.push(serde_json::json!({
             "type": "object",
             "properties": props,
@@ -911,9 +902,7 @@ pub(crate) fn tool_envelope_schema_for(
 ///   tool calls.
 /// - Otherwise (no tools, no explicit budget), return `None` and
 ///   let the embedded provider's chat-template default decide.
-pub(crate) fn resolve_think_budget(
-    request: &ChatCompletionRequest,
-) -> Option<usize> {
+pub(crate) fn resolve_think_budget(request: &ChatCompletionRequest) -> Option<usize> {
     if let Some(n) = request.think_budget {
         return Some(n as usize);
     }
@@ -928,9 +917,7 @@ pub(crate) fn resolve_think_budget(
 /// object is missing or doesn't carry the key — leaves the embedded
 /// provider's default (currently `false`) in charge. Other keys in
 /// the blob are accepted but ignored.
-pub(crate) fn extract_enable_thinking(
-    kwargs: Option<&serde_json::Value>,
-) -> Option<bool> {
+pub(crate) fn extract_enable_thinking(kwargs: Option<&serde_json::Value>) -> Option<bool> {
     kwargs
         .and_then(|v| v.get("enable_thinking"))
         .and_then(|v| v.as_bool())
@@ -939,9 +926,7 @@ pub(crate) fn extract_enable_thinking(
 /// Pull a JSON Schema out of the OpenAI `response_format` envelope.
 /// Returns `None` for unrecognised or missing shapes so we don't
 /// propagate junk into the sampler.
-pub(crate) fn extract_response_format_schema(
-    rf: &serde_json::Value,
-) -> Option<serde_json::Value> {
+pub(crate) fn extract_response_format_schema(rf: &serde_json::Value) -> Option<serde_json::Value> {
     let kind = rf.get("type").and_then(|v| v.as_str())?;
     match kind {
         "json_schema" => rf
@@ -1036,10 +1021,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         // name and logs the count.
         let pre_report = crate::prompt_compactor::PromptSizeReport::measure(&request);
         pre_report.log("pre_compact");
-        let _profile = crate::tool_profile::apply(
-            crate::tool_profile::global(),
-            &mut request,
-        );
+        let _profile = crate::tool_profile::apply(crate::tool_profile::global(), &mut request);
         let compactor = crate::prompt_compactor::PromptCompactor::from_env();
         if compactor.is_active() {
             compactor.compact(&mut request);
@@ -1103,14 +1085,10 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         //     — the 2026-05-21 alternation-grammar adoption.
         // Either one means the model emitted a `{"name":...,
         // "arguments":...}` envelope without `<tool_call>` markers.
-        let grammar_constrained = (req.structured_output.is_some()
-            || req.lark_grammar.is_some())
+        let grammar_constrained = (req.structured_output.is_some() || req.lark_grammar.is_some())
             && tool_envelope_schema_for_with_env(&request).is_some();
         if tools_present {
-            tracing::debug!(
-                grammar_constrained,
-                "inference_adapter:tool_parse_mode"
-            );
+            tracing::debug!(grammar_constrained, "inference_adapter:tool_parse_mode");
         }
         // When the request set an `assistant_prefix`, the inference
         // layer appended it to the rendered prompt — but it lives in
@@ -1184,11 +1162,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
                     .into_iter()
                     .enumerate()
                     .map(|(i, c)| ToolCall {
-                        id: format!(
-                            "call_{}_{}",
-                            started.elapsed().as_micros(),
-                            i
-                        ),
+                        id: format!("call_{}_{}", started.elapsed().as_micros(), i),
                         kind: "function".into(),
                         function: FunctionCall {
                             name: c.name,
@@ -1244,9 +1218,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             }],
             usage: Some(Usage {
                 prompt_tokens: resp.prompt_tokens as u32,
-                completion_tokens: resp
-                    .tokens_used
-                    .saturating_sub(resp.prompt_tokens) as u32,
+                completion_tokens: resp.tokens_used.saturating_sub(resp.prompt_tokens) as u32,
                 total_tokens: resp.tokens_used as u32,
             }),
         })
@@ -1301,10 +1273,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         // treated correctly.
         let pre_report = crate::prompt_compactor::PromptSizeReport::measure(&request);
         pre_report.log("pre_compact");
-        let _profile = crate::tool_profile::apply(
-            crate::tool_profile::global(),
-            &mut request,
-        );
+        let _profile = crate::tool_profile::apply(crate::tool_profile::global(), &mut request);
         let compactor = crate::prompt_compactor::PromptCompactor::from_env();
         if compactor.is_active() {
             compactor.compact(&mut request);
@@ -1320,9 +1289,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             .complete_stream_with_finish(&req)
             .await
             .map_err(|e| format!("{e}"))?;
-        tracing::info!(
-            "sovereign inference adapter: typed streaming started"
-        );
+        tracing::info!("sovereign inference adapter: typed streaming started");
         // Translate sovereign_core::types::StreamFrame →
         // commonwealth_api::openai_types::StreamFrame. The two
         // shapes are identical by design (see openai_types.rs);
@@ -1332,17 +1299,16 @@ impl LocalInferenceService for SovereignInferenceAdapter {
     }
 
     fn provider_manifest(&self) -> Option<ProviderManifest> {
-        Some(crate::oicp_synthesis::build_self_manifest(self.provider.as_ref()))
+        Some(crate::oicp_synthesis::build_self_manifest(
+            self.provider.as_ref(),
+        ))
     }
 
     async fn embed(&self, input: &str) -> Result<Vec<f32>, String> {
         // Delegate to the underlying provider's EmbedSlot. The
         // commonwealth-api handler wraps the returned vector in an
         // OpenAI-shape `EmbeddingResponse`.
-        self.provider
-            .embed(input)
-            .await
-            .map_err(|e| format!("{e}"))
+        self.provider.embed(input).await.map_err(|e| format!("{e}"))
     }
 
     // ── Runtime slot management ─────────────────────────────────
@@ -1474,16 +1440,16 @@ mod adapter_translation_tests {
             tools: Some(vec![tool_def("get_weather")]),
             tool_choice: Some(serde_json::json!("auto")),
             oicp: None,
-                    response_format: None,
-                    chat_template_kwargs: None,
+            response_format: None,
+            chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
         let (prompt, _system) = SovereignInferenceAdapter::flatten(&req);
         // The prior tool call is replayed as a <tool_call> block so
@@ -1512,22 +1478,25 @@ mod adapter_translation_tests {
             tools: Some(vec![tool_def("a"), tool_def("b")]),
             tool_choice: None,
             oicp: None,
-                    response_format: None,
-                    chat_template_kwargs: None,
+            response_format: None,
+            chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
         let forwarded = SovereignInferenceAdapter::forward_tools(&req).unwrap();
         assert_eq!(forwarded.len(), 2);
         assert_eq!(forwarded[0].name, "a");
         assert_eq!(forwarded[1].name, "b");
-        assert_eq!(forwarded[0].description.as_deref(), Some("description of a"));
+        assert_eq!(
+            forwarded[0].description.as_deref(),
+            Some("description of a")
+        );
     }
 
     #[test]
@@ -1545,16 +1514,16 @@ mod adapter_translation_tests {
             tools: Some(Vec::new()),
             tool_choice: None,
             oicp: None,
-                    response_format: None,
-                    chat_template_kwargs: None,
+            response_format: None,
+            chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
         assert!(SovereignInferenceAdapter::forward_tools(&req).is_none());
     }
@@ -1607,12 +1576,12 @@ mod adapter_translation_tests {
             chat_template_kwargs: None,
             think_budget,
             tool_profile: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         }
     }
 
@@ -1671,12 +1640,12 @@ mod adapter_translation_tests {
             chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         }
     }
 
@@ -1686,8 +1655,7 @@ mod adapter_translation_tests {
             Some(vec![tool_def("write")]),
             Some(serde_json::json!("required")),
         );
-        let schema = super::tool_envelope_schema_for(&req)
-            .expect("schema should be built");
+        let schema = super::tool_envelope_schema_for(&req).expect("schema should be built");
         // oneOf with one variant for the single tool.
         let variants = schema.get("oneOf").and_then(|v| v.as_array()).unwrap();
         assert_eq!(variants.len(), 1);
@@ -1731,10 +1699,7 @@ mod adapter_translation_tests {
     fn tool_envelope_schema_skipped_when_tools_empty_under_required() {
         // `required` with zero tools is malformed; refuse to constrain
         // (empty oneOf would mask everything → model can never finish).
-        let req = req_with_tool_choice(
-            Some(vec![]),
-            Some(serde_json::json!("required")),
-        );
+        let req = req_with_tool_choice(Some(vec![]), Some(serde_json::json!("required")));
         assert!(super::tool_envelope_schema_for(&req).is_none());
     }
 
@@ -1744,8 +1709,7 @@ mod adapter_translation_tests {
     /// out to be a flake under repo-wide parallel `cargo test` — pin
     /// it with an actual mutex.
     fn force_tool_calls_env_lock() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> =
-            std::sync::OnceLock::new();
+        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
         LOCK.get_or_init(|| std::sync::Mutex::new(()))
             .lock()
             .unwrap_or_else(|p| p.into_inner())
@@ -1758,7 +1722,10 @@ mod adapter_translation_tests {
         let req = req_with_tool_choice(Some(vec![tool_def("write")]), None);
         let schema = super::tool_envelope_schema_for_with_env(&req);
         std::env::remove_var("SOVEREIGN_FORCE_TOOL_CALLS");
-        assert!(schema.is_some(), "env override should synthesize tool_choice=required");
+        assert!(
+            schema.is_some(),
+            "env override should synthesize tool_choice=required"
+        );
     }
 
     #[test]
@@ -1775,7 +1742,10 @@ mod adapter_translation_tests {
         );
         let schema = super::tool_envelope_schema_for_with_env(&req);
         std::env::remove_var("SOVEREIGN_FORCE_TOOL_CALLS");
-        assert!(schema.is_some(), "env override should upgrade auto to required");
+        assert!(
+            schema.is_some(),
+            "env override should upgrade auto to required"
+        );
     }
 
     #[test]
@@ -1864,7 +1834,8 @@ mod adapter_translation_tests {
     fn parse_tool_envelope_direct_normalizes_raw_newlines() {
         // Same Qwen-Coder failure mode the marker-based parser
         // already handles: raw \n inside content string.
-        let text = "{\"name\":\"write\",\"arguments\":{\"path\":\"x\",\"content\":\"line1\nline2\"}}";
+        let text =
+            "{\"name\":\"write\",\"arguments\":{\"path\":\"x\",\"content\":\"line1\nline2\"}}";
         let calls = super::parse_tool_envelope_direct(text);
         assert_eq!(calls.len(), 1, "normalization should recover");
         assert_eq!(calls[0].name, "write");
@@ -1881,7 +1852,11 @@ mod adapter_translation_tests {
         let text = r#"{"name":"write","arguments":{"path":"src/lib.rs","content":"pub fn f() {}\n"}}
 <tool_call>"#;
         let calls = super::parse_tool_envelope_direct(text);
-        assert_eq!(calls.len(), 1, "should extract envelope despite trailing <tool_call>");
+        assert_eq!(
+            calls.len(),
+            1,
+            "should extract envelope despite trailing <tool_call>"
+        );
         assert_eq!(calls[0].name, "write");
         assert!(calls[0].arguments.contains("src/lib.rs"));
     }
@@ -1900,7 +1875,8 @@ mod adapter_translation_tests {
     fn parse_tool_envelope_direct_ignores_second_envelope() {
         // Two complete envelopes in a row: take the first, leave the
         // second (pi protocol is one tool call per turn).
-        let text = r#"{"name":"read","arguments":{"path":"a"}} {"name":"read","arguments":{"path":"b"}}"#;
+        let text =
+            r#"{"name":"read","arguments":{"path":"a"}} {"name":"read","arguments":{"path":"b"}}"#;
         let calls = super::parse_tool_envelope_direct(text);
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "read");
@@ -1930,4 +1906,3 @@ mod adapter_translation_tests {
         assert_eq!(names, vec!["a", "b", "c"]);
     }
 }
-

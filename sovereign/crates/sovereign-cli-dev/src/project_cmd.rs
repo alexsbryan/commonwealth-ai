@@ -23,12 +23,7 @@ use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, IngestProgress};
 /// engine's default is harmless — code indexes are FTS-only).
 fn configured_embed_model_name() -> String {
     if let Ok(cfg) = sovereign_core::setup_config::SetupConfig::load() {
-        if let Some(stem) = cfg
-            .models
-            .embed
-            .file_stem()
-            .and_then(|s| s.to_str())
-        {
+        if let Some(stem) = cfg.models.embed.file_stem().and_then(|s| s.to_str()) {
             return stem.to_lowercase();
         }
     }
@@ -276,9 +271,15 @@ const HELP_SERVE: crate::util::help::Help = crate::util::help::Help {
              [--sovereign-dir <dir>]",
         ),
         crate::util::help::HelpSection::Flags(&[
-            ("--port <port>",         "Listen port (default: 9741)"),
-            ("--data-dir <dir>",      "Index directory (default: ~/.sovereign/indexes)"),
-            ("--sovereign-dir <dir>", "Path to .sovereign/ (default: nearest ancestor with .sovereign/)"),
+            ("--port <port>", "Listen port (default: 9741)"),
+            (
+                "--data-dir <dir>",
+                "Index directory (default: ~/.sovereign/indexes)",
+            ),
+            (
+                "--sovereign-dir <dir>",
+                "Path to .sovereign/ (default: nearest ancestor with .sovereign/)",
+            ),
         ]),
     ],
 };
@@ -286,9 +287,9 @@ const HELP_SERVE: crate::util::help::Help = crate::util::help::Help {
 const HELP_STATUS: crate::util::help::Help = crate::util::help::Help {
     command: "sovereign project status",
     summary: "Show the status of code intelligence for the current project.",
-    sections: &[
-        crate::util::help::HelpSection::Usage("sovereign project status"),
-    ],
+    sections: &[crate::util::help::HelpSection::Usage(
+        "sovereign project status",
+    )],
 };
 
 const HELP_REFRESH: crate::util::help::Help = crate::util::help::Help {
@@ -299,7 +300,10 @@ const HELP_REFRESH: crate::util::help::Help = crate::util::help::Help {
             "sovereign project refresh [--quiet] [--rebuild-index]",
         ),
         crate::util::help::HelpSection::Flags(&[
-            ("--quiet", "Suppress progress output (use from hook scripts)"),
+            (
+                "--quiet",
+                "Suppress progress output (use from hook scripts)",
+            ),
             (
                 "--rebuild-index",
                 "Force-rebuild the LanceDB corpus index (chunks + embeddings) \
@@ -353,7 +357,10 @@ fn detect_harnesses(project_root: &Path) -> HarnessDetection {
         || home.as_ref().is_some_and(|h| h.join(".opencode").exists())
         || binary_on_path("opencode");
 
-    HarnessDetection { claude_code, opencode }
+    HarnessDetection {
+        claude_code,
+        opencode,
+    }
 }
 
 /// Best-effort check for a binary on PATH. Uses `which(1)` on unix and
@@ -524,11 +531,10 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     // non-fatal: a missing or unreadable project.toml means "first
     // init", which is the common case.
     let prior_project_toml_path = repo_root.join(".sovereign").join("project.toml");
-    let prior_git_declined: bool = crate::project_toml::ProjectTomlFile::read(
-        &prior_project_toml_path,
-    )
-    .map(|t| t.lifecycle.git_declined_at_init)
-    .unwrap_or(false);
+    let prior_git_declined: bool =
+        crate::project_toml::ProjectTomlFile::read(&prior_project_toml_path)
+            .map(|t| t.lifecycle.git_declined_at_init)
+            .unwrap_or(false);
     let design_md_path = repo_root.join("DESIGN.md");
     let design_exists = design_md_path.exists();
 
@@ -538,8 +544,17 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     // passed through because the prompt's kindness wording changes
     // based on whether the user is about to start drafting a
     // DESIGN.md (the main value prop for git) or not.
-    let git_outcome = resolve_git(&repo_root, has_git, git_override, design_exists, prior_git_declined);
-    let has_git = matches!(git_outcome, GitOutcome::Present | GitOutcome::InitializedNow);
+    let git_outcome = resolve_git(
+        &repo_root,
+        has_git,
+        git_override,
+        design_exists,
+        prior_git_declined,
+    );
+    let has_git = matches!(
+        git_outcome,
+        GitOutcome::Present | GitOutcome::InitializedNow
+    );
 
     // Resolve workspace roots for SCIP export and language detection.
     // Single-repo (default): just the git root.
@@ -598,11 +613,9 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     // re-running init after `sovereign project found` doesn't reset
     // `founded`, `charter_version`, or `current_phase`.
     let project_toml_path = repo_root.join(".sovereign").join("project.toml");
-    if let Err(e) = std::fs::create_dir_all(
-        project_toml_path
-            .parent()
-            .unwrap_or_else(|| Path::new(".")),
-    ) {
+    if let Err(e) =
+        std::fs::create_dir_all(project_toml_path.parent().unwrap_or_else(|| Path::new(".")))
+    {
         eprintln!("    \u{2717} Cannot create .sovereign/: {e}");
         return 1;
     }
@@ -669,7 +682,11 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
         println!(
             "    Monorepo mode ({} workspace{})",
             scip_workspace_roots.len(),
-            if scip_workspace_roots.len() == 1 { "" } else { "s" }
+            if scip_workspace_roots.len() == 1 {
+                ""
+            } else {
+                "s"
+            }
         );
         for root in &scip_workspace_roots {
             println!(
@@ -758,10 +775,10 @@ vector = false
 
     // Progress callback — inline progress bar.
     let progress: corpus_engine::ProgressCallback = Box::new(|p| match p {
-        IngestProgress::Extracting { documents_processed } => {
-            eprint!(
-                "\r    Extracting... {documents_processed} files    "
-            );
+        IngestProgress::Extracting {
+            documents_processed,
+        } => {
+            eprint!("\r    Extracting... {documents_processed} files    ");
         }
         IngestProgress::Embedding {
             chunks_embedded,
@@ -882,9 +899,7 @@ vector = false
                     );
                 }
                 corpus_engine_scip::scip_export::ScipProgress::Skipped { language, reason } => {
-                    eprintln!(
-                        "\r    \u{26a0} {language}: skipped ({reason})    "
-                    );
+                    eprintln!("\r    \u{26a0} {language}: skipped ({reason})    ");
                 }
             };
 
@@ -1007,9 +1022,8 @@ vector = false
     // nothing — no clutter for non-AI-coding projects. If detected, we ask
     // once per harness whether to write its config.
     let detected = detect_harnesses(&repo_root);
-    let write_claude = detected.claude_code
-        && !no_claude_config
-        && confirm_write_config("Claude Code");
+    let write_claude =
+        detected.claude_code && !no_claude_config && confirm_write_config("Claude Code");
     let write_opencode = detected.opencode && confirm_write_config("opencode");
 
     // Commonwealth URL: after `sovereign setup`, the local daemon always
@@ -1262,9 +1276,7 @@ vector = false
         println!(
             "  Next: `sovereign project design` — I'll work with the agent on your DESIGN.md."
         );
-        println!(
-            "        Bring a path to an existing doc with `--import <path>`, or start blank."
-        );
+        println!("        Bring a path to an existing doc with `--import <path>`, or start blank.");
         println!();
     }
 
@@ -1305,7 +1317,9 @@ pub(crate) async fn cmd_design(args: &[String]) -> i32 {
                         crate::design_session::TransportChoice::Default
                     }
                     Some(other) => {
-                        eprintln!("error: --via expects opencode | claude-code | cursor; got `{other}`");
+                        eprintln!(
+                            "error: --via expects opencode | claude-code | cursor; got `{other}`"
+                        );
                         return 1;
                     }
                     None => {
@@ -1394,8 +1408,8 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
         }
         i += 1;
     }
-    let enrich_model = enrich_model
-        .unwrap_or_else(|| "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L".to_string());
+    let enrich_model =
+        enrich_model.unwrap_or_else(|| "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L".to_string());
 
     let repo_root = match find_repo_root() {
         Some(r) => r,
@@ -1409,7 +1423,10 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
     let design_md = match std::fs::read_to_string(&design_path) {
         Ok(s) => s,
         Err(_) => {
-            eprintln!("  \u{2717} No DESIGN.md at repo root ({}).", design_path.display());
+            eprintln!(
+                "  \u{2717} No DESIGN.md at repo root ({}).",
+                design_path.display()
+            );
             eprintln!("    Run `sovereign project design` first to author or import one.");
             return 2;
         }
@@ -1434,7 +1451,10 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
     let unanswered: Vec<_> = oqs.iter().filter(|o| !o.is_answered()).collect();
     if !unanswered.is_empty() && !allow_open {
         eprintln!();
-        eprintln!("  \u{26a0} {} unanswered question(s) in OPEN_QUESTIONS.md:", unanswered.len());
+        eprintln!(
+            "  \u{26a0} {} unanswered question(s) in OPEN_QUESTIONS.md:",
+            unanswered.len()
+        );
         for oq in &unanswered {
             eprintln!("    · {} ({})", oq.id, oq.anchor);
         }
@@ -1500,8 +1520,11 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
                 outcome.enriched, outcome.skipped, outcome.failed
             );
             // Re-render with the mutated items.
-            composed.markdown =
-                crate::plan_composer::render(&compose_inputs, &composed.items, &composed.design_hash);
+            composed.markdown = crate::plan_composer::render(
+                &compose_inputs,
+                &composed.items,
+                &composed.design_hash,
+            );
         } else {
             eprintln!(
                 "    \u{26a0} enrich: daemon at {} not reachable — keeping deterministic plan. \
@@ -1672,8 +1695,7 @@ async fn cmd_amend_design(args: &[String]) -> i32 {
             if questions.len() == 1 { "" } else { "s" }
         );
         for q in &questions {
-            let answer =
-                crate::amend::AmendmentInterlocutor::ask_adversarial(&mut interlocutor, q);
+            let answer = crate::amend::AmendmentInterlocutor::ask_adversarial(&mut interlocutor, q);
             qa.push((q.clone(), answer));
         }
     } else {
@@ -1689,8 +1711,7 @@ async fn cmd_amend_design(args: &[String]) -> i32 {
     // of the log — matches the append_design_amendment_log
     // implementation and the convention in CHARTER.md's log.
     let today = today_iso();
-    let entry =
-        crate::amend::render_design_amendment_entry(&today, &qa, &old_hash, &new_hash);
+    let entry = crate::amend::render_design_amendment_entry(&today, &qa, &old_hash, &new_hash);
     let final_md = crate::amend::append_design_amendment_log(&new_text, &entry);
 
     if let Err(e) = std::fs::write(&path, &final_md) {
@@ -1760,7 +1781,10 @@ pub(crate) async fn cmd_charter(args: &[String]) -> i32 {
     let sovereign_dir = match charter_path.parent() {
         Some(p) => p.to_path_buf(),
         None => {
-            eprintln!("  \u{2717} could not resolve .sovereign/ parent of {}", charter_path.display());
+            eprintln!(
+                "  \u{2717} could not resolve .sovereign/ parent of {}",
+                charter_path.display()
+            );
             return 1;
         }
     };
@@ -1768,7 +1792,10 @@ pub(crate) async fn cmd_charter(args: &[String]) -> i32 {
     // Ensure .sovereign/ exists — init creates it, but cmd_charter
     // might be invoked in a repo where init was skipped. Safe/cheap.
     if let Err(e) = std::fs::create_dir_all(&sovereign_dir) {
-        eprintln!("  \u{2717} could not create {}: {e}", sovereign_dir.display());
+        eprintln!(
+            "  \u{2717} could not create {}: {e}",
+            sovereign_dir.display()
+        );
         return 1;
     }
 
@@ -1801,7 +1828,10 @@ pub(crate) async fn cmd_charter(args: &[String]) -> i32 {
     let charter_text = match std::fs::read_to_string(&charter_path) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("  \u{2717} could not re-read {}: {e}", charter_path.display());
+            eprintln!(
+                "  \u{2717} could not re-read {}: {e}",
+                charter_path.display()
+            );
             return 1;
         }
     };
@@ -1834,7 +1864,9 @@ pub(crate) async fn cmd_charter(args: &[String]) -> i32 {
         &new_hash[..new_hash.len().min(12)]
     );
     if created_fresh {
-        eprintln!("    Next: fill in the Onboarding pointers section — new teammates read this first.");
+        eprintln!(
+            "    Next: fill in the Onboarding pointers section — new teammates read this first."
+        );
     }
     0
 }
@@ -2089,7 +2121,9 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
             Ok(_) => {
                 if !quiet {
                     println!("  \u{2713} Rebuild nudged for \"{corpus_id}\".");
-                    println!("    Check progress with `sovereign project watch status {corpus_id}`.");
+                    println!(
+                        "    Check progress with `sovereign project watch status {corpus_id}`."
+                    );
                 }
                 // SCIP is nudged; now gate the LanceDB corpus
                 // rebuild on either the explicit `--rebuild-index`
@@ -2186,64 +2220,58 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
     // wedging on `no such column: corpus_id` at index-creation time —
     // which is exactly what `sovereign doctor`'s `scip_integrity`
     // repair hint used to run into. Mirrors `Reindexer::register`.
-    let graph = match corpus_engine_scip::ScipGraph::open_with_integrity(
-        &scip_graph_path,
-        &corpus_id,
-    ) {
-        Ok(g) => g,
-        Err(corpus_engine_scip::OpenError::Corrupt { moved_to }) => {
-            if !quiet {
-                eprintln!(
-                    "  \u{26a0} SCIP DB was corrupt; quarantined to {}",
-                    moved_to.display()
-                );
-                eprintln!("    Rebuilding from scratch.");
-            }
-            match corpus_engine_scip::ScipGraph::open_with_integrity(
-                &scip_graph_path,
-                &corpus_id,
-            ) {
-                Ok(g) => g,
-                Err(e) => {
+    let graph =
+        match corpus_engine_scip::ScipGraph::open_with_integrity(&scip_graph_path, &corpus_id) {
+            Ok(g) => g,
+            Err(corpus_engine_scip::OpenError::Corrupt { moved_to }) => {
+                if !quiet {
                     eprintln!(
-                        "error: cannot open SCIP graph after quarantine: {e}"
+                        "  \u{26a0} SCIP DB was corrupt; quarantined to {}",
+                        moved_to.display()
                     );
-                    return 1;
+                    eprintln!("    Rebuilding from scratch.");
+                }
+                match corpus_engine_scip::ScipGraph::open_with_integrity(
+                    &scip_graph_path,
+                    &corpus_id,
+                ) {
+                    Ok(g) => g,
+                    Err(e) => {
+                        eprintln!("error: cannot open SCIP graph after quarantine: {e}");
+                        return 1;
+                    }
                 }
             }
-        }
-        Err(corpus_engine_scip::OpenError::SchemaMismatch { found, expected }) => {
-            if !quiet {
-                eprintln!(
+            Err(corpus_engine_scip::OpenError::SchemaMismatch { found, expected }) => {
+                if !quiet {
+                    eprintln!(
                     "  \u{26a0} SCIP DB schema v{found} is stale (current: v{expected}); resetting."
                 );
-            }
-            if let Err(e) = reset_scip_db(&scip_graph_path) {
-                eprintln!(
-                    "error: cannot reset stale SCIP DB at {}: {e}",
-                    scip_graph_path.display()
-                );
-                return 1;
-            }
-            match corpus_engine_scip::ScipGraph::open_with_integrity(
-                &scip_graph_path,
-                &corpus_id,
-            ) {
-                Ok(g) => g,
-                Err(e) => {
+                }
+                if let Err(e) = reset_scip_db(&scip_graph_path) {
                     eprintln!(
-                        "error: cannot open SCIP graph after reset: {e}"
+                        "error: cannot reset stale SCIP DB at {}: {e}",
+                        scip_graph_path.display()
                     );
                     return 1;
                 }
+                match corpus_engine_scip::ScipGraph::open_with_integrity(
+                    &scip_graph_path,
+                    &corpus_id,
+                ) {
+                    Ok(g) => g,
+                    Err(e) => {
+                        eprintln!("error: cannot open SCIP graph after reset: {e}");
+                        return 1;
+                    }
+                }
             }
-        }
-        Err(e) => {
-            eprintln!("error: cannot open SCIP graph: {e}");
-            eprintln!("Run `sovereign project init` first.");
-            return 1;
-        }
-    };
+            Err(e) => {
+                eprintln!("error: cannot open SCIP graph: {e}");
+                eprintln!("Run `sovereign project init` first.");
+                return 1;
+            }
+        };
 
     // Get pre-refresh counts for delta display.
     let prev_symbols = graph.symbol_count().await;
@@ -2445,11 +2473,7 @@ fn lancedb_rebuild_reason(
             ));
         }
     };
-    if meta
-        .get("embedding_dimensions")
-        .and_then(|v| v.as_u64())
-        == Some(768)
-    {
+    if meta.get("embedding_dimensions").and_then(|v| v.as_u64()) == Some(768) {
         return Some("on-disk index is 768-dim (legacy zero-vector code index)".into());
     }
     None
@@ -2612,7 +2636,10 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         .unwrap_or_else(|| PathBuf::from("./sovereign-indexes"));
 
     if !data_dir.exists() {
-        eprintln!("error: index directory does not exist: {}", data_dir.display());
+        eprintln!(
+            "error: index directory does not exist: {}",
+            data_dir.display()
+        );
         eprintln!("Run `sovereign project init` in at least one project first.");
         return 1;
     }
@@ -2646,7 +2673,10 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
             } else {
                 eprintln!("  Corpora:");
                 for info in &code_indexes {
-                    eprintln!("    \u{2713} {} ({} symbols)", info.corpus_id, info.chunk_count);
+                    eprintln!(
+                        "    \u{2713} {} ({} symbols)",
+                        info.corpus_id, info.chunk_count
+                    );
                 }
             }
         }
@@ -2663,7 +2693,9 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     let (initial_graph, _summary) = load_merged_graph(&data_dir, true).await;
     let merged_graph: sovereign_tools::ScipGraphHandle =
         Arc::new(ArcSwap::from_pointee(initial_graph));
-    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(&merged_graph)));
+    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(
+        &merged_graph,
+    )));
 
     // Spawn the background reloader: every 30s, stat each scip_graph.db,
     // and if any mtime changed (or a file appeared/disappeared) rebuild the
@@ -2683,7 +2715,9 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // This allows `sovereign project serve` to be launched from a monorepo
     // root that is not itself a git repository.
 
-    let cwd = std::env::current_dir().ok().unwrap_or_else(|| PathBuf::from("."));
+    let cwd = std::env::current_dir()
+        .ok()
+        .unwrap_or_else(|| PathBuf::from("."));
     let sovereign_dir = sovereign_dir_arg
         .map(|p| if p.is_absolute() { p } else { cwd.join(p) })
         .or_else(|| find_sovereign_dir(&cwd))
@@ -2699,9 +2733,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     eprintln!();
     eprintln!("  Stores:");
 
-    let test_store = match corpus_engine::TestResultStore::open(
-        &data_dir.join("test_results.db"),
-    ) {
+    let test_store = match corpus_engine::TestResultStore::open(&data_dir.join("test_results.db")) {
         Ok(s) => {
             eprintln!("  test_results.db  ✓");
             Arc::new(s)
@@ -2715,9 +2747,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         }
     };
 
-    let lint_store = match corpus_engine::LintResultStore::open(
-        &data_dir.join("lint_results.db"),
-    ) {
+    let lint_store = match corpus_engine::LintResultStore::open(&data_dir.join("lint_results.db")) {
         Ok(s) => {
             eprintln!("  lint_results.db  ✓");
             Arc::new(s)
@@ -2794,38 +2824,37 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
     // ── Project docs store ───────────────────────────────────────
 
-    let docs_store = match corpus_engine_notes::ProjectDocsStore::open(
-        &data_dir.join("project_docs.db"),
-    ) {
-        Ok(s) => {
-            let store = Arc::new(s);
-            // Index on first run without blocking serve startup.
-            if store.is_empty().await.unwrap_or(true) {
-                let s2 = Arc::clone(&store);
-                let root = repo_root.clone();
-                tokio::spawn(async move {
-                    let files = corpus_engine_notes::find_markdown_files(&root);
-                    let mut count = 0usize;
-                    for f in &files {
-                        count += s2.index_file(f, &root).await.unwrap_or(0);
-                    }
-                    if count > 0 {
-                        tracing::info!(
-                            "indexed {} doc chunks from {} md files",
-                            count,
-                            files.len()
-                        );
-                    }
-                });
+    let docs_store =
+        match corpus_engine_notes::ProjectDocsStore::open(&data_dir.join("project_docs.db")) {
+            Ok(s) => {
+                let store = Arc::new(s);
+                // Index on first run without blocking serve startup.
+                if store.is_empty().await.unwrap_or(true) {
+                    let s2 = Arc::clone(&store);
+                    let root = repo_root.clone();
+                    tokio::spawn(async move {
+                        let files = corpus_engine_notes::find_markdown_files(&root);
+                        let mut count = 0usize;
+                        for f in &files {
+                            count += s2.index_file(f, &root).await.unwrap_or(0);
+                        }
+                        if count > 0 {
+                            tracing::info!(
+                                "indexed {} doc chunks from {} md files",
+                                count,
+                                files.len()
+                            );
+                        }
+                    });
+                }
+                eprintln!("  project_docs.db  ✓");
+                Some(store)
             }
-            eprintln!("  project_docs.db  ✓");
-            Some(store)
-        }
-        Err(e) => {
-            eprintln!("  warning: could not open project docs DB: {e}");
-            None
-        }
-    };
+            Err(e) => {
+                eprintln!("  warning: could not open project docs DB: {e}");
+                None
+            }
+        };
 
     // ── Build background watchers ───────────────────────────────
 
@@ -2837,7 +2866,11 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         sovereign_cfg.test_runner.as_ref().map(|cfg| {
             let working_dir = cfg.working_dir.as_ref().map(|d| {
                 let p = PathBuf::from(d);
-                if p.is_absolute() { p } else { repo_root.join(p) }
+                if p.is_absolute() {
+                    p
+                } else {
+                    repo_root.join(p)
+                }
             });
             eprintln!(
                 "  test_runner      ✓  {}",
@@ -2858,7 +2891,11 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         sovereign_cfg.lint_runner.as_ref().map(|cfg| {
             let working_dir = cfg.working_dir.as_ref().map(|d| {
                 let p = PathBuf::from(d);
-                if p.is_absolute() { p } else { repo_root.join(p) }
+                if p.is_absolute() {
+                    p
+                } else {
+                    repo_root.join(p)
+                }
             });
             eprintln!(
                 "  lint_runner      ✓  {}",
@@ -2896,9 +2933,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
     // Shared flag: set to true after coordinator.start() succeeds. Tools expose
     // this as watcher_active so agents know the FS watcher is live.
-    let watcher_active_flag = std::sync::Arc::new(
-        std::sync::atomic::AtomicBool::new(false),
-    );
+    let watcher_active_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
     // ── Register tools ──────────────────────────────────────────
 
@@ -2907,20 +2942,20 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         Arc::clone(&engine),
         Arc::clone(&merged_graph),
     )));
-    tools.register(Box::new(
-        sovereign_tools::CodeSearchTool::new(Arc::clone(&engine)),
-    ));
+    tools.register(Box::new(sovereign_tools::CodeSearchTool::new(Arc::clone(
+        &engine,
+    ))));
     tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
         Arc::clone(&engine),
     )));
-    tools.register(Box::new(sovereign_tools::FindCalleesTool::new(
-        Arc::clone(&engine),
-        Arc::clone(&merged_graph),
-    ).with_health_checker(Arc::clone(&health_checker))));
-    tools.register(Box::new(sovereign_tools::FindCallersTool::new(
-        Arc::clone(&engine),
-        Arc::clone(&merged_graph),
-    ).with_health_checker(Arc::clone(&health_checker))));
+    tools.register(Box::new(
+        sovereign_tools::FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
+            .with_health_checker(Arc::clone(&health_checker)),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
+            .with_health_checker(Arc::clone(&health_checker)),
+    ));
 
     // ── Test / lint watcher tools ───────────────────────────────
 
@@ -2933,9 +2968,9 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         tools.register(Box::new(tool));
     }
     if let Some(ref watcher) = test_watcher {
-        tools.register(Box::new(sovereign_tools::RunTestsTool::new(
-            Arc::clone(watcher),
-        )));
+        tools.register(Box::new(sovereign_tools::RunTestsTool::new(Arc::clone(
+            watcher,
+        ))));
     }
     tools.register(Box::new(sovereign_tools::GetRunOutputTool::new(
         Arc::clone(&test_store),
@@ -2959,15 +2994,15 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
     // ── Agent partnership tools (notes, blast radius, project context) ──
 
-    tools.register(Box::new(sovereign_tools::WriteNoteTool::new(
-        Arc::clone(&notes_store),
-    )));
-    tools.register(Box::new(sovereign_tools::ReadNotesTool::new(
-        Arc::clone(&notes_store),
-    )));
-    tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(
-        Arc::clone(&notes_store),
-    )));
+    tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
+        &notes_store,
+    ))));
+    tools.register(Box::new(sovereign_tools::ReadNotesTool::new(Arc::clone(
+        &notes_store,
+    ))));
+    tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(Arc::clone(
+        &notes_store,
+    ))));
     // Work atlas — coordination layer for agents sharing this repo.
     // The serve path runs the GC loop and exposes the three claim
     // tools alongside the code-intel surface. Per spec §10 the
@@ -2984,8 +3019,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
             .or_else(|_| commonwealth_state::MeshStore::in_memory())
             .expect("work atlas mesh store"),
     );
-    let atlas_node_id =
-        sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir);
+    let atlas_node_id = sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir);
     let atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
         Arc::clone(&atlas_mesh_store),
         atlas_node_id,
@@ -3004,40 +3038,41 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         });
     let atlas_broadcaster: Arc<dyn sovereign_work_atlas::tools::ClaimBroadcaster> =
         Arc::new(sovereign_work_atlas::tools::NullBroadcaster);
-    let (atlas_repo_root, atlas_repo_id) =
-        match sovereign_work_atlas::resolve_repo_id(&repo_root) {
-            Ok(pair) => pair,
-            Err(e) => {
-                tracing::warn!(
-                    error = %e,
-                    "work_atlas:repo_id_missing — declare_scope will reject calls"
-                );
-                (repo_root.clone(), String::new())
-            }
-        };
+    let (atlas_repo_root, atlas_repo_id) = match sovereign_work_atlas::resolve_repo_id(&repo_root) {
+        Ok(pair) => pair,
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "work_atlas:repo_id_missing — declare_scope will reject calls"
+            );
+            (repo_root.clone(), String::new())
+        }
+    };
     let atlas_branch = crate::code_cmd::current_branch(&atlas_repo_root);
-    tools.register(Box::new(sovereign_work_atlas::tools::DeclareScopeTool::new(
-        Arc::clone(&atlas_store),
-        atlas_cfg.clone(),
-        Arc::clone(&atlas_broadcaster),
-        atlas_repo_root.clone(),
-        atlas_repo_id.clone(),
-        atlas_branch.clone(),
-    )));
-    tools.register(Box::new(sovereign_work_atlas::tools::ReleaseScopeTool::new(
-        Arc::clone(&atlas_store),
-        Arc::clone(&atlas_broadcaster),
-    )));
-    tools.register(Box::new(sovereign_work_atlas::tools::WorkInFlightTool::new(
-        Arc::clone(&atlas_store),
-    )));
+    tools.register(Box::new(
+        sovereign_work_atlas::tools::DeclareScopeTool::new(
+            Arc::clone(&atlas_store),
+            atlas_cfg.clone(),
+            Arc::clone(&atlas_broadcaster),
+            atlas_repo_root.clone(),
+            atlas_repo_id.clone(),
+            atlas_branch.clone(),
+        ),
+    ));
+    tools.register(Box::new(
+        sovereign_work_atlas::tools::ReleaseScopeTool::new(
+            Arc::clone(&atlas_store),
+            Arc::clone(&atlas_broadcaster),
+        ),
+    ));
+    tools.register(Box::new(
+        sovereign_work_atlas::tools::WorkInFlightTool::new(Arc::clone(&atlas_store)),
+    ));
     // GC loop. Holds onto the handle so dropping it aborts cleanly
     // when serve terminates.
-    let _atlas_gc_handle = sovereign_work_atlas::gc::WorkAtlasGc::new(
-        Arc::clone(&atlas_store),
-        atlas_cfg.clone(),
-    )
-    .spawn();
+    let _atlas_gc_handle =
+        sovereign_work_atlas::gc::WorkAtlasGc::new(Arc::clone(&atlas_store), atlas_cfg.clone())
+            .spawn();
 
     tools.register(Box::new(
         sovereign_tools::BlastRadiusTool::new(Arc::clone(&merged_graph))
@@ -3062,9 +3097,9 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     tools.register(Box::new(sovereign_tools::ReadNoteByIdTool::new(
         Arc::clone(&notes_store),
     )));
-    tools.register(Box::new(sovereign_tools::PromoteNoteTool::new(
-        Arc::clone(&notes_store),
-    )));
+    tools.register(Box::new(sovereign_tools::PromoteNoteTool::new(Arc::clone(
+        &notes_store,
+    ))));
     // ReadNoteDigestTool runs in fallback (header-only) mode here —
     // `sovereign project serve` doesn't load a model, so the Fast-slot
     // summarization path is unavailable. The banner in the fallback
@@ -3090,8 +3125,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
     // ── Doc path checker ────────────────────────────────────────────────
     tools.register(Box::new(
-        sovereign_tools::CheckDocPathsTool::new()
-            .with_project_root(repo_root.clone()),
+        sovereign_tools::CheckDocPathsTool::new().with_project_root(repo_root.clone()),
     ));
 
     // ── DESIGN.md structural signals ────────────────────────────────────
@@ -3101,8 +3135,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // right file. Absolute paths still work — the tool resolves them
     // verbatim, bypassing project_root.
     tools.register(Box::new(
-        sovereign_tools::DesignSignalsExtractTool::new()
-            .with_project_root(repo_root.clone()),
+        sovereign_tools::DesignSignalsExtractTool::new().with_project_root(repo_root.clone()),
     ));
 
     // ── Start watcher coordinator ───────────────────────────────
@@ -3111,7 +3144,12 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         .test_runner
         .as_ref()
         .and_then(|c| c.debounce_ms)
-        .or_else(|| sovereign_cfg.lint_runner.as_ref().and_then(|c| c.debounce_ms))
+        .or_else(|| {
+            sovereign_cfg
+                .lint_runner
+                .as_ref()
+                .and_then(|c| c.debounce_ms)
+        })
         .unwrap_or(500);
 
     let mut coordinator = corpus_engine::WatcherCoordinator::new(debounce_ms);
@@ -3122,10 +3160,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         coordinator.register(Arc::clone(w) as Arc<dyn corpus_engine::BackgroundWatcher>);
     }
     if let Some(ref ds) = docs_store {
-        let pw = corpus_engine::ProjectIndexWatcher::new(
-            Arc::clone(ds),
-            repo_root.clone(),
-        );
+        let pw = corpus_engine::ProjectIndexWatcher::new(Arc::clone(ds), repo_root.clone());
         coordinator.register(Arc::new(pw) as Arc<dyn corpus_engine::BackgroundWatcher>);
     }
 
@@ -3189,25 +3224,25 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // `drift` without a restart.
     let notifier = sovereign_mesh::mcp_router::McpNotifier::new();
     let watcher_notifier = notifier.clone();
-    let _spec_watcher = match sovereign_tools::spec_watcher::SpecWatcher::start(
-        &repo_root,
-        move || watcher_notifier.notify_tools_list_changed(),
-    ) {
-        Ok(w) => Some(w),
-        Err(e) => {
-            // Don't fail the whole serve over a non-critical watcher;
-            // fall back to TTL-only cache freshness. Log so the
-            // operator sees why list_changed events aren't firing.
-            tracing::warn!(
-                error = %e,
-                root = %repo_root.display(),
-                "spec_watcher: failed to start; falling back to 1s TTL — \
-                 spec edits will surface within a second instead of \
-                 immediately"
-            );
-            None
-        }
-    };
+    let _spec_watcher =
+        match sovereign_tools::spec_watcher::SpecWatcher::start(&repo_root, move || {
+            watcher_notifier.notify_tools_list_changed()
+        }) {
+            Ok(w) => Some(w),
+            Err(e) => {
+                // Don't fail the whole serve over a non-critical watcher;
+                // fall back to TTL-only cache freshness. Log so the
+                // operator sees why list_changed events aren't firing.
+                tracing::warn!(
+                    error = %e,
+                    root = %repo_root.display(),
+                    "spec_watcher: failed to start; falling back to 1s TTL — \
+                     spec edits will surface within a second instead of \
+                     immediately"
+                );
+                None
+            }
+        };
     let app = sovereign_mesh::mcp_router::mcp_router(
         tools,
         Arc::clone(&notes_store),
@@ -3249,10 +3284,7 @@ pub(crate) use sovereign_cli_shared::scip::{load_merged_graph, snapshot_graph_mt
 /// change, rebuild the merged graph out-of-band and atomically swap it
 /// into `handle`. Tools (FindCalleesTool, FindCallersTool) pick up the
 /// new graph on their next `load_full()`.
-async fn scip_graph_reloader(
-    handle: sovereign_tools::ScipGraphHandle,
-    data_dir: PathBuf,
-) {
+async fn scip_graph_reloader(handle: sovereign_tools::ScipGraphHandle, data_dir: PathBuf) {
     const POLL_INTERVAL: Duration = Duration::from_secs(30);
 
     let mut last_seen = snapshot_graph_mtimes(&data_dir);
@@ -3287,7 +3319,6 @@ async fn scip_graph_reloader(
         );
     }
 }
-
 
 // ─── sovereign project found (Phase 6: retired) ─────────────
 //
@@ -3400,10 +3431,7 @@ pub(crate) async fn cmd_phase_status(_args: &[String]) -> i32 {
         .iter()
         .find(|p| !p.deferred && p.ordinal > project_toml.lifecycle.current_phase);
     match next {
-        Some(p) => println!(
-            "  Next: `sovereign project phase pass {}`",
-            p.ordinal
-        ),
+        Some(p) => println!("  Next: `sovereign project phase pass {}`", p.ordinal),
         None => println!("  All numbered phases complete."),
     }
     0
@@ -3444,7 +3472,10 @@ pub(crate) async fn cmd_phase_pass(args: &[String]) -> i32 {
         project_toml.lifecycle.current_phase + 1
     };
 
-    let phase = match phases.iter().find(|p| !p.deferred && p.ordinal == target_ordinal) {
+    let phase = match phases
+        .iter()
+        .find(|p| !p.deferred && p.ordinal == target_ordinal)
+    {
         Some(p) => p.clone(),
         None => {
             eprintln!(
@@ -3461,7 +3492,10 @@ pub(crate) async fn cmd_phase_pass(args: &[String]) -> i32 {
     // (`reqwest`) from prose. Treat any extracted "command" that
     // doesn't contain a space OR a shell operator as suspicious
     // and drop to manual confirmation.
-    let executable = phase.stop_command.as_ref().filter(|c| looks_shell_runnable(c));
+    let executable = phase
+        .stop_command
+        .as_ref()
+        .filter(|c| looks_shell_runnable(c));
 
     println!();
     println!("  Phase pass: {}", phase.heading);
@@ -3480,7 +3514,11 @@ pub(crate) async fn cmd_phase_pass(args: &[String]) -> i32 {
             let out = crate::phases::run_stop_command(cmd);
             println!(
                 "  {} exit={} duration={}ms",
-                if out.passed { "\u{2713} PASSED" } else { "\u{2717} FAILED" },
+                if out.passed {
+                    "\u{2713} PASSED"
+                } else {
+                    "\u{2717} FAILED"
+                },
                 out.exit_code
                     .map(|c| c.to_string())
                     .unwrap_or_else(|| "?".into()),
@@ -3490,9 +3528,7 @@ pub(crate) async fn cmd_phase_pass(args: &[String]) -> i32 {
         }
         None => {
             // Manual confirmation path.
-            println!(
-                "  No single unambiguous shell command extracted from the stop text."
-            );
+            println!("  No single unambiguous shell command extracted from the stop text.");
             println!("  Manual verification — run the stop condition yourself, then answer here.");
             print!("  Did it pass? [y/N] ");
             use std::io::Write;
@@ -3577,8 +3613,14 @@ pub(crate) async fn cmd_phase_pass(args: &[String]) -> i32 {
         0
     } else {
         println!();
-        println!("  Phase {} FAILED — current_phase unchanged.", phase.ordinal);
-        println!("  Read `{}` for the captured output.", report_path.display());
+        println!(
+            "  Phase {} FAILED — current_phase unchanged.",
+            phase.ordinal
+        );
+        println!(
+            "  Read `{}` for the captured output.",
+            report_path.display()
+        );
         1
     }
 }
@@ -3586,8 +3628,7 @@ pub(crate) async fn cmd_phase_pass(args: &[String]) -> i32 {
 /// Load the usual project triple: repo root, parsed project.toml,
 /// project.toml path. Returns a reusable `Err(i32)` exit code
 /// when any precondition fails.
-fn load_phase_context(
-) -> Result<(PathBuf, crate::project_toml::ProjectTomlFile, PathBuf), i32> {
+fn load_phase_context() -> Result<(PathBuf, crate::project_toml::ProjectTomlFile, PathBuf), i32> {
     let repo_root = find_repo_root()
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
     let project_toml_path = repo_root.join(".sovereign").join("project.toml");
@@ -3693,10 +3734,7 @@ pub(crate) async fn cmd_audit(args: &[String]) -> i32 {
     let notes_db = sov.join("notes.db");
     if notes_db.exists() {
         if let Ok(store) = corpus_engine_notes::NoteStore::open(&notes_db) {
-            let summary = crate::audit_extract::run_with_default_backend(
-                &repo_root, &store,
-            )
-            .await;
+            let summary = crate::audit_extract::run_with_default_backend(&repo_root, &store).await;
             if summary.ran && summary.written > 0 {
                 eprintln!(
                     "  audit: extracted {} new decision{} from diff at HEAD {}",
@@ -3738,7 +3776,11 @@ async fn build_audit_report(
     out.push_str("## Lifecycle\n\n");
     out.push_str(&format!(
         "- **Founded:** {}\n- **Charter version:** {}\n- **Current phase:** {}\n",
-        if project_toml.lifecycle.founded { "yes" } else { "no" },
+        if project_toml.lifecycle.founded {
+            "yes"
+        } else {
+            "no"
+        },
         project_toml.lifecycle.charter_version,
         project_toml.lifecycle.current_phase,
     ));
@@ -3874,12 +3916,12 @@ async fn build_audit_report(
     out.push_str("## Features\n\n");
     let feature_rows = collect_feature_rows(&sov).await;
     if feature_rows.is_empty() {
-        out.push_str("_(no features yet — write a spec at \
-            `.sovereign/features/<id>/spec.md` and commit it)_\n\n");
-    } else {
         out.push_str(
-            "| Feature | State | Spec | Auto red-team |\n|---|---|---|---|\n",
+            "_(no features yet — write a spec at \
+            `.sovereign/features/<id>/spec.md` and commit it)_\n\n",
         );
+    } else {
+        out.push_str("| Feature | State | Spec | Auto red-team |\n|---|---|---|---|\n");
         for row in &feature_rows {
             out.push_str(&format!(
                 "| {} | {} | {} | {} |\n",
@@ -3946,8 +3988,7 @@ fn compose_publish_recipe_nudge() -> Option<String> {
 
     // Build the registry once so `is_local_entry` is cheap to call.
     let mut registry = RecipeRegistry::from_bundled(Some(local_recipes_dir.clone()));
-    registry =
-        registry.with_local_registry(&local_recipes_dir.join("registry.toml"));
+    registry = registry.with_local_registry(&local_recipes_dir.join("registry.toml"));
 
     // Read the publish + dismissal markers.
     let sovereign_root = crate::util::dirs::sovereign_root();
@@ -3978,8 +4019,7 @@ fn compose_publish_recipe_nudge() -> Option<String> {
             Some(s) => s.to_string(),
             None => continue,
         };
-        let findings_path =
-            path.join("investigation").join("pattern_findings.json");
+        let findings_path = path.join("investigation").join("pattern_findings.json");
         if !findings_path.is_file() {
             continue;
         }
@@ -3987,11 +4027,10 @@ fn compose_publish_recipe_nudge() -> Option<String> {
             Ok(s) => s,
             Err(_) => continue,
         };
-        let arr: Vec<serde_json::Value> =
-            match serde_json::from_str(&raw) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
+        let arr: Vec<serde_json::Value> = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
         if arr.is_empty() {
             continue;
         }
@@ -4037,9 +4076,7 @@ fn compose_publish_recipe_nudge() -> Option<String> {
             nudge.push_str(&format!("- `{id}` ({n} finding(s))\n"));
         }
         nudge.push('\n');
-        nudge.push_str(
-            "  sovereign recipe publish ~/.sovereign/recipes/<id>/recipe.toml\n\n",
-        );
+        nudge.push_str("  sovereign recipe publish ~/.sovereign/recipes/<id>/recipe.toml\n\n");
     }
     nudge.push_str(
         "_Shown once. Dismiss forever: `sovereign nudge dismiss recipe-publish` \
@@ -4216,8 +4253,7 @@ fn render_decisions(notes: &AuditNotes) -> String {
         chain.sort_by(|a, b| a.created_at.cmp(&b.created_at));
     }
 
-    let mut already_rendered: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
+    let mut already_rendered: std::collections::HashSet<String> = std::collections::HashSet::new();
     for n in &notes.decisions {
         // Skip rows that are themselves reversals — they'll be
         // rendered under the originals below.
@@ -4292,12 +4328,11 @@ fn render_open_questions(notes: &AuditNotes) -> String {
     }
     out.push_str("## Open questions\n\n");
     for n in &notes.open_questions {
-        let confidence_suffix =
-            if n.source == corpus_engine_notes::NoteSource::Inferred.as_str() {
-                " _(low confidence)_"
-            } else {
-                ""
-            };
+        let confidence_suffix = if n.source == corpus_engine_notes::NoteSource::Inferred.as_str() {
+            " _(low confidence)_"
+        } else {
+            ""
+        };
         out.push_str(&render_audit_line(n));
         out.push_str(confidence_suffix);
         out.push('\n');
@@ -4439,8 +4474,7 @@ fn collect_artifact_inventory(sov: &Path) -> Vec<String> {
     let feats = sov.join("features");
     if feats.exists() {
         if let Ok(entries) = std::fs::read_dir(&feats) {
-            let mut dirs: Vec<PathBuf> =
-                entries.filter_map(|e| e.ok()).map(|e| e.path()).collect();
+            let mut dirs: Vec<PathBuf> = entries.filter_map(|e| e.ok()).map(|e| e.path()).collect();
             dirs.sort();
             for dir in dirs {
                 let name = dir.file_name().and_then(|s| s.to_str()).unwrap_or("");
@@ -4455,8 +4489,7 @@ fn collect_artifact_inventory(sov: &Path) -> Vec<String> {
                         .filter_map(|e| e.ok())
                         .filter_map(|e| {
                             let n = e.file_name().to_string_lossy().into_owned();
-                            (n.starts_with("milestone-") && n.ends_with(".md"))
-                                .then_some(n)
+                            (n.starts_with("milestone-") && n.ends_with(".md")).then_some(n)
                         })
                         .collect();
                     ms.sort();
@@ -4626,10 +4659,7 @@ pub(crate) async fn cmd_amend(args: &[String]) -> i32 {
             );
             0
         }
-        crate::amend::AmendOutcome::Approved {
-            new_charter,
-            entry,
-        } => {
+        crate::amend::AmendOutcome::Approved { new_charter, entry } => {
             if let Err(e) = std::fs::write(&charter_path, &new_charter) {
                 eprintln!("  Could not write CHARTER.md: {e}");
                 return 1;
@@ -4669,7 +4699,10 @@ pub(crate) async fn cmd_amend(args: &[String]) -> i32 {
                 entry.version,
                 &entry.new_charter_hash[..8.min(entry.new_charter_hash.len())]
             );
-            println!("    \u{2713} decision note written (session=amend-v{})", entry.version);
+            println!(
+                "    \u{2713} decision note written (session=amend-v{})",
+                entry.version
+            );
             0
         }
     }
@@ -4813,7 +4846,9 @@ fn resolve_git(
             GitOutcome::NonInteractiveSkipped
         }
     } else {
-        eprintln!("    \u{2026} git skipped. Run `git init` manually later if you change your mind.");
+        eprintln!(
+            "    \u{2026} git skipped. Run `git init` manually later if you change your mind."
+        );
         GitOutcome::DeclinedByUser
     }
 }
@@ -5010,8 +5045,8 @@ fn detect_languages(root: &Path) -> Vec<DetectedLanguage> {
         found.push(DetectedLanguage { id: "typescript" });
     } else if root.join("package.json").exists() {
         // Check if it's TS or JS.
-        let is_ts = root.join("tsconfig.json").exists()
-            || has_file_extension_recursive(root, "ts", 2);
+        let is_ts =
+            root.join("tsconfig.json").exists() || has_file_extension_recursive(root, "ts", 2);
         if is_ts {
             found.push(DetectedLanguage { id: "typescript" });
         } else {
@@ -5080,12 +5115,7 @@ pub(crate) use sovereign_cli_shared::repo::{find_repo_root, find_sovereign_dir};
 
 // ─── File generation ─────────────────────────────────────────
 
-fn generate_sovereign_md(
-    corpus_id: &str,
-    port: u16,
-    langs: &[&str],
-    has_scip: bool,
-) -> String {
+fn generate_sovereign_md(corpus_id: &str, port: u16, langs: &[&str], has_scip: bool) -> String {
     let call_graph_section = if has_scip {
         "## Call graph
 
@@ -5329,10 +5359,7 @@ fn generate_opencode_config(
     });
 
     if let Some(url) = commonwealth_url {
-        let base = format!(
-            "{}/v1",
-            url.trim_end_matches('/').replace(":9742", ":9741")
-        );
+        let base = format!("{}/v1", url.trim_end_matches('/').replace(":9742", ":9741"));
 
         let mut models = serde_json::Map::new();
         for id in commonwealth_models {
@@ -5392,10 +5419,7 @@ fn merge_opencode_config(existing: &str, generated: &str) -> String {
     }
 
     // Merge provider.commonwealth — add or update, preserve other providers.
-    if let Some(cw_provider) = new
-        .get("provider")
-        .and_then(|p| p.get("commonwealth"))
-    {
+    if let Some(cw_provider) = new.get("provider").and_then(|p| p.get("commonwealth")) {
         let provider = base
             .as_object_mut()
             .unwrap()
@@ -5412,7 +5436,12 @@ fn merge_opencode_config(existing: &str, generated: &str) -> String {
 /// Generate a starter AGENTS.md for projects that don't have one.
 /// Opencode (and other agents that read AGENTS.md) use this as their
 /// system-level instructions for the codebase.
-fn generate_agents_md(corpus_id: &str, port: u16, has_scip: bool, commonwealth_url: Option<&str>) -> String {
+fn generate_agents_md(
+    corpus_id: &str,
+    port: u16,
+    has_scip: bool,
+    commonwealth_url: Option<&str>,
+) -> String {
     let scip_section = if has_scip {
         "\n## Pre-flight before editing\n\
          \n\
@@ -5557,12 +5586,7 @@ except Exception:
     )
 }
 
-fn generate_claude_settings(
-    port: u16,
-    corpus_id: &str,
-    has_git: bool,
-    has_scip: bool,
-) -> String {
+fn generate_claude_settings(port: u16, corpus_id: &str, has_git: bool, has_scip: bool) -> String {
     let scip_instruction = if has_scip {
         "MANDATORY PRE-FLIGHT — before modifying any existing function: \
          call find_callers to count dependents; call blast_radius for \
@@ -5926,8 +5950,11 @@ pub(crate) async fn cmd_unregister(args: &[String]) -> i32 {
         eprintln!("error: missing corpus_id. usage: sovereign project unregister <corpus_id>");
         return 1;
     };
-    match daemon_post(&format!("/v1/projects/{corpus_id}/unregister"), serde_json::json!({}))
-        .await
+    match daemon_post(
+        &format!("/v1/projects/{corpus_id}/unregister"),
+        serde_json::json!({}),
+    )
+    .await
     {
         Ok(resp) => {
             let removed = resp["removed"].as_bool().unwrap_or(false);
@@ -6044,7 +6071,9 @@ async fn cmd_watch_status(args: &[String]) -> i32 {
     for p in filtered {
         let id = p["corpus_id"].as_str().unwrap_or("?");
         println!("  {id}");
-        let Some(status) = p["status"].as_object() else { continue };
+        let Some(status) = p["status"].as_object() else {
+            continue;
+        };
         for (watcher, s) in status {
             let state = s["state"].as_str().unwrap_or("?");
             let extra = match state {
@@ -6156,10 +6185,7 @@ fn format_graph_age(secs: u64) -> String {
     }
 }
 
-async fn daemon_post(
-    path: &str,
-    body: serde_json::Value,
-) -> Result<serde_json::Value, String> {
+async fn daemon_post(path: &str, body: serde_json::Value) -> Result<serde_json::Value, String> {
     let url = format!("{DAEMON_BASE}{path}");
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
@@ -6257,9 +6283,7 @@ fn remove_legacy_hook(repo_root: &Path) -> std::io::Result<bool> {
         return Ok(false);
     }
     let content = std::fs::read_to_string(&hook_path)?;
-    let is_sovereign_only = content
-        .lines()
-        .any(|l| l.starts_with("# SOVEREIGN_HOOK_V"))
+    let is_sovereign_only = content.lines().any(|l| l.starts_with("# SOVEREIGN_HOOK_V"))
         && !content.contains("# non-sovereign");
     if !is_sovereign_only {
         return Ok(false);
@@ -6573,9 +6597,18 @@ fi
     fn strip_prior_removes_v2_sovereign_block() {
         let existing = "#!/bin/sh\n# user hook\necho \"user step\"\n\n# SOVEREIGN_HOOK_V2\n# Sovereign: keep code intelligence fresh after each commit.\nLOG=\"$HOME/.sovereign/hooks.log\"\nmkdir -p \"$(dirname \"$LOG\")\"\nSOVEREIGN=\"/path/to/sovereign-cli\"\nif [ ! -x \"$SOVEREIGN\" ]; then\n  command -v sovereign >/dev/null 2>&1 || exit 0\n  SOVEREIGN=sovereign\nfi\nsetsid sh -c 'printf \"hi\" >> \"$LOG\"' < /dev/null > /dev/null 2>&1 &\n\n";
         let stripped = strip_prior_sovereign_block(existing);
-        assert!(!stripped.contains("SOVEREIGN_HOOK_V2"), "V2 marker should be stripped");
-        assert!(!stripped.contains("setsid"), "setsid line should be stripped");
-        assert!(stripped.contains("echo \"user step\""), "user content preserved");
+        assert!(
+            !stripped.contains("SOVEREIGN_HOOK_V2"),
+            "V2 marker should be stripped"
+        );
+        assert!(
+            !stripped.contains("setsid"),
+            "setsid line should be stripped"
+        );
+        assert!(
+            stripped.contains("echo \"user step\""),
+            "user content preserved"
+        );
     }
 
     // ── opencode config generation ──────────────────────────────
@@ -6584,7 +6617,10 @@ fi
     fn opencode_config_no_commonwealth() {
         let s = generate_opencode_config(9741, None, &[]);
         let v: serde_json::Value = serde_json::from_str(&s).unwrap();
-        assert_eq!(v["mcp"]["servers"]["sovereign"]["url"], "http://localhost:9741/mcp");
+        assert_eq!(
+            v["mcp"]["servers"]["sovereign"]["url"],
+            "http://localhost:9741/mcp"
+        );
         assert!(v.get("provider").is_none());
     }
 
@@ -6592,7 +6628,10 @@ fi
     fn opencode_config_commonwealth_no_models_uses_auto_fallback() {
         let s = generate_opencode_config(9741, Some("http://localhost:9741"), &[]);
         let v: serde_json::Value = serde_json::from_str(&s).unwrap();
-        assert_eq!(v["provider"]["commonwealth"]["options"]["baseURL"], "http://localhost:9741/v1");
+        assert_eq!(
+            v["provider"]["commonwealth"]["options"]["baseURL"],
+            "http://localhost:9741/v1"
+        );
         assert!(v["provider"]["commonwealth"]["models"]["auto"].is_object());
     }
 
@@ -6604,7 +6643,10 @@ fi
         let m = &v["provider"]["commonwealth"]["models"];
         assert!(m["Qwen3-9B"].is_object());
         assert!(m["Qwen3-27B"].is_object());
-        assert!(m.get("auto").is_none(), "auto should not appear when real models are known");
+        assert!(
+            m.get("auto").is_none(),
+            "auto should not appear when real models are known"
+        );
     }
 
     #[test]
@@ -6612,14 +6654,16 @@ fi
         // Port 9742 (internal mesh) should be rewritten to 9741 (public API)
         let s = generate_opencode_config(9741, Some("http://localhost:9742"), &[]);
         let v: serde_json::Value = serde_json::from_str(&s).unwrap();
-        assert_eq!(v["provider"]["commonwealth"]["options"]["baseURL"], "http://localhost:9741/v1");
+        assert_eq!(
+            v["provider"]["commonwealth"]["options"]["baseURL"],
+            "http://localhost:9741/v1"
+        );
     }
 
     #[test]
     fn merge_opencode_adds_commonwealth_provider() {
         let existing = r#"{"mcp":{"servers":{"sovereign":{"type":"http","url":"http://localhost:9741/mcp"}}}}"#;
-        let generated =
-            generate_opencode_config(9741, Some("http://localhost:9741"), &[]);
+        let generated = generate_opencode_config(9741, Some("http://localhost:9741"), &[]);
         let merged = merge_opencode_config(existing, &generated);
         let v: serde_json::Value = serde_json::from_str(&merged).unwrap();
         assert!(v["provider"]["commonwealth"]["options"]["baseURL"].is_string());
@@ -6628,12 +6672,17 @@ fi
     #[test]
     fn merge_opencode_preserves_other_providers() {
         let existing = r#"{"mcp":{"servers":{}},"provider":{"openai":{"name":"OpenAI","options":{"baseURL":"https://api.openai.com/v1"}}}}"#;
-        let generated =
-            generate_opencode_config(9741, Some("http://localhost:9741"), &[]);
+        let generated = generate_opencode_config(9741, Some("http://localhost:9741"), &[]);
         let merged = merge_opencode_config(existing, &generated);
         let v: serde_json::Value = serde_json::from_str(&merged).unwrap();
-        assert!(v["provider"]["openai"].is_object(), "pre-existing provider must survive");
-        assert!(v["provider"]["commonwealth"].is_object(), "commonwealth must be added");
+        assert!(
+            v["provider"]["openai"].is_object(),
+            "pre-existing provider must survive"
+        );
+        assert!(
+            v["provider"]["commonwealth"].is_object(),
+            "commonwealth must be added"
+        );
     }
 
     #[test]
@@ -6738,7 +6787,10 @@ fi
     async fn audit_returns_empty_when_no_features_anywhere() {
         let tmp = tempfile::tempdir().unwrap();
         let rows = collect_feature_rows(tmp.path()).await;
-        assert!(rows.is_empty(), "expected no rows in an empty sovereign dir");
+        assert!(
+            rows.is_empty(),
+            "expected no rows in an empty sovereign dir"
+        );
     }
 
     /// Two features on disk → two rows, sorted alphabetically. The
@@ -6803,8 +6855,14 @@ fi
             None,
         )
         .await;
-        let _a = write_note(&store, "decision", "agent decision A", NoteSource::Agent, None)
-            .await;
+        let _a = write_note(
+            &store,
+            "decision",
+            "agent decision A",
+            NoteSource::Agent,
+            None,
+        )
+        .await;
         let _c = write_note(
             &store,
             "decision",
@@ -6900,9 +6958,7 @@ fi
         // The reversal does NOT appear as a separate top-level row
         // (the renderer skips supersedes-set rows that have a
         // visible original).
-        let count_top = rendered
-            .matches("HashMap over BTreeMap")
-            .count();
+        let count_top = rendered.matches("HashMap over BTreeMap").count();
         assert_eq!(
             count_top, 1,
             "reversal should appear exactly once (under the original); got {count_top}"
@@ -6964,13 +7020,9 @@ fi
         assert!(rendered.contains("partial commit"));
         assert!(rendered.contains("cache TTL"));
         // The inferred row carries the low-confidence suffix.
-        let inferred_line = rendered
-            .lines()
-            .find(|l| l.contains("cache TTL"))
-            .unwrap();
+        let inferred_line = rendered.lines().find(|l| l.contains("cache TTL")).unwrap();
         assert!(
-            inferred_line.contains("low confidence")
-                || rendered.contains("(low confidence)"),
+            inferred_line.contains("low confidence") || rendered.contains("(low confidence)"),
             "inferred row missing low-confidence marker: {rendered}"
         );
         // The agent row does NOT carry it.
@@ -7013,8 +7065,14 @@ fi
         let dir = tempfile::tempdir().unwrap();
         let store = NoteStore::open(&dir.path().join("notes.db")).unwrap();
         // Decision-only — no observed rows.
-        let _d =
-            write_note(&store, "decision", "agent decision", NoteSource::Agent, None).await;
+        let _d = write_note(
+            &store,
+            "decision",
+            "agent decision",
+            NoteSource::Agent,
+            None,
+        )
+        .await;
         let notes = gather_audit_notes(&store).await;
         let rendered = render_observed_patterns(&notes);
         assert!(
@@ -7035,6 +7093,3 @@ fi
         assert_eq!(notes.by_id.get(&id).unwrap().content, "anchor");
     }
 }
-
-
-

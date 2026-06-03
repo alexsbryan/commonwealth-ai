@@ -46,16 +46,16 @@ pub use capability_request::CapabilityRequestTool;
 pub use checkpoint::CheckpointTool;
 pub use decision_log::DecisionLogTool;
 pub use probe_url::{detect_pagination_hint, PaginationHint, ProbeUrlTool};
-pub use research_finding::{
-    FindingConfidence, FindingScope, ResearchFindingPayload, ResearchFindingTool,
-};
 pub use project::{
-    maintainer_inbox_dir, projects_root_dir, CheckpointMeta, DecisionFrontier,
-    ProjectSummary, RecipeProject,
+    maintainer_inbox_dir, projects_root_dir, CheckpointMeta, DecisionFrontier, ProjectSummary,
+    RecipeProject,
 };
 pub use read::RecipeReadTool;
 pub use recipe_schema::recipe_json_schema;
 pub use registry_browse::RegistryBrowseTool;
+pub use research_finding::{
+    FindingConfidence, FindingScope, ResearchFindingPayload, ResearchFindingTool,
+};
 pub use test_tool::RecipeTestTool;
 pub use validate::RecipeValidateTool;
 pub use write::RecipeWriteTool;
@@ -148,10 +148,7 @@ fn resolve_root(override_dir: Option<&PathBuf>) -> Result<PathBuf> {
 /// `<id>/recipe.toml` because that's the canonical published-recipe
 /// layout. Used by every tool below — duplicating the logic in each
 /// would just risk drift.
-pub(crate) fn resolve_recipe_path(
-    input: &str,
-    override_dir: Option<&PathBuf>,
-) -> Result<PathBuf> {
+pub(crate) fn resolve_recipe_path(input: &str, override_dir: Option<&PathBuf>) -> Result<PathBuf> {
     let candidate: PathBuf = if input.contains('/') || input.ends_with(".toml") {
         input.into()
     } else {
@@ -168,33 +165,22 @@ mod tests {
     #[test]
     fn rejects_traversal_paths() {
         let root = std::path::PathBuf::from("/tmp/x/.sovereign/recipes");
-        let err = assert_under_root(
-            std::path::Path::new("../../etc/passwd"),
-            &root,
-        )
-        .unwrap_err();
+        let err = assert_under_root(std::path::Path::new("../../etc/passwd"), &root).unwrap_err();
         assert!(format!("{err}").contains(".."));
     }
 
     #[test]
     fn rejects_path_outside_recipes_dir() {
         let root = std::path::PathBuf::from("/tmp/x/.sovereign/recipes");
-        let err = assert_under_root(
-            std::path::Path::new("/etc/passwd"),
-            &root,
-        )
-        .unwrap_err();
+        let err = assert_under_root(std::path::Path::new("/etc/passwd"), &root).unwrap_err();
         assert!(format!("{err}").contains("outside"));
     }
 
     #[test]
     fn relative_path_resolves_under_recipes_dir() {
         let root = std::path::PathBuf::from("/tmp/x/.sovereign/recipes");
-        let p = assert_under_root(
-            std::path::Path::new("sec-investigation/recipe.toml"),
-            &root,
-        )
-        .unwrap();
+        let p = assert_under_root(std::path::Path::new("sec-investigation/recipe.toml"), &root)
+            .unwrap();
         assert!(p.ends_with("sec-investigation/recipe.toml"));
         assert!(p.starts_with(&root));
     }

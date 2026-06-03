@@ -54,7 +54,10 @@ fn frames_ending_in(prelude: Vec<&str>, reason: FinishReason) -> Vec<StreamFrame
         .into_iter()
         .map(|c| StreamFrame::Token(c.to_string()))
         .collect();
-    out.push(StreamFrame::Finish { reason, usage: None });
+    out.push(StreamFrame::Finish {
+        reason,
+        usage: None,
+    });
     out
 }
 
@@ -74,13 +77,8 @@ fn build_state(provider: Arc<dyn InferenceProvider>) -> AppState {
     };
     let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
     let app_registry = Arc::new(AppRegistry::new());
-    let state = AppState::new_with_platform_and_engine(
-        self_id,
-        mesh,
-        mesh_store,
-        app_registry,
-        None,
-    );
+    let state =
+        AppState::new_with_platform_and_engine(self_id, mesh, mesh_store, app_registry, None);
     let adapter: Arc<dyn LocalInferenceService> =
         Arc::new(SovereignInferenceAdapter::new(provider));
     state.with_local_inference(adapter)
@@ -143,9 +141,8 @@ async fn length_truncation_surfaces_length_on_final_chunk() {
         !payloads.is_empty(),
         "stream must produce at least one event"
     );
-    let reason = terminal_finish_reason(&payloads).expect(
-        "stream must include a terminal chunk with a non-null finish_reason",
-    );
+    let reason = terminal_finish_reason(&payloads)
+        .expect("stream must include a terminal chunk with a non-null finish_reason");
     assert_eq!(
         reason, "length",
         "length-truncated stream must surface finish_reason=length on the SSE \

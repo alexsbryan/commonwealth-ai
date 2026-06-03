@@ -45,12 +45,11 @@ impl Tool for WriteRedteamFindingTool {
         ToolDescriptor {
             id: "write_redteam_finding".to_string(),
             name: "Write Red-Team Finding".to_string(),
-            description:
-                "Record a red-team review finding. Structured around §5.3 of the ATOS \
+            description: "Record a red-team review finding. Structured around §5.3 of the ATOS \
                  design doc — {invariant, status, evidence, confidence}. The call must \
                  be made from a `mode=redteam` driver session against a provisioned \
                  feature_id; otherwise normal-mode `write_note` is the right tool."
-                    .to_string(),
+                .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -133,9 +132,7 @@ impl Tool for WriteRedteamFindingTool {
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .ok_or_else(|| {
-                    Error::InvalidInput(format!(
-                        "write_redteam_finding requires non-empty '{key}'"
-                    ))
+                    Error::InvalidInput(format!("write_redteam_finding requires non-empty '{key}'"))
                 })?;
         }
         let status = params.get("status").and_then(|v| v.as_str()).unwrap_or("");
@@ -144,7 +141,10 @@ impl Tool for WriteRedteamFindingTool {
                 "status must be violated|potentially_violated|not_found, got '{status}'"
             )));
         }
-        let confidence = params.get("confidence").and_then(|v| v.as_str()).unwrap_or("");
+        let confidence = params
+            .get("confidence")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         if !matches!(confidence, "high" | "medium" | "low") {
             return Err(Error::InvalidInput(format!(
                 "confidence must be high|medium|low, got '{confidence}'"
@@ -154,10 +154,19 @@ impl Tool for WriteRedteamFindingTool {
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
-        let feature_id = params.get("feature_id").and_then(|v| v.as_str()).unwrap_or("");
-        let invariant = params.get("invariant").and_then(|v| v.as_str()).unwrap_or("");
+        let feature_id = params
+            .get("feature_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let invariant = params
+            .get("invariant")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let status = params.get("status").and_then(|v| v.as_str()).unwrap_or("");
-        let evidence = params.get("evidence").and_then(|v| v.as_str()).unwrap_or("");
+        let evidence = params
+            .get("evidence")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let confidence = params
             .get("confidence")
             .and_then(|v| v.as_str())

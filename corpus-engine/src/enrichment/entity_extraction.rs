@@ -351,9 +351,8 @@ pub async fn run_entity_extraction(
     inference: InferenceFn,
     progress: &(dyn Fn(EnrichmentProgress) + Send + Sync),
 ) -> Result<EntityExtractionResult> {
-    let raw =
-        run_entity_extraction_raw(chunks, domain, inference, progress, &HashSet::new(), None)
-            .await?;
+    let raw = run_entity_extraction_raw(chunks, domain, inference, progress, &HashSet::new(), None)
+        .await?;
     let mut failures = raw.failures;
     let merged = merge_responses(raw.parsed, &mut failures);
     Ok(EntityExtractionResult {
@@ -442,9 +441,7 @@ async fn run_entity_extraction_raw(
     // Concurrent in-flight window with refill, mirroring
     // field_engine's skeleton-extraction shape.
     type InferenceFuture = std::pin::Pin<
-        Box<
-            dyn futures::Future<Output = (usize, crate::error::Result<String>)> + Send,
-        >,
+        Box<dyn futures::Future<Output = (usize, crate::error::Result<String>)> + Send>,
     >;
 
     let spawn = |inference: InferenceFn,
@@ -776,9 +773,7 @@ where
     deserialize_lenient_string_array(d)
 }
 
-fn deserialize_lenient_string_array<'de, D>(
-    d: D,
-) -> std::result::Result<Vec<String>, D::Error>
+fn deserialize_lenient_string_array<'de, D>(d: D) -> std::result::Result<Vec<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -1260,9 +1255,8 @@ fn consolidate_typo_aliases(
             .or_default()
             .insert(chunk_id.clone());
     }
-    let chunk_count = |idx: usize| -> usize {
-        chunk_counts.get(&idx).map(|s| s.len()).unwrap_or(0)
-    };
+    let chunk_count =
+        |idx: usize| -> usize { chunk_counts.get(&idx).map(|s| s.len()).unwrap_or(0) };
 
     let mut remap: HashMap<usize, usize> = HashMap::new();
     // Skip entities already remapped (transitive closure not needed
@@ -1463,9 +1457,8 @@ fn consolidate_org_prefixed_initiatives(
             .or_default()
             .insert(chunk_id.clone());
     }
-    let chunk_count = |idx: usize| -> usize {
-        chunk_counts.get(&idx).map(|s| s.len()).unwrap_or(0)
-    };
+    let chunk_count =
+        |idx: usize| -> usize { chunk_counts.get(&idx).map(|s| s.len()).unwrap_or(0) };
 
     // Find collisions: every group of initiatives with the same
     // folded canonical_name. Keep the one with more chunks; fold
@@ -1596,10 +1589,7 @@ fn apply_alias_remap_and_compact(
             target.aliases.push(primary_alias);
         }
         for inh in inherited_aliases {
-            if !target
-                .aliases
-                .iter()
-                .any(|a| a.eq_ignore_ascii_case(&inh))
+            if !target.aliases.iter().any(|a| a.eq_ignore_ascii_case(&inh))
                 && !target.canonical_name.eq_ignore_ascii_case(&inh)
             {
                 target.aliases.push(inh);
@@ -1726,9 +1716,9 @@ fn upsert_entity(
         affiliation,
         role,
         participants: Vec::new(),
-            provenance: Default::default(),
-            concept_kind: None,
-});
+        provenance: Default::default(),
+        concept_kind: None,
+    });
     by_folded_name.insert(folded, new_idx);
     new_idx
 }
@@ -1783,8 +1773,8 @@ fn _phantom_arc(a: Arc<()>) -> Arc<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::domain::Chunk;
+    use super::*;
 
     fn chunk(id: u64, content: &str) -> StoredChunk {
         StoredChunk {
@@ -1945,7 +1935,10 @@ mod tests {
         assert_eq!(e.role.as_deref(), Some("VP Engineering"));
         // Two distinct chunk_ids → two Involves edges.
         assert_eq!(merged.edges.len(), 2);
-        assert!(merged.edges.iter().all(|e| e.edge_type == EdgeType::Involves));
+        assert!(merged
+            .edges
+            .iter()
+            .all(|e| e.edge_type == EdgeType::Involves));
     }
 
     #[test]
@@ -1998,10 +1991,7 @@ mod tests {
     #[test]
     fn strip_org_prefix_prefers_longer_org_match() {
         let prefixes = {
-            let mut p = vec![
-                "stonewell industries".to_string(),
-                "stonewell".to_string(),
-            ];
+            let mut p = vec!["stonewell industries".to_string(), "stonewell".to_string()];
             p.sort_by_key(|s| std::cmp::Reverse(s.chars().count()));
             p
         };
@@ -2170,7 +2160,11 @@ mod tests {
             .aliases
             .iter()
             .any(|a| a.eq_ignore_ascii_case("Stonewall Industries")));
-        assert_eq!(merged.edges.len(), 4, "all 4 chunks should attach to canonical");
+        assert_eq!(
+            merged.edges.len(),
+            4,
+            "all 4 chunks should attach to canonical"
+        );
     }
 
     #[test]
@@ -2252,7 +2246,11 @@ mod tests {
         });
         let mut failures = Vec::new();
         let merged = merge_responses(vec![(0, b1)], &mut failures);
-        assert_eq!(merged.entities.len(), 2, "first-letter mismatch must not fold");
+        assert_eq!(
+            merged.entities.len(),
+            2,
+            "first-letter mismatch must not fold"
+        );
     }
 
     #[test]
@@ -2290,8 +2288,11 @@ mod tests {
         assert_eq!(e.affiliation.as_deref(), Some("Acme"));
         assert_eq!(e.role.as_deref(), Some("Engineering Lead"));
         // Both chunk references must survive the fold.
-        let chunk_ids: std::collections::HashSet<_> =
-            merged.edges.iter().flat_map(|e| e.evidence.iter().map(|c| c.chunk_id.clone())).collect();
+        let chunk_ids: std::collections::HashSet<_> = merged
+            .edges
+            .iter()
+            .flat_map(|e| e.evidence.iter().map(|c| c.chunk_id.clone()))
+            .collect();
         assert!(chunk_ids.contains("c2"));
         assert!(chunk_ids.contains("c5"));
     }
@@ -2483,39 +2484,65 @@ mod tests {
         // panic if invoked.
         struct OptOutDomain;
         impl Domain for OptOutDomain {
-            fn id(&self) -> &str { "opt-out" }
-            fn name(&self) -> &str { "Opt Out" }
+            fn id(&self) -> &str {
+                "opt-out"
+            }
+            fn name(&self) -> &str {
+                "Opt Out"
+            }
             fn position_statuses(&self) -> &super::super::domain::PositionStatusVocab {
                 static V: super::super::domain::PositionStatusVocab =
                     super::super::domain::PositionStatusVocab {
-                        dominant: "x", minority: "x", contested: "x", settled: "x",
+                        dominant: "x",
+                        minority: "x",
+                        contested: "x",
+                        settled: "x",
                     };
                 &V
             }
-            fn question_types(&self) -> &[super::super::domain::QuestionType] { &[] }
+            fn question_types(&self) -> &[super::super::domain::QuestionType] {
+                &[]
+            }
             fn overview_filter(&self) -> super::super::domain::ChunkFilter {
                 super::super::domain::ChunkFilter::default()
             }
-            fn skeleton_extraction_prompt(&self, _: &[&Chunk]) -> String { String::new() }
-            fn cluster_labeling_prompt(&self, _: &[&Chunk]) -> String { String::new() }
+            fn skeleton_extraction_prompt(&self, _: &[&Chunk]) -> String {
+                String::new()
+            }
+            fn cluster_labeling_prompt(&self, _: &[&Chunk]) -> String {
+                String::new()
+            }
             fn fault_line_detection_prompt(
-                &self, _: &[&Chunk], _: &[&Chunk], _: &str, _: &str,
-            ) -> String { String::new() }
-            fn open_question_prompt(&self, _: &[&Chunk]) -> String { String::new() }
+                &self,
+                _: &[&Chunk],
+                _: &[&Chunk],
+                _: &str,
+                _: &str,
+            ) -> String {
+                String::new()
+            }
+            fn open_question_prompt(&self, _: &[&Chunk]) -> String {
+                String::new()
+            }
             fn clustering_config(&self) -> super::super::domain::ClusteringConfig {
                 super::super::domain::ClusteringConfig {
-                    min_cluster_size: 1, epsilon: 0.1, label_sample_size: 1,
-                    max_cluster_points: 0, reduced_dims: 0,
+                    min_cluster_size: 1,
+                    epsilon: 0.1,
+                    label_sample_size: 1,
+                    max_cluster_points: 0,
+                    reduced_dims: 0,
                 }
             }
             fn alignment_config(&self) -> super::super::domain::AlignmentConfig {
                 super::super::domain::AlignmentConfig {
-                    alignment_threshold: 0.5, min_chunks_for_discovery: 1,
+                    alignment_threshold: 0.5,
+                    min_chunks_for_discovery: 1,
                 }
             }
             fn fault_line_config(&self) -> super::super::domain::FaultLineConfig {
                 super::super::domain::FaultLineConfig {
-                    proximity_threshold: 0.5, min_confidence: 0.5,
+                    proximity_threshold: 0.5,
+                    min_confidence: 0.5,
                 }
             }
             fn skeleton_storage(&self) -> super::super::domain::SkeletonStorage {
@@ -2524,24 +2551,20 @@ mod tests {
             // entity_extraction_prompt: default (None)
         }
 
-        let panicking_inference: InferenceFn = Arc::new(|_p: &str, _schema: Option<&serde_json::Value>| {
-            Box::pin(async {
-                panic!("inference must not be called when domain opts out");
-                #[allow(unreachable_code)]
-                Ok(String::new())
-            })
-        });
+        let panicking_inference: InferenceFn =
+            Arc::new(|_p: &str, _schema: Option<&serde_json::Value>| {
+                Box::pin(async {
+                    panic!("inference must not be called when domain opts out");
+                    #[allow(unreachable_code)]
+                    Ok(String::new())
+                })
+            });
 
         let chunks = vec![chunk(1, "hello"), chunk(2, "world")];
         let progress = |_: EnrichmentProgress| {};
-        let result = run_entity_extraction(
-            &chunks,
-            &OptOutDomain,
-            panicking_inference,
-            &progress,
-        )
-        .await
-        .expect("opt-out path returns Ok");
+        let result = run_entity_extraction(&chunks, &OptOutDomain, panicking_inference, &progress)
+            .await
+            .expect("opt-out path returns Ok");
         assert!(result.entities.is_empty());
         assert!(result.edges.is_empty());
         assert_eq!(result.batches_run, 0);
@@ -2764,19 +2787,20 @@ mod tests {
         // prompt (chunks 9,10,11,12).
         let invocations = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
         let invocations_for_inf = Arc::clone(&invocations);
-        let inference: InferenceFn = Arc::new(move |prompt: &str, _schema: Option<&serde_json::Value>| {
-            let prompt = prompt.to_string();
-            let inv = Arc::clone(&invocations_for_inf);
-            Box::pin(async move {
-                inv.lock().unwrap().push(prompt.clone());
-                // Batch 2 has chunks 9,10,11,12.
-                if prompt == "BATCH:9,10,11,12" {
-                    Ok(mock_response_for_batch(2))
-                } else {
-                    panic!("unexpected inference prompt: {}", prompt);
-                }
-            })
-        });
+        let inference: InferenceFn =
+            Arc::new(move |prompt: &str, _schema: Option<&serde_json::Value>| {
+                let prompt = prompt.to_string();
+                let inv = Arc::clone(&invocations_for_inf);
+                Box::pin(async move {
+                    inv.lock().unwrap().push(prompt.clone());
+                    // Batch 2 has chunks 9,10,11,12.
+                    if prompt == "BATCH:9,10,11,12" {
+                        Ok(mock_response_for_batch(2))
+                    } else {
+                        panic!("unexpected inference prompt: {}", prompt);
+                    }
+                })
+            });
 
         let chunks: Vec<StoredChunk> = (1..=12u64).map(|i| chunk(i, "x")).collect();
         let progress = |_: EnrichmentProgress| {};
@@ -2835,18 +2859,19 @@ mod tests {
 
         // First pass: inference returns success for batch 0,
         // hard error for batch 1.
-        let inference1: InferenceFn = Arc::new(|prompt: &str, _schema: Option<&serde_json::Value>| {
-            let prompt = prompt.to_string();
-            Box::pin(async move {
-                if prompt == "BATCH:1,2,3,4" {
-                    Ok(mock_response_for_batch(0))
-                } else {
-                    Err(crate::error::Error::from(std::io::Error::other(
-                        "simulated",
-                    )))
-                }
-            })
-        });
+        let inference1: InferenceFn =
+            Arc::new(|prompt: &str, _schema: Option<&serde_json::Value>| {
+                let prompt = prompt.to_string();
+                Box::pin(async move {
+                    if prompt == "BATCH:1,2,3,4" {
+                        Ok(mock_response_for_batch(0))
+                    } else {
+                        Err(crate::error::Error::from(std::io::Error::other(
+                            "simulated",
+                        )))
+                    }
+                })
+            });
         let progress = |_: EnrichmentProgress| {};
         let mut checkpoint = EnrichmentCheckpoint::default();
         let _ = run_and_write_entity_extraction(
@@ -2887,18 +2912,19 @@ mod tests {
 
         let invocations = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
         let invocations_for_inf = Arc::clone(&invocations);
-        let inference2: InferenceFn = Arc::new(move |prompt: &str, _schema: Option<&serde_json::Value>| {
-            let prompt = prompt.to_string();
-            let inv = Arc::clone(&invocations_for_inf);
-            Box::pin(async move {
-                inv.lock().unwrap().push(prompt.clone());
-                if prompt == "BATCH:5,6,7,8" {
-                    Ok(mock_response_for_batch(1))
-                } else {
-                    panic!("unexpected inference prompt on pass 2: {}", prompt);
-                }
-            })
-        });
+        let inference2: InferenceFn =
+            Arc::new(move |prompt: &str, _schema: Option<&serde_json::Value>| {
+                let prompt = prompt.to_string();
+                let inv = Arc::clone(&invocations_for_inf);
+                Box::pin(async move {
+                    inv.lock().unwrap().push(prompt.clone());
+                    if prompt == "BATCH:5,6,7,8" {
+                        Ok(mock_response_for_batch(1))
+                    } else {
+                        panic!("unexpected inference prompt on pass 2: {}", prompt);
+                    }
+                })
+            });
 
         let mut checkpoint2 = EnrichmentCheckpoint::default();
         checkpoint2.phase_1b_batches_done = 1;

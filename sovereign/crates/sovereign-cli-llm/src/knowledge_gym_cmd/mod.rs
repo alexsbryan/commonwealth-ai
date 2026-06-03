@@ -65,21 +65,16 @@ async fn run_cmd(args: &[String]) -> i32 {
     while let Some(a) = iter.next() {
         match a.as_str() {
             "--base-url" => {
-                base_url = iter
-                    .next().cloned()
-                    .unwrap_or_else(|| {
-                        eprintln!("--base-url requires a value");
-                        std::process::exit(2)
-                    });
+                base_url = iter.next().cloned().unwrap_or_else(|| {
+                    eprintln!("--base-url requires a value");
+                    std::process::exit(2)
+                });
             }
             "--fixtures-dir" => {
-                fixtures_dir = iter
-                    .next()
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|| {
-                        eprintln!("--fixtures-dir requires a value");
-                        std::process::exit(2)
-                    });
+                fixtures_dir = iter.next().map(PathBuf::from).unwrap_or_else(|| {
+                    eprintln!("--fixtures-dir requires a value");
+                    std::process::exit(2)
+                });
             }
             "--fixture" => {
                 only_fixture.push(iter.next().cloned().unwrap_or_else(|| {
@@ -115,7 +110,10 @@ async fn run_cmd(args: &[String]) -> i32 {
         }
     };
     if fixtures.is_empty() {
-        eprintln!("knowledge-gym: no fixtures found under {}", fixtures_dir.display());
+        eprintln!(
+            "knowledge-gym: no fixtures found under {}",
+            fixtures_dir.display()
+        );
         return 1;
     }
 
@@ -123,10 +121,7 @@ async fn run_cmd(args: &[String]) -> i32 {
         .timeout(HTTP_TIMEOUT)
         .build()
         .expect("build http client");
-    let cfg = runner::RunnerCfg {
-        base_url,
-        replays,
-    };
+    let cfg = runner::RunnerCfg { base_url, replays };
 
     let mut all_runs: Vec<runner::FixtureReport> = Vec::new();
     for fx in &fixtures {
@@ -204,9 +199,8 @@ fn load_fixtures(dir: &Path, only: &[String]) -> std::io::Result<Vec<Fixture>> {
             continue;
         }
         let pass_raw = std::fs::read_to_string(&pass_path)?;
-        let predicates: toml::Value = toml::from_str(&pass_raw).map_err(|e| {
-            std::io::Error::other(format!("{slug}/pass.toml: {e}"))
-        })?;
+        let predicates: toml::Value = toml::from_str(&pass_raw)
+            .map_err(|e| std::io::Error::other(format!("{slug}/pass.toml: {e}")))?;
 
         // Detect single-turn (input.json) vs multi-turn
         // (input_turn_0.json, input_turn_1.json, ...). The
@@ -252,13 +246,14 @@ fn load_turn(
     } else {
         EMPTY_MOCK_EVIDENCE.to_string()
     };
-    let input: Value = serde_json::from_str(&input_raw).map_err(|e| {
-        std::io::Error::other(format!("{slug}/{input_name}: {e}"))
-    })?;
-    let mock_evidence: Value = serde_json::from_str(&mock_raw).map_err(|e| {
-        std::io::Error::other(format!("{slug}/{mock_name}: {e}"))
-    })?;
-    Ok(TurnSpec { input, mock_evidence })
+    let input: Value = serde_json::from_str(&input_raw)
+        .map_err(|e| std::io::Error::other(format!("{slug}/{input_name}: {e}")))?;
+    let mock_evidence: Value = serde_json::from_str(&mock_raw)
+        .map_err(|e| std::io::Error::other(format!("{slug}/{mock_name}: {e}")))?;
+    Ok(TurnSpec {
+        input,
+        mock_evidence,
+    })
 }
 
 /// Walk `input_turn_N.json` + `mock_evidence_turn_N.json` pairs

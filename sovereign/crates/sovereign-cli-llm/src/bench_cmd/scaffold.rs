@@ -27,9 +27,7 @@ const HELP: Help = Help {
     command: "sovereign bench scaffold",
     summary: "Draft a golden TOML from an existing resolved atlas — populate; prune; commit.",
     sections: &[
-        HelpSection::Usage(
-            "sovereign bench scaffold <corpus-id> [--per-axis N] [--output <path>]",
-        ),
+        HelpSection::Usage("sovereign bench scaffold <corpus-id> [--per-axis N] [--output <path>]"),
         HelpSection::Flags(&[
             (
                 "--per-axis N",
@@ -155,7 +153,7 @@ struct DraftGolden {
 
 #[derive(Debug)]
 struct DraftAxis {
-    key: &'static str,           // catalog axis key
+    key: &'static str, // catalog axis key
     entries: Vec<DraftAxisEntry>,
 }
 
@@ -163,12 +161,12 @@ struct DraftAxis {
 struct DraftAxisEntry {
     // Different axes use different field names in the golden TOML;
     // this carries the union so the renderer can pick.
-    name: Option<String>,         // mechanism / named_position / concession / evidence
-    stance: Option<String>,       // named_position
-    kind: Option<String>,         // evidence
-    left: Option<String>,         // opposition
-    right: Option<String>,        // opposition
-    axis_label: Option<String>,   // opposition
+    name: Option<String>,   // mechanism / named_position / concession / evidence
+    stance: Option<String>, // named_position
+    kind: Option<String>,   // evidence
+    left: Option<String>,   // opposition
+    right: Option<String>,  // opposition
+    axis_label: Option<String>, // opposition
 }
 
 #[derive(Debug)]
@@ -209,26 +207,38 @@ fn scaffold_draft(corpus_id: &str, atoms: &[AtomEnvelope], per_axis: usize) -> D
     // Base atom-kind sampling. Filter by entity_type for the three
     // Entity sub-kinds (Person / Concept / Work); everything else
     // pulls from its own envelope variant.
-    draft.persons = sample_entities(atoms, |e| {
-        matches!(
-            e.entity_type,
-            corpus_engine::enrichment::pipeline::atlas::EntityType::Person
-        )
-    }, per_axis);
-    draft.concepts = sample_entities(atoms, |e| {
-        // Skip qualified concepts (mechanism etc.) — those went into
-        // their axis lane. Keep base / unqualified concepts here.
-        matches!(
-            e.entity_type,
-            corpus_engine::enrichment::pipeline::atlas::EntityType::Concept
-        ) && e.concept_kind.is_none()
-    }, per_axis);
-    draft.works = sample_entities(atoms, |e| {
-        matches!(
-            e.entity_type,
-            corpus_engine::enrichment::pipeline::atlas::EntityType::Work
-        )
-    }, per_axis);
+    draft.persons = sample_entities(
+        atoms,
+        |e| {
+            matches!(
+                e.entity_type,
+                corpus_engine::enrichment::pipeline::atlas::EntityType::Person
+            )
+        },
+        per_axis,
+    );
+    draft.concepts = sample_entities(
+        atoms,
+        |e| {
+            // Skip qualified concepts (mechanism etc.) — those went into
+            // their axis lane. Keep base / unqualified concepts here.
+            matches!(
+                e.entity_type,
+                corpus_engine::enrichment::pipeline::atlas::EntityType::Concept
+            ) && e.concept_kind.is_none()
+        },
+        per_axis,
+    );
+    draft.works = sample_entities(
+        atoms,
+        |e| {
+            matches!(
+                e.entity_type,
+                corpus_engine::enrichment::pipeline::atlas::EntityType::Work
+            )
+        },
+        per_axis,
+    );
 
     draft.events = sample_events(atoms, per_axis);
     draft.questions = sample_questions(atoms, per_axis);
@@ -266,7 +276,10 @@ fn sample_axis(atoms: &[AtomEnvelope], axis: &TypedAxis, n: usize) -> Vec<DraftA
                         // works at scoring time.
                         name: Some(truncate_needle(&c.content, 60)),
                         stance: None,
-                        kind: c.evidence_kind.clone().or_else(|| c.concession_outcome.clone()),
+                        kind: c
+                            .evidence_kind
+                            .clone()
+                            .or_else(|| c.concession_outcome.clone()),
                         left: None,
                         right: None,
                         axis_label: None,
@@ -455,7 +468,11 @@ fn render_toml(d: &DraftGolden) -> String {
                         out.push_str(&format!("{field} = [{}]\n", quote(n)));
                     }
                     if let Some(k) = &entry.kind {
-                        let field = if axis.key == "evidence" { "kind" } else { "outcome" };
+                        let field = if axis.key == "evidence" {
+                            "kind"
+                        } else {
+                            "outcome"
+                        };
                         out.push_str(&format!("{field} = \"{k}\"\n"));
                     }
                 }

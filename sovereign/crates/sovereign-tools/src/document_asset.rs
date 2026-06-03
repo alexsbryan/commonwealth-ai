@@ -17,8 +17,8 @@
 //! parsing and chunking. Reuses `DocumentOperationTool`'s map-reduce
 //! pattern for the synthesis and aggregation executors.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use futures::stream::{self, StreamExt};
 use serde::Deserialize;
@@ -94,12 +94,11 @@ fn detect_self_reference(request: &str) -> bool {
 /// extracting filename keywords — a question that mentions "the" or "2024"
 /// is not meaningfully "about" the attached document.
 const FILENAME_STOPWORDS: &[&str] = &[
-    "the", "and", "for", "but", "not", "you", "are", "with", "this", "that",
-    "from", "into", "onto", "upon", "have", "had", "has", "was", "were", "been",
-    "being", "its", "their", "them", "they", "our", "his", "her", "what", "which",
-    "who", "whom", "when", "where", "why", "how", "too", "also", "just", "only",
-    "pdf", "doc", "docx", "txt", "pages", "page", "chapter", "part", "vol", "volume",
-    "edition", "copy", "draft", "final", "version", "revised",
+    "the", "and", "for", "but", "not", "you", "are", "with", "this", "that", "from", "into",
+    "onto", "upon", "have", "had", "has", "was", "were", "been", "being", "its", "their", "them",
+    "they", "our", "his", "her", "what", "which", "who", "whom", "when", "where", "why", "how",
+    "too", "also", "just", "only", "pdf", "doc", "docx", "txt", "pages", "page", "chapter", "part",
+    "vol", "volume", "edition", "copy", "draft", "final", "version", "revised",
 ];
 
 /// ASCII-fold a string: strip diacritics so `"Schrödinger"` and
@@ -111,12 +110,14 @@ fn ascii_fold(s: &str) -> String {
         .map(|c| match c {
             'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' => 'a',
             'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' => 'A',
-            'ç' => 'c', 'Ç' => 'C',
+            'ç' => 'c',
+            'Ç' => 'C',
             'è' | 'é' | 'ê' | 'ë' => 'e',
             'È' | 'É' | 'Ê' | 'Ë' => 'E',
             'ì' | 'í' | 'î' | 'ï' => 'i',
             'Ì' | 'Í' | 'Î' | 'Ï' => 'I',
-            'ñ' => 'n', 'Ñ' => 'N',
+            'ñ' => 'n',
+            'Ñ' => 'N',
             'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' => 'o',
             'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' | 'Ø' => 'O',
             'ù' | 'ú' | 'û' | 'ü' => 'u',
@@ -341,10 +342,7 @@ pub struct DocumentAssetManager {
 }
 
 impl DocumentAssetManager {
-    pub fn new(
-        inference: Arc<dyn InferenceProvider>,
-        store: Arc<dyn StateStore>,
-    ) -> Self {
+    pub fn new(inference: Arc<dyn InferenceProvider>, store: Arc<dyn StateStore>) -> Self {
         Self { inference, store }
     }
 
@@ -635,10 +633,13 @@ impl DocumentAssetManager {
 
                 // Segments (TextTiling) + overview run concurrently —
                 // both touch all chunks, neither depends on the other.
-                let segments_future =
-                    extract_segments(&inference, &text_chunks, &skeleton.main_entities, doc_type.clone());
-                let overview_future =
-                    generate_overview(&inference, &text_chunks, &doc_type);
+                let segments_future = extract_segments(
+                    &inference,
+                    &text_chunks,
+                    &skeleton.main_entities,
+                    doc_type.clone(),
+                );
+                let overview_future = generate_overview(&inference, &text_chunks, &doc_type);
                 let (segments, overview) = tokio::join!(segments_future, overview_future);
                 skeleton.segments = segments;
                 skeleton.overview = overview;
@@ -798,8 +799,7 @@ impl DocumentAssetManager {
         // No UI progress on rebuilds — state updates inside build_skeleton
         // are the only signal. Callers who want per-batch feedback should
         // run a full re-ingest.
-        let noop_progress: Arc<dyn Fn(IngestProgress) + Send + Sync> =
-            Arc::new(|_| ());
+        let noop_progress: Arc<dyn Fn(IngestProgress) + Send + Sync> = Arc::new(|_| ());
 
         let skeleton = build_skeleton(
             &self.inference,
@@ -915,11 +915,7 @@ impl DocumentAssetManager {
         // `ask()` stays on its old 3-tuple API for HTTP callers that only
         // need raw content strings. Tauri callers use `execute_operation`
         // directly and get the full `ExecutionOutput`.
-        let sources: Vec<String> = output
-            .citations
-            .iter()
-            .map(|c| c.content.clone())
-            .collect();
+        let sources: Vec<String> = output.citations.iter().map(|c| c.content.clone()).collect();
 
         Ok((output.text, operation, sources))
     }
@@ -1063,16 +1059,16 @@ impl DocumentAssetManager {
                 top_k: None,
                 top_p: None,
                 oicp: None,
-            tools: None,
-            tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
+                tools: None,
+                tool_choice: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
             })
             .await?;
 
@@ -1162,10 +1158,8 @@ impl DocumentAssetManager {
             .await?;
 
         // Filter to chunks from this document only.
-        let relevant: Vec<&DocumentChunk> = results
-            .iter()
-            .filter(|c| c.source == source_id)
-            .collect();
+        let relevant: Vec<&DocumentChunk> =
+            results.iter().filter(|c| c.source == source_id).collect();
 
         tracing::debug!(
             total_results = results.len(),
@@ -1228,16 +1222,16 @@ impl DocumentAssetManager {
                 top_k: None,
                 top_p: None,
                 oicp: None,
-            tools: None,
-            tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
+                tools: None,
+                tool_choice: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
             })
             .await?;
 
@@ -1247,7 +1241,8 @@ impl DocumentAssetManager {
             model_id: response.model_id,
             tokens_used: response.tokens_used,
             finish_reason: response.finish_reason.clone(),
-            completion_tokens: response.completion_tokens,            latency_ms: response.latency_ms,
+            completion_tokens: response.completion_tokens,
+            latency_ms: response.latency_ms,
         })
     }
 
@@ -1301,13 +1296,17 @@ impl DocumentAssetManager {
             indices.dedup();
             if indices.is_empty() {
                 // Fallback: sample evenly across the document.
-                (0..all_chunks.len()).step_by(all_chunks.len().max(1) / 20).collect()
+                (0..all_chunks.len())
+                    .step_by(all_chunks.len().max(1) / 20)
+                    .collect()
             } else {
                 indices
             }
         } else {
             // No skeleton — degrade to sampling.
-            (0..all_chunks.len()).step_by(all_chunks.len().max(1) / 20).collect()
+            (0..all_chunks.len())
+                .step_by(all_chunks.len().max(1) / 20)
+                .collect()
         };
 
         let selected: Vec<&DocumentChunk> = relevant_indices
@@ -1348,8 +1347,7 @@ impl DocumentAssetManager {
         // Keep the full content around for the assistant-message's
         // `sources` field (legacy UI), separate from the prompt-trimmed
         // text inside `citations`.
-        let full_sources: Vec<String> =
-            selected.iter().map(|c| c.content.clone()).collect();
+        let full_sources: Vec<String> = selected.iter().map(|c| c.content.clone()).collect();
 
         let skeleton_context = asset
             .skeleton
@@ -1394,16 +1392,16 @@ impl DocumentAssetManager {
                 top_k: None,
                 top_p: None,
                 oicp: None,
-            tools: None,
-            tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
+                tools: None,
+                tool_choice: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
             })
             .await?;
 
@@ -1425,7 +1423,8 @@ impl DocumentAssetManager {
             model_id: response.model_id,
             tokens_used: response.tokens_used,
             finish_reason: response.finish_reason.clone(),
-            completion_tokens: response.completion_tokens,            latency_ms: response.latency_ms,
+            completion_tokens: response.completion_tokens,
+            latency_ms: response.latency_ms,
         })
     }
 
@@ -1518,16 +1517,16 @@ impl DocumentAssetManager {
                 top_k: None,
                 top_p: None,
                 oicp: None,
-            tools: None,
-            tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
+                tools: None,
+                tool_choice: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
             })
             .await?;
 
@@ -1537,7 +1536,8 @@ impl DocumentAssetManager {
             model_id: response.model_id,
             tokens_used: response.tokens_used,
             finish_reason: response.finish_reason.clone(),
-            completion_tokens: response.completion_tokens,            latency_ms: response.latency_ms,
+            completion_tokens: response.completion_tokens,
+            latency_ms: response.latency_ms,
         })
     }
 
@@ -1587,16 +1587,16 @@ impl DocumentAssetManager {
                 top_k: None,
                 top_p: None,
                 oicp: None,
-            tools: None,
-            tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
+                tools: None,
+                tool_choice: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
             })
             .await?;
 
@@ -1609,10 +1609,10 @@ impl DocumentAssetManager {
             model_id: response.model_id,
             tokens_used: response.tokens_used,
             finish_reason: response.finish_reason.clone(),
-            completion_tokens: response.completion_tokens,            latency_ms: response.latency_ms,
+            completion_tokens: response.completion_tokens,
+            latency_ms: response.latency_ms,
         })
     }
-
 }
 
 // ─── Skeleton extraction (free functions) ────────────────────
@@ -1658,14 +1658,14 @@ async fn detect_document_type(
             oicp: None,
             tools: None,
             tool_choice: None,
-                    model_id: None,
-                    enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         })
         .await;
 
@@ -2184,10 +2184,7 @@ pub(crate) async fn build_atlas_artifacts(
     embeddings: &[Vec<f32>],
     doc_type: DocumentTypeTag,
 ) -> Result<(Vec<RaptorNode>, Vec<AssetMotif>)> {
-    build_atlas_artifacts_with_checkpoint(
-        inference, chunks, embeddings, doc_type, None, None,
-    )
-    .await
+    build_atlas_artifacts_with_checkpoint(inference, chunks, embeddings, doc_type, None, None).await
 }
 
 /// Checkpoint-aware variant. Most callers should reach this directly
@@ -2298,7 +2295,11 @@ async fn build_and_persist_raptor_atlas(
         }
     }
     if raptor_chunks.is_empty() {
-        tracing::warn!(asset_id, total, "raptor_atlas: no embedded chunks; skipping");
+        tracing::warn!(
+            asset_id,
+            total,
+            "raptor_atlas: no embedded chunks; skipping"
+        );
         return;
     }
 
@@ -2306,20 +2307,14 @@ async fn build_and_persist_raptor_atlas(
     // RAPTOR-tree-build failures (the only Err path); motif extraction
     // is best-effort inside the helper and returns an empty vec on
     // classifier failure.
-    let (nodes, motifs) = match build_atlas_artifacts(
-        inference,
-        &raptor_chunks,
-        &embeddings,
-        doc_type,
-    )
-    .await
-    {
-        Ok(pair) => pair,
-        Err(e) => {
-            tracing::warn!(asset_id, error = %e, "raptor_atlas: build_atlas_artifacts failed");
-            return;
-        }
-    };
+    let (nodes, motifs) =
+        match build_atlas_artifacts(inference, &raptor_chunks, &embeddings, doc_type).await {
+            Ok(pair) => pair,
+            Err(e) => {
+                tracing::warn!(asset_id, error = %e, "raptor_atlas: build_atlas_artifacts failed");
+                return;
+            }
+        };
     let node_count = nodes.len();
     let motif_count = motifs.len();
     let distinctive_count = motifs.iter().filter(|m| m.is_distinctive).count();
@@ -2357,22 +2352,19 @@ async fn build_and_persist_raptor_atlas(
 /// and curated (~110 entries) rather than exhaustive — the TF-IDF +
 /// LLM classifier downstream catches anything this misses.
 const MOTIF_STOPLIST: &[&str] = &[
-    "the", "and", "for", "are", "but", "not", "you", "all", "can", "had",
-    "her", "was", "one", "our", "out", "day", "get", "has", "him", "his",
-    "how", "man", "new", "now", "old", "see", "two", "way", "who", "boy",
-    "did", "its", "let", "put", "say", "she", "too", "use", "any", "every",
-    "from", "have", "into", "like", "more", "much", "must", "only", "over",
-    "said", "some", "such", "than", "that", "them", "they", "this", "very",
-    "want", "well", "were", "what", "when", "with", "your", "their", "there",
-    "these", "those", "would", "could", "should", "about", "after", "again",
-    "before", "being", "below", "doing", "going", "having", "still", "while",
-    "where", "which", "whose", "until", "under", "above", "across", "almost",
-    "another", "because", "between", "however", "without", "through", "though",
-    "perhaps", "rather", "seemed", "though", "toward", "upon", "whom",
-    "indeed", "least", "much", "often", "since", "thus", "yet", "even",
-    "made", "make", "down", "back", "come", "came", "took", "look", "good",
-    "great", "long", "last", "first", "right", "left", "thing", "things",
-    "those", "time", "times", "year", "years", "place", "world",
+    "the", "and", "for", "are", "but", "not", "you", "all", "can", "had", "her", "was", "one",
+    "our", "out", "day", "get", "has", "him", "his", "how", "man", "new", "now", "old", "see",
+    "two", "way", "who", "boy", "did", "its", "let", "put", "say", "she", "too", "use", "any",
+    "every", "from", "have", "into", "like", "more", "much", "must", "only", "over", "said",
+    "some", "such", "than", "that", "them", "they", "this", "very", "want", "well", "were", "what",
+    "when", "with", "your", "their", "there", "these", "those", "would", "could", "should",
+    "about", "after", "again", "before", "being", "below", "doing", "going", "having", "still",
+    "while", "where", "which", "whose", "until", "under", "above", "across", "almost", "another",
+    "because", "between", "however", "without", "through", "though", "perhaps", "rather", "seemed",
+    "though", "toward", "upon", "whom", "indeed", "least", "much", "often", "since", "thus", "yet",
+    "even", "made", "make", "down", "back", "come", "came", "took", "look", "good", "great",
+    "long", "last", "first", "right", "left", "thing", "things", "those", "time", "times", "year",
+    "years", "place", "world",
 ];
 
 /// Candidate term for the motif index. Pure-Rust extraction pass —
@@ -2380,22 +2372,21 @@ const MOTIF_STOPLIST: &[&str] = &[
 /// breadth (terms appearing in 3+ chunks but not in every chunk are
 /// the most likely motif candidates). Caller passes the result to
 /// `classify_motifs` for the LLM motif-vs-noise judgment.
-fn extract_motif_candidates(
-    chunks: &[TextChunk],
-    top_n: usize,
-) -> Vec<MotifCandidate> {
+fn extract_motif_candidates(chunks: &[TextChunk], top_n: usize) -> Vec<MotifCandidate> {
     use std::collections::HashMap;
 
     let stoplist: std::collections::HashSet<&str> = MOTIF_STOPLIST.iter().copied().collect();
 
     // term → (total_count, set_of_chunk_indices)
-    let mut term_stats: HashMap<String, (u32, std::collections::BTreeSet<u32>)> =
-        HashMap::new();
+    let mut term_stats: HashMap<String, (u32, std::collections::BTreeSet<u32>)> = HashMap::new();
 
     for (idx, chunk) in chunks.iter().enumerate() {
         let mut seen_this_chunk: std::collections::HashSet<String> =
             std::collections::HashSet::new();
-        for raw in chunk.content.split(|c: char| !c.is_alphabetic() && c != '\'') {
+        for raw in chunk
+            .content
+            .split(|c: char| !c.is_alphabetic() && c != '\'')
+        {
             let lower = raw.to_lowercase();
             // Length + stoplist filters. Drop possessives and contractions
             // by stripping a trailing 's or ' before the length check.
@@ -2616,11 +2607,7 @@ fn parse_motif_classification(text: &str) -> std::collections::HashSet<String> {
 ///
 /// Returns no breaks (all `false`) if `embeddings.len() < 2` or
 /// if the depth signal has no variance (e.g. identical embeddings).
-fn detect_segment_boundaries(
-    embeddings: &[Vec<f32>],
-    window: usize,
-    depth_k: f32,
-) -> Vec<bool> {
+fn detect_segment_boundaries(embeddings: &[Vec<f32>], window: usize, depth_k: f32) -> Vec<bool> {
     let n = embeddings.len();
     if n < 2 {
         return Vec::new();
@@ -2654,8 +2641,7 @@ fn detect_segment_boundaries(
     // Adaptive threshold: mean + depth_k * std. If std == 0 the
     // signal is flat and no boundaries should fire.
     let mean = depths.iter().sum::<f32>() / depths.len() as f32;
-    let variance = depths.iter().map(|d| (d - mean).powi(2)).sum::<f32>()
-        / depths.len() as f32;
+    let variance = depths.iter().map(|d| (d - mean).powi(2)).sum::<f32>() / depths.len() as f32;
     let std = variance.sqrt();
     if std < f32::EPSILON {
         return vec![false; depths.len()];
@@ -2744,9 +2730,7 @@ fn parse_lean_skeleton_batch(
 /// Parse the Pass-B segment-naming JSON response. Returns None for
 /// unparseable responses; the caller falls back to a placeholder
 /// title rather than failing the segment.
-fn parse_segment_naming(
-    text: &str,
-) -> Option<(String, String, SectionFunction, Vec<String>)> {
+fn parse_segment_naming(text: &str) -> Option<(String, String, SectionFunction, Vec<String>)> {
     let trimmed = text.trim();
     let start = trimmed.find('{')?;
     let end = trimmed.rfind('}')?;
@@ -2836,10 +2820,7 @@ async fn extract_action_atoms(
         for &idx in &sample_indices {
             if let Some(chunk) = chunks.get(idx) {
                 let excerpt: String = chunk.content.chars().take(500).collect();
-                passages.push_str(&format!(
-                    "\n[chunk {idx}]\n{}\n",
-                    excerpt.trim(),
-                ));
+                passages.push_str(&format!("\n[chunk {idx}]\n{}\n", excerpt.trim(),));
             }
         }
         if passages.trim().is_empty() {
@@ -2987,14 +2968,14 @@ async fn generate_overview(
             oicp: None,
             tools: None,
             tool_choice: None,
-                    model_id: None,
-                    enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         })
         .await
         .map(|r| r.text)
@@ -3074,7 +3055,9 @@ fn parse_skeleton_batch(response: &str, batch_start: usize) -> Option<Vec<Skelet
                                 .map(parse_entity_kind)
                                 .unwrap_or(EntityKind::Concept);
                             Some((name, kind))
-                        } else { v.as_str().map(|s| (s.to_string(), EntityKind::Concept)) }
+                        } else {
+                            v.as_str().map(|s| (s.to_string(), EntityKind::Concept))
+                        }
                     })
                     .collect()
             })
@@ -3317,10 +3300,7 @@ mod tests {
         assert!(toks.contains(&"schrodinger".to_string()));
         // Question with the accented form still matches because the query
         // is ASCII-folded at match time.
-        assert!(mentions_document(
-            &toks,
-            "What did Schrödinger argue?"
-        ));
+        assert!(mentions_document(&toks, "What did Schrödinger argue?"));
     }
 
     #[test]
@@ -3330,8 +3310,7 @@ mod tests {
                        crystals studied by physicists. It stores hereditary information.";
         let snip = short_snippet(content, 60);
         assert!(snip.ends_with("..."));
-        assert!(!snip.contains("Schrödinger")
-            || snip.len() <= 60 + "...".len() + 10 /* slack */);
+        assert!(!snip.contains("Schrödinger") || snip.len() <= 60 + "...".len() + 10 /* slack */);
         // Snippet ends on a word boundary — no mid-word cut before the ellipsis.
         let pre = snip.trim_end_matches("...");
         assert!(pre.ends_with(|c: char| c.is_ascii_alphanumeric() || c == ','));
@@ -3353,7 +3332,9 @@ mod tests {
         let content = "Mr Verloc observed quietly\u{201C}I have no means of action upon the police here.\u{201D} Vladimir replied at length.";
         // Find the byte index of the opening curly quote and ask for a
         // snippet that lands inside it.
-        let quote_byte = content.find('\u{201C}').expect("test fixture must contain U+201C");
+        let quote_byte = content
+            .find('\u{201C}')
+            .expect("test fixture must contain U+201C");
         let inside_quote = quote_byte + 1; // mid-character; would panic on raw slice
         let snip = short_snippet(content, inside_quote);
         // Must not panic AND must end with the ellipsis sentinel.
@@ -3440,7 +3421,9 @@ mod tests {
         // Within-cluster gaps should be quiet. We allow one or two
         // false positives in the noisy jitter — the test checks the
         // signal-to-noise floor, not perfection.
-        let within_breaks = breaks.iter().enumerate()
+        let within_breaks = breaks
+            .iter()
+            .enumerate()
             .filter(|(i, b)| **b && *i != 3 && *i != 7)
             .count();
         assert!(
@@ -3456,7 +3439,10 @@ mod tests {
         let embeddings = vec![vec![0.5, 0.5, 0.5, 0.5]; 10];
         let breaks = detect_segment_boundaries(&embeddings, 3, 1.0);
         assert_eq!(breaks.len(), 9);
-        assert!(breaks.iter().all(|b| !b), "flat signal should produce no breaks");
+        assert!(
+            breaks.iter().all(|b| !b),
+            "flat signal should produce no breaks"
+        );
     }
 
     #[test]
@@ -3524,7 +3510,10 @@ mod tests {
             terms.contains(&"incurious"),
             "expected 'incurious' in candidates; got {terms:?}"
         );
-        assert!(!terms.contains(&"hat"), "single-chunk term must not surface");
+        assert!(
+            !terms.contains(&"hat"),
+            "single-chunk term must not surface"
+        );
         assert!(!terms.contains(&"the"), "stoplisted word must not surface");
     }
 

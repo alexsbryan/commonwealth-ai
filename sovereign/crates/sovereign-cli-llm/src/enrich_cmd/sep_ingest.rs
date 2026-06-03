@@ -95,9 +95,7 @@ pub async fn cmd_sep_ingest(args: &[String]) -> i32 {
         }
     };
 
-    let parquet_path = parsed
-        .parquet_override
-        .unwrap_or_else(default_parquet_path);
+    let parquet_path = parsed.parquet_override.unwrap_or_else(default_parquet_path);
     if !parquet_path.exists() {
         eprintln!(
             "error: SEP parquet not found at {}.\n       \
@@ -111,11 +109,7 @@ pub async fn cmd_sep_ingest(args: &[String]) -> i32 {
     if parsed.list {
         match list_categories(&parquet_path) {
             Ok(cats) => {
-                println!(
-                    "  {} article(s) in {}",
-                    cats.len(),
-                    parquet_path.display()
-                );
+                println!("  {} article(s) in {}", cats.len(), parquet_path.display());
                 for (slug, n) in &cats {
                     println!("    {:>4}  {}", n, slug);
                 }
@@ -148,9 +142,7 @@ pub async fn cmd_sep_ingest(args: &[String]) -> i32 {
              (ASCII letters, digits, or hyphens only, 1-64 chars)."
         );
         eprintln!();
-        eprintln!(
-            "Hint: run `sovereign enrich sep-ingest --list` to see valid slugs."
-        );
+        eprintln!("Hint: run `sovereign enrich sep-ingest --list` to see valid slugs.");
         return 2;
     }
 
@@ -160,9 +152,7 @@ pub async fn cmd_sep_ingest(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!("error: {e}");
             eprintln!();
-            eprintln!(
-                "Hint: run `sovereign enrich sep-ingest --list` to see available slugs."
-            );
+            eprintln!("Hint: run `sovereign enrich sep-ingest --list` to see available slugs.");
             return 1;
         }
     };
@@ -176,12 +166,12 @@ pub async fn cmd_sep_ingest(args: &[String]) -> i32 {
     );
 
     // Write the rendered markdown to `~/.sovereign/corpora/sep/articles/<slug>.md`.
-    let articles_dir = sovereign_root().join("corpora").join("sep").join("articles");
+    let articles_dir = sovereign_root()
+        .join("corpora")
+        .join("sep")
+        .join("articles");
     if let Err(e) = fs::create_dir_all(&articles_dir) {
-        eprintln!(
-            "error: creating {}: {e}",
-            articles_dir.display()
-        );
+        eprintln!("error: creating {}: {e}", articles_dir.display());
         return 1;
     }
     let article_path = articles_dir.join(format!("{slug}.md"));
@@ -194,10 +184,7 @@ pub async fn cmd_sep_ingest(args: &[String]) -> i32 {
     }
     let markdown = article.render_markdown(parsed.paragraphs_per_section);
     if let Err(e) = fs::write(&article_path, &markdown) {
-        eprintln!(
-            "error: writing {}: {e}",
-            article_path.display()
-        );
+        eprintln!("error: writing {}: {e}", article_path.display());
         return 1;
     }
     println!("  ✓ wrote {}", article_path.display());
@@ -243,16 +230,11 @@ pub async fn cmd_sep_ingest(args: &[String]) -> i32 {
     ) {
         // Not fatal — the corpus is scaffolded, this is just a
         // re-ingest convenience.
-        eprintln!(
-            "warning: could not write {}: {e}",
-            metadata_path.display()
-        );
+        eprintln!("warning: could not write {}: {e}", metadata_path.display());
     }
 
     println!();
-    println!(
-        "  Next: sovereign enrich build {corpus_id}"
-    );
+    println!("  Next: sovereign enrich build {corpus_id}");
     0
 }
 
@@ -309,16 +291,14 @@ fn parse_args(args: &[String]) -> Result<ParsedSepIngest, String> {
         let a = &args[i];
         match a.as_str() {
             "--paragraphs-per-section" => {
-                let v = args.get(i + 1).ok_or_else(|| {
-                    "--paragraphs-per-section requires an integer".to_string()
-                })?;
+                let v = args
+                    .get(i + 1)
+                    .ok_or_else(|| "--paragraphs-per-section requires an integer".to_string())?;
                 paragraphs_per_section = v
                     .parse()
                     .map_err(|e| format!("--paragraphs-per-section: {e}"))?;
                 if paragraphs_per_section == 0 {
-                    return Err(
-                        "--paragraphs-per-section must be ≥ 1".into(),
-                    );
+                    return Err("--paragraphs-per-section must be ≥ 1".into());
                 }
                 i += 2;
             }
@@ -345,9 +325,7 @@ fn parse_args(args: &[String]) -> Result<ParsedSepIngest, String> {
                     slug = Some(other.to_string());
                     i += 1;
                 } else {
-                    return Err(format!(
-                        "unexpected positional argument: {other}"
-                    ));
+                    return Err(format!("unexpected positional argument: {other}"));
                 }
             }
         }
@@ -409,12 +387,8 @@ mod tests {
 
     #[test]
     fn parse_args_rejects_zero_paragraphs_per_section() {
-        let err = parse_args(&[
-            "x".into(),
-            "--paragraphs-per-section".into(),
-            "0".into(),
-        ])
-        .unwrap_err();
+        let err =
+            parse_args(&["x".into(), "--paragraphs-per-section".into(), "0".into()]).unwrap_err();
         assert!(err.contains(">= 1") || err.contains("≥ 1"));
     }
 

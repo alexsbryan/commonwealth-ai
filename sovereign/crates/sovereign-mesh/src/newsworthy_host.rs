@@ -120,8 +120,7 @@ impl MeshNewsworthyHost {
         // `target_corpus_id`. Snapshots are gossiped hourly, so a
         // freshly-installed peer may not show up for up to an hour —
         // acceptable for a daily watcher tick.
-        let events: Vec<LedgerEvent> = match self.app_state.inner.contribution_emitter.events()
-        {
+        let events: Vec<LedgerEvent> = match self.app_state.inner.contribution_emitter.events() {
             Ok(ev) => ev,
             Err(e) => {
                 tracing::warn!(
@@ -201,11 +200,7 @@ impl NewsworthyHost for MeshNewsworthyHost {
             .map_err(|e| CorpusError::Database(format!("MeshStore.set: {e}")))
     }
 
-    fn store_scan(
-        &self,
-        app_id: &str,
-        prefix: &str,
-    ) -> CorpusResult<Vec<(String, Vec<u8>)>> {
+    fn store_scan(&self, app_id: &str, prefix: &str) -> CorpusResult<Vec<(String, Vec<u8>)>> {
         let entries = self
             .mesh_store()
             .scan(app_id, prefix)
@@ -579,19 +574,18 @@ async fn apply_incremental(
         .map_err(|e| format!("apply_atom_delta({}): {e}", atlas_dir.display()))?;
 
     // Meta-atlas: refresh anchors for this corpus only.
-    let meta_outcome =
-        match rebuild_for_corpus(&indexes_dir, &corpus_id, None) {
-            Ok(_) => "ok",
-            Err(e) => {
-                tracing::warn!(
-                    corpus_id = %corpus_id,
-                    role = %role,
-                    error = %e,
-                    "newsworthy.atlas_meta_partial_rebuild_failed — meta-atlas anchors may lag until next full build"
-                );
-                "failed"
-            }
-        };
+    let meta_outcome = match rebuild_for_corpus(&indexes_dir, &corpus_id, None) {
+        Ok(_) => "ok",
+        Err(e) => {
+            tracing::warn!(
+                corpus_id = %corpus_id,
+                role = %role,
+                error = %e,
+                "newsworthy.atlas_meta_partial_rebuild_failed — meta-atlas anchors may lag until next full build"
+            );
+            "failed"
+        }
+    };
 
     tracing::info!(
         corpus_id = %corpus_id,
@@ -624,10 +618,7 @@ async fn apply_incremental(
 /// or when every file was removed. Any walk/IO error short-circuits
 /// — the caller logs and skips the retry rather than rebuilding on
 /// a half-wiped directory.
-fn wipe_atlas_dir(
-    indexes_dir: &std::path::Path,
-    corpus_id: &str,
-) -> Result<(), String> {
+fn wipe_atlas_dir(indexes_dir: &std::path::Path, corpus_id: &str) -> Result<(), String> {
     use corpus_engine::enrichment::atlas::writer::ATLAS_DIRNAME;
     let atlas_dir = indexes_dir.join(corpus_id).join(ATLAS_DIRNAME);
     if !atlas_dir.exists() {
@@ -636,8 +627,7 @@ fn wipe_atlas_dir(
     let entries = std::fs::read_dir(&atlas_dir)
         .map_err(|e| format!("read_dir {}: {e}", atlas_dir.display()))?;
     for entry in entries {
-        let entry =
-            entry.map_err(|e| format!("read_dir entry {}: {e}", atlas_dir.display()))?;
+        let entry = entry.map_err(|e| format!("read_dir entry {}: {e}", atlas_dir.display()))?;
         let path = entry.path();
         if path.is_file() {
             std::fs::remove_file(&path)

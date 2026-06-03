@@ -239,7 +239,10 @@ fn split_oversized(content: String, spans: Vec<TurnSpan>) -> Vec<SplitChunk> {
         if remaining <= MAX_CHUNK_CHARS {
             let sub_content = content[pos..].to_string();
             let sub_spans = clip_spans(&spans, pos, content.len());
-            out.push(SplitChunk { content: sub_content, spans: sub_spans });
+            out.push(SplitChunk {
+                content: sub_content,
+                spans: sub_spans,
+            });
             break;
         }
         // Soft target: try to break on a blank line near MAX_CHUNK_CHARS.
@@ -250,14 +253,12 @@ fn split_oversized(content: String, spans: Vec<TurnSpan>) -> Vec<SplitChunk> {
         // anthropic export: byte 2979 fell inside `—` (2977..2980).
         let raw_soft = pos + MAX_CHUNK_CHARS;
         let soft_target = floor_char_boundary(&content, raw_soft);
-        let mut end = next_soft_boundary(&content, soft_target)
-            .unwrap_or_else(|| {
-                // Same boundary discipline on the hard fallback —
-                // both targets are derived from byte arithmetic.
-                let raw_hard = (soft_target + (MAX_HARD_CHARS - MAX_CHUNK_CHARS))
-                    .min(content.len());
-                floor_char_boundary(&content, raw_hard)
-            });
+        let mut end = next_soft_boundary(&content, soft_target).unwrap_or_else(|| {
+            // Same boundary discipline on the hard fallback —
+            // both targets are derived from byte arithmetic.
+            let raw_hard = (soft_target + (MAX_HARD_CHARS - MAX_CHUNK_CHARS)).min(content.len());
+            floor_char_boundary(&content, raw_hard)
+        });
         // Don't loop forever if the splitter returned an end ≤ pos
         // (degenerate input — pos has no \n or boundary).
         if end <= pos {
@@ -268,7 +269,10 @@ fn split_oversized(content: String, spans: Vec<TurnSpan>) -> Vec<SplitChunk> {
         }
         let sub_content = content[pos..end].to_string();
         let sub_spans = clip_spans(&spans, pos, end);
-        out.push(SplitChunk { content: sub_content, spans: sub_spans });
+        out.push(SplitChunk {
+            content: sub_content,
+            spans: sub_spans,
+        });
         // Advance past the boundary, leaving a small overlap so a fact
         // straddling the cut survives in the next sub-chunk too.
         // Snap the rewound `next_pos` to a char boundary too — the
@@ -309,7 +313,6 @@ fn next_soft_boundary(s: &str, target: usize) -> Option<usize> {
     }
     None
 }
-
 
 /// Project the parent chunk's spans onto a sub-chunk's byte range.
 /// A span survives if it overlaps `[sub_start, sub_end)`; its byte
@@ -356,9 +359,7 @@ fn turn_header_regex() -> &'static Regex {
     // Matches `### [YYYY-MM-DD HH:MM] sender` or
     // `### [unknown-time] sender`. Captures: 1 = timestamp content
     // inside the brackets; 2 = sender slug.
-    CELL.get_or_init(|| {
-        Regex::new(r"(?m)^###\s+\[([^\]]+)\]\s+(user|assistant)\s*$").unwrap()
-    })
+    CELL.get_or_init(|| Regex::new(r"(?m)^###\s+\[([^\]]+)\]\s+(user|assistant)\s*$").unwrap())
 }
 
 #[derive(Debug)]
@@ -501,10 +502,13 @@ mod tests {
         let user_span = &first.spans[0];
         let assistant_span = &first.spans[1];
         let user_text = &first.content[user_span.byte_range.0..user_span.byte_range.1];
-        let asst_text =
-            &first.content[assistant_span.byte_range.0..assistant_span.byte_range.1];
+        let asst_text = &first.content[assistant_span.byte_range.0..assistant_span.byte_range.1];
         assert!(user_text.contains("burn rate"));
-        assert!(!user_text.contains("$312k"), "user span leaked assistant text: {}", user_text);
+        assert!(
+            !user_text.contains("$312k"),
+            "user span leaked assistant text: {}",
+            user_text
+        );
         assert!(asst_text.contains("$312k"));
         assert!(
             !asst_text.contains("burn rate"),
@@ -517,8 +521,14 @@ mod tests {
     fn span_timestamps_parsed() {
         let chunks = ThreadedTurnsChunker::new().chunk_attributed(SAMPLE);
         let first = &chunks[0];
-        assert_eq!(first.spans[0].timestamp.as_deref(), Some("2025-09-04 18:01"));
-        assert_eq!(first.spans[1].timestamp.as_deref(), Some("2025-09-04 18:02"));
+        assert_eq!(
+            first.spans[0].timestamp.as_deref(),
+            Some("2025-09-04 18:01")
+        );
+        assert_eq!(
+            first.spans[1].timestamp.as_deref(),
+            Some("2025-09-04 18:02")
+        );
     }
 
     #[test]
@@ -539,8 +549,8 @@ mod tests {
 
     #[test]
     fn non_marker_text_falls_back_to_unattributed_span() {
-        let chunks = ThreadedTurnsChunker::new()
-            .chunk_attributed("Free prose with no turn markers.");
+        let chunks =
+            ThreadedTurnsChunker::new().chunk_attributed("Free prose with no turn markers.");
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0].spans.len(), 1);
         assert_eq!(chunks[0].spans[0].attribution, Attribution::Unattributed);
@@ -714,7 +724,11 @@ mod tests {
         // chunker; post-fix it must complete + every chunk must
         // round-trip as valid UTF-8.
         let chunks = ThreadedTurnsChunker::new().chunk(&input);
-        assert!(chunks.len() > 1, "input must split: got {} chunks", chunks.len());
+        assert!(
+            chunks.len() > 1,
+            "input must split: got {} chunks",
+            chunks.len()
+        );
         for c in &chunks {
             assert!(c.content.is_char_boundary(0));
             assert!(c.content.is_char_boundary(c.content.len()));

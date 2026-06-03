@@ -26,11 +26,7 @@ impl DocumentTool {
     }
 
     /// Map phase: process chunks in batches, producing a summary for each batch.
-    async fn map_chunks(
-        &self,
-        chunks: &[DocumentChunk],
-        operation: &str,
-    ) -> Result<Vec<String>> {
+    async fn map_chunks(&self, chunks: &[DocumentChunk], operation: &str) -> Result<Vec<String>> {
         let map_prompt = match operation {
             "analyze" => "Identify the key themes, arguments, and structure in the following text section. Be specific and cite details.",
             _ => "Summarize the following text section. Preserve key facts, names, and conclusions. Be concise but thorough.",
@@ -46,9 +42,7 @@ impl DocumentTool {
                 .join("\n\n---\n\n");
 
             let request = CompletionRequest {
-                prompt: format!(
-                    "{map_prompt}\n\n---\n\n{batch_text}"
-                ),
+                prompt: format!("{map_prompt}\n\n---\n\n{batch_text}"),
                 system_message: Some(format!(
                     "You are processing section {} of a larger document. {map_prompt}",
                     batch_idx + 1,
@@ -57,20 +51,20 @@ impl DocumentTool {
                 max_tokens: Some(512),
                 temperature: Some(0.3),
                 structured_output: None,
-            think_budget: None,
+                think_budget: None,
                 top_k: None,
                 top_p: None,
                 oicp: None,
-            tools: None,
-            tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
+                tools: None,
+                tool_choice: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -97,17 +91,17 @@ impl DocumentTool {
         depth: usize,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send + 'a>> {
         Box::pin(async move {
-        if depth > 5 {
-            return Err(Error::Execution(
-                "Map-reduce exceeded maximum recursion depth".to_string(),
-            ));
-        }
+            if depth > 5 {
+                return Err(Error::Execution(
+                    "Map-reduce exceeded maximum recursion depth".to_string(),
+                ));
+            }
 
-        let combined: String = summaries.join("\n\n---\n\n");
+            let combined: String = summaries.join("\n\n---\n\n");
 
-        if combined.len() <= MAX_REDUCE_INPUT_CHARS {
-            // Fits in one prompt — produce final synthesis.
-            let reduce_prompt = match operation {
+            if combined.len() <= MAX_REDUCE_INPUT_CHARS {
+                // Fits in one prompt — produce final synthesis.
+                let reduce_prompt = match operation {
                 "analyze" => format!(
                     "You have been given section-by-section analyses of the document \"{source}\". \
                      Synthesize these into a comprehensive analysis covering: key themes, main arguments, \
@@ -120,65 +114,65 @@ impl DocumentTool {
                 ),
             };
 
-            let request = CompletionRequest {
-                prompt: reduce_prompt,
-                system_message: Some(
-                    "You are synthesizing a final summary from section summaries. \
+                let request = CompletionRequest {
+                    prompt: reduce_prompt,
+                    system_message: Some(
+                        "You are synthesizing a final summary from section summaries. \
                      Produce a coherent, comprehensive result."
-                        .to_string(),
-                ),
-                preferred_speed: Speed::Slow,
-                max_tokens: Some(1024),
-                temperature: Some(0.5),
-                structured_output: None,
-            think_budget: None,
-                top_k: None,
-                top_p: None,
-                oicp: None,
-            tools: None,
-            tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-            };
+                            .to_string(),
+                    ),
+                    preferred_speed: Speed::Slow,
+                    max_tokens: Some(1024),
+                    temperature: Some(0.5),
+                    structured_output: None,
+                    think_budget: None,
+                    top_k: None,
+                    top_p: None,
+                    oicp: None,
+                    tools: None,
+                    tool_choice: None,
+                    model_id: None,
+                    enable_thinking: None,
+                    sampling_mode: None,
+                    assistant_prefix: None,
+                    cmd_prefix: None,
+                    url_allowlist: None,
+                    evidence_id_allowlist: None,
+                    lark_grammar: None,
+                };
 
-            let response = self.inference.complete(&request).await?;
-            return Ok(response.text);
-        }
+                let response = self.inference.complete(&request).await?;
+                return Ok(response.text);
+            }
 
-        // Too large — recurse: re-summarize the summaries in batches.
-        eprintln!(
-            "  [document] Reduce pass {} ({} summaries, {} chars)",
-            depth + 1,
-            summaries.len(),
-            combined.len(),
-        );
+            // Too large — recurse: re-summarize the summaries in batches.
+            eprintln!(
+                "  [document] Reduce pass {} ({} summaries, {} chars)",
+                depth + 1,
+                summaries.len(),
+                combined.len(),
+            );
 
-        // Create synthetic chunks from the summaries for re-processing.
-        let synthetic_chunks: Vec<DocumentChunk> = summaries
-            .iter()
-            .enumerate()
-            .map(|(i, s)| DocumentChunk {
-                id: format!("reduce-{depth}-{i}"),
-                source: source.to_string(),
-                content: s.clone(),
-                chunk_index: i,
-                embedding: None,
-                created_at: 0,
-                source_type: SourceType::UserDocument,
-                version: 0,
-                deleted_at: None,
-            })
-            .collect();
+            // Create synthetic chunks from the summaries for re-processing.
+            let synthetic_chunks: Vec<DocumentChunk> = summaries
+                .iter()
+                .enumerate()
+                .map(|(i, s)| DocumentChunk {
+                    id: format!("reduce-{depth}-{i}"),
+                    source: source.to_string(),
+                    content: s.clone(),
+                    chunk_index: i,
+                    embedding: None,
+                    created_at: 0,
+                    source_type: SourceType::UserDocument,
+                    version: 0,
+                    deleted_at: None,
+                })
+                .collect();
 
-        let new_summaries = self.map_chunks(&synthetic_chunks, operation).await?;
-        self.reduce_summaries(new_summaries, operation, source, depth + 1)
-            .await
+            let new_summaries = self.map_chunks(&synthetic_chunks, operation).await?;
+            self.reduce_summaries(new_summaries, operation, source, depth + 1)
+                .await
         }) // Box::pin(async move {
     }
 }
@@ -246,11 +240,7 @@ impl Tool for DocumentTool {
         Ok(())
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let source = params
             .get("source")
             .and_then(|v| v.as_str())
@@ -337,20 +327,20 @@ impl DocumentTool {
                 max_tokens: Some(1024),
                 temperature: Some(0.5),
                 structured_output: None,
-            think_budget: None,
+                think_budget: None,
                 top_k: None,
                 top_p: None,
                 oicp: None,
-            tools: None,
-            tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
+                tools: None,
+                tool_choice: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
             };
 
             let response = self.inference.complete(&request).await?;

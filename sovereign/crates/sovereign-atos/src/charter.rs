@@ -115,7 +115,12 @@ fn detect_auto_redteam(preamble: &str) -> bool {
         let (label, value) = rest;
         let label_ok = matches!(
             label.trim(),
-            "red team" | "red-team" | "redteam" | "auto red-team" | "auto red team" | "auto-red-team"
+            "red team"
+                | "red-team"
+                | "redteam"
+                | "auto red-team"
+                | "auto red team"
+                | "auto-red-team"
         );
         if !label_ok {
             continue;
@@ -156,9 +161,7 @@ fn find_milestones_heading(md: &str) -> Result<usize> {
             }
             Event::Text(text) => {
                 if let Some((level, start)) = current_heading_start {
-                    if level == HeadingLevel::H2
-                        && text.trim().eq_ignore_ascii_case("Milestones")
-                    {
+                    if level == HeadingLevel::H2 && text.trim().eq_ignore_ascii_case("Milestones") {
                         return Ok(start);
                     }
                 }
@@ -349,7 +352,9 @@ Wire the parser in.
     #[test]
     fn happy_path_two_milestones() {
         let parsed = parse(HAPPY_CHARTER).unwrap();
-        assert!(parsed.preamble_md.contains("Preamble describing motivation"));
+        assert!(parsed
+            .preamble_md
+            .contains("Preamble describing motivation"));
         assert!(!parsed.preamble_md.contains("## Milestones"));
         assert_eq!(parsed.milestones.len(), 2);
 
@@ -425,7 +430,8 @@ Wire the parser in.
     #[test]
     fn empty_stop_condition_body_accepted() {
         // Manual-review milestone — marker present, body empty.
-        let md = "## Milestones\n\n### 1. Manual check\n\nPlease eyeball it.\n\n**Stop condition:**\n";
+        let md =
+            "## Milestones\n\n### 1. Manual check\n\nPlease eyeball it.\n\n**Stop condition:**\n";
         let parsed = parse(md).unwrap();
         assert_eq!(parsed.milestones[0].stop_condition, "");
     }

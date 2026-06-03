@@ -28,7 +28,7 @@ use std::sync::Arc;
 
 use corpus_engine::InferenceFn;
 
-use super::args::{has_flag, get_flag};
+use super::args::{get_flag, has_flag};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum InferenceMode {
@@ -84,9 +84,7 @@ fn mock_inference() -> InferenceFn {
             // Entity extraction (personal or conversational). The
             // marker phrase is the prompt preamble's claim about
             // named-entity work.
-            if p.contains("named-entity extraction")
-                || p.contains("identify the *people*")
-            {
+            if p.contains("named-entity extraction") || p.contains("identify the *people*") {
                 return Ok(canned_entity_extraction(&p));
             }
 
@@ -102,7 +100,9 @@ fn mock_inference() -> InferenceFn {
                 return Ok(r#"{"topic":"general","position_name":"Default","is_argumentative":false,"is_objection":false,"is_open_question":false,"is_coherent":true}"#.to_string());
             }
             if p.contains("in tension") || p.contains("in dialogue") {
-                return Ok(r#"{"crux":"none","confidence":0.5,"resolution_condition":"n/a"}"#.to_string());
+                return Ok(
+                    r#"{"crux":"none","confidence":0.5,"resolution_condition":"n/a"}"#.to_string(),
+                );
             }
             if p.contains("unresolved inquiry") || p.contains("returning to") {
                 return Ok(r#"{"question":"none","why_unresolved":"n/a"}"#.to_string());
@@ -151,7 +151,13 @@ fn canned_entity_extraction(prompt: &str) -> String {
             continue;
         }
         let _ = current_kind;
-        scan_line(line, current_block, &mut persons, &mut orgs, &mut initiatives);
+        scan_line(
+            line,
+            current_block,
+            &mut persons,
+            &mut orgs,
+            &mut initiatives,
+        );
     }
 
     let person_json: Vec<serde_json::Value> = persons
@@ -197,10 +203,7 @@ fn canned_entity_extraction(prompt: &str) -> String {
 fn canned_suggest_detection(prompt: &str) -> String {
     // Find the "← current turn" line and pull the user content
     // that follows it.
-    let current = match prompt
-        .lines()
-        .position(|l| l.contains("← current turn"))
-    {
+    let current = match prompt.lines().position(|l| l.contains("← current turn")) {
         Some(idx) => {
             let mut buf = String::new();
             for line in prompt.lines().skip(idx + 1) {
@@ -219,8 +222,13 @@ fn canned_suggest_detection(prompt: &str) -> String {
 
     // Goal: "our goal is", "by Q3 we want", "by end of Qn", measurable
     // targets like "40% enterprise revenue".
-    if (lower.contains("our goal is") || lower.contains("by end of q") || lower.contains("our target is"))
-        && (lower.contains('%') || lower.contains("revenue") || lower.contains("by q") || lower.contains("by end of"))
+    if (lower.contains("our goal is")
+        || lower.contains("by end of q")
+        || lower.contains("our target is"))
+        && (lower.contains('%')
+            || lower.contains("revenue")
+            || lower.contains("by q")
+            || lower.contains("by end of"))
     {
         detections.push(serde_json::json!({
             "kind": "goal",
@@ -267,7 +275,12 @@ fn short_clause(content: &str, anchors: &[&str]) -> String {
             return tail.trim().to_string();
         }
     }
-    content.chars().take(80).collect::<String>().trim().to_string()
+    content
+        .chars()
+        .take(80)
+        .collect::<String>()
+        .trim()
+        .to_string()
 }
 
 /// Tiny entity scanner: capitalized two-word names → Person; words
@@ -291,9 +304,7 @@ fn scan_line(
         }
         // Initiative: well-known prefixes ("API ", "Q3 ", …) take
         // priority over Person/Org because they don't share shape.
-        if (w == "API" || w == "Q3" || w == "Q1" || w == "Q2" || w == "Q4")
-            && i + 1 < words.len()
-        {
+        if (w == "API" || w == "Q3" || w == "Q1" || w == "Q2" || w == "Q4") && i + 1 < words.len() {
             let next = words[i + 1].trim_matches(|c: char| !c.is_alphanumeric());
             if !next.is_empty() && next.chars().all(|c| c.is_alphabetic()) {
                 initiatives.insert((format!("{w} {}", next.to_lowercase()), block));
@@ -487,10 +498,7 @@ Had a great call with Sarah Chen at Acme Corp about the Q3 launch."#;
         let orgs = v["organizations"].as_array().unwrap();
         let inits = v["initiatives"].as_array().unwrap();
         // Heuristic should pick up Sarah Chen, Acme Corp, Q3 launch.
-        let person_names: Vec<&str> = persons
-            .iter()
-            .filter_map(|p| p["name"].as_str())
-            .collect();
+        let person_names: Vec<&str> = persons.iter().filter_map(|p| p["name"].as_str()).collect();
         let org_names: Vec<&str> = orgs.iter().filter_map(|p| p["name"].as_str()).collect();
         let init_names: Vec<&str> = inits.iter().filter_map(|p| p["name"].as_str()).collect();
         assert!(person_names.iter().any(|n| n.contains("Sarah")));

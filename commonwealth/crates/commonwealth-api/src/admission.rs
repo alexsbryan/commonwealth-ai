@@ -81,8 +81,13 @@ pub struct PeerInflightGuard {
 
 impl std::fmt::Debug for PeerInflightGuard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "PeerInflightGuard {{ in_flight: {} }}",
-            self.inner.peer_inflight_count.load(std::sync::atomic::Ordering::Relaxed))
+        write!(
+            f,
+            "PeerInflightGuard {{ in_flight: {} }}",
+            self.inner
+                .peer_inflight_count
+                .load(std::sync::atomic::Ordering::Relaxed)
+        )
     }
 }
 

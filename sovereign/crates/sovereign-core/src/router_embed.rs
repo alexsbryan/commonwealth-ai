@@ -124,24 +124,16 @@ impl EmbedRouter {
     /// Load exemplars from the given TOML path; embed each one via
     /// `inference.embed_query`. Sequential because exemplar counts
     /// are small (~200) and the embed slot serialises anyway.
-    pub async fn load(
-        path: &Path,
-        inference: Arc<dyn InferenceProvider>,
-    ) -> Result<Self> {
-        let raw = std::fs::read_to_string(path).map_err(|e| {
-            Error::InvalidInput(format!("read exemplars {}: {e}", path.display()))
-        })?;
-        let parsed: ExemplarFile = toml::from_str(&raw).map_err(|e| {
-            Error::InvalidInput(format!("parse exemplars {}: {e}", path.display()))
-        })?;
+    pub async fn load(path: &Path, inference: Arc<dyn InferenceProvider>) -> Result<Self> {
+        let raw = std::fs::read_to_string(path)
+            .map_err(|e| Error::InvalidInput(format!("read exemplars {}: {e}", path.display())))?;
+        let parsed: ExemplarFile = toml::from_str(&raw)
+            .map_err(|e| Error::InvalidInput(format!("parse exemplars {}: {e}", path.display())))?;
 
         let mut exemplars = Vec::with_capacity(parsed.example.len());
         for row in parsed.example {
             let intent = parse_intent(&row.intent).map_err(|e| {
-                Error::InvalidInput(format!(
-                    "exemplar `{}`: {e}",
-                    truncate(&row.query, 60)
-                ))
+                Error::InvalidInput(format!("exemplar `{}`: {e}", truncate(&row.query, 60)))
             })?;
             let mut emb = inference.embed_query(&row.query).await?;
             normalize(&mut emb);
@@ -219,10 +211,7 @@ impl EmbedRouter {
     /// callers that already have one (the router could splice this
     /// into the existing search-embedding pipeline to skip a second
     /// embed call).
-    pub fn classify_from_embedding(
-        &self,
-        q_normalized: &[f32],
-    ) -> Option<EmbedClassification> {
+    pub fn classify_from_embedding(&self, q_normalized: &[f32]) -> Option<EmbedClassification> {
         if self.exemplars.is_empty() || q_normalized.is_empty() {
             return None;
         }
@@ -230,8 +219,7 @@ impl EmbedRouter {
         // Max similarity per intent + remember the nearest exemplar
         // (text + scope) for the diagnostic surface and downstream
         // routing bias.
-        let mut per_intent: HashMap<Intent, (f32, &str, Option<&str>)> =
-            HashMap::new();
+        let mut per_intent: HashMap<Intent, (f32, &str, Option<&str>)> = HashMap::new();
         for ex in &self.exemplars {
             if ex.embedding.len() != q_normalized.len() {
                 // Dimension mismatch (exemplars embedded with a
@@ -261,12 +249,8 @@ impl EmbedRouter {
             .collect();
         ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        let (top_intent, top_sim, nearest, top_scope) = (
-            ranked[0].0.clone(),
-            ranked[0].1,
-            ranked[0].2,
-            ranked[0].3,
-        );
+        let (top_intent, top_sim, nearest, top_scope) =
+            (ranked[0].0.clone(), ranked[0].1, ranked[0].2, ranked[0].3);
         let second_sim = ranked.get(1).map(|(_, s, _, _)| *s).unwrap_or(0.0);
         let margin = top_sim - second_sim;
 
@@ -372,8 +356,14 @@ mod tests {
 
     #[test]
     fn parse_intent_snake_and_camel() {
-        assert!(matches!(parse_intent("knowledge_query"), Ok(Intent::KnowledgeQuery)));
-        assert!(matches!(parse_intent("KnowledgeQuery"), Ok(Intent::KnowledgeQuery)));
+        assert!(matches!(
+            parse_intent("knowledge_query"),
+            Ok(Intent::KnowledgeQuery)
+        ));
+        assert!(matches!(
+            parse_intent("KnowledgeQuery"),
+            Ok(Intent::KnowledgeQuery)
+        ));
         assert!(parse_intent("nonsense").is_err());
     }
 
@@ -394,7 +384,11 @@ mod tests {
             exemplars: vec![
                 make_exemplar(Intent::KnowledgeQuery, "What is X?", vec![1.0, 0.0, 0.0]),
                 make_exemplar(Intent::DeepQuery, "Why did X happen?", vec![0.0, 1.0, 0.0]),
-                make_exemplar(Intent::MetalingualQuery, "What does X mean here?", vec![0.0, 0.0, 1.0]),
+                make_exemplar(
+                    Intent::MetalingualQuery,
+                    "What does X mean here?",
+                    vec![0.0, 0.0, 1.0],
+                ),
             ],
             min_top_sim: 0.5,
             min_margin: 0.1,

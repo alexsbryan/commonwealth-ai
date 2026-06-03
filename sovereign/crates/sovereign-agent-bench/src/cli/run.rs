@@ -12,9 +12,12 @@ use tracing::{info, warn};
 use std::time::Duration;
 
 use crate::artifacts::ArtifactSink;
-use crate::baseline::{write_dated_and_update_latest, read_latest, BaselineError};
+use crate::baseline::{read_latest, write_dated_and_update_latest, BaselineError};
 use crate::cli::args::{ArgsError, RunArgs};
-use crate::judge::{request_for_dimension, HttpJudgeClient, JudgeClient, JudgeError, JudgeRequest, JudgeTrialOutcome};
+use crate::judge::{
+    request_for_dimension, HttpJudgeClient, JudgeClient, JudgeError, JudgeRequest,
+    JudgeTrialOutcome,
+};
 use crate::judge_multi::{aggregate, MultiTrialOutcome};
 use crate::problem::{load_problem, Problem, ProblemLoadError, ScoringMode};
 use crate::report::BenchReport;
@@ -69,7 +72,10 @@ pub async fn run_command(argv: &[String]) -> Result<(), RunError> {
         return Err(RunError::NoProblems(args.bench_root.display().to_string()));
     }
 
-    let judge_model = args.judge_model.clone().unwrap_or_else(|| args.model.clone());
+    let judge_model = args
+        .judge_model
+        .clone()
+        .unwrap_or_else(|| args.model.clone());
     let judge: Arc<dyn JudgeClient> = Arc::new(HttpJudgeClient::new(
         &args.judge_base_url,
         judge_model.clone(),
@@ -117,14 +123,8 @@ pub async fn run_command(argv: &[String]) -> Result<(), RunError> {
                     "agent_bench: trial started"
                 );
             }
-            let score = run_one_problem(
-                &*runner,
-                judge.as_ref(),
-                problem,
-                &args,
-                Some(&sink),
-            )
-            .await?;
+            let score =
+                run_one_problem(&*runner, judge.as_ref(), problem, &args, Some(&sink)).await?;
             info!(
                 problem = %problem.meta.id,
                 trial = t,
@@ -145,7 +145,10 @@ pub async fn run_command(argv: &[String]) -> Result<(), RunError> {
         // Multi-trial → the trial closest to the mean total; preserves
         // honest integer dim/exit/tool_calls (not a synthetic average).
         let (headline, detail_opt) = if trials_n == 1 {
-            (per_trial_scores.into_iter().next().expect("trials>=1"), None)
+            (
+                per_trial_scores.into_iter().next().expect("trials>=1"),
+                None,
+            )
         } else {
             let detail = ProblemTrialDetail::from_trials(&problem.meta.id, &per_trial_scores);
             let idx = detail.representative_index();
@@ -225,11 +228,7 @@ pub async fn run_command(argv: &[String]) -> Result<(), RunError> {
     }
 
     println!("{}", report.text_rollup());
-    info!(
-        grand_total,
-        max_total,
-        "agent_bench: grand_total"
-    );
+    info!(grand_total, max_total, "agent_bench: grand_total");
     Ok(())
 }
 
@@ -238,10 +237,7 @@ pub async fn run_command(argv: &[String]) -> Result<(), RunError> {
 /// the trait, so when the user pinned a specific pi binary we
 /// replace the runner with a fresh `PiRunner` configured with it.
 /// Other runners are returned unchanged.
-fn patch_runner_pi_binary(
-    runner: Arc<dyn AgentRunner>,
-    args: &RunArgs,
-) -> Arc<dyn AgentRunner> {
+fn patch_runner_pi_binary(runner: Arc<dyn AgentRunner>, args: &RunArgs) -> Arc<dyn AgentRunner> {
     if runner.id() != "pi" {
         return runner;
     }
@@ -270,9 +266,7 @@ pub async fn run_one_problem(
     // (`--tier from-scratch`) wins over the problem's declared tier
     // for direct A/B measurement: same problem, same fixtures, with
     // vs. without the scaffold safety net.
-    let effective_tier = args
-        .tier_override
-        .unwrap_or(problem.meta.tier);
+    let effective_tier = args.tier_override.unwrap_or(problem.meta.tier);
     let sandbox = Sandbox::new(problem.fixture_path())?;
     let install_scaffold = matches!(effective_tier, crate::problem::Tier::Scaffolded);
     if install_scaffold {
@@ -516,30 +510,20 @@ async fn score_dim(
     match mode {
         ScoringMode::AutoTestPassFraction => {
             let (frac, bucketed, verify_ok) = match witness {
-                Some(w) => (
-                    w.parsed.pass_fraction(),
-                    w.bucketed_score,
-                    w.verify_exit_ok,
-                ),
+                Some(w) => (w.parsed.pass_fraction(), w.bucketed_score, w.verify_exit_ok),
                 None => (0.0, 0, false),
             };
             Ok(dim_from_auto(frac, bucketed, verify_ok))
         }
         ScoringMode::JudgeRubric { rubric_id } => {
             let req = request_for_dimension(problem, artifact, dim_name, rubric_id)?;
-            let outcome = run_judge_trials_glassbox(
-                judge, &req, judge_trials, dim_id, sink,
-            )
-            .await;
+            let outcome = run_judge_trials_glassbox(judge, &req, judge_trials, dim_id, sink).await;
             Ok(dim_from_judge(&outcome))
         }
         ScoringMode::HybridAutoFloor { rubric_id } => {
             let auto_score = witness.map(|w| w.bucketed_score).unwrap_or(0);
             let req = request_for_dimension(problem, artifact, dim_name, rubric_id)?;
-            let outcome = run_judge_trials_glassbox(
-                judge, &req, judge_trials, dim_id, sink,
-            )
-            .await;
+            let outcome = run_judge_trials_glassbox(judge, &req, judge_trials, dim_id, sink).await;
             Ok(dim_from_hybrid(auto_score, &outcome))
         }
     }
@@ -612,7 +596,13 @@ fn resolve_artifacts_root(args: &RunArgs) -> std::path::PathBuf {
     let model_slug = args
         .model
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '.' { c } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '.' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect::<String>();
     args.bench_root
         .join(".artifacts")

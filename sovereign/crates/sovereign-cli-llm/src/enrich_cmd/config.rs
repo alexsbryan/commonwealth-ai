@@ -192,8 +192,8 @@ impl EnrichConfig {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let json = serde_json::to_string_pretty(self)
-            .map_err(|e| Error::Serialization(e.to_string()))?;
+        let json =
+            serde_json::to_string_pretty(self).map_err(|e| Error::Serialization(e.to_string()))?;
         let tmp = path.with_extension("json.tmp");
         fs::write(&tmp, json)?;
         fs::rename(&tmp, &path)?;

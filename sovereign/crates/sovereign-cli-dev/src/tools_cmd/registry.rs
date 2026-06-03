@@ -39,12 +39,10 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 
 use corpus_engine::{CorpusEngine, EmbedFn, LintResultStore, TestResultStore};
+use corpus_engine_atos::FeatureStore;
 use corpus_engine_notes::{NoteStore, ProjectDocsStore};
-use corpus_engine_atos::{FeatureStore};
 use sovereign_cli_shared::{
-    dirs::default_data_dir,
-    repo::find_sovereign_dir,
-    scip::load_merged_graph,
+    dirs::default_data_dir, repo::find_sovereign_dir, scip::load_merged_graph,
 };
 use sovereign_core::registry::ToolRegistry;
 
@@ -141,9 +139,9 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     let (initial_graph, _summary) = load_merged_graph(&data_dir, false).await;
     let merged_graph: sovereign_tools::ScipGraphHandle =
         Arc::new(ArcSwap::from_pointee(initial_graph));
-    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(
-        Arc::clone(&merged_graph),
-    ));
+    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(
+        &merged_graph,
+    )));
 
     // No `watcher_active` flag wired here: the CLI binary isn't
     // running a watcher of its own — it's a thin reader over the
@@ -202,25 +200,28 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // tools-call path still wants the tools registered so users see
     // them in `sovereign tools list`; declare_scope just rejects at
     // execute time. work_in_flight is independent of repo_id.
-    let (atlas_repo_root, atlas_repo_id) =
-        sovereign_work_atlas::resolve_repo_id(&repo_root)
-            .unwrap_or_else(|_| (repo_root.clone(), String::new()));
+    let (atlas_repo_root, atlas_repo_id) = sovereign_work_atlas::resolve_repo_id(&repo_root)
+        .unwrap_or_else(|_| (repo_root.clone(), String::new()));
     let current_branch = current_branch_for(&atlas_repo_root);
-    tools.register(Box::new(sovereign_work_atlas::tools::DeclareScopeTool::new(
-        Arc::clone(&atlas_store),
-        atlas_cfg.clone(),
-        Arc::clone(&atlas_broadcaster),
-        atlas_repo_root.clone(),
-        atlas_repo_id.clone(),
-        current_branch.clone(),
-    )));
-    tools.register(Box::new(sovereign_work_atlas::tools::ReleaseScopeTool::new(
-        Arc::clone(&atlas_store),
-        Arc::clone(&atlas_broadcaster),
-    )));
-    tools.register(Box::new(sovereign_work_atlas::tools::WorkInFlightTool::new(
-        Arc::clone(&atlas_store),
-    )));
+    tools.register(Box::new(
+        sovereign_work_atlas::tools::DeclareScopeTool::new(
+            Arc::clone(&atlas_store),
+            atlas_cfg.clone(),
+            Arc::clone(&atlas_broadcaster),
+            atlas_repo_root.clone(),
+            atlas_repo_id.clone(),
+            current_branch.clone(),
+        ),
+    ));
+    tools.register(Box::new(
+        sovereign_work_atlas::tools::ReleaseScopeTool::new(
+            Arc::clone(&atlas_store),
+            Arc::clone(&atlas_broadcaster),
+        ),
+    ));
+    tools.register(Box::new(
+        sovereign_work_atlas::tools::WorkInFlightTool::new(Arc::clone(&atlas_store)),
+    ));
 
     tools.register(Box::new(
         sovereign_tools::BlastRadiusTool::new(Arc::clone(&merged_graph))
@@ -243,8 +244,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // the displayed scope) is correct per tool — the heartbeat is shared
     // across lint+test, so a live coordinator alone doesn't tell us
     // whether THIS tool's runner exists.
-    let sov_cfg =
-        corpus_engine::SovereignConfig::load_or_default(&repo_root.join(".sovereign"));
+    let sov_cfg = corpus_engine::SovereignConfig::load_or_default(&repo_root.join(".sovereign"));
     let lint_scope = sov_cfg.lint_runner.as_ref().map(|c| c.command.clone());
     let test_scope = sov_cfg.test_runner.as_ref().map(|c| c.command.clone());
     let mut lint_status = sovereign_tools::LintStatusTool::new(Arc::clone(&lint_store))
@@ -259,8 +259,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // hook query this; the orchestrator writes the fingerprint after
     // a successful run.
     tools.register(Box::new(
-        sovereign_tools::DriftPostureTool::new()
-            .with_workspace_root(repo_root.clone()),
+        sovereign_tools::DriftPostureTool::new().with_workspace_root(repo_root.clone()),
     ));
     // Point-of-edit drift query — sibling to drift_posture. Lets
     // an agent ask "what does the narrative say about THIS symbol
@@ -293,18 +292,18 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     )));
 
     // Notes + ATOS lifecycle tools.
-    tools.register(Box::new(sovereign_tools::WriteNoteTool::new(
-        Arc::clone(&notes_store),
-    )));
+    tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
+        &notes_store,
+    ))));
     tools.register(Box::new(sovereign_tools::ReadNotesTool::new(Arc::clone(
         &notes_store,
     ))));
-    tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(
-        Arc::clone(&notes_store),
-    )));
-    tools.register(Box::new(sovereign_tools::ReadNoteByIdTool::new(Arc::clone(
+    tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(Arc::clone(
         &notes_store,
     ))));
+    tools.register(Box::new(sovereign_tools::ReadNoteByIdTool::new(
+        Arc::clone(&notes_store),
+    )));
     tools.register(Box::new(sovereign_tools::PromoteNoteTool::new(Arc::clone(
         &notes_store,
     ))));
@@ -377,9 +376,7 @@ fn find_git_root(start: &std::path::Path) -> Option<PathBuf> {
     if !out.status.success() {
         return None;
     }
-    Some(PathBuf::from(
-        String::from_utf8_lossy(&out.stdout).trim(),
-    ))
+    Some(PathBuf::from(String::from_utf8_lossy(&out.stdout).trim()))
 }
 
 /// Build a `corpus_engine::EmbedFn` backed by the running daemon's
@@ -414,9 +411,10 @@ async fn build_daemon_embed_fn_or_zero(daemon_url: &str) -> EmbedFn {
                     resp.status()
                 )));
             }
-            let body: serde_json::Value = resp.json().await.map_err(|e| {
-                corpus_engine::Error::Embed(format!("daemon parse: {e}"))
-            })?;
+            let body: serde_json::Value = resp
+                .json()
+                .await
+                .map_err(|e| corpus_engine::Error::Embed(format!("daemon parse: {e}")))?;
             body.get("data")
                 .and_then(|v| v.get(0))
                 .and_then(|v| v.get("embedding"))

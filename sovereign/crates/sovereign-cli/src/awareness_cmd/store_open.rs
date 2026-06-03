@@ -14,8 +14,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use corpus_engine_notes::{NoteStore};
-use corpus_engine_atos::{FeatureStore};
+use corpus_engine_atos::FeatureStore;
+use corpus_engine_notes::NoteStore;
 
 use super::args::get_flag;
 

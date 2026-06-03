@@ -97,8 +97,7 @@ impl Domain for ConversationalDomain {
                 )
             })
             .collect::<Vec<_>>()
-            .join("\n\n")
-            ;
+            .join("\n\n");
 
         format!(
             r#"You are reading conversations between one person and an AI

@@ -44,18 +44,17 @@ pub fn build_filter_pipeline(
     let mut children: Vec<Arc<dyn DocumentFilter>> = Vec::with_capacity(filters.len());
     for cfg in filters {
         let child: Arc<dyn DocumentFilter> = match cfg {
-            FilterConfig::PageviewRank { rank_file, max_rank } => {
-                Arc::new(load_pageview_rank(rank_file, *max_rank, recipe_root)?)
-            }
+            FilterConfig::PageviewRank {
+                rank_file,
+                max_rank,
+            } => Arc::new(load_pageview_rank(rank_file, *max_rank, recipe_root)?),
             FilterConfig::TitleList { list_file } => {
                 Arc::new(load_title_list(list_file, recipe_root)?)
             }
             FilterConfig::KnowledgeDensity(cfg) => {
                 Arc::new(KnowledgeDensityFilter::new(cfg.clone()))
             }
-            FilterConfig::Boilerplate(cfg) => {
-                Arc::new(BoilerplateFilter::new(cfg.clone()))
-            }
+            FilterConfig::Boilerplate(cfg) => Arc::new(BoilerplateFilter::new(cfg.clone())),
         };
         children.push(child);
     }
@@ -70,7 +69,9 @@ fn load_pageview_rank(
 ) -> Result<PageviewRankFilter> {
     if let Some(key) = rank_file.strip_prefix(BUNDLED_PREFIX) {
         let bytes = assets::lookup_bundled(key).ok_or_else(|| {
-            Error::Recipe(format!("unknown bundled filter asset '{key}' in pageview_rank"))
+            Error::Recipe(format!(
+                "unknown bundled filter asset '{key}' in pageview_rank"
+            ))
         })?;
         // Bundled rank files are gzipped to keep the binary small. The
         // crate currently ships only `.csv.gz` keys, but if a future
@@ -89,7 +90,9 @@ fn load_pageview_rank(
 fn load_title_list(list_file: &str, recipe_root: Option<&Path>) -> Result<TitleListFilter> {
     if let Some(key) = list_file.strip_prefix(BUNDLED_PREFIX) {
         let bytes = assets::lookup_bundled(key).ok_or_else(|| {
-            Error::Recipe(format!("unknown bundled filter asset '{key}' in title_list"))
+            Error::Recipe(format!(
+                "unknown bundled filter asset '{key}' in title_list"
+            ))
         })?;
         TitleListFilter::from_bytes(bytes, key)
     } else {
@@ -201,8 +204,12 @@ mod tests {
         let b = dir.path().join("b.txt");
         std::fs::write(&b, "Baz\n").unwrap();
         let cfg = vec![
-            FilterConfig::TitleList { list_file: "a.txt".into() },
-            FilterConfig::TitleList { list_file: "b.txt".into() },
+            FilterConfig::TitleList {
+                list_file: "a.txt".into(),
+            },
+            FilterConfig::TitleList {
+                list_file: "b.txt".into(),
+            },
         ];
         let p = build_filter_pipeline(&cfg, ComposeMode::Any, Some(dir.path())).unwrap();
         assert!(p.is_active());

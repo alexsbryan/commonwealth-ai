@@ -20,10 +20,7 @@ impl GutenbergParser {
 }
 
 impl CorpusParser for GutenbergParser {
-    fn parse(
-        &self,
-        source_path: &Path,
-    ) -> Result<Box<dyn Iterator<Item = Result<DocumentChunk>>>> {
+    fn parse(&self, source_path: &Path) -> Result<Box<dyn Iterator<Item = Result<DocumentChunk>>>> {
         let files = collect_text_files(source_path)?;
         Ok(Box::new(GutenbergIterator {
             files: files.into(),
@@ -73,8 +70,7 @@ fn collect_recursive(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
     let entries = fs::read_dir(dir)
         .map_err(|e| Error::Storage(format!("Failed to read {}: {e}", dir.display())))?;
     for entry in entries {
-        let entry =
-            entry.map_err(|e| Error::Storage(format!("Directory entry error: {e}")))?;
+        let entry = entry.map_err(|e| Error::Storage(format!("Directory entry error: {e}")))?;
         let path = entry.path();
         if path.is_dir() {
             collect_recursive(&path, files)?;
@@ -184,7 +180,9 @@ mod tests {
             .unwrap();
 
         assert!(!chunks.is_empty());
-        assert!(chunks[0].content.starts_with("Project Gutenberg: Test Book"));
+        assert!(chunks[0]
+            .content
+            .starts_with("Project Gutenberg: Test Book"));
         assert_eq!(
             chunks[0].source_type,
             sovereign_core::types::SourceType::Corpus {
@@ -200,18 +198,12 @@ mod tests {
     #[test]
     fn extract_title_from_header() {
         let text = "Heading\nTitle: Moby Dick\nAuthor: Melville\n";
-        assert_eq!(
-            extract_title(text, Path::new("moby.txt")),
-            "Moby Dick"
-        );
+        assert_eq!(extract_title(text, Path::new("moby.txt")), "Moby Dick");
     }
 
     #[test]
     fn extract_title_fallback_to_filename() {
         let text = "No title header here.\n";
-        assert_eq!(
-            extract_title(text, Path::new("moby-dick.txt")),
-            "moby-dick"
-        );
+        assert_eq!(extract_title(text, Path::new("moby-dick.txt")), "moby-dick");
     }
 }

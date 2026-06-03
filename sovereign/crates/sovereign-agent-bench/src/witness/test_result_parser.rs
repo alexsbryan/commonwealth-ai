@@ -178,8 +178,7 @@ fn count_number_before_token(s: &str, token: &str) -> u32 {
         let next_clean = words[i + 1].trim_end_matches(|c: char| !c.is_ascii_alphabetic());
         if next_clean == token {
             // Strip leading non-numeric from the candidate (e.g. "(3").
-            let prev_clean =
-                words[i].trim_start_matches(|c: char| !c.is_ascii_digit());
+            let prev_clean = words[i].trim_start_matches(|c: char| !c.is_ascii_digit());
             if let Ok(n) = prev_clean.parse::<u32>() {
                 found = Some(n);
             }
@@ -299,7 +298,8 @@ mod tests {
 
     #[test]
     fn pytest_text_extracts_summary() {
-        let out = "FAILED tests/test_a.py::test_b - assert 1 == 2\n=== 3 passed, 1 failed in 0.05s ===\n";
+        let out =
+            "FAILED tests/test_a.py::test_b - assert 1 == 2\n=== 3 passed, 1 failed in 0.05s ===\n";
         let r = parse_pytest_text(out);
         assert_eq!(r.passed, 3);
         assert_eq!(r.failed, 1);
@@ -313,7 +313,8 @@ mod tests {
         // Observed on 3.2-lights-out-python (2026-05-22) where the
         // parser previously read passed=0/total=0 despite stdout
         // showing "1 failed, 11 passed in 0.05s".
-        let out = "......F.....\nFAILED tests/test_a.py::test_b - assert\n1 failed, 11 passed in 0.05s\n";
+        let out =
+            "......F.....\nFAILED tests/test_a.py::test_b - assert\n1 failed, 11 passed in 0.05s\n";
         let r = parse_pytest_text(out);
         assert_eq!(r.passed, 11);
         assert_eq!(r.failed, 1);

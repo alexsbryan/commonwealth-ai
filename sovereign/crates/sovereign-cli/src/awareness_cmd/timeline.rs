@@ -33,7 +33,9 @@ pub(super) async fn cmd_timeline(args: &[String]) -> i32 {
 
     let Some(name) = positional.into_iter().next() else {
         eprintln!("awareness timeline: <entity-name> is required");
-        eprintln!("usage: sovereign awareness timeline \"<name>\" [--window 90] [--include-chunks]");
+        eprintln!(
+            "usage: sovereign awareness timeline \"<name>\" [--window 90] [--include-chunks]"
+        );
         return 2;
     };
 
@@ -332,7 +334,10 @@ fn print_atos_link(link: &AtosLink) {
         CharterStatus::Drifted => "Drifted",
         CharterStatus::Unapproved => "Unapproved",
     };
-    println!("ATOS: {} \"{}\", {}, charter: {}", kind, link.id, phase, charter);
+    println!(
+        "ATOS: {} \"{}\", {}, charter: {}",
+        kind, link.id, phase, charter
+    );
 }
 
 fn print_interactions(
@@ -358,7 +363,10 @@ fn print_interactions(
     }
 }
 
-fn print_linked_notes(notes: &[sovereign_tools::knowledge_view::relational::RelationalNote], now: i64) {
+fn print_linked_notes(
+    notes: &[sovereign_tools::knowledge_view::relational::RelationalNote],
+    now: i64,
+) {
     if notes.is_empty() {
         return;
     }
@@ -366,16 +374,17 @@ fn print_linked_notes(notes: &[sovereign_tools::knowledge_view::relational::Rela
     println!("Linked notes:");
     for n in notes {
         let kind = match n.kind {
-            sovereign_tools::knowledge_view::relational::RelationalNoteKind::Commitment => "commitment",
-            sovereign_tools::knowledge_view::relational::RelationalNoteKind::FollowUp => "follow_up",
+            sovereign_tools::knowledge_view::relational::RelationalNoteKind::Commitment => {
+                "commitment"
+            }
+            sovereign_tools::knowledge_view::relational::RelationalNoteKind::FollowUp => {
+                "follow_up"
+            }
             sovereign_tools::knowledge_view::relational::RelationalNoteKind::Goal => "goal",
         };
         let date = format_date(Some(n.anchor_timestamp));
         let age_days = (now.saturating_sub(n.anchor_timestamp)) / 86_400;
-        println!(
-            "  {} ({}): {}",
-            kind, date, n.summary
-        );
+        println!("  {} ({}): {}", kind, date, n.summary);
         println!(
             "    Status: outstanding ({} day{})",
             age_days,
@@ -447,8 +456,14 @@ mod tests {
             role: None,
             participants: Vec::new(),
             interactions: vec![
-                Interaction { timestamp: Some(100), source_chunk_id: "c1".into() },
-                Interaction { timestamp: Some(200), source_chunk_id: "c2".into() },
+                Interaction {
+                    timestamp: Some(100),
+                    source_chunk_id: "c1".into(),
+                },
+                Interaction {
+                    timestamp: Some(200),
+                    source_chunk_id: "c2".into(),
+                },
             ],
             atos_project: None,
         };
@@ -459,9 +474,10 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec!["Sarah".into()],
-            interactions: vec![
-                Interaction { timestamp: Some(300), source_chunk_id: "c3".into() },
-            ],
+            interactions: vec![Interaction {
+                timestamp: Some(300),
+                source_chunk_id: "c3".into(),
+            }],
             atos_project: None,
         };
         let mike = InteractionTimeline {
@@ -471,9 +487,10 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-            interactions: vec![
-                Interaction { timestamp: Some(150), source_chunk_id: "c1".into() },
-            ],
+            interactions: vec![Interaction {
+                timestamp: Some(150),
+                source_chunk_id: "c1".into(),
+            }],
             atos_project: None,
         };
         let all = vec![sarah.clone(), api, mike];

@@ -144,8 +144,7 @@ pub fn scan_markers(source_root: &Path) -> Vec<RoughEdgeFinding> {
                     || name == "dist"
                     || name == "build"
                     || name == "__pycache__"
-                    || name.starts_with(".")
-                        && name != ".cargo"))
+                    || name.starts_with(".") && name != ".cargo"))
         })
         .flatten()
     {
@@ -285,8 +284,7 @@ pub fn scan_doc_drift(source_root: &Path) -> Vec<RoughEdgeFinding> {
                     || name == "dist"
                     || name == "build"
                     || name == "__pycache__"
-                    || name.starts_with(".")
-                        && name != ".cargo"))
+                    || name.starts_with(".") && name != ".cargo"))
         })
         .flatten()
     {
@@ -653,8 +651,13 @@ mod tests {
         );
         let findings = scan_markers(dir.path());
         assert_eq!(findings.len(), 2);
-        assert!(matches!(findings[0].kind, FindingKind::Marker(MarkerKind::Todo) | FindingKind::Marker(MarkerKind::Fixme)));
-        assert!(findings.iter().any(|f| f.message.contains("handle the empty case")));
+        assert!(matches!(
+            findings[0].kind,
+            FindingKind::Marker(MarkerKind::Todo) | FindingKind::Marker(MarkerKind::Fixme)
+        ));
+        assert!(findings
+            .iter()
+            .any(|f| f.message.contains("handle the empty case")));
         assert!(findings.iter().any(|f| f.message.contains("off-by-one")));
     }
 
@@ -668,7 +671,10 @@ mod tests {
         );
         let findings = scan_markers(dir.path());
         assert_eq!(findings.len(), 1);
-        assert!(matches!(findings[0].kind, FindingKind::Marker(MarkerKind::Hack)));
+        assert!(matches!(
+            findings[0].kind,
+            FindingKind::Marker(MarkerKind::Hack)
+        ));
         assert_eq!(findings[0].severity, Severity::Likely);
     }
 
@@ -766,7 +772,10 @@ mod tests {
         );
         let findings = scan_doc_drift(dir.path());
         assert_eq!(findings.len(), 1);
-        assert!(matches!(findings[0].kind, FindingKind::DocDrift(DocDriftKind::SectionMismatch)));
+        assert!(matches!(
+            findings[0].kind,
+            FindingKind::DocDrift(DocDriftKind::SectionMismatch)
+        ));
         assert_eq!(findings[0].severity, Severity::Likely);
         assert!(findings[0].message.contains("Panics"));
     }
@@ -817,11 +826,7 @@ mod tests {
     fn truncates_long_snippets() {
         let dir = fixture_dir();
         let long_body = "x".repeat(500);
-        write(
-            dir.path(),
-            "lib.rs",
-            &format!("// TODO {long_body}\n"),
-        );
+        write(dir.path(), "lib.rs", &format!("// TODO {long_body}\n"));
         let findings = scan_markers(dir.path());
         assert_eq!(findings.len(), 1);
         // 160 cap + UTF-8 ellipsis (3 bytes) = 163 max

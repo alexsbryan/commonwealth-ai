@@ -19,7 +19,9 @@ impl PipelineRegistry {
     /// Empty registry. Prefer `builtin()` unless a test genuinely
     /// wants an isolated registry.
     pub fn new() -> Self {
-        Self { pipelines: HashMap::new() }
+        Self {
+            pipelines: HashMap::new(),
+        }
     }
 
     /// Registry pre-loaded with every built-in pipeline.

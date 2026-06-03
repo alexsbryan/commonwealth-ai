@@ -83,14 +83,10 @@ impl Tool for DeleteNoteTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::InvalidInput("missing 'id'".to_string()))?;
 
-        let deleted = self
-            .store
-            .delete_note(id)
-            .await
-            .map_err(|e| Error::Tool {
-                tool_id: "delete_note".to_string(),
-                message: e.to_string(),
-            })?;
+        let deleted = self.store.delete_note(id).await.map_err(|e| Error::Tool {
+            tool_id: "delete_note".to_string(),
+            message: e.to_string(),
+        })?;
 
         if deleted {
             Ok(StepOutput::Json(json!({ "deleted": true })))

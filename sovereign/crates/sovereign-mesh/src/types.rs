@@ -31,7 +31,7 @@ pub struct MeshMember {
     pub node_id: String,
     pub is_self: bool,
     pub status: MemberStatus,
-    pub contribution_level: u8, // 0-5 bar chart
+    pub contribution_level: u8,     // 0-5 bar chart
     pub contribution_label: String, // "Top contributor", "Mostly uses, that's ok!"
     /// Tailnet (or other reachable) addresses for this member, as
     /// known to the local daemon's gossip view. Surfaced for

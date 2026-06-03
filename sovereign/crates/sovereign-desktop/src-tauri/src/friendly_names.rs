@@ -16,36 +16,22 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 /// gendered — the wordlist defines first impressions of the user
 /// inside their friend group's mesh.
 const ADJECTIVES: &[&str] = &[
-    "Beefy", "Brassy", "Brave", "Bright", "Bold", "Breezy",
-    "Cozy", "Crisp", "Curious", "Calm", "Crunchy",
-    "Dapper", "Dandy", "Dusty",
-    "Eager", "Earnest", "Easy",
-    "Fluffy", "Frosty", "Feisty", "Fancy",
-    "Glossy", "Glad", "Gentle", "Groovy",
-    "Hearty", "Honest", "Happy",
-    "Jolly", "Jaunty", "Jazzy",
-    "Kind", "Keen",
-    "Lucky", "Lively", "Lofty",
-    "Mighty", "Merry", "Mellow",
-    "Nifty", "Nimble", "Noble",
-    "Plucky", "Peppy", "Plush", "Polished",
-    "Quirky", "Quick",
-    "Rosy", "Royal", "Rugged",
-    "Snappy", "Sleepy", "Spry", "Sunny", "Sneaky", "Silver",
-    "Tidy", "Tame",
-    "Witty", "Wiry", "Wise",
-    "Zesty", "Zen",
+    "Beefy", "Brassy", "Brave", "Bright", "Bold", "Breezy", "Cozy", "Crisp", "Curious", "Calm",
+    "Crunchy", "Dapper", "Dandy", "Dusty", "Eager", "Earnest", "Easy", "Fluffy", "Frosty",
+    "Feisty", "Fancy", "Glossy", "Glad", "Gentle", "Groovy", "Hearty", "Honest", "Happy", "Jolly",
+    "Jaunty", "Jazzy", "Kind", "Keen", "Lucky", "Lively", "Lofty", "Mighty", "Merry", "Mellow",
+    "Nifty", "Nimble", "Noble", "Plucky", "Peppy", "Plush", "Polished", "Quirky", "Quick", "Rosy",
+    "Royal", "Rugged", "Snappy", "Sleepy", "Spry", "Sunny", "Sneaky", "Silver", "Tidy", "Tame",
+    "Witty", "Wiry", "Wise", "Zesty", "Zen",
 ];
 
 /// ~30 mascot nouns — animals, machines, vibes. Same vetting:
 /// nothing offensive, nothing too long, nothing brand-coded.
 const MASCOTS: &[&str] = &[
-    "Mac", "Falcon", "Otter", "Walrus", "Badger", "Yak", "Lemur",
-    "Manatee", "Marmot", "Pelican", "Heron", "Wombat", "Penguin",
-    "Pangolin", "Capybara", "Quokka", "Tapir", "Lynx", "Stoat",
-    "Puffin", "Narwhal", "Axolotl", "Hedgehog", "Beaver",
-    "Moose", "Bison", "Crane", "Magpie", "Raven", "Owl", "Hare",
-    "Bear", "Fox", "Wolf",
+    "Mac", "Falcon", "Otter", "Walrus", "Badger", "Yak", "Lemur", "Manatee", "Marmot", "Pelican",
+    "Heron", "Wombat", "Penguin", "Pangolin", "Capybara", "Quokka", "Tapir", "Lynx", "Stoat",
+    "Puffin", "Narwhal", "Axolotl", "Hedgehog", "Beaver", "Moose", "Bison", "Crane", "Magpie",
+    "Raven", "Owl", "Hare", "Bear", "Fox", "Wolf",
 ];
 
 /// Returns e.g. "BeefyMac".
@@ -86,7 +72,10 @@ mod tests {
             "generated name {name:?} did not start with a known adjective"
         );
         // Length sanity check — both lists have 2-letter minimums.
-        assert!(name.len() >= 4, "generated name {name:?} suspiciously short");
+        assert!(
+            name.len() >= 4,
+            "generated name {name:?} suspiciously short"
+        );
     }
 
     #[test]

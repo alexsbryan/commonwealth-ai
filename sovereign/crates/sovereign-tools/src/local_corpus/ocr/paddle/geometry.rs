@@ -54,7 +54,11 @@ impl Quad {
     fn sort_key(&self, line_tol: u32) -> (u32, u32) {
         // Bucket the y coordinate so boxes on the same visual line group
         // together, then order left→right within the line.
-        let bucket = if line_tol == 0 { self.y } else { self.y / line_tol };
+        let bucket = if line_tol == 0 {
+            self.y
+        } else {
+            self.y / line_tol
+        };
         (bucket, self.x)
     }
 }
@@ -63,8 +67,14 @@ impl Quad {
 /// but we guard the degenerate zero-size case so recognition never sees
 /// an empty image.
 pub fn crop(page: &DynamicImage, quad: &Quad) -> DynamicImage {
-    let w = quad.w.max(1).min(page.width().saturating_sub(quad.x).max(1));
-    let h = quad.h.max(1).min(page.height().saturating_sub(quad.y).max(1));
+    let w = quad
+        .w
+        .max(1)
+        .min(page.width().saturating_sub(quad.x).max(1));
+    let h = quad
+        .h
+        .max(1)
+        .min(page.height().saturating_sub(quad.y).max(1));
     page.crop_imm(quad.x, quad.y, w, h)
 }
 
@@ -93,7 +103,12 @@ mod tests {
     #[test]
     fn unclip_expands_and_clamps() {
         // A 100x20 box well inside a 1000x1000 page.
-        let q = Quad { x: 200, y: 200, w: 100, h: 20 };
+        let q = Quad {
+            x: 200,
+            y: 200,
+            w: 100,
+            h: 20,
+        };
         let u = q.unclip(1.5, 1000, 1000);
         // area=2000, peri=240, dist=round(2000*1.5/240)=round(12.5)=13.
         assert_eq!(u.x, 187);
@@ -104,7 +119,12 @@ mod tests {
 
     #[test]
     fn unclip_clamps_to_page_bounds() {
-        let q = Quad { x: 2, y: 2, w: 50, h: 50 };
+        let q = Quad {
+            x: 2,
+            y: 2,
+            w: 50,
+            h: 50,
+        };
         let u = q.unclip(2.0, 60, 60);
         // dist=round(2500*2/200)=25 → x0 = max(2-25,0)=0, clamped.
         assert_eq!(u.x, 0);
@@ -118,9 +138,24 @@ mod tests {
         // Two lines; second line's left box should still come after both
         // first-line boxes. Heights ~20 → line_tol 10.
         let mut quads = vec![
-            Quad { x: 300, y: 10, w: 50, h: 20 }, // line 1, right
-            Quad { x: 10, y: 12, w: 50, h: 20 },  // line 1, left
-            Quad { x: 10, y: 80, w: 50, h: 20 },  // line 2, left
+            Quad {
+                x: 300,
+                y: 10,
+                w: 50,
+                h: 20,
+            }, // line 1, right
+            Quad {
+                x: 10,
+                y: 12,
+                w: 50,
+                h: 20,
+            }, // line 1, left
+            Quad {
+                x: 10,
+                y: 80,
+                w: 50,
+                h: 20,
+            }, // line 2, left
         ];
         sort_reading_order(&mut quads);
         assert_eq!(quads[0].x, 10); // line1 left

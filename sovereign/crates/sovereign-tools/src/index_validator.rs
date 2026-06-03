@@ -12,8 +12,7 @@ use std::sync::Arc;
 use corpus_engine::CorpusEngine;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::health::{
-    Component, HealthCheckable, HealthIssue, HealthReport, RepairKind,
-    RepairOutcome, UpdateDelta,
+    Component, HealthCheckable, HealthIssue, HealthReport, RepairKind, RepairOutcome, UpdateDelta,
 };
 
 /// Convert a corpus-engine error to a sovereign-core error.
@@ -164,9 +163,8 @@ impl HealthCheckable for CorpusIndexChecker {
     fn repair(
         &self,
         issue: &HealthIssue,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<RepairOutcome>> + Send + '_>,
-    > {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<RepairOutcome>> + Send + '_>>
+    {
         let issue = issue.clone();
         Box::pin(async move {
             match &issue {
@@ -181,11 +179,17 @@ impl HealthCheckable for CorpusIndexChecker {
                         }),
                     }
                 }
-                HealthIssue::CorruptEmbeddings { corpus_id, bad_chunk_ids } => {
+                HealthIssue::CorruptEmbeddings {
+                    corpus_id,
+                    bad_chunk_ids,
+                } => {
                     let embed_fn = self.engine.embed_fn();
                     match self.engine.open_index_for_corpus(corpus_id).await {
                         Ok(index) => {
-                            index.re_embed_chunks(bad_chunk_ids, &embed_fn).await.map_err(ce)?;
+                            index
+                                .re_embed_chunks(bad_chunk_ids, &embed_fn)
+                                .await
+                                .map_err(ce)?;
                             Ok(RepairOutcome::Resolved)
                         }
                         Err(_) => Ok(RepairOutcome::Failed {
@@ -193,7 +197,11 @@ impl HealthCheckable for CorpusIndexChecker {
                         }),
                     }
                 }
-                HealthIssue::PartialIngestion { corpus_id, resume_from, .. } => {
+                HealthIssue::PartialIngestion {
+                    corpus_id,
+                    resume_from,
+                    ..
+                } => {
                     if let Some(cursor) = resume_from {
                         Ok(RepairOutcome::NeedsUserDecision {
                             question: format!(
@@ -256,7 +264,11 @@ impl HealthCheckable for CorpusIndexChecker {
         // gets repaired silently, large drift surfaces as a user
         // decision via the standard `maybe_surface_decision` path.
         match issue {
-            HealthIssue::FtsDesync { chunk_count, fts_count, .. } => {
+            HealthIssue::FtsDesync {
+                chunk_count,
+                fts_count,
+                ..
+            } => {
                 let delta = chunk_count.abs_diff(*fts_count);
                 delta <= AUTO_FTS_REPAIR_MAX_DELTA
             }

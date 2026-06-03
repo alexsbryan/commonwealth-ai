@@ -11,7 +11,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use futures::StreamExt as _;
-use sovereign_core::models_manifest::{DEFAULT_MANIFEST, SlotConfig};
+use sovereign_core::models_manifest::{SlotConfig, DEFAULT_MANIFEST};
 
 use crate::hardware::ProfileName;
 use crate::{validate_gguf, GgufExpectation};
@@ -148,10 +148,7 @@ pub fn hf_download_url(slot: &SlotConfig) -> String {
     if slot.hf_url.contains("/resolve/") {
         slot.hf_url.clone()
     } else {
-        format!(
-            "https://huggingface.co/{repo}/resolve/main/{}",
-            slot.file
-        )
+        format!("https://huggingface.co/{repo}/resolve/main/{}", slot.file)
     }
 }
 
@@ -219,10 +216,7 @@ pub async fn download_gguf(
     if let Some(tok) = hf_token() {
         req = req.bearer_auth(tok);
     }
-    let resp = req
-        .send()
-        .await
-        .map_err(|e| format!("GET {url}: {e}"))?;
+    let resp = req.send().await.map_err(|e| format!("GET {url}: {e}"))?;
     if !resp.status().is_success() && resp.status().as_u16() != 206 {
         return Err(format!("GET {url}: {}", resp.status()));
     }
@@ -266,10 +260,7 @@ pub async fn download_gguf(
     Ok(())
 }
 
-fn reject_non_binary_content_type(
-    resp: &reqwest::Response,
-    url: &str,
-) -> Result<(), String> {
+fn reject_non_binary_content_type(resp: &reqwest::Response, url: &str) -> Result<(), String> {
     let Some(ct) = resp
         .headers()
         .get(reqwest::header::CONTENT_TYPE)

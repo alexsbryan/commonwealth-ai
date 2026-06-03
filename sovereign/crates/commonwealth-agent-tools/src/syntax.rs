@@ -54,7 +54,10 @@ impl SyntaxError {
             let pad = " ".repeat(line_str.len());
             out.push_str(&format!("{pad} |\n"));
             out.push_str(&format!("{line_str} | {src}\n"));
-            out.push_str(&format!("{pad} | {}^\n", " ".repeat(self.col.saturating_sub(1) as usize)));
+            out.push_str(&format!(
+                "{pad} | {}^\n",
+                " ".repeat(self.col.saturating_sub(1) as usize)
+            ));
         }
         out
     }
@@ -335,9 +338,7 @@ impl SyntaxValidator for PythonSyntaxValidator {
         // open: we couldn't determine if the content was valid, so
         // let the write through and let cargo/pytest catch it later.
         if output.status.code() == Some(124) {
-            tracing::warn!(
-                "PythonSyntaxValidator: timeout(10s) elapsed; fail-open"
-            );
+            tracing::warn!("PythonSyntaxValidator: timeout(10s) elapsed; fail-open");
             return Vec::new();
         }
         if output.status.success() {
@@ -376,9 +377,7 @@ fn parse_cpython_syntax_error(stderr: &str, path: &Path, content: &str) -> Vec<S
         // "SyntaxError: <msg>" or "IndentationError: <msg>" etc.
         if let Some((kind, rest)) = l.split_once(": ") {
             if kind.ends_with("Error")
-                && (kind.contains("Syntax")
-                    || kind.contains("Indentation")
-                    || kind.contains("Tab"))
+                && (kind.contains("Syntax") || kind.contains("Indentation") || kind.contains("Tab"))
             {
                 message = Some(rest.to_string());
             }
@@ -445,9 +444,12 @@ mod tests {
         let v = RustSyntaxValidator::new();
         let errors = v.check_file(
             Path::new("src/lib.rs"),
-            "pub fn f() { let x = 1; ",  // missing closing brace
+            "pub fn f() { let x = 1; ", // missing closing brace
         );
-        assert!(!errors.is_empty(), "expected parse error for unbalanced braces");
+        assert!(
+            !errors.is_empty(),
+            "expected parse error for unbalanced braces"
+        );
         let e = &errors[0];
         assert_eq!(e.file, Path::new("src/lib.rs"));
         assert!(!e.message.is_empty());
@@ -458,10 +460,7 @@ mod tests {
         // `;;;` is a stream of empty statements, valid. A real broken
         // construct is missing-fn-body: `pub fn f() -> u8` (no `{...}`).
         let v = RustSyntaxValidator::new();
-        let errors = v.check_file(
-            Path::new("src/lib.rs"),
-            "pub fn f() -> u8",
-        );
+        let errors = v.check_file(Path::new("src/lib.rs"), "pub fn f() -> u8");
         assert!(!errors.is_empty());
     }
 
@@ -486,17 +485,9 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(tmp.path().join("target/release")).unwrap();
         // Place a broken file inside target/ — must be ignored.
-        std::fs::write(
-            tmp.path().join("target/release/lib.rs"),
-            "pub fn f() -> u8",
-        )
-        .unwrap();
+        std::fs::write(tmp.path().join("target/release/lib.rs"), "pub fn f() -> u8").unwrap();
         // And a clean file at the root.
-        std::fs::write(
-            tmp.path().join("src.rs"),
-            "pub fn g() -> u32 { 1 }",
-        )
-        .unwrap();
+        std::fs::write(tmp.path().join("src.rs"), "pub fn g() -> u32 { 1 }").unwrap();
         std::fs::create_dir_all(tmp.path().join("src")).unwrap();
         std::fs::write(
             tmp.path().join("src/main.rs"),

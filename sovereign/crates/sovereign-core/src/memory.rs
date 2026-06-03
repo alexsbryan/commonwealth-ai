@@ -185,7 +185,12 @@ pub async fn compress_working_memory(
         if !prev.facts.is_empty() {
             context_prefix.push_str(&format!(
                 "Known facts: {}\n",
-                prev.facts.iter().take(5).cloned().collect::<Vec<_>>().join("; ")
+                prev.facts
+                    .iter()
+                    .take(5)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join("; ")
             ));
         }
     }
@@ -209,20 +214,20 @@ pub async fn compress_working_memory(
         max_tokens: Some(200),
         temperature: Some(0.1),
         structured_output: None,
-            think_budget: None,
+        think_budget: None,
         top_k: None,
         top_p: None,
         oicp: None,
-                tools: None,
-                tool_choice: None,
-                    model_id: None,
-                    enable_thinking: None,
-    sampling_mode: None,
-    assistant_prefix: None,
-    cmd_prefix: None,
-    url_allowlist: None,
-    evidence_id_allowlist: None,
-    lark_grammar: None,
+        tools: None,
+        tool_choice: None,
+        model_id: None,
+        enable_thinking: None,
+        sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -238,10 +243,7 @@ pub async fn compress_working_memory(
 }
 
 /// Parse working memory from LLM response, with fallback.
-fn parse_working_memory(
-    text: &str,
-    previous: Option<&WorkingMemory>,
-) -> Result<WorkingMemory> {
+fn parse_working_memory(text: &str, previous: Option<&WorkingMemory>) -> Result<WorkingMemory> {
     // Try full JSON parse first.
     if let Some(json_str) = extract_json_object(text) {
         if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str) {
@@ -451,10 +453,7 @@ const RELATIONAL_INFER_THRESHOLD: f64 = 0.5;
 ///   2026-03-12 that…" instead of flat assertions.
 ///
 /// Returns `None` when `memories` is empty.
-pub fn format_memories_for_prompt(
-    memories: &[Memory],
-    register: SkillRegister,
-) -> Option<String> {
+pub fn format_memories_for_prompt(memories: &[Memory], register: SkillRegister) -> Option<String> {
     if memories.is_empty() {
         return None;
     }
@@ -667,15 +666,13 @@ Reply with a JSON array, one entry per memory, in the original order:\n\
         .into_iter()
         .filter(|item| item.relation == "tension")
         .filter_map(|item| {
-            candidates
-                .get(item.index)
-                .map(|m| TemporalTension {
-                    memory_id: m.id.clone(),
-                    prior_content: m.content.clone(),
-                    prior_created_at: m.created_at,
-                    prior_has_source_conversation: m.source_conversation_id.is_some(),
-                    current_excerpt: excerpt.clone(),
-                })
+            candidates.get(item.index).map(|m| TemporalTension {
+                memory_id: m.id.clone(),
+                prior_content: m.content.clone(),
+                prior_created_at: m.created_at,
+                prior_has_source_conversation: m.source_conversation_id.is_some(),
+                current_excerpt: excerpt.clone(),
+            })
         })
         .collect();
 
@@ -770,20 +767,20 @@ pub async fn detect_contradictions(
         max_tokens: Some(50),
         temperature: Some(0.0),
         structured_output: None,
-            think_budget: None,
+        think_budget: None,
         top_k: None,
         top_p: None,
         oicp: None,
-                tools: None,
-                tool_choice: None,
-                    model_id: None,
-                    enable_thinking: None,
-    sampling_mode: None,
-    assistant_prefix: None,
-    cmd_prefix: None,
-    url_allowlist: None,
-    evidence_id_allowlist: None,
-    lark_grammar: None,
+        tools: None,
+        tool_choice: None,
+        model_id: None,
+        enable_thinking: None,
+        sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -981,16 +978,13 @@ pub async fn prune_decayed_memories_with_config(
     let mut pruned = 0;
 
     for memory in &all {
-        let decayed = apply_confidence_decay_with_rate_and_inventory(
-            memory, now_ts, decay_rate, inventory,
-        );
+        let decayed =
+            apply_confidence_decay_with_rate_and_inventory(memory, now_ts, decay_rate, inventory);
         if decayed < prune_threshold {
             store.delete_memory(&memory.id).await?;
             pruned += 1;
         } else if (decayed - memory.confidence).abs() > 0.01 {
-            store
-                .update_memory_confidence(&memory.id, decayed)
-                .await?;
+            store.update_memory_confidence(&memory.id, decayed).await?;
         }
     }
 
@@ -1009,7 +1003,10 @@ pub async fn save_with_contradiction_check(
 
     // Check for exact duplicate content.
     let new_lower = new_memory.content.trim().to_lowercase();
-    if existing.iter().any(|m| m.content.trim().to_lowercase() == new_lower) {
+    if existing
+        .iter()
+        .any(|m| m.content.trim().to_lowercase() == new_lower)
+    {
         return Ok(());
     }
 
@@ -1191,7 +1188,14 @@ pub async fn read_recent_tool_decisions(
         limit.min(100)
     };
     let rows = notes
-        .read_notes(None, &[], &[], &["tool_decision".to_string()], fetch_cap, false)
+        .read_notes(
+            None,
+            &[],
+            &[],
+            &["tool_decision".to_string()],
+            fetch_cap,
+            false,
+        )
         .await
         .map_err(|e| Error::Storage(e.to_string()))?;
 
@@ -1248,18 +1252,14 @@ mod tests {
     fn entity_linked_memory_decays_at_half_rate() {
         // One month at default 10%/month: unweighted lands at 0.90,
         // entity-linked lands at 0.95.
-        let mem = mem_with_content(
-            "Discussed Q3 strategy with Sarah Chen at the offsite.",
-        );
+        let mem = mem_with_content("Discussed Q3 strategy with Sarah Chen at the offsite.");
         let inventory = entity_inventory_from_names(["Sarah Chen", "Mike Torres"]);
         let one_month = 30 * 86400;
 
-        let weighted = apply_confidence_decay_with_rate_and_inventory(
-            &mem, one_month, 0.10, Some(&inventory),
-        );
-        let unweighted = apply_confidence_decay_with_rate_and_inventory(
-            &mem, one_month, 0.10, None,
-        );
+        let weighted =
+            apply_confidence_decay_with_rate_and_inventory(&mem, one_month, 0.10, Some(&inventory));
+        let unweighted =
+            apply_confidence_decay_with_rate_and_inventory(&mem, one_month, 0.10, None);
 
         assert!((weighted - 0.95).abs() < 0.001, "weighted={weighted}");
         assert!((unweighted - 0.90).abs() < 0.001, "unweighted={unweighted}");
@@ -1270,9 +1270,8 @@ mod tests {
         let mem = mem_with_content("Just thinking about software architecture.");
         let inventory = entity_inventory_from_names(["Sarah Chen", "API migration"]);
         let one_month = 30 * 86400;
-        let decayed = apply_confidence_decay_with_rate_and_inventory(
-            &mem, one_month, 0.10, Some(&inventory),
-        );
+        let decayed =
+            apply_confidence_decay_with_rate_and_inventory(&mem, one_month, 0.10, Some(&inventory));
         // No match → full decay → 0.90.
         assert!((decayed - 0.90).abs() < 0.001);
     }
@@ -1294,9 +1293,7 @@ mod tests {
 
     #[test]
     fn multi_word_entity_name_matches() {
-        let mem = mem_with_content(
-            "The API migration is on track for end of Q2.",
-        );
+        let mem = mem_with_content("The API migration is on track for end of Q2.");
         let inventory = entity_inventory_from_names(["API migration"]);
         assert!(memory_mentions_any_entity(&mem.content, &inventory));
     }
@@ -1306,9 +1303,8 @@ mod tests {
         let mem = mem_with_content("Sarah Chen mentioned the Q3 push.");
         let inventory: EntityInventory = EntityInventory::new();
         let one_month = 30 * 86400;
-        let decayed = apply_confidence_decay_with_rate_and_inventory(
-            &mem, one_month, 0.10, Some(&inventory),
-        );
+        let decayed =
+            apply_confidence_decay_with_rate_and_inventory(&mem, one_month, 0.10, Some(&inventory));
         assert!((decayed - 0.90).abs() < 0.001);
     }
 
@@ -1319,9 +1315,8 @@ mod tests {
         let mem = mem_with_content("Sarah Chen flagged a budget concern.");
         let inventory = entity_inventory_from_names(["Sarah Chen"]);
         let one_month = 30 * 86400;
-        let weighted = apply_confidence_decay_with_rate_and_inventory(
-            &mem, one_month, 0.15, Some(&inventory),
-        );
+        let weighted =
+            apply_confidence_decay_with_rate_and_inventory(&mem, one_month, 0.15, Some(&inventory));
         // Effective rate 0.075 → retention 0.925 → after 1 month 0.925.
         assert!((weighted - 0.925).abs() < 0.001, "weighted={weighted}");
     }
@@ -1402,8 +1397,7 @@ mod tests {
                 ..Default::default()
             },
         ];
-        let result =
-            format_memories_for_prompt(&memories, SkillRegister::Factual).unwrap();
+        let result = format_memories_for_prompt(&memories, SkillRegister::Factual).unwrap();
         assert!(result.contains("Known facts about the user:"));
         assert!(result.contains("- User prefers Rust"));
         assert!(result.contains("- User is a backend engineer"));
@@ -1437,16 +1431,26 @@ mod tests {
     #[test]
     fn relational_register_splits_into_three_confidence_bands() {
         // 2026-03-12 00:00:00 UTC = 1773273600
-        let directly = mem("d", "I want to leave the job", 0.92, 1_773_273_600, Some("c-mar"));
+        let directly = mem(
+            "d",
+            "I want to leave the job",
+            0.92,
+            1_773_273_600,
+            Some("c-mar"),
+        );
         // 2026-04-08 00:00:00 UTC = 1775606400
-        let inferred = mem("i", "Work and meaning are linked for you", 0.62, 1_775_606_400, Some("c-apr"));
+        let inferred = mem(
+            "i",
+            "Work and meaning are linked for you",
+            0.62,
+            1_775_606_400,
+            Some("c-apr"),
+        );
         let tentative = mem("t", "You may be avoiding conflict with Mark", 0.35, 0, None);
 
-        let result = format_memories_for_prompt(
-            &[directly, inferred, tentative],
-            SkillRegister::Relational,
-        )
-        .unwrap();
+        let result =
+            format_memories_for_prompt(&[directly, inferred, tentative], SkillRegister::Relational)
+                .unwrap();
 
         assert!(result.contains("What you've told me directly:"));
         assert!(result.contains("What I've inferred from earlier conversations:"));
@@ -1463,11 +1467,7 @@ mod tests {
     #[test]
     fn relational_register_omits_date_when_no_source_conversation() {
         let undated = mem("u", "User prefers Rust", 0.95, 1_773_273_600, None);
-        let result = format_memories_for_prompt(
-            &[undated],
-            SkillRegister::Relational,
-        )
-        .unwrap();
+        let result = format_memories_for_prompt(&[undated], SkillRegister::Relational).unwrap();
         // Date should not appear because source_conversation_id is None,
         // even though created_at would resolve to a valid date.
         assert!(!result.contains("[2026-03-12]"));
@@ -1477,11 +1477,8 @@ mod tests {
     #[test]
     fn relational_register_skips_empty_bands() {
         let only_directly = mem("d", "I told you X", 0.95, 1_773_273_600, Some("c"));
-        let result = format_memories_for_prompt(
-            &[only_directly],
-            SkillRegister::Relational,
-        )
-        .unwrap();
+        let result =
+            format_memories_for_prompt(&[only_directly], SkillRegister::Relational).unwrap();
         // Only the band that has content should render.
         assert!(result.contains("What you've told me directly:"));
         assert!(!result.contains("What I've inferred"));
@@ -1497,11 +1494,8 @@ mod tests {
         // 0.4999... — just below inferred threshold.
         let m_49 = mem("c", "tentative", 0.49, 0, None);
 
-        let result = format_memories_for_prompt(
-            &[m_85, m_50, m_49],
-            SkillRegister::Relational,
-        )
-        .unwrap();
+        let result =
+            format_memories_for_prompt(&[m_85, m_50, m_49], SkillRegister::Relational).unwrap();
         // The directly band lists "boundary directly".
         let directly_idx = result.find("What you've told me directly:").unwrap();
         let inferred_idx = result.find("What I've inferred").unwrap();
@@ -1596,10 +1590,7 @@ mod tests {
 
     #[async_trait]
     impl InferenceProvider for ScriptedInference {
-        async fn complete(
-            &self,
-            request: &CompletionRequest,
-        ) -> Result<CompletionResponse> {
+        async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
             *self.last_prompt.lock().unwrap() = Some(request.prompt.clone());
             Ok(CompletionResponse {
                 text: self.response_text.clone(),
@@ -1609,14 +1600,17 @@ mod tests {
                 latency_ms: 0,
                 oicp_meta: None,
                 finish_reason: None,
-                completion_tokens: None,            })
+                completion_tokens: None,
+            })
         }
 
         async fn complete_stream(
             &self,
             _request: &CompletionRequest,
         ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-            Err(Error::NotImplemented("ScriptedInference: streaming unused".into()))
+            Err(Error::NotImplemented(
+                "ScriptedInference: streaming unused".into(),
+            ))
         }
 
         async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
@@ -1658,7 +1652,9 @@ mod tests {
     #[tokio::test]
     async fn detect_tensions_returns_empty_when_no_candidate_memories() {
         let infer = ScriptedInference::new("[]");
-        let out = detect_temporal_tensions(&infer, "anything", &[]).await.unwrap();
+        let out = detect_temporal_tensions(&infer, "anything", &[])
+            .await
+            .unwrap();
         assert!(out.is_empty());
         // The provider must NOT have been called when there are no
         // candidates (zero-cost guarantee for casual chat).
@@ -1670,7 +1666,9 @@ mod tests {
         // 0.6 < RELATIONAL_DIRECT_THRESHOLD (0.85) — should be filtered.
         let infer = ScriptedInference::new("[]");
         let mems = vec![relational_mem("a", "guess", 0.6, 0, None)];
-        let out = detect_temporal_tensions(&infer, "anything", &mems).await.unwrap();
+        let out = detect_temporal_tensions(&infer, "anything", &mems)
+            .await
+            .unwrap();
         assert!(out.is_empty());
         // No directly-stated candidates → no inference call.
         assert!(infer.last_prompt.lock().unwrap().is_none());
@@ -1688,7 +1686,13 @@ mod tests {
         );
         let mems = vec![
             relational_mem("m0", "I love my job", 0.95, 1_773_273_600, Some("c1")),
-            relational_mem("m1", "I want to leave the job", 0.92, 1_773_273_600, Some("c2")),
+            relational_mem(
+                "m1",
+                "I want to leave the job",
+                0.92,
+                1_773_273_600,
+                Some("c2"),
+            ),
             relational_mem("m2", "I cook on Sundays", 0.90, 0, None),
         ];
         let out = detect_temporal_tensions(&infer, "this is a place I want to grow", &mems)
@@ -1708,7 +1712,9 @@ mod tests {
         // just return empty so the turn proceeds.
         let infer = ScriptedInference::new("I'm not sure what you mean.");
         let mems = vec![relational_mem("m", "I told you X", 0.95, 0, Some("c"))];
-        let out = detect_temporal_tensions(&infer, "current", &mems).await.unwrap();
+        let out = detect_temporal_tensions(&infer, "current", &mems)
+            .await
+            .unwrap();
         assert!(out.is_empty());
     }
 
@@ -1718,7 +1724,9 @@ mod tests {
             "Here's the classification:\n```json\n[{\"index\": 0, \"relation\": \"tension\"}]\n```",
         );
         let mems = vec![relational_mem("m", "I told you X", 0.95, 0, Some("c"))];
-        let out = detect_temporal_tensions(&infer, "current", &mems).await.unwrap();
+        let out = detect_temporal_tensions(&infer, "current", &mems)
+            .await
+            .unwrap();
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].memory_id, "m");
     }
@@ -1728,7 +1736,9 @@ mod tests {
         let infer = ScriptedInference::new(r#"[{"index": 0, "relation": "tension"}]"#);
         let mems = vec![relational_mem("m", "prior", 0.95, 0, None)];
         let long_message = "x".repeat(500);
-        let out = detect_temporal_tensions(&infer, &long_message, &mems).await.unwrap();
+        let out = detect_temporal_tensions(&infer, &long_message, &mems)
+            .await
+            .unwrap();
         assert_eq!(out.len(), 1);
         // Excerpt cap is TENSION_EXCERPT_CHAR_CAP (240) + ellipsis.
         assert!(out[0].current_excerpt.chars().count() <= TENSION_EXCERPT_CHAR_CAP + 1);
@@ -1750,7 +1760,9 @@ mod tests {
         let mems: Vec<Memory> = (0..7)
             .map(|i| relational_mem(&format!("m{i}"), &format!("memory {i}"), 0.95, 0, None))
             .collect();
-        let out = detect_temporal_tensions(&infer, "current", &mems).await.unwrap();
+        let out = detect_temporal_tensions(&infer, "current", &mems)
+            .await
+            .unwrap();
         // At most MAX_TENSION_CANDIDATES (5), regardless of memories supplied.
         assert!(out.len() <= MAX_TENSION_CANDIDATES);
     }
@@ -1845,7 +1857,7 @@ mod tests {
             "search",
             ToolDecisionOutcome::WrongTool,
             "should have used knowledge_lookup",
-                    ToolDecisionExtras::none(),
+            ToolDecisionExtras::none(),
         )
         .await
         .unwrap();

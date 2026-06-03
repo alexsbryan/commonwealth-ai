@@ -179,7 +179,9 @@ impl ApprovalChannel for AutoApprovalChannel {
 
     fn emit_progress(&self, step: &Step, output: &StepOutput) {
         let status = match output {
-            StepOutput::Text(_) | StepOutput::Json(_) | StepOutput::ReasonWithToolsResult { .. } => "done",
+            StepOutput::Text(_)
+            | StepOutput::Json(_)
+            | StepOutput::ReasonWithToolsResult { .. } => "done",
             StepOutput::Jump(t) => {
                 tracing::info!(
                     step_id = step.id,
@@ -291,7 +293,9 @@ fn propagate_skips(plan: &Plan, completed: &mut HashMap<usize, StepOutput>) {
             _ => continue,
         };
 
-        completed.entry(skipped_target).or_insert(StepOutput::Skipped);
+        completed
+            .entry(skipped_target)
+            .or_insert(StepOutput::Skipped);
 
         let mut queue = vec![skipped_target];
         while let Some(current) = queue.pop() {
@@ -395,8 +399,7 @@ impl Executor {
                 }
             }
 
-            ctx.task.completed_steps =
-                ctx.completed.iter().map(|(&k, v)| (k, v.clone())).collect();
+            ctx.task.completed_steps = ctx.completed.iter().map(|(&k, v)| (k, v.clone())).collect();
             ctx.task.updated_at = now();
             let _ = self.store.save_task(&ctx.task).await;
         }
@@ -455,13 +458,12 @@ impl Executor {
                 let resolved = resolve_inputs(prompt_template, &step.inputs, completed)?;
 
                 let base_system = "You are a helpful assistant performing a step in a multi-step task. Be thorough and specific.";
-                let system_message = if let Some(overrides) =
-                    self.skills.prompt_overrides(&Intent::ComplexTask)
-                {
-                    format!("{overrides}\n\n{base_system}")
-                } else {
-                    base_system.to_string()
-                };
+                let system_message =
+                    if let Some(overrides) = self.skills.prompt_overrides(&Intent::ComplexTask) {
+                        format!("{overrides}\n\n{base_system}")
+                    } else {
+                        base_system.to_string()
+                    };
 
                 // Attach OICP requirements from active skills. If
                 // skills haven't declared a latency class, derive one
@@ -502,20 +504,20 @@ impl Executor {
                     max_tokens: Some(budget.max_tokens),
                     temperature: Some(0.7),
                     structured_output: None,
-            think_budget: None,
+                    think_budget: None,
                     top_k: None,
                     top_p: None,
                     oicp,
                     tools: None,
                     tool_choice: None,
-                                    model_id: None,
-                                    enable_thinking: None,
-                sampling_mode: None,
-                assistant_prefix: None,
-                cmd_prefix: None,
-                url_allowlist: None,
-                evidence_id_allowlist: None,
-                lark_grammar: None,
+                    model_id: None,
+                    enable_thinking: None,
+                    sampling_mode: None,
+                    assistant_prefix: None,
+                    cmd_prefix: None,
+                    url_allowlist: None,
+                    evidence_id_allowlist: None,
+                    lark_grammar: None,
                 };
 
                 // Best-of-N sampling or single completion.
@@ -566,8 +568,8 @@ impl Executor {
 
             StepKind::Tool { tool_id, params } => {
                 // 1. Resolve params.
-                let params_str = serde_json::to_string(params)
-                    .map_err(|e| Error::Execution(e.to_string()))?;
+                let params_str =
+                    serde_json::to_string(params).map_err(|e| Error::Execution(e.to_string()))?;
                 let resolved_str = resolve_inputs(&params_str, &step.inputs, completed)?;
                 let resolved_params: serde_json::Value = serde_json::from_str(&resolved_str)
                     .map_err(|e| Error::Execution(format!("Invalid resolved params: {e}")))?;
@@ -587,9 +589,7 @@ impl Executor {
                 // — that's almost always a missing declaration, not a
                 // deliberate choice. Surface it so per-tool permission
                 // tightening (see §12 Roadmap) has a visible signal.
-                if perms.is_empty()
-                    && tool.descriptor().effect != Effect::Read
-                {
+                if perms.is_empty() && tool.descriptor().effect != Effect::Read {
                     tracing::warn!(
                         tool_id = %tool_id,
                         effect = ?tool.descriptor().effect,
@@ -616,8 +616,7 @@ impl Executor {
                                 params: resolved_params.clone(),
                             };
 
-                            let approved =
-                                self.approval.request_approval(step, &preview).await?;
+                            let approved = self.approval.request_approval(step, &preview).await?;
 
                             if !approved {
                                 return Ok(StepOutput::Skipped);
@@ -652,11 +651,7 @@ impl Executor {
 
                 for attempt in 0..=retry.max_retries {
                     if attempt > 0 {
-                        let delay = retry
-                            .backoff_ms
-                            .get(attempt - 1)
-                            .copied()
-                            .unwrap_or(3000);
+                        let delay = retry.backoff_ms.get(attempt - 1).copied().unwrap_or(3000);
                         tracing::info!(
                             tool_id = %tool_id,
                             attempt,
@@ -673,7 +668,11 @@ impl Executor {
                     // (knowledge_lookup, code-intel) hit the cache
                     // on duplicate args; non-idempotent tools
                     // bypass entirely per descriptor.idempotency.
-                    match self.tools.call_cached(tool_id, &resolved_params, &tool_ctx).await {
+                    match self
+                        .tools
+                        .call_cached(tool_id, &resolved_params, &tool_ctx)
+                        .await
+                    {
                         Ok(output) => return Ok(output),
                         Err(e) => {
                             let msg = e.to_string().to_lowercase();
@@ -698,9 +697,8 @@ impl Executor {
                     }
                 }
 
-                Err(last_error.unwrap_or_else(|| {
-                    Error::Execution("All retries exhausted".to_string())
-                }))
+                Err(last_error
+                    .unwrap_or_else(|| Error::Execution("All retries exhausted".to_string())))
             }
 
             StepKind::UserInput { question } => {
@@ -869,16 +867,11 @@ impl Executor {
             }
         }
 
-        let system = self.build_retrieval_reasoning_prompt(
-            &tool_descs,
-            &tool_signals,
-            max_iterations,
-        );
+        let system =
+            self.build_retrieval_reasoning_prompt(&tool_descs, &tool_signals, max_iterations);
 
         // Build the growing conversation as a single prompt.
-        let mut conversation = format!(
-            "{system}\n\n---\n\nUser question: {prompt}\n\nAssistant:"
-        );
+        let mut conversation = format!("{system}\n\n---\n\nUser question: {prompt}\n\nAssistant:");
 
         let mut search_log: Vec<SearchLogEntry> = Vec::new();
         let mut iterations = 0;
@@ -891,20 +884,20 @@ impl Executor {
                 max_tokens: Some(2048),
                 temperature: Some(0.3),
                 structured_output: None,
-            think_budget: None,
+                think_budget: None,
                 top_k: None,
                 top_p: None,
                 oicp: None,
                 tools: None,
                 tool_choice: None,
-                            model_id: None,
-                            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -925,7 +918,11 @@ impl Executor {
                             turn_index: 0,
                         };
                         // Tier 4: cache-aware dispatch.
-                        match self.tools.call_cached(&tool_call.tool_id, &params, &ctx).await {
+                        match self
+                            .tools
+                            .call_cached(&tool_call.tool_id, &params, &ctx)
+                            .await
+                        {
                             Ok(output) => match output {
                                 StepOutput::Text(t) => t,
                                 StepOutput::Json(v) => v
@@ -979,20 +976,20 @@ impl Executor {
                         max_tokens: Some(2048),
                         temperature: Some(0.3),
                         structured_output: None,
-            think_budget: None,
+                        think_budget: None,
                         top_k: None,
                         top_p: None,
                         oicp: None,
-                tools: None,
-                tool_choice: None,
-                                    model_id: None,
-                                    enable_thinking: None,
-                    sampling_mode: None,
-                    assistant_prefix: None,
-                    cmd_prefix: None,
-                    url_allowlist: None,
-                    evidence_id_allowlist: None,
-                    lark_grammar: None,
+                        tools: None,
+                        tool_choice: None,
+                        model_id: None,
+                        enable_thinking: None,
+                        sampling_mode: None,
+                        assistant_prefix: None,
+                        cmd_prefix: None,
+                        url_allowlist: None,
+                        evidence_id_allowlist: None,
+                        lark_grammar: None,
                     };
                     let final_response = self.inference.complete(&final_request).await?;
 
@@ -1153,8 +1150,7 @@ When ready to answer (without a <tool_call>):
                     candidates.len()
                 );
 
-                let request =
-                    CompletionRequest::new(&judge_prompt).with_speed(Speed::Fast);
+                let request = CompletionRequest::new(&judge_prompt).with_speed(Speed::Fast);
                 let response = self.inference.complete(&request).await?;
                 let choice: usize = response.text.trim().parse().unwrap_or(1);
                 let idx = choice.saturating_sub(1).min(candidates.len() - 1);
@@ -1230,8 +1226,8 @@ When ready to answer (without a <tool_call>):
                 &text[..text.len().min(2000)]
             );
 
-            let eval_request = CompletionRequest::new(&eval_prompt)
-                .with_speed(eval_config.eval_speed);
+            let eval_request =
+                CompletionRequest::new(&eval_prompt).with_speed(eval_config.eval_speed);
             let eval_response = self.inference.complete(&eval_request).await?;
 
             // Parse evaluation result.
@@ -1368,12 +1364,8 @@ mod tests {
                 key: "output".to_string(),
             },
         ];
-        let result = resolve_inputs(
-            "Compare: {0.output} vs {1.output}",
-            &inputs,
-            &completed,
-        )
-        .unwrap();
+        let result =
+            resolve_inputs("Compare: {0.output} vs {1.output}", &inputs, &completed).unwrap();
         assert_eq!(result, "Compare: Python is great vs Rust is fast");
     }
 

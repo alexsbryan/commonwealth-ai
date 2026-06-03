@@ -7,9 +7,8 @@ use tokio_postgres::NoTls;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::observer::{noop_observer, SharedStateStoreObserver};
 use sovereign_core::traits::{
-    BudgetStore, ConversationStore, CorpusStateStore, DocumentSessionStore,
-    DocumentStore, HealthStore, MemoryStore, PermissionStore, RoutingStore,
-    StateStore, TaskStore,
+    BudgetStore, ConversationStore, CorpusStateStore, DocumentSessionStore, DocumentStore,
+    HealthStore, MemoryStore, PermissionStore, RoutingStore, StateStore, TaskStore,
 };
 use sovereign_core::types::*;
 
@@ -243,7 +242,11 @@ impl PostgresStateStore {
 #[async_trait]
 impl ConversationStore for PostgresStateStore {
     async fn save_message(&self, msg: &Message) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let now = Self::now();
 
         // Upsert conversation.
@@ -265,7 +268,14 @@ impl ConversationStore for PostgresStateStore {
                 "INSERT INTO messages (id, conversation_id, role, content, created_at, metadata) \
                  VALUES ($1, $2, $3, $4, $5, $6) \
                  ON CONFLICT (id) DO NOTHING",
-                &[&msg.id, &msg.conversation_id, &role, &msg.content, &msg.created_at, &metadata],
+                &[
+                    &msg.id,
+                    &msg.conversation_id,
+                    &role,
+                    &msg.content,
+                    &msg.created_at,
+                    &metadata,
+                ],
             )
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
@@ -278,7 +288,11 @@ impl ConversationStore for PostgresStateStore {
     }
 
     async fn get_conversation(&self, id: &str) -> Result<Conversation> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
 
         let row = client
             .query_opt(
@@ -306,20 +320,29 @@ impl ConversationStore for PostgresStateStore {
                 Message {
                     id: r.get("id"),
                     conversation_id: r.get("conversation_id"),
-                    role: if role_str == "user" { Role::User } else if role_str == "system" { Role::System } else { Role::Assistant },
+                    role: if role_str == "user" {
+                        Role::User
+                    } else if role_str == "system" {
+                        Role::System
+                    } else {
+                        Role::Assistant
+                    },
                     content: r.get("content"),
                     created_at: r.get("created_at"),
-                    metadata: r.get::<_, Option<String>>("metadata").and_then(|s| serde_json::from_str(&s).ok()),
+                    metadata: r
+                        .get::<_, Option<String>>("metadata")
+                        .and_then(|s| serde_json::from_str(&s).ok()),
                 }
             })
             .collect();
 
         let enabled_corpora: Option<serde_json::Value> = row.get("enabled_corpora");
-        let enabled_corpora = enabled_corpora
-            .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok());
+        let enabled_corpora =
+            enabled_corpora.and_then(|v| serde_json::from_value::<Vec<String>>(v).ok());
         let searched_sources: Option<serde_json::Value> = row.get("searched_sources");
-        let searched_sources = searched_sources
-            .and_then(|v| serde_json::from_value::<Vec<sovereign_core::types::SearchedSourceEntry>>(v).ok());
+        let searched_sources = searched_sources.and_then(|v| {
+            serde_json::from_value::<Vec<sovereign_core::types::SearchedSourceEntry>>(v).ok()
+        });
         Ok(Conversation {
             id: row.get("id"),
             title: row.get("title"),
@@ -335,7 +358,11 @@ impl ConversationStore for PostgresStateStore {
     }
 
     async fn list_conversations(&self, limit: usize, offset: usize) -> Result<Vec<Conversation>> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
 
         let rows = client
             .query(
@@ -364,15 +391,21 @@ impl ConversationStore for PostgresStateStore {
                     skill_id: r.get("skill_id"),
                     enabled_corpora: enabled_corpora
                         .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok()),
-                    searched_sources: searched_sources
-                        .and_then(|v| serde_json::from_value::<Vec<sovereign_core::types::SearchedSourceEntry>>(v).ok()),
+                    searched_sources: searched_sources.and_then(|v| {
+                        serde_json::from_value::<Vec<sovereign_core::types::SearchedSourceEntry>>(v)
+                            .ok()
+                    }),
                 }
             })
             .collect())
     }
 
     async fn search_messages(&self, query: &str) -> Result<Vec<Message>> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
 
         // Use ILIKE for simple text search. For production, use tsvector.
         let pattern = format!("%{query}%");
@@ -392,10 +425,18 @@ impl ConversationStore for PostgresStateStore {
                 Message {
                     id: r.get("id"),
                     conversation_id: r.get("conversation_id"),
-                    role: if role_str == "user" { Role::User } else if role_str == "system" { Role::System } else { Role::Assistant },
+                    role: if role_str == "user" {
+                        Role::User
+                    } else if role_str == "system" {
+                        Role::System
+                    } else {
+                        Role::Assistant
+                    },
                     content: r.get("content"),
                     created_at: r.get("created_at"),
-                    metadata: r.get::<_, Option<String>>("metadata").and_then(|s| serde_json::from_str(&s).ok()),
+                    metadata: r
+                        .get::<_, Option<String>>("metadata")
+                        .and_then(|s| serde_json::from_str(&s).ok()),
                 }
             })
             .collect())
@@ -403,7 +444,11 @@ impl ConversationStore for PostgresStateStore {
 
     async fn delete_conversation(&self, id: &str) -> Result<()> {
         {
-            let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+            let client = self
+                .pool
+                .get()
+                .await
+                .map_err(|e| Error::Storage(e.to_string()))?;
             // CASCADE deletes messages.
             client
                 .execute("DELETE FROM conversations WHERE id = $1", &[&id])
@@ -415,7 +460,11 @@ impl ConversationStore for PostgresStateStore {
     }
 
     async fn update_conversation_title(&self, id: &str, title: &str) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let ts = Self::now();
         let rows = client
             .execute(
@@ -435,7 +484,11 @@ impl ConversationStore for PostgresStateStore {
         conversation_id: &str,
         skill_id: &str,
     ) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         client
             .execute(
                 "UPDATE conversations SET skill_id = $2 \
@@ -452,11 +505,14 @@ impl ConversationStore for PostgresStateStore {
         conversation_id: &str,
         enabled_corpora: Option<Vec<String>>,
     ) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
-        let encoded: Option<serde_json::Value> = enabled_corpora
-            .map(|ids| serde_json::Value::Array(
-                ids.into_iter().map(serde_json::Value::String).collect(),
-            ));
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        let encoded: Option<serde_json::Value> = enabled_corpora.map(|ids| {
+            serde_json::Value::Array(ids.into_iter().map(serde_json::Value::String).collect())
+        });
         let rows = client
             .execute(
                 "UPDATE conversations SET enabled_corpora = $2 \
@@ -476,7 +532,11 @@ impl ConversationStore for PostgresStateStore {
         conversation_id: &str,
         entries: Option<Vec<sovereign_core::types::SearchedSourceEntry>>,
     ) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let encoded: Option<serde_json::Value> = entries
             .map(|es| serde_json::to_value(&es))
             .transpose()
@@ -499,7 +559,11 @@ impl ConversationStore for PostgresStateStore {
 #[async_trait]
 impl TaskStore for PostgresStateStore {
     async fn save_task(&self, task: &Task) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let plan = serde_json::to_string(&task.plan).unwrap_or_default();
         let state = serde_json::to_string(&task.completed_steps).unwrap_or_default();
         let status = format!("{:?}", task.status);
@@ -519,7 +583,11 @@ impl TaskStore for PostgresStateStore {
     }
 
     async fn get_task(&self, id: &str) -> Result<Task> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let row = client
             .query_opt("SELECT * FROM tasks WHERE id = $1", &[&id])
             .await
@@ -551,13 +619,17 @@ impl TaskStore for PostgresStateStore {
 impl MemoryStore for PostgresStateStore {
     async fn save_memory(&self, memory: &Memory) -> Result<()> {
         {
-            let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+            let client = self
+                .pool
+                .get()
+                .await
+                .map_err(|e| Error::Storage(e.to_string()))?;
             let kind_str = match memory.kind {
                 sovereign_core::types::MemoryKind::Raw => "raw",
                 sovereign_core::types::MemoryKind::Summary => "summary",
             };
-            let source_memory_ids_json = serde_json::to_string(&memory.source_memory_ids)
-                .unwrap_or_else(|_| "[]".into());
+            let source_memory_ids_json =
+                serde_json::to_string(&memory.source_memory_ids).unwrap_or_else(|_| "[]".into());
             client
                 .execute(
                     "INSERT INTO memories \
@@ -586,7 +658,11 @@ impl MemoryStore for PostgresStateStore {
     }
 
     async fn get_relevant_memories(&self, context: &str, limit: usize) -> Result<Vec<Memory>> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let pattern = format!("%{context}%");
         let rows = client
             .query(
@@ -606,7 +682,11 @@ impl MemoryStore for PostgresStateStore {
     }
 
     async fn get_all_memories(&self) -> Result<Vec<Memory>> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let rows = client
             .query(
                 "SELECT id, content, source, confidence, created_at, last_used, \
@@ -623,28 +703,56 @@ impl MemoryStore for PostgresStateStore {
     }
 
     async fn delete_memory(&self, id: &str) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
-        client.execute("DELETE FROM memories WHERE id = $1", &[&id]).await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        client
+            .execute("DELETE FROM memories WHERE id = $1", &[&id])
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         Ok(())
     }
 
     async fn update_memory_confidence(&self, id: &str, confidence: f64) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
-        client.execute("UPDATE memories SET confidence = $1 WHERE id = $2", &[&confidence, &id]).await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        client
+            .execute(
+                "UPDATE memories SET confidence = $1 WHERE id = $2",
+                &[&confidence, &id],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         Ok(())
     }
 
     async fn touch_memory(&self, id: &str, timestamp: i64) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
-        client.execute("UPDATE memories SET last_used = $1 WHERE id = $2", &[&timestamp, &id]).await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        client
+            .execute(
+                "UPDATE memories SET last_used = $1 WHERE id = $2",
+                &[&timestamp, &id],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         Ok(())
     }
 
-    async fn list_memories_for_conversation(
-        &self,
-        conversation_id: &str,
-    ) -> Result<Vec<Memory>> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+    async fn list_memories_for_conversation(&self, conversation_id: &str) -> Result<Vec<Memory>> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let rows = client
             .query(
                 "SELECT id, content, source, confidence, created_at, last_used, \
@@ -660,12 +768,12 @@ impl MemoryStore for PostgresStateStore {
         Ok(rows.iter().map(pg_row_to_memory).collect())
     }
 
-    async fn mark_superseded(
-        &self,
-        memory_id: &str,
-        summary_id: &str,
-    ) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+    async fn mark_superseded(&self, memory_id: &str, summary_id: &str) -> Result<()> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         client
             .execute(
                 "UPDATE memories SET superseded_by = $1 WHERE id = $2",
@@ -708,8 +816,17 @@ fn pg_row_to_memory(r: &tokio_postgres::Row) -> Memory {
 
 #[async_trait]
 impl RoutingStore for PostgresStateStore {
-    async fn log_routing(&self, message_hash: &str, classified_as: &str, latency_ms: i64) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+    async fn log_routing(
+        &self,
+        message_hash: &str,
+        classified_as: &str,
+        latency_ms: i64,
+    ) -> Result<()> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let now = Self::now();
         client
             .execute(
@@ -722,7 +839,11 @@ impl RoutingStore for PostgresStateStore {
     }
 
     async fn get_routing_corrections(&self, limit: usize) -> Result<Vec<RoutingCorrection>> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let rows = client
             .query(
                 "SELECT message_hash, classified_as, was_correct, created_at FROM routing_log WHERE was_correct = false ORDER BY created_at DESC LIMIT $1",
@@ -731,16 +852,23 @@ impl RoutingStore for PostgresStateStore {
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
 
-        Ok(rows.iter().map(|r| RoutingCorrection {
-            message_hash: r.get("message_hash"),
-            classified_as: r.get("classified_as"),
-            was_correct: r.get::<_, Option<bool>>("was_correct").unwrap_or(false),
-            created_at: r.get("created_at"),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| RoutingCorrection {
+                message_hash: r.get("message_hash"),
+                classified_as: r.get("classified_as"),
+                was_correct: r.get::<_, Option<bool>>("was_correct").unwrap_or(false),
+                created_at: r.get("created_at"),
+            })
+            .collect())
     }
 
     async fn mark_routing_correct(&self, message_hash: &str, was_correct: bool) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         client
             .execute(
                 "UPDATE routing_log SET was_correct = $1 WHERE message_hash = $2",
@@ -751,12 +879,12 @@ impl RoutingStore for PostgresStateStore {
         Ok(())
     }
 
-    async fn mark_routing_redirected(
-        &self,
-        message_hash: &str,
-        redirect_to: &str,
-    ) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+    async fn mark_routing_redirected(&self, message_hash: &str, redirect_to: &str) -> Result<()> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         client
             .execute(
                 "UPDATE routing_log SET was_redirected = TRUE, redirect_to = $1 \
@@ -772,12 +900,17 @@ impl RoutingStore for PostgresStateStore {
 #[async_trait]
 impl DocumentStore for PostgresStateStore {
     async fn store_chunks(&self, chunks: &[DocumentChunk]) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let now = Self::now();
         for chunk in chunks {
-            let embedding_bytes: Option<Vec<u8>> = chunk.embedding.as_ref().map(|e| {
-                e.iter().flat_map(|f| f.to_le_bytes()).collect()
-            });
+            let embedding_bytes: Option<Vec<u8>> = chunk
+                .embedding
+                .as_ref()
+                .map(|e| e.iter().flat_map(|f| f.to_le_bytes()).collect());
             let (source_type_str, corpus_id) = chunk.source_type.to_db_columns();
             let corpus_id_owned = corpus_id.map(|s| s.to_string());
             client
@@ -792,8 +925,17 @@ impl DocumentStore for PostgresStateStore {
         Ok(())
     }
 
-    async fn search_documents(&self, _query_embedding: &[f32], query_text: &str, limit: usize) -> Result<Vec<DocumentChunk>> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+    async fn search_documents(
+        &self,
+        _query_embedding: &[f32],
+        query_text: &str,
+        limit: usize,
+    ) -> Result<Vec<DocumentChunk>> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let pattern = format!("%{query_text}%");
         let rows = client
             .query(
@@ -803,47 +945,67 @@ impl DocumentStore for PostgresStateStore {
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
 
-        Ok(rows.iter().map(|r| {
-            let idx: i32 = r.get("chunk_index");
-            let st: Option<String> = r.get("source_type");
-            let cid: Option<String> = r.get("corpus_id");
-            DocumentChunk {
-                id: r.get("id"),
-                source: r.get("source"),
-                content: r.get("content"),
-                chunk_index: idx as usize,
-                embedding: None,
-                created_at: Self::now(),
-                source_type: SourceType::from_db_columns(st.as_deref().unwrap_or("user"), cid.as_deref()),
-            }
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let idx: i32 = r.get("chunk_index");
+                let st: Option<String> = r.get("source_type");
+                let cid: Option<String> = r.get("corpus_id");
+                DocumentChunk {
+                    id: r.get("id"),
+                    source: r.get("source"),
+                    content: r.get("content"),
+                    chunk_index: idx as usize,
+                    embedding: None,
+                    created_at: Self::now(),
+                    source_type: SourceType::from_db_columns(
+                        st.as_deref().unwrap_or("user"),
+                        cid.as_deref(),
+                    ),
+                }
+            })
+            .collect())
     }
 
     async fn get_chunks_by_source(&self, source: &str) -> Result<Vec<DocumentChunk>> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let rows = client
             .query("SELECT id, source, content, chunk_index, source_type, corpus_id FROM documents WHERE source = $1 ORDER BY chunk_index", &[&source])
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
 
-        Ok(rows.iter().map(|r| {
-            let idx: i32 = r.get("chunk_index");
-            let st: Option<String> = r.get("source_type");
-            let cid: Option<String> = r.get("corpus_id");
-            DocumentChunk {
-                id: r.get("id"),
-                source: r.get("source"),
-                content: r.get("content"),
-                chunk_index: idx as usize,
-                embedding: None,
-                created_at: Self::now(),
-                source_type: SourceType::from_db_columns(st.as_deref().unwrap_or("user"), cid.as_deref()),
-            }
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let idx: i32 = r.get("chunk_index");
+                let st: Option<String> = r.get("source_type");
+                let cid: Option<String> = r.get("corpus_id");
+                DocumentChunk {
+                    id: r.get("id"),
+                    source: r.get("source"),
+                    content: r.get("content"),
+                    chunk_index: idx as usize,
+                    embedding: None,
+                    created_at: Self::now(),
+                    source_type: SourceType::from_db_columns(
+                        st.as_deref().unwrap_or("user"),
+                        cid.as_deref(),
+                    ),
+                }
+            })
+            .collect())
     }
 
     async fn delete_chunks_by_corpus(&self, corpus_id: &str) -> Result<u64> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let count = client
             .execute("DELETE FROM documents WHERE corpus_id = $1", &[&corpus_id])
             .await
@@ -852,7 +1014,11 @@ impl DocumentStore for PostgresStateStore {
     }
 
     async fn list_sources(&self) -> Result<Vec<String>> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let rows = client
             .query("SELECT DISTINCT source FROM documents ORDER BY source", &[])
             .await
@@ -864,7 +1030,11 @@ impl DocumentStore for PostgresStateStore {
 #[async_trait]
 impl CorpusStateStore for PostgresStateStore {
     async fn save_corpus_state(&self, state: &CorpusState) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         client
             .execute(
                 "INSERT INTO corpus_state (corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, vector_index_ready) \
@@ -878,7 +1048,11 @@ impl CorpusStateStore for PostgresStateStore {
     }
 
     async fn get_corpus_state(&self, corpus_id: &str) -> Result<CorpusState> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let row = client
             .query_opt(
                 "SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, COALESCE(vector_index_ready, 0) FROM corpus_state WHERE corpus_id = $1",
@@ -904,36 +1078,54 @@ impl CorpusStateStore for PostgresStateStore {
     }
 
     async fn list_corpus_states(&self) -> Result<Vec<CorpusState>> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let rows = client
             .query("SELECT corpus_id, installed_at, source_date, chunks_count, index_size_mb, last_updated, COALESCE(vector_index_ready, 0) FROM corpus_state ORDER BY installed_at DESC", &[])
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
 
-        Ok(rows.iter().map(|r| CorpusState {
-            corpus_id: r.get("corpus_id"),
-            installed_at: r.get("installed_at"),
-            source_date: r.get("source_date"),
-            chunks_count: r.get("chunks_count"),
-            index_size_mb: r.get("index_size_mb"),
-            last_updated: r.get("last_updated"),
-            version: 0,
-            deleted_at: None,
-            vector_index_ready: r.get::<_, i64>("vector_index_ready") != 0,
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| CorpusState {
+                corpus_id: r.get("corpus_id"),
+                installed_at: r.get("installed_at"),
+                source_date: r.get("source_date"),
+                chunks_count: r.get("chunks_count"),
+                index_size_mb: r.get("index_size_mb"),
+                last_updated: r.get("last_updated"),
+                version: 0,
+                deleted_at: None,
+                vector_index_ready: r.get::<_, i64>("vector_index_ready") != 0,
+            })
+            .collect())
     }
 
     async fn delete_corpus_state(&self, corpus_id: &str) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         client
-            .execute("DELETE FROM corpus_state WHERE corpus_id = $1", &[&corpus_id])
+            .execute(
+                "DELETE FROM corpus_state WHERE corpus_id = $1",
+                &[&corpus_id],
+            )
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
         Ok(())
     }
 
     async fn set_vector_index_ready(&self, corpus_id: &str, ready: bool) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         client
             .execute(
                 "UPDATE corpus_state SET vector_index_ready = $1 WHERE corpus_id = $2",
@@ -945,7 +1137,11 @@ impl CorpusStateStore for PostgresStateStore {
     }
 
     async fn get_vector_index_ready(&self, corpus_id: &str) -> Result<bool> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let row = client
             .query_opt(
                 "SELECT COALESCE(vector_index_ready, 0) FROM corpus_state WHERE corpus_id = $1",
@@ -960,7 +1156,11 @@ impl CorpusStateStore for PostgresStateStore {
 #[async_trait]
 impl BudgetStore for PostgresStateStore {
     async fn get_search_budget(&self, backend: &str) -> Result<Option<SearchBudget>> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let row = client
             .query_opt(
                 "SELECT backend, monthly_limit, used_this_month, reset_date FROM search_budget WHERE backend = $1",
@@ -978,7 +1178,11 @@ impl BudgetStore for PostgresStateStore {
     }
 
     async fn update_search_budget(&self, budget: &SearchBudget) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         client
             .execute(
                 "INSERT INTO search_budget (backend, monthly_limit, used_this_month, reset_date) \
@@ -995,7 +1199,11 @@ impl BudgetStore for PostgresStateStore {
 #[async_trait]
 impl PermissionStore for PostgresStateStore {
     async fn get_permission(&self, tool_id: &str, scope: &str) -> Result<Option<bool>> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let row = client
             .query_opt(
                 "SELECT granted FROM permissions WHERE tool_id = $1 AND scope = $2",
@@ -1007,7 +1215,11 @@ impl PermissionStore for PostgresStateStore {
     }
 
     async fn set_permission(&self, tool_id: &str, scope: &str, granted: bool) -> Result<()> {
-        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
         let now = Self::now();
         client
             .execute(

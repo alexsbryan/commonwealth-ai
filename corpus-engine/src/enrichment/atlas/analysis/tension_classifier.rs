@@ -327,11 +327,11 @@ mod tests {
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
             quotable_excerpt: None,
-                    claim_kind: None,
+            claim_kind: None,
             concession_outcome: None,
             evidence_kind: None,
-}
-}
+        }
+    }
 
     fn mk_state(id: usize, entity: AtomId, label: &str, evidence_chunk: &str) -> State {
         State {
@@ -360,10 +360,10 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-}
-}
+            provenance: Default::default(),
+            concept_kind: None,
+        }
+    }
 
     #[test]
     fn resolve_candidate_content_pulls_claim_state_text_and_entity_name() {

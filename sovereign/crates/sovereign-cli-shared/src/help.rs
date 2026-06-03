@@ -60,7 +60,8 @@ pub enum HelpSection {
 /// the bare word `help` anywhere in the argument list. Called at the
 /// top of every `cmd_*` dispatcher before any real work happens.
 pub fn wants_help(args: &[String]) -> bool {
-    args.iter().any(|a| a == "--help" || a == "-h" || a == "help")
+    args.iter()
+        .any(|a| a == "--help" || a == "-h" || a == "help")
 }
 
 /// Render a `Help` block to stderr (help output doesn't go to stdout
@@ -68,7 +69,10 @@ pub fn wants_help(args: &[String]) -> bool {
 pub fn print(h: &Help) {
     eprintln!();
     eprintln!("  {}", h.command);
-    eprintln!("  {}", "─".repeat(h.command.chars().count() + 2).min_width(50));
+    eprintln!(
+        "  {}",
+        "─".repeat(h.command.chars().count() + 2).min_width(50)
+    );
     eprintln!("  {}", h.summary);
 
     for section in h.sections {
@@ -113,7 +117,11 @@ pub fn print(h: &Help) {
 /// Two-column aligned printer for Subcommands / Flags sections. Pads
 /// the left column to the longest entry so descriptions line up.
 fn print_table(entries: &[(&str, &str)]) {
-    let width = entries.iter().map(|(k, _)| k.chars().count()).max().unwrap_or(0);
+    let width = entries
+        .iter()
+        .map(|(k, _)| k.chars().count())
+        .max()
+        .unwrap_or(0);
     for (name, desc) in entries {
         eprintln!("    {:width$}  {desc}", name, width = width);
     }

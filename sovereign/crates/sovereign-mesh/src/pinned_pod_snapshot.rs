@@ -341,8 +341,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         // Good snapshot.
         let blob = mint_blob(3, "good");
-        let snap =
-            PinnedPodSnapshot::new("vast-good", "h", 9742, blob, Default::default());
+        let snap = PinnedPodSnapshot::new("vast-good", "h", 9742, blob, Default::default());
         save_snapshot(tmp.path(), &snap).unwrap();
         // Corrupt JSON in a .json file.
         std::fs::write(tmp.path().join("broken.json"), b"{not-json").unwrap();

@@ -115,7 +115,10 @@ pub async fn run_phase(op: PhaseOp, args: &[String]) -> i32 {
                 Ok(r) => Ok((
                     r.output.concerns.len(),
                     r.run_path,
-                    r.failures.into_iter().map(|f| format!("{}: {}", f.subject, f.reason)).collect(),
+                    r.failures
+                        .into_iter()
+                        .map(|f| format!("{}: {}", f.subject, f.reason))
+                        .collect(),
                 )),
                 Err(e) => Err(e.to_string()),
             }
@@ -139,7 +142,10 @@ pub async fn run_phase(op: PhaseOp, args: &[String]) -> i32 {
                 Ok(r) => Ok((
                     r.output.positions.len(),
                     r.run_path,
-                    r.failures.into_iter().map(|f| format!("{}: {}", f.subject, f.reason)).collect(),
+                    r.failures
+                        .into_iter()
+                        .map(|f| format!("{}: {}", f.subject, f.reason))
+                        .collect(),
                 )),
                 Err(e) => Err(e.to_string()),
             }
@@ -148,7 +154,10 @@ pub async fn run_phase(op: PhaseOp, args: &[String]) -> i32 {
             Ok(r) => Ok((
                 r.output.tensions.len(),
                 r.run_path,
-                r.failures.into_iter().map(|f| format!("{}: {}", f.subject, f.reason)).collect(),
+                r.failures
+                    .into_iter()
+                    .map(|f| format!("{}: {}", f.subject, f.reason))
+                    .collect(),
             )),
             Err(e) => Err(e.to_string()),
         },

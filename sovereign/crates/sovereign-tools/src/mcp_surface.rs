@@ -40,13 +40,19 @@
 /// rewrites old names before the registry lookup.
 pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     // Code intelligence (compiler-resolved, fast).
-    "symbols", "callers", "callees", "blast",
+    "symbols",
+    "callers",
+    "callees",
+    "blast",
     // Build/lint status. `build` is the canonical single-call
     // tool; `lint_status` + `get_lint_output` remain registered
     // for backward-compat during the alias window.
-    "build", "lint_status", "get_lint_output",
+    "build",
+    "lint_status",
+    "get_lint_output",
     // Working notes (the audit's primary input).
-    "note", "notes",
+    "note",
+    "notes",
     // Catalog-driven on-demand article ingest. Surfaced so an MCP
     // client (or `mcp call wikipedia_fetch`) can drive the
     // chat-with-wikipedia loop directly when the agent's autonomous
@@ -59,17 +65,25 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     // they're the live tool set for the `recipe-author` skill — the
     // skill's `[tools] required` list is descriptive; MCP exposure is
     // the gate that actually lets the live agent loop reach them.
-    "recipe_read", "recipe_write", "recipe_write_structured",
-    "recipe_validate", "recipe_test", "registry_browse",
-    "web_search", "web_fetch",
-    "checkpoint", "decision_log", "capability_request",
+    "recipe_read",
+    "recipe_write",
+    "recipe_write_structured",
+    "recipe_validate",
+    "recipe_test",
+    "registry_browse",
+    "web_search",
+    "web_fetch",
+    "checkpoint",
+    "decision_log",
+    "capability_request",
     // API-shape probing + durable web findings — closed the loop
     // where the agent guessed at API contracts and never persisted
     // what it learned. probe_url returns one HTTP GET's structured
     // response (status, top-level JSON keys, pagination hint, body
     // excerpt). research_finding is the ResearchFinding writer the
     // v7 NoteStore migration left without a tool wrapping it.
-    "probe_url", "research_finding",
+    "probe_url",
+    "research_finding",
     // ATOS step verification — runs verify command + hollow/untouched gates.
     "atos_verify",
     // Drift report query — point-of-edit narrative-side lookup.
@@ -88,7 +102,9 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     // gate in `mcp_router::handle_tool_call` logs them at WARN.
     // `work_in_flight` is read-only, used to check overlapping work
     // before starting. See sovereign/docs/WORK_ATLAS.md.
-    "declare_scope", "release_scope", "work_in_flight",
+    "declare_scope",
+    "release_scope",
+    "work_in_flight",
 ];
 
 /// MCP tools that should only appear when a spec exists in the
@@ -97,10 +113,7 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
 /// [`MCP_TOOLS_ALWAYS`] at request time. Until then the union is
 /// unconditional — a fresh repo with no `.sovereign/features/`
 /// will see `spec`/`drift` advertise empty content.
-pub const MCP_TOOLS_SPEC_GATED: &[&str] = &[
-    "spec",
-    "drift",
-];
+pub const MCP_TOOLS_SPEC_GATED: &[&str] = &["spec", "drift"];
 
 /// Tools registered in the in-process [`sovereign_core::ToolRegistry`]
 /// but no longer exposed via MCP. The flat-namespace plan retires
@@ -111,13 +124,23 @@ pub const MCP_TOOLS_SPEC_GATED: &[&str] = &[
 /// Documentation only — exposure is decided by [`is_mcp_exposed`].
 #[allow(dead_code)]
 pub const MCP_TOOLS_RETIRED: &[&str] = &[
-    "code_search", "recent_changes",
-    "test_status", "run_tests", "get_run_output",
-    "delete_note", "read_note_by_id", "read_note_digest",
-    "promote_note", "suggest_note", "session_reflection",
-    "check_doc_paths", "design_signals_extract",
-    "provision_feature", "archive_feature",
-    "record_atos_event", "write_redteam_finding",
+    "code_search",
+    "recent_changes",
+    "test_status",
+    "run_tests",
+    "get_run_output",
+    "delete_note",
+    "read_note_by_id",
+    "read_note_digest",
+    "promote_note",
+    "suggest_note",
+    "session_reflection",
+    "check_doc_paths",
+    "design_signals_extract",
+    "provision_feature",
+    "archive_feature",
+    "record_atos_event",
+    "write_redteam_finding",
     "project_context",
 ];
 
@@ -152,8 +175,7 @@ pub fn resolve_alias(name: &str) -> &str {
 /// `ALWAYS` and `SPEC_GATED`; Phase 5 will replace the union with
 /// a file-presence-gated variant.
 pub fn is_mcp_exposed(canonical_name: &str) -> bool {
-    MCP_TOOLS_ALWAYS.contains(&canonical_name)
-        || MCP_TOOLS_SPEC_GATED.contains(&canonical_name)
+    MCP_TOOLS_ALWAYS.contains(&canonical_name) || MCP_TOOLS_SPEC_GATED.contains(&canonical_name)
 }
 
 /// Render the MCP `tools/list` payload for a registry's descriptors.
@@ -297,8 +319,7 @@ pub fn spec_present_in_dir(dir: &std::path::Path) -> bool {
 type SpecCacheKey = std::path::PathBuf;
 type SpecCacheValue = (std::time::Instant, bool);
 type SpecCacheMap = std::collections::HashMap<SpecCacheKey, SpecCacheValue>;
-static SPEC_CACHE: std::sync::OnceLock<std::sync::Mutex<SpecCacheMap>> =
-    std::sync::OnceLock::new();
+static SPEC_CACHE: std::sync::OnceLock<std::sync::Mutex<SpecCacheMap>> = std::sync::OnceLock::new();
 const SPEC_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(1);
 
 fn lock_cache() -> std::sync::MutexGuard<'static, SpecCacheMap> {
@@ -473,9 +494,7 @@ mod tests {
     /// target spec-gated tools, so we cover those branches via the
     /// canonical-id assertions.
     fn fake_descriptors() -> Vec<sovereign_core::types::ToolDescriptor> {
-        use sovereign_core::types::{
-            Effect, Idempotency, Latency, Scope, ToolDescriptor,
-        };
+        use sovereign_core::types::{Effect, Idempotency, Latency, Scope, ToolDescriptor};
         let make = |id: &str, desc: &str, effect: Effect| ToolDescriptor {
             id: id.to_string(),
             name: id.to_string(),
@@ -503,11 +522,22 @@ mod tests {
     fn render_gated_with_no_feature_root_includes_spec_gated() {
         let descs = fake_descriptors();
         let out = render_tools_list_gated(&descs, None);
-        let names: Vec<String> =
-            out.iter().filter_map(|v| v["name"].as_str().map(String::from)).collect();
-        assert!(names.contains(&"callers".to_string()), "always-on missing: {names:?}");
-        assert!(names.contains(&"spec".to_string()), "spec-gated missing: {names:?}");
-        assert!(names.contains(&"drift".to_string()), "spec-gated missing: {names:?}");
+        let names: Vec<String> = out
+            .iter()
+            .filter_map(|v| v["name"].as_str().map(String::from))
+            .collect();
+        assert!(
+            names.contains(&"callers".to_string()),
+            "always-on missing: {names:?}"
+        );
+        assert!(
+            names.contains(&"spec".to_string()),
+            "spec-gated missing: {names:?}"
+        );
+        assert!(
+            names.contains(&"drift".to_string()),
+            "spec-gated missing: {names:?}"
+        );
     }
 
     /// When `feature_root` points at a directory with no spec, the
@@ -519,8 +549,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let descs = fake_descriptors();
         let out = render_tools_list_gated(&descs, Some(dir.path()));
-        let names: Vec<String> =
-            out.iter().filter_map(|v| v["name"].as_str().map(String::from)).collect();
+        let names: Vec<String> = out
+            .iter()
+            .filter_map(|v| v["name"].as_str().map(String::from))
+            .collect();
         assert!(
             names.contains(&"callers".to_string()),
             "always-on tool dropped: {names:?}"
@@ -554,8 +586,10 @@ mod tests {
         // each test, so the cache key is unique.
         let descs = fake_descriptors();
         let out = render_tools_list_gated(&descs, Some(dir.path()));
-        let names: Vec<String> =
-            out.iter().filter_map(|v| v["name"].as_str().map(String::from)).collect();
+        let names: Vec<String> = out
+            .iter()
+            .filter_map(|v| v["name"].as_str().map(String::from))
+            .collect();
         assert!(
             names.contains(&"spec".to_string()),
             "spec-gated tool missing despite spec on disk: {names:?}"
@@ -649,7 +683,11 @@ mod tests {
         // cache is keyed on the absolute path, so they should not
         // contaminate each other's answers.
         let with_spec = tempfile::tempdir().unwrap();
-        let foo = with_spec.path().join(".sovereign").join("features").join("foo");
+        let foo = with_spec
+            .path()
+            .join(".sovereign")
+            .join("features")
+            .join("foo");
         std::fs::create_dir_all(&foo).unwrap();
         std::fs::write(foo.join("spec.md"), b"# foo\n").unwrap();
 
@@ -659,8 +697,10 @@ mod tests {
         let with = render_tools_list_gated(&descs, Some(with_spec.path()));
         let without = render_tools_list_gated(&descs, Some(without_spec.path()));
 
-        let names_with: Vec<String> =
-            with.iter().filter_map(|v| v["name"].as_str().map(String::from)).collect();
+        let names_with: Vec<String> = with
+            .iter()
+            .filter_map(|v| v["name"].as_str().map(String::from))
+            .collect();
         let names_without: Vec<String> = without
             .iter()
             .filter_map(|v| v["name"].as_str().map(String::from))

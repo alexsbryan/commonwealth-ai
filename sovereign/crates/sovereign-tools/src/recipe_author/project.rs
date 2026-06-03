@@ -36,8 +36,8 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
 use corpus_engine_atos::{FeatureRow, FeatureState, FeatureStore};
+use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
 use sovereign_core::error::{Error, Result};
 
 /// Wrap an `std::io::Error` into a `sovereign_core::Error` carrying
@@ -81,16 +81,18 @@ pub fn projects_root_dir() -> Result<PathBuf> {
     std::env::var_os("HOME")
         .map(|h| PathBuf::from(h).join(".sovereign").join("recipe-projects"))
         .ok_or_else(|| {
-            Error::InvalidInput(
-                "HOME not set; cannot locate ~/.sovereign/recipe-projects/".into(),
-            )
+            Error::InvalidInput("HOME not set; cannot locate ~/.sovereign/recipe-projects/".into())
         })
 }
 
 /// Resolve `~/.sovereign/capability-requests/inbox/`.
 pub fn maintainer_inbox_dir() -> Result<PathBuf> {
     std::env::var_os("HOME")
-        .map(|h| PathBuf::from(h).join(".sovereign").join(MAINTAINER_INBOX_SUBPATH))
+        .map(|h| {
+            PathBuf::from(h)
+                .join(".sovereign")
+                .join(MAINTAINER_INBOX_SUBPATH)
+        })
         .ok_or_else(|| {
             Error::InvalidInput(
                 "HOME not set; cannot locate ~/.sovereign/capability-requests/inbox/".into(),
@@ -202,11 +204,9 @@ impl RecipeProject {
         std::fs::create_dir_all(&checkpoints)
             .map_err(|e| io_err("create_dir_all", &checkpoints, e))?;
         let cap = project_dir.join("capability-requests");
-        std::fs::create_dir_all(&cap)
-            .map_err(|e| io_err("create_dir_all", &cap, e))?;
+        std::fs::create_dir_all(&cap).map_err(|e| io_err("create_dir_all", &cap, e))?;
         let research = project_dir.join("research");
-        std::fs::create_dir_all(&research)
-            .map_err(|e| io_err("create_dir_all", &research, e))?;
+        std::fs::create_dir_all(&research).map_err(|e| io_err("create_dir_all", &research, e))?;
 
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -267,8 +267,7 @@ impl RecipeProject {
             std::fs::create_dir_all(&checkpoints)
                 .map_err(|e| io_err("create_dir_all", &checkpoints, e))?;
             let cap = project_dir.join("capability-requests");
-            std::fs::create_dir_all(&cap)
-                .map_err(|e| io_err("create_dir_all", &cap, e))?;
+            std::fs::create_dir_all(&cap).map_err(|e| io_err("create_dir_all", &cap, e))?;
             let research = project_dir.join("research");
             std::fs::create_dir_all(&research)
                 .map_err(|e| io_err("create_dir_all", &research, e))?;
@@ -323,11 +322,9 @@ impl RecipeProject {
                 updated_at: 0,
             });
         }
-        let text = std::fs::read_to_string(&path)
-            .map_err(|e| io_err("read", &path, e))?;
-        serde_json::from_str(&text).map_err(|e| {
-            Error::InvalidInput(format!("malformed project.json: {e}"))
-        })
+        let text = std::fs::read_to_string(&path).map_err(|e| io_err("read", &path, e))?;
+        serde_json::from_str(&text)
+            .map_err(|e| Error::InvalidInput(format!("malformed project.json: {e}")))
     }
 
     /// Replace the persisted summary atomically (write-then-rename).
@@ -341,10 +338,8 @@ impl RecipeProject {
         let bytes = serde_json::to_vec_pretty(summary).map_err(|e| {
             Error::InvalidInput(format!("failed to serialise project summary: {e}"))
         })?;
-        std::fs::write(&part, &bytes)
-            .map_err(|e| io_err("write", &part, e))?;
-        std::fs::rename(&part, &path)
-            .map_err(|e| io_err("rename to", &path, e))
+        std::fs::write(&part, &bytes).map_err(|e| io_err("write", &part, e))?;
+        std::fs::rename(&part, &path).map_err(|e| io_err("rename to", &path, e))
     }
 
     /// List the project's checkpoints in chronological order
@@ -368,8 +363,8 @@ impl RecipeProject {
             if !meta_path.exists() {
                 continue;
             }
-            let text = std::fs::read_to_string(&meta_path)
-                .map_err(|e| io_err("read", &meta_path, e))?;
+            let text =
+                std::fs::read_to_string(&meta_path).map_err(|e| io_err("read", &meta_path, e))?;
             let meta: CheckpointMeta = serde_json::from_str(&text).map_err(|e| {
                 Error::InvalidInput(format!(
                     "malformed checkpoint meta at {}: {e}",
@@ -398,10 +393,7 @@ impl RecipeProject {
     }
 
     /// Read the decision-log frontier captured by a checkpoint.
-    pub fn read_checkpoint_frontier(
-        &self,
-        checkpoint_id: &str,
-    ) -> Result<DecisionFrontier> {
+    pub fn read_checkpoint_frontier(&self, checkpoint_id: &str) -> Result<DecisionFrontier> {
         let path = self
             .checkpoints_dir()
             .join(checkpoint_id)
@@ -411,11 +403,9 @@ impl RecipeProject {
                 "checkpoint `{checkpoint_id}` has no decision_frontier.json"
             )));
         }
-        let text = std::fs::read_to_string(&path)
-            .map_err(|e| io_err("read", &path, e))?;
-        serde_json::from_str(&text).map_err(|e| {
-            Error::InvalidInput(format!("malformed decision_frontier.json: {e}"))
-        })
+        let text = std::fs::read_to_string(&path).map_err(|e| io_err("read", &path, e))?;
+        serde_json::from_str(&text)
+            .map_err(|e| Error::InvalidInput(format!("malformed decision_frontier.json: {e}")))
     }
 
     /// Recent feature-scoped notes for this project, newest first.

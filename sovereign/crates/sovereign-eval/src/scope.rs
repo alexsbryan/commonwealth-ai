@@ -15,7 +15,7 @@
 //!    `--numstat`, classifies each file by glob match, reports
 //!    in-scope vs. out-of-scope changes + a compliance ratio.
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::process::Command;
@@ -256,7 +256,10 @@ mod tests {
 
     #[test]
     fn forbidden_prefixes_always_out_of_scope() {
-        assert!(!is_in_scope("scorer/golden/Cargo.toml", &["**".to_string()]));
+        assert!(!is_in_scope(
+            "scorer/golden/Cargo.toml",
+            &["**".to_string()]
+        ));
         assert!(!is_in_scope("runs/abc/manifest.json", &["**".to_string()]));
         assert!(!is_in_scope(".git/HEAD", &["**".to_string()]));
     }

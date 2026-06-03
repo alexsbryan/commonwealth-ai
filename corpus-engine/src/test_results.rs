@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use tokio::sync::Mutex;
 
 use crate::error::{Error, Result};
@@ -95,9 +95,8 @@ impl TestResultStore {
                 db_path.display()
             )))
         })?;
-        conn.execute_batch(SCHEMA).map_err(|e| {
-            Error::Io(std::io::Error::other(format!("schema migration: {e}")))
-        })?;
+        conn.execute_batch(SCHEMA)
+            .map_err(|e| Error::Io(std::io::Error::other(format!("schema migration: {e}"))))?;
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -146,13 +145,7 @@ impl TestResultStore {
         conn.execute(
             "INSERT INTO test_results (run_id, kind, name, output, output_truncated) \
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![
-                run_id,
-                kind.as_str(),
-                name,
-                stored_output,
-                truncated as i32
-            ],
+            params![run_id, kind.as_str(), name, stored_output, truncated as i32],
         )
         .map_err(sqlite_err)?;
         Ok(())
@@ -449,7 +442,12 @@ mod tests {
             .await
             .unwrap();
         store
-            .record_result(run_id, TestResultKind::Fail, "test_b", Some("assertion failed"))
+            .record_result(
+                run_id,
+                TestResultKind::Fail,
+                "test_b",
+                Some("assertion failed"),
+            )
             .await
             .unwrap();
         store.finish_run(run_id, 1).await.unwrap();

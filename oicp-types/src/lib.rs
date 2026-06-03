@@ -83,9 +83,7 @@ pub fn proficiency(profile: &CapabilityProfile, cap: Capability) -> ProficiencyL
 /// and should route on the general hint. Only a model that is
 /// measurably better at code than general — Qwen Coder, DeepSeek
 /// Coder, Code Llama variants — earns the `code` hint.
-pub fn infer_hint_from_profile(
-    profile: &CapabilityProfile,
-) -> CapabilityHint {
+pub fn infer_hint_from_profile(profile: &CapabilityProfile) -> CapabilityHint {
     let code = proficiency(profile, Capability::Code);
     let general = proficiency(profile, Capability::General);
     if code == 4 && code > general {
@@ -144,8 +142,7 @@ impl CapabilityHint {
 
     /// Known standardized hints as of this crate build. Grows by
     /// governance decision (§4.3); do not extend locally.
-    pub const STANDARDIZED: &'static [&'static str] =
-        &[Self::GENERAL, Self::CODE];
+    pub const STANDARDIZED: &'static [&'static str] = &[Self::GENERAL, Self::CODE];
 
     /// The standardized `general` hint.
     pub fn general() -> Self {
@@ -162,9 +159,7 @@ impl CapabilityHint {
     /// Rejects empty/whitespace tags, tags that already carry the
     /// prefix, tags that collide with a standardized hint, and tags
     /// containing whitespace.
-    pub fn extension(
-        tag: impl AsRef<str>,
-    ) -> Result<Self, InvalidCapabilityHint> {
+    pub fn extension(tag: impl AsRef<str>) -> Result<Self, InvalidCapabilityHint> {
         let tag = tag.as_ref().trim();
         if tag.is_empty() {
             return Err(InvalidCapabilityHint::Empty);
@@ -187,9 +182,7 @@ impl CapabilityHint {
     /// reserved for structurally unusable values — bare strings that
     /// aren't currently standardized here are preserved verbatim so
     /// forward-compatible matching still works (§10.3).
-    pub fn parse(
-        raw: impl AsRef<str>,
-    ) -> Result<Self, InvalidCapabilityHint> {
+    pub fn parse(raw: impl AsRef<str>) -> Result<Self, InvalidCapabilityHint> {
         let raw = raw.as_ref().trim();
         if raw.is_empty() {
             return Err(InvalidCapabilityHint::Empty);
@@ -213,8 +206,7 @@ impl CapabilityHint {
     /// True iff this hint carries the `x:` extension prefix and has
     /// a non-empty tag component.
     pub fn is_extension(&self) -> bool {
-        self.0.starts_with(Self::EXTENSION_PREFIX)
-            && self.0.len() > Self::EXTENSION_PREFIX.len()
+        self.0.starts_with(Self::EXTENSION_PREFIX) && self.0.len() > Self::EXTENSION_PREFIX.len()
     }
 
     /// True iff this hint is neither standardized in this build nor
@@ -251,13 +243,9 @@ impl std::fmt::Display for InvalidCapabilityHint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = match self {
             Self::Empty => "capability hint is empty",
-            Self::AlreadyPrefixed => {
-                "capability hint already carries the 'x:' extension prefix"
-            }
+            Self::AlreadyPrefixed => "capability hint already carries the 'x:' extension prefix",
             Self::Whitespace => "capability hint contains whitespace",
-            Self::CollidesWithStandardized => {
-                "extension tag collides with a standardized hint"
-            }
+            Self::CollidesWithStandardized => "extension tag collides with a standardized hint",
         };
         f.write_str(msg)
     }
@@ -266,18 +254,13 @@ impl std::fmt::Display for InvalidCapabilityHint {
 impl std::error::Error for InvalidCapabilityHint {}
 
 impl Serialize for CapabilityHint {
-    fn serialize<S: Serializer>(
-        &self,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.0.serialize(serializer)
     }
 }
 
 impl<'de> Deserialize<'de> for CapabilityHint {
-    fn deserialize<D: Deserializer<'de>>(
-        deserializer: D,
-    ) -> Result<Self, D::Error> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let raw = String::deserialize(deserializer)?;
         Self::parse(&raw).map_err(serde::de::Error::custom)
     }
@@ -295,17 +278,7 @@ impl<'de> Deserialize<'de> for CapabilityHint {
 /// it needs. The scheduler prefers matching classes and treats
 /// mismatch as a soft deprioritization rather than a hard failure
 /// (§6).
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Default,
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LatencyClass {
     /// Time-to-first-token in hundreds of milliseconds. Suitable for
@@ -394,8 +367,7 @@ impl CapabilityClaim {
     /// True iff this claim can fit the structural size of a request
     /// (§6 — context/output are hard constraints).
     pub fn fits(&self, context_tokens: u32, max_output_tokens: u32) -> bool {
-        self.max_context >= context_tokens
-            && self.max_output >= max_output_tokens
+        self.max_context >= context_tokens && self.max_output >= max_output_tokens
     }
 }
 
@@ -561,11 +533,7 @@ impl ProviderManifest {
 pub struct ProviderInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        rename = "type"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "type")]
     pub provider_type: Option<ProviderType>,
 }
 
@@ -883,10 +851,7 @@ pub const LATENCY_TWO_CLASS_SCORE: f32 = 0.5;
 ///   specialist claim at 1.0 for a general request would subvert
 ///   that obligation and let a specialist silently absorb every
 ///   general-hinted request on the mesh.
-pub fn hint_match_score(
-    claim_hint: &CapabilityHint,
-    req_hint: &CapabilityHint,
-) -> f32 {
+pub fn hint_match_score(claim_hint: &CapabilityHint, req_hint: &CapabilityHint) -> f32 {
     if claim_hint == req_hint {
         return 1.0;
     }
@@ -909,10 +874,7 @@ pub fn hint_match_score(
 /// - Exact match → `1.0`.
 /// - Adjacent class → [`LATENCY_ADJACENT_SCORE`] (0.8).
 /// - Two-class gap → [`LATENCY_TWO_CLASS_SCORE`] (0.5).
-pub fn latency_match_score(
-    claim_class: LatencyClass,
-    req_class: LatencyClass,
-) -> f32 {
+pub fn latency_match_score(claim_class: LatencyClass, req_class: LatencyClass) -> f32 {
     fn rank(c: LatencyClass) -> i32 {
         match c {
             LatencyClass::Fast => 0,
@@ -1084,8 +1046,7 @@ pub fn effective_affinity(claimed: f32, obs: &NodeObservations) -> f32 {
     if obs.samples == 0 {
         return claim;
     }
-    let obs_weight =
-        (obs.samples as f32 / CONFIDENCE_SAMPLES as f32).min(1.0);
+    let obs_weight = (obs.samples as f32 / CONFIDENCE_SAMPLES as f32).min(1.0);
     let failure = obs.recent_failure_rate.clamp(0.0, 1.0);
     // Interpolation: claim → claim × (1 - failure) as weight → 1.0.
     claim * (1.0 - obs_weight * failure)
@@ -1193,9 +1154,7 @@ pub fn throughput_factor(
     baseline_benchmark: Option<&BenchmarkResult>,
 ) -> f32 {
     let observed_tg_tok_s =
-        if obs.samples >= THROUGHPUT_OBSERVATION_THRESHOLD
-            && obs.tg_tok_s_ewma > 0.0
-        {
+        if obs.samples >= THROUGHPUT_OBSERVATION_THRESHOLD && obs.tg_tok_s_ewma > 0.0 {
             Some(obs.tg_tok_s_ewma as f32)
         } else {
             None
@@ -1221,9 +1180,7 @@ pub fn throughput_factor(
         (None, None) => return 1.0,
     };
 
-    
-    (estimated_tg_tok_s / THROUGHPUT_REFERENCE_TG_TOK_S)
-        .clamp(THROUGHPUT_FLOOR, 1.0)
+    (estimated_tg_tok_s / THROUGHPUT_REFERENCE_TG_TOK_S).clamp(THROUGHPUT_FLOOR, 1.0)
 }
 
 /// String label for a [`throughput_factor`] decision — `"observed"`,
@@ -1235,9 +1192,7 @@ pub fn throughput_factor_source(
     obs: &NodeObservations,
     baseline_benchmark: Option<&BenchmarkResult>,
 ) -> &'static str {
-    if obs.samples >= THROUGHPUT_OBSERVATION_THRESHOLD
-        && obs.tg_tok_s_ewma > 0.0
-    {
+    if obs.samples >= THROUGHPUT_OBSERVATION_THRESHOLD && obs.tg_tok_s_ewma > 0.0 {
         "observed"
     } else if baseline_benchmark.is_some() {
         "benchmark_estimate"
@@ -1318,14 +1273,9 @@ impl ExtensionRegistry {
 
     /// Observe an extension hint appearing on an advertised claim
     /// (i.e., fetched in a peer's `ProviderManifest`).
-    pub fn observe_advertisement(
-        &mut self,
-        hint: &CapabilityHint,
-        now_unix: u64,
-    ) {
+    pub fn observe_advertisement(&mut self, hint: &CapabilityHint, now_unix: u64) {
         self.record(hint, now_unix, |stats| {
-            stats.advertisements_seen =
-                stats.advertisements_seen.saturating_add(1);
+            stats.advertisements_seen = stats.advertisements_seen.saturating_add(1);
         });
     }
 
@@ -1413,10 +1363,7 @@ pub fn score_claim_for_request(
         return None;
     }
 
-    let latency = latency_match_score(
-        claim.latency_class,
-        req.effective_latency_class(),
-    );
+    let latency = latency_match_score(claim.latency_class, req.effective_latency_class());
 
     Some(hint * latency * claim.effective_affinity())
 }
@@ -1571,7 +1518,10 @@ mod tests {
 
     #[test]
     fn capability_hint_parse_accepts_standardized_extension_and_future() {
-        assert_eq!(CapabilityHint::parse("general").unwrap().as_str(), "general");
+        assert_eq!(
+            CapabilityHint::parse("general").unwrap().as_str(),
+            "general"
+        );
         assert_eq!(CapabilityHint::parse("code").unwrap().as_str(), "code");
 
         let ext = CapabilityHint::parse("x:biomed").unwrap();
@@ -1746,10 +1696,7 @@ mod tests {
             1.0
         );
         assert_eq!(
-            hint_match_score(
-                &CapabilityHint::general(),
-                &CapabilityHint::general()
-            ),
+            hint_match_score(&CapabilityHint::general(), &CapabilityHint::general()),
             1.0
         );
     }
@@ -1757,10 +1704,7 @@ mod tests {
     #[test]
     fn hint_match_general_request_against_specific_claim_is_zero() {
         assert_eq!(
-            hint_match_score(
-                &CapabilityHint::code(),
-                &CapabilityHint::general()
-            ),
+            hint_match_score(&CapabilityHint::code(), &CapabilityHint::general()),
             0.0
         );
         assert_eq!(
@@ -1775,10 +1719,7 @@ mod tests {
     #[test]
     fn hint_match_specific_request_with_general_claim_is_fallback() {
         assert_eq!(
-            hint_match_score(
-                &CapabilityHint::general(),
-                &CapabilityHint::code()
-            ),
+            hint_match_score(&CapabilityHint::general(), &CapabilityHint::code()),
             HINT_GENERAL_FALLBACK_SCORE
         );
     }
@@ -1805,10 +1746,7 @@ mod tests {
             LATENCY_ADJACENT_SCORE
         );
         assert_eq!(
-            latency_match_score(
-                LatencyClass::Fast,
-                LatencyClass::Extended
-            ),
+            latency_match_score(LatencyClass::Fast, LatencyClass::Extended),
             LATENCY_TWO_CLASS_SCORE
         );
     }
@@ -1840,12 +1778,7 @@ mod tests {
             2_000,
             0.9,
         );
-        let req = req_with(
-            CapabilityHint::code(),
-            LatencyClass::Normal,
-            4_000,
-            1_000,
-        );
+        let req = req_with(CapabilityHint::code(), LatencyClass::Normal, 4_000, 1_000);
         assert_eq!(score_claim_for_request(&c, &req), None);
     }
 
@@ -1859,12 +1792,7 @@ mod tests {
             4_000,
             0.9,
         );
-        let req = req_with(
-            CapabilityHint::code(),
-            LatencyClass::Fast,
-            4_000,
-            500,
-        );
+        let req = req_with(CapabilityHint::code(), LatencyClass::Fast, 4_000, 500);
         let score = score_claim_for_request(&c, &req).expect("passes");
         // hint=1.0, latency=Fast vs Normal adjacent=0.8, affinity=0.9
         assert!((score - 0.72).abs() < 1e-6, "got {score}");
@@ -1872,11 +1800,7 @@ mod tests {
 
     // ───── v0.3 §7 — observation helpers ───────────────────
 
-    fn obs_with(
-        in_flight: u32,
-        failures: f32,
-        samples: u32,
-    ) -> NodeObservations {
+    fn obs_with(in_flight: u32, failures: f32, samples: u32) -> NodeObservations {
         NodeObservations {
             in_flight,
             p50_latency_ms: 0,
@@ -1916,18 +1840,9 @@ mod tests {
 
     #[test]
     fn effective_affinity_clamps_and_handles_nan() {
-        assert_eq!(
-            effective_affinity(1.5, &obs_with(0, 0.0, 0)),
-            1.0
-        );
-        assert_eq!(
-            effective_affinity(-0.2, &obs_with(0, 0.0, 0)),
-            0.0
-        );
-        assert_eq!(
-            effective_affinity(f32::NAN, &obs_with(0, 0.0, 0)),
-            0.0
-        );
+        assert_eq!(effective_affinity(1.5, &obs_with(0, 0.0, 0)), 1.0);
+        assert_eq!(effective_affinity(-0.2, &obs_with(0, 0.0, 0)), 0.0);
+        assert_eq!(effective_affinity(f32::NAN, &obs_with(0, 0.0, 0)), 0.0);
     }
 
     #[test]
@@ -1942,7 +1857,10 @@ mod tests {
         let fifty = load_penalty(&obs_with(50, 0.0, 0));
         assert!(ten > twenty);
         assert!(twenty > fifty);
-        assert!(fifty > 0.0, "must never collapse to zero — that would eliminate the node entirely");
+        assert!(
+            fifty > 0.0,
+            "must never collapse to zero — that would eliminate the node entirely"
+        );
     }
 
     #[test]
@@ -2047,10 +1965,7 @@ mod tests {
         assert_eq!(cold_start_weight(COLD_START_SAMPLES + 1_000), 1.0);
         // Monotonic between 0 and the threshold.
         let mid = cold_start_weight(COLD_START_SAMPLES / 2);
-        assert!(
-            mid > COLD_START_MIN_WEIGHT && mid < 1.0,
-            "got {mid}"
-        );
+        assert!(mid > COLD_START_MIN_WEIGHT && mid < 1.0, "got {mid}");
     }
 
     // ───── v0.3 §3 — throughput scoring ────────────────────
@@ -2092,8 +2007,7 @@ mod tests {
     fn throughput_factor_floor_at_low_observed_rate() {
         let obs = obs_with_throughput(100, 3.0);
         assert!(
-            (throughput_factor(&obs, 8.0, None) - THROUGHPUT_FLOOR).abs()
-                < 1e-6,
+            (throughput_factor(&obs, 8.0, None) - THROUGHPUT_FLOOR).abs() < 1e-6,
             "3 tok/s observed must clamp to floor"
         );
         assert_eq!(throughput_factor_source(&obs, None), "observed");
@@ -2205,12 +2119,7 @@ mod tests {
             4_000,
             0.85,
         );
-        let req = req_with(
-            CapabilityHint::code(),
-            LatencyClass::Normal,
-            16_000,
-            2_000,
-        );
+        let req = req_with(CapabilityHint::code(), LatencyClass::Normal, 16_000, 2_000);
         let a = score_claim_for_request(&qwen_coder, &req).unwrap();
         let b = score_claim_for_request(&llama_70b, &req).unwrap();
         assert!(a > b, "coder {a} must beat general {b}");

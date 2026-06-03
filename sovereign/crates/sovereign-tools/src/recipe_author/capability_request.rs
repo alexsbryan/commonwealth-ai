@@ -51,8 +51,8 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use corpus_engine_atos::FeatureStore;
 use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
-use corpus_engine_atos::{FeatureStore};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
@@ -115,8 +115,7 @@ impl Tool for CapabilityRequestTool {
         ToolDescriptor {
             id: "capability_request".into(),
             name: "CapabilityRequest".into(),
-            description:
-                "Escalate a capability gap to the maintainer. Use when the \
+            description: "Escalate a capability gap to the maintainer. Use when the \
                  existing extractors / acquirers / chunkers don't handle the \
                  source format and you have CONCRETE evidence of failure — \
                  not just \"this might be tricky.\" \
@@ -133,7 +132,7 @@ impl Tool for CapabilityRequestTool {
                  evaluate, use DecisionLog with `kind = deferred_question` \
                  instead — that's a NoteStore-only path with no maintainer \
                  inbox side effect."
-                    .into(),
+                .into(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -202,11 +201,10 @@ impl Tool for CapabilityRequestTool {
                 ]
             }),
             examples: vec![ToolExample {
-                situation:
-                    "After the partner has reviewed and approved the request \
+                situation: "After the partner has reviewed and approved the request \
                      for an XML extractor that preserves docket-entry \
                      nesting."
-                        .into(),
+                    .into(),
                 call: json!({
                     "feature_id": "<project-uuid>",
                     "format_or_source": "PACER docket XML",
@@ -243,15 +241,9 @@ impl Tool for CapabilityRequestTool {
         vec![Permission::RecipeAuthoring]
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let notes = self.notes.as_ref().ok_or_else(|| {
-            Error::InvalidInput(
-                "CapabilityRequestTool was constructed without a NoteStore".into(),
-            )
+            Error::InvalidInput("CapabilityRequestTool was constructed without a NoteStore".into())
         })?;
         let features = self.features.as_ref().ok_or_else(|| {
             Error::InvalidInput(
@@ -284,28 +276,21 @@ impl Tool for CapabilityRequestTool {
             .get("feature_id")
             .and_then(|v| v.as_str())
             .ok_or_else(|| {
-                Error::InvalidInput(
-                    "CapabilityRequestTool requires `feature_id`".into(),
-                )
+                Error::InvalidInput("CapabilityRequestTool requires `feature_id`".into())
             })?;
         let format_or_source = params
             .get("format_or_source")
             .and_then(|v| v.as_str())
             .ok_or_else(|| {
-                Error::InvalidInput(
-                    "CapabilityRequestTool requires `format_or_source`".into(),
-                )
+                Error::InvalidInput("CapabilityRequestTool requires `format_or_source`".into())
             })?;
         let analysis = params
             .get("analysis")
             .and_then(|v| v.as_str())
             .ok_or_else(|| {
-                Error::InvalidInput(
-                    "CapabilityRequestTool requires `analysis`".into(),
-                )
+                Error::InvalidInput("CapabilityRequestTool requires `analysis`".into())
             })?;
-        let extractors_tried =
-            string_array(params.get("existing_extractors_tried"));
+        let extractors_tried = string_array(params.get("existing_extractors_tried"));
         let failure_modes = string_array(params.get("failure_modes"));
         let recipe_state_path = params
             .get("recipe_state_path")
@@ -313,24 +298,17 @@ impl Tool for CapabilityRequestTool {
             .map(String::from);
         let blocked_parts = string_array(params.get("blocked_recipe_parts"));
 
-        let project = RecipeProject::load(
-            feature_id,
-            Arc::clone(notes),
-            Arc::clone(features),
-        )
-        .await?;
+        let project =
+            RecipeProject::load(feature_id, Arc::clone(notes), Arc::clone(features)).await?;
 
         let timestamp_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
         let request_id = format!("{timestamp_secs}-{}", uuid_short());
-        let now_rfc = chrono::DateTime::<chrono::Utc>::from_timestamp(
-            timestamp_secs as i64,
-            0,
-        )
-        .map(|dt| dt.to_rfc3339())
-        .unwrap_or_else(|| timestamp_secs.to_string());
+        let now_rfc = chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp_secs as i64, 0)
+            .map(|dt| dt.to_rfc3339())
+            .unwrap_or_else(|| timestamp_secs.to_string());
 
         let request = CapabilityRequest {
             request_id: request_id.clone(),
@@ -350,15 +328,12 @@ impl Tool for CapabilityRequestTool {
         let project_path = project
             .capability_requests_dir()
             .join(format!("{request_id}.json"));
-        let bytes = serde_json::to_vec_pretty(&request).map_err(|e| {
-            Error::InvalidInput(format!("failed to serialise request: {e}"))
-        })?;
+        let bytes = serde_json::to_vec_pretty(&request)
+            .map_err(|e| Error::InvalidInput(format!("failed to serialise request: {e}")))?;
         if let Some(parent) = project_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| io_err("create_dir_all", parent, e))?;
+            std::fs::create_dir_all(parent).map_err(|e| io_err("create_dir_all", parent, e))?;
         }
-        std::fs::write(&project_path, &bytes)
-            .map_err(|e| io_err("write", &project_path, e))?;
+        std::fs::write(&project_path, &bytes).map_err(|e| io_err("write", &project_path, e))?;
 
         // 2. Mirror into the global maintainer inbox.
         let inbox_root = match self.inbox_dir.as_ref() {
@@ -367,13 +342,8 @@ impl Tool for CapabilityRequestTool {
         };
         std::fs::create_dir_all(&inbox_root)
             .map_err(|e| io_err("create_dir_all", &inbox_root, e))?;
-        let inbox_path = inbox_root.join(format!(
-            "{}-{}.json",
-            project.feature_id(),
-            request_id
-        ));
-        std::fs::write(&inbox_path, &bytes)
-            .map_err(|e| io_err("write", &inbox_path, e))?;
+        let inbox_path = inbox_root.join(format!("{}-{}.json", project.feature_id(), request_id));
+        std::fs::write(&inbox_path, &bytes).map_err(|e| io_err("write", &inbox_path, e))?;
 
         // 3. NoteStore note for the dashboard.
         let payload = json!({
@@ -456,8 +426,7 @@ mod tests {
         let guard = HOME_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let dir = tempfile::tempdir().unwrap();
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
-        let features =
-            Arc::new(FeatureStore::open(&dir.path().join("features.db")).unwrap());
+        let features = Arc::new(FeatureStore::open(&dir.path().join("features.db")).unwrap());
         std::env::set_var("HOME", dir.path());
         let project = RecipeProject::new(
             "trial",
@@ -485,11 +454,8 @@ mod tests {
     async fn rejects_without_partner_confirmation() {
         let (notes, features, project, _dir, _home_lock) = fresh().await;
         let inbox = tempfile::tempdir().unwrap();
-        let tool = CapabilityRequestTool::with_stores(
-            Arc::clone(&notes),
-            Arc::clone(&features),
-        )
-        .with_inbox_dir(inbox.path().to_path_buf());
+        let tool = CapabilityRequestTool::with_stores(Arc::clone(&notes), Arc::clone(&features))
+            .with_inbox_dir(inbox.path().to_path_buf());
         let err = tool
             .execute(
                 &json!({
@@ -509,11 +475,8 @@ mod tests {
     async fn rejects_when_partner_confirmed_absent() {
         let (notes, features, project, _dir, _home_lock) = fresh().await;
         let inbox = tempfile::tempdir().unwrap();
-        let tool = CapabilityRequestTool::with_stores(
-            Arc::clone(&notes),
-            Arc::clone(&features),
-        )
-        .with_inbox_dir(inbox.path().to_path_buf());
+        let tool = CapabilityRequestTool::with_stores(Arc::clone(&notes), Arc::clone(&features))
+            .with_inbox_dir(inbox.path().to_path_buf());
         let err = tool
             .execute(
                 &json!({
@@ -532,11 +495,8 @@ mod tests {
     async fn submits_when_confirmed_writes_both_paths() {
         let (notes, features, project, _dir, _home_lock) = fresh().await;
         let inbox = tempfile::tempdir().unwrap();
-        let tool = CapabilityRequestTool::with_stores(
-            Arc::clone(&notes),
-            Arc::clone(&features),
-        )
-        .with_inbox_dir(inbox.path().to_path_buf());
+        let tool = CapabilityRequestTool::with_stores(Arc::clone(&notes), Arc::clone(&features))
+            .with_inbox_dir(inbox.path().to_path_buf());
         let out = tool
             .execute(
                 &json!({
@@ -558,7 +518,11 @@ mod tests {
         };
         let inbox_path = PathBuf::from(v["inbox_path"].as_str().unwrap());
         let project_path = PathBuf::from(v["project_path"].as_str().unwrap());
-        assert!(inbox_path.exists(), "inbox path missing: {}", inbox_path.display());
+        assert!(
+            inbox_path.exists(),
+            "inbox path missing: {}",
+            inbox_path.display()
+        );
         assert!(
             project_path.exists(),
             "project path missing: {}",

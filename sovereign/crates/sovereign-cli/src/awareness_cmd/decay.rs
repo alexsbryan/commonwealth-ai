@@ -73,7 +73,10 @@ pub(super) async fn cmd_decay(args: &[String]) -> i32 {
     let store = match SqliteStateStore::open(&db_path) {
         Ok(s) => Arc::new(s),
         Err(e) => {
-            eprintln!("awareness decay: open {} failed: {e}", display_path(&db_path));
+            eprintln!(
+                "awareness decay: open {} failed: {e}",
+                display_path(&db_path)
+            );
             return 1;
         }
     };
@@ -95,7 +98,10 @@ pub(super) async fn cmd_decay(args: &[String]) -> i32 {
              conversations. The seed templates only write conversation messages."
         );
         if !inventory.is_empty() {
-            println!("(Entity inventory loaded: {} names — would apply.)", inventory.len());
+            println!(
+                "(Entity inventory loaded: {} names — would apply.)",
+                inventory.len()
+            );
         }
         return 0;
     }
@@ -163,12 +169,8 @@ fn simulate_decay(
         let mut entity_aware = 0usize;
         for m in memories {
             let u = apply_confidence_decay_with_rate_and_inventory(m, projected, rate, None);
-            let e = apply_confidence_decay_with_rate_and_inventory(
-                m,
-                projected,
-                rate,
-                Some(inventory),
-            );
+            let e =
+                apply_confidence_decay_with_rate_and_inventory(m, projected, rate, Some(inventory));
             if u >= threshold {
                 uniform += 1;
             }
@@ -264,13 +266,7 @@ fn unix_now() -> i64 {
         .unwrap_or(0)
 }
 
-fn print_report(
-    r: &DecayReport,
-    months: i64,
-    rate: f64,
-    threshold: f64,
-    show_entity_linked: bool,
-) {
+fn print_report(r: &DecayReport, months: i64, rate: f64, threshold: f64, show_entity_linked: bool) {
     println!(
         "Memory decay simulation: {} month{} at {:.0}%/month rate (threshold {:.2})",
         months,
@@ -284,14 +280,8 @@ fn print_report(
     } else {
         (r.entity_linked * 100) / r.total
     };
-    println!(
-        "Memories at start: {}",
-        r.total
-    );
-    println!(
-        "Entity-linked: {} ({}%)",
-        r.entity_linked, pct
-    );
+    println!("Memories at start: {}", r.total);
+    println!("Entity-linked: {} ({}%)", r.entity_linked, pct);
     println!();
     println!(
         "{:>16}  {:>17}  {:>17}",
@@ -316,10 +306,7 @@ fn print_report(
             r.differential_survivors.len()
         );
         for d in &r.differential_survivors {
-            println!(
-                "  {}",
-                d.content_preview
-            );
+            println!("  {}", d.content_preview);
             println!(
                 "    confidence: {:.2} (uniform) → {:.2} (entity-aware)",
                 d.uniform_confidence, d.entity_aware_confidence
@@ -404,7 +391,12 @@ mod tests {
         let memories = vec![
             // Entity-linked, mid-confidence — should survive entity-aware,
             // potentially fail uniform after several more months.
-            mem("a", "Sarah said the project is on track", two_months_ago, 0.5),
+            mem(
+                "a",
+                "Sarah said the project is on track",
+                two_months_ago,
+                0.5,
+            ),
             // Topical, mid-confidence — same age, no entity link.
             mem("b", "Read about quantum theory", two_months_ago, 0.5),
         ];

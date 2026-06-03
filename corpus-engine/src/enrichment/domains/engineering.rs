@@ -21,17 +21,49 @@ use super::super::domain::*;
 pub struct EngineeringDomain;
 
 impl Domain for EngineeringDomain {
-    fn id(&self) -> &str { "engineering" }
-    fn name(&self) -> &str { "Engineering" }
-    fn position_statuses(&self) -> &PositionStatusVocab { todo!("EngineeringDomain") }
-    fn question_types(&self) -> &[QuestionType] { todo!("EngineeringDomain") }
-    fn overview_filter(&self) -> ChunkFilter { todo!("EngineeringDomain") }
-    fn skeleton_extraction_prompt(&self, _chunks: &[&Chunk]) -> String { todo!("EngineeringDomain") }
-    fn cluster_labeling_prompt(&self, _chunks: &[&Chunk]) -> String { todo!("EngineeringDomain") }
-    fn fault_line_detection_prompt(&self, _a: &[&Chunk], _b: &[&Chunk], _pa: &str, _pb: &str) -> String { todo!("EngineeringDomain") }
-    fn open_question_prompt(&self, _chunks: &[&Chunk]) -> String { todo!("EngineeringDomain") }
-    fn clustering_config(&self) -> ClusteringConfig { todo!("EngineeringDomain") }
-    fn alignment_config(&self) -> AlignmentConfig { todo!("EngineeringDomain") }
-    fn fault_line_config(&self) -> FaultLineConfig { todo!("EngineeringDomain") }
-    fn skeleton_storage(&self) -> SkeletonStorage { todo!("EngineeringDomain") }
+    fn id(&self) -> &str {
+        "engineering"
+    }
+    fn name(&self) -> &str {
+        "Engineering"
+    }
+    fn position_statuses(&self) -> &PositionStatusVocab {
+        todo!("EngineeringDomain")
+    }
+    fn question_types(&self) -> &[QuestionType] {
+        todo!("EngineeringDomain")
+    }
+    fn overview_filter(&self) -> ChunkFilter {
+        todo!("EngineeringDomain")
+    }
+    fn skeleton_extraction_prompt(&self, _chunks: &[&Chunk]) -> String {
+        todo!("EngineeringDomain")
+    }
+    fn cluster_labeling_prompt(&self, _chunks: &[&Chunk]) -> String {
+        todo!("EngineeringDomain")
+    }
+    fn fault_line_detection_prompt(
+        &self,
+        _a: &[&Chunk],
+        _b: &[&Chunk],
+        _pa: &str,
+        _pb: &str,
+    ) -> String {
+        todo!("EngineeringDomain")
+    }
+    fn open_question_prompt(&self, _chunks: &[&Chunk]) -> String {
+        todo!("EngineeringDomain")
+    }
+    fn clustering_config(&self) -> ClusteringConfig {
+        todo!("EngineeringDomain")
+    }
+    fn alignment_config(&self) -> AlignmentConfig {
+        todo!("EngineeringDomain")
+    }
+    fn fault_line_config(&self) -> FaultLineConfig {
+        todo!("EngineeringDomain")
+    }
+    fn skeleton_storage(&self) -> SkeletonStorage {
+        todo!("EngineeringDomain")
+    }
 }

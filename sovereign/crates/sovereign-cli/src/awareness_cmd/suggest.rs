@@ -57,7 +57,10 @@ pub(super) async fn cmd_suggest(args: &[String]) -> i32 {
     let store = match SqliteStateStore::open(&db_path) {
         Ok(s) => Arc::new(s),
         Err(e) => {
-            eprintln!("awareness suggest: open {} failed: {e}", display_path(&db_path));
+            eprintln!(
+                "awareness suggest: open {} failed: {e}",
+                display_path(&db_path)
+            );
             return 1;
         }
     };
@@ -147,7 +150,10 @@ fn print_assistant_or_system_turn(n: usize, m: &Message) {
         Role::User => "user",
     };
     println!();
-    println!("Turn {n} ({role}): \"{}\"", truncate_inline(&m.content, 200));
+    println!(
+        "Turn {n} ({role}): \"{}\"",
+        truncate_inline(&m.content, 200)
+    );
     println!("    (skipped — only user turns trigger suggestion detection)");
 }
 
@@ -235,14 +241,30 @@ impl std::fmt::Display for SuggestionKind {
 fn build_detection_prompt(c: &Conversation, turn_idx: usize) -> String {
     let mut window = String::new();
     let start = turn_idx.saturating_sub(3);
-    for (i, m) in c.messages.iter().enumerate().skip(start).take(turn_idx + 1 - start) {
+    for (i, m) in c
+        .messages
+        .iter()
+        .enumerate()
+        .skip(start)
+        .take(turn_idx + 1 - start)
+    {
         let role = match m.role {
             Role::User => "user",
             Role::Assistant => "assistant",
             Role::System => "system",
         };
-        let marker = if i == turn_idx { " ← current turn" } else { "" };
-        window.push_str(&format!("[Turn {}, {}{}]\n{}\n\n", i + 1, role, marker, m.content));
+        let marker = if i == turn_idx {
+            " ← current turn"
+        } else {
+            ""
+        };
+        window.push_str(&format!(
+            "[Turn {}, {}{}]\n{}\n\n",
+            i + 1,
+            role,
+            marker,
+            m.content
+        ));
     }
     format!(
         r#"You are a development-time evaluator for the Sovereign suggest_note pipeline.
@@ -336,9 +358,7 @@ fn trim_to_json_object(s: &str) -> &str {
 /// Apply the goal > commitment > follow_up priority gate. Returns
 /// (chosen, suppressed). Suppressed is empty when zero or one
 /// detections fire.
-fn apply_priority_gate(
-    mut detections: Vec<Detection>,
-) -> (Option<Detection>, Vec<Detection>) {
+fn apply_priority_gate(mut detections: Vec<Detection>) -> (Option<Detection>, Vec<Detection>) {
     if detections.is_empty() {
         return (None, Vec::new());
     }

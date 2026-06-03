@@ -40,7 +40,9 @@ pub fn landscape_digest_router(manager: Arc<KnowledgeViewManager>) -> Router {
             "/v1/knowledge/landscape_digest",
             post(landscape_digest_handler),
         )
-        .layer(axum::middleware::from_fn(crate::loopback_guard::loopback_only))
+        .layer(axum::middleware::from_fn(
+            crate::loopback_guard::loopback_only,
+        ))
         .layer(Extension(manager))
 }
 

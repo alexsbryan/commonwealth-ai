@@ -249,7 +249,10 @@ pub async fn run_register(args: &[String]) -> i32 {
     println!("  display_name = {}", parsed.display_name);
     println!("  initial_sweep = {:?}", parsed.initial_sweep);
     println!();
-    println!("Track progress with:  sovereign corpus watch-status {}", parsed.corpus_id);
+    println!(
+        "Track progress with:  sovereign corpus watch-status {}",
+        parsed.corpus_id
+    );
     0
 }
 
@@ -264,7 +267,9 @@ fn print_register_help() {
     eprintln!("  --name <NAME>            Display name (default: folder basename)");
     eprintln!("  --sweep-secs <N>         Sweep cadence in seconds (default: 120, floor: 60)");
     eprintln!("  --grace-secs <N>         Soft-delete grace window in seconds (default: 7d)");
-    eprintln!("  --abs-threshold <N>      Pause the sweep if it would delete >= N files (default: 100)");
+    eprintln!(
+        "  --abs-threshold <N>      Pause the sweep if it would delete >= N files (default: 100)"
+    );
     eprintln!("  --frac-threshold <F>     Pause the sweep if it would delete >= F of live docs (default: 0.25)");
     eprintln!("  --no-deletion-guard      Disable both deletion thresholds (eager delete)");
     eprintln!("  --exclude <GLOB>         Path glob to exclude (repeatable)");
@@ -422,7 +427,10 @@ pub async fn run_status(args: &[String]) -> i32 {
     };
     println!("{}: {}", parsed.corpus_id, status_summary(&parsed.status));
     println!();
-    println!("{}", serde_json::to_string_pretty(&parsed.status).unwrap_or_default());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&parsed.status).unwrap_or_default()
+    );
     0
 }
 
@@ -512,10 +520,7 @@ pub async fn run_add_root(args: &[String]) -> i32 {
         eprintln!("Not a directory: {}", path.display());
         return 1;
     }
-    let url = format!(
-        "{}/internal/corpus/watch/{id}/roots",
-        daemon_base_url()
-    );
+    let url = format!("{}/internal/corpus/watch/{id}/roots", daemon_base_url());
     post_ack(&url, json!({ "path": path })).await
 }
 
@@ -619,7 +624,11 @@ fn require_corpus_id(args: &[String], cmd: &str) -> Option<String> {
 fn status_summary(s: &StatusEnum) -> String {
     use StatusEnum::*;
     match s {
-        Idle { last_sweep_unix, live_docs, tombstones } => {
+        Idle {
+            last_sweep_unix,
+            live_docs,
+            tombstones,
+        } => {
             format!(
                 "idle  live_docs={live_docs}  tombstones={tombstones}  last_sweep={}",
                 if *last_sweep_unix == 0 {
@@ -629,7 +638,11 @@ fn status_summary(s: &StatusEnum) -> String {
                 }
             )
         }
-        Sweeping { phase, current, total } => {
+        Sweeping {
+            phase,
+            current,
+            total,
+        } => {
             format!("sweeping  phase={phase:?}  {current}/{total}")
         }
         PausedAwaitingConfirmation {
@@ -703,7 +716,8 @@ struct StateResponse {
 #[derive(Debug, Deserialize)]
 struct FailedFileWire {
     doc_id: String,
-    #[allow(dead_code)] // path printed only via doc_id today; absolute_path reserved for future drill-down
+    #[allow(dead_code)]
+    // path printed only via doc_id today; absolute_path reserved for future drill-down
     absolute_path: PathBuf,
     kind: String,
     reason: String,
@@ -827,11 +841,7 @@ mod tests {
         // always refused for unprivileged clients on macOS/Linux.
         let url = "http://127.0.0.1:1/anything";
         let client = build_client();
-        let err = client
-            .get(url)
-            .send()
-            .await
-            .expect_err("connect must fail");
+        let err = client.get(url).send().await.expect_err("connect must fail");
         let msg = describe_request_error(&err, url);
         // We don't require is_connect()==true (reqwest sometimes
         // returns is_request()==true for refused ports), only that

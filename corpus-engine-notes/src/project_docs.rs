@@ -66,8 +66,11 @@ impl ProjectDocsStore {
                 db_path.display()
             )))
         })?;
-        conn.execute_batch(SCHEMA)
-            .map_err(|e| Error::Io(std::io::Error::other(format!("ProjectDocsStore schema: {e}"))))?;
+        conn.execute_batch(SCHEMA).map_err(|e| {
+            Error::Io(std::io::Error::other(format!(
+                "ProjectDocsStore schema: {e}"
+            )))
+        })?;
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -177,11 +180,9 @@ impl ProjectDocsStore {
     pub async fn file_count(&self) -> Result<usize> {
         let conn = self.conn.lock().await;
         let count: i64 = conn
-            .query_row(
-                "SELECT COUNT(DISTINCT file_path) FROM docs",
-                [],
-                |r| r.get(0),
-            )
+            .query_row("SELECT COUNT(DISTINCT file_path) FROM docs", [], |r| {
+                r.get(0)
+            })
             .map_err(sqlite_err)?;
         Ok(count as usize)
     }
@@ -312,7 +313,9 @@ pub fn find_markdown_files(repo_root: &Path) -> Vec<PathBuf> {
 }
 
 fn walk_for_markdown(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         let name = path
@@ -341,7 +344,9 @@ fn unix_now() -> i64 {
 }
 
 fn sqlite_err(e: rusqlite::Error) -> Error {
-    Error::Io(std::io::Error::other(format!("ProjectDocsStore sqlite: {e}")))
+    Error::Io(std::io::Error::other(format!(
+        "ProjectDocsStore sqlite: {e}"
+    )))
 }
 
 fn normalise_bm25(bm25: f64) -> f32 {

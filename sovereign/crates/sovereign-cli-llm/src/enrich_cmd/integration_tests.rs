@@ -15,14 +15,14 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::enrichment::pipeline::{
-    ChapterManifest, ChatCompletionFn, ChatPrompt, ChapterSelection, Phase1Output, PhaseCache,
-    PipelinePhase,
-};
-use corpus_engine::types::EmbedFn;
 use super::config::{EnrichConfig, CONFIG_SCHEMA_VERSION};
 use super::paths;
 use super::test_env::{scoped_home, HomeGuard};
+use corpus_engine::enrichment::pipeline::{
+    ChapterManifest, ChapterSelection, ChatCompletionFn, ChatPrompt, Phase1Output, PhaseCache,
+    PipelinePhase,
+};
+use corpus_engine::types::EmbedFn;
 
 fn synthetic_book() -> String {
     let mut s = String::new();
@@ -116,11 +116,9 @@ fn scaffold_corpus(corpus_id: &str, source_path: &std::path::Path) -> EnrichConf
     // Build + save chapter manifest so future runs merge against it.
     let source = fs::read_to_string(source_path).unwrap();
     let detector = corpus_engine::chunkers::sectioned::ChapterRegexDetector::new();
-    let chunker =
-        corpus_engine::chunkers::sectioned::SectionedChunker::with_detector(detector);
+    let chunker = corpus_engine::chunkers::sectioned::SectionedChunker::with_detector(detector);
     let report = chunker.dry_run(&source);
-    let manifest =
-        ChapterManifest::from_detected_sections(corpus_id, &source, &report.sections);
+    let manifest = ChapterManifest::from_detected_sections(corpus_id, &source, &report.sections);
     manifest
         .save(&paths::chapters_manifest_path(corpus_id))
         .unwrap();

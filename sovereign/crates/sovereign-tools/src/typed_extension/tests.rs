@@ -65,7 +65,8 @@ impl InferenceProvider for CannedInferenceProvider {
             latency_ms: 1,
             oicp_meta: None,
             finish_reason: None,
-            completion_tokens: None,        })
+            completion_tokens: None,
+        })
     }
 
     async fn complete_stream(
@@ -167,7 +168,9 @@ async fn seed_store_with_two_leaves_and_two_themes(corpus_id: &str) -> Arc<Sqlit
         VaultThemeRow {
             corpus_id: corpus_id.into(),
             theme_id: "theme-1".into(),
-            summary: "Cross-note theme: markets versus regulation as competing allocation mechanisms.".into(),
+            summary:
+                "Cross-note theme: markets versus regulation as competing allocation mechanisms."
+                    .into(),
             summary_embedding: Vec::new(),
             member_source_doc_ids_json: "[]".into(),
             cluster_coherence: 0.9,
@@ -176,7 +179,9 @@ async fn seed_store_with_two_leaves_and_two_themes(corpus_id: &str) -> Arc<Sqlit
         VaultThemeRow {
             corpus_id: corpus_id.into(),
             theme_id: "theme-2".into(),
-            summary: "Cross-note theme: PBM intermediation extracts more rent than it produces value.".into(),
+            summary:
+                "Cross-note theme: PBM intermediation extracts more rent than it produces value."
+                    .into(),
             summary_embedding: Vec::new(),
             member_source_doc_ids_json: "[]".into(),
             cluster_coherence: 0.85,
@@ -237,7 +242,10 @@ async fn end_to_end_writes_atoms_and_manifest() {
     let opposition = *report.atoms_per_kind.get("opposition").unwrap();
     let concession = *report.atoms_per_kind.get("concession").unwrap();
     assert!(mechanism >= 1, "mechanism axis must populate from Pass A");
-    assert!(named_position >= 1, "named_position must populate from Pass A");
+    assert!(
+        named_position >= 1,
+        "named_position must populate from Pass A"
+    );
     assert!(evidence >= 1, "evidence must populate from Pass A");
     assert!(opposition >= 1, "opposition must populate from Pass B");
     assert!(concession >= 1, "concession must populate from Pass B");
@@ -370,7 +378,8 @@ async fn atoms_carry_primary_source_citations_when_quote_spans_present() {
         .await
         .unwrap();
 
-    let primary_quote = "Spread pricing lets PBMs charge payers more than they reimburse pharmacies.";
+    let primary_quote =
+        "Spread pricing lets PBMs charge payers more than they reimburse pharmacies.";
     let primary_chunk_id: u32 = 7777;
     let leaf = ConvRaptorNodeRow {
         node_id: "n-cite-1".into(),
@@ -461,7 +470,10 @@ fn assert_atoms_use_content_hash_ids(atlas_dir: &Path) {
         .get("atoms")
         .and_then(|v| v.as_array())
         .expect("atoms.json must carry an `atoms` array");
-    assert!(!atoms.is_empty(), "atoms array must be non-empty in the e2e test");
+    assert!(
+        !atoms.is_empty(),
+        "atoms array must be non-empty in the e2e test"
+    );
     for atom in atoms {
         let envelope = atom
             .as_object()

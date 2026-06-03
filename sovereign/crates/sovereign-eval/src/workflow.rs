@@ -99,7 +99,10 @@ pub fn analyze(m: &Manifest) -> WorkflowReport {
             None => stats.other_outcome_count += 1,
         }
         if let Some(d) = p.duration_ms {
-            tool_durations.entry(p.tool_name.clone()).or_default().push(d);
+            tool_durations
+                .entry(p.tool_name.clone())
+                .or_default()
+                .push(d);
         }
     }
 
@@ -162,9 +165,7 @@ fn count_retries(m: &Manifest) -> u32 {
         let args = e.args_json.as_deref().unwrap_or("");
         let lookback = i.saturating_sub(3);
         for prev in &befores[lookback..i] {
-            if prev.tool_name == e.tool_name
-                && prev.args_json.as_deref().unwrap_or("") == args
-            {
+            if prev.tool_name == e.tool_name && prev.args_json.as_deref().unwrap_or("") == args {
                 retries += 1;
                 break;
             }
@@ -229,7 +230,15 @@ mod tests {
         }
     }
 
-    fn ev(call_id: &str, tool: &str, phase: &str, fired: i64, args: Option<&str>, outcome: Option<&str>, dur: Option<i64>) -> ToolCallEvent {
+    fn ev(
+        call_id: &str,
+        tool: &str,
+        phase: &str,
+        fired: i64,
+        args: Option<&str>,
+        outcome: Option<&str>,
+        dur: Option<i64>,
+    ) -> ToolCallEvent {
         ToolCallEvent {
             event_id: format!("e-{call_id}-{phase}"),
             call_id: call_id.into(),
@@ -246,8 +255,24 @@ mod tests {
     fn analyze_pairs_before_after() {
         let mut m = empty_manifest();
         m.tool_calls = vec![
-            ev("c1", "symbols", "before", 100, Some("{\"name\":\"X\"}"), None, None),
-            ev("c1", "symbols", "after", 110, None, Some("success"), Some(10)),
+            ev(
+                "c1",
+                "symbols",
+                "before",
+                100,
+                Some("{\"name\":\"X\"}"),
+                None,
+                None,
+            ),
+            ev(
+                "c1",
+                "symbols",
+                "after",
+                110,
+                None,
+                Some("success"),
+                Some(10),
+            ),
         ];
         let r = analyze(&m);
         assert_eq!(r.total_tool_calls, 2);
@@ -259,10 +284,42 @@ mod tests {
     fn analyze_counts_retries() {
         let mut m = empty_manifest();
         m.tool_calls = vec![
-            ev("c1", "symbols", "before", 100, Some("{\"name\":\"X\"}"), None, None),
-            ev("c1", "symbols", "after", 110, None, Some("empty_result"), Some(10)),
-            ev("c2", "symbols", "before", 120, Some("{\"name\":\"X\"}"), None, None),
-            ev("c2", "symbols", "after", 130, None, Some("empty_result"), Some(10)),
+            ev(
+                "c1",
+                "symbols",
+                "before",
+                100,
+                Some("{\"name\":\"X\"}"),
+                None,
+                None,
+            ),
+            ev(
+                "c1",
+                "symbols",
+                "after",
+                110,
+                None,
+                Some("empty_result"),
+                Some(10),
+            ),
+            ev(
+                "c2",
+                "symbols",
+                "before",
+                120,
+                Some("{\"name\":\"X\"}"),
+                None,
+                None,
+            ),
+            ev(
+                "c2",
+                "symbols",
+                "after",
+                130,
+                None,
+                Some("empty_result"),
+                Some(10),
+            ),
         ];
         let r = analyze(&m);
         assert_eq!(r.retry_calls, 1);
@@ -271,9 +328,7 @@ mod tests {
     #[test]
     fn analyze_handles_orphan_after() {
         let mut m = empty_manifest();
-        m.tool_calls = vec![
-            ev("c1", "symbols", "before", 100, Some("{}"), None, None),
-        ];
+        m.tool_calls = vec![ev("c1", "symbols", "before", 100, Some("{}"), None, None)];
         let r = analyze(&m);
         assert_eq!(r.orphaned_after, 1);
         assert_eq!(r.total_paired_calls, 0);

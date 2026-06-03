@@ -16,15 +16,9 @@ pub enum TopologyEvent {
     /// A node departed — either gracefully or detected by the fault detector.
     NodeDeparted(NodeId),
     /// A node's model portfolio changed — a large model became available.
-    ModelAvailable {
-        node_id: NodeId,
-        model_id: String,
-    },
+    ModelAvailable { node_id: NodeId, model_id: String },
     /// A node's model was unloaded (memory pressure, manual unload).
-    ModelUnavailable {
-        node_id: NodeId,
-        model_id: String,
-    },
+    ModelUnavailable { node_id: NodeId, model_id: String },
     /// Leadership changed — the new leader should start the scheduler.
     LeaderChanged(NodeId),
 }

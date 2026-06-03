@@ -541,8 +541,7 @@ mod tests {
         assert!(s.is_object());
         assert_eq!(s["type"], "object");
         let required = s["required"].as_array().unwrap();
-        let names: Vec<&str> =
-            required.iter().filter_map(|v| v.as_str()).collect();
+        let names: Vec<&str> = required.iter().filter_map(|v| v.as_str()).collect();
         assert!(names.contains(&"corpus"));
         assert!(names.contains(&"acquire"));
         assert!(names.contains(&"extract"));
@@ -591,9 +590,7 @@ mod tests {
             .expect("acquire must be a oneOf");
         let http_api = arms
             .iter()
-            .find(|arm| {
-                arm["properties"]["type"]["const"] == "http_api"
-            })
+            .find(|arm| arm["properties"]["type"]["const"] == "http_api")
             .expect("http_api arm");
         let required: Vec<&str> = http_api["required"]
             .as_array()
@@ -613,9 +610,7 @@ mod tests {
             .expect("extract must be a oneOf");
         let hs = arms
             .iter()
-            .find(|arm| {
-                arm["properties"]["type"]["const"] == "html_sections"
-            })
+            .find(|arm| arm["properties"]["type"]["const"] == "html_sections")
             .expect("html_sections arm");
         let required: Vec<&str> = hs["required"]
             .as_array()
@@ -629,12 +624,11 @@ mod tests {
     #[test]
     fn enrichment_pattern_types_include_role_overlap() {
         let s = recipe_json_schema();
-        let pat_types = s["properties"]["enrichment"]["properties"]["patterns"]
-            ["items"]["properties"]["type"]["enum"]
+        let pat_types = s["properties"]["enrichment"]["properties"]["patterns"]["items"]
+            ["properties"]["type"]["enum"]
             .as_array()
             .unwrap();
-        let names: Vec<&str> =
-            pat_types.iter().filter_map(|v| v.as_str()).collect();
+        let names: Vec<&str> = pat_types.iter().filter_map(|v| v.as_str()).collect();
         assert!(names.contains(&"role_overlap"));
         assert!(names.contains(&"circular_flow"));
         assert!(names.contains(&"threshold"));

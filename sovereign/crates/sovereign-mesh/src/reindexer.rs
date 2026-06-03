@@ -187,10 +187,7 @@ impl Reindexer {
     /// `None` from `get_mut`). The daemon's startup wires the
     /// harvester immediately after `Reindexer::new` and before
     /// handing the Arc to anything else.
-    pub fn with_commit_harvester(
-        self: &mut Arc<Self>,
-        notes: Arc<corpus_engine_notes::NoteStore>,
-    ) {
+    pub fn with_commit_harvester(self: &mut Arc<Self>, notes: Arc<corpus_engine_notes::NoteStore>) {
         if let Some(inner) = Arc::get_mut(self) {
             inner.commit_harvester = Some(notes);
         } else {
@@ -213,10 +210,7 @@ impl Reindexer {
         // needed. Any OpenError triggers the first rebuild via the
         // Startup signal below — we spawn the worker with a fresh
         // in-memory graph as a placeholder so tools don't race.
-        let db_path = self
-            .indexes_dir
-            .join(&corpus_id)
-            .join("scip_graph.db");
+        let db_path = self.indexes_dir.join(&corpus_id).join("scip_graph.db");
         let initial_graph = match ScipGraph::open_with_integrity(&db_path, &corpus_id) {
             Ok(g) => g,
             Err(e) => {
@@ -225,8 +219,7 @@ impl Reindexer {
                     error = %e,
                     "open_with_integrity failed on register; placeholder graph + rebuild scheduled"
                 );
-                ScipGraph::open_in_memory(&corpus_id)
-                    .expect("in-memory fallback graph")
+                ScipGraph::open_in_memory(&corpus_id).expect("in-memory fallback graph")
             }
         };
         let graph: ScipGraphHandle = Arc::new(ArcSwap::from_pointee(initial_graph));
@@ -390,11 +383,7 @@ async fn run_worker(ctx: WorkerCtx) {
 
     // Filesystem watcher. Held for the lifetime of the task so
     // the notify backend is released when the worker exits.
-    let _fs_watcher = match start_fs_watcher(
-        &entry.root,
-        &entry.watchers.ignore_paths,
-        _fs_tx,
-    ) {
+    let _fs_watcher = match start_fs_watcher(&entry.root, &entry.watchers.ignore_paths, _fs_tx) {
         Ok(w) => Some(w),
         Err(e) => {
             tracing::warn!(
@@ -532,7 +521,9 @@ async fn run_one_rebuild(ctx: &RebuildCtx, req: RebuildRequest) {
         return;
     }
 
-    ctx.state.set(WatcherKind::Scip, WatcherStatus::Active).await;
+    ctx.state
+        .set(WatcherKind::Scip, WatcherStatus::Active)
+        .await;
     let start = Instant::now();
     // Cross-project semaphore — at most one project rebuilds at a
     // time, monorepo-wide. SCIP export is a full cargo + rust-
@@ -603,15 +594,9 @@ pub struct RebuildSummary {
     pub skipped: Vec<String>,
 }
 
-async fn execute_rebuild(
-    ctx: &RebuildCtx,
-    req: &RebuildRequest,
-) -> Result<RebuildSummary, String> {
+async fn execute_rebuild(ctx: &RebuildCtx, req: &RebuildRequest) -> Result<RebuildSummary, String> {
     let corpus_id = ctx.entry.corpus_id.clone();
-    let live_path = ctx
-        .indexes_dir
-        .join(&corpus_id)
-        .join("scip_graph.db");
+    let live_path = ctx.indexes_dir.join(&corpus_id).join("scip_graph.db");
     let db_dir = live_path
         .parent()
         .ok_or_else(|| "db path has no parent".to_string())?
@@ -651,9 +636,9 @@ async fn execute_rebuild(
     let export_out = tempdir.path().join("scip");
 
     let workspace_roots: Option<Vec<PathBuf>> = None; // auto-detect
-    // The exporter wants a `&dyn Fn(ScipProgress)`; use a plain
-    // function (Send + Sync by default) rather than a closure, so
-    // the containing async body stays Send.
+                                                      // The exporter wants a `&dyn Fn(ScipProgress)`; use a plain
+                                                      // function (Send + Sync by default) rather than a closure, so
+                                                      // the containing async body stays Send.
     fn silent_progress(_p: corpus_engine_scip::scip_export::ScipProgress<'_>) {}
     let summary = corpus_engine_scip::scip_export::export_all(
         &ctx.entry.root,
@@ -684,11 +669,7 @@ async fn execute_rebuild(
 
     let head = read_git_head(&ctx.entry.root);
     new_graph
-        .record_rebuild(
-            req.reason.as_str(),
-            head.as_deref(),
-            Some(&outcomes_json),
-        )
+        .record_rebuild(req.reason.as_str(), head.as_deref(), Some(&outcomes_json))
         .await;
 
     // Close the staging connection before rename so Windows and
@@ -696,8 +677,13 @@ async fn execute_rebuild(
     // POSIX the rename works either way; explicit drop is cheap.
     drop(new_graph);
 
-    std::fs::rename(&staging_path, &live_path)
-        .map_err(|e| format!("rename {} → {}: {e}", staging_path.display(), live_path.display()))?;
+    std::fs::rename(&staging_path, &live_path).map_err(|e| {
+        format!(
+            "rename {} → {}: {e}",
+            staging_path.display(),
+            live_path.display()
+        )
+    })?;
 
     // Re-open from the renamed live path, swap into the handle.
     let live = ScipGraph::open_with_integrity(&live_path, &corpus_id)
@@ -805,8 +791,7 @@ impl IgnoreFilter {
         ];
         if path.components().any(|c| {
             let s = c.as_os_str().to_string_lossy();
-            HARD_EXCLUDE.contains(&s.as_ref())
-                || self.extra_ignores.iter().any(|e| e == s.as_ref())
+            HARD_EXCLUDE.contains(&s.as_ref()) || self.extra_ignores.iter().any(|e| e == s.as_ref())
         }) {
             return true;
         }
@@ -856,10 +841,7 @@ fn build_ignore_filter(root: &Path, extra_ignores: &[String]) -> IgnoreFilter {
 /// common case — daemon restart for an inference-side change with
 /// nothing touched in the source tree — which used to fan out N
 /// full SCIP rebuilds and OOM the box.
-async fn needs_startup_rebuild(
-    entry: &ProjectEntry,
-    graph: &ScipGraph,
-) -> bool {
+async fn needs_startup_rebuild(entry: &ProjectEntry, graph: &ScipGraph) -> bool {
     // 1. The on-disk graph must have a recorded HEAD. Placeholder
     //    in-memory graphs (from a corrupt-DB recovery path) and
     //    legacy DBs without the `last_indexed_head` row return
@@ -1063,7 +1045,11 @@ mod tests {
         let (_tmp, entry, _head) = init_repo_with_commit("drift");
         let graph = ScipGraph::open_in_memory(&entry.corpus_id).unwrap();
         graph
-            .record_rebuild("startup", Some("0000000000000000000000000000000000000000"), None)
+            .record_rebuild(
+                "startup",
+                Some("0000000000000000000000000000000000000000"),
+                None,
+            )
             .await;
         assert!(needs_startup_rebuild(&entry, &graph).await);
     }

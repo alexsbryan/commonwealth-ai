@@ -29,8 +29,8 @@ pub fn run_recognition(
 
     // ── preprocess: resize to fixed height, proportional width ──
     let (cw, ch) = (crop.width().max(1), crop.height().max(1));
-    let target_w = (((target_h as f32) * cw as f32 / ch as f32).round() as u32)
-        .clamp(1, REC_MAX_WIDTH);
+    let target_w =
+        (((target_h as f32) * cw as f32 / ch as f32).round() as u32).clamp(1, REC_MAX_WIDTH);
     let resized = crop
         .resize_exact(target_w, target_h, image::imageops::FilterType::Triangle)
         .to_rgb8();
@@ -54,8 +54,10 @@ pub fn run_recognition(
             .lock()
             .map_err(|_| PaddleError::Session("rec mutex poisoned".into()))?;
         let outputs = sess
-            .run(ort::inputs![engine.rec_input() => tensor]
-                .map_err(|e| PaddleError::Session(format!("rec inputs!: {e}")))?)
+            .run(
+                ort::inputs![engine.rec_input() => tensor]
+                    .map_err(|e| PaddleError::Session(format!("rec inputs!: {e}")))?,
+            )
             .map_err(|e| PaddleError::Session(format!("rec run: {e}")))?;
         let view = outputs[0]
             .try_extract_tensor::<f32>()
@@ -93,7 +95,11 @@ pub fn ctc_decode(logits: &[f32], t: usize, c: usize, dict: &[String]) -> (Strin
                 "paddle.recognize: dict/model class-count mismatch — output will be garbled"
             );
         } else {
-            trace!(logits_c = c, dict_len = dict.len(), "paddle.recognize: +1 trailing class");
+            trace!(
+                logits_c = c,
+                dict_len = dict.len(),
+                "paddle.recognize: +1 trailing class"
+            );
         }
     }
 
@@ -141,7 +147,10 @@ mod tests {
 
     fn dict() -> Vec<String> {
         // index 0 = blank, then a,b,c
-        ["<blank>", "a", "b", "c"].iter().map(|s| s.to_string()).collect()
+        ["<blank>", "a", "b", "c"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
     }
 
     /// Build a [T,C] logit row-major buffer where each step's argmax is
@@ -158,7 +167,7 @@ mod tests {
     fn decode_drops_blanks_and_collapses_repeats() {
         let d = dict();
         let c = d.len(); // 4
-        // blank, a, a, blank, b, c, c  →  "abc"
+                         // blank, a, a, blank, b, c, c  →  "abc"
         let seq = [0usize, 1, 1, 0, 2, 3, 3];
         let logits = logits_from_argmax(&seq, c);
         let (text, conf) = ctc_decode(&logits, seq.len(), c, &d);

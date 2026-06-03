@@ -303,8 +303,9 @@ impl Worklist {
             "SELECT state, COUNT(*) FROM work_units
              WHERE recipe_id = ?1 GROUP BY state",
         )?;
-        let rows =
-            stmt.query_map(params![recipe_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
+        let rows = stmt.query_map(params![recipe_id], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+        })?;
         for row in rows {
             let (state, count) = row?;
             let count = count as u64;
@@ -428,7 +429,9 @@ mod tests {
         let mut wl = Worklist::open_in_memory().unwrap();
         wl.seed("r", ["x"]).unwrap();
         let claimed = wl.claim("r", "drv", 1, 60).unwrap();
-        let next = wl.ack_failure("r", &claimed[0], "boom", "timeout", 3).unwrap();
+        let next = wl
+            .ack_failure("r", &claimed[0], "boom", "timeout", 3)
+            .unwrap();
         assert_eq!(next, State::Pending);
         let stats = wl.stats("r").unwrap();
         assert_eq!(stats.pending, 1);

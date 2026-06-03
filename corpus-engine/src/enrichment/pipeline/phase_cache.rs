@@ -17,8 +17,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 use super::types::PipelinePhase;
 use crate::error::{Error, Result};
@@ -31,7 +31,9 @@ pub struct PhaseCache {
 
 impl PhaseCache {
     pub fn new(cache_dir: impl AsRef<Path>) -> Self {
-        Self { root: cache_dir.as_ref().to_path_buf() }
+        Self {
+            root: cache_dir.as_ref().to_path_buf(),
+        }
     }
 
     pub fn root(&self) -> &Path {
@@ -52,11 +54,7 @@ impl PhaseCache {
         }
         let raw = fs::read_to_string(&path)?;
         let parsed: T = serde_json::from_str(&raw).map_err(|e| {
-            Error::Serialization(format!(
-                "phase cache {} parse error: {}",
-                path.display(),
-                e
-            ))
+            Error::Serialization(format!("phase cache {} parse error: {}", path.display(), e))
         })?;
         Ok(Some(parsed))
     }
@@ -65,8 +63,8 @@ impl PhaseCache {
     /// if missing.
     pub fn write<T: Serialize>(&self, phase: PipelinePhase, value: &T) -> Result<()> {
         fs::create_dir_all(&self.root)?;
-        let json = serde_json::to_string_pretty(value)
-            .map_err(|e| Error::Serialization(e.to_string()))?;
+        let json =
+            serde_json::to_string_pretty(value).map_err(|e| Error::Serialization(e.to_string()))?;
         let path = self.path(phase);
         let tmp = path.with_extension("json.tmp");
         fs::write(&tmp, json)?;
@@ -112,11 +110,7 @@ impl PhaseCache {
     /// Extend the dep-based staleness check with arbitrary extra
     /// files (exemplars, config.json). If any of them is newer than
     /// this phase's cache, report stale.
-    pub fn is_stale_against_files(
-        &self,
-        phase: PipelinePhase,
-        extras: &[PathBuf],
-    ) -> Result<bool> {
+    pub fn is_stale_against_files(&self, phase: PipelinePhase, extras: &[PathBuf]) -> Result<bool> {
         if self.is_stale(phase)? {
             return Ok(true);
         }
@@ -203,7 +197,10 @@ mod tests {
     fn write_read_roundtrip() {
         let dir = tempdir().unwrap();
         let cache = PhaseCache::new(dir.path());
-        let d = Dummy { schema_version: 1, value: 42 };
+        let d = Dummy {
+            schema_version: 1,
+            value: 42,
+        };
         cache.write(PipelinePhase::Questions, &d).unwrap();
         let got: Dummy = cache.read(PipelinePhase::Questions).unwrap().unwrap();
         assert_eq!(got, d);
@@ -221,17 +218,26 @@ mod tests {
     fn atomic_tmp_file_is_cleaned_up() {
         let dir = tempdir().unwrap();
         let cache = PhaseCache::new(dir.path());
-        let d = Dummy { schema_version: 1, value: 1 };
+        let d = Dummy {
+            schema_version: 1,
+            value: 1,
+        };
         cache.write(PipelinePhase::Questions, &d).unwrap();
         // tmp should not remain on disk after rename.
-        assert!(!cache.path(PipelinePhase::Questions).with_extension("json.tmp").exists());
+        assert!(!cache
+            .path(PipelinePhase::Questions)
+            .with_extension("json.tmp")
+            .exists());
     }
 
     #[test]
     fn is_stale_when_upstream_never_ran() {
         let dir = tempdir().unwrap();
         let cache = PhaseCache::new(dir.path());
-        let d = Dummy { schema_version: 1, value: 1 };
+        let d = Dummy {
+            schema_version: 1,
+            value: 1,
+        };
         // Write downstream phase without writing upstream.
         cache.write(PipelinePhase::Questions, &d).unwrap();
         assert!(cache.is_stale(PipelinePhase::Questions).unwrap());
@@ -241,7 +247,10 @@ mod tests {
     fn is_fresh_when_no_deps_and_cache_exists() {
         let dir = tempdir().unwrap();
         let cache = PhaseCache::new(dir.path());
-        let d = Dummy { schema_version: 1, value: 1 };
+        let d = Dummy {
+            schema_version: 1,
+            value: 1,
+        };
         cache.write(PipelinePhase::Ingest, &d).unwrap();
         // Ingest has no dependencies.
         assert!(!cache.is_stale(PipelinePhase::Ingest).unwrap());
@@ -255,7 +264,10 @@ mod tests {
     fn is_stale_when_upstream_is_newer() {
         let dir = tempdir().unwrap();
         let cache = PhaseCache::new(dir.path());
-        let d = Dummy { schema_version: 1, value: 1 };
+        let d = Dummy {
+            schema_version: 1,
+            value: 1,
+        };
         // Write downstream first.
         cache.write(PipelinePhase::Ingest, &d).unwrap();
         cache.write(PipelinePhase::Questions, &d).unwrap();
@@ -287,7 +299,10 @@ mod tests {
     fn is_stale_against_extra_file() {
         let dir = tempdir().unwrap();
         let cache = PhaseCache::new(dir.path());
-        let d = Dummy { schema_version: 1, value: 1 };
+        let d = Dummy {
+            schema_version: 1,
+            value: 1,
+        };
         cache.write(PipelinePhase::Ingest, &d).unwrap();
         cache.write(PipelinePhase::Questions, &d).unwrap();
         assert!(!cache
@@ -306,7 +321,10 @@ mod tests {
     fn list_all_reports_only_existing_caches() {
         let dir = tempdir().unwrap();
         let cache = PhaseCache::new(dir.path());
-        let d = Dummy { schema_version: 1, value: 1 };
+        let d = Dummy {
+            schema_version: 1,
+            value: 1,
+        };
         cache.write(PipelinePhase::Ingest, &d).unwrap();
         cache.write(PipelinePhase::Questions, &d).unwrap();
         let listed = cache.list_all().unwrap();
@@ -319,7 +337,10 @@ mod tests {
     fn clear_removes_cache() {
         let dir = tempdir().unwrap();
         let cache = PhaseCache::new(dir.path());
-        let d = Dummy { schema_version: 1, value: 1 };
+        let d = Dummy {
+            schema_version: 1,
+            value: 1,
+        };
         cache.write(PipelinePhase::Ingest, &d).unwrap();
         cache.clear(PipelinePhase::Ingest).unwrap();
         assert!(!cache.path(PipelinePhase::Ingest).exists());

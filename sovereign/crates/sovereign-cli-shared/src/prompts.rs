@@ -77,7 +77,10 @@ pub fn prompt_path(prompt: &str) -> Result<Option<PathBuf>, String> {
     eprint!("{prompt}");
     io::stderr().flush().ok();
     let mut line = String::new();
-    io::stdin().lock().read_line(&mut line).map_err(|e| e.to_string())?;
+    io::stdin()
+        .lock()
+        .read_line(&mut line)
+        .map_err(|e| e.to_string())?;
     let trimmed = strip_quoting(line.trim());
     if trimmed.is_empty() {
         return Ok(None);
@@ -152,7 +155,10 @@ mod tests {
 
     #[test]
     fn strip_quoting_removes_backticks() {
-        assert_eq!(strip_quoting("`/Users/alice/my model.gguf`"), "/Users/alice/my model.gguf");
+        assert_eq!(
+            strip_quoting("`/Users/alice/my model.gguf`"),
+            "/Users/alice/my model.gguf"
+        );
     }
 
     #[test]

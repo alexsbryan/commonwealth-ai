@@ -7,21 +7,38 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
+use commonwealth_tdd::tasks::framework::Framework;
+use commonwealth_tdd::tasks::make_passing::MakePassingArgs;
+use commonwealth_tdd::tasks::split_file::{cleanup_structural_test, SplitFileArgs};
+use commonwealth_tdd::tasks::write_failing_test::WriteFailingTestArgs;
 use commonwealth_tdd::{
     run_trial,
     tasks::{make_failing_tests_pass, split_file, write_failing_test},
     DeterministicChatBackend, TrialConfig, TrialStatus, Workdir,
 };
-use commonwealth_tdd::tasks::make_passing::MakePassingArgs;
-use commonwealth_tdd::tasks::framework::Framework;
-use commonwealth_tdd::tasks::split_file::{cleanup_structural_test, SplitFileArgs};
-use commonwealth_tdd::tasks::write_failing_test::WriteFailingTestArgs;
 
 fn init_git(path: &Path) {
-    let _ = Command::new("git").arg("-C").arg(path).arg("init").arg("--initial-branch=main").output();
-    let _ = Command::new("git").arg("-C").arg(path).args(["config", "user.email", "t@t.t"]).output();
-    let _ = Command::new("git").arg("-C").arg(path).args(["config", "user.name", "t"]).output();
-    let _ = Command::new("git").arg("-C").arg(path).args(["commit", "--allow-empty", "-m", "init"]).output();
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .arg("init")
+        .arg("--initial-branch=main")
+        .output();
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["config", "user.email", "t@t.t"])
+        .output();
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["config", "user.name", "t"])
+        .output();
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["commit", "--allow-empty", "-m", "init"])
+        .output();
 }
 
 fn pytest_available() -> bool {
@@ -61,7 +78,11 @@ async fn make_passing_wraps_a_maximize_passing_trial() {
     });
     let r = run_trial(trial, backend).await;
     // No source file + no tests → NoBaseline.
-    assert!(matches!(r.status, TrialStatus::NoBaseline { .. }), "{:?}", r.status);
+    assert!(
+        matches!(r.status, TrialStatus::NoBaseline { .. }),
+        "{:?}",
+        r.status
+    );
 }
 
 #[tokio::test]
@@ -88,7 +109,12 @@ async fn write_failing_test_uses_generate_one_failing_polarity() {
     // (empty script) before producing a result. Tolerate Stalled
     // or NoBaseline depending on path taken.
     assert!(
-        matches!(r.status, TrialStatus::Stalled { .. } | TrialStatus::NoBaseline { .. } | TrialStatus::Exhausted { .. }),
+        matches!(
+            r.status,
+            TrialStatus::Stalled { .. }
+                | TrialStatus::NoBaseline { .. }
+                | TrialStatus::Exhausted { .. }
+        ),
         "got {:?}",
         r.status
     );

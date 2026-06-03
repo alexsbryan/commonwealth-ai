@@ -98,7 +98,10 @@ fn truncate_quote(span: &str) -> String {
     if trimmed.chars().count() <= SOURCE_RECOVERY_QUOTE_CHAR_CAP {
         return trimmed.to_string();
     }
-    let mut out: String = trimmed.chars().take(SOURCE_RECOVERY_QUOTE_CHAR_CAP).collect();
+    let mut out: String = trimmed
+        .chars()
+        .take(SOURCE_RECOVERY_QUOTE_CHAR_CAP)
+        .collect();
     out.push('…');
     out
 }
@@ -117,16 +120,15 @@ mod tests {
         assert!(SOURCE_RECOVERY_DISCIPLINE.contains("Prefer verbatim phrasings"));
         assert!(SOURCE_RECOVERY_DISCIPLINE.contains("Do NOT invent prose names"));
         assert!(SOURCE_RECOVERY_DISCIPLINE.contains("Opposition labels are SHORT"));
-        assert!(SOURCE_RECOVERY_DISCIPLINE.contains("Evidence labels lead with the distinctive token"));
+        assert!(
+            SOURCE_RECOVERY_DISCIPLINE.contains("Evidence labels lead with the distinctive token")
+        );
         assert!(SOURCE_RECOVERY_DISCIPLINE.contains("primary_entities"));
     }
 
     #[test]
     fn render_surfaces_each_excerpt_with_index() {
-        let body = render_source_recovery_block(&[
-            "First quote text.",
-            "Second quote text.",
-        ]);
+        let body = render_source_recovery_block(&["First quote text.", "Second quote text."]);
         assert!(body.contains("Verbatim source excerpts"));
         assert!(body.contains("> [0] First quote text."));
         assert!(body.contains("> [1] Second quote text."));

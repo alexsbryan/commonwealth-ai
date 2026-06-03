@@ -61,13 +61,8 @@ fn build_state() -> AppState {
     };
     let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
     let app_registry = Arc::new(AppRegistry::new());
-    let state = AppState::new_with_platform_and_engine(
-        self_id,
-        mesh,
-        mesh_store,
-        app_registry,
-        None,
-    );
+    let state =
+        AppState::new_with_platform_and_engine(self_id, mesh, mesh_store, app_registry, None);
     let provider: Arc<dyn InferenceProvider> = Arc::new(
         TestProvider::new()
             .with_model_id("responses-stub")
@@ -105,34 +100,56 @@ async fn non_streaming_input_text_returns_canonical_response_shape() {
 
     // Canonical envelope: id + object + status="completed" + model
     // (echoes what the caller asked for) + output array.
-    assert!(json["id"].as_str().unwrap_or("").starts_with("resp_"),
-        "id must start with `resp_` per Responses spec; got: {json}");
-    assert_eq!(json["object"].as_str(), Some("response"),
-        "object discriminator must be `response`; got: {json}");
-    assert_eq!(json["status"].as_str(), Some("completed"),
-        "status on a non-streaming success must be `completed`; got: {json}");
-    assert_eq!(json["model"].as_str(), Some("responses-stub"),
-        "model must echo the request's model label; got: {json}");
+    assert!(
+        json["id"].as_str().unwrap_or("").starts_with("resp_"),
+        "id must start with `resp_` per Responses spec; got: {json}"
+    );
+    assert_eq!(
+        json["object"].as_str(),
+        Some("response"),
+        "object discriminator must be `response`; got: {json}"
+    );
+    assert_eq!(
+        json["status"].as_str(),
+        Some("completed"),
+        "status on a non-streaming success must be `completed`; got: {json}"
+    );
+    assert_eq!(
+        json["model"].as_str(),
+        Some("responses-stub"),
+        "model must echo the request's model label; got: {json}"
+    );
 
     // Output must be an array with at least one Message containing
     // the translated text. Regression here would mean the adapter
     // didn't pull content out of chat.completions choices[0].message.content.
     let output = json["output"].as_array().expect("output must be an array");
-    assert!(!output.is_empty(), "output must contain at least one item; got: {json}");
+    assert!(
+        !output.is_empty(),
+        "output must contain at least one item; got: {json}"
+    );
 
     // First output item is a message with our text. Don't pin role
     // capitalization — that's an enum on the wire.
     let msg = &output[0];
-    assert_eq!(msg["type"].as_str(), Some("message"),
-        "first output item must be type=message; got: {msg}");
+    assert_eq!(
+        msg["type"].as_str(),
+        Some("message"),
+        "first output item must be type=message; got: {msg}"
+    );
     let content = msg["content"]
         .as_array()
         .expect("message.content must be an array");
-    assert!(!content.is_empty(), "message.content must have at least one part");
+    assert!(
+        !content.is_empty(),
+        "message.content must have at least one part"
+    );
     let text = content[0]["text"].as_str().unwrap_or("");
-    assert!(text.contains("hello from responses adapter"),
+    assert!(
+        text.contains("hello from responses adapter"),
         "first content part's text must carry the provider's output verbatim; \
-         got text={text:?}, full message={msg}");
+         got text={text:?}, full message={msg}"
+    );
 }
 
 #[tokio::test]

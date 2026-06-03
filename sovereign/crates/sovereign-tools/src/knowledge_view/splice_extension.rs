@@ -41,9 +41,7 @@ use sovereign_core::memory::EntityInventory;
 
 use crate::knowledge_view::relational::{RelationalNote, RelationalNoteKind};
 use crate::knowledge_view::strategic::StrategicGoal;
-use crate::knowledge_view::timeline::{
-    AtosLink, AtosLinkKind, AtosLookup, CharterStatus,
-};
+use crate::knowledge_view::timeline::{AtosLink, AtosLinkKind, AtosLookup, CharterStatus};
 
 // ── Chunk-timestamp resolver ────────────────────────────────────
 
@@ -68,24 +66,22 @@ pub fn load_chunk_timestamps(db_path: &Path) -> HashMap<String, i64> {
         return map;
     };
 
-    if let Ok(mut stmt) = conn.prepare(
-        "SELECT id, last_used FROM memories WHERE deleted_at IS NULL",
-    ) {
-        if let Ok(rows) = stmt.query_map([], |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
-        }) {
+    if let Ok(mut stmt) =
+        conn.prepare("SELECT id, last_used FROM memories WHERE deleted_at IS NULL")
+    {
+        if let Ok(rows) = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+        {
             for row in rows.flatten() {
                 map.insert(row.0, row.1);
             }
         }
     }
 
-    if let Ok(mut stmt) = conn.prepare(
-        "SELECT id, updated_at FROM conversations WHERE deleted_at IS NULL",
-    ) {
-        if let Ok(rows) = stmt.query_map([], |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
-        }) {
+    if let Ok(mut stmt) =
+        conn.prepare("SELECT id, updated_at FROM conversations WHERE deleted_at IS NULL")
+    {
+        if let Ok(rows) = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+        {
             for row in rows.flatten() {
                 map.insert(row.0, row.1);
             }
@@ -106,10 +102,7 @@ pub async fn relational_notes_for_entity(
     entity_name: &str,
 ) -> Vec<RelationalNote> {
     let kinds: &[&str] = &["commitment", "follow_up", "goal"];
-    let rows = match notes
-        .read_notes_by_related_entity(entity_name, kinds)
-        .await
-    {
+    let rows = match notes.read_notes_by_related_entity(entity_name, kinds).await {
         Ok(r) => r,
         Err(e) => {
             tracing::debug!(
@@ -463,13 +456,11 @@ fn contains_whole_word(haystack: &str, needle: &str) -> bool {
     let mut i = 0usize;
     while i + bytes_n.len() <= bytes_h.len() {
         if &bytes_h[i..i + bytes_n.len()] == bytes_n {
-            let before_ok = i == 0
-                || !bytes_h[i - 1].is_ascii_alphanumeric()
-                    && bytes_h[i - 1] != b'_';
+            let before_ok =
+                i == 0 || !bytes_h[i - 1].is_ascii_alphanumeric() && bytes_h[i - 1] != b'_';
             let after_idx = i + bytes_n.len();
             let after_ok = after_idx >= bytes_h.len()
-                || !bytes_h[after_idx].is_ascii_alphanumeric()
-                    && bytes_h[after_idx] != b'_';
+                || !bytes_h[after_idx].is_ascii_alphanumeric() && bytes_h[after_idx] != b'_';
             if before_ok && after_ok {
                 return true;
             }
@@ -493,10 +484,7 @@ mod tests {
 
     #[test]
     fn shorten_summary_keeps_first_line_only() {
-        assert_eq!(
-            shorten_summary("first\nsecond\nthird"),
-            "first"
-        );
+        assert_eq!(shorten_summary("first\nsecond\nthird"), "first");
     }
 
     #[test]
@@ -567,9 +555,7 @@ mod tests {
         assert_eq!(by_id.current_phase, Some(3));
         assert_eq!(by_id.total_phases, Some(8));
 
-        let by_title = snap
-            .lookup("relational and strategic awareness")
-            .unwrap();
+        let by_title = snap.lookup("relational and strategic awareness").unwrap();
         assert_eq!(by_title.kind, AtosLinkKind::Feature);
         assert_eq!(by_title.id, "knowledge-view-relational");
     }
@@ -666,9 +652,9 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-};
+            provenance: Default::default(),
+            concept_kind: None,
+        };
         let file = AtomsFile::new(vec![AtomEnvelope::Entity(entity)]);
         let body = serde_json::to_string(&file).unwrap();
         std::fs::write(atlas_dir.join("atoms.json"), body).unwrap();

@@ -13,14 +13,13 @@
 //! argument turns on (see Pharmacy Benefit recovery in the plan).
 
 use crate::enrichment::pipeline::atlas::{
-    DefinitionSketch, DescriptiveExtension, ExampleSketch, PropertyClaimSketch,
-    ProvenanceSketch, RelationSketch, TypeExtension,
+    DefinitionSketch, DescriptiveExtension, ExampleSketch, PropertyClaimSketch, ProvenanceSketch,
+    RelationSketch, TypeExtension,
 };
 use crate::enrichment::pipeline::types::strip_reasoning_tags;
 use crate::error::{Error, Result};
 
-pub const PHASE1_DESCRIPTIVE_SYSTEM: &str =
-    include_str!("descriptive_phase1_system.md");
+pub const PHASE1_DESCRIPTIVE_SYSTEM: &str = include_str!("descriptive_phase1_system.md");
 
 pub fn phase1_descriptive_schema() -> serde_json::Value {
     serde_json::json!({
@@ -168,9 +167,7 @@ pub fn parse_phase1_descriptive(response: &str) -> Result<DescriptiveExtension> 
                         .and_then(|x| x.as_array())
                         .map(|a| {
                             a.iter()
-                                .filter_map(|p| {
-                                    p.as_str().map(str::trim).filter(|s| !s.is_empty())
-                                })
+                                .filter_map(|p| p.as_str().map(str::trim).filter(|s| !s.is_empty()))
                                 .map(str::to_string)
                                 .collect::<Vec<_>>()
                         })
@@ -231,7 +228,9 @@ pub fn parse_phase1_descriptive(response: &str) -> Result<DescriptiveExtension> 
 }
 
 pub fn parse_phase1_descriptive_extension(response: &str) -> Result<TypeExtension> {
-    Ok(TypeExtension::Descriptive(parse_phase1_descriptive(response)?))
+    Ok(TypeExtension::Descriptive(parse_phase1_descriptive(
+        response,
+    )?))
 }
 
 #[cfg(test)]

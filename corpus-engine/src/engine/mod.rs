@@ -100,10 +100,7 @@ use crate::types::{
 /// bar buys nothing. If a future custom acquirer needs progress, the
 /// closure can emit it via its own side channel.
 pub type CustomAcquirerFn = Arc<
-    dyn Fn(
-            serde_json::Value,
-            PathBuf,
-        ) -> Pin<Box<dyn Future<Output = Result<PathBuf>> + Send>>
+    dyn Fn(serde_json::Value, PathBuf) -> Pin<Box<dyn Future<Output = Result<PathBuf>> + Send>>
         + Send
         + Sync,
 >;
@@ -120,8 +117,7 @@ pub type CustomAcquirerFn = Arc<
 /// Returning `Ok("")` skips the file (treated as empty). Returning
 /// `Err(_)` propagates as a per-file extraction failure that bubbles
 /// through the standard ingest error path.
-pub type CustomExtractorFn =
-    Arc<dyn Fn(&Path) -> Result<String> + Send + Sync>;
+pub type CustomExtractorFn = Arc<dyn Fn(&Path) -> Result<String> + Send + Sync>;
 
 /// Default partition-suffix for engines constructed without a mesh
 /// node id (standalone CLI / tests). Mesh daemons override via
@@ -171,8 +167,7 @@ pub struct CorpusEngine {
     /// `None` means tiered ingest runs RAPTOR-only — the
     /// conv-entity-graph builder still works against
     /// `primary_entities` per the Option-A path.
-    chunk_entity_extractor:
-        Option<crate::enrichment::tiered::ChunkEntityExtractorHandle>,
+    chunk_entity_extractor: Option<crate::enrichment::tiered::ChunkEntityExtractorHandle>,
     expected_embedding_model: String,
     /// Display-formatted identifier for this node, used as the partition
     /// suffix when ingesting into `<corpus>-partition-<self_node_id>`.
@@ -299,11 +294,7 @@ pub(crate) fn canonical_jsonl_shard_entries(zip_path: &Path) -> Result<Vec<usize
 }
 
 impl CorpusEngine {
-    pub fn new(
-        recipes_dir: PathBuf,
-        index_dir: PathBuf,
-        embed: EmbedFn,
-    ) -> Self {
+    pub fn new(recipes_dir: PathBuf, index_dir: PathBuf, embed: EmbedFn) -> Self {
         // Use recipes_dir as local overrides: checked before fetching URLs.
         // During development, local recipe.toml files in recipes/<id>/ are found here.
         // After install, cached recipe TOMLs are found here for delta updates.
@@ -367,10 +358,7 @@ impl CorpusEngine {
     /// The daemon's `start_daemon` builds AppState first (the hook's
     /// backing atomics live there) and then calls
     /// [`Self::set_yield_hook`] on the already-Arc-wrapped engine.
-    pub fn with_yield_hook(
-        self,
-        hook: Arc<dyn crate::yield_hook::YieldHook>,
-    ) -> Self {
+    pub fn with_yield_hook(self, hook: Arc<dyn crate::yield_hook::YieldHook>) -> Self {
         self.set_yield_hook(hook);
         self
     }
@@ -382,10 +370,7 @@ impl CorpusEngine {
     /// reconstructing the LanceDB connections it caches internally,
     /// which is needlessly expensive.
     pub fn set_yield_hook(&self, hook: Arc<dyn crate::yield_hook::YieldHook>) {
-        let mut guard = self
-            .yield_hook
-            .write()
-            .expect("yield_hook RwLock poisoned");
+        let mut guard = self.yield_hook.write().expect("yield_hook RwLock poisoned");
         *guard = Some(hook);
     }
 
@@ -431,11 +416,7 @@ impl CorpusEngine {
     /// will dispatch each file to this closure at ingest time.
     /// Overwrites any previously registered extractor with the same
     /// `kind`. Call before [`CorpusEngine::ingest`].
-    pub fn register_extractor(
-        &self,
-        kind: impl Into<String>,
-        extractor: CustomExtractorFn,
-    ) {
+    pub fn register_extractor(&self, kind: impl Into<String>, extractor: CustomExtractorFn) {
         let mut guard = self
             .custom_extractors
             .write()
@@ -472,8 +453,7 @@ impl CorpusEngine {
         let store = std::sync::Arc::new(
             crate::asset_store::FilesystemAssetStore::new(&root)
                 .expect("FilesystemAssetStore::new failed"),
-        )
-            as std::sync::Arc<dyn crate::asset_store::AssetStore>;
+        ) as std::sync::Arc<dyn crate::asset_store::AssetStore>;
         guard.insert(corpus_id.to_string(), store.clone());
         store
     }
@@ -645,11 +625,7 @@ impl CorpusEngine {
     /// individual extractor / provider failures log and are swallowed
     /// so the sweep keeps making forward progress; the next full
     /// re-enrichment recovers any skipped state.
-    pub async fn reindex_changed_sources_tiered(
-        &self,
-        corpus_id: &str,
-        source_doc_ids: &[String],
-    ) {
+    pub async fn reindex_changed_sources_tiered(&self, corpus_id: &str, source_doc_ids: &[String]) {
         if source_doc_ids.is_empty() {
             return;
         }
@@ -667,8 +643,7 @@ impl CorpusEngine {
             }
         }
         if let Some(provider) = self.tiered_provider.as_ref() {
-            if let Err(e) = provider.reenrich_sources(corpus_id, source_doc_ids).await
-            {
+            if let Err(e) = provider.reenrich_sources(corpus_id, source_doc_ids).await {
                 tracing::warn!(
                     corpus = corpus_id,
                     docs = source_doc_ids.len(),
@@ -695,7 +670,9 @@ impl CorpusEngine {
     /// Returns 0 when the meta file is absent (corpus not yet started).
     pub fn corpus_committed_iter_pos(&self, corpus_id: &str) -> u64 {
         let path = self.index_dir.join(corpus_id).join("_corpus_meta.json");
-        let Ok(content) = std::fs::read_to_string(&path) else { return 0 };
+        let Ok(content) = std::fs::read_to_string(&path) else {
+            return 0;
+        };
         serde_json::from_str::<serde_json::Value>(&content)
             .ok()
             .and_then(|v| v["committed_iter_pos"].as_u64())
@@ -1046,11 +1023,12 @@ impl CorpusEngine {
         // First pass: bucket every <something>-partition-* directory
         // by the corpus_id (everything before the first
         // `-partition-`).
-        let mut corpora_with_partitions: std::collections::BTreeSet<String> =
-            Default::default();
+        let mut corpora_with_partitions: std::collections::BTreeSet<String> = Default::default();
         for entry in entries.flatten() {
             let name_os = entry.file_name();
-            let Some(name) = name_os.to_str() else { continue };
+            let Some(name) = name_os.to_str() else {
+                continue;
+            };
             if name.starts_with('_') {
                 continue;
             }
@@ -1111,11 +1089,12 @@ impl CorpusEngine {
             return vec![];
         };
 
-        let mut counts: std::collections::BTreeMap<String, usize> =
-            Default::default();
+        let mut counts: std::collections::BTreeMap<String, usize> = Default::default();
         for entry in entries.flatten() {
             let name_os = entry.file_name();
-            let Some(name) = name_os.to_str() else { continue };
+            let Some(name) = name_os.to_str() else {
+                continue;
+            };
             if name.starts_with('_') {
                 continue;
             }
@@ -1126,8 +1105,7 @@ impl CorpusEngine {
             let Ok(content) = std::fs::read_to_string(&meta_path) else {
                 continue;
             };
-            let Ok(v) = serde_json::from_str::<serde_json::Value>(&content)
-            else {
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) else {
                 continue;
             };
             let Some(cid) = v.get("corpus_id").and_then(|x| x.as_str()) else {
@@ -1167,13 +1145,14 @@ impl CorpusEngine {
             return vec![];
         };
 
-        let self_partition_prefix =
-            format!("-partition-{}", self.self_node_id);
+        let self_partition_prefix = format!("-partition-{}", self.self_node_id);
         let mut out: std::collections::BTreeSet<String> = Default::default();
 
         for entry in entries.flatten() {
             let name_os = entry.file_name();
-            let Some(name) = name_os.to_str() else { continue };
+            let Some(name) = name_os.to_str() else {
+                continue;
+            };
             if name.starts_with('_') {
                 continue;
             }
@@ -1185,8 +1164,7 @@ impl CorpusEngine {
             let Ok(content) = std::fs::read_to_string(&meta_path) else {
                 continue;
             };
-            let Ok(v) = serde_json::from_str::<serde_json::Value>(&content)
-            else {
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) else {
                 continue;
             };
             if v["ingestion_in_progress"].as_bool() != Some(true) {
@@ -1194,8 +1172,7 @@ impl CorpusEngine {
             }
 
             // Determine the corpus id this directory belongs to.
-            let corpus_id = if let Some(rest) = name.strip_suffix(&self_partition_prefix)
-            {
+            let corpus_id = if let Some(rest) = name.strip_suffix(&self_partition_prefix) {
                 // <corpus>-partition-<self> for our own node.
                 rest.to_string()
             } else if name.contains("-partition-") {
@@ -1304,10 +1281,7 @@ impl CorpusEngine {
                 continue;
             }
             // Skip internal directories.
-            let name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("");
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if name.starts_with('_') {
                 continue;
             }
@@ -1461,14 +1435,22 @@ impl CorpusEngine {
                          committed_iter_pos: {}\n\
                          embedding_model: {}\n\
                          embedding_dimensions: {}\n",
-                        meta.get("ingestion_in_progress").unwrap_or(&serde_json::Value::Null),
-                        meta.get("indexes_built").unwrap_or(&serde_json::Value::Null),
-                        meta.get("vector_index_built").unwrap_or(&serde_json::Value::Null),
-                        meta.get("content_fts_built").unwrap_or(&serde_json::Value::Null),
-                        meta.get("title_fts_built").unwrap_or(&serde_json::Value::Null),
-                        meta.get("committed_iter_pos").unwrap_or(&serde_json::Value::Null),
-                        meta.get("embedding_model").unwrap_or(&serde_json::Value::Null),
-                        meta.get("embedding_dimensions").unwrap_or(&serde_json::Value::Null),
+                        meta.get("ingestion_in_progress")
+                            .unwrap_or(&serde_json::Value::Null),
+                        meta.get("indexes_built")
+                            .unwrap_or(&serde_json::Value::Null),
+                        meta.get("vector_index_built")
+                            .unwrap_or(&serde_json::Value::Null),
+                        meta.get("content_fts_built")
+                            .unwrap_or(&serde_json::Value::Null),
+                        meta.get("title_fts_built")
+                            .unwrap_or(&serde_json::Value::Null),
+                        meta.get("committed_iter_pos")
+                            .unwrap_or(&serde_json::Value::Null),
+                        meta.get("embedding_model")
+                            .unwrap_or(&serde_json::Value::Null),
+                        meta.get("embedding_dimensions")
+                            .unwrap_or(&serde_json::Value::Null),
                     ));
                 } else {
                     report.push_str("  Meta file exists but failed to parse.\n");
@@ -1611,8 +1593,8 @@ impl CorpusEngine {
 
         // Read committed_iter_pos from _corpus_meta.json.
         let meta_raw = std::fs::read_to_string(&meta_path)?;
-        let meta: serde_json::Value = serde_json::from_str(&meta_raw)
-            .map_err(|e| Error::Serialization(e.to_string()))?;
+        let meta: serde_json::Value =
+            serde_json::from_str(&meta_raw).map_err(|e| Error::Serialization(e.to_string()))?;
         let committed_iter_pos = meta
             .get("committed_iter_pos")
             .and_then(|v| v.as_u64())
@@ -1648,7 +1630,9 @@ impl CorpusEngine {
                     .to_string(),
                 size_bytes: 0,
                 status: if committed_iter_pos > 0 {
-                    SourceFileStatus::InProgress { started_at: Utc::now() }
+                    SourceFileStatus::InProgress {
+                        started_at: Utc::now(),
+                    }
                 } else {
                     SourceFileStatus::Pending
                 },
@@ -1723,7 +1707,9 @@ impl CorpusEngine {
                     filename,
                     size_bytes: {
                         // Approximate from actual file size if available.
-                        std::fs::metadata(path).map(|m| m.len()).unwrap_or(size_hint)
+                        std::fs::metadata(path)
+                            .map(|m| m.len())
+                            .unwrap_or(size_hint)
                     },
                     status,
                 }
@@ -1787,7 +1773,9 @@ impl CorpusEngine {
         if let Ok(entries) = std::fs::read_dir(&self.index_dir) {
             for entry in entries.flatten() {
                 let name = entry.file_name();
-                let Some(name_str) = name.to_str() else { continue };
+                let Some(name_str) = name.to_str() else {
+                    continue;
+                };
                 if !name_str.starts_with(&prefix) {
                     continue;
                 }
@@ -1950,24 +1938,22 @@ impl CorpusEngine {
         for corpus_id in canonicals {
             let path = self.index_dir.join(&corpus_id);
             match crate::index::CorpusIndex::open(&path).await {
-                Ok(idx) => {
-                    match idx.compute_and_stamp_fingerprint().await {
-                        Ok(fp) => {
-                            tracing::info!(
-                                corpus_id,
-                                fp_prefix = %&fp[..fp.len().min(12)],
-                                "lazy_stamp_legacy_fingerprints: stamped canonical"
-                            );
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                corpus_id,
-                                error = %e,
-                                "lazy_stamp_legacy_fingerprints: compute failed"
-                            );
-                        }
+                Ok(idx) => match idx.compute_and_stamp_fingerprint().await {
+                    Ok(fp) => {
+                        tracing::info!(
+                            corpus_id,
+                            fp_prefix = %&fp[..fp.len().min(12)],
+                            "lazy_stamp_legacy_fingerprints: stamped canonical"
+                        );
                     }
-                }
+                    Err(e) => {
+                        tracing::warn!(
+                            corpus_id,
+                            error = %e,
+                            "lazy_stamp_legacy_fingerprints: compute failed"
+                        );
+                    }
+                },
                 Err(e) => {
                     tracing::warn!(
                         corpus_id,
@@ -2009,7 +1995,9 @@ impl CorpusEngine {
         if let Ok(entries) = std::fs::read_dir(&self.index_dir) {
             for entry in entries.flatten() {
                 let name = entry.file_name();
-                let Some(name_str) = name.to_str() else { continue };
+                let Some(name_str) = name.to_str() else {
+                    continue;
+                };
                 if name_str.starts_with(&prefix) && name_str != self_suffix {
                     tracing::info!(
                         corpus_id,
@@ -2106,7 +2094,9 @@ impl CorpusEngine {
                     ref_model = Some(info.embedding_model.clone());
                     ref_dims = Some(info.embedding_dimensions);
                 }
-                (Some(m), Some(d)) if m != &info.embedding_model || *d != info.embedding_dimensions => {
+                (Some(m), Some(d))
+                    if m != &info.embedding_model || *d != info.embedding_dimensions =>
+                {
                     return Err(Error::Recipe(format!(
                         "embed model mismatch: expected {m}/{d} but shard '{}' has {}/{}",
                         shard_path.display(),
@@ -2132,7 +2122,11 @@ impl CorpusEngine {
     }
 
     /// Chunk a document's text content using the recipe's chunker config.
-    pub fn chunk_document(&self, recipe: &Recipe, content: &str) -> Result<Vec<crate::index::InsertChunk>> {
+    pub fn chunk_document(
+        &self,
+        recipe: &Recipe,
+        content: &str,
+    ) -> Result<Vec<crate::index::InsertChunk>> {
         let chunker = self.make_chunker(&recipe.chunk);
         let chunks: Vec<_> = chunker
             .chunk(content)
@@ -2148,7 +2142,7 @@ impl CorpusEngine {
                     source_doc_id: None,
                     source_file: None,
                     code: crate::index::InsertCodeMeta::default(),
-                            unit_id: None,
+                    unit_id: None,
                 }
             })
             .collect();
@@ -2178,8 +2172,8 @@ impl CorpusEngine {
         log: &crate::update::delta::UpdateProgressLog,
     ) -> Result<()> {
         let path = self.index_dir.join(corpus_id).join("_update_progress.json");
-        let json = serde_json::to_string_pretty(log)
-            .map_err(|e| Error::Serialization(e.to_string()))?;
+        let json =
+            serde_json::to_string_pretty(log).map_err(|e| Error::Serialization(e.to_string()))?;
         std::fs::write(&path, json)?;
         Ok(())
     }
@@ -2211,7 +2205,10 @@ impl CorpusEngine {
         &self,
         corpus_id: &str,
     ) -> Result<crate::update::delta::VersionManifest> {
-        let path = self.index_dir.join(corpus_id).join("_version_manifest.json");
+        let path = self
+            .index_dir
+            .join(corpus_id)
+            .join("_version_manifest.json");
         if !path.exists() {
             return Err(Error::IndexNotFound(format!("No manifest for {corpus_id}")));
         }
@@ -2225,7 +2222,10 @@ impl CorpusEngine {
         corpus_id: &str,
         manifest: &crate::update::delta::VersionManifest,
     ) -> Result<()> {
-        let path = self.index_dir.join(corpus_id).join("_version_manifest.json");
+        let path = self
+            .index_dir
+            .join(corpus_id)
+            .join("_version_manifest.json");
         let json = serde_json::to_string_pretty(manifest)
             .map_err(|e| Error::Serialization(e.to_string()))?;
         std::fs::write(&path, json)?;
@@ -2310,9 +2310,7 @@ mod tests {
     use std::sync::Arc;
 
     fn mock_embed_fn() -> EmbedFn {
-        Arc::new(|_text: &str| {
-            Box::pin(async { Ok(vec![0.0_f32; 8]) })
-        })
+        Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) }))
     }
 
     #[test]
@@ -2351,23 +2349,11 @@ mod tests {
         std::fs::create_dir_all(&idx_dir).unwrap();
 
         let idx_path = idx_dir.join("test");
-        CorpusIndex::create(
-            &idx_path,
-            "test",
-            "Test",
-            "different-model",
-            8,
-            true,
-            "MIT",
-        )
-        .await
-        .unwrap();
+        CorpusIndex::create(&idx_path, "test", "Test", "different-model", 8, true, "MIT")
+            .await
+            .unwrap();
 
-        let engine = CorpusEngine::new(
-            dir.path().join("recipes"),
-            idx_dir,
-            mock_embed_fn(),
-        );
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
 
         // Should succeed (warn, not error) when model names differ.
         assert!(engine.open_index(&idx_path).await.is_ok());
@@ -2385,11 +2371,7 @@ mod tests {
             .unwrap();
         assert!(idx_path.exists());
 
-        let engine = CorpusEngine::new(
-            dir.path().join("recipes"),
-            idx_dir,
-            mock_embed_fn(),
-        );
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
         engine.remove_index("test").unwrap();
         assert!(!idx_path.exists());
     }
@@ -2402,7 +2384,8 @@ mod tests {
         std::fs::write(
             idx_dir.join("wikipedia/_corpus_meta.json"),
             r#"{"ingestion_in_progress":true,"committed_iter_pos":100000}"#,
-        ).unwrap();
+        )
+        .unwrap();
 
         let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
         let result = engine.in_progress_ingestions();
@@ -2418,7 +2401,8 @@ mod tests {
         std::fs::write(
             idx_dir.join("wikipedia/_corpus_meta.json"),
             r#"{"ingestion_in_progress":true,"committed_iter_pos":0}"#,
-        ).unwrap();
+        )
+        .unwrap();
 
         let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
         assert!(engine.in_progress_ingestions().is_empty());
@@ -2624,9 +2608,17 @@ mod tests {
 
         // Real canonical wikipedia index.
         let canonical = idx_dir.join("wikipedia");
-        CorpusIndex::create(&canonical, "wikipedia", "Wikipedia", "test-model", 4, true, "MIT")
-            .await
-            .unwrap();
+        CorpusIndex::create(
+            &canonical,
+            "wikipedia",
+            "Wikipedia",
+            "test-model",
+            4,
+            true,
+            "MIT",
+        )
+        .await
+        .unwrap();
         std::fs::write(
             canonical.join("_corpus_meta.json"),
             r#"{"corpus_id":"wikipedia","corpus_name":"Wikipedia","embedding_model":"test-model",
@@ -2641,9 +2633,17 @@ mod tests {
 
         // Lingering per-peer partition advertising the same corpus_id.
         let partition = idx_dir.join("wikipedia-partition-peerX");
-        CorpusIndex::create(&partition, "wikipedia", "Wikipedia", "test-model", 4, true, "MIT")
-            .await
-            .unwrap();
+        CorpusIndex::create(
+            &partition,
+            "wikipedia",
+            "Wikipedia",
+            "test-model",
+            4,
+            true,
+            "MIT",
+        )
+        .await
+        .unwrap();
         std::fs::write(
             partition.join("_corpus_meta.json"),
             r#"{"corpus_id":"wikipedia","corpus_name":"Wikipedia","embedding_model":"test-model",
@@ -2656,15 +2656,19 @@ mod tests {
         )
         .unwrap();
 
-        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn());
+        let engine =
+            CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn());
         let listed = engine.installed_indexes().await.unwrap();
 
         let by_id: Vec<&str> = listed.iter().map(|i| i.corpus_id.as_str()).collect();
-        assert_eq!(by_id, vec!["wikipedia"], "expected exactly one wikipedia entry after dedup, got: {by_id:?}");
+        assert_eq!(
+            by_id,
+            vec!["wikipedia"],
+            "expected exactly one wikipedia entry after dedup, got: {by_id:?}"
+        );
         let kept = listed.iter().find(|i| i.corpus_id == "wikipedia").unwrap();
         assert_eq!(
-            kept.path,
-            canonical,
+            kept.path, canonical,
             "dedup must prefer the canonical-named dir (matches open_index_for_corpus)"
         );
     }
@@ -2687,7 +2691,8 @@ mod tests {
         std::fs::write(
             idx_dir.join("wikipedia/_corpus_meta.json"),
             r#"{"ingestion_in_progress":false,"committed_iter_pos":5000000}"#,
-        ).unwrap();
+        )
+        .unwrap();
 
         let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
         assert!(engine.in_progress_ingestions().is_empty());
@@ -2704,14 +2709,13 @@ mod tests {
         )
         .unwrap();
 
-        let engine = CorpusEngine::new(
-            dir.path().join("recipes"),
-            idx_dir,
-            mock_embed_fn(),
-        )
-        .with_self_node_id("nodeA");
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn())
+            .with_self_node_id("nodeA");
 
-        assert_eq!(engine.in_progress_ingestions(), vec!["wikipedia".to_string()]);
+        assert_eq!(
+            engine.in_progress_ingestions(),
+            vec!["wikipedia".to_string()]
+        );
     }
 
     #[test]
@@ -2728,12 +2732,8 @@ mod tests {
         )
         .unwrap();
 
-        let engine = CorpusEngine::new(
-            dir.path().join("recipes"),
-            idx_dir,
-            mock_embed_fn(),
-        )
-        .with_self_node_id("nodeA");
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn())
+            .with_self_node_id("nodeA");
 
         assert!(engine.in_progress_ingestions().is_empty());
     }
@@ -2755,14 +2755,13 @@ mod tests {
         )
         .unwrap();
 
-        let engine = CorpusEngine::new(
-            dir.path().join("recipes"),
-            idx_dir,
-            mock_embed_fn(),
-        )
-        .with_self_node_id("nodeA");
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn())
+            .with_self_node_id("nodeA");
 
-        assert_eq!(engine.in_progress_ingestions(), vec!["wikipedia".to_string()]);
+        assert_eq!(
+            engine.in_progress_ingestions(),
+            vec!["wikipedia".to_string()]
+        );
     }
 
     /// `wikipedia.legacy-backup`-style directories — manual snapshots
@@ -2798,10 +2797,12 @@ mod tests {
         )
         .unwrap();
 
-        let engine =
-            CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
 
-        assert_eq!(engine.in_progress_ingestions(), vec!["wikipedia".to_string()]);
+        assert_eq!(
+            engine.in_progress_ingestions(),
+            vec!["wikipedia".to_string()]
+        );
     }
 
     /// Same opt-out applies to `installed_indexes()` so the legacy
@@ -2845,11 +2846,7 @@ mod tests {
         )
         .unwrap();
 
-        let engine = CorpusEngine::new(
-            dir.path().join("recipes"),
-            idx_dir,
-            mock_embed_fn(),
-        );
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
         let listed = engine.installed_indexes().await.unwrap();
         let names: Vec<&str> = listed.iter().map(|i| i.corpus_id.as_str()).collect();
         assert!(names.contains(&"sep"), "real index missing: {names:?}");
@@ -2861,14 +2858,22 @@ mod tests {
 
     #[test]
     fn is_out_of_band_marks_dotted_names() {
-        assert!(CorpusEngine::is_out_of_band_index_name("wikipedia.legacy-backup"));
+        assert!(CorpusEngine::is_out_of_band_index_name(
+            "wikipedia.legacy-backup"
+        ));
         assert!(CorpusEngine::is_out_of_band_index_name("sep.bak"));
         assert!(CorpusEngine::is_out_of_band_index_name("foo.snapshot"));
         // Real corpus IDs use only alphanumeric + hyphens / underscores.
         assert!(!CorpusEngine::is_out_of_band_index_name("wikipedia"));
-        assert!(!CorpusEngine::is_out_of_band_index_name("sep-compatibilism"));
-        assert!(!CorpusEngine::is_out_of_band_index_name("brothers_karamazov"));
-        assert!(!CorpusEngine::is_out_of_band_index_name("wikipedia-partition-nodeA"));
+        assert!(!CorpusEngine::is_out_of_band_index_name(
+            "sep-compatibilism"
+        ));
+        assert!(!CorpusEngine::is_out_of_band_index_name(
+            "brothers_karamazov"
+        ));
+        assert!(!CorpusEngine::is_out_of_band_index_name(
+            "wikipedia-partition-nodeA"
+        ));
     }
 
     // ── remove_corpus_everything ──────────────────────────────────────
@@ -2882,7 +2887,8 @@ mod tests {
         std::fs::create_dir_all(idx_dir.join("wikipedia-partition-abc123")).unwrap();
         std::fs::create_dir_all(idx_dir.join("openalex")).unwrap(); // unrelated
 
-        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn());
+        let engine =
+            CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn());
         engine.remove_corpus_everything("wikipedia").unwrap();
 
         assert!(!idx_dir.join("wikipedia").exists());
@@ -2940,12 +2946,8 @@ mod tests {
         )
         .unwrap();
 
-        let engine = CorpusEngine::new(
-            dir.path().join("recipes"),
-            idx_dir,
-            mock_embed_fn(),
-        )
-        .with_self_node_id("nodeA");
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn())
+            .with_self_node_id("nodeA");
 
         let status = engine.corpus_disk_status("wikipedia");
         assert!(status.partition_present);
@@ -2969,12 +2971,8 @@ mod tests {
         )
         .unwrap();
 
-        let engine = CorpusEngine::new(
-            dir.path().join("recipes"),
-            idx_dir,
-            mock_embed_fn(),
-        )
-        .with_self_node_id("nodeA");
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn())
+            .with_self_node_id("nodeA");
 
         let status = engine.corpus_disk_status("wikipedia");
         assert!(status.canonical_present);
@@ -3011,12 +3009,9 @@ mod tests {
         let idx_dir = dir.path().join("indexes");
         seed_canonical_meta(&idx_dir.join("wikipedia"), 3_651_456, true);
 
-        let engine = CorpusEngine::new(
-            dir.path().join("recipes"),
-            idx_dir.clone(),
-            mock_embed_fn(),
-        )
-        .with_self_node_id("node-abc");
+        let engine =
+            CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn())
+                .with_self_node_id("node-abc");
 
         let new_path = engine.migrate_canonical_to_partition("wikipedia").unwrap();
         assert_eq!(new_path, idx_dir.join("wikipedia-partition-node-abc"));
@@ -3030,10 +3025,9 @@ mod tests {
             "chunks.lance must travel with the rename — data preserved"
         );
 
-        let raw = std::fs::read_to_string(
-            idx_dir.join("wikipedia-partition-node-abc/_corpus_meta.json"),
-        )
-        .unwrap();
+        let raw =
+            std::fs::read_to_string(idx_dir.join("wikipedia-partition-node-abc/_corpus_meta.json"))
+                .unwrap();
         let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(v["is_shard"], serde_json::Value::Bool(true));
         assert_eq!(
@@ -3054,12 +3048,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let idx_dir = dir.path().join("indexes");
         std::fs::create_dir_all(&idx_dir).unwrap();
-        let engine = CorpusEngine::new(
-            dir.path().join("recipes"),
-            idx_dir,
-            mock_embed_fn(),
-        )
-        .with_self_node_id("node-abc");
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn())
+            .with_self_node_id("node-abc");
         assert!(engine.migrate_canonical_to_partition("wikipedia").is_err());
     }
 
@@ -3069,12 +3059,9 @@ mod tests {
         let idx_dir = dir.path().join("indexes");
         seed_canonical_meta(&idx_dir.join("wikipedia"), 10, false);
 
-        let engine = CorpusEngine::new(
-            dir.path().join("recipes"),
-            idx_dir.clone(),
-            mock_embed_fn(),
-        )
-        .with_self_node_id("node-abc");
+        let engine =
+            CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn())
+                .with_self_node_id("node-abc");
         let err = engine
             .migrate_canonical_to_partition("wikipedia")
             .unwrap_err();
@@ -3092,12 +3079,9 @@ mod tests {
         seed_canonical_meta(&idx_dir.join("wikipedia"), 5, true);
         std::fs::create_dir_all(idx_dir.join("wikipedia-partition-node-abc")).unwrap();
 
-        let engine = CorpusEngine::new(
-            dir.path().join("recipes"),
-            idx_dir.clone(),
-            mock_embed_fn(),
-        )
-        .with_self_node_id("node-abc");
+        let engine =
+            CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn())
+                .with_self_node_id("node-abc");
 
         assert!(engine.migrate_canonical_to_partition("wikipedia").is_err());
         // Canonical stays put.
@@ -3110,7 +3094,8 @@ mod tests {
         let idx_dir = dir.path().join("indexes");
         seed_partition_meta(&idx_dir.join("wikipedia-partition-local"));
 
-        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn());
+        let engine =
+            CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn());
         let promoted = engine.finalise_solo_ingest("wikipedia").unwrap();
         assert!(promoted);
         assert!(!idx_dir.join("wikipedia-partition-local").exists());
@@ -3139,9 +3124,13 @@ mod tests {
         seed_partition_meta(&idx_dir.join("wikipedia-partition-local"));
         seed_partition_meta(&idx_dir.join("wikipedia-partition-peerX"));
 
-        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn());
+        let engine =
+            CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn());
         let promoted = engine.finalise_solo_ingest("wikipedia").unwrap();
-        assert!(!promoted, "must defer to coordinate_merge when a peer partition exists");
+        assert!(
+            !promoted,
+            "must defer to coordinate_merge when a peer partition exists"
+        );
         assert!(idx_dir.join("wikipedia-partition-local").exists());
         assert!(idx_dir.join("wikipedia-partition-peerX").exists());
         assert!(!idx_dir.join("wikipedia").exists());
@@ -3160,7 +3149,8 @@ mod tests {
         seed_canonical_meta(&idx_dir.join("wikipedia"), 5, false);
         seed_partition_meta(&idx_dir.join("wikipedia-partition-local"));
 
-        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn());
+        let engine =
+            CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn());
         assert!(!engine.finalise_solo_ingest("wikipedia").unwrap());
         // Partition dir stays — caller (the merge path, or a later cleanup)
         // is responsible for resolving the conflict.
@@ -3188,13 +3178,13 @@ mod tests {
         let zip_path = build_zip_with_entries(
             dir.path(),
             &[
-                ("real_one.jsonl", b"{}\n"),                      // raw 0 — keep
-                ("__MACOSX/._real_one.jsonl", b"resource fork"),  // raw 1 — drop (__MACOSX/)
-                ("._also_resource.jsonl", b"rf"),                 // raw 2 — drop (._ prefix)
-                ("real_two.ndjson", b"{}\n"),                     // raw 3 — keep
-                ("readme.txt", b"hi"),                            // raw 4 — drop (ext)
-                ("nested/real_three.jsonl", b"{}\n"),             // raw 5 — keep
-                ("nested/._rf.jsonl", b"rf"),                     // raw 6 — drop (basename ._)
+                ("real_one.jsonl", b"{}\n"),                     // raw 0 — keep
+                ("__MACOSX/._real_one.jsonl", b"resource fork"), // raw 1 — drop (__MACOSX/)
+                ("._also_resource.jsonl", b"rf"),                // raw 2 — drop (._ prefix)
+                ("real_two.ndjson", b"{}\n"),                    // raw 3 — keep
+                ("readme.txt", b"hi"),                           // raw 4 — drop (ext)
+                ("nested/real_three.jsonl", b"{}\n"),            // raw 5 — keep
+                ("nested/._rf.jsonl", b"rf"),                    // raw 6 — drop (basename ._)
             ],
         );
 
@@ -3224,11 +3214,7 @@ mod tests {
         // rename to the expected filename for jsonl_source_shard_count
         std::fs::rename(&zip_path, idx_dir.join("_downloads/wikipedia.zip")).unwrap();
 
-        let engine = CorpusEngine::new(
-            dir.path().join("recipes"),
-            idx_dir,
-            mock_embed_fn(),
-        );
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
         assert_eq!(engine.jsonl_source_shard_count("wikipedia").unwrap(), 2);
     }
 }

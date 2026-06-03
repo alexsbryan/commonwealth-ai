@@ -267,7 +267,10 @@ mod tests {
             ]),
         );
         let body = render_atlas_digest(tmp.path(), 1000);
-        assert!(body.contains("Conversation history:"), "shape wrong: {body}");
+        assert!(
+            body.contains("Conversation history:"),
+            "shape wrong: {body}"
+        );
         assert!(body.contains("People & topics:"), "section missing: {body}");
         let top_idx = body.find("Top salience person").unwrap();
         let low_idx = body.find("Low salience person").unwrap();

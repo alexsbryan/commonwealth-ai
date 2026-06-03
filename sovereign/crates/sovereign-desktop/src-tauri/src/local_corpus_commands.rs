@@ -78,9 +78,7 @@ async fn require_manager(
 /// returns `false`, so users on a build without bundled binaries
 /// don't see a button that would error if clicked.
 #[tauri::command]
-pub async fn lc_ocr_available(
-    state: State<'_, Arc<AppState>>,
-) -> Result<bool, String> {
+pub async fn lc_ocr_available(state: State<'_, Arc<AppState>>) -> Result<bool, String> {
     let manager = match state.local_corpus.read().await.as_ref().cloned() {
         Some(m) => m,
         None => return Ok(false),
@@ -168,9 +166,7 @@ pub async fn install_ocr_ctx_for_app(
     let tesseract_bin = match resolve_tesseract_path(app) {
         Some(p) => p,
         None => {
-            tracing::info!(
-                "OCR not available: no PaddleOCR models and no tesseract sidecar"
-            );
+            tracing::info!("OCR not available: no PaddleOCR models and no tesseract sidecar");
             return;
         }
     };
@@ -324,13 +320,13 @@ fn resolve_tessdata_dir(resource_dir: Option<&std::path::Path>) -> Option<PathBu
     // Without these, a system-installed tesseract from the PATH probe
     // above would be found but tessdata would still come up empty.
     for p in [
-        "/opt/homebrew/share/tessdata",            // Homebrew Apple Silicon
-        "/usr/local/share/tessdata",               // Homebrew Intel
-        "/opt/local/share/tessdata",               // MacPorts
-        "/usr/share/tessdata",                     // Debian/Ubuntu
-        "/usr/share/tesseract-ocr/4.00/tessdata",  // Older Debian
-        "/usr/share/tesseract-ocr/5/tessdata",     // Newer Debian
-        "/usr/share/tesseract/tessdata",           // RHEL/Fedora
+        "/opt/homebrew/share/tessdata",           // Homebrew Apple Silicon
+        "/usr/local/share/tessdata",              // Homebrew Intel
+        "/opt/local/share/tessdata",              // MacPorts
+        "/usr/share/tessdata",                    // Debian/Ubuntu
+        "/usr/share/tesseract-ocr/4.00/tessdata", // Older Debian
+        "/usr/share/tesseract-ocr/5/tessdata",    // Newer Debian
+        "/usr/share/tesseract/tessdata",          // RHEL/Fedora
     ] {
         probes.push(PathBuf::from(p));
     }
@@ -418,10 +414,7 @@ pub async fn lc_validate_path(path: String) -> Result<PathValidation, String> {
     let p = PathBuf::from(&path);
     let exists = p.exists();
     let is_dir = p.is_dir();
-    let readable = p
-        .metadata()
-        .and_then(|_| std::fs::read_dir(&p))
-        .is_ok();
+    let readable = p.metadata().and_then(|_| std::fs::read_dir(&p)).is_ok();
     let canonical_path = p
         .canonicalize()
         .ok()
@@ -551,9 +544,7 @@ pub async fn lc_ingest(
 // ─── Command: lc_list ────────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn lc_list(
-    state: State<'_, Arc<AppState>>,
-) -> Result<Vec<LocalCorpusConfig>, String> {
+pub async fn lc_list(state: State<'_, Arc<AppState>>) -> Result<Vec<LocalCorpusConfig>, String> {
     let manager = require_manager(&state).await?;
     Ok(manager.list().await)
 }
@@ -561,10 +552,7 @@ pub async fn lc_list(
 // ─── Command: lc_remove ──────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn lc_remove(
-    state: State<'_, Arc<AppState>>,
-    corpus_id: String,
-) -> Result<(), String> {
+pub async fn lc_remove(state: State<'_, Arc<AppState>>, corpus_id: String) -> Result<(), String> {
     let manager = require_manager(&state).await?;
     manager
         .remove(&corpus_id)
@@ -589,10 +577,7 @@ pub async fn lc_incomplete_jobs(
 /// The progress channel emits its final `Error { recoverable: true }`
 /// once the engine loop exits.
 #[tauri::command]
-pub async fn lc_cancel(
-    state: State<'_, Arc<AppState>>,
-    corpus_id: String,
-) -> Result<bool, String> {
+pub async fn lc_cancel(state: State<'_, Arc<AppState>>, corpus_id: String) -> Result<bool, String> {
     let manager = require_manager(&state).await?;
     Ok(manager.cancel(&corpus_id))
 }
@@ -771,4 +756,3 @@ pub async fn lc_search(
         })
         .collect())
 }
-

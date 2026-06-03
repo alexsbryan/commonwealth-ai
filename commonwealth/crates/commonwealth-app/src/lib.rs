@@ -13,5 +13,5 @@ pub mod registry;
 
 pub use lifecycle::{AppProcess, AppStatus};
 pub use manifest::{AppPermissions, MeshAppManifest, RequiredCapabilities};
-pub use proxy::{AppPortMap, forward, proxy_client};
+pub use proxy::{forward, proxy_client, AppPortMap};
 pub use registry::AppRegistry;

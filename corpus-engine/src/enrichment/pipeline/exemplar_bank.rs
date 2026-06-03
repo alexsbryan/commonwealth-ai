@@ -283,8 +283,8 @@ impl ExemplarBank {
             schema_version: BANK_SCHEMA_VERSION,
             exemplars: self.raw.clone(),
         };
-        let json = serde_json::to_string_pretty(&file)
-            .map_err(|e| Error::Serialization(e.to_string()))?;
+        let json =
+            serde_json::to_string_pretty(&file).map_err(|e| Error::Serialization(e.to_string()))?;
         let tmp = self.path.with_extension("json.tmp");
         fs::write(&tmp, json).map_err(Error::Io)?;
         fs::rename(&tmp, &self.path).map_err(Error::Io)?;
@@ -328,7 +328,12 @@ impl ExemplarBank {
                 None => true,
                 Some(f) => l.exemplar.facet.as_deref() == Some(f),
             })
-            .map(|l| (cosine_similarity(query_embedding, &l.embedding), &l.exemplar))
+            .map(|l| {
+                (
+                    cosine_similarity(query_embedding, &l.embedding),
+                    &l.exemplar,
+                )
+            })
             .collect();
         scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
         scored.truncate(k);
@@ -378,15 +383,17 @@ impl ExemplarBank {
                         issues.push(ExemplarLint {
                             index: i,
                             id: e.id.clone(),
-                            reason:
-                                "corrected exemplar needs `corrected_output` (or `output`)".into(),
+                            reason: "corrected exemplar needs `corrected_output` (or `output`)"
+                                .into(),
                         });
                     }
                     if e.model_output.is_none() {
                         issues.push(ExemplarLint {
                             index: i,
                             id: e.id.clone(),
-                            reason: "corrected exemplar needs `model_output` (what the model did wrong)".into(),
+                            reason:
+                                "corrected exemplar needs `model_output` (what the model did wrong)"
+                                    .into(),
                         });
                     }
                 }
@@ -395,7 +402,8 @@ impl ExemplarBank {
                         issues.push(ExemplarLint {
                             index: i,
                             id: e.id.clone(),
-                            reason: "negative exemplar needs `model_output` (what the model did)".into(),
+                            reason: "negative exemplar needs `model_output` (what the model did)"
+                                .into(),
                         });
                     }
                 }
@@ -670,9 +678,7 @@ mod tests {
             facet: None,
         });
         let lints = bank.lint();
-        assert!(lints
-            .iter()
-            .any(|l| l.reason.contains("model_output")));
+        assert!(lints.iter().any(|l| l.reason.contains("model_output")));
     }
 
     #[test]

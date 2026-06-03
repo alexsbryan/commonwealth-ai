@@ -32,9 +32,7 @@ use uuid::Uuid;
 use corpus_engine::update::watcher_coordinator::{BackgroundWatcher, WatcherStatus};
 
 use crate::config::WorkAtlasConfig;
-use crate::model::{
-    AgentKind, ObservationRecord, ObservationSource, Privacy, SessionRecord,
-};
+use crate::model::{AgentKind, ObservationRecord, ObservationSource, Privacy, SessionRecord};
 use crate::store::{SessionIdentity, WorkAtlasStore};
 use crate::tools::broadcast::ClaimBroadcaster;
 
@@ -192,8 +190,7 @@ impl AtlasObserver {
             // Private observations skip this — `broadcast_now` would
             // refuse anyway, and the namespace is gossip-excluded.
             if session.privacy == Privacy::Public {
-                let key =
-                    WorkAtlasStore::observation_key(session.session_id, &path);
+                let key = WorkAtlasStore::observation_key(session.session_id, &path);
                 self.broadcaster
                     .broadcast(Privacy::Public.app_id(), &key)
                     .await;

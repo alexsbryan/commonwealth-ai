@@ -60,10 +60,7 @@ pub async fn run(args: &[String]) -> i32 {
         }
     };
 
-    println!(
-        "{:<32} {:>8} {:>10}",
-        "corpus", "docs", "atoms"
-    );
+    println!("{:<32} {:>8} {:>10}", "corpus", "docs", "atoms");
     println!("{}", "─".repeat(56));
 
     let mut total_docs = 0usize;
@@ -91,14 +88,8 @@ pub async fn run(args: &[String]) -> i32 {
 
         match doc_to_atoms::build_and_write(&atlas_dir) {
             Ok(file) => {
-                let atoms_count: usize =
-                    file.by_doc.values().map(|v| v.len()).sum();
-                println!(
-                    "{:<32} {:>8} {:>10}",
-                    corpus_id,
-                    file.len(),
-                    atoms_count
-                );
+                let atoms_count: usize = file.by_doc.values().map(|v| v.len()).sum();
+                println!("{:<32} {:>8} {:>10}", corpus_id, file.len(), atoms_count);
                 total_docs += file.len();
                 total_atoms += atoms_count;
             }

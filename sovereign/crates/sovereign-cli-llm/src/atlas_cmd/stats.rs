@@ -64,8 +64,7 @@ pub async fn run(args: &[String]) -> i32 {
     );
     println!("{}", "─".repeat(96));
 
-    let mut sorted: Vec<PathBuf> =
-        entries.filter_map(|e| e.ok().map(|e| e.path())).collect();
+    let mut sorted: Vec<PathBuf> = entries.filter_map(|e| e.ok().map(|e| e.path())).collect();
     sorted.sort();
 
     for corpus_path in sorted {
@@ -138,8 +137,7 @@ fn articulation_histogram(atoms: &[AtomEnvelope]) -> (f32, f32, f32) {
     let mut arg = 0usize;
     let mut trc = 0usize;
     for env in atoms {
-        let vec: ArticulationVector =
-            corpus_engine::meta_atlas::classify_articulation(env, "");
+        let vec: ArticulationVector = corpus_engine::meta_atlas::classify_articulation(env, "");
         match vec.dominant() {
             Articulation::Inventory => inv += 1,
             Articulation::Argument => arg += 1,

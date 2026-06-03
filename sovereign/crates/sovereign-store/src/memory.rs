@@ -6,9 +6,8 @@ use tokio::sync::RwLock;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{
-    BudgetStore, ConversationStore, CorpusStateStore, DocumentAssetStore,
-    DocumentSessionStore, DocumentStore, HealthStore, MemoryStore,
-    PermissionStore, RoutingStore, StateStore, TaskStore,
+    BudgetStore, ConversationStore, CorpusStateStore, DocumentAssetStore, DocumentSessionStore,
+    DocumentStore, HealthStore, MemoryStore, PermissionStore, RoutingStore, StateStore, TaskStore,
 };
 use sovereign_core::types::*;
 
@@ -82,7 +81,7 @@ impl ConversationStore for InMemoryStateStore {
                 deleted_at: None,
                 skill_id: None,
                 enabled_corpora: None,
-            searched_sources: None,
+                searched_sources: None,
             });
 
         if let Some(convo) = convos.get_mut(&msg.conversation_id) {
@@ -261,10 +260,7 @@ impl MemoryStore for InMemoryStateStore {
         Ok(())
     }
 
-    async fn list_memories_for_conversation(
-        &self,
-        conversation_id: &str,
-    ) -> Result<Vec<Memory>> {
+    async fn list_memories_for_conversation(&self, conversation_id: &str) -> Result<Vec<Memory>> {
         let mems = self.memories.read().await;
         let mut out: Vec<Memory> = mems
             .iter()
@@ -278,11 +274,7 @@ impl MemoryStore for InMemoryStateStore {
         Ok(out)
     }
 
-    async fn mark_superseded(
-        &self,
-        memory_id: &str,
-        summary_id: &str,
-    ) -> Result<()> {
+    async fn mark_superseded(&self, memory_id: &str, summary_id: &str) -> Result<()> {
         let mut mems = self.memories.write().await;
         if let Some(m) = mems.iter_mut().find(|m| m.id == memory_id) {
             m.superseded_by = Some(summary_id.to_string());
@@ -339,11 +331,7 @@ impl RoutingStore for InMemoryStateStore {
         Ok(())
     }
 
-    async fn mark_routing_redirected(
-        &self,
-        message_hash: &str,
-        redirect_to: &str,
-    ) -> Result<()> {
+    async fn mark_routing_redirected(&self, message_hash: &str, redirect_to: &str) -> Result<()> {
         let mut log = self.routing_log.write().await;
         for entry in log.iter_mut().rev() {
             if entry.message_hash == message_hash {
@@ -475,7 +463,9 @@ impl BudgetStore for InMemoryStateStore {
 impl PermissionStore for InMemoryStateStore {
     async fn get_permission(&self, tool_id: &str, scope: &str) -> Result<Option<bool>> {
         let perms = self.permissions.read().await;
-        Ok(perms.get(&(tool_id.to_string(), scope.to_string())).copied())
+        Ok(perms
+            .get(&(tool_id.to_string(), scope.to_string()))
+            .copied())
     }
 
     async fn set_permission(&self, tool_id: &str, scope: &str, granted: bool) -> Result<()> {
@@ -543,11 +533,7 @@ impl DocumentAssetStore for InMemoryStateStore {
     ) -> Result<()> {
         Ok(())
     }
-    async fn save_raptor_nodes(
-        &self,
-        _asset_id: &str,
-        _nodes: &[RaptorNode],
-    ) -> Result<()> {
+    async fn save_raptor_nodes(&self, _asset_id: &str, _nodes: &[RaptorNode]) -> Result<()> {
         Ok(())
     }
     async fn list_raptor_nodes(&self, _asset_id: &str) -> Result<Vec<RaptorNode>> {
@@ -556,11 +542,7 @@ impl DocumentAssetStore for InMemoryStateStore {
     async fn get_raptor_node(&self, _node_id: &str) -> Result<Option<RaptorNode>> {
         Ok(None)
     }
-    async fn save_asset_motifs(
-        &self,
-        _asset_id: &str,
-        _motifs: &[AssetMotif],
-    ) -> Result<()> {
+    async fn save_asset_motifs(&self, _asset_id: &str, _motifs: &[AssetMotif]) -> Result<()> {
         Ok(())
     }
     async fn list_asset_motifs(&self, _asset_id: &str) -> Result<Vec<AssetMotif>> {

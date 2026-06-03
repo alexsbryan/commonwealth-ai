@@ -27,9 +27,15 @@ const HELP: Help = Help {
     sections: &[
         HelpSection::Usage("sovereign chat session [flags]"),
         HelpSection::Flags(&[
-            ("--conversation <id>", "Resume an existing conversation id (default: fresh uuid)."),
-            ("--show-reasoning",    "Render <think> blocks inline after every turn."),
-            ("--help, -h",          "Show this message."),
+            (
+                "--conversation <id>",
+                "Resume an existing conversation id (default: fresh uuid).",
+            ),
+            (
+                "--show-reasoning",
+                "Render <think> blocks inline after every turn.",
+            ),
+            ("--help, -h", "Show this message."),
         ]),
         HelpSection::Notes(
             "Type `quit` or `exit` to end. Ctrl-D also works. Blank lines are ignored.",

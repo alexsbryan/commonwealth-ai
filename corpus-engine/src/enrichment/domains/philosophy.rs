@@ -15,7 +15,7 @@ const FAULT_LINE_MIN_CONFIDENCE: f32 = 0.70;
 const OVERVIEW_MIN_TOKEN_COUNT: usize = 80;
 
 const OVERVIEW_SECTION_NAMES: &[&str] = &[
-    "",                   // unnamed opening section — the most common case in SEP
+    "", // unnamed opening section — the most common case in SEP
     "Introduction",
     "Overview",
     "Preliminary Remarks",
@@ -313,7 +313,8 @@ mod tests {
 
     #[test]
     fn skeleton_extraction_prompt_handles_multiple_chunks() {
-        let chunks = [Chunk {
+        let chunks = [
+            Chunk {
                 id: 1,
                 content: "First passage about free will.".into(),
                 title: Some("Free Will".into()),
@@ -327,7 +328,8 @@ mod tests {
                 id: 3,
                 content: "Third passage about moral responsibility.".into(),
                 title: None,
-            }];
+            },
+        ];
         let refs: Vec<&Chunk> = chunks.iter().collect();
         let prompt = PhilosophyDomain.skeleton_extraction_prompt(&refs);
         assert!(prompt.contains("[Passage 1 — Free Will]"));
@@ -361,7 +363,9 @@ mod tests {
         };
         let chunk_b = Chunk {
             id: 2,
-            content: "Hard incompatibilism denies free will under both determinism and indeterminism.".into(),
+            content:
+                "Hard incompatibilism denies free will under both determinism and indeterminism."
+                    .into(),
             title: None,
         };
         let prompt = PhilosophyDomain.fault_line_detection_prompt(
@@ -381,7 +385,8 @@ mod tests {
     fn open_question_prompt_structure() {
         let chunk = Chunk {
             id: 1,
-            content: "It remains unclear whether manipulation arguments undermine compatibilism.".into(),
+            content: "It remains unclear whether manipulation arguments undermine compatibilism."
+                .into(),
             title: None,
         };
         let prompt = PhilosophyDomain.open_question_prompt(&[&chunk]);

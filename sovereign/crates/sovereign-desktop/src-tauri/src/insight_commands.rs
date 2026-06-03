@@ -4,9 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use tauri::State;
 
-use sovereign_core::types::{
-    InsightPosition, InsightSinkState, InsightSource,
-};
+use sovereign_core::types::{InsightPosition, InsightSinkState, InsightSource};
 
 use crate::state::AppState;
 
@@ -60,12 +58,9 @@ impl From<sovereign_core::types::InsightNode> for InsightNodeDto {
 async fn get_insight_service(
     state: &AppState,
 ) -> Result<Arc<sovereign_core::insight::InsightService>, String> {
-    state
-        .insight_service
-        .read()
-        .await
-        .clone()
-        .ok_or_else(|| "Insight service not initialized. Backend may still be starting.".to_string())
+    state.insight_service.read().await.clone().ok_or_else(|| {
+        "Insight service not initialized. Backend may still be starting.".to_string()
+    })
 }
 
 fn now() -> i64 {
@@ -133,19 +128,14 @@ pub async fn search_insights(
 }
 
 #[tauri::command]
-pub async fn delete_insight(
-    id: String,
-    state: State<'_, Arc<AppState>>,
-) -> Result<(), String> {
+pub async fn delete_insight(id: String, state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let service = get_insight_service(&state).await?;
     let id = uuid::Uuid::parse_str(&id).map_err(|e| format!("Invalid id: {e}"))?;
     service.store.delete(id).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn get_sink_status(
-    state: State<'_, Arc<AppState>>,
-) -> Result<SinkStatusDto, String> {
+pub async fn get_sink_status(state: State<'_, Arc<AppState>>) -> Result<SinkStatusDto, String> {
     let service = get_insight_service(&state).await?;
     let any_connected = service.sinks.any_connected().await;
     Ok(SinkStatusDto {

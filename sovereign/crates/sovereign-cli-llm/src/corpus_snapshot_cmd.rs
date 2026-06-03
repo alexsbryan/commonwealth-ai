@@ -11,8 +11,8 @@ use std::process::Command;
 
 use chrono::Utc;
 use corpus_engine::snapshot::{
-    prebuilt_toml_snippet, publish_snapshot, read_manifest_from_archive,
-    restore_snapshot_archive, PublishOptions, SnapshotManifest,
+    prebuilt_toml_snippet, publish_snapshot, read_manifest_from_archive, restore_snapshot_archive,
+    PublishOptions, SnapshotManifest,
 };
 use corpus_engine::CorpusIndex;
 
@@ -100,9 +100,9 @@ const HELP_SNAPSHOT_PUBLISH: Help = Help {
 const HELP_SNAPSHOT_INSPECT: Help = Help {
     command: "sovereign corpus snapshot inspect",
     summary: "Print the manifest stored at the root of a snapshot archive.",
-    sections: &[
-        HelpSection::Usage("sovereign corpus snapshot inspect <archive.tar.zst>"),
-    ],
+    sections: &[HelpSection::Usage(
+        "sovereign corpus snapshot inspect <archive.tar.zst>",
+    )],
 };
 
 pub async fn run_snapshot(args: &[String]) -> i32 {
@@ -272,7 +272,11 @@ async fn cmd_publish(args: &[String]) -> i32 {
     } else {
         None
     };
-    match (atlas_in_index, enrichment_dir.is_some(), parsed.include_atlas) {
+    match (
+        atlas_in_index,
+        enrichment_dir.is_some(),
+        parsed.include_atlas,
+    ) {
         (true, true, true) => {
             println!(
                 "Atlas: capturing from both {}/atlas/ and {}",
@@ -460,8 +464,18 @@ async fn cmd_publish(args: &[String]) -> i32 {
         println!(
             "  siblings: {} bundled ({} … {})",
             outcome.manifest.bundled_corpora.len(),
-            outcome.manifest.bundled_corpora.first().map(|s| s.as_str()).unwrap_or(""),
-            outcome.manifest.bundled_corpora.last().map(|s| s.as_str()).unwrap_or(""),
+            outcome
+                .manifest
+                .bundled_corpora
+                .first()
+                .map(|s| s.as_str())
+                .unwrap_or(""),
+            outcome
+                .manifest
+                .bundled_corpora
+                .last()
+                .map(|s| s.as_str())
+                .unwrap_or(""),
         );
     }
 
@@ -493,7 +507,10 @@ async fn cmd_publish(args: &[String]) -> i32 {
             {
                 Ok(()) => println!("Upload complete."),
                 Err(msg) => {
-                    eprintln!("Upload failed after {} attempts: {msg}", parsed.upload_max_attempts);
+                    eprintln!(
+                        "Upload failed after {} attempts: {msg}",
+                        parsed.upload_max_attempts
+                    );
                     eprintln!(
                         "The archive is still on disk; re-run the same command to retry just the upload \
                          (the build phase will be skipped). Or run manually:"
@@ -506,7 +523,13 @@ async fn cmd_publish(args: &[String]) -> i32 {
     }
 
     println!();
-    println!("{}", prebuilt_toml_snippet(&outcome, parsed.upload_repo.as_deref().unwrap_or("svrnmesh/<repo>")));
+    println!(
+        "{}",
+        prebuilt_toml_snippet(
+            &outcome,
+            parsed.upload_repo.as_deref().unwrap_or("svrnmesh/<repo>")
+        )
+    );
 
     0
 }
@@ -517,7 +540,11 @@ fn default_snapshot_id(corpus_id: &str, index_dir: &Path) -> String {
     let model = std::fs::read_to_string(index_dir.join("_corpus_meta.json"))
         .ok()
         .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-        .and_then(|v| v.get("embedding_model").and_then(|m| m.as_str()).map(str::to_string))
+        .and_then(|v| {
+            v.get("embedding_model")
+                .and_then(|m| m.as_str())
+                .map(str::to_string)
+        })
         .unwrap_or_else(|| "unknown-embed".to_string());
     let date = Utc::now().format("%Y-%m-%d");
     format!("{corpus_id}-{model}-{date}")
@@ -606,7 +633,9 @@ fn part_path_for(output: &Path) -> PathBuf {
 /// doesn't need to know whether the archive was just produced or
 /// reused from a prior run. Reads the in-archive manifest, recomputes
 /// sha256, returns sizes.
-fn reconstruct_outcome(archive: &Path) -> std::result::Result<corpus_engine::snapshot::PublishOutcome, String> {
+fn reconstruct_outcome(
+    archive: &Path,
+) -> std::result::Result<corpus_engine::snapshot::PublishOutcome, String> {
     use corpus_engine::snapshot::{read_manifest_from_archive, PublishOutcome};
 
     let manifest = read_manifest_from_archive(archive)
@@ -624,12 +653,15 @@ fn reconstruct_outcome(archive: &Path) -> std::result::Result<corpus_engine::sna
 fn hash_file_sha256(path: &Path) -> std::result::Result<(String, u64), String> {
     use sha2::{Digest, Sha256};
     use std::io::Read;
-    let mut file = std::fs::File::open(path).map_err(|e| format!("open {}: {e}", path.display()))?;
+    let mut file =
+        std::fs::File::open(path).map_err(|e| format!("open {}: {e}", path.display()))?;
     let mut hasher = Sha256::new();
     let mut buf = vec![0u8; 1 << 20];
     let mut total: u64 = 0;
     loop {
-        let n = file.read(&mut buf).map_err(|e| format!("read {}: {e}", path.display()))?;
+        let n = file
+            .read(&mut buf)
+            .map_err(|e| format!("read {}: {e}", path.display()))?;
         if n == 0 {
             break;
         }
@@ -654,7 +686,10 @@ fn cmd_inspect(args: &[String]) -> i32 {
     let manifest = match read_manifest_from_archive(&archive_path) {
         Ok(m) => m,
         Err(e) => {
-            eprintln!("Failed to read manifest from {}: {e}", archive_path.display());
+            eprintln!(
+                "Failed to read manifest from {}: {e}",
+                archive_path.display()
+            );
             return 1;
         }
     };
@@ -727,7 +762,9 @@ fn parse_restore_args(args: &[String]) -> std::result::Result<RestoreArgs, Strin
                 out.into = Some(PathBuf::from(v));
             }
             "--expected-sha256" => {
-                let v = iter.next().ok_or("--expected-sha256 requires a hex string")?;
+                let v = iter
+                    .next()
+                    .ok_or("--expected-sha256 requires a hex string")?;
                 out.expected_sha256 = Some(v.clone());
             }
             "--embedding-model" => {
@@ -773,7 +810,10 @@ async fn cmd_restore(args: &[String]) -> i32 {
         return 2;
     }
 
-    let sovereign_data_dir = parsed.into.clone().unwrap_or_else(|| home_dir().join(".sovereign"));
+    let sovereign_data_dir = parsed
+        .into
+        .clone()
+        .unwrap_or_else(|| home_dir().join(".sovereign"));
     if !sovereign_data_dir.exists() {
         if let Err(e) = std::fs::create_dir_all(&sovereign_data_dir) {
             eprintln!("cannot create {}: {e}", sovereign_data_dir.display());
@@ -784,7 +824,10 @@ async fn cmd_restore(args: &[String]) -> i32 {
     // Resolve the archive — either local or HF fetch.
     let archive_path = if let Some(local) = parsed.archive.clone() {
         if !local.is_file() {
-            eprintln!("--archive {} does not exist or is not a file", local.display());
+            eprintln!(
+                "--archive {} does not exist or is not a file",
+                local.display()
+            );
             return 1;
         }
         local
@@ -825,17 +868,26 @@ async fn cmd_restore(args: &[String]) -> i32 {
     println!("archive manifest:");
     println!("  archive_corpus_id:    {}", preview.corpus_id);
     println!("  snapshot_id:          {}", preview.snapshot_id);
-    println!("  embedding_model:      {} ({}d)", preview.embedding_model, preview.embedding_dimensions);
+    println!(
+        "  embedding_model:      {} ({}d)",
+        preview.embedding_model, preview.embedding_dimensions
+    );
     println!("  chunk_count:          {}", preview.chunk_count);
     println!("  atlas_included:       {}", preview.atlas_included);
     if let Some(p) = preview.residual_gap_pct {
         println!("  residual_gap_pct:     {p:.2}%");
     }
 
-    let target_id = parsed.as_id.clone().unwrap_or_else(|| preview.corpus_id.clone());
+    let target_id = parsed
+        .as_id
+        .clone()
+        .unwrap_or_else(|| preview.corpus_id.clone());
     println!();
     if target_id != preview.corpus_id {
-        println!("Extracting under target corpus id: {target_id} (renaming from {})", preview.corpus_id);
+        println!(
+            "Extracting under target corpus id: {target_id} (renaming from {})",
+            preview.corpus_id
+        );
     } else {
         println!("Extracting under archive's corpus id: {target_id}");
     }
@@ -896,7 +948,11 @@ async fn cmd_restore(args: &[String]) -> i32 {
             );
         }
     }
-    println!("  bytes:        {} ({:.2} GB)", outcome.archive_size_bytes, outcome.archive_size_bytes as f64 / 1.073e9_f64);
+    println!(
+        "  bytes:        {} ({:.2} GB)",
+        outcome.archive_size_bytes,
+        outcome.archive_size_bytes as f64 / 1.073e9_f64
+    );
     println!();
     println!("Next: `sovereign corpus diag {target_id}` to confirm chunk count + L5 coverage.");
     0
@@ -947,9 +1003,7 @@ async fn fetch_hf_archive(
     for attempt in 1..=max_attempts {
         if attempt > 1 {
             let backoff_secs = (15u64 * (1 << (attempt - 2))).min(300);
-            let resume_offset = std::fs::metadata(&part)
-                .map(|m| m.len())
-                .unwrap_or(0);
+            let resume_offset = std::fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
             eprintln!(
                 "Attempt {attempt}/{max_attempts}: waiting {backoff_secs}s before resuming \
                  from {:.2} GB (previous error: {last_err}) …",
@@ -959,9 +1013,8 @@ async fn fetch_hf_archive(
         }
         match fetch_hf_archive_attempt(url, &part).await {
             Ok(()) => {
-                std::fs::rename(&part, &dest).map_err(|e| {
-                    format!("rename {} -> {}: {e}", part.display(), dest.display())
-                })?;
+                std::fs::rename(&part, &dest)
+                    .map_err(|e| format!("rename {} -> {}: {e}", part.display(), dest.display()))?;
                 return Ok(dest);
             }
             Err(msg) => {
@@ -1015,8 +1068,7 @@ async fn fetch_hf_archive_attempt(url: &str, part: &Path) -> std::result::Result
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
         }
-        std::fs::File::create(part)
-            .map_err(|e| format!("truncate {}: {e}", part.display()))?;
+        std::fs::File::create(part).map_err(|e| format!("truncate {}: {e}", part.display()))?;
     } else if !status.is_success() && status != reqwest::StatusCode::PARTIAL_CONTENT {
         return Err(format!("{url} returned {status}"));
     }
@@ -1049,7 +1101,9 @@ async fn fetch_hf_archive_attempt(url: &str, part: &Path) -> std::result::Result
     let mut last_logged: u64 = written;
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| format!("stream: {e}"))?;
-        out.write_all(&chunk).await.map_err(|e| format!("write: {e}"))?;
+        out.write_all(&chunk)
+            .await
+            .map_err(|e| format!("write: {e}"))?;
         written += chunk.len() as u64;
         if written - last_logged > (1 << 28) {
             // ~256 MiB tick.

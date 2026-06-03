@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use tokio::sync::Mutex;
 
 use crate::error::{Error, Result};
@@ -101,9 +101,8 @@ impl LintResultStore {
                 db_path.display()
             )))
         })?;
-        conn.execute_batch(SCHEMA).map_err(|e| {
-            Error::Io(std::io::Error::other(format!("schema migration: {e}")))
-        })?;
+        conn.execute_batch(SCHEMA)
+            .map_err(|e| Error::Io(std::io::Error::other(format!("schema migration: {e}"))))?;
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -451,7 +450,14 @@ mod tests {
         let store = make_store().await;
         let run_id = store.begin_run().await.unwrap();
         store
-            .record_result(run_id, LintResultKind::Warn, "src/foo.rs", Some("unused var"), Some(12), Some(9))
+            .record_result(
+                run_id,
+                LintResultKind::Warn,
+                "src/foo.rs",
+                Some("unused var"),
+                Some(12),
+                Some(9),
+            )
             .await
             .unwrap();
         store.finish_run(run_id, 0, 100).await.unwrap();
@@ -459,7 +465,10 @@ mod tests {
         let summary = store.latest_run().await.unwrap().unwrap();
         assert_eq!(summary.warn_count, 1);
         assert_eq!(summary.fail_count, 0);
-        assert!(summary.passed(), "exit_code=0 with only warnings should be passing");
+        assert!(
+            summary.passed(),
+            "exit_code=0 with only warnings should be passing"
+        );
     }
 
     #[tokio::test]
@@ -467,7 +476,14 @@ mod tests {
         let store = make_store().await;
         let run_id = store.begin_run().await.unwrap();
         store
-            .record_result(run_id, LintResultKind::Fail, "src/bar.rs", Some("type error"), Some(34), Some(5))
+            .record_result(
+                run_id,
+                LintResultKind::Fail,
+                "src/bar.rs",
+                Some("type error"),
+                Some(34),
+                Some(5),
+            )
             .await
             .unwrap();
         store.finish_run(run_id, 1, 200).await.unwrap();
@@ -483,14 +499,24 @@ mod tests {
         let run_id = store.begin_run().await.unwrap();
         let long = "e".repeat(OUTPUT_TRUNCATE_CHARS + 200);
         store
-            .record_result(run_id, LintResultKind::Fail, "src/baz.rs", Some(&long), None, None)
+            .record_result(
+                run_id,
+                LintResultKind::Fail,
+                "src/baz.rs",
+                Some(&long),
+                None,
+                None,
+            )
             .await
             .unwrap();
         store.finish_run(run_id, 1, 50).await.unwrap();
 
         let failures = store.latest_failures(1).await.unwrap();
         assert!(failures[0].output_truncated);
-        assert_eq!(failures[0].output.as_ref().unwrap().len(), OUTPUT_TRUNCATE_CHARS);
+        assert_eq!(
+            failures[0].output.as_ref().unwrap().len(),
+            OUTPUT_TRUNCATE_CHARS
+        );
     }
 
     #[tokio::test]

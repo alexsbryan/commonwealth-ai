@@ -122,9 +122,7 @@ impl DecisionLogTool {
     }
 
     pub fn with_notes(notes: Arc<NoteStore>) -> Self {
-        Self {
-            notes: Some(notes),
-        }
+        Self { notes: Some(notes) }
     }
 }
 
@@ -134,8 +132,7 @@ impl Tool for DecisionLogTool {
         ToolDescriptor {
             id: "decision_log".into(),
             name: "DecisionLog".into(),
-            description:
-                "Record a decision in the active recipe-author project's decision \
+            description: "Record a decision in the active recipe-author project's decision \
                  log. Use ONE of five kinds: \
                  `source_choice` (which data source / API to pull from), \
                  `extraction_choice` (extractor / filter / chunker shape), \
@@ -150,7 +147,7 @@ impl Tool for DecisionLogTool {
                  `alternatives_considered` whenever the choice was non-obvious \
                  — the partner reads these in retrospect to audit which \
                  decisions were theirs."
-                    .into(),
+                .into(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -220,11 +217,7 @@ impl Tool for DecisionLogTool {
         vec![Permission::RecipeAuthoring]
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let notes = self.notes.as_ref().ok_or_else(|| {
             Error::InvalidInput(
                 "DecisionLogTool was constructed without a NoteStore; \
@@ -235,15 +228,11 @@ impl Tool for DecisionLogTool {
         let feature_id = params
             .get("feature_id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::InvalidInput("DecisionLogTool requires `feature_id`".into())
-            })?;
+            .ok_or_else(|| Error::InvalidInput("DecisionLogTool requires `feature_id`".into()))?;
         let kind_str = params
             .get("kind")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::InvalidInput("DecisionLogTool requires `kind`".into())
-            })?;
+            .ok_or_else(|| Error::InvalidInput("DecisionLogTool requires `kind`".into()))?;
         let kind = DecisionKind::parse(kind_str).ok_or_else(|| {
             Error::InvalidInput(format!(
                 "DecisionLogTool: unknown kind `{kind_str}`. Allowed: \
@@ -254,9 +243,7 @@ impl Tool for DecisionLogTool {
         let summary = params
             .get("summary")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::InvalidInput("DecisionLogTool requires `summary`".into())
-            })?;
+            .ok_or_else(|| Error::InvalidInput("DecisionLogTool requires `summary`".into()))?;
         let attribution: Option<DecisionAttribution> = params
             .get("attribution")
             .and_then(|v| v.as_str())
@@ -277,9 +264,7 @@ impl Tool for DecisionLogTool {
             alternatives_considered: alternatives,
         };
         let payload_json = serde_json::to_string(&payload).map_err(|e| {
-            Error::InvalidInput(format!(
-                "failed to serialise decision payload: {e}"
-            ))
+            Error::InvalidInput(format!("failed to serialise decision payload: {e}"))
         })?;
 
         let session_id = &ctx.conversation_id;
@@ -315,8 +300,7 @@ mod tests {
     async fn fresh_stores() -> (Arc<NoteStore>, Arc<FeatureStore>, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
-        let features =
-            Arc::new(FeatureStore::open(&dir.path().join("features.db")).unwrap());
+        let features = Arc::new(FeatureStore::open(&dir.path().join("features.db")).unwrap());
         (notes, features, dir)
     }
 

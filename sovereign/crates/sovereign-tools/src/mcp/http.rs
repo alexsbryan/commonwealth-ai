@@ -31,8 +31,8 @@ impl HttpSseTransport {
             .build()
             .map_err(|e| McpError::Transport(format!("HTTP client error: {e}")))?;
 
-        let url = Url::parse(server_url)
-            .map_err(|e| McpError::Transport(format!("Invalid URL: {e}")))?;
+        let url =
+            Url::parse(server_url).map_err(|e| McpError::Transport(format!("Invalid URL: {e}")))?;
 
         let transport = Self {
             endpoint: Arc::new(Mutex::new(url)),
@@ -60,10 +60,7 @@ impl HttpSseTransport {
             .await?;
 
         // Some servers return a session endpoint in the response.
-        if let Some(session_endpoint) = result
-            .get("sessionEndpoint")
-            .and_then(|v| v.as_str())
-        {
+        if let Some(session_endpoint) = result.get("sessionEndpoint").and_then(|v| v.as_str()) {
             let mut ep = transport.endpoint.lock().await;
             *ep = Url::parse(session_endpoint)
                 .map_err(|e| McpError::Transport(format!("Invalid session endpoint: {e}")))?;
@@ -110,9 +107,7 @@ impl McpTransport for HttpSseTransport {
 
         if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
-            return Err(McpError::Transport(format!(
-                "HTTP {status}: {body}"
-            )));
+            return Err(McpError::Transport(format!("HTTP {status}: {body}")));
         }
 
         let rpc_response: Value = response
@@ -124,10 +119,7 @@ impl McpTransport for HttpSseTransport {
         if let Some(error) = rpc_response.get("error") {
             return Err(McpError::Protocol {
                 code: error["code"].as_i64().unwrap_or(-1) as i32,
-                message: error["message"]
-                    .as_str()
-                    .unwrap_or("unknown")
-                    .to_string(),
+                message: error["message"].as_str().unwrap_or("unknown").to_string(),
             });
         }
 

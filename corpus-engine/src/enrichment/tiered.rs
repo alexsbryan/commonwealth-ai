@@ -137,11 +137,7 @@ pub trait TieredEnrichmentProvider: Send + Sync {
     /// Default no-op so the conv provider inherits a sensible
     /// fallback; `FolderTieredProvider` overrides to do per-doc work
     /// + a finalize pass.
-    async fn reenrich_sources(
-        &self,
-        _corpus_id: &str,
-        _source_doc_ids: &[String],
-    ) -> Result<()> {
+    async fn reenrich_sources(&self, _corpus_id: &str, _source_doc_ids: &[String]) -> Result<()> {
         Ok(())
     }
 }
@@ -286,9 +282,7 @@ pub async fn run_tiered_enrichment(
     // cheapest (`Tiny`) work fires first — operator sees progress
     // quickly and any provider crash on a tiny conv surfaces before
     // committing to long-tail Slow-slot work.
-    conv_buckets.sort_by_key(|(uuid, _)| {
-        groups.get(uuid).map(|v| v.len()).unwrap_or(0)
-    });
+    conv_buckets.sort_by_key(|(uuid, _)| groups.get(uuid).map(|v| v.len()).unwrap_or(0));
 
     let mut completed = 0usize;
     let mut failed = 0usize;
@@ -493,17 +487,12 @@ pub async fn run_folder_tiered_enrichment(
     // first so the operator sees the Atlas index populate quickly
     // and any provider crash surfaces before committing to the
     // long-tail RAPTOR work.
-    doc_buckets.sort_by_key(|(doc_id, _)| {
-        groups.get(doc_id).map(|v| v.len()).unwrap_or(0)
-    });
+    doc_buckets.sort_by_key(|(doc_id, _)| groups.get(doc_id).map(|v| v.len()).unwrap_or(0));
 
     let mut completed = 0usize;
     let mut failed = 0usize;
     for (doc_id, bucket) in doc_buckets {
-        let rows = match index
-            .chunks_for_source_doc_with_embeddings(&doc_id)
-            .await
-        {
+        let rows = match index.chunks_for_source_doc_with_embeddings(&doc_id).await {
             Ok(r) => r,
             Err(e) => {
                 tracing::warn!(

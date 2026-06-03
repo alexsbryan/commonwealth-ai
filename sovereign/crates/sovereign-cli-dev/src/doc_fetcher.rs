@@ -54,9 +54,7 @@ pub struct HttpFetched {
 /// responses. Sync return: the caller's inside a tokio runtime
 /// already, and doing one-shot GETs synchronously keeps the
 /// Fetcher trait surface simple (no async_trait here).
-pub type HttpFn = Box<
-    dyn Fn(&str) -> Result<HttpFetched, String> + Send + Sync + 'static,
->;
+pub type HttpFn = Box<dyn Fn(&str) -> Result<HttpFetched, String> + Send + Sync + 'static>;
 
 /// Build a production HTTP fetcher backed by `reqwest::Client`.
 /// 30-second timeout; 5MB cap on response body to avoid pathological
@@ -254,7 +252,11 @@ pub fn parse_urls(input: &str) -> Vec<String> {
     let mut out = Vec::new();
     for token in input.split_whitespace() {
         if token.starts_with("http://") || token.starts_with("https://") {
-            out.push(token.trim_end_matches(&[',', ';', ')', ']'][..]).to_string());
+            out.push(
+                token
+                    .trim_end_matches(&[',', ';', ')', ']'][..])
+                    .to_string(),
+            );
         }
     }
     out
@@ -288,10 +290,7 @@ mod tests {
 
     #[test]
     fn render_stashed_prepends_provenance_header() {
-        let body = render_stashed(
-            "https://docs.example.com/api",
-            b"# Heading\n\nsome content",
-        );
+        let body = render_stashed("https://docs.example.com/api", b"# Heading\n\nsome content");
         assert!(body.starts_with("> Source: https://docs.example.com/api\n"));
         assert!(body.contains("# Heading"));
     }
@@ -356,7 +355,8 @@ mod tests {
         let store = make_store(&repo_root.join(".sovereign"));
 
         let url = "https://docs.example.com/reconnect";
-        let body = b"# Reconnect\n\nClients should backoff exponentially with the keyword **gluon**.";
+        let body =
+            b"# Reconnect\n\nClients should backoff exponentially with the keyword **gluon**.";
         let mut responses = std::collections::HashMap::new();
         responses.insert(
             url.to_string(),
@@ -384,7 +384,11 @@ mod tests {
         // Disk artifact exists.
         let slug = slug_for(url);
         let stashed = repo_root.join(".sovereign").join("docs").join(&slug);
-        assert!(stashed.exists(), "stashed file missing at {}", stashed.display());
+        assert!(
+            stashed.exists(),
+            "stashed file missing at {}",
+            stashed.display()
+        );
         let disk = std::fs::read_to_string(&stashed).unwrap();
         assert!(disk.contains("> Source: https://docs.example.com/reconnect"));
         assert!(disk.contains("gluon"));

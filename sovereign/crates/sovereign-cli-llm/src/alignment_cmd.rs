@@ -62,7 +62,10 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
                  and show what's in scope. Mesh peers converge automatically \
                  once both have ingested.",
             ),
-            ("status", "Show local alignment scope (files + notes) and ingest state."),
+            (
+                "status",
+                "Show local alignment scope (files + notes) and ingest state.",
+            ),
         ]),
         crate::util::help::HelpSection::Notes(
             "Sync mechanics: this command lands the LOCAL state on the alignment \
@@ -143,11 +146,8 @@ async fn cmd_migrate(args: &[String]) -> i32 {
     println!("✓ backup at {}", backup.display());
 
     println!("→ submitting corpus install for `{CORPUS_ID}`");
-    let install_code = crate::mesh_cmd::run_corpus(&[
-        "install".to_string(),
-        CORPUS_ID.to_string(),
-    ])
-    .await;
+    let install_code =
+        crate::mesh_cmd::run_corpus(&["install".to_string(), CORPUS_ID.to_string()]).await;
     if install_code != 0 {
         eprintln!(
             "corpus install returned exit code {install_code}; backup at {} \
@@ -194,14 +194,10 @@ async fn cmd_status(_args: &[String]) -> i32 {
             println!("Local alignment corpus: {}", canonical.display());
             if let Ok(raw) = std::fs::read_to_string(&meta) {
                 if let Ok(value) = serde_json::from_str::<serde_json::Value>(&raw) {
-                    if let Some(updated_at) =
-                        value.get("last_updated").and_then(|v| v.as_u64())
-                    {
+                    if let Some(updated_at) = value.get("last_updated").and_then(|v| v.as_u64()) {
                         println!("  last_updated: {}", format_unix_secs(updated_at as i64));
                     }
-                    if let Some(policy) =
-                        value.get("mutable_merge").and_then(|v| v.as_str())
-                    {
+                    if let Some(policy) = value.get("mutable_merge").and_then(|v| v.as_str()) {
                         println!("  mutable_merge: {policy}");
                     } else {
                         println!(
@@ -285,7 +281,11 @@ impl AlignmentScope {
         }
 
         let notes_db = home.join(".sovereign").join("notes.db");
-        let notes_db = if notes_db.exists() { Some(notes_db) } else { None };
+        let notes_db = if notes_db.exists() {
+            Some(notes_db)
+        } else {
+            None
+        };
 
         Ok(Self {
             plans_dir,
@@ -329,8 +329,7 @@ fn print_scope_summary(scope: &AlignmentScope, dry_run: bool) {
 
 fn make_backup(home: &Path, scope: &AlignmentScope) -> Result<PathBuf, String> {
     let backups = home.join(".sovereign").join("backups");
-    std::fs::create_dir_all(&backups)
-        .map_err(|e| format!("mkdir {}: {e}", backups.display()))?;
+    std::fs::create_dir_all(&backups).map_err(|e| format!("mkdir {}: {e}", backups.display()))?;
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -353,9 +352,7 @@ fn make_backup(home: &Path, scope: &AlignmentScope) -> Result<PathBuf, String> {
             cmd.arg(rel);
         }
     }
-    let status = cmd
-        .status()
-        .map_err(|e| format!("spawn tar: {e}"))?;
+    let status = cmd.status().map_err(|e| format!("spawn tar: {e}"))?;
     if !status.success() {
         return Err(format!("tar exited with status {status}"));
     }

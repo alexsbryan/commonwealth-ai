@@ -110,7 +110,8 @@ mod tests {
         let mut wl = Worklist::open_in_memory().unwrap();
         wl.seed("r", ["x"]).unwrap();
         let c = wl.claim("r", "drv", 1, 60).unwrap();
-        wl.ack_failure("r", &c[0], "boom", "vram_thrash", 1).unwrap();
+        wl.ack_failure("r", &c[0], "boom", "vram_thrash", 1)
+            .unwrap();
         let r = report(&wl, "r").unwrap();
         let rendered = r.render();
         assert!(rendered.contains("failure buckets"));

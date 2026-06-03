@@ -12,9 +12,9 @@
 
 #[cfg(feature = "treesitter")]
 use std::path::Path;
+use std::time::Instant;
 #[cfg(feature = "treesitter")]
 use std::time::UNIX_EPOCH;
-use std::time::Instant;
 
 use crate::engine::CorpusEngine;
 use crate::error::{Error, Result};
@@ -136,11 +136,9 @@ impl CorpusEngine {
                 index: idx,
             })
             .collect();
-        let diff = crate::chunkers::chunk_delta(
-            &committed,
-            new_text_chunks,
-            |s| blake3::hash(s.as_bytes()).to_hex().to_string(),
-        );
+        let diff = crate::chunkers::chunk_delta(&committed, new_text_chunks, |s| {
+            blake3::hash(s.as_bytes()).to_hex().to_string()
+        });
 
         if diff.is_noop() {
             tracing::debug!(
@@ -181,10 +179,8 @@ impl CorpusEngine {
         // `chunk_delta` did not return the source ExtractedChunk
         // because the primitive is chunker-shape-agnostic.
         use std::collections::HashMap;
-        let by_hash: HashMap<String, &_> = chunks
-            .iter()
-            .map(|c| (c.content_hash.clone(), c))
-            .collect();
+        let by_hash: HashMap<String, &_> =
+            chunks.iter().map(|c| (c.content_hash.clone(), c)).collect();
 
         let added_extracted: Vec<_> = diff
             .added
@@ -220,10 +216,7 @@ impl CorpusEngine {
         }
 
         // ── Batched embed — only the added chunks ──────────────
-        let texts: Vec<&str> = added_extracted
-            .iter()
-            .map(|c| c.content.as_str())
-            .collect();
+        let texts: Vec<&str> = added_extracted.iter().map(|c| c.content.as_str()).collect();
         let embeddings = self.batch_embed_texts(&texts).await?;
 
         if embeddings.len() != added_extracted.len() {
@@ -346,16 +339,19 @@ impl CorpusEngine {
             .map_err(Error::Io)?;
 
         let extractor = self.make_extractor(extractor_config, corpus_id);
-        let docs: Vec<crate::extractors::ExtractedDoc> = extractor
-            .extract(tmp.path())?
-            .collect::<Result<Vec<_>>>()?;
+        let docs: Vec<crate::extractors::ExtractedDoc> =
+            extractor.extract(tmp.path())?.collect::<Result<Vec<_>>>()?;
 
         let chunker = self.make_chunker(chunker_config);
         let is_portal_bullet = matches!(chunker_config, ChunkerConfig::PortalEventBullet { .. });
 
         let t = Instant::now();
-        let mut chunk_records: Vec<(String, Option<serde_json::Value>, Option<String>, Option<String>)> =
-            Vec::new();
+        let mut chunk_records: Vec<(
+            String,
+            Option<serde_json::Value>,
+            Option<String>,
+            Option<String>,
+        )> = Vec::new();
         // (content, per_chunk_metadata_json, doc_title, doc_url)
 
         for doc in &docs {
@@ -407,7 +403,10 @@ impl CorpusEngine {
         }
 
         // Batched embed — one call per article.
-        let texts: Vec<&str> = chunk_records.iter().map(|(c, _, _, _)| c.as_str()).collect();
+        let texts: Vec<&str> = chunk_records
+            .iter()
+            .map(|(c, _, _, _)| c.as_str())
+            .collect();
         let embeddings = self.batch_embed_texts(&texts).await?;
         if embeddings.len() != chunk_records.len() {
             return Err(Error::Embed(format!(
@@ -518,8 +517,7 @@ fn rescope_outgoing_links_for_bullet(
     bullet_text: &str,
 ) -> Option<serde_json::Value> {
     let mut meta = section_metadata.clone()?;
-    let bullet_targets =
-        crate::chunkers::portal_event_bullet::extract_bullet_links(bullet_text);
+    let bullet_targets = crate::chunkers::portal_event_bullet::extract_bullet_links(bullet_text);
 
     let object = meta.as_object_mut()?;
     let bullet_target_set: std::collections::HashSet<&str> =
@@ -538,7 +536,10 @@ fn rescope_outgoing_links_for_bullet(
             })
             .cloned()
             .collect();
-        object.insert("outgoing_links".to_string(), serde_json::Value::Array(filtered));
+        object.insert(
+            "outgoing_links".to_string(),
+            serde_json::Value::Array(filtered),
+        );
     }
 
     // Always emit the bullet-scoped link list as a flat string array
@@ -569,12 +570,7 @@ mod tests {
         Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.1_f32; 4]) }))
     }
 
-    async fn fixture_engine(
-        index_dir: &Path,
-    ) -> (
-        CorpusEngine,
-        CorpusIndex,
-    ) {
+    async fn fixture_engine(index_dir: &Path) -> (CorpusEngine, CorpusIndex) {
         let recipes_dir = index_dir.parent().unwrap().join("recipes");
         std::fs::create_dir_all(&recipes_dir).unwrap();
         let engine = CorpusEngine::new(recipes_dir, index_dir.to_path_buf(), mock_embed_fn());
@@ -616,15 +612,16 @@ mod tests {
             .expect("reindex absent doc");
 
         match result {
-            ReindexResult::Updated {
-                chunks_written,
-                ..
-            } => assert_eq!(chunks_written, 1, "passthrough chunker → one chunk"),
+            ReindexResult::Updated { chunks_written, .. } => {
+                assert_eq!(chunks_written, 1, "passthrough chunker → one chunk")
+            }
             other => panic!("expected Updated, got {other:?}"),
         }
 
         // Reopen the index and verify the chunk is queryable.
-        let reopened = CorpusIndex::open(&idx_dir.join("test-corpus")).await.unwrap();
+        let reopened = CorpusIndex::open(&idx_dir.join("test-corpus"))
+            .await
+            .unwrap();
         assert_eq!(reopened.chunk_count().await.unwrap(), 1);
         let ids = reopened.list_indexed_source_doc_ids().await.unwrap();
         assert!(ids.contains("Donald_Trump"));
@@ -667,7 +664,9 @@ mod tests {
             .await
             .expect("refresh");
 
-        let reopened = CorpusIndex::open(&idx_dir.join("test-corpus")).await.unwrap();
+        let reopened = CorpusIndex::open(&idx_dir.join("test-corpus"))
+            .await
+            .unwrap();
         // Total chunk count is 1 — old must be replaced, not duplicated.
         // (If the delete-by-source-doc step had been skipped, count
         //  would be 2 with both revisions co-resident.)

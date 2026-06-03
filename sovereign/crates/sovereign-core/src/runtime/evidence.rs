@@ -196,10 +196,7 @@ pub(crate) enum SynthesisRoute {
 /// Identity used for source-dominance: corpus_id + document title, since a
 /// single corpus can host many unrelated documents.
 pub(crate) fn chunk_source_key(c: &ScoredChunk) -> (String, String) {
-    (
-        c.corpus_id.clone(),
-        c.title.clone().unwrap_or_default(),
-    )
+    (c.corpus_id.clone(), c.title.clone().unwrap_or_default())
 }
 
 /// Whether a non-dominant chunk qualifies as a "grounding" signal
@@ -225,13 +222,12 @@ pub(crate) fn is_grounding_candidate(chunk: &ScoredChunk) -> bool {
 /// Extract ≥N-char tokens from `text`, lowercased, stopwords removed.
 pub(crate) fn extract_tokens(text: &str, min_len: usize) -> Vec<String> {
     const STOPWORDS: &[&str] = &[
-        "about", "above", "after", "again", "also", "been", "being",
-        "both", "could", "does", "doing", "down", "each", "from", "have",
-        "having", "here", "just", "like", "make", "many", "more", "most",
-        "much", "need", "only", "other", "over", "should", "some", "such",
-        "tell", "than", "that", "their", "them", "then", "there", "these",
-        "they", "this", "those", "upon", "very", "want", "were", "what",
-        "when", "where", "which", "while", "will", "with", "would", "your",
+        "about", "above", "after", "again", "also", "been", "being", "both", "could", "does",
+        "doing", "down", "each", "from", "have", "having", "here", "just", "like", "make", "many",
+        "more", "most", "much", "need", "only", "other", "over", "should", "some", "such", "tell",
+        "than", "that", "their", "them", "then", "there", "these", "they", "this", "those", "upon",
+        "very", "want", "were", "what", "when", "where", "which", "while", "will", "with", "would",
+        "your",
     ];
     text.split(|c: char| !c.is_alphanumeric())
         .filter(|s| s.len() >= min_len)
@@ -542,7 +538,10 @@ mod grounding_filter_tests {
             "conversation-history",
             Some(""),
         )));
-        assert!(!is_grounding_candidate(&chunk("conversation-history", None)));
+        assert!(!is_grounding_candidate(&chunk(
+            "conversation-history",
+            None
+        )));
     }
 
     /// Untitled chunks (empty or whitespace-only title, or None) are
@@ -627,10 +626,7 @@ mod strip_title_tests {
     #[test]
     fn does_not_strip_title_as_word_prefix() {
         let body = "Joanne Rowling authored Harry Potter.";
-        assert_eq!(
-            strip_leading_title_duplicate(body, Some("Joan")),
-            body
-        );
+        assert_eq!(strip_leading_title_duplicate(body, Some("Joan")), body);
     }
 }
 
@@ -675,7 +671,10 @@ mod evidence_shape_tests {
         ];
         let shape = compute_evidence_shape(&chunks, "Can you tell me about Joan Robinson?");
         assert_eq!(shape.count, 8);
-        assert!(shape.title_match, "'robinson' must match the top chunk's title");
+        assert!(
+            shape.title_match,
+            "'robinson' must match the top chunk's title"
+        );
         assert_eq!(
             shape.top_source_repeat_count, 3,
             "3 hits to obsidian/Joan Robinson"
@@ -687,11 +686,7 @@ mod evidence_shape_tests {
             shape.median_ratio
         );
         let route = route_from_evidence(&shape);
-        assert_eq!(
-            route,
-            SynthesisRoute::FastFocused,
-            "shape = {shape:?}"
-        );
+        assert_eq!(route, SynthesisRoute::FastFocused, "shape = {shape:?}");
     }
 
     /// Multi-source synthesis: ~5 sources at near-equal scores,
@@ -802,7 +797,10 @@ mod evidence_shape_tests {
             chunk("folder", "other-b", 0.016),
         ];
         let shape = compute_evidence_shape(&chunks, "tell me about this when where which");
-        assert!(!shape.title_match, "only overlap is stopwords — should not count");
+        assert!(
+            !shape.title_match,
+            "only overlap is stopwords — should not count"
+        );
     }
 
     /// Empty retrieval must not panic. Returns Fast as a default
@@ -840,8 +838,7 @@ mod evidence_shape_tests {
             chunk("wiki", "capitalism", 0.0161),
             chunk("wiki", "republic", 0.0160),
         ];
-        let shape =
-            compute_evidence_shape(&chunks, "Tell me about the Commonwealth scheduler");
+        let shape = compute_evidence_shape(&chunks, "Tell me about the Commonwealth scheduler");
         assert!(shape.distinct_sources >= 3);
         assert!(!shape.title_match);
         assert_eq!(
@@ -869,8 +866,7 @@ mod evidence_shape_tests {
             chunk("folder", "ThePrince", 0.0167),
             chunk("obsidian", "Benchmark", 0.0161),
         ];
-        let shape =
-            compute_evidence_shape(&chunks, "Can you tell me about Joan Robinson?");
+        let shape = compute_evidence_shape(&chunks, "Can you tell me about Joan Robinson?");
         assert!(shape.title_match);
         assert!(
             !shape.is_off_target(),
@@ -965,11 +961,8 @@ mod expansion_strategy_tests {
     fn concentrated_non_comparison_still_takes_dominant_source() {
         // The fix must NOT regress the single-source-lookup case.
         let shape = build_test_evidence_shape(10, 2, true, 3);
-        let (strategy, _) = decide_expansion_strategy(
-            &Intent::KnowledgeQuery,
-            SynthesisRoute::FastFocused,
-            &shape,
-        );
+        let (strategy, _) =
+            decide_expansion_strategy(&Intent::KnowledgeQuery, SynthesisRoute::FastFocused, &shape);
         assert_eq!(strategy, ExpansionStrategy::DominantSource);
     }
 
@@ -990,11 +983,8 @@ mod expansion_strategy_tests {
         // FastFocused but below the repeat floor and single-source:
         // no dominant signal, nothing to spread — expand nothing.
         let shape = build_test_evidence_shape(4, 1, false, 1);
-        let (strategy, _) = decide_expansion_strategy(
-            &Intent::KnowledgeQuery,
-            SynthesisRoute::FastFocused,
-            &shape,
-        );
+        let (strategy, _) =
+            decide_expansion_strategy(&Intent::KnowledgeQuery, SynthesisRoute::FastFocused, &shape);
         assert_eq!(strategy, ExpansionStrategy::NoExpansion);
     }
 }

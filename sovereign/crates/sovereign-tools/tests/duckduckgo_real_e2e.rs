@@ -23,8 +23,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use sovereign_tools::web::search::{
-    BudgetView, DuckDuckGoBackendImpl, SearchOrchestrator, SearchPrivacy,
-    SelectInputs, WebSearchRegistry,
+    BudgetView, DuckDuckGoBackendImpl, SearchOrchestrator, SearchPrivacy, SelectInputs,
+    WebSearchRegistry,
 };
 
 #[tokio::test]
@@ -46,7 +46,9 @@ async fn duckduckgo_returns_results_or_surfaces_block() {
             SelectInputs {
                 query: "rust programming language",
                 max_results: 5,
-                max_privacy: SearchPrivacy::External { provider: "duckduckgo" },
+                max_privacy: SearchPrivacy::External {
+                    provider: "duckduckgo",
+                },
                 budget: &budget,
                 prefer: &["duckduckgo"],
             },

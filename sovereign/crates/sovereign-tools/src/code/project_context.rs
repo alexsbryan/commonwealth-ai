@@ -16,8 +16,8 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine_notes::{ProjectDocsStore};
-use corpus_engine_atos::{FeatureStore};
+use corpus_engine_atos::FeatureStore;
+use corpus_engine_notes::ProjectDocsStore;
 
 pub struct ProjectContextTool {
     store: Arc<ProjectDocsStore>,
@@ -29,7 +29,10 @@ pub struct ProjectContextTool {
 
 impl ProjectContextTool {
     pub fn new(store: Arc<ProjectDocsStore>) -> Self {
-        Self { store, features: None }
+        Self {
+            store,
+            features: None,
+        }
     }
 
     pub fn with_features(mut self, features: Arc<FeatureStore>) -> Self {
@@ -134,20 +137,18 @@ impl Tool for ProjectContextTool {
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty());
 
-        let results = self
-            .store
-            .search(query, 5)
-            .await
-            .map_err(|e| Error::Tool {
-                tool_id: "project_context".to_string(),
-                message: e.to_string(),
-            })?;
+        let results = self.store.search(query, 5).await.map_err(|e| Error::Tool {
+            tool_id: "project_context".to_string(),
+            message: e.to_string(),
+        })?;
 
         // Threshold: below this relevance, hint at adding conventions.
         const LOW_RELEVANCE_THRESHOLD: f32 = 0.05;
 
         let all_low = results.is_empty()
-            || results.iter().all(|r| r.relevance < LOW_RELEVANCE_THRESHOLD);
+            || results
+                .iter()
+                .all(|r| r.relevance < LOW_RELEVANCE_THRESHOLD);
 
         // Resolve the feature charter if requested. A missing feature is
         // communicated via a hint rather than an error so a typo doesn't

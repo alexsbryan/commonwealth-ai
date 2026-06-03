@@ -28,8 +28,7 @@ use serde::Deserialize;
 /// common-atoms portion (Person/Place/Concept/etc.) is still produced
 /// by the literary preamble in `obsidian_atlas`; this preamble
 /// targets the FIVE typed-extension atom collections only.
-pub const PHASE1_ARGUMENTATIVE_SYSTEM: &str =
-    include_str!("argumentative_phase1_system.md");
+pub const PHASE1_ARGUMENTATIVE_SYSTEM: &str = include_str!("argumentative_phase1_system.md");
 
 /// JSON Schema for the argumentative typed-extension output. The
 /// runner pairs this with the prompt above via `with_response_schema`
@@ -267,13 +266,9 @@ pub fn parse_phase1_argumentative(response: &str) -> Result<ArgumentativeExtensi
             let kind = match e.kind.trim().to_ascii_lowercase().as_str() {
                 "study" | "studies" => "study".to_string(),
                 "figure" | "statistic" | "stat" | "number" => "figure".to_string(),
-                "historical_example" | "history" | "example" => {
-                    "historical_example".to_string()
-                }
+                "historical_example" | "history" | "example" => "historical_example".to_string(),
                 "case_study" | "case" => "case_study".to_string(),
-                "personal_anecdote" | "anecdote" | "personal" => {
-                    "personal_anecdote".to_string()
-                }
+                "personal_anecdote" | "anecdote" | "personal" => "personal_anecdote".to_string(),
                 "quotation" | "quote" => "quotation".to_string(),
                 "" | "other" => "other".to_string(),
                 other => other.to_string(),
@@ -383,7 +378,11 @@ mod tests {
             ]
         }"#;
         let ext = parse_phase1_argumentative(r).expect("parses");
-        assert_eq!(ext.positions.len(), 1, "empty-name position should be dropped");
+        assert_eq!(
+            ext.positions.len(),
+            1,
+            "empty-name position should be dropped"
+        );
     }
 
     #[test]
@@ -406,7 +405,11 @@ mod tests {
             ]
         }"#;
         let ext = parse_phase1_argumentative(r).expect("parses");
-        let kinds: Vec<_> = ext.evidence_invocations.iter().map(|e| e.kind.as_str()).collect();
+        let kinds: Vec<_> = ext
+            .evidence_invocations
+            .iter()
+            .map(|e| e.kind.as_str())
+            .collect();
         assert_eq!(kinds, vec!["figure", "quotation", "case_study"]);
     }
 

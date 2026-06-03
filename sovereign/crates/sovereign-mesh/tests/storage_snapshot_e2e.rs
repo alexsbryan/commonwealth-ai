@@ -44,12 +44,7 @@ fn mock_embed_fn() -> EmbedFn {
 /// Create a real on-disk corpus index at `<indexes>/<id>` with the
 /// given `mesh_sharing` flag, populated with a single trivial
 /// chunk so it counts as "installed" when the engine enumerates.
-async fn install_corpus(
-    indexes_dir: &std::path::Path,
-    id: &str,
-    name: &str,
-    mesh_sharing: bool,
-) {
+async fn install_corpus(indexes_dir: &std::path::Path, id: &str, name: &str, mesh_sharing: bool) {
     let path = indexes_dir.join(id);
     let index = CorpusIndex::create(
         &path,

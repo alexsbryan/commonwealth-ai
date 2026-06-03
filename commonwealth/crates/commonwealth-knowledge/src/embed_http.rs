@@ -1,6 +1,6 @@
-use std::sync::Arc;
-use corpus_engine::EmbedFn;
 use commonwealth_core::oicp::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
+use corpus_engine::EmbedFn;
+use std::sync::Arc;
 
 /// Query a running llama-server (or compatible) to discover its active
 /// embedding model's identity and output shape.

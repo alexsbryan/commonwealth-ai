@@ -90,9 +90,7 @@ impl BulkDownloader {
 
         // Check for partial download (resume support).
         let existing_len = if self.resume && part_path.exists() {
-            std::fs::metadata(&part_path)
-                .map(|m| m.len())
-                .unwrap_or(0)
+            std::fs::metadata(&part_path).map(|m| m.len()).unwrap_or(0)
         } else {
             0
         };
@@ -120,25 +118,18 @@ impl BulkDownloader {
         let response = request.send().await?;
 
         if !response.status().is_success() && response.status().as_u16() != 206 {
-            return Err(Error::Http(
-                response.error_for_status().unwrap_err(),
-            ));
+            return Err(Error::Http(response.error_for_status().unwrap_err()));
         }
 
         let should_append = response.status().as_u16() == 206;
-        let total_size = response.content_length().map(|cl| {
-            if should_append {
-                cl + existing_len
-            } else {
-                cl
-            }
-        });
+        let total_size =
+            response
+                .content_length()
+                .map(|cl| if should_append { cl + existing_len } else { cl });
 
         use std::io::Write;
         let mut file = if should_append {
-            std::fs::OpenOptions::new()
-                .append(true)
-                .open(&part_path)?
+            std::fs::OpenOptions::new().append(true).open(&part_path)?
         } else {
             std::fs::File::create(&part_path)?
         };
@@ -211,11 +202,7 @@ fn extract_extension(url: &str) -> String {
     } else if filename.ends_with(".tar.gz") {
         "tar.gz".to_string()
     } else {
-        filename
-            .rsplit('.')
-            .next()
-            .unwrap_or("dat")
-            .to_string()
+        filename.rsplit('.').next().unwrap_or("dat").to_string()
     }
 }
 
@@ -228,7 +215,13 @@ fn filename_for_url(url: &str, idx: usize) -> String {
     let raw = path.rsplit('/').next().unwrap_or("");
     let safe: String = raw
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     if safe.is_empty() {
         format!("source-{idx}")
@@ -243,9 +236,18 @@ mod tests {
 
     #[test]
     fn extract_extension_works() {
-        assert_eq!(extract_extension("https://example.com/dump.xml.bz2"), "xml.bz2");
-        assert_eq!(extract_extension("https://example.com/data.tar.gz"), "tar.gz");
+        assert_eq!(
+            extract_extension("https://example.com/dump.xml.bz2"),
+            "xml.bz2"
+        );
+        assert_eq!(
+            extract_extension("https://example.com/data.tar.gz"),
+            "tar.gz"
+        );
         assert_eq!(extract_extension("https://example.com/file.jsonl"), "jsonl");
-        assert_eq!(extract_extension("https://example.com/file.jsonl?v=2"), "jsonl");
+        assert_eq!(
+            extract_extension("https://example.com/file.jsonl?v=2"),
+            "jsonl"
+        );
     }
 }

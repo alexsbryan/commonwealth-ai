@@ -120,9 +120,7 @@ pub fn enforce_cap(state: &mut WatchedFolderState) -> usize {
     // tolerable per sweep — TOMBSTONE_CAP is 100k, so worst case is
     // ~100k log 100k comparisons after a bulk-delete, which is
     // single-digit milliseconds.
-    state
-        .tombstones
-        .sort_by_key(|t| t.removed_at_unix);
+    state.tombstones.sort_by_key(|t| t.removed_at_unix);
     let excess = state.tombstones.len() - TOMBSTONE_CAP;
     state.tombstones.drain(0..excess);
     excess
@@ -157,7 +155,10 @@ mod tests {
     }
 
     fn snapshot(items: &[(&str, EntryRecord)]) -> WalkSnapshot {
-        items.iter().map(|(k, v)| (k.to_string(), v.clone())).collect()
+        items
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect()
     }
 
     #[test]
@@ -203,7 +204,11 @@ mod tests {
         let snap = snapshot(&[("a.md", entry("/tmp/a.md", "h2", 10))]);
         let revived = detect_revivals(&mut state, &snap, 1_000, 200);
         assert!(revived.is_empty());
-        assert_eq!(state.tombstones.len(), 1, "tombstone preserved when hash differs");
+        assert_eq!(
+            state.tombstones.len(),
+            1,
+            "tombstone preserved when hash differs"
+        );
     }
 
     #[test]

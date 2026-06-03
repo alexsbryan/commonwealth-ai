@@ -3,12 +3,15 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use arrow::array::{Array, AsArray, RecordBatch};
-use arrow::datatypes::{DataType, Int8Type, Int16Type, Int32Type, Int64Type, UInt8Type, UInt16Type, UInt32Type, UInt64Type};
+use arrow::datatypes::{
+    DataType, Int16Type, Int32Type, Int64Type, Int8Type, UInt16Type, UInt32Type, UInt64Type,
+    UInt8Type,
+};
 use arrow::error::ArrowError;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
-use crate::error::{Error, Result};
 use super::{slug, ExtractedDoc, Extractor};
+use crate::error::{Error, Result};
 
 /// Parquet file extractor.
 ///
@@ -82,10 +85,7 @@ impl Extractor for ParquetExtractor {
             }))
         } else {
             let file = File::open(source_path).map_err(|e| {
-                Error::Extraction(format!(
-                    "Failed to open {}: {e}",
-                    source_path.display()
-                ))
+                Error::Extraction(format!("Failed to open {}: {e}", source_path.display()))
             })?;
 
             let builder = ParquetRecordBatchReaderBuilder::try_new(file)
@@ -324,18 +324,78 @@ fn get_string_value(batch: &RecordBatch, col_idx: usize, row: usize) -> String {
             // HuggingFace parquets commonly encode string columns as
             // Dictionary<Int8/16/32/64, Utf8/LargeUtf8>.
             match (key_type.as_ref(), value_type.as_ref()) {
-                (DataType::Int8,  DataType::Utf8)      => col.as_dictionary::<Int8Type>() .values().as_string::<i32>().value(col.as_dictionary::<Int8Type>() .keys().value(row) as usize).to_string(),
-                (DataType::Int16, DataType::Utf8)      => col.as_dictionary::<Int16Type>().values().as_string::<i32>().value(col.as_dictionary::<Int16Type>().keys().value(row) as usize).to_string(),
-                (DataType::Int32, DataType::Utf8)      => col.as_dictionary::<Int32Type>().values().as_string::<i32>().value(col.as_dictionary::<Int32Type>().keys().value(row) as usize).to_string(),
-                (DataType::Int64, DataType::Utf8)      => col.as_dictionary::<Int64Type>().values().as_string::<i32>().value(col.as_dictionary::<Int64Type>().keys().value(row) as usize).to_string(),
-                (DataType::UInt8, DataType::Utf8)      => col.as_dictionary::<UInt8Type>() .values().as_string::<i32>().value(col.as_dictionary::<UInt8Type>() .keys().value(row) as usize).to_string(),
-                (DataType::UInt16,DataType::Utf8)      => col.as_dictionary::<UInt16Type>().values().as_string::<i32>().value(col.as_dictionary::<UInt16Type>().keys().value(row) as usize).to_string(),
-                (DataType::UInt32,DataType::Utf8)      => col.as_dictionary::<UInt32Type>().values().as_string::<i32>().value(col.as_dictionary::<UInt32Type>().keys().value(row) as usize).to_string(),
-                (DataType::UInt64,DataType::Utf8)      => col.as_dictionary::<UInt64Type>().values().as_string::<i32>().value(col.as_dictionary::<UInt64Type>().keys().value(row) as usize).to_string(),
-                (DataType::Int8,  DataType::LargeUtf8) => col.as_dictionary::<Int8Type>() .values().as_string::<i64>().value(col.as_dictionary::<Int8Type>() .keys().value(row) as usize).to_string(),
-                (DataType::Int16, DataType::LargeUtf8) => col.as_dictionary::<Int16Type>().values().as_string::<i64>().value(col.as_dictionary::<Int16Type>().keys().value(row) as usize).to_string(),
-                (DataType::Int32, DataType::LargeUtf8) => col.as_dictionary::<Int32Type>().values().as_string::<i64>().value(col.as_dictionary::<Int32Type>().keys().value(row) as usize).to_string(),
-                (DataType::Int64, DataType::LargeUtf8) => col.as_dictionary::<Int64Type>().values().as_string::<i64>().value(col.as_dictionary::<Int64Type>().keys().value(row) as usize).to_string(),
+                (DataType::Int8, DataType::Utf8) => col
+                    .as_dictionary::<Int8Type>()
+                    .values()
+                    .as_string::<i32>()
+                    .value(col.as_dictionary::<Int8Type>().keys().value(row) as usize)
+                    .to_string(),
+                (DataType::Int16, DataType::Utf8) => col
+                    .as_dictionary::<Int16Type>()
+                    .values()
+                    .as_string::<i32>()
+                    .value(col.as_dictionary::<Int16Type>().keys().value(row) as usize)
+                    .to_string(),
+                (DataType::Int32, DataType::Utf8) => col
+                    .as_dictionary::<Int32Type>()
+                    .values()
+                    .as_string::<i32>()
+                    .value(col.as_dictionary::<Int32Type>().keys().value(row) as usize)
+                    .to_string(),
+                (DataType::Int64, DataType::Utf8) => col
+                    .as_dictionary::<Int64Type>()
+                    .values()
+                    .as_string::<i32>()
+                    .value(col.as_dictionary::<Int64Type>().keys().value(row) as usize)
+                    .to_string(),
+                (DataType::UInt8, DataType::Utf8) => col
+                    .as_dictionary::<UInt8Type>()
+                    .values()
+                    .as_string::<i32>()
+                    .value(col.as_dictionary::<UInt8Type>().keys().value(row) as usize)
+                    .to_string(),
+                (DataType::UInt16, DataType::Utf8) => col
+                    .as_dictionary::<UInt16Type>()
+                    .values()
+                    .as_string::<i32>()
+                    .value(col.as_dictionary::<UInt16Type>().keys().value(row) as usize)
+                    .to_string(),
+                (DataType::UInt32, DataType::Utf8) => col
+                    .as_dictionary::<UInt32Type>()
+                    .values()
+                    .as_string::<i32>()
+                    .value(col.as_dictionary::<UInt32Type>().keys().value(row) as usize)
+                    .to_string(),
+                (DataType::UInt64, DataType::Utf8) => col
+                    .as_dictionary::<UInt64Type>()
+                    .values()
+                    .as_string::<i32>()
+                    .value(col.as_dictionary::<UInt64Type>().keys().value(row) as usize)
+                    .to_string(),
+                (DataType::Int8, DataType::LargeUtf8) => col
+                    .as_dictionary::<Int8Type>()
+                    .values()
+                    .as_string::<i64>()
+                    .value(col.as_dictionary::<Int8Type>().keys().value(row) as usize)
+                    .to_string(),
+                (DataType::Int16, DataType::LargeUtf8) => col
+                    .as_dictionary::<Int16Type>()
+                    .values()
+                    .as_string::<i64>()
+                    .value(col.as_dictionary::<Int16Type>().keys().value(row) as usize)
+                    .to_string(),
+                (DataType::Int32, DataType::LargeUtf8) => col
+                    .as_dictionary::<Int32Type>()
+                    .values()
+                    .as_string::<i64>()
+                    .value(col.as_dictionary::<Int32Type>().keys().value(row) as usize)
+                    .to_string(),
+                (DataType::Int64, DataType::LargeUtf8) => col
+                    .as_dictionary::<Int64Type>()
+                    .values()
+                    .as_string::<i64>()
+                    .value(col.as_dictionary::<Int64Type>().keys().value(row) as usize)
+                    .to_string(),
                 _ => String::new(),
             }
         }
@@ -346,10 +406,10 @@ fn get_string_value(batch: &RecordBatch, col_idx: usize, row: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use arrow::array::StringArray;
     use arrow::datatypes::{Field, Schema};
     use parquet::arrow::ArrowWriter;
+    use std::sync::Arc;
 
     fn make_test_parquet(path: &Path) {
         let schema = Arc::new(Schema::new(vec![
@@ -362,17 +422,11 @@ mod tests {
             "Epistemology is the branch of philosophy concerned with the nature and scope of knowledge.",
             "",  // empty row should be skipped
         ]);
-        let category = StringArray::from(vec![
-            Some("Bergson"),
-            Some("Epistemology"),
-            Some("Empty"),
-        ]);
+        let category =
+            StringArray::from(vec![Some("Bergson"), Some("Epistemology"), Some("Empty")]);
 
-        let batch = RecordBatch::try_new(
-            schema.clone(),
-            vec![Arc::new(text), Arc::new(category)],
-        )
-        .unwrap();
+        let batch =
+            RecordBatch::try_new(schema.clone(), vec![Arc::new(text), Arc::new(category)]).unwrap();
 
         let file = File::create(path).unwrap();
         let mut writer = ArrowWriter::try_new(file, schema, None).unwrap();

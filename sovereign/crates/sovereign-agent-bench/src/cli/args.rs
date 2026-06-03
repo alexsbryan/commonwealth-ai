@@ -107,8 +107,9 @@ impl RunArgs {
                 }
                 "--judge-trials" => {
                     let v = require_value("--judge-trials", argv, &mut i)?;
-                    judge_trials =
-                        v.parse().map_err(|_| ArgsError::BadNumber("--judge-trials".into(), v.clone()))?;
+                    judge_trials = v
+                        .parse()
+                        .map_err(|_| ArgsError::BadNumber("--judge-trials".into(), v.clone()))?;
                 }
                 "--judge-model" => {
                     judge_model = Some(require_value("--judge-model", argv, &mut i)?);
@@ -118,17 +119,15 @@ impl RunArgs {
                 }
                 "--token-cap-override" => {
                     let v = require_value("--token-cap-override", argv, &mut i)?;
-                    token_cap_override = Some(
-                        v.parse()
-                            .map_err(|_| ArgsError::BadNumber("--token-cap-override".into(), v.clone()))?,
-                    );
+                    token_cap_override = Some(v.parse().map_err(|_| {
+                        ArgsError::BadNumber("--token-cap-override".into(), v.clone())
+                    })?);
                 }
                 "--wall-seconds-override" => {
                     let v = require_value("--wall-seconds-override", argv, &mut i)?;
-                    wall_seconds_override = Some(
-                        v.parse()
-                            .map_err(|_| ArgsError::BadNumber("--wall-seconds-override".into(), v.clone()))?,
-                    );
+                    wall_seconds_override = Some(v.parse().map_err(|_| {
+                        ArgsError::BadNumber("--wall-seconds-override".into(), v.clone())
+                    })?);
                 }
                 "--update-baseline" => {
                     update_baseline = true;

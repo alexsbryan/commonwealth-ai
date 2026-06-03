@@ -44,8 +44,10 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use corpus_engine_archaeology::archaeology_eval::{inquiries_matching_files, load_inquiries_from_dir};
 use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope};
+use corpus_engine_archaeology::archaeology_eval::{
+    inquiries_matching_files, load_inquiries_from_dir,
+};
 use corpus_engine_archaeology::git_archaeology::{batch_harvest_all_commits, CommitRecord};
 use corpus_engine_notes::{NoteRow, NoteStore};
 use serde::Deserialize;
@@ -159,8 +161,7 @@ pub async fn assemble_brief(
     // Slotted between drift posture and notes so the model sees
     // architectural commitments before any narrative claims.
     if let Some(inquiries_dir) = inputs.inquiries_dir {
-        let s_principles =
-            render_principles(inquiries_dir, inputs.working_set, remaining);
+        let s_principles = render_principles(inquiries_dir, inputs.working_set, remaining);
         if !s_principles.is_empty() {
             push_if_fits(&mut out, &mut remaining, &s_principles);
         }
@@ -319,11 +320,17 @@ fn render_drift_posture(drift_dir: &Path, repo_root: &Path) -> String {
         ));
     }
     if act_on > 3 {
-        out.push_str(&format!("- _+{} more (see `~/.sovereign/drift/latest.md`)_\n", act_on - 3));
+        out.push_str(&format!(
+            "- _+{} more (see `~/.sovereign/drift/latest.md`)_\n",
+            act_on - 3
+        ));
     }
 
     // Hint the operator at the remediation when stale or never-run.
-    if matches!(posture.status, PostureStatus::Stale | PostureStatus::NeverRun) {
+    if matches!(
+        posture.status,
+        PostureStatus::Stale | PostureStatus::NeverRun
+    ) {
         out.push_str("\nRun `sovereign drift detect` to refresh.\n");
     }
 
@@ -349,11 +356,7 @@ fn humanize_age(seconds: u64) -> String {
 /// Surface architectural commitments (inquiries) that target a file
 /// in the working set. Reuses the eval framework's inquiry loader +
 /// glob matcher so principles-as-inquiries stays one source of truth.
-fn render_principles(
-    inquiries_dir: &Path,
-    working_set: &[PathBuf],
-    remaining: usize,
-) -> String {
+fn render_principles(inquiries_dir: &Path, working_set: &[PathBuf], remaining: usize) -> String {
     let inquiries = match load_inquiries_from_dir(inquiries_dir) {
         Ok(i) => i,
         Err(_) => return String::new(),
@@ -390,11 +393,7 @@ async fn render_notes(
     // `reflection` joins decision + invariant so session-end captures
     // (written by `sovereign code reflect`) surface in the next
     // session's brief automatically — closing the feedback loop.
-    let kinds: Vec<String> = vec![
-        "decision".into(),
-        "invariant".into(),
-        "reflection".into(),
-    ];
+    let kinds: Vec<String> = vec!["decision".into(), "invariant".into(), "reflection".into()];
     let scope_filter = match feature_id {
         Some(f) => ScopeFilter {
             scopes: vec![NoteScope::Global, NoteScope::Feature],
@@ -422,12 +421,7 @@ async fn render_notes(
         .collect();
     let mut kept: Vec<&NoteRow> = Vec::new();
     for row in &rows {
-        if row.files.is_empty()
-            || row
-                .files
-                .iter()
-                .any(|f| ws_set.contains(f))
-        {
+        if row.files.is_empty() || row.files.iter().any(|f| ws_set.contains(f)) {
             kept.push(row);
         }
     }
@@ -475,7 +469,8 @@ fn render_structural(
     }
 
     // Filter atoms by working-set membership.
-    let ws_set: std::collections::HashSet<&Path> = working_set.iter().map(|p| p.as_path()).collect();
+    let ws_set: std::collections::HashSet<&Path> =
+        working_set.iter().map(|p| p.as_path()).collect();
     let atoms_file = match read_atlas_atoms(atlas_dir) {
         Ok(a) => a,
         Err(_) => return Ok(String::new()),
@@ -525,7 +520,8 @@ fn render_recent_activity(
     // Collect (timestamp, hash, subject, file) triples for working-set
     // files within the cutoff window. Dedup by hash so a single commit
     // touching N working-set files only renders once.
-    let ws_set: std::collections::HashSet<&Path> = working_set.iter().map(|p| p.as_path()).collect();
+    let ws_set: std::collections::HashSet<&Path> =
+        working_set.iter().map(|p| p.as_path()).collect();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut entries: Vec<(i64, &CommitRecord)> = Vec::new();
     for path in working_set {
@@ -620,7 +616,11 @@ mod tests {
             .unwrap()
             .success());
         for (k, v) in [("user.email", "alice@example.com"), ("user.name", "A")] {
-            Cmd::new("git").args(["config", k, v]).current_dir(dir).status().unwrap();
+            Cmd::new("git")
+                .args(["config", k, v])
+                .current_dir(dir)
+                .status()
+                .unwrap();
         }
     }
 
@@ -630,7 +630,11 @@ mod tests {
             std::fs::create_dir_all(parent).unwrap();
         }
         std::fs::write(&p, body).unwrap();
-        Cmd::new("git").args(["add", rel]).current_dir(dir).status().unwrap();
+        Cmd::new("git")
+            .args(["add", rel])
+            .current_dir(dir)
+            .status()
+            .unwrap();
         Cmd::new("git")
             .args(["commit", "-m", msg])
             .current_dir(dir)
@@ -667,7 +671,8 @@ mod tests {
     async fn working_set_lists_files_capped_at_20() {
         let tmp = tempfile::tempdir().unwrap();
         let notes = NoteStore::open(&tmp.path().join("notes.db")).unwrap();
-        let working_set: Vec<PathBuf> = (0..25).map(|i| PathBuf::from(format!("f{i}.rs"))).collect();
+        let working_set: Vec<PathBuf> =
+            (0..25).map(|i| PathBuf::from(format!("f{i}.rs"))).collect();
         let inputs = BriefInputs {
             working_set: &working_set,
             repo_root: None,
@@ -693,7 +698,11 @@ mod tests {
         // One backdated commit + one fresh.
         let p = repo.join("old.rs");
         std::fs::write(&p, "fn old() {}\n").unwrap();
-        Cmd::new("git").args(["add", "old.rs"]).current_dir(repo).status().unwrap();
+        Cmd::new("git")
+            .args(["add", "old.rs"])
+            .current_dir(repo)
+            .status()
+            .unwrap();
         Cmd::new("git")
             .args(["commit", "-m", "old commit body"])
             .env("GIT_AUTHOR_DATE", "2020-01-01T00:00:00 +0000")
@@ -727,8 +736,9 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let notes = NoteStore::open(&tmp.path().join("notes.db")).unwrap();
         // 100 files; with a tiny budget many should be dropped.
-        let working_set: Vec<PathBuf> =
-            (0..100).map(|i| PathBuf::from(format!("file{i}.rs"))).collect();
+        let working_set: Vec<PathBuf> = (0..100)
+            .map(|i| PathBuf::from(format!("file{i}.rs")))
+            .collect();
         let inputs = BriefInputs {
             working_set: &working_set,
             repo_root: None,

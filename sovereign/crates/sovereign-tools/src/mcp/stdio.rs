@@ -97,10 +97,7 @@ impl McpTransport for StdioTransport {
         if let Some(error) = response.get("error") {
             return Err(McpError::Protocol {
                 code: error["code"].as_i64().unwrap_or(-1) as i32,
-                message: error["message"]
-                    .as_str()
-                    .unwrap_or("unknown")
-                    .to_string(),
+                message: error["message"].as_str().unwrap_or("unknown").to_string(),
             });
         }
 

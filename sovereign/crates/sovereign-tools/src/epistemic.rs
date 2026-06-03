@@ -84,11 +84,7 @@ impl Tool for ClaimSearchTool {
         Ok(())
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -298,11 +294,7 @@ impl Tool for EpistemicLandscapeTool {
         Ok(())
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let topic = params
             .get("topic")
             .and_then(|v| v.as_str())
@@ -458,11 +450,21 @@ impl FieldLandscape {
             ));
 
             // Group by status.
-            let dominant: Vec<_> = q.positions.iter().filter(|p| p.status == "majority").collect();
-            let contested: Vec<_> =
-                q.positions.iter().filter(|p| p.status == "contested").collect();
-            let minority: Vec<_> =
-                q.positions.iter().filter(|p| p.status == "minority").collect();
+            let dominant: Vec<_> = q
+                .positions
+                .iter()
+                .filter(|p| p.status == "majority")
+                .collect();
+            let contested: Vec<_> = q
+                .positions
+                .iter()
+                .filter(|p| p.status == "contested")
+                .collect();
+            let minority: Vec<_> = q
+                .positions
+                .iter()
+                .filter(|p| p.status == "minority")
+                .collect();
 
             if !dominant.is_empty() {
                 out.push_str("DOMINANT VIEW:\n");

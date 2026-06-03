@@ -143,7 +143,10 @@ fn build_plan(parsed: &ParsedReset) -> ResetPlan {
     if parsed.full {
         let enrich_root = paths::enrichment_root(&parsed.corpus_id);
         if enrich_root.exists() {
-            labels.push(format!("entire enrichment tree ({})", enrich_root.display()));
+            labels.push(format!(
+                "entire enrichment tree ({})",
+                enrich_root.display()
+            ));
             paths.push(enrich_root);
         }
         let manifest_path = paths::chapters_manifest_path(&parsed.corpus_id);
@@ -278,8 +281,7 @@ fn parse_args(args: &[String]) -> Result<ParsedReset, String> {
                 let p = PipelinePhase::from_str(v).map_err(|e| format!("--from: {e}"))?;
                 if p == PipelinePhase::Ingest {
                     return Err(
-                        "--from ingest is not a reset starting point (use --full instead)"
-                            .into(),
+                        "--from ingest is not a reset starting point (use --full instead)".into(),
                     );
                 }
                 from = Some(p);
@@ -438,10 +440,17 @@ mod tests {
     #[test]
     fn parse_accepts_all_flags() {
         let p = parse_args(
-            &["ak", "--from", "positions", "--include-exemplars", "--dry-run", "-y"]
-                .iter()
-                .map(|s| s.to_string())
-                .collect::<Vec<_>>(),
+            &[
+                "ak",
+                "--from",
+                "positions",
+                "--include-exemplars",
+                "--dry-run",
+                "-y",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>(),
         )
         .unwrap();
         assert_eq!(p.from, PipelinePhase::Positions);
@@ -518,12 +527,7 @@ mod tests {
         scaffold("t5");
         let before_cache = paths::cache_dir("t5").join("concerns.json");
         assert!(path_exists(&before_cache));
-        let code = cmd_reset(&[
-            "t5".into(),
-            "--dry-run".into(),
-            "--yes".into(),
-        ])
-        .await;
+        let code = cmd_reset(&["t5".into(), "--dry-run".into(), "--yes".into()]).await;
         assert_eq!(code, 0);
         assert!(path_exists(&before_cache), "dry-run must not delete files");
     }

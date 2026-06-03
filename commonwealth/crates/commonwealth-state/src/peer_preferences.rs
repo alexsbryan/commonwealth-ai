@@ -117,9 +117,8 @@ impl PeerPreferenceStore {
     /// `PeerPreference` exists, it is valid by construction.
     pub fn set(&self, peer: &NodeId, pref: PeerPreference) -> Result<()> {
         let key = node_key(peer);
-        let bytes = serde_json::to_vec(&pref).map_err(|e| {
-            Error::Backend(format!("serialize peer preference: {e}"))
-        })?;
+        let bytes = serde_json::to_vec(&pref)
+            .map_err(|e| Error::Backend(format!("serialize peer preference: {e}")))?;
         tracing::info!(
             peer = %fmt_peer(peer),
             multiplier = pref.multiplier,
@@ -145,9 +144,7 @@ impl PeerPreferenceStore {
             Some(e) => e,
         };
         let pref = serde_json::from_slice::<PeerPreference>(entry.value.as_ref())
-            .map_err(|e| {
-                Error::Backend(format!("deserialize peer preference: {e}"))
-            })?;
+            .map_err(|e| Error::Backend(format!("deserialize peer preference: {e}")))?;
         Ok(Some(pref))
     }
 
@@ -168,9 +165,7 @@ impl PeerPreferenceStore {
             let Some(node_id) = node_from_key(&entry.key) else {
                 continue;
             };
-            if let Ok(pref) =
-                serde_json::from_slice::<PeerPreference>(entry.value.as_ref())
-            {
+            if let Ok(pref) = serde_json::from_slice::<PeerPreference>(entry.value.as_ref()) {
                 out.push((node_id, pref));
             }
         }
@@ -222,10 +217,7 @@ pub fn is_gossip_excluded(app_id: &str) -> bool {
 }
 
 fn node_key(peer: &NodeId) -> String {
-    peer.as_bytes()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+    peer.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
 }
 
 fn node_from_key(key: &str) -> Option<NodeId> {
@@ -241,7 +233,11 @@ fn node_from_key(key: &str) -> Option<NodeId> {
 }
 
 fn fmt_peer(id: &NodeId) -> String {
-    id.as_bytes().iter().take(6).map(|b| format!("{b:02x}")).collect()
+    id.as_bytes()
+        .iter()
+        .take(6)
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 #[cfg(test)]

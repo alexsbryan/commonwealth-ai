@@ -49,8 +49,7 @@ impl ArtifactSink {
             tokens_input: artifact.tokens.input,
             tokens_output: artifact.tokens.output,
             wall_ms: artifact.wall_ms,
-            exit_reason: serde_json::to_value(&artifact.exit_reason)
-                .unwrap_or(Value::Null),
+            exit_reason: serde_json::to_value(&artifact.exit_reason).unwrap_or(Value::Null),
             tool_calls: artifact.tool_calls.clone(),
             stderr_tail: artifact.stderr_tail.clone(),
             final_assistant_text: artifact.final_assistant_text.clone(),

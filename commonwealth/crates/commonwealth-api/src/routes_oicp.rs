@@ -4,10 +4,9 @@ use axum::Json;
 
 use commonwealth_core::ids::NodeId;
 use commonwealth_inference::oicp::{
-    Capability, CapabilityClaim, CapabilityHint, CapabilityProfile,
-    CorpusDescriptor, FederationManifest, KnowledgeManifest, LatencyClass,
-    ModelStatus, PeerDescriptor, ProviderInfo, ProviderManifest, ProviderModel,
-    ProviderType, OICP_VERSION,
+    Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, CorpusDescriptor,
+    FederationManifest, KnowledgeManifest, LatencyClass, ModelStatus, PeerDescriptor, ProviderInfo,
+    ProviderManifest, ProviderModel, ProviderType, OICP_VERSION,
 };
 
 use crate::state::AppState;
@@ -45,11 +44,15 @@ fn synthesize_default_claim(
         // general-adjacent capabilities. Models with `General: 4`
         // advertise strong general affinity; those with only
         // `Instruction: 2` advertise weaker.
-        let best = [Capability::General, Capability::Analysis, Capability::Instruction]
-            .into_iter()
-            .map(|c| profile.get(&c).copied().unwrap_or(0))
-            .max()
-            .unwrap_or(0);
+        let best = [
+            Capability::General,
+            Capability::Analysis,
+            Capability::Instruction,
+        ]
+        .into_iter()
+        .map(|c| profile.get(&c).copied().unwrap_or(0))
+        .max()
+        .unwrap_or(0);
         // Return a sentinel; we'll compute affinity from `best`
         // below rather than re-looking-up.
         return CapabilityClaim::new(
@@ -119,11 +122,7 @@ pub async fn capabilities(
                 .get_llama_address(model.id)
                 .is_some();
 
-            let claim = synthesize_default_claim(
-                &model.name,
-                &model.oicp_capabilities,
-                32_768,
-            );
+            let claim = synthesize_default_claim(&model.name, &model.oicp_capabilities, 32_768);
             ProviderModel {
                 id: model.name.clone(),
                 base_model: None,
@@ -240,8 +239,7 @@ fn fmt_requester(id: &NodeId) -> String {
 mod tests {
     use super::*;
     use commonwealth_inference::oicp::{
-        CapabilityClaim, CapabilityHint, LatencyClass, ModelStatus,
-        ProviderManifest, ProviderModel,
+        CapabilityClaim, CapabilityHint, LatencyClass, ModelStatus, ProviderManifest, ProviderModel,
     };
     use commonwealth_state::{PeerPreference, PeerPreferenceStore};
 

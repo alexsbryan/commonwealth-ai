@@ -166,9 +166,13 @@ impl Tool for SpecTool {
             None => single_feature_dir(&repo_root.join(".sovereign").join("features")),
         };
 
-        let spec_path = feature_id
-            .as_ref()
-            .map(|id| repo_root.join(".sovereign").join("features").join(id).join("spec.md"));
+        let spec_path = feature_id.as_ref().map(|id| {
+            repo_root
+                .join(".sovereign")
+                .join("features")
+                .join(id)
+                .join("spec.md")
+        });
         let (spec, spec_truncated) = match &spec_path {
             Some(p) => read_capped(p),
             None => (None, false),
@@ -238,7 +242,11 @@ fn read_capped(path: &Path) -> (Option<String>, bool) {
         Err(_) => return (None, false),
     };
     let truncated = bytes.len() > MAX_DOC_BYTES;
-    let slice = if truncated { &bytes[..MAX_DOC_BYTES] } else { bytes.as_slice() };
+    let slice = if truncated {
+        &bytes[..MAX_DOC_BYTES]
+    } else {
+        bytes.as_slice()
+    };
     let mut text = String::from_utf8_lossy(slice).into_owned();
     if truncated {
         // String::from_utf8_lossy may have produced a trailing

@@ -45,14 +45,13 @@ impl Tool for RecipeTestTool {
         ToolDescriptor {
             id: "recipe_test".into(),
             name: "RecipeTest".into(),
-            description:
-                "Run the recipe test harness against a recipe TOML. Acquires a \
+            description: "Run the recipe test harness against a recipe TOML. Acquires a \
                  sample of source data, extracts, chunks, and reports per-section \
                  match/miss for html_sections recipes. Pass `params` to inject \
                  install-time parameter values without prompting. Use this AFTER \
                  RecipeValidate passes; iterate on `section_misses[].nearby_text` \
                  to refine regexes."
-                    .into(),
+                .into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -80,11 +79,10 @@ impl Tool for RecipeTestTool {
                 "required": ["path"],
             }),
             examples: vec![ToolExample {
-                situation:
-                    "Verify a SEC investigation recipe extracts the MD&A and \
+                situation: "Verify a SEC investigation recipe extracts the MD&A and \
                      related-party sections from a sample of 10-Ks before \
                      installing on the full corpus."
-                        .into(),
+                    .into(),
                 call: serde_json::json!({
                     "path": "sec-ai-investigation",
                     "params": {
@@ -144,17 +142,11 @@ impl Tool for RecipeTestTool {
         vec![Permission::Network, Permission::RecipeAuthoring]
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let raw_path = params
             .get("path")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::InvalidInput("RecipeTestTool requires `path`".into())
-            })?;
+            .ok_or_else(|| Error::InvalidInput("RecipeTestTool requires `path`".into()))?;
         let resolved = resolve_recipe_path(raw_path, self.recipes_dir.as_ref())?;
         if !resolved.is_file() {
             return Err(Error::InvalidInput(format!(
@@ -255,19 +247,15 @@ fn compose_nudge(report: &corpus_engine::TestReport) -> Option<String> {
     // characteristic prefix. The fix path is almost always to confirm
     // the URL with `probe_url` (one GET, gets you status / pagination
     // hint / body excerpt) before drafting again.
-    let acq_failed = report
-        .validation
-        .errors
-        .iter()
-        .any(|e| {
-            let l = e.to_ascii_lowercase();
-            l.contains("acquisition failed")
-                || l.contains("http error")
-                || l.contains("dns")
-                || l.contains("could not resolve host")
-                || l.contains("connection refused")
-                || l.contains("certificate")
-        });
+    let acq_failed = report.validation.errors.iter().any(|e| {
+        let l = e.to_ascii_lowercase();
+        l.contains("acquisition failed")
+            || l.contains("http error")
+            || l.contains("dns")
+            || l.contains("could not resolve host")
+            || l.contains("connection refused")
+            || l.contains("certificate")
+    });
     if acq_failed {
         return Some(
             "Acquisition failed before any docs were fetched. \
@@ -301,8 +289,7 @@ fn compose_nudge(report: &corpus_engine::TestReport) -> Option<String> {
 }
 
 fn build_stub_engine() -> CorpusEngine {
-    let stub_embed: EmbedFn =
-        Arc::new(|_text| Box::pin(async { Ok(vec![0f32; 768]) }));
+    let stub_embed: EmbedFn = Arc::new(|_text| Box::pin(async { Ok(vec![0f32; 768]) }));
     let tmp = std::env::temp_dir().join("sovereign-recipe-author-test");
     CorpusEngine::new(tmp.clone(), tmp, stub_embed)
 }

@@ -15,21 +15,28 @@ const HELP: Help = Help {
     command: "sovereign enrich show",
     summary: "Inspect cached phase output without opening JSON files.",
     sections: &[
-        HelpSection::Usage(
-            "sovereign enrich show <corpus-id> <target> [--chapter <id>]",
-        ),
+        HelpSection::Usage("sovereign enrich show <corpus-id> <target> [--chapter <id>]"),
         HelpSection::Subcommands(&[
             ("phase1", "Per-chapter questions from the last --full run."),
-            ("question-clusters", "Phase 2 cluster assignments (+ unclustered)."),
+            (
+                "question-clusters",
+                "Phase 2 cluster assignments (+ unclustered).",
+            ),
             ("concerns", "Phase 3 canonical concerns."),
             ("chunk-clusters", "Phase 4 chunk cluster ids and sizes."),
-            ("positions", "Phase 5 grounded positions (use --concern to filter)."),
+            (
+                "positions",
+                "Phase 5 grounded positions (use --concern to filter).",
+            ),
             ("tensions", "Phase 6 detected tensions."),
             ("gaps", "Phase 7 identified gaps."),
         ]),
         HelpSection::Flags(&[
             ("--chapter <id>", "Filter phase1 output to one chapter id."),
-            ("--concern <id>", "Filter positions or tensions by concern id."),
+            (
+                "--concern <id>",
+                "Filter positions or tensions by concern id.",
+            ),
         ]),
     ],
 };
@@ -60,11 +67,11 @@ pub async fn cmd_show(args: &[String]) -> i32 {
         Target::Phase1 => show_one(&cache, PipelinePhase::Questions, |out: Phase1Output| {
             print_phase1(&out, parsed.chapter.as_deref())
         }),
-        Target::Phase2 => {
-            show_one(&cache, PipelinePhase::QuestionClusters, |out: Phase2Output| {
-                print_phase2(&out)
-            })
-        }
+        Target::Phase2 => show_one(
+            &cache,
+            PipelinePhase::QuestionClusters,
+            |out: Phase2Output| print_phase2(&out),
+        ),
         Target::Phase3 => show_one(&cache, PipelinePhase::Concerns, |out: Phase3Output| {
             print_phase3(&out)
         }),
@@ -109,8 +116,14 @@ where
 }
 
 fn print_phase1(out: &Phase1Output, filter: Option<&str>) {
-    println!("Phase 1 (per-chapter questions) — cached {}", out.written_at);
-    println!("Pipeline: {} · schema v{}", out.pipeline_id, out.schema_version);
+    println!(
+        "Phase 1 (per-chapter questions) — cached {}",
+        out.written_at
+    );
+    println!(
+        "Pipeline: {} · schema v{}",
+        out.pipeline_id, out.schema_version
+    );
     println!();
     let mut shown = 0usize;
     for entry in &out.questions_by_chapter {
@@ -223,7 +236,10 @@ fn print_phase5(out: &Phase5Output, concern_filter: Option<&str>) {
             }
         }
         shown += 1;
-        println!("  {} (concern {}, cluster {})", p.id, p.concern_id, p.chunk_cluster_id);
+        println!(
+            "  {} (concern {}, cluster {})",
+            p.id, p.concern_id, p.chunk_cluster_id
+        );
         println!("    {}", p.position_text);
         if !p.grounding.is_empty() {
             println!("    grounding:");
@@ -347,7 +363,12 @@ fn parse_args(args: &[String]) -> Result<ParsedShow, String> {
         "missing <target> (try phase1 | question-clusters | concerns | chunk-clusters | positions | tensions | gaps)"
             .to_string()
     })?;
-    Ok(ParsedShow { corpus_id, target, chapter, concern })
+    Ok(ParsedShow {
+        corpus_id,
+        target,
+        chapter,
+        concern,
+    })
 }
 
 fn parse_target(s: &str) -> Result<Target, String> {

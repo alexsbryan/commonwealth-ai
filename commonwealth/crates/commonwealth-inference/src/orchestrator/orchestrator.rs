@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use tracing::{info, warn};
 
+use crate::inference_plan::{InferencePlan, ShardPlan};
 use commonwealth_core::capabilities::ProcessKind;
 use commonwealth_core::ids::{ModelId, ProcessId};
-use crate::inference_plan::{InferencePlan, ShardPlan};
 use commonwealth_core::Error;
 
 use super::health::{HealthCheckConfig, HealthStatus, HealthTracker};
@@ -308,14 +308,18 @@ impl Orchestrator {
         // The MeshPlan roles reference models by string name. For now, we log
         // the transition rather than forcefully stopping processes — the
         // existing apply_shard_plan handles spawning.
-        let has_standby = my_roles.iter().any(|r| matches!(r, crate::plan::NodeRole::Standby));
-        if has_standby && !my_roles.iter().any(|r| {
-            matches!(
-                r,
-                crate::plan::NodeRole::ThroughputInference { .. }
-                    | crate::plan::NodeRole::QualityInference { .. }
-            )
-        }) {
+        let has_standby = my_roles
+            .iter()
+            .any(|r| matches!(r, crate::plan::NodeRole::Standby));
+        if has_standby
+            && !my_roles.iter().any(|r| {
+                matches!(
+                    r,
+                    crate::plan::NodeRole::ThroughputInference { .. }
+                        | crate::plan::NodeRole::QualityInference { .. }
+                )
+            })
+        {
             // Node is standby-only — stop all inference processes.
             info!("Node assigned Standby — stopping all inference processes");
             // `apply_mesh_plan` is best-effort by design (per the

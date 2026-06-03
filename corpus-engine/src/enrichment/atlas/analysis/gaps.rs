@@ -229,14 +229,14 @@ fn detect_open_questions(input: GapDetectionInput<'_>) -> Vec<Gap> {
 
 #[cfg(test)]
 mod tests {
-    use crate::enrichment::pipeline::atlas::{
-        ClaimScope, DiscourseAct, EnrichmentDepth, EpistemicStatus, QuestionType, StateType,
-    };
     use super::super::super::atoms::{
         AtomId, ChunkRef, Claim, Question, ResolutionStatus, SectionRange, State,
     };
     use super::super::super::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
     use super::*;
+    use crate::enrichment::pipeline::atlas::{
+        ClaimScope, DiscourseAct, EnrichmentDepth, EpistemicStatus, QuestionType, StateType,
+    };
 
     fn claim(id: u32, content: &str, has_evidence: bool) -> Claim {
         Claim {
@@ -255,11 +255,11 @@ mod tests {
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
             quotable_excerpt: None,
-                    claim_kind: None,
+            claim_kind: None,
             concession_outcome: None,
             evidence_kind: None,
-}
-}
+        }
+    }
 
     fn state(id: u32, owner: u32) -> State {
         State {

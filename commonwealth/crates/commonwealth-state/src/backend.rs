@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::sync::Mutex;
 
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::error::{Error, Result};
 
@@ -48,7 +48,11 @@ impl SqliteBackend {
             let value: Vec<u8> = row.get(0)?;
             let timestamp: u64 = row.get(1)?;
             let origin: Vec<u8> = row.get(2)?;
-            Ok(RawEntry { value, timestamp, origin })
+            Ok(RawEntry {
+                value,
+                timestamp,
+                origin,
+            })
         });
 
         match result {
@@ -126,7 +130,10 @@ impl SqliteBackend {
     /// Return all rows whose key starts with `prefix` for the given app.
     pub fn scan_with_prefix(&self, app_id: &str, prefix: &str) -> Result<Vec<AllRow>> {
         // Escape LIKE special chars in prefix so they are treated literally.
-        let escaped = prefix.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+        let escaped = prefix
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
         let pattern = format!("{escaped}%");
 
         let conn = self.conn.lock().unwrap();

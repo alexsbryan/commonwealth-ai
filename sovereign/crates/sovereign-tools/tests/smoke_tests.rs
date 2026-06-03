@@ -61,7 +61,8 @@ impl InferenceProvider for DeterministicInference {
             latency_ms: 1,
             oicp_meta: None,
             finish_reason: None,
-            completion_tokens: None,        })
+            completion_tokens: None,
+        })
     }
 
     async fn complete_stream(
@@ -150,8 +151,7 @@ fn build_runtime(store: Arc<SqliteStateStore>) -> Runtime {
     let router: Box<dyn sovereign_core::traits::Router> = Box::new(PassthroughRouter);
     let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
     let tools = Arc::new(ToolRegistry::new());
-    let approval: Arc<dyn sovereign_core::traits::ApprovalChannel> =
-        Arc::new(AutoApprovalChannel);
+    let approval: Arc<dyn sovereign_core::traits::ApprovalChannel> = Arc::new(AutoApprovalChannel);
 
     Runtime::new(
         inference,
@@ -189,20 +189,32 @@ fn parquet_parser_produces_chunks_with_correct_metadata() {
         .unwrap();
 
     // All 5 articles produced chunks.
-    assert!(chunks.len() >= 5, "Expected at least 5 chunks, got {}", chunks.len());
+    assert!(
+        chunks.len() >= 5,
+        "Expected at least 5 chunks, got {}",
+        chunks.len()
+    );
 
     // Every chunk has the correct source_type.
     for chunk in &chunks {
         assert_eq!(
             chunk.source_type,
-            SourceType::Corpus { corpus_id: "sep".to_string() },
+            SourceType::Corpus {
+                corpus_id: "sep".to_string()
+            },
             "All chunks should have source_type Corpus/sep"
         );
     }
 
     // Bergson article is present and has substantive content.
-    let bergson_chunks: Vec<_> = chunks.iter().filter(|c| c.content.contains("Bergson")).collect();
-    assert!(!bergson_chunks.is_empty(), "Bergson article should be in chunks");
+    let bergson_chunks: Vec<_> = chunks
+        .iter()
+        .filter(|c| c.content.contains("Bergson"))
+        .collect();
+    assert!(
+        !bergson_chunks.is_empty(),
+        "Bergson article should be in chunks"
+    );
     assert!(
         bergson_chunks[0].content.contains("Laughter"),
         "Bergson chunk should mention Laughter essay"
@@ -214,7 +226,9 @@ fn parquet_parser_produces_chunks_with_correct_metadata() {
 
     // Category label is prepended.
     assert!(
-        bergson_chunks[0].content.starts_with("Stanford Encyclopedia of Philosophy: Bergson"),
+        bergson_chunks[0]
+            .content
+            .starts_with("Stanford Encyclopedia of Philosophy: Bergson"),
         "Chunk should start with SEP label + category. Got: {}",
         &bergson_chunks[0].content[..80.min(bergson_chunks[0].content.len())]
     );
@@ -254,7 +268,9 @@ fn parquet_chunks_are_storable_and_searchable_via_fts5() {
     );
     assert_eq!(
         results[0].source_type,
-        SourceType::Corpus { corpus_id: "sep".to_string() },
+        SourceType::Corpus {
+            corpus_id: "sep".to_string()
+        },
         "Result should retain corpus source_type"
     );
 }
@@ -277,15 +293,27 @@ fn parquet_ingestion_handles_multiple_topics() {
     rt.block_on(store.store_chunks(&chunks)).unwrap();
 
     // Search for different topics — each should find the right article.
-    let kant = rt.block_on(store.search_documents(&[], "Kant critique pure reason", 5)).unwrap();
+    let kant = rt
+        .block_on(store.search_documents(&[], "Kant critique pure reason", 5))
+        .unwrap();
     assert!(!kant.is_empty(), "Should find Kant article");
     assert!(kant[0].content.contains("Kant"));
 
-    let existentialism = rt.block_on(store.search_documents(&[], "existentialism Sartre freedom", 5)).unwrap();
-    assert!(!existentialism.is_empty(), "Should find existentialism article");
-    assert!(existentialism[0].content.contains("Existentialism") || existentialism[0].content.contains("existentialism"));
+    let existentialism = rt
+        .block_on(store.search_documents(&[], "existentialism Sartre freedom", 5))
+        .unwrap();
+    assert!(
+        !existentialism.is_empty(),
+        "Should find existentialism article"
+    );
+    assert!(
+        existentialism[0].content.contains("Existentialism")
+            || existentialism[0].content.contains("existentialism")
+    );
 
-    let epistemology = rt.block_on(store.search_documents(&[], "epistemology knowledge justified belief", 5)).unwrap();
+    let epistemology = rt
+        .block_on(store.search_documents(&[], "epistemology knowledge justified belief", 5))
+        .unwrap();
     assert!(!epistemology.is_empty(), "Should find epistemology article");
 }
 
@@ -336,7 +364,10 @@ async fn full_pipeline_query_finds_corpus_and_records_provenance() {
         .unwrap();
 
     // The response should exist and be non-empty.
-    assert!(!response.message.content.is_empty(), "Response should not be empty");
+    assert!(
+        !response.message.content.is_empty(),
+        "Response should not be empty"
+    );
 
     // Provenance should show SEP was consulted with results.
     let prov = extract_provenance(&response);
@@ -345,7 +376,9 @@ async fn full_pipeline_query_finds_corpus_and_records_provenance() {
         "Search method should be recorded"
     );
     assert!(
-        prov.sources.iter().any(|s| s.origin == "sep" && s.count > 0),
+        prov.sources
+            .iter()
+            .any(|s| s.origin == "sep" && s.count > 0),
         "Provenance should show SEP chunks were found. Sources: {:?}",
         prov.sources
     );
@@ -353,7 +386,8 @@ async fn full_pipeline_query_finds_corpus_and_records_provenance() {
     // The response content should reference knowledge (the DeterministicInference
     // returns "Based on the provided knowledge..." when it sees "Relevant knowledge:")
     assert!(
-        response.message.content.contains("knowledge") || response.message.content.contains("source"),
+        response.message.content.contains("knowledge")
+            || response.message.content.contains("source"),
         "Response should reference knowledge sources. Got: {}",
         &response.message.content[..response.message.content.len().min(200)]
     );
@@ -439,7 +473,12 @@ async fn full_pipeline_multi_topic_queries_find_different_sources() {
         .unwrap();
     let p3 = extract_provenance(&r3);
     // Should search but find nothing relevant
-    let sep_hits = p3.sources.iter().find(|s| s.origin == "sep").map(|s| s.count).unwrap_or(0);
+    let sep_hits = p3
+        .sources
+        .iter()
+        .find(|s| s.origin == "sep")
+        .map(|s| s.count)
+        .unwrap_or(0);
     assert_eq!(
         sep_hits, 0,
         "Chocolate cake query should not match philosophy corpus"

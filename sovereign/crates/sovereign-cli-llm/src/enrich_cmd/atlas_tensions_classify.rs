@@ -29,8 +29,7 @@ use corpus_engine::enrichment::atlas::{
     },
     atoms::{AtomEnvelope, AtomId, AtomsFile, Entity},
     edges::{Edge, EdgeId, EdgeProvenance, EdgeType},
-    read_atlas_atoms, read_atlas_edges, read_tension_candidates, write_atlas_edges,
-    ATLAS_DIRNAME,
+    read_atlas_atoms, read_atlas_edges, read_tension_candidates, write_atlas_edges, ATLAS_DIRNAME,
 };
 use corpus_engine::enrichment::pipeline::{atlas::EntityType, PipelineRegistry};
 
@@ -468,7 +467,6 @@ async fn run_holistic_classifier(
         run_counts,
     );
 
-
     // Read existing edges, drop prior LlmPairwise Tension edges
     // (whether from per-pair or a previous holistic run). Preserve
     // every other edge.
@@ -660,7 +658,9 @@ fn next_edge_ordinal(edges: &[Edge]) -> usize {
             // Edge id format is "edge-NNNNN" (5-digit zero-padded).
             // Parse the suffix; non-conforming ids contribute 0 so
             // we still issue a fresh max+1 ordinal.
-            e.id.as_str().strip_prefix("edge-").and_then(|s| s.parse::<usize>().ok())
+            e.id.as_str()
+                .strip_prefix("edge-")
+                .and_then(|s| s.parse::<usize>().ok())
         })
         .max()
         .unwrap_or(0)
@@ -684,9 +684,9 @@ fn parse_args(args: &[String]) -> Result<ParsedClassify, String> {
                 let n_str = args
                     .get(i + 1)
                     .ok_or_else(|| "--max-candidates requires a value".to_string())?;
-                let n: usize = n_str
-                    .parse()
-                    .map_err(|e| format!("--max-candidates value '{n_str}' is not an integer: {e}"))?;
+                let n: usize = n_str.parse().map_err(|e| {
+                    format!("--max-candidates value '{n_str}' is not an integer: {e}")
+                })?;
                 max_candidates = Some(n);
                 i += 2;
             }
@@ -729,8 +729,7 @@ mod tests {
 
     #[test]
     fn parse_args_accepts_max_candidates() {
-        let p =
-            parse_args(&["bk".into(), "--max-candidates".into(), "5".into()]).unwrap();
+        let p = parse_args(&["bk".into(), "--max-candidates".into(), "5".into()]).unwrap();
         assert_eq!(p.max_candidates, Some(5));
     }
 

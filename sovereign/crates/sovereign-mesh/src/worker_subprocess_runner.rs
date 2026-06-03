@@ -65,8 +65,8 @@
 //!   owns retries — see `sovereign-pipeline`'s bucketed failures).
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::io::AsyncBufReadExt;
@@ -357,7 +357,11 @@ async fn process_unit(
     let resp = match tokio::time::timeout(inner.config.inference_timeout, resp_fut).await {
         Ok(Ok(r)) => r,
         Ok(Err(e)) => return Err(SubprocessRunnerError::InferenceFailed(e.to_string())),
-        Err(_) => return Err(SubprocessRunnerError::InferenceTimeout(inner.config.inference_timeout)),
+        Err(_) => {
+            return Err(SubprocessRunnerError::InferenceTimeout(
+                inner.config.inference_timeout,
+            ))
+        }
     };
     let status = resp.status();
     let bytes = resp
@@ -367,10 +371,7 @@ async fn process_unit(
     if !status.is_success() {
         // Cap the body snippet so a 1 MB stack trace doesn't blow
         // the completed-queue memory budget.
-        let snippet: String = String::from_utf8_lossy(&bytes)
-            .chars()
-            .take(500)
-            .collect();
+        let snippet: String = String::from_utf8_lossy(&bytes).chars().take(500).collect();
         return Err(SubprocessRunnerError::InferenceFailed(format!(
             "child returned {status}: {snippet}"
         )));
@@ -420,7 +421,9 @@ async fn wait_for_disk_dump(inner: &Arc<Inner>) -> Result<(), SubprocessRunnerEr
                 timeout_secs = inner.config.disk_dump_timeout.as_secs(),
                 "subprocess-runner: disk dump did not complete within timeout"
             );
-            Err(SubprocessRunnerError::DiskDumpTimeout(inner.config.disk_dump_timeout))
+            Err(SubprocessRunnerError::DiskDumpTimeout(
+                inner.config.disk_dump_timeout,
+            ))
         }
     }
 }
@@ -670,7 +673,10 @@ fn now_unix() -> u64 {
 mod tests {
     use super::*;
     use axum::response::IntoResponse;
-    use axum::{Json, Router, routing::{get, post}};
+    use axum::{
+        routing::{get, post},
+        Json, Router,
+    };
     use std::collections::BTreeMap;
     use std::net::SocketAddr;
     use tokio::net::TcpListener;
@@ -678,9 +684,7 @@ mod tests {
     /// Spin up a tiny axum server on an ephemeral port and return
     /// the bound port. Used as a mock child daemon — handlers echo
     /// the request body back so the runner has something to receive.
-    async fn spawn_mock_child(
-        slow_first_n: usize,
-    ) -> (u16, Arc<AtomicBool>) {
+    async fn spawn_mock_child(slow_first_n: usize) -> (u16, Arc<AtomicBool>) {
         let ready_called = Arc::new(AtomicBool::new(false));
         let probe_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let probe_count_h = probe_count.clone();
@@ -698,7 +702,8 @@ mod tests {
                         // Make the first `slow_n` probes return 503 so
                         // tests can exercise the polling loop.
                         if n < slow_n {
-                            return (axum::http::StatusCode::SERVICE_UNAVAILABLE, "warming up").into_response();
+                            return (axum::http::StatusCode::SERVICE_UNAVAILABLE, "warming up")
+                                .into_response();
                         }
                         rc.store(true, Ordering::Release);
                         Json(serde_json::json!({ "data": [] })).into_response()
@@ -788,8 +793,16 @@ mod tests {
         let manifest = JobManifest {
             job_id: "j-test".to_string(),
             units: vec![
-                unit(1, "/v1/chat/completions", serde_json::json!({"prompt": "hi"})),
-                unit(2, "/v1/chat/completions", serde_json::json!({"prompt": "hello"})),
+                unit(
+                    1,
+                    "/v1/chat/completions",
+                    serde_json::json!({"prompt": "hi"}),
+                ),
+                unit(
+                    2,
+                    "/v1/chat/completions",
+                    serde_json::json!({"prompt": "hello"}),
+                ),
             ],
             config: serde_json::json!({}),
         };
@@ -835,7 +848,8 @@ mod tests {
         // not an error payload.
         assert!(
             units[0].payload.get("error").is_none(),
-            "unit completed with error: {:?}", units[0].payload
+            "unit completed with error: {:?}",
+            units[0].payload
         );
     }
 
@@ -930,10 +944,15 @@ mod tests {
     async fn child_4xx_surfaces_as_error_payload() {
         // Custom mock that returns 400 on chat-completions.
         let app = Router::new()
-            .route("/v1/models", get(|| async { Json(serde_json::json!({"data": []})) }))
+            .route(
+                "/v1/models",
+                get(|| async { Json(serde_json::json!({"data": []})) }),
+            )
             .route(
                 "/v1/chat/completions",
-                post(|| async { (axum::http::StatusCode::BAD_REQUEST, "missing model field").into_response() }),
+                post(|| async {
+                    (axum::http::StatusCode::BAD_REQUEST, "missing model field").into_response()
+                }),
             );
         let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
             .await
@@ -956,7 +975,10 @@ mod tests {
         wait_for_n(&received, 1, 3000).await;
         let units = received.lock().await;
         let err = units[0].payload["error"].as_str().unwrap_or("");
-        assert!(err.contains("400"), "expected status 400 in error, got: {err}");
+        assert!(
+            err.contains("400"),
+            "expected status 400 in error, got: {err}"
+        );
         assert!(
             err.contains("missing model field"),
             "expected body snippet in error, got: {err}"
@@ -997,7 +1019,7 @@ mod tests {
     #[tokio::test]
     async fn signals_fire_when_watcher_completes_dump() {
         use crate::worker_http::{UploadProgress, WorkerState};
-        use crate::worker_pod::{BootstrapInputs, UploadEntry, mint_bootstrap};
+        use crate::worker_pod::{mint_bootstrap, BootstrapInputs, UploadEntry};
         use ed25519_dalek::SigningKey;
         use sha2::{Digest, Sha256};
 
@@ -1103,7 +1125,8 @@ mod tests {
         assert_eq!(units.len(), 1);
         assert!(
             units[0].payload.get("error").is_none(),
-            "unit failed: {:?}", units[0].payload
+            "unit failed: {:?}",
+            units[0].payload
         );
         assert_eq!(units[0].payload["echo"]["q"], "ping");
     }
@@ -1174,7 +1197,9 @@ mod tests {
                 // `/bin/false` exits with code 1. The watcher should
                 // capture that and surface it verbatim.
                 assert!(
-                    status.contains("exit_code=1") || status.contains("signal=") || status.contains("status="),
+                    status.contains("exit_code=1")
+                        || status.contains("signal=")
+                        || status.contains("status="),
                     "expected exit-code/signal in status, got: {status}"
                 );
             }
@@ -1238,7 +1263,14 @@ mod tests {
         runner.dispatch(manifest, emit);
         wait_for_n(&received, 1, 360_000).await;
         let units = received.lock().await;
-        assert!(units[0].payload.get("error").is_none(), "real child smoke failed: {:?}", units[0].payload);
-        assert!(runner.child_pid().await > 0, "child PID should have been recorded");
+        assert!(
+            units[0].payload.get("error").is_none(),
+            "real child smoke failed: {:?}",
+            units[0].payload
+        );
+        assert!(
+            runner.child_pid().await > 0,
+            "child PID should have been recorded"
+        );
     }
 }

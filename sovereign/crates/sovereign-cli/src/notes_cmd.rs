@@ -296,20 +296,14 @@ async fn cmd_migrate_from(args: &[String]) -> i32 {
     // source. Use `events_for_content_hashes` after gathering ids
     // — gives us full embeddings + entities so the migration also
     // ports T1/T2 artifacts in one pass.
-    let source_hashes = match source_store
-        .content_hash_digest()
-        .await
-    {
+    let source_hashes = match source_store.content_hash_digest().await {
         Ok(digest) => {
             let mut all = Vec::new();
             for (bucket, _) in digest {
                 match source_store.content_hashes_in_bucket(bucket).await {
                     Ok(mut h) => all.append(&mut h),
                     Err(e) => {
-                        eprintln!(
-                            "notes migrate-from: scan bucket {:02x}: {e}",
-                            bucket
-                        );
+                        eprintln!("notes migrate-from: scan bucket {:02x}: {e}", bucket);
                     }
                 }
             }
@@ -374,11 +368,3 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
         ),
     ],
 };
-
-
-
-
-
-
-
-

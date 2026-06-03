@@ -53,11 +53,9 @@ impl<T: McpTransport> McpClient<T> {
         let tools = result
             .get("tools")
             .and_then(|v| v.as_array())
-            .ok_or_else(|| {
-                McpError::Protocol {
-                    code: -32600,
-                    message: "Invalid tools/list response".into(),
-                }
+            .ok_or_else(|| McpError::Protocol {
+                code: -32600,
+                message: "Invalid tools/list response".into(),
             })?;
 
         let mut infos = Vec::new();
@@ -112,7 +110,9 @@ impl<T: McpTransport> McpClient<T> {
                 arr.iter()
                     .filter_map(|item| {
                         if item.get("type").and_then(|v| v.as_str()) == Some("text") {
-                            item.get("text").and_then(|v| v.as_str()).map(|s| s.to_string())
+                            item.get("text")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
                         } else {
                             None
                         }

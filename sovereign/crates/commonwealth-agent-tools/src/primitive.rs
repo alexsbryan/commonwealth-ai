@@ -300,9 +300,9 @@ mod tests {
     fn primitive_kind_round_trips() {
         for kind in PrimitiveKind::all() {
             let p = match kind {
-                PrimitiveKind::InspectWorkdir => Primitive::InspectWorkdir(InspectIntent::File {
-                    path: "x".into(),
-                }),
+                PrimitiveKind::InspectWorkdir => {
+                    Primitive::InspectWorkdir(InspectIntent::File { path: "x".into() })
+                }
                 PrimitiveKind::WriteFile => Primitive::WriteFile(WriteFileArgs {
                     path: "x".into(),
                     content: String::new(),

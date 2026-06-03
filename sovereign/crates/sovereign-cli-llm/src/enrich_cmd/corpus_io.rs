@@ -33,7 +33,9 @@ const CORPUS_SOURCE_PREFIX: &str = "corpus:";
 /// `build_corpus`) share one dispatch site.
 fn detector_for(cfg: &EnrichConfig) -> Result<Box<dyn SectionDetector>> {
     if let Some(tm) = &cfg.toc_markers {
-        Ok(Box::new(TocAnchoredDetector::with_markers(&tm.start, &tm.end)))
+        Ok(Box::new(TocAnchoredDetector::with_markers(
+            &tm.start, &tm.end,
+        )))
     } else {
         let det = ChapterRegexDetector::with_pattern(&cfg.chapter_regex)
             .map_err(|e| Error::InvalidInput(format!("invalid chapter_regex: {e}")))?
@@ -50,9 +52,7 @@ fn detector_for(cfg: &EnrichConfig) -> Result<Box<dyn SectionDetector>> {
 /// `cfg.source_path` is the `corpus:<id>` sentinel — multi-document
 /// corpora hydrate `ChapterInput.text` from LanceDB chunks rather
 /// than from a single source file.
-pub fn rebuild_corpus_state(
-    cfg: &EnrichConfig,
-) -> Result<(Vec<ChapterInput>, ChapterManifest)> {
+pub fn rebuild_corpus_state(cfg: &EnrichConfig) -> Result<(Vec<ChapterInput>, ChapterManifest)> {
     if let Some(source_corpus_id) = corpus_source_id(cfg) {
         return rebuild_corpus_state_from_corpus(cfg, &source_corpus_id);
     }
@@ -88,8 +88,7 @@ pub fn rebuild_corpus_state(
     // Build a fresh manifest, then merge back any fields that previous
     // runs populated (characters_present from phase 1, chunk_ids from a
     // future LanceDB ingest).
-    let mut fresh =
-        ChapterManifest::from_detected_sections(&cfg.corpus_id, &source, &sections);
+    let mut fresh = ChapterManifest::from_detected_sections(&cfg.corpus_id, &source, &sections);
     let manifest_path = paths::chapters_manifest_path(&cfg.corpus_id);
     if let Some(prior) = ChapterManifest::load(&manifest_path)? {
         for entry in &mut fresh.chapters {
@@ -311,6 +310,10 @@ pub fn build_corpus(cfg: &EnrichConfig) -> Result<(CorpusContext, ChapterManifes
         })
         .collect();
     let chapter_titles: Vec<String> = chapters.iter().map(|c| c.title.clone()).collect();
-    let ctx = CorpusContext { chapters, chunks, chapter_titles };
+    let ctx = CorpusContext {
+        chapters,
+        chunks,
+        chapter_titles,
+    };
     Ok((ctx, manifest))
 }

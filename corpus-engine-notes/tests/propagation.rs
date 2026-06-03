@@ -99,7 +99,11 @@ async fn dispatch_all(nodes: &[&Node]) -> HashMap<String, IngestRemoteReport> {
                 .ingest_remote_notes(events.clone())
                 .await
                 .unwrap();
-            let key = format!("{sender}→{receiver}", sender = sender, receiver = receiver.name);
+            let key = format!(
+                "{sender}→{receiver}",
+                sender = sender,
+                receiver = receiver.name
+            );
             reports.insert(key, r);
         }
     }
@@ -256,7 +260,11 @@ async fn supersedes_chain_propagates_intact() {
         .unwrap();
     assert_eq!(on_b.len(), 2);
     let with_supersedes: Vec<_> = on_b.iter().filter(|n| n.supersedes.is_some()).collect();
-    assert_eq!(with_supersedes.len(), 1, "exactly one note reverses another");
+    assert_eq!(
+        with_supersedes.len(),
+        1,
+        "exactly one note reverses another"
+    );
     assert_eq!(with_supersedes[0].supersedes.as_deref(), Some(v1.as_str()));
 }
 
@@ -271,23 +279,11 @@ async fn offline_divergence_converges_on_reconnect() {
 
     for i in 0..5 {
         a.store
-            .write_note(
-                "todo",
-                &format!("A-task-{i}"),
-                vec![],
-                vec![],
-                "sess-a",
-            )
+            .write_note("todo", &format!("A-task-{i}"), vec![], vec![], "sess-a")
             .await
             .unwrap();
         b.store
-            .write_note(
-                "todo",
-                &format!("B-task-{i}"),
-                vec![],
-                vec![],
-                "sess-b",
-            )
+            .write_note("todo", &format!("B-task-{i}"), vec![], vec![], "sess-b")
             .await
             .unwrap();
     }
@@ -370,13 +366,7 @@ async fn concurrent_supersedes_preserves_fork_on_both_peers() {
     // 1. A writes X; deliver to B so both peers share X.
     let x = a
         .store
-        .write_note(
-            "decision",
-            "base decision",
-            vec![],
-            vec![],
-            "sess-shared",
-        )
+        .write_note("decision", "base decision", vec![], vec![], "sess-shared")
         .await
         .unwrap();
     let _ = dispatch_all(&[&a, &b]).await;
@@ -445,13 +435,7 @@ async fn tombstone_wins_over_concurrent_edit() {
 
     let x = a
         .store
-        .write_note(
-            "decision",
-            "the X decision",
-            vec![],
-            vec![],
-            "sess-shared",
-        )
+        .write_note("decision", "the X decision", vec![], vec![], "sess-shared")
         .await
         .unwrap();
     let _ = dispatch_all(&[&a, &b]).await;
@@ -526,13 +510,7 @@ async fn reconciliation_bucket_diff_isolates_single_change() {
 
     // A writes one more note; don't dispatch.
     a.store
-        .write_note(
-            "decision",
-            "post-sync arrival",
-            vec![],
-            vec![],
-            "seed-sess",
-        )
+        .write_note("decision", "post-sync arrival", vec![], vec![], "seed-sess")
         .await
         .unwrap();
     let _ = a.drain_pending().await;

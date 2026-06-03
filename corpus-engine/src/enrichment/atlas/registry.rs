@@ -20,7 +20,9 @@ impl AtlasIngestionRegistry {
     /// Empty registry. Prefer `builtin()` unless a test wants an
     /// isolated registry.
     pub fn new() -> Self {
-        Self { strategies: HashMap::new() }
+        Self {
+            strategies: HashMap::new(),
+        }
     }
 
     /// Registry pre-loaded with every built-in strategy. Today that

@@ -362,9 +362,7 @@ fn write_atomic<T: Serialize>(path: &Path, value: &T) -> io::Result<()> {
     fs::create_dir_all(parent)?;
     let tmp = parent.join(format!(
         ".{}.tmp",
-        path.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("atlas")
+        path.file_name().and_then(|n| n.to_str()).unwrap_or("atlas")
     ));
     let data = serde_json::to_vec_pretty(value)
         .map_err(|e| io::Error::other(format!("serialise: {e}")))?;
@@ -398,9 +396,9 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-                    provenance: Default::default(),
-                    concept_kind: None,
-};
+            provenance: Default::default(),
+            concept_kind: None,
+        };
         let event = Event {
             id: AtomId::event(1),
             description: "an event".into(),
@@ -423,9 +421,12 @@ mod tests {
             provenance: EdgeProvenance::Derived,
         };
 
-        let written =
-            write_atlas(&atlas_dir, &[entity], &[event], &[edge]).unwrap();
-        for p in [&written.atoms_path, &written.edges_path, &written.trajectories_path] {
+        let written = write_atlas(&atlas_dir, &[entity], &[event], &[edge]).unwrap();
+        for p in [
+            &written.atoms_path,
+            &written.edges_path,
+            &written.trajectories_path,
+        ] {
             assert!(p.exists(), "expected file: {}", p.display());
         }
         let atoms_json = fs::read_to_string(&written.atoms_path).unwrap();
@@ -463,9 +464,9 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-                    provenance: Default::default(),
-                    concept_kind: None,
-};
+            provenance: Default::default(),
+            concept_kind: None,
+        };
         write_atlas(&atlas_dir, &[entity], &[], &[]).unwrap();
         let atoms_json = fs::read_to_string(atlas_dir.join("atoms.json")).unwrap();
         assert!(atoms_json.contains("\"Only\""));

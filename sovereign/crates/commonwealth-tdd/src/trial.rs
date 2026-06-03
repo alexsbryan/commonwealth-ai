@@ -177,7 +177,9 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
             user_message(
                 &prompt,
                 &polarity,
-                source_file.as_deref().unwrap_or("(no source file discovered)"),
+                source_file
+                    .as_deref()
+                    .unwrap_or("(no source file discovered)"),
                 &file_listing,
                 &current,
                 &current_tail,
@@ -191,7 +193,9 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
             user_message(
                 &prompt,
                 &polarity,
-                source_file.as_deref().unwrap_or("(no source file discovered)"),
+                source_file
+                    .as_deref()
+                    .unwrap_or("(no source file discovered)"),
                 &pristine_listing,
                 &current,
                 &current_tail,
@@ -263,14 +267,7 @@ pub async fn run_trial(trial: Trial, backend: Arc<dyn ChatBackend>) -> TrialResu
 
         let candidate_labels: Vec<String> = candidates
             .iter()
-            .map(|c| {
-                format!(
-                    "{}@T{}={}",
-                    c.shape_summary(),
-                    c.temp,
-                    c.passing_or_error()
-                )
-            })
+            .map(|c| format!("{}@T{}={}", c.shape_summary(), c.temp, c.passing_or_error()))
             .collect();
 
         // Pick the strict-improvement winner under the active polarity.
@@ -784,7 +781,12 @@ mod tests {
     use super::*;
 
     fn summary(passed: u32, failed: u32, total: u32) -> TestSummary {
-        TestSummary { passed, failed, total, failed_names: vec![] }
+        TestSummary {
+            passed,
+            failed,
+            total,
+            failed_names: vec![],
+        }
     }
 
     #[test]
@@ -792,13 +794,23 @@ mod tests {
         let before = summary(5, 5, 10);
         let same = summary(5, 5, 10);
         let more = summary(6, 4, 10);
-        assert!(!is_strict_improvement(&before, &same, &Polarity::MaximizePassing));
-        assert!(is_strict_improvement(&before, &more, &Polarity::MaximizePassing));
+        assert!(!is_strict_improvement(
+            &before,
+            &same,
+            &Polarity::MaximizePassing
+        ));
+        assert!(is_strict_improvement(
+            &before,
+            &more,
+            &Polarity::MaximizePassing
+        ));
     }
 
     #[test]
     fn generate_one_failing_requires_exactly_one_new_failure() {
-        let p = Polarity::GenerateOneFailing { test_name_hint: None };
+        let p = Polarity::GenerateOneFailing {
+            test_name_hint: None,
+        };
         let before = summary(3, 0, 3);
         // Exactly one new failure, no passes lost.
         let win = summary(3, 1, 4);
@@ -813,15 +825,26 @@ mod tests {
 
     #[test]
     fn reached_terminal_maximize_when_all_passing() {
-        assert!(reached_terminal(&summary(5, 0, 5), &Polarity::MaximizePassing));
-        assert!(!reached_terminal(&summary(4, 1, 5), &Polarity::MaximizePassing));
+        assert!(reached_terminal(
+            &summary(5, 0, 5),
+            &Polarity::MaximizePassing
+        ));
+        assert!(!reached_terminal(
+            &summary(4, 1, 5),
+            &Polarity::MaximizePassing
+        ));
         // Zero-test case is NOT terminal for MaximizePassing — that's NoBaseline.
-        assert!(!reached_terminal(&summary(0, 0, 0), &Polarity::MaximizePassing));
+        assert!(!reached_terminal(
+            &summary(0, 0, 0),
+            &Polarity::MaximizePassing
+        ));
     }
 
     #[test]
     fn reached_terminal_generate_one_failing_when_any_failure_exists() {
-        let p = Polarity::GenerateOneFailing { test_name_hint: None };
+        let p = Polarity::GenerateOneFailing {
+            test_name_hint: None,
+        };
         assert!(reached_terminal(&summary(3, 1, 4), &p));
         assert!(!reached_terminal(&summary(3, 0, 3), &p));
     }
@@ -829,15 +852,26 @@ mod tests {
     #[test]
     fn stall_state_from_u32_matches_round_count() {
         assert!(matches!(StallState::from(0), StallState::Fresh));
-        assert!(matches!(StallState::from(1), StallState::Plateau { rounds: 1 }));
-        assert!(matches!(StallState::from(5), StallState::Plateau { rounds: 5 }));
+        assert!(matches!(
+            StallState::from(1),
+            StallState::Plateau { rounds: 1 }
+        ));
+        assert!(matches!(
+            StallState::from(5),
+            StallState::Plateau { rounds: 5 }
+        ));
     }
 
     #[test]
     fn user_message_fresh_has_no_stall_prefix() {
         let v = user_message(
-            "p", &Polarity::MaximizePassing, "f.py", "1: x\n",
-            &summary(1, 1, 2), "tail", "h",
+            "p",
+            &Polarity::MaximizePassing,
+            "f.py",
+            "1: x\n",
+            &summary(1, 1, 2),
+            "tail",
+            "h",
             StallState::Fresh,
             "",
         );
@@ -849,8 +883,13 @@ mod tests {
     #[test]
     fn user_message_plateau_injects_warning_with_round_count() {
         let v = user_message(
-            "p", &Polarity::MaximizePassing, "f.py", "1: x\n",
-            &summary(2, 1, 3), "tail", "h",
+            "p",
+            &Polarity::MaximizePassing,
+            "f.py",
+            "1: x\n",
+            &summary(2, 1, 3),
+            "tail",
+            "h",
             StallState::Plateau { rounds: 2 },
             "",
         );
@@ -930,8 +969,13 @@ mod tests {
     #[test]
     fn user_message_restart_tells_model_clean_slate() {
         let v = user_message(
-            "p", &Polarity::MaximizePassing, "f.py", "1: x\n",
-            &summary(2, 1, 3), "tail", "h",
+            "p",
+            &Polarity::MaximizePassing,
+            "f.py",
+            "1: x\n",
+            &summary(2, 1, 3),
+            "tail",
+            "h",
             StallState::Restart { rounds: 3 },
             "",
         );

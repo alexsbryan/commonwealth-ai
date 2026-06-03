@@ -40,8 +40,8 @@ use async_trait::async_trait;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
 use sovereign_core::types::{
-    AssetState, Effect, Idempotency, Latency, Permission, RaptorNode,
-    Scope, StepOutput, ToolContext, ToolDescriptor,
+    AssetState, Effect, Idempotency, Latency, Permission, RaptorNode, Scope, StepOutput,
+    ToolContext, ToolDescriptor,
 };
 
 pub struct AttachedDocumentSearchTool {
@@ -50,10 +50,7 @@ pub struct AttachedDocumentSearchTool {
 }
 
 impl AttachedDocumentSearchTool {
-    pub fn new(
-        store: Arc<dyn StateStore>,
-        inference: Arc<dyn InferenceProvider>,
-    ) -> Self {
+    pub fn new(store: Arc<dyn StateStore>, inference: Arc<dyn InferenceProvider>) -> Self {
         Self { store, inference }
     }
 }
@@ -111,11 +108,7 @@ impl Tool for AttachedDocumentSearchTool {
         }
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -260,8 +253,9 @@ impl Tool for AttachedDocumentSearchTool {
         // Skipped when (a) the skeleton has no action atoms,
         // (b) the query mentions no known entities, or (c) the
         // operator disables it via SOVEREIGN_DOC_PPR=off.
-        let ppr_enabled =
-            std::env::var("SOVEREIGN_DOC_PPR").map(|v| v != "off").unwrap_or(true);
+        let ppr_enabled = std::env::var("SOVEREIGN_DOC_PPR")
+            .map(|v| v != "off")
+            .unwrap_or(true);
         let mut ppr_boosted_chunks: Vec<usize> = Vec::new();
         if ppr_enabled {
             if let Some(skel) = asset.skeleton.as_ref() {
@@ -288,11 +282,8 @@ impl Tool for AttachedDocumentSearchTool {
                         // var (default 6); cap of 12 keeps the tool
                         // result bounded even on noisy graphs.
                         let cosine_top_k: usize = 16;
-                        let cosine_top_indices: std::collections::HashSet<usize> = scored
-                            .iter()
-                            .take(cosine_top_k)
-                            .map(|(_, i)| *i)
-                            .collect();
+                        let cosine_top_indices: std::collections::HashSet<usize> =
+                            scored.iter().take(cosine_top_k).map(|(_, i)| *i).collect();
                         let boost_count: usize = std::env::var("SOVEREIGN_DOC_PPR_BOOST")
                             .ok()
                             .and_then(|v| v.parse().ok())
@@ -313,7 +304,8 @@ impl Tool for AttachedDocumentSearchTool {
                             .map(|(idx, score)| (idx, *score))
                             .collect();
                         candidates.sort_by(|a, b| {
-                            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+                            b.1.partial_cmp(&a.1)
+                                .unwrap_or(std::cmp::Ordering::Equal)
                                 .then(a.0.cmp(&b.0))
                         });
                         ppr_boosted_chunks = candidates
@@ -394,8 +386,7 @@ impl Tool for AttachedDocumentSearchTool {
                 .take(cluster_pool_size)
                 .map(|(s, i)| (*i, *s))
                 .collect();
-            let in_pool: std::collections::HashSet<usize> =
-                pool.iter().map(|(i, _)| *i).collect();
+            let in_pool: std::collections::HashSet<usize> = pool.iter().map(|(i, _)| *i).collect();
             // PPR chunks may sit below the cosine top-K cut. Look
             // their cosine score up from `scored` (the full sorted
             // list). Cosine score is unique per chunk, so a linear
@@ -409,22 +400,16 @@ impl Tool for AttachedDocumentSearchTool {
                     pool.push((ppr_idx, *s));
                 }
             }
-            let ranked = blend_by_cluster_score(
-                &pool,
-                &leaf_nodes,
-                &query_embedding,
-                cluster_weight,
-            );
+            let ranked =
+                blend_by_cluster_score(&pool, &leaf_nodes, &query_embedding, cluster_weight);
             // Map the new chunk-index ordering back into the
             // (cosine_score, chunk_index) shape downstream code
             // expects. Cosine scores carry through unchanged — they
             // aren't read after this point, but keeping them avoids
             // a wider refactor of `scored`'s type. The blended order
             // is what matters.
-            let cosine_by_chunk: std::collections::HashMap<usize, f32> = pool
-                .iter()
-                .copied()
-                .collect();
+            let cosine_by_chunk: std::collections::HashMap<usize, f32> =
+                pool.iter().copied().collect();
             scored = ranked
                 .into_iter()
                 .map(|i| (*cosine_by_chunk.get(&i).unwrap_or(&0.0), i))
@@ -669,9 +654,9 @@ impl Tool for AttachedDocumentSearchTool {
             // above, so look it up in `raw` (top-K results from the
             // embedding query, which may or may not include it) and
             // fall back to a list_documents call if necessary.
-            let chunk_content_opt = raw.iter().find(|c| {
-                c.source == asset_source_key && c.chunk_index == *chunk_idx
-            });
+            let chunk_content_opt = raw
+                .iter()
+                .find(|c| c.source == asset_source_key && c.chunk_index == *chunk_idx);
             let body: String = match chunk_content_opt {
                 Some(c) => c.content.chars().take(600).collect(),
                 None => {
@@ -785,7 +770,10 @@ fn blend_by_cluster_score(
     // each lookup is O(1).
     let mut chunk_to_cluster: std::collections::HashMap<u32, usize> =
         std::collections::HashMap::with_capacity(
-            leaf_nodes.iter().map(|n| n.direct_member_chunk_ids.len()).sum(),
+            leaf_nodes
+                .iter()
+                .map(|n| n.direct_member_chunk_ids.len())
+                .sum(),
         );
     for (node_idx, node) in leaf_nodes.iter().enumerate() {
         for chunk_id in &node.direct_member_chunk_ids {
@@ -805,10 +793,8 @@ fn blend_by_cluster_score(
             Some(&node_idx) => match cluster_score_cache[node_idx] {
                 Some(s) => s,
                 None => {
-                    let s = cosine_similarity(
-                        query_embedding,
-                        &leaf_nodes[node_idx].summary_embedding,
-                    );
+                    let s =
+                        cosine_similarity(query_embedding, &leaf_nodes[node_idx].summary_embedding);
                     cluster_score_cache[node_idx] = Some(s);
                     s
                 }
@@ -936,8 +922,7 @@ mod tests {
         ];
         let pool = vec![(10, 0.9), (11, 0.7), (20, 0.2), (21, 0.1)];
         let ranked = blend_by_cluster_score(&pool, &leaves, &query, 1.0);
-        let first_two: std::collections::HashSet<usize> =
-            ranked.iter().take(2).copied().collect();
+        let first_two: std::collections::HashSet<usize> = ranked.iter().take(2).copied().collect();
         assert_eq!(
             first_two,
             [20, 21].iter().copied().collect::<std::collections::HashSet<usize>>(),

@@ -159,8 +159,15 @@ fn looks_like_gguf(path: &Path) -> bool {
     }
 }
 
-fn scan_directory_flat(dir: &Path, label: &str, results: &mut Vec<DiscoveredModel>, seen: &mut HashSet<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+fn scan_directory_flat(
+    dir: &Path,
+    label: &str,
+    results: &mut Vec<DiscoveredModel>,
+    seen: &mut HashSet<PathBuf>,
+) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_file() && path.extension().is_some_and(|ext| ext == "gguf") {
@@ -176,7 +183,11 @@ fn scan_directory_flat(dir: &Path, label: &str, results: &mut Vec<DiscoveredMode
                     let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
                     results.push(DiscoveredModel {
                         path: canonical.display().to_string(),
-                        file_name: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                        file_name: path
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string(),
                         size_bytes: size,
                         location_label: label.to_string(),
                     });
@@ -186,9 +197,21 @@ fn scan_directory_flat(dir: &Path, label: &str, results: &mut Vec<DiscoveredMode
     }
 }
 
-fn scan_directory_deep(dir: &Path, label: &str, max_depth: usize, results: &mut Vec<DiscoveredModel>, seen: &mut HashSet<PathBuf>) {
-    if !dir.exists() { return; }
-    for entry in walkdir::WalkDir::new(dir).max_depth(max_depth).into_iter().flatten() {
+fn scan_directory_deep(
+    dir: &Path,
+    label: &str,
+    max_depth: usize,
+    results: &mut Vec<DiscoveredModel>,
+    seen: &mut HashSet<PathBuf>,
+) {
+    if !dir.exists() {
+        return;
+    }
+    for entry in walkdir::WalkDir::new(dir)
+        .max_depth(max_depth)
+        .into_iter()
+        .flatten()
+    {
         let path = entry.path();
         if path.is_file() && path.extension().is_some_and(|ext| ext == "gguf") {
             if !looks_like_gguf(path) {
@@ -203,7 +226,11 @@ fn scan_directory_deep(dir: &Path, label: &str, max_depth: usize, results: &mut 
                     let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
                     results.push(DiscoveredModel {
                         path: canonical.display().to_string(),
-                        file_name: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                        file_name: path
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string(),
                         size_bytes: size,
                         location_label: label.to_string(),
                     });
@@ -233,7 +260,8 @@ mod scan_tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("stub.gguf");
         let mut f = std::fs::File::create(&path).unwrap();
-        f.write_all(b"<!doctype html><html>404 Not Found</html>").unwrap();
+        f.write_all(b"<!doctype html><html>404 Not Found</html>")
+            .unwrap();
         assert!(!looks_like_gguf(&path));
     }
 
@@ -242,7 +270,8 @@ mod scan_tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("ptr.gguf");
         let mut f = std::fs::File::create(&path).unwrap();
-        f.write_all(b"version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 12345\n").unwrap();
+        f.write_all(b"version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 12345\n")
+            .unwrap();
         assert!(!looks_like_gguf(&path));
     }
 
@@ -297,7 +326,12 @@ pub async fn scan_for_models() -> Result<Vec<DiscoveredModel>, String> {
 
         // Priority 1: Sovereign models directory
         let sovereign_models = home.join(".sovereign").join("models");
-        scan_directory_flat(&sovereign_models, "Sovereign Models", &mut results, &mut seen);
+        scan_directory_flat(
+            &sovereign_models,
+            "Sovereign Models",
+            &mut results,
+            &mut seen,
+        );
 
         // Priority 2: Local models/ directory
         let local_models = std::env::current_dir().unwrap_or_default().join("models");
@@ -446,7 +480,9 @@ pub async fn download_model(
         }
     }
 
-    file.flush().await.map_err(|e| format!("Flush error: {e}"))?;
+    file.flush()
+        .await
+        .map_err(|e| format!("Flush error: {e}"))?;
     drop(file);
 
     // Post-stream validation. Covers CDN responses that advertised
@@ -491,4 +527,3 @@ pub async fn download_model(
 
     Ok(dest.display().to_string())
 }
-

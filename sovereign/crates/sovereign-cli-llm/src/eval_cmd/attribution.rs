@@ -41,9 +41,7 @@ impl AttributionMode {
 
 fn turn_header_regex() -> &'static Regex {
     static CELL: OnceLock<Regex> = OnceLock::new();
-    CELL.get_or_init(|| {
-        Regex::new(r"(?m)^###\s+\[([^\]]+)\]\s+(user|assistant)\s*$").unwrap()
-    })
+    CELL.get_or_init(|| Regex::new(r"(?m)^###\s+\[([^\]]+)\]\s+(user|assistant)\s*$").unwrap())
 }
 
 /// Strip turn blocks whose sender does not match `mode`. Returns

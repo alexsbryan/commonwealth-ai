@@ -236,12 +236,16 @@ fn main() -> Result<()> {
         Commands::Models => cmd_models(&config),
         Commands::Corpus { command } => match command {
             CorpusCommands::List => cmd_corpus_list(&config),
-            CorpusCommands::Install { id, recipe } => cmd_corpus_install(&id, recipe.as_deref(), &config),
+            CorpusCommands::Install { id, recipe } => {
+                cmd_corpus_install(&id, recipe.as_deref(), &config)
+            }
             CorpusCommands::Remove { id } => cmd_corpus_remove(&id, &config),
             CorpusCommands::Update { id } => cmd_corpus_update(&id, &config),
             CorpusCommands::Status => cmd_corpus_status(&config),
             CorpusCommands::Consolidate { id } => cmd_corpus_consolidate(&id, &config),
-            CorpusCommands::Collaborate { id, recipe } => cmd_corpus_collaborate(&id, recipe.as_deref(), &config),
+            CorpusCommands::Collaborate { id, recipe } => {
+                cmd_corpus_collaborate(&id, recipe.as_deref(), &config)
+            }
             CorpusCommands::CollaborateStatus { id } => cmd_corpus_collaborate_status(&id, &config),
         },
         Commands::Logs { follow } => cmd_logs(follow, &config),
@@ -255,17 +259,29 @@ fn main() -> Result<()> {
             DaemonCommands::Start => cmd_daemon_start(&config),
         },
         Commands::Recipe { command } => match command {
-            RecipeCommands::Test { path, sample_size, no_embed, output, offline, verbose } => {
-                cmd_recipe_test(&path, sample_size, !no_embed, output.as_deref(), offline, verbose)
-            }
-            RecipeCommands::Validate { path, offline } => {
-                cmd_recipe_validate(&path, offline)
-            }
+            RecipeCommands::Test {
+                path,
+                sample_size,
+                no_embed,
+                output,
+                offline,
+                verbose,
+            } => cmd_recipe_test(
+                &path,
+                sample_size,
+                !no_embed,
+                output.as_deref(),
+                offline,
+                verbose,
+            ),
+            RecipeCommands::Validate { path, offline } => cmd_recipe_validate(&path, offline),
         },
         Commands::PeerPreference { command } => match command {
-            PeerPreferenceCommands::Set { node, multiplier, reason } => {
-                cmd_peer_preference_set(&node, &multiplier, reason.as_deref())
-            }
+            PeerPreferenceCommands::Set {
+                node,
+                multiplier,
+                reason,
+            } => cmd_peer_preference_set(&node, &multiplier, reason.as_deref()),
             PeerPreferenceCommands::List => cmd_peer_preference_list(),
             PeerPreferenceCommands::Clear { node } => cmd_peer_preference_clear(&node),
         },
@@ -376,7 +392,10 @@ fn cmd_balance(_config: &Option<DaemonConfig>) -> Result<()> {
         Err(e) => {
             println!("Contribution Ledger");
             println!("{}", "─".repeat(60));
-            println!("(no store at {} — daemon hasn't run yet: {e})", store_path.display());
+            println!(
+                "(no store at {} — daemon hasn't run yet: {e})",
+                store_path.display()
+            );
             return Ok(());
         }
     };
@@ -399,18 +418,13 @@ fn cmd_balance(_config: &Option<DaemonConfig>) -> Result<()> {
     println!("{}", "─".repeat(72));
     println!(
         "{:<20} {:>22} {:>14} {:>12}",
-        "Node",
-        "Inference (s/r)",
-        "Knowledge",
-        "Network (s/r)"
+        "Node", "Inference (s/r)", "Knowledge", "Network (s/r)"
     );
     println!("{}", "─".repeat(72));
     let mut entries: Vec<_> = contribs.iter().collect();
     // Stable display ordering — sort by hex prefix of NodeId so two
     // operators reading on different nodes see the same row order.
-    entries.sort_by_key(|(id, _)| {
-        id.as_bytes().to_vec()
-    });
+    entries.sort_by_key(|(id, _)| id.as_bytes().to_vec());
     for (node_id, c) in entries {
         let node_label = short_node_id(node_id);
         let served = c.inference_served.requests;
@@ -421,22 +435,14 @@ fn cmd_balance(_config: &Option<DaemonConfig>) -> Result<()> {
         let gb_received = c.bytes_received as f64 / 1e9;
         println!(
             "{:<20} {:>10} / {:<8} {:>3} corp/{:>4} q  {:>5.1} / {:>5.1} GB",
-            node_label,
-            served,
-            received,
-            corpora,
-            queries,
-            gb_served,
-            gb_received,
+            node_label, served, received, corpora, queries, gb_served, gb_received,
         );
         // Sole-host annotations, one per line under the row.
         for hosting in &c.corpora_hosted {
             if hosting.is_sole_host {
                 println!(
                     "  {:<18} sole host of {} ({:.1} GB)",
-                    "",
-                    hosting.corpus_id,
-                    hosting.size_gb,
+                    "", hosting.corpus_id, hosting.size_gb,
                 );
             }
         }
@@ -461,11 +467,7 @@ fn short_node_id(id: &commonwealth_core::ids::NodeId) -> String {
 // Peer-preference commands
 // ============================================================================
 
-fn cmd_peer_preference_set(
-    node: &str,
-    multiplier_arg: &str,
-    reason: Option<&str>,
-) -> Result<()> {
+fn cmd_peer_preference_set(node: &str, multiplier_arg: &str, reason: Option<&str>) -> Result<()> {
     use commonwealth_state::{MeshStore, PeerPreference, PeerPreferenceStore};
 
     let multiplier = parse_multiplier(multiplier_arg)?;
@@ -482,7 +484,9 @@ fn cmd_peer_preference_set(
         "set peer preference: {} → {:.0}%{}",
         node,
         multiplier * 100.0,
-        reason.map(|r| format!(" (reason: {r})")).unwrap_or_default()
+        reason
+            .map(|r| format!(" (reason: {r})"))
+            .unwrap_or_default()
     );
     let _ = prefs; // silence the unused-import lint when the binary is stripped
     let _ = MeshStore::in_memory; // ditto
@@ -490,7 +494,7 @@ fn cmd_peer_preference_set(
 }
 
 fn cmd_peer_preference_list() -> Result<()> {
-    use commonwealth_state::{PeerPreferenceStore};
+    use commonwealth_state::PeerPreferenceStore;
     let store = open_local_store()?;
     let prefs = PeerPreferenceStore::new(store, fallback_self_id());
     let entries = prefs.list().with_context(|| "listing peer preferences")?;
@@ -501,8 +505,7 @@ fn cmd_peer_preference_list() -> Result<()> {
     println!("{:<32} {:>10}  Reason", "Peer node id", "Multiplier");
     println!("{}", "─".repeat(64));
     for (id, pref) in entries {
-        let id_hex: String =
-            id.as_bytes().iter().map(|b| format!("{b:02x}")).collect();
+        let id_hex: String = id.as_bytes().iter().map(|b| format!("{b:02x}")).collect();
         println!(
             "{:<32} {:>9.0}%  {}",
             id_hex,
@@ -557,8 +560,7 @@ fn parse_peer_node_id(s: &str) -> Result<commonwealth_core::ids::NodeId> {
         let pair = trimmed
             .get(i * 2..i * 2 + 2)
             .with_context(|| format!("invalid hex id '{trimmed}'"))?;
-        *b = u8::from_str_radix(pair, 16)
-            .with_context(|| format!("invalid hex id '{trimmed}'"))?;
+        *b = u8::from_str_radix(pair, 16).with_context(|| format!("invalid hex id '{trimmed}'"))?;
     }
     Ok(commonwealth_core::ids::NodeId::from_u128(
         u128::from_be_bytes(bytes),
@@ -567,9 +569,8 @@ fn parse_peer_node_id(s: &str) -> Result<commonwealth_core::ids::NodeId> {
 
 fn open_local_store() -> Result<commonwealth_state::MeshStore> {
     let store_path = dirs_path().join("store.db");
-    commonwealth_state::MeshStore::open(&store_path).with_context(|| {
-        format!("opening local store at {}", store_path.display())
-    })
+    commonwealth_state::MeshStore::open(&store_path)
+        .with_context(|| format!("opening local store at {}", store_path.display()))
 }
 
 /// CLI subcommands operate on the local store directly without
@@ -611,7 +612,11 @@ fn cmd_corpus_list(_config: &Option<DaemonConfig>) -> Result<()> {
     Ok(())
 }
 
-fn cmd_corpus_install(id: &str, recipe: Option<&std::path::Path>, _config: &Option<DaemonConfig>) -> Result<()> {
+fn cmd_corpus_install(
+    id: &str,
+    recipe: Option<&std::path::Path>,
+    _config: &Option<DaemonConfig>,
+) -> Result<()> {
     if let Some(path) = recipe {
         println!("Installing corpus '{id}' from recipe: {}", path.display());
     } else {
@@ -644,8 +649,15 @@ fn cmd_corpus_consolidate(id: &str, _config: &Option<DaemonConfig>) -> Result<()
     Ok(())
 }
 
-fn cmd_corpus_collaborate(id: &str, recipe: Option<&str>, config: &Option<DaemonConfig>) -> Result<()> {
-    let internal_port = config.as_ref().map(|c| c.node.internal_port).unwrap_or(9742);
+fn cmd_corpus_collaborate(
+    id: &str,
+    recipe: Option<&str>,
+    config: &Option<DaemonConfig>,
+) -> Result<()> {
+    let internal_port = config
+        .as_ref()
+        .map(|c| c.node.internal_port)
+        .unwrap_or(9742);
     let url = format!("http://127.0.0.1:{internal_port}/internal/corpus/collaborate");
 
     println!("Planning collaborative ingestion for corpus '{id}'...");
@@ -705,7 +717,10 @@ fn cmd_corpus_collaborate(id: &str, recipe: Option<&str>, config: &Option<Daemon
 }
 
 fn cmd_corpus_collaborate_status(id: &str, config: &Option<DaemonConfig>) -> Result<()> {
-    let internal_port = config.as_ref().map(|c| c.node.internal_port).unwrap_or(9742);
+    let internal_port = config
+        .as_ref()
+        .map(|c| c.node.internal_port)
+        .unwrap_or(9742);
     println!("Checking collaborative ingestion status for corpus '{id}'...");
     println!("(In production, this would read the gossip handoff state from the daemon at localhost:{internal_port}.)");
     Ok(())
@@ -780,42 +795,46 @@ fn cmd_daemon_start(config: &Option<DaemonConfig>) -> Result<()> {
 
         // 2. Open the mesh store.
         let store_path = PathBuf::from(&data_dir).join("store.db");
-        let mesh_store = Arc::new(
-            MeshStore::open(&store_path)
-                .with_context(|| format!("failed to open MeshStore at {}", store_path.display()))?,
-        );
+        let mesh_store =
+            Arc::new(MeshStore::open(&store_path).with_context(|| {
+                format!("failed to open MeshStore at {}", store_path.display())
+            })?);
         info!(path = %store_path.display(), "MeshStore opened");
 
         // 3. Init the app registry and register built-in apps.
         let app_registry = Arc::new(AppRegistry::new());
 
-        app_registry.register(MeshAppManifest {
-            app_id: "inference".into(),
-            name: "Inference Engine".into(),
-            version: env!("CARGO_PKG_VERSION").into(),
-            entrypoint: "embedded".into(),
-            permissions: AppPermissions {
-                mesh_store_read: true,
-                mesh_store_write: true,
-                inference_access: true,
-                knowledge_access: false,
-            },
-            required_capabilities: RequiredCapabilities::default(),
-        }).await;
+        app_registry
+            .register(MeshAppManifest {
+                app_id: "inference".into(),
+                name: "Inference Engine".into(),
+                version: env!("CARGO_PKG_VERSION").into(),
+                entrypoint: "embedded".into(),
+                permissions: AppPermissions {
+                    mesh_store_read: true,
+                    mesh_store_write: true,
+                    inference_access: true,
+                    knowledge_access: false,
+                },
+                required_capabilities: RequiredCapabilities::default(),
+            })
+            .await;
 
-        app_registry.register(MeshAppManifest {
-            app_id: "knowledge".into(),
-            name: "Knowledge Engine".into(),
-            version: env!("CARGO_PKG_VERSION").into(),
-            entrypoint: "embedded".into(),
-            permissions: AppPermissions {
-                mesh_store_read: true,
-                mesh_store_write: true,
-                inference_access: false,
-                knowledge_access: true,
-            },
-            required_capabilities: RequiredCapabilities::default(),
-        }).await;
+        app_registry
+            .register(MeshAppManifest {
+                app_id: "knowledge".into(),
+                name: "Knowledge Engine".into(),
+                version: env!("CARGO_PKG_VERSION").into(),
+                entrypoint: "embedded".into(),
+                permissions: AppPermissions {
+                    mesh_store_read: true,
+                    mesh_store_write: true,
+                    inference_access: false,
+                    knowledge_access: true,
+                },
+                required_capabilities: RequiredCapabilities::default(),
+            })
+            .await;
 
         info!("AppRegistry initialized with inference and knowledge apps");
 
@@ -825,7 +844,7 @@ fn cmd_daemon_start(config: &Option<DaemonConfig>) -> Result<()> {
         // 5. Start RetentionGc (7-day TTL, hourly GC).
         let gc = RetentionGc::new(
             mesh_store.clone(),
-            86_400 * 7,          // 7 days
+            86_400 * 7,                 // 7 days
             Duration::from_secs(3_600), // run every hour
         );
         tokio::spawn(gc.run(shutdown_rx));
@@ -834,7 +853,8 @@ fn cmd_daemon_start(config: &Option<DaemonConfig>) -> Result<()> {
         // 6. Probe inference capability before announcing to the mesh.
         // This must run before mDNS announce and the first gossip round so the
         // node never transiently appears as an inference candidate it cannot fill.
-        let inference_config = config.as_ref()
+        let inference_config = config
+            .as_ref()
             .map(|c| c.inference.clone())
             .unwrap_or_default();
         let inference_capable = probe_inference_capability(&inference_config).await;
@@ -877,39 +897,36 @@ fn cmd_daemon_start(config: &Option<DaemonConfig>) -> Result<()> {
         let snapshot_emitter = state.inner.contribution_emitter.clone();
         let snapshot_engine = state.inner.corpus_engine.clone();
         let snapshot_shutdown = shutdown_tx.subscribe();
-        tokio::spawn(commonwealth_state::contributions::run_storage_snapshot_loop(
-            snapshot_emitter,
-            move || {
-                let engine = snapshot_engine.clone();
-                async move {
-                    let Some(engine) = engine else {
-                        return Vec::new();
-                    };
-                    let installed = match engine.installed_indexes().await {
-                        Ok(list) => list,
-                        Err(e) => {
-                            tracing::warn!(
-                                error = %e,
-                                "storage_snapshot: installed_indexes failed"
-                            );
+        tokio::spawn(
+            commonwealth_state::contributions::run_storage_snapshot_loop(
+                snapshot_emitter,
+                move || {
+                    let engine = snapshot_engine.clone();
+                    async move {
+                        let Some(engine) = engine else {
                             return Vec::new();
-                        }
-                    };
-                    installed
-                        .into_iter()
-                        .filter(|i| i.mesh_sharing)
-                        .map(|i| {
-                            (
-                                i.corpus_id,
-                                i.index_size_bytes as f64 / 1e9,
-                            )
-                        })
-                        .collect()
-                }
-            },
-            commonwealth_state::contributions::STORAGE_SNAPSHOT_INTERVAL,
-            snapshot_shutdown,
-        ));
+                        };
+                        let installed = match engine.installed_indexes().await {
+                            Ok(list) => list,
+                            Err(e) => {
+                                tracing::warn!(
+                                    error = %e,
+                                    "storage_snapshot: installed_indexes failed"
+                                );
+                                return Vec::new();
+                            }
+                        };
+                        installed
+                            .into_iter()
+                            .filter(|i| i.mesh_sharing)
+                            .map(|i| (i.corpus_id, i.index_size_bytes as f64 / 1e9))
+                            .collect()
+                    }
+                },
+                commonwealth_state::contributions::STORAGE_SNAPSHOT_INTERVAL,
+                snapshot_shutdown,
+            ),
+        );
         info!("StorageSnapshot loop started");
 
         // 7. Start both API servers.
@@ -1020,13 +1037,11 @@ fn cmd_recipe_test(
     offline: bool,
     verbose: bool,
 ) -> Result<()> {
-    let output = output
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            path.parent()
-                .unwrap_or(std::path::Path::new("."))
-                .join("TEST_REPORT.md")
-        });
+    let output = output.map(PathBuf::from).unwrap_or_else(|| {
+        path.parent()
+            .unwrap_or(std::path::Path::new("."))
+            .join("TEST_REPORT.md")
+    });
 
     eprintln!("Testing recipe: {}", path.display());
     eprintln!("Sample size:    {sample_size}");
@@ -1048,7 +1063,8 @@ fn cmd_recipe_test(
         .build()
         .context("failed to build async runtime")?;
 
-    let report = rt.block_on(engine.test_recipe(path, &options))
+    let report = rt
+        .block_on(engine.test_recipe(path, &options))
         .context("recipe test failed")?;
 
     let markdown = report.to_markdown();
@@ -1101,7 +1117,8 @@ fn cmd_recipe_validate(path: &std::path::Path, offline: bool) -> Result<()> {
         .build()
         .context("failed to build async runtime")?;
 
-    let report = rt.block_on(engine.test_recipe(path, &options))
+    let report = rt
+        .block_on(engine.test_recipe(path, &options))
         .context("recipe validation failed")?;
 
     if report.validation.errors.is_empty() {
@@ -1120,9 +1137,7 @@ fn cmd_recipe_validate(path: &std::path::Path, offline: bool) -> Result<()> {
 }
 
 fn build_stub_engine() -> CorpusEngine {
-    let stub_embed: EmbedFn = Arc::new(|_text| {
-        Box::pin(async { Ok(vec![0f32; 768]) })
-    });
+    let stub_embed: EmbedFn = Arc::new(|_text| Box::pin(async { Ok(vec![0f32; 768]) }));
     let tmp = std::env::temp_dir().join("commonwealth-recipe-test");
     CorpusEngine::new(tmp.clone(), tmp, stub_embed)
 }

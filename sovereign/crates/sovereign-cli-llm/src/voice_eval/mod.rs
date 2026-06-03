@@ -152,8 +152,7 @@ pub async fn run_voice_eval(args: &[String]) -> i32 {
     let chat_model = get_flag(&flags, "chat-model").filter(|s| !s.is_empty());
     let judge_model = get_flag(&flags, "judge-model").filter(|s| !s.is_empty());
 
-    let mut run = report::VoiceEvalRun::new()
-        .with_models(chat_model.clone(), judge_model.clone());
+    let mut run = report::VoiceEvalRun::new().with_models(chat_model.clone(), judge_model.clone());
 
     if let Some(text) = canned_response {
         // Dry-run path — score the canned response against every
@@ -196,7 +195,13 @@ pub async fn run_voice_eval(args: &[String]) -> i32 {
                             eprintln!("  rationale: {}", score.rationale);
                         }
                     }
-                    run.add_live(live.result, live.judge, live.runtime_ms, live.judge_ms, live.metrics);
+                    run.add_live(
+                        live.result,
+                        live.judge,
+                        live.runtime_ms,
+                        live.judge_ms,
+                        live.metrics,
+                    );
                 }
             }
             Err(e) => {
@@ -214,7 +219,10 @@ pub async fn run_voice_eval(args: &[String]) -> i32 {
     // Write report.
     if let Some(path) = report_path.as_ref() {
         if let Err(e) = report::write_json_report(path, &run) {
-            eprintln!("voice eval: failed to write report to {}: {e}", path.display());
+            eprintln!(
+                "voice eval: failed to write report to {}: {e}",
+                path.display()
+            );
             return 1;
         }
     }
@@ -249,7 +257,11 @@ pub async fn run_voice_eval(args: &[String]) -> i32 {
         }
     }
 
-    if run.has_failures() { 1 } else { 0 }
+    if run.has_failures() {
+        1
+    } else {
+        0
+    }
 }
 
 fn print_help() {
@@ -276,7 +288,9 @@ fn print_help() {
     eprintln!("                             primary signal — pass/fail flips have run-to-run");
     eprintln!("                             variance, axis means pool across scenarios.");
     eprintln!("  --json                     Suppress the text report; print only the JSON path.");
-    eprintln!("  --no-judge                 Skip the LLM-as-judge call; deterministic checks only.");
+    eprintln!(
+        "  --no-judge                 Skip the LLM-as-judge call; deterministic checks only."
+    );
     eprintln!("  --chat-model <id>          Pin the runtime turn to this model id (gguf stem).");
     eprintln!("  --judge-model <id>         Pin the LLM-as-judge to this model id, regardless of");
     eprintln!("                             --chat-model. Use this for model A/B baselines so the");
@@ -304,8 +318,8 @@ fn resolve_scenarios_dir(flags: &[(String, String)]) -> Result<PathBuf, String> 
     }
 
     // Walk up from CWD looking for bench/voice/.
-    let mut here: PathBuf = std::env::current_dir()
-        .map_err(|e| format!("cannot resolve current dir: {e}"))?;
+    let mut here: PathBuf =
+        std::env::current_dir().map_err(|e| format!("cannot resolve current dir: {e}"))?;
     loop {
         let candidate = here.join(DEFAULT_SCENARIOS_DIR);
         if candidate.is_dir() {

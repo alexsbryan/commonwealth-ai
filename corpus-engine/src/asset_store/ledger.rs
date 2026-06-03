@@ -51,9 +51,8 @@ pub struct LedgerEntry {
 /// `FilesystemAssetStore` does this — the ledger here is the lower
 /// layer).
 pub(crate) fn append(ledger_path: &Path, entry: &LedgerEntry) -> Result<()> {
-    let line = serde_json::to_string(entry).map_err(|e| {
-        Error::Extraction(format!("ledger serialise {}: {e}", entry.sha256))
-    })?;
+    let line = serde_json::to_string(entry)
+        .map_err(|e| Error::Extraction(format!("ledger serialise {}: {e}", entry.sha256)))?;
     let mut f = OpenOptions::new()
         .create(true)
         .append(true)

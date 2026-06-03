@@ -49,10 +49,16 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
     sections: &[
         crate::util::help::HelpSection::Usage("sovereign recipe <subcommand> [args]"),
         crate::util::help::HelpSection::Subcommands(&[
-            ("list",             "List all corpora available in the registry"),
-            ("test <path>",      "Run the full test harness against a recipe file"),
-            ("validate <path>",  "Validate recipe fields without downloading data"),
-            ("publish <path>",   "Add a recipe to the local user registry"),
+            ("list", "List all corpora available in the registry"),
+            (
+                "test <path>",
+                "Run the full test harness against a recipe file",
+            ),
+            (
+                "validate <path>",
+                "Validate recipe fields without downloading data",
+            ),
+            ("publish <path>", "Add a recipe to the local user registry"),
         ]),
         crate::util::help::HelpSection::Notes(
             "`list` takes --offline (skip live registry refresh).\n\
@@ -113,7 +119,10 @@ async fn cmd_test(args: &[String]) -> i32 {
                 let raw = match std::fs::read_to_string(&path) {
                     Ok(s) => s,
                     Err(e) => {
-                        eprintln!("error: failed to read --params-file {}: {e}", path.display());
+                        eprintln!(
+                            "error: failed to read --params-file {}: {e}",
+                            path.display()
+                        );
                         return 1;
                     }
                 };
@@ -342,8 +351,16 @@ async fn cmd_list(args: &[String]) -> i32 {
         println!(
             "{:<16} {:<40} {:<14} {:>7.0}GB {:>7.0}GB  {:<8}",
             entry.id,
-            if entry.name.len() > 39 { &entry.name[..39] } else { &entry.name },
-            if entry.license.len() > 13 { &entry.license[..13] } else { &entry.license },
+            if entry.name.len() > 39 {
+                &entry.name[..39]
+            } else {
+                &entry.name
+            },
+            if entry.license.len() > 13 {
+                &entry.license[..13]
+            } else {
+                &entry.license
+            },
             entry.size_compressed_gb,
             entry.size_indexed_gb,
             origin,
@@ -365,9 +382,7 @@ async fn cmd_list(args: &[String]) -> i32 {
 ///
 /// The stub returns zero-vectors; it is never called when `embed = false`.
 fn build_stub_engine() -> CorpusEngine {
-    let stub_embed: EmbedFn = Arc::new(|_text| {
-        Box::pin(async { Ok(vec![0f32; 768]) })
-    });
+    let stub_embed: EmbedFn = Arc::new(|_text| Box::pin(async { Ok(vec![0f32; 768]) }));
 
     // Use a temporary location for downloads; the engine's index_dir is
     // unused since we never write a production index.
@@ -483,10 +498,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
     let sha256 = sha256_hex(raw.as_bytes());
 
     if let Err(e) = std::fs::create_dir_all(&local_dir) {
-        eprintln!(
-            "error: failed to create {}: {e}",
-            local_dir.display()
-        );
+        eprintln!("error: failed to create {}: {e}", local_dir.display());
         return 1;
     }
     let recipe_dir = local_dir.join(&recipe.corpus.id);
@@ -537,7 +549,10 @@ async fn cmd_publish(args: &[String]) -> i32 {
         println!();
         println!("Share with the community (optional):");
         println!("  1. Fork the sovereign-recipes repo on GitHub.");
-        println!("  2. Copy the recipe to <fork>/{}/recipe.toml", recipe.corpus.id);
+        println!(
+            "  2. Copy the recipe to <fork>/{}/recipe.toml",
+            recipe.corpus.id
+        );
         println!("  3. Add an entry to registry.toml with sha256 = \"{sha256}\".");
         println!("  4. Open a PR. Or pass `--submit-pr` next time to draft it via `gh`.");
     }
@@ -608,11 +623,7 @@ fn upsert_local_registry_entry(
 /// Record a publish marker so `sovereign project audit` doesn't
 /// fire the "publish your recipe" nudge again. Stored as a JSON
 /// map keyed by recipe id.
-fn record_publish_marker(
-    path: &Path,
-    recipe_id: &str,
-    sha256: &str,
-) -> std::io::Result<()> {
+fn record_publish_marker(path: &Path, recipe_id: &str, sha256: &str) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -659,9 +670,7 @@ fn sha256_hex(data: &[u8]) -> String {
 
 fn rfc3339_now() -> String {
     use chrono::Utc;
-    Utc::now()
-        .format("%Y-%m-%dT%H:%M:%SZ")
-        .to_string()
+    Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
 /// Parse a single `--params` / `--param` value into the running

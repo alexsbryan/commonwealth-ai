@@ -91,11 +91,17 @@ const MANIFEST_FILES: &[&str] = &[
 /// a definition that other code depends on.
 const STRUCTURAL_DEFINITION_KEYWORDS: &[&str] = &[
     // Rust
-    "struct ", "trait ", "impl ", "enum ",
+    "struct ",
+    "trait ",
+    "impl ",
+    "enum ",
     // TS / Java / C# / Kotlin
-    "interface ", "class ",
+    "interface ",
+    "class ",
     // Python
-    "class ", "def __init__", "abstract class",
+    "class ",
+    "def __init__",
+    "abstract class",
 ];
 
 /// Keywords inside a diff snippet that look like a test assertion
@@ -227,7 +233,9 @@ impl StructuralNudgeGenerator {
         });
 
         let test_assertion = obs.test_assertion_modified
-            || TEST_ASSERTION_KEYWORDS.iter().any(|kw| obs.diff_text.contains(kw));
+            || TEST_ASSERTION_KEYWORDS
+                .iter()
+                .any(|kw| obs.diff_text.contains(kw));
 
         // Normalise both sides to lowercase alphanumeric so a
         // spec heading like "Canonical Fingerprint" matches a
@@ -235,19 +243,18 @@ impl StructuralNudgeGenerator {
         // separators, same concept). Falls back to substring match
         // if the normalised form is too short (avoid a 3-letter
         // keyword false-matching half the diff).
-        let spec_invariant = !obs.spec_invariant_keywords.is_empty()
-            && {
-                let lower_diff = obs.diff_text.to_lowercase();
-                let normalised_diff = normalise(&lower_diff);
-                obs.spec_invariant_keywords.iter().any(|kw| {
-                    let kw_lower = kw.to_lowercase();
-                    if lower_diff.contains(&kw_lower) {
-                        return true;
-                    }
-                    let kw_norm = normalise(&kw_lower);
-                    kw_norm.len() >= 6 && normalised_diff.contains(&kw_norm)
-                })
-            };
+        let spec_invariant = !obs.spec_invariant_keywords.is_empty() && {
+            let lower_diff = obs.diff_text.to_lowercase();
+            let normalised_diff = normalise(&lower_diff);
+            obs.spec_invariant_keywords.iter().any(|kw| {
+                let kw_lower = kw.to_lowercase();
+                if lower_diff.contains(&kw_lower) {
+                    return true;
+                }
+                let kw_norm = normalise(&kw_lower);
+                kw_norm.len() >= 6 && normalised_diff.contains(&kw_norm)
+            })
+        };
 
         NudgeSignals {
             multi_file,
@@ -498,7 +505,10 @@ mod tests {
             obs.diff_text = "irrelevant".into();
             assert!(g.pending_text(&obs).is_none());
         }
-        assert!(g.pending_text(&obs).is_some(), "expected second nudge after reset window");
+        assert!(
+            g.pending_text(&obs).is_some(),
+            "expected second nudge after reset window"
+        );
     }
 
     /// `pending_text` returns None when no signals fire, even if

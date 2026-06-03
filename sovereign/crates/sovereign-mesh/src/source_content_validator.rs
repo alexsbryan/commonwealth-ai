@@ -405,10 +405,13 @@ mod tests {
 
     #[test]
     fn validate_returns_empty_when_registry_empty() {
-        let tools = vec![tool("write", json!({
-            "type": "object",
-            "properties": {"content": {"type": "string", "x-source-content": "rust"}}
-        }))];
+        let tools = vec![tool(
+            "write",
+            json!({
+                "type": "object",
+                "properties": {"content": {"type": "string", "x-source-content": "rust"}}
+            }),
+        )];
         let calls = vec![call("write", json!({"content": "fn main() {}"}))];
         let registry = ValidatorRegistry::new();
         assert!(validate_tool_calls(&calls, &tools, &registry).is_empty());
@@ -416,10 +419,13 @@ mod tests {
 
     #[test]
     fn validate_skips_calls_without_matching_tool() {
-        let tools = vec![tool("write", json!({
-            "type": "object",
-            "properties": {"content": {"type": "string", "x-source-content": "rust"}}
-        }))];
+        let tools = vec![tool(
+            "write",
+            json!({
+                "type": "object",
+                "properties": {"content": {"type": "string", "x-source-content": "rust"}}
+            }),
+        )];
         let calls = vec![call("unknown_tool", json!({"content": "anything"}))];
         let mut registry = ValidatorRegistry::new();
         registry.register("rust", Box::new(AlwaysFails));
@@ -428,10 +434,13 @@ mod tests {
 
     #[test]
     fn validate_skips_unmarked_fields() {
-        let tools = vec![tool("write", json!({
-            "type": "object",
-            "properties": {"filePath": {"type": "string"}}
-        }))];
+        let tools = vec![tool(
+            "write",
+            json!({
+                "type": "object",
+                "properties": {"filePath": {"type": "string"}}
+            }),
+        )];
         let calls = vec![call("write", json!({"filePath": "/tmp/x"}))];
         let mut registry = ValidatorRegistry::new();
         registry.register("rust", Box::new(AlwaysFails));
@@ -440,17 +449,23 @@ mod tests {
 
     #[test]
     fn validate_emits_warning_on_marked_field_failure() {
-        let tools = vec![tool("write", json!({
-            "type": "object",
-            "properties": {
-                "filePath": {"type": "string"},
-                "content": {"type": "string", "x-source-content": "rust"}
-            }
-        }))];
-        let calls = vec![call("write", json!({
-            "filePath": "/tmp/lib.rs",
-            "content": "fn main() { BAD }"
-        }))];
+        let tools = vec![tool(
+            "write",
+            json!({
+                "type": "object",
+                "properties": {
+                    "filePath": {"type": "string"},
+                    "content": {"type": "string", "x-source-content": "rust"}
+                }
+            }),
+        )];
+        let calls = vec![call(
+            "write",
+            json!({
+                "filePath": "/tmp/lib.rs",
+                "content": "fn main() { BAD }"
+            }),
+        )];
         let mut registry = ValidatorRegistry::new();
         registry.register("rust", Box::new(RejectsBad));
         let findings = validate_tool_calls(&calls, &tools, &registry);
@@ -464,10 +479,13 @@ mod tests {
 
     #[test]
     fn validate_skips_when_validator_for_language_missing() {
-        let tools = vec![tool("write", json!({
-            "type": "object",
-            "properties": {"content": {"type": "string", "x-source-content": "ocaml"}}
-        }))];
+        let tools = vec![tool(
+            "write",
+            json!({
+                "type": "object",
+                "properties": {"content": {"type": "string", "x-source-content": "ocaml"}}
+            }),
+        )];
         let calls = vec![call("write", json!({"content": "let x = 1"}))];
         let mut registry = ValidatorRegistry::new();
         registry.register("rust", Box::new(AlwaysFails));
@@ -477,10 +495,13 @@ mod tests {
 
     #[test]
     fn validate_emits_error_on_malformed_arguments_json() {
-        let tools = vec![tool("write", json!({
-            "type": "object",
-            "properties": {"content": {"type": "string", "x-source-content": "rust"}}
-        }))];
+        let tools = vec![tool(
+            "write",
+            json!({
+                "type": "object",
+                "properties": {"content": {"type": "string", "x-source-content": "rust"}}
+            }),
+        )];
         let calls = vec![ParsedToolCall {
             name: "write".into(),
             arguments: "{not-json".into(),
@@ -495,10 +516,13 @@ mod tests {
 
     #[test]
     fn validate_passes_clean_source_through() {
-        let tools = vec![tool("write", json!({
-            "type": "object",
-            "properties": {"content": {"type": "string", "x-source-content": "rust"}}
-        }))];
+        let tools = vec![tool(
+            "write",
+            json!({
+                "type": "object",
+                "properties": {"content": {"type": "string", "x-source-content": "rust"}}
+            }),
+        )];
         let calls = vec![call("write", json!({"content": "fn main() {}"}))];
         let mut registry = ValidatorRegistry::new();
         registry.register("rust", Box::new(RejectsBad));
@@ -507,10 +531,13 @@ mod tests {
 
     #[test]
     fn validate_handles_two_calls_one_corrupt() {
-        let tools = vec![tool("write", json!({
-            "type": "object",
-            "properties": {"content": {"type": "string", "x-source-content": "rust"}}
-        }))];
+        let tools = vec![tool(
+            "write",
+            json!({
+                "type": "object",
+                "properties": {"content": {"type": "string", "x-source-content": "rust"}}
+            }),
+        )];
         let calls = vec![
             call("write", json!({"content": "fn ok() {}"})),
             call("write", json!({"content": "fn BAD() {}"})),

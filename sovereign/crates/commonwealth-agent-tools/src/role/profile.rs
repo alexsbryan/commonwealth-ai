@@ -62,8 +62,7 @@ pub fn default_profile_for(role: Role) -> RoleProfile {
     match role {
         Role::Planner => RoleProfile {
             role: Role::Planner,
-            system_prompt:
-                "You are the Planner. Your job is exactly one tool call: `agent_plan`. \
+            system_prompt: "You are the Planner. Your job is exactly one tool call: `agent_plan`. \
                  Fill `plan` with a 3-6 sentence high-level approach (data structures, \
                  algorithm, files to modify). For problems with MULTIPLE distinct edits \
                  (bug-fixes spanning several functions, multi-feature implementations), ALSO \
@@ -74,7 +73,7 @@ pub fn default_profile_for(role: Role) -> RoleProfile {
                  staying informed by the full set. Workdir contents are listed in your user \
                  message — you have everything you need. Do not inspect, do not write code, \
                  do not build."
-                    .to_string(),
+                .to_string(),
             allowed_primitives: vec![PrimitiveKind::AgentPlan],
             sampling: SamplingOverrides {
                 temperature: Some(0.4),
@@ -156,7 +155,9 @@ mod tests {
         assert!(!p.allowed_primitives.contains(&PrimitiveKind::WriteFile));
         assert!(!p.allowed_primitives.contains(&PrimitiveKind::Build));
         assert!(!p.allowed_primitives.contains(&PrimitiveKind::Smoke));
-        assert!(!p.allowed_primitives.contains(&PrimitiveKind::InspectWorkdir));
+        assert!(!p
+            .allowed_primitives
+            .contains(&PrimitiveKind::InspectWorkdir));
         assert!(p.allowed_primitives.contains(&PrimitiveKind::AgentPlan));
     }
 
@@ -169,7 +170,9 @@ mod tests {
         // Inspect excluded: workdir state is in the initial user
         // message; Implementer that "needs to inspect" defaults to
         // looping inspect instead of writing. Structural fix.
-        assert!(!p.allowed_primitives.contains(&PrimitiveKind::InspectWorkdir));
+        assert!(!p
+            .allowed_primitives
+            .contains(&PrimitiveKind::InspectWorkdir));
         assert!(p.allowed_primitives.contains(&PrimitiveKind::WriteFile));
     }
 

@@ -166,7 +166,10 @@ impl DocumentFilter for KnowledgeDensityFilter {
 
         // Closed-question gate.
         if self.cfg.exclude_closed {
-            let closed = meta.get("closed").and_then(|v| v.as_bool()).unwrap_or(false);
+            let closed = meta
+                .get("closed")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             if closed {
                 return false;
             }
@@ -226,7 +229,11 @@ impl DocumentFilter for KnowledgeDensityFilter {
             self.cfg.min_substantive_answers,
             self.cfg.answer_score_threshold,
             self.cfg.min_answer_length,
-            if self.cfg.exclude_closed { ", closed=excluded" } else { "" },
+            if self.cfg.exclude_closed {
+                ", closed=excluded"
+            } else {
+                ""
+            },
             self.cfg
                 .tag_filter
                 .as_ref()

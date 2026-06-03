@@ -29,10 +29,10 @@
 //! pattern. `From<corpus_engine_atos::Error> for corpus_engine::Error`
 //! lives in `corpus-engine/src/error.rs` for downstream `?`-bubbling.
 
+pub mod design_signals;
 pub mod error;
 pub mod features;
 pub mod plan_items;
-pub mod design_signals;
 
 pub use error::{Error, Result};
 pub use features::{

@@ -151,10 +151,8 @@ fn build_items(input: &ComposeInputs<'_>) -> Vec<ComposedPlanItem> {
         let id = format!("plan.phase-{phase_counter}.{slug}");
         let realizes = format!("DESIGN.md §{}", section.heading);
 
-        let (open_risks, resolved_risks) = split_risks_for_section(
-            input.open_questions,
-            &section.heading,
-        );
+        let (open_risks, resolved_risks) =
+            split_risks_for_section(input.open_questions, &section.heading);
 
         let body = derive_section_body_summary(&section.body);
 
@@ -252,11 +250,7 @@ fn derive_section_body_summary(body: &str) -> String {
 /// Render the plan markdown given a (possibly post-composition-mutated)
 /// item list. `cmd_plan` calls this directly after the inference
 /// enrichment pass mutates `body` / `stop_hint` on each item.
-pub fn render(
-    input: &ComposeInputs<'_>,
-    items: &[ComposedPlanItem],
-    design_hash: &str,
-) -> String {
+pub fn render(input: &ComposeInputs<'_>, items: &[ComposedPlanItem], design_hash: &str) -> String {
     render_markdown(input, items, design_hash)
 }
 
@@ -265,8 +259,16 @@ fn render_markdown(
     items: &[ComposedPlanItem],
     design_hash: &str,
 ) -> String {
-    let open_count: usize = input.open_questions.iter().filter(|o| !o.is_answered()).count();
-    let answered_count: usize = input.open_questions.iter().filter(|o| o.is_answered()).count();
+    let open_count: usize = input
+        .open_questions
+        .iter()
+        .filter(|o| !o.is_answered())
+        .count();
+    let answered_count: usize = input
+        .open_questions
+        .iter()
+        .filter(|o| o.is_answered())
+        .count();
 
     let mut out = String::new();
     out.push_str(&format!("# {} — Implementation plan\n", input.project_id));
@@ -295,7 +297,11 @@ fn render_markdown(
         if !item.open_risks.is_empty() {
             out.push_str("**Open risks:**\n");
             for risk in &item.open_risks {
-                out.push_str(&format!("- `{}` — {}\n", risk.id, truncate(&risk.question, 160)));
+                out.push_str(&format!(
+                    "- `{}` — {}\n",
+                    risk.id,
+                    truncate(&risk.question, 160)
+                ));
             }
             out.push_str("\n");
         }
@@ -502,7 +508,12 @@ mod tests {
     use super::*;
     use corpus_engine_atos::design_signals;
 
-    fn inputs_from<'a>(design_md: &'a str, oqs: &'a [OpenQuestionEntry], lang: Option<&'a str>, today: &'a str) -> (DesignSignals, ComposeInputs<'a>) {
+    fn inputs_from<'a>(
+        design_md: &'a str,
+        oqs: &'a [OpenQuestionEntry],
+        lang: Option<&'a str>,
+        today: &'a str,
+    ) -> (DesignSignals, ComposeInputs<'a>) {
         let signals = design_signals::extract(design_md);
         let sig_ref: &'a DesignSignals = Box::leak(Box::new(signals));
         let inputs = ComposeInputs {
@@ -546,7 +557,9 @@ _Captured by `sovereign project design --solo` · session `design-123` · 2026-0
         assert_eq!(parsed[0].id, "oq.data-interfaces.1");
         assert_eq!(parsed[0].question, "What's the wire format?");
         assert_eq!(parsed[0].anchor, "DESIGN.md §Data & interfaces");
-        assert!(parsed[0].answer.starts_with("JSON with a versioned envelope."));
+        assert!(parsed[0]
+            .answer
+            .starts_with("JSON with a versioned envelope."));
         assert!(parsed[0].is_answered());
 
         assert_eq!(parsed[1].id, "oq.anchors.1");
@@ -597,10 +610,7 @@ _Captured by `sovereign project design --solo` · session `design-123` · 2026-0
             .iter()
             .map(|it| (it.phase, it.title.as_str()))
             .collect();
-        assert_eq!(
-            phases,
-            vec![(0, "Skeleton"), (1, "Ingest"), (2, "Storage")]
-        );
+        assert_eq!(phases, vec![(0, "Skeleton"), (1, "Ingest"), (2, "Storage")]);
     }
 
     #[test]
@@ -614,7 +624,11 @@ _Captured by `sovereign project design --solo` · session `design-123` · 2026-0
         };
         let (_s, i) = inputs_from(md, std::slice::from_ref(&oq), Some("rust"), "d");
         let plan = compose_plan(&i);
-        let ingest_phase = plan.items.iter().find(|p| p.title == "Ingest").expect("ingest");
+        let ingest_phase = plan
+            .items
+            .iter()
+            .find(|p| p.title == "Ingest")
+            .expect("ingest");
         assert_eq!(ingest_phase.open_risks.len(), 1);
         assert_eq!(ingest_phase.open_risks[0].id, "oq.ingest.1");
     }

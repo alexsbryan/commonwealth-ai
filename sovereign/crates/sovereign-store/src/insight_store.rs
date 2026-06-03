@@ -71,23 +71,33 @@ impl SqliteInsightStore {
         let created_at_ts: i64 = row.get(8)?;
         let sink_state_json: String = row.get(9)?;
 
-        let id = uuid::Uuid::parse_str(&id_str)
-            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e)))?;
-        let message_id = uuid::Uuid::parse_str(&message_id_str)
-            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(2, rusqlite::types::Type::Text, Box::new(e)))?;
-        let source: InsightSource = serde_json::from_str(&source_json)
-            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(e)))?;
+        let id = uuid::Uuid::parse_str(&id_str).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
+        })?;
+        let message_id = uuid::Uuid::parse_str(&message_id_str).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(2, rusqlite::types::Type::Text, Box::new(e))
+        })?;
+        let source: InsightSource = serde_json::from_str(&source_json).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(e))
+        })?;
         let position: Option<InsightPosition> = position_json
             .map(|j| serde_json::from_str(&j))
             .transpose()
-            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(5, rusqlite::types::Type::Text, Box::new(e)))?;
-        let adjacent: Vec<String> = serde_json::from_str(&adjacent_json)
-            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(6, rusqlite::types::Type::Text, Box::new(e)))?;
+            .map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    5,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })?;
+        let adjacent: Vec<String> = serde_json::from_str(&adjacent_json).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(6, rusqlite::types::Type::Text, Box::new(e))
+        })?;
         let embedding = embedding_bytes.map(|b| decode_embedding(&b));
-        let created_at = chrono::DateTime::from_timestamp(created_at_ts, 0)
-            .unwrap_or_default();
-        let sink_state: InsightSinkState = serde_json::from_str(&sink_state_json)
-            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(9, rusqlite::types::Type::Text, Box::new(e)))?;
+        let created_at = chrono::DateTime::from_timestamp(created_at_ts, 0).unwrap_or_default();
+        let sink_state: InsightSinkState = serde_json::from_str(&sink_state_json).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(9, rusqlite::types::Type::Text, Box::new(e))
+        })?;
 
         Ok(InsightNode {
             id,
@@ -168,9 +178,7 @@ impl InsightStore for SqliteInsightStore {
             )
             .map_err(map_db)?;
 
-        let rows = stmt
-            .query_map([limit], Self::row_to_node)
-            .map_err(map_db)?;
+        let rows = stmt.query_map([limit], Self::row_to_node).map_err(map_db)?;
 
         let mut nodes = Vec::new();
         for row in rows {
@@ -184,7 +192,11 @@ impl InsightStore for SqliteInsightStore {
             return Ok(vec![]);
         }
         let conn = self.conn.lock().await;
-        let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
+        let placeholders: Vec<String> = ids
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("?{}", i + 1))
+            .collect();
         let sql = format!(
             "SELECT id, clipped_text, message_id, paragraph_index, source_json, \
              position_json, adjacent_json, embedding, created_at, sink_state_json \
@@ -249,9 +261,7 @@ impl InsightStore for SqliteInsightStore {
             )
             .map_err(map_db)?;
 
-        let rows = stmt
-            .query_map([], Self::row_to_node)
-            .map_err(map_db)?;
+        let rows = stmt.query_map([], Self::row_to_node).map_err(map_db)?;
 
         let mut scored: Vec<(f32, InsightNode)> = Vec::new();
         for row in rows {
@@ -406,7 +416,13 @@ mod tests {
         let adjacent = store.adjacent_by_embedding(&query, 2).await.unwrap();
         assert_eq!(adjacent.len(), 2);
         // n1 should be most similar, then n2
-        assert_eq!(adjacent[0].source.article_title, Some("Frankfurt Cases".to_string()));
-        assert_eq!(adjacent[1].source.article_title, Some("Moral Responsibility".to_string()));
+        assert_eq!(
+            adjacent[0].source.article_title,
+            Some("Frankfurt Cases".to_string())
+        );
+        assert_eq!(
+            adjacent[1].source.article_title,
+            Some("Moral Responsibility".to_string())
+        );
     }
 }

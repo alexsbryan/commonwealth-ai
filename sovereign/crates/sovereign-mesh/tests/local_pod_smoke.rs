@@ -36,12 +36,10 @@ use std::time::Duration;
 
 use ed25519_dalek::SigningKey;
 use sovereign_mesh::worker_controller::{
-    ControllerConfig, JobSpec, PublicAddress, WorkerController, WorkerProvider, ProviderResult,
-    ProviderInstance, ProviderError,
+    ControllerConfig, JobSpec, ProviderError, ProviderInstance, ProviderResult, PublicAddress,
+    WorkerController, WorkerProvider,
 };
-use sovereign_mesh::worker_pod::{
-    BootstrapInputs, encode_bootstrap, mint_bootstrap,
-};
+use sovereign_mesh::worker_pod::{encode_bootstrap, mint_bootstrap, BootstrapInputs};
 
 const IMAGE_TAG: &str = "sovereign-worker-local:test";
 const CONTAINER_NAME: &str = "sovereign-worker-local-test-instance";
@@ -85,7 +83,10 @@ fn skip_reason() -> Option<String> {
         Ok(o) if o.status.success() => None,
         Ok(o) => Some(format!(
             "podman wrapper failed: {}",
-            String::from_utf8_lossy(&o.stderr).chars().take(200).collect::<String>()
+            String::from_utf8_lossy(&o.stderr)
+                .chars()
+                .take(200)
+                .collect::<String>()
         )),
         Err(e) => Some(format!("podman wrapper not runnable: {e}")),
     }
@@ -150,11 +151,7 @@ fn force_rm(name: &str) {
 ///    build their own binary against their native GPU stack and
 ///    don't have this problem; locally we need the host's
 ///    Vulkan loader to satisfy the linker before `main()` runs.
-fn run_args<'a>(
-    container_name: &'a str,
-    host_port: u16,
-    bootstrap_b64: &'a str,
-) -> Vec<String> {
+fn run_args<'a>(container_name: &'a str, host_port: u16, bootstrap_b64: &'a str) -> Vec<String> {
     let mut args: Vec<String> = vec![
         "run".into(),
         "-d".into(),
@@ -226,11 +223,7 @@ struct PreboundProvider {
     address: PublicAddress,
 }
 impl WorkerProvider for PreboundProvider {
-    fn create(
-        &self,
-        _bootstrap_b64: &str,
-        _spec: &JobSpec,
-    ) -> ProviderResult<ProviderInstance> {
+    fn create(&self, _bootstrap_b64: &str, _spec: &JobSpec) -> ProviderResult<ProviderInstance> {
         Ok(ProviderInstance {
             instance_id: CONTAINER_NAME.to_string(),
             gpu_name: "Local".into(),
@@ -252,7 +245,9 @@ impl WorkerProvider for PreboundProvider {
 struct FailingProvider;
 impl WorkerProvider for FailingProvider {
     fn create(&self, _b: &str, _s: &JobSpec) -> ProviderResult<ProviderInstance> {
-        Err(ProviderError::Other("must not be called in this test".into()))
+        Err(ProviderError::Other(
+            "must not be called in this test".into(),
+        ))
     }
     fn address(&self, _: &str) -> ProviderResult<Option<PublicAddress>> {
         Ok(None)
@@ -497,9 +492,7 @@ async fn local_pod_rejects_impostor_owner() {
     let msg = err.to_string();
     eprintln!("[local-pod-impostor] rejection (expected): {msg}");
     assert!(
-        msg.contains("401")
-            || msg.to_lowercase().contains("unauth")
-            || msg.contains("timed out"),
+        msg.contains("401") || msg.to_lowercase().contains("unauth") || msg.contains("timed out"),
         "expected auth rejection, got: {msg}"
     );
     eprintln!("\n[local-pod-impostor] ✓ impostor rejected at container boundary");
@@ -514,7 +507,7 @@ async fn local_pod_rejects_impostor_owner() {
 #[ignore]
 async fn local_pod_pool_three_containers_drain() {
     use sovereign_mesh::multi_pod_coordinator::{
-        CoordinatorConfig, PoolHandle, PoolPod, partition_units,
+        partition_units, CoordinatorConfig, PoolHandle, PoolPod,
     };
     use tokio::sync::Mutex as AsyncMutex;
 
@@ -576,7 +569,10 @@ async fn local_pod_pool_three_containers_drain() {
         .unwrap();
         let encoded = encode_bootstrap(&blob).unwrap();
         let host_port = pick_free_port();
-        eprintln!("[local-pod-pool] starting pod {i}: {} → :9742 ({})", host_port, names[i]);
+        eprintln!(
+            "[local-pod-pool] starting pod {i}: {} → :9742 ({})",
+            host_port, names[i]
+        );
         let run = Command::new(pod_wrapper())
             .args(run_args(&names[i], host_port, &encoded))
             .output()
@@ -587,8 +583,7 @@ async fn local_pod_pool_three_containers_drain() {
                 String::from_utf8_lossy(&run.stderr)
             );
         }
-        let client =
-            sovereign_mesh::worker_controller::build_pinned_client_for(&blob).unwrap();
+        let client = sovereign_mesh::worker_controller::build_pinned_client_for(&blob).unwrap();
         let handle = sovereign_mesh::worker_pod::WorkerHandle::new(
             "127.0.0.1".to_string(),
             host_port,
@@ -618,11 +613,8 @@ async fn local_pod_pool_three_containers_drain() {
     config.health_poll_interval = Duration::from_millis(250);
     config.health_poll_timeout = Duration::from_secs(60);
     let provider = Arc::new(FailingProvider);
-    let controller = sovereign_mesh::worker_controller::WorkerController::new(
-        provider,
-        owner.clone(),
-        config,
-    );
+    let controller =
+        sovereign_mesh::worker_controller::WorkerController::new(provider, owner.clone(), config);
 
     for (i, pp) in pool_pods.iter().enumerate() {
         if let Err(e) = controller.wait_for_health(&pp.handle, &pp.client).await {

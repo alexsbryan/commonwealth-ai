@@ -89,7 +89,9 @@ fn main() -> ExitCode {
         Ok(report) => println!("  PASS — {}", report),
         Err(e) => {
             eprintln!("  FAIL — {}", e);
-            eprintln!("\nsd_smoke: ABORT (embed fine-tune broke LM head; pivot to Qwen3-0.6B-Base)");
+            eprintln!(
+                "\nsd_smoke: ABORT (embed fine-tune broke LM head; pivot to Qwen3-0.6B-Base)"
+            );
             return ExitCode::from(2);
         }
     }
@@ -107,7 +109,10 @@ fn main() -> ExitCode {
     );
     let (chat_prompts, pipeline_prompts) = sample_prompts();
     let probe_strings = build_tokenizer_probe(&chat_prompts, &pipeline_prompts);
-    println!("  probing {} strings (chat + pipeline + adversarial tokens)", probe_strings.len());
+    println!(
+        "  probing {} strings (chat + pipeline + adversarial tokens)",
+        probe_strings.len()
+    );
     match check_tokenizer_match(&draft_model, &target_model, &probe_strings) {
         Ok(()) => println!("  PASS — tokenizer match across all probes"),
         Err(e) => {
@@ -123,7 +128,10 @@ fn main() -> ExitCode {
     let mut draft_ctx = new_causal_context(&backend, &draft_model, 4096);
     let mut target_ctx = new_causal_context(&backend, &target_model, 4096);
 
-    println!("  running SD on {} chat prompts (greedy)", chat_prompts.len());
+    println!(
+        "  running SD on {} chat prompts (greedy)",
+        chat_prompts.len()
+    );
     let chat_stats = measure_acceptance(
         &draft_model,
         &mut draft_ctx,
@@ -140,7 +148,10 @@ fn main() -> ExitCode {
         chat_stats.avg_decoded_tokens(),
     );
 
-    println!("  running SD on {} pipeline prompts (greedy)", pipeline_prompts.len());
+    println!(
+        "  running SD on {} pipeline prompts (greedy)",
+        pipeline_prompts.len()
+    );
     let pipeline_stats = measure_acceptance(
         &draft_model,
         &mut draft_ctx,
@@ -167,14 +178,25 @@ fn main() -> ExitCode {
     let chat_ok = chat_stats.acceptance() >= ACCEPTANCE_GATE;
     let pipeline_ok = pipeline_stats.acceptance() >= ACCEPTANCE_GATE;
     if chat_ok && pipeline_ok {
-        println!("sd_smoke: GATE PASSED — both distributions clear {:.0}% acceptance", ACCEPTANCE_GATE * 100.0);
+        println!(
+            "sd_smoke: GATE PASSED — both distributions clear {:.0}% acceptance",
+            ACCEPTANCE_GATE * 100.0
+        );
         ExitCode::SUCCESS
     } else {
         if !chat_ok {
-            eprintln!("sd_smoke: chat acceptance {:.2} < gate {:.2}", chat_stats.acceptance(), ACCEPTANCE_GATE);
+            eprintln!(
+                "sd_smoke: chat acceptance {:.2} < gate {:.2}",
+                chat_stats.acceptance(),
+                ACCEPTANCE_GATE
+            );
         }
         if !pipeline_ok {
-            eprintln!("sd_smoke: pipeline acceptance {:.2} < gate {:.2}", pipeline_stats.acceptance(), ACCEPTANCE_GATE);
+            eprintln!(
+                "sd_smoke: pipeline acceptance {:.2} < gate {:.2}",
+                pipeline_stats.acceptance(),
+                ACCEPTANCE_GATE
+            );
         }
         eprintln!("sd_smoke: GATE FAILED — see Spike 2 plan Risk 1/2/6 for pivot options");
         ExitCode::from(1)
@@ -227,7 +249,11 @@ impl std::fmt::Display for LogitsSanity {
         write!(
             f,
             "{} prompts: top-1 max p={:.3} (ceiling {:.4}), top-5 min mass={:.3} (floor {:.2})",
-            self.samples, self.top1_max_prob, TOP_1_PROB_CEILING, self.top5_min_mass, TOP_K_MASS_THRESHOLD
+            self.samples,
+            self.top1_max_prob,
+            TOP_1_PROB_CEILING,
+            self.top5_min_mass,
+            TOP_K_MASS_THRESHOLD
         )
     }
 }
@@ -301,8 +327,7 @@ fn softmax(logits: &[f32]) -> Vec<f32> {
 }
 
 fn top_k_stats(probs: &[f32], k: usize) -> (f32, usize, f32) {
-    let mut indexed: Vec<(usize, f32)> =
-        probs.iter().copied().enumerate().collect();
+    let mut indexed: Vec<(usize, f32)> = probs.iter().copied().enumerate().collect();
     indexed.sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
     let top1 = indexed.first().copied().unwrap_or((0, 0.0));
     let top_k_mass: f32 = indexed.iter().take(k).map(|(_, p)| *p).sum();
@@ -496,7 +521,11 @@ fn measure_acceptance(
             // Trim everything past resume_pos on both contexts. On full
             // acceptance we have one extra position (target's bonus) to
             // keep on the target context only.
-            let target_trim_from = if target_bonus { resume_pos + 1 } else { resume_pos };
+            let target_trim_from = if target_bonus {
+                resume_pos + 1
+            } else {
+                resume_pos
+            };
             let _ = target_ctx.clear_kv_cache_seq(Some(0), Some(target_trim_from as u32), None);
             let _ = draft_ctx.clear_kv_cache_seq(Some(0), Some(resume_pos as u32), None);
 
@@ -677,7 +706,9 @@ impl Args {
                     n_draft = raw.get(i).and_then(|s| s.parse().ok()).unwrap_or(5);
                 }
                 "-h" | "--help" => {
-                    println!("usage: sd_smoke --target-model <path> --draft-model <path> [--n-draft N]");
+                    println!(
+                        "usage: sd_smoke --target-model <path> --draft-model <path> [--n-draft N]"
+                    );
                     std::process::exit(0);
                 }
                 _ => {}

@@ -11,7 +11,6 @@
 
 use std::collections::HashMap;
 
-
 use crate::error::Result;
 use crate::traits::*;
 
@@ -86,7 +85,8 @@ impl Runtime {
 
         let placeholder_body = "I didn't find anything relevant in your installed knowledge bases \
              for that question. Rather than guess, I'd like to check how you'd \
-             like me to proceed.".to_string();
+             like me to proceed."
+            .to_string();
         let metadata = serde_json::json!({
             "move_kind": "ask",
             "retrieval_missed": true,
@@ -203,11 +203,10 @@ impl Runtime {
             options: options.clone(),
         };
 
-        let placeholder_body =
-            "I didn't find anything relevant in your installed knowledge bases \
+        let placeholder_body = "I didn't find anything relevant in your installed knowledge bases \
              for that question. Rather than guess, I'd like to check how you'd \
              like me to proceed."
-                .to_string();
+            .to_string();
         let metadata = serde_json::json!({
             "move_kind": "ask",
             "retrieval_missed": true,
@@ -266,7 +265,10 @@ impl Runtime {
         intent: &Intent,
         scope: Option<&str>,
     ) -> KnowledgeQueryPlan {
-        tracing::info!(message_chars = message.len(), "handle_knowledge_query: begin");
+        tracing::info!(
+            message_chars = message.len(),
+            "handle_knowledge_query: begin"
+        );
 
         // 1. Embed the query using the query-side function (applies
         //    instruction prefix for asymmetric models like Qwen3-Embedding).
@@ -291,8 +293,7 @@ impl Runtime {
             .as_ref()
             .and_then(|tc| tc.topic.clone());
         let prior_messages_for_audit = context.conversation.messages.len();
-        let query_preview_for_audit =
-            truncate_with_ellipsis(message, 120).to_string();
+        let query_preview_for_audit = truncate_with_ellipsis(message, 120).to_string();
         let retrieval_query_preview_for_audit =
             truncate_with_ellipsis(&retrieval_query, 160).to_string();
         let embedding = self
@@ -321,8 +322,7 @@ impl Runtime {
         // `build_per_corpus_k_overrides` for the formula and
         // `HOT_CORPUS_K_RANGE` for the magnitude.
         let hot_corpora = collect_hot_corpora(&context.conversation.messages);
-        let per_corpus_overrides =
-            build_per_corpus_k_overrides(&hot_corpora, KQ_PER_CORPUS_LIMIT);
+        let per_corpus_overrides = build_per_corpus_k_overrides(&hot_corpora, KQ_PER_CORPUS_LIMIT);
         let enabled_corpora_kq = context.conversation.enabled_corpora.as_deref();
         let mut chunks = self
             .search_corpus_indexes_with_overrides(
@@ -409,11 +409,7 @@ impl Runtime {
             let initial_count = chunks.len();
             let mut entity_added = 0usize;
             for entity in entities.iter().take(MAX_ENTITY_QUERIES) {
-                let entity_emb = self
-                    .inference
-                    .embed_query(entity)
-                    .await
-                    .unwrap_or_default();
+                let entity_emb = self.inference.embed_query(entity).await.unwrap_or_default();
                 let entity_chunks = self
                     .search_corpus_indexes_with_overrides(
                         &entity_emb,
@@ -454,8 +450,7 @@ impl Runtime {
             )
             .await;
         if !meta_atlas_hits.is_empty() {
-            let total_added: usize =
-                meta_atlas_hits.iter().map(|r| r.chunks_added).sum();
+            let total_added: usize = meta_atlas_hits.iter().map(|r| r.chunks_added).sum();
             tracing::info!(
                 hits = meta_atlas_hits.len(),
                 chunks_added = total_added,
@@ -550,10 +545,7 @@ impl Runtime {
         //      on purpose: the chunks are metadata (no query-token overlap)
         //      and the floor would drop them. See `enumerate_typed_atom_chunks`.
         if let Some(atom_chunks) = self
-            .enumerate_typed_atom_chunks(
-                message,
-                context.conversation.enabled_corpora.as_deref(),
-            )
+            .enumerate_typed_atom_chunks(message, context.conversation.enabled_corpora.as_deref())
             .await
         {
             tracing::info!(
@@ -634,11 +626,7 @@ impl Runtime {
 
         let mut chunks = cap_chunks_per_article(chunks, MAX_CHUNKS_PER_ARTICLE_AT_MERGE);
         if is_comparison {
-            chunks = reserve_chunks_per_entity(
-                chunks,
-                &entities,
-                COMPARISON_PER_ENTITY_RESERVE,
-            );
+            chunks = reserve_chunks_per_entity(chunks, &entities, COMPARISON_PER_ENTITY_RESERVE);
         }
         // Title-expand reservation. When the title-expand primitive
         // named explicit Wikipedia titles for this turn, pin chunks
@@ -653,11 +641,7 @@ impl Runtime {
         // dominant-source expander then flooded with.
         if let Some(titles) = &title_expand_titles {
             if !titles.is_empty() {
-                chunks = reserve_chunks_per_entity(
-                    chunks,
-                    titles,
-                    COMPARISON_PER_ENTITY_RESERVE,
-                );
+                chunks = reserve_chunks_per_entity(chunks, titles, COMPARISON_PER_ENTITY_RESERVE);
             }
         }
         // Atlas-directed reservation. The atom-enum set (when
@@ -685,14 +669,10 @@ impl Runtime {
             for c in &chunks {
                 *by_corpus.entry(c.corpus_id.clone()).or_insert(0) += 1;
                 *by_article
-                    .entry((
-                        c.corpus_id.clone(),
-                        c.title.clone().unwrap_or_default(),
-                    ))
+                    .entry((c.corpus_id.clone(), c.title.clone().unwrap_or_default()))
                     .or_insert(0) += 1;
             }
-            let mut corpus_pairs: Vec<(String, usize)> =
-                by_corpus.into_iter().collect();
+            let mut corpus_pairs: Vec<(String, usize)> = by_corpus.into_iter().collect();
             corpus_pairs.sort_by(|a, b| b.1.cmp(&a.1));
             let mut article_pairs: Vec<((String, String), usize)> =
                 by_article.into_iter().collect();
@@ -713,7 +693,10 @@ impl Runtime {
             let atom_enum_survived = chunks
                 .iter()
                 .filter(|c| {
-                    c.metadata.get("source").map(|s| s == "atom-enum").unwrap_or(false)
+                    c.metadata
+                        .get("source")
+                        .map(|s| s == "atom-enum")
+                        .unwrap_or(false)
                 })
                 .count();
             tracing::info!(
@@ -785,14 +768,14 @@ impl Runtime {
                 oicp: None,
                 tools: None,
                 tool_choice: None,
-                            model_id: None,
-                            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
             };
             return KnowledgeQueryPlan {
                 request,
@@ -991,7 +974,6 @@ impl Runtime {
         }
         let _ = original_budget; // silence unused warning when ctx-aware branch never fires
 
-
         // Naturalistic audit — post-expansion composition. After the
         // dominant-source or top-sources expander has had its say,
         // what's actually in the prompt? T11 (marathon) showed 12
@@ -1010,14 +992,10 @@ impl Runtime {
             for c in &chunks {
                 *by_corpus.entry(c.corpus_id.clone()).or_insert(0) += 1;
                 *by_article
-                    .entry((
-                        c.corpus_id.clone(),
-                        c.title.clone().unwrap_or_default(),
-                    ))
+                    .entry((c.corpus_id.clone(), c.title.clone().unwrap_or_default()))
                     .or_insert(0) += 1;
             }
-            let mut corpus_pairs: Vec<(String, usize)> =
-                by_corpus.into_iter().collect();
+            let mut corpus_pairs: Vec<(String, usize)> = by_corpus.into_iter().collect();
             corpus_pairs.sort_by(|a, b| b.1.cmp(&a.1));
             let mut article_pairs: Vec<((String, String), usize)> =
                 by_article.into_iter().collect();
@@ -1134,10 +1112,9 @@ impl Runtime {
                 } else {
                     format!("{base}\n\n{gap_note}")
                 };
-                let budget_note =
-                    crate::runtime::build_response_length_directive(
-                        FAST_KNOWLEDGE_MAX_TOKENS as usize,
-                    );
+                let budget_note = crate::runtime::build_response_length_directive(
+                    FAST_KNOWLEDGE_MAX_TOKENS as usize,
+                );
                 let base = format!("{base}\n\n{budget_note}");
                 let system = self.build_system_message(&base, context);
                 CompletionRequest {
@@ -1156,14 +1133,14 @@ impl Runtime {
                     oicp: None,
                     tools: None,
                     tool_choice: None,
-                                    model_id: None,
-                                    enable_thinking: None,
-                sampling_mode: None,
-                assistant_prefix: None,
-                cmd_prefix: None,
-                url_allowlist: None,
-                evidence_id_allowlist: None,
-                lark_grammar: None,
+                    model_id: None,
+                    enable_thinking: None,
+                    sampling_mode: None,
+                    assistant_prefix: None,
+                    cmd_prefix: None,
+                    url_allowlist: None,
+                    evidence_id_allowlist: None,
+                    lark_grammar: None,
                 }
             }
             SynthesisRoute::PrimarySynthesis => {
@@ -1172,10 +1149,9 @@ impl Runtime {
                 } else {
                     format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{gap_note}\n\n{THINKING_DIRECTIVE}")
                 };
-                let budget_note =
-                    crate::runtime::build_response_length_directive(
-                        self.inference_config.max_tokens,
-                    );
+                let budget_note = crate::runtime::build_response_length_directive(
+                    self.inference_config.max_tokens,
+                );
                 let base = format!("{base}\n\n{budget_note}");
                 let system = self.build_primary_system_message(&base, context);
                 CompletionRequest {
@@ -1191,14 +1167,14 @@ impl Runtime {
                     oicp: self.build_oicp(&Intent::KnowledgeQuery),
                     tools: None,
                     tool_choice: None,
-                                    model_id: None,
-                                    enable_thinking: None,
-                sampling_mode: None,
-                assistant_prefix: None,
-                cmd_prefix: None,
-                url_allowlist: None,
-                evidence_id_allowlist: None,
-                lark_grammar: None,
+                    model_id: None,
+                    enable_thinking: None,
+                    sampling_mode: None,
+                    assistant_prefix: None,
+                    cmd_prefix: None,
+                    url_allowlist: None,
+                    evidence_id_allowlist: None,
+                    lark_grammar: None,
                 }
             }
         };
@@ -1275,14 +1251,11 @@ impl Runtime {
             for c in &chunks {
                 *by_corpus.entry(c.corpus_id.clone()).or_insert(0) += 1;
             }
-            let mut corpus_pairs: Vec<(String, usize)> =
-                by_corpus.into_iter().collect();
+            let mut corpus_pairs: Vec<(String, usize)> = by_corpus.into_iter().collect();
             corpus_pairs.sort_by(|a, b| b.1.cmp(&a.1));
             let hot_pairs: Vec<(String, usize)> = {
-                let mut v: Vec<(String, usize)> = hot_corpora
-                    .iter()
-                    .map(|(k, v)| (k.clone(), *v))
-                    .collect();
+                let mut v: Vec<(String, usize)> =
+                    hot_corpora.iter().map(|(k, v)| (k.clone(), *v)).collect();
                 v.sort_by(|a, b| b.1.cmp(&a.1));
                 v
             };
@@ -1328,7 +1301,6 @@ impl Runtime {
         }
     }
 
-
     /// Handle KnowledgeQuery (and ComparisonQuery): search corpus-engine
     /// LanceDB indexes → inject into prompt → synthesize. The intent
     /// pins the plan's synthesis route — ComparisonQuery always rides
@@ -1343,7 +1315,9 @@ impl Runtime {
         self_assessment: Option<String>,
         routing_trigger: Option<String>,
     ) -> Result<Response> {
-        let plan = self.prepare_knowledge_query_plan(message, context, intent, None).await;
+        let plan = self
+            .prepare_knowledge_query_plan(message, context, intent, None)
+            .await;
 
         // PR5 — non-streaming retrieval-miss diversion. Mirrors the
         // streaming path: dispersed noise → suppress synthesis +

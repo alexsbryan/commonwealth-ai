@@ -22,11 +22,12 @@ use crate::recipe::{ExtractorConfig, Recipe};
 /// [`crate::engine::CorpusEngine::ingest_with_overrides`] (peer /
 /// coordinator path) so the two entry points stay in sync about how
 /// partition assignments reach the extractor.
-pub(crate) fn apply_jsonl_shard_override(
-    recipe: &mut Recipe,
-    indices: Option<Vec<usize>>,
-) {
-    if let ExtractorConfig::WikipediaJsonl { ref mut shard_indices, .. } = recipe.extract {
+pub(crate) fn apply_jsonl_shard_override(recipe: &mut Recipe, indices: Option<Vec<usize>>) {
+    if let ExtractorConfig::WikipediaJsonl {
+        ref mut shard_indices,
+        ..
+    } = recipe.extract
+    {
         *shard_indices = indices;
     }
 }

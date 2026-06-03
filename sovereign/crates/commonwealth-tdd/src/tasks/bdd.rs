@@ -74,10 +74,7 @@ pub struct BddCycleResult {
     pub generated_test_content: Option<String>,
 }
 
-pub async fn bdd_cycle(
-    args: BddCycleArgs,
-    backend: Arc<dyn ChatBackend>,
-) -> BddCycleResult {
+pub async fn bdd_cycle(args: BddCycleArgs, backend: Arc<dyn ChatBackend>) -> BddCycleResult {
     let BddCycleArgs {
         workdir,
         model,
@@ -127,8 +124,7 @@ pub async fn bdd_cycle(
         };
 
     // PauseAfterSynthesis or synthesis didn't Reach → stop here.
-    if !matches!(review_mode, ReviewMode::Auto)
-        || !matches!(synthesis.status, TrialStatus::Reached)
+    if !matches!(review_mode, ReviewMode::Auto) || !matches!(synthesis.status, TrialStatus::Reached)
     {
         return BddCycleResult {
             synthesis,
@@ -223,11 +219,25 @@ mod tests {
     use std::process::Command;
 
     fn init_git(path: &std::path::Path) {
-        let _ = Command::new("git").arg("-C").arg(path).arg("init").arg("--initial-branch=main").output();
-        let _ = Command::new("git").arg("-C").arg(path).args(["config", "user.email", "t@t.t"]).output();
-        let _ = Command::new("git").arg("-C").arg(path).args(["config", "user.name", "t"]).output();
         let _ = Command::new("git")
-            .arg("-C").arg(path)
+            .arg("-C")
+            .arg(path)
+            .arg("init")
+            .arg("--initial-branch=main")
+            .output();
+        let _ = Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(["config", "user.email", "t@t.t"])
+            .output();
+        let _ = Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(["config", "user.name", "t"])
+            .output();
+        let _ = Command::new("git")
+            .arg("-C")
+            .arg(path)
             .args(["commit", "--allow-empty", "-m", "init"])
             .output();
     }
@@ -237,9 +247,8 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         init_git(tmp.path());
         let workdir = Workdir::check_safe(tmp.path().to_path_buf(), false).unwrap();
-        let backend: Arc<dyn ChatBackend> = Arc::new(DeterministicChatBackend::from_strs(
-            Vec::<String>::new(),
-        ));
+        let backend: Arc<dyn ChatBackend> =
+            Arc::new(DeterministicChatBackend::from_strs(Vec::<String>::new()));
         let r = bdd_cycle(
             BddCycleArgs {
                 workdir,
@@ -265,9 +274,8 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         init_git(tmp.path());
         let workdir = Workdir::check_safe(tmp.path().to_path_buf(), false).unwrap();
-        let backend: Arc<dyn ChatBackend> = Arc::new(DeterministicChatBackend::from_strs(
-            Vec::<String>::new(),
-        ));
+        let backend: Arc<dyn ChatBackend> =
+            Arc::new(DeterministicChatBackend::from_strs(Vec::<String>::new()));
         let r = bdd_cycle(
             BddCycleArgs {
                 workdir,

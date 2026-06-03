@@ -48,11 +48,7 @@ impl Tool for ComputeTool {
         Ok(())
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let code = params
             .get("code")
             .and_then(|v| v.as_str())
@@ -91,9 +87,7 @@ impl Tool for ComputeTool {
             if stderr.is_empty() {
                 Ok(StepOutput::Text(stdout))
             } else {
-                Ok(StepOutput::Text(format!(
-                    "{stdout}\n\n[stderr]\n{stderr}"
-                )))
+                Ok(StepOutput::Text(format!("{stdout}\n\n[stderr]\n{stderr}")))
             }
         } else {
             Ok(StepOutput::Text(format!(

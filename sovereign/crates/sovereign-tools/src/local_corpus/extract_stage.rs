@@ -94,9 +94,8 @@ pub fn stage_blocking(
                     content: &text,
                     source_path: &relative,
                 };
-                let json = serde_json::to_string(&line).map_err(|e| {
-                    std::io::Error::other(format!("serialize: {e}"))
-                })?;
+                let json = serde_json::to_string(&line)
+                    .map_err(|e| std::io::Error::other(format!("serialize: {e}")))?;
                 writeln!(writer, "{json}")?;
                 result.staged += 1;
             }
@@ -127,14 +126,12 @@ pub(crate) fn extract_one(path: &Path, _config: &LocalCorpusConfig) -> Result<St
         "pdf" => safe_extract_pdf_text(path).map_err(|e| classify_extract_error("pdf", &e)),
         "txt" => std::fs::read_to_string(path).map_err(|e| format!("read: {e}")),
         "md" => extract_markdown(path),
-        "html" | "htm" => safe_extract_html_text(path)
-            .map_err(|e| classify_extract_error("html", &e)),
-        "mhtml" => safe_extract_mhtml_text(path)
-            .map_err(|e| classify_extract_error("mhtml", &e)),
-        "epub" => safe_extract_epub_text(path)
-            .map_err(|e| classify_extract_error("epub", &e)),
-        "docx" => safe_extract_docx_text(path)
-            .map_err(|e| classify_extract_error("docx", &e)),
+        "html" | "htm" => {
+            safe_extract_html_text(path).map_err(|e| classify_extract_error("html", &e))
+        }
+        "mhtml" => safe_extract_mhtml_text(path).map_err(|e| classify_extract_error("mhtml", &e)),
+        "epub" => safe_extract_epub_text(path).map_err(|e| classify_extract_error("epub", &e)),
+        "docx" => safe_extract_docx_text(path).map_err(|e| classify_extract_error("docx", &e)),
         other => Err(format!("unsupported extension: {other}")),
     }
 }
@@ -212,9 +209,7 @@ impl StdoutSilencer {
         let guard = STDOUT_SILENCE_LOCK
             .lock()
             .unwrap_or_else(|p| p.into_inner());
-        let devnull = std::fs::OpenOptions::new()
-            .write(true)
-            .open("/dev/null")?;
+        let devnull = std::fs::OpenOptions::new().write(true).open("/dev/null")?;
         use std::os::fd::AsRawFd;
         let stdout_fd: libc::c_int = 1;
         // Flush any buffered stdout first so it lands in the real
@@ -332,8 +327,8 @@ pub(crate) fn downcast_panic_payload(
 /// blocking task.
 pub fn safe_extract_html_text(path: &Path) -> Result<String, SafeExtractError> {
     use std::panic::{catch_unwind, AssertUnwindSafe};
-    let raw = std::fs::read_to_string(path)
-        .map_err(|e| SafeExtractError::Parse(format!("read: {e}")))?;
+    let raw =
+        std::fs::read_to_string(path).map_err(|e| SafeExtractError::Parse(format!("read: {e}")))?;
     let result = catch_unwind(AssertUnwindSafe(|| html_body_text(&raw)));
     match result {
         Ok(text) => Ok(text),
@@ -368,10 +363,7 @@ pub(crate) fn html_body_text(raw: &str) -> String {
     collapse_html_whitespace(&out)
 }
 
-fn walk_html_node(
-    node: ego_tree::NodeRef<'_, scraper::Node>,
-    out: &mut String,
-) {
+fn walk_html_node(node: ego_tree::NodeRef<'_, scraper::Node>, out: &mut String) {
     use scraper::Node;
     if let Node::Element(el) = node.value() {
         let name = el.name();
@@ -380,8 +372,20 @@ fn walk_html_node(
         }
         if matches!(
             name,
-            "p" | "div" | "br" | "li" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
-                | "tr" | "section" | "article" | "header" | "footer"
+            "p" | "div"
+                | "br"
+                | "li"
+                | "h1"
+                | "h2"
+                | "h3"
+                | "h4"
+                | "h5"
+                | "h6"
+                | "tr"
+                | "section"
+                | "article"
+                | "header"
+                | "footer"
         ) && !out.ends_with('\n')
         {
             out.push('\n');
@@ -402,8 +406,7 @@ fn walk_html_node(
 /// HTML files use.
 pub fn safe_extract_mhtml_text(path: &Path) -> Result<String, SafeExtractError> {
     use std::panic::{catch_unwind, AssertUnwindSafe};
-    let bytes = std::fs::read(path)
-        .map_err(|e| SafeExtractError::Parse(format!("read: {e}")))?;
+    let bytes = std::fs::read(path).map_err(|e| SafeExtractError::Parse(format!("read: {e}")))?;
     let result = catch_unwind(AssertUnwindSafe(|| extract_mhtml_html_part(&bytes)));
     match result {
         Ok(Ok(html)) => Ok(html_body_text(&html)),
@@ -630,9 +633,7 @@ pub(crate) fn strip_frontmatter(raw: &str) -> &str {
         let at_line_start = abs == 0 || remainder.as_bytes()[abs - 1] == b'\n';
         // Must be followed by `\n`, `\r\n`, or EOF.
         let tail = &remainder[abs + 3..];
-        let end_of_line = tail.is_empty()
-            || tail.starts_with('\n')
-            || tail.starts_with("\r\n");
+        let end_of_line = tail.is_empty() || tail.starts_with('\n') || tail.starts_with("\r\n");
         if at_line_start && end_of_line {
             // Advance past the closing `---` and its terminator.
             let skip = 3 + if tail.starts_with("\r\n") {
@@ -664,7 +665,9 @@ fn source_id_for(path: &Path) -> String {
 /// Kept here so callers don't have to reach into `LocalCorpusManager`
 /// internals to know the layout.
 pub fn default_staging_path(data_dir: &Path, corpus_id: &str) -> PathBuf {
-    data_dir.join("local-corpus-staging").join(format!("{corpus_id}.jsonl"))
+    data_dir
+        .join("local-corpus-staging")
+        .join(format!("{corpus_id}.jsonl"))
 }
 
 // ─── OCR stage ───────────────────────────────────────────────────────
@@ -750,9 +753,8 @@ pub async fn append_ocr_to_staging(
                     content: &text,
                     source_path: &relative,
                 };
-                let json = serde_json::to_string(&line).map_err(|e| {
-                    std::io::Error::other(format!("serialize: {e}"))
-                })?;
+                let json = serde_json::to_string(&line)
+                    .map_err(|e| std::io::Error::other(format!("serialize: {e}")))?;
                 writeln!(file_handle, "{json}")?;
                 result.staged += 1;
             }
@@ -924,7 +926,10 @@ mod tests {
         assert!(text.contains("visible"));
         assert!(!text.contains("alert"), "script body leaked: {text:?}");
         assert!(!text.contains("color: red"), "style body leaked: {text:?}");
-        assert!(!text.contains("more.script"), "second script leaked: {text:?}");
+        assert!(
+            !text.contains("more.script"),
+            "second script leaked: {text:?}"
+        );
     }
 
     #[test]
@@ -1177,10 +1182,7 @@ mod tests {
         let path = dir.path().join("hello.docx");
         write_sample_docx(&path, "Hello world from DOCX.");
         let text = safe_extract_docx_text(&path).expect("docx extracts");
-        assert!(
-            text.contains("Hello world from DOCX."),
-            "got: {text:?}"
-        );
+        assert!(text.contains("Hello world from DOCX."), "got: {text:?}");
     }
 
     #[test]

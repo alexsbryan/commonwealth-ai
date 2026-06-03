@@ -28,10 +28,7 @@ static CANCEL: OnceLock<ScheduleCancel> = OnceLock::new();
 
 /// Install the manager + registry. Called once from
 /// `daemon_cmd.rs::run_daemon`. Subsequent calls are no-ops.
-pub fn install(
-    manager: Arc<LocalCorpusManager>,
-    registry: Arc<WatchedFolderRegistry>,
-) {
+pub fn install(manager: Arc<LocalCorpusManager>, registry: Arc<WatchedFolderRegistry>) {
     let _ = MANAGER.set(manager);
     let _ = REGISTRY.set(registry);
 }

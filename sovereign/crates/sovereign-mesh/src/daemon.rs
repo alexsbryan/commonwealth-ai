@@ -16,8 +16,8 @@ use commonwealth_core::mesh::Mesh;
 use commonwealth_core::oicp::EmbedModelInfo;
 use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 use commonwealth_discovery::membership;
-use corpus_engine::{CorpusEngine};
-use corpus_engine_notes::{NoteStore};
+use corpus_engine::CorpusEngine;
+use corpus_engine_notes::NoteStore;
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::{InferenceProvider, StateStore};
@@ -272,7 +272,11 @@ impl EmbeddedDaemon {
         notes: Arc<NoteStore>,
         session_id: String,
     ) {
-        *self.mcp.write().await = Some(McpMount { tools, notes, session_id });
+        *self.mcp.write().await = Some(McpMount {
+            tools,
+            notes,
+            session_id,
+        });
     }
 
     /// Install the mesh HTTP API so `/v1/mesh/status` + `create` +
@@ -438,10 +442,7 @@ impl EmbeddedDaemon {
                 .read()
                 .await
                 .clone()
-                .ok_or_else(|| {
-                    "models changed but no ProviderFactory installed"
-                        .to_string()
-                })?;
+                .ok_or_else(|| "models changed but no ProviderFactory installed".to_string())?;
             let new_provider = factory.build_provider(&fresh).await?;
             self.set_inference_provider(new_provider).await;
             for f in &diff.models_changed {
@@ -527,10 +528,7 @@ impl EmbeddedDaemon {
     /// same provider Sovereign uses for the local user's chats —
     /// a peer asking us for synthesis gets the same quality a
     /// local user would.
-    pub async fn set_inference_provider(
-        &self,
-        provider: Arc<dyn InferenceProvider>,
-    ) {
+    pub async fn set_inference_provider(&self, provider: Arc<dyn InferenceProvider>) {
         *self.inference_provider.write().await = Some(provider);
     }
 
@@ -613,9 +611,7 @@ impl EmbeddedDaemon {
     /// dependent behaviour gracefully when this is `None`.
     pub async fn self_node_id(&self) -> Option<NodeId> {
         match &*self.state.read().await {
-            DaemonState::Running { app_state, .. } => {
-                Some(app_state.self_node_id())
-            }
+            DaemonState::Running { app_state, .. } => Some(app_state.self_node_id()),
             _ => None,
         }
     }
@@ -641,9 +637,7 @@ impl EmbeddedDaemon {
     /// not on `commonwealth-api`) can install foreground back-pressure
     /// on the lint/test watchers without taking a direct
     /// `commonwealth-api` dep.
-    pub async fn build_yield_hook(
-        &self,
-    ) -> Option<std::sync::Arc<dyn corpus_engine::YieldHook>> {
+    pub async fn build_yield_hook(&self) -> Option<std::sync::Arc<dyn corpus_engine::YieldHook>> {
         let state = self.app_state().await?;
         Some(commonwealth_api::yield_hook::AppStateYieldHook::new(
             state.inner.clone(),
@@ -680,12 +674,8 @@ impl EmbeddedDaemon {
         // would stamp a fresh random ID, so rejoining users would
         // appear as new peers every time their mesh.json got wiped.
         let stable_id = persist::load_or_generate_self_node_id(&self.data_dir);
-        let (mesh, join_key) = membership::init_mesh_with_node_id(
-            mesh_name,
-            node_name,
-            addrs,
-            stable_id,
-        );
+        let (mesh, join_key) =
+            membership::init_mesh_with_node_id(mesh_name, node_name, addrs, stable_id);
         let node_id = stable_id;
         let _ = mesh
             .members
@@ -850,15 +840,12 @@ impl EmbeddedDaemon {
         // assign us a new founder-side NodeId and leave zombie
         // entries in the mesh.members roster.
         let stable_id = persist::load_or_generate_self_node_id(&self.data_dir);
-        let (placeholder_mesh, _throwaway_key) = membership::init_mesh_with_node_id(
-            &mesh_name,
-            node_name,
-            addrs.clone(),
-            stable_id,
-        );
+        let (placeholder_mesh, _throwaway_key) =
+            membership::init_mesh_with_node_id(&mesh_name, node_name, addrs.clone(), stable_id);
         let placeholder_node_id = stable_id;
 
-        self.start_daemon(placeholder_mesh, placeholder_node_id).await?;
+        self.start_daemon(placeholder_mesh, placeholder_node_id)
+            .await?;
 
         // Step 3 — handshake. Clone the Arc<MdnsDiscovery> so we don't
         // hold the DaemonState lock for the ~5s the handshake may take.
@@ -919,8 +906,7 @@ impl EmbeddedDaemon {
                 // mesh — manifesting as `local node not found in
                 // mesh` 500s and gossip log spam every 10s.
                 app_state.set_self_node_id(adopted_node_id);
-                *mesh_state.write().await =
-                    MeshState::from_app_state(app_state).await;
+                *mesh_state.write().await = MeshState::from_app_state(app_state).await;
             }
         }
 
@@ -1041,7 +1027,11 @@ impl EmbeddedDaemon {
     pub async fn mesh_state(&self) -> Option<MeshState> {
         let state = self.state.read().await;
         match &*state {
-            DaemonState::Running { app_state, mesh_state, .. } => {
+            DaemonState::Running {
+                app_state,
+                mesh_state,
+                ..
+            } => {
                 let fresh = MeshState::from_app_state(app_state).await;
                 // Gated heartbeat: log at info only when the member
                 // count actually changed, else debug. The UI polls
@@ -1184,19 +1174,17 @@ impl EmbeddedDaemon {
                 // gossiped list fails on the first attempt in
                 // toolbox/container environments that lack an IPv6
                 // route to the tailnet.
-                base_urls: commonwealth_core::peer_addr::sorted_addresses(
-                    &m.addresses.to_vec(),
-                )
-                .iter()
-                .map(|addr| {
-                    let ip = addr.ip();
-                    if ip.is_ipv6() {
-                        format!("http://[{ip}]:{peer_client_port}/v1")
-                    } else {
-                        format!("http://{ip}:{peer_client_port}/v1")
-                    }
-                })
-                .collect(),
+                base_urls: commonwealth_core::peer_addr::sorted_addresses(&m.addresses.to_vec())
+                    .iter()
+                    .map(|addr| {
+                        let ip = addr.ip();
+                        if ip.is_ipv6() {
+                            format!("http://[{ip}]:{peer_client_port}/v1")
+                        } else {
+                            format!("http://{ip}:{peer_client_port}/v1")
+                        }
+                    })
+                    .collect(),
                 system_ram_gb: m.capabilities.hardware.system_ram_gb,
                 benchmark: m.capabilities.benchmark.clone(),
                 current_in_flight: m.capabilities.current_in_flight,
@@ -1211,11 +1199,7 @@ impl EmbeddedDaemon {
 
     // ── Private ─────────────────────────────────────────
 
-    async fn start_daemon(
-        &self,
-        mesh: Mesh,
-        node_id: NodeId,
-    ) -> Result<(), MeshError> {
+    async fn start_daemon(&self, mesh: Mesh, node_id: NodeId) -> Result<(), MeshError> {
         // Resolve the bind/announce ports once at the top so every
         // downstream site (listener bind, mDNS announce, auto-
         // collaborate loop spawn) sees the same pair. Defaults to
@@ -1248,8 +1232,7 @@ impl EmbeddedDaemon {
         let mesh_store = match self.mesh_store.read().await.clone() {
             Some(provided) => provided,
             None => Arc::new(
-                commonwealth_state::MeshStore::in_memory()
-                    .expect("in-memory MeshStore failed"),
+                commonwealth_state::MeshStore::in_memory().expect("in-memory MeshStore failed"),
             ),
         };
         let app_registry = Arc::new(commonwealth_app::registry::AppRegistry::new());
@@ -1288,13 +1271,9 @@ impl EmbeddedDaemon {
         // this, peer inference requests 503 because the daemon's
         // scheduler/llama-server path is empty in the embedded
         // topology.
-        let app_state = if let Some(provider) =
-            self.inference_provider.read().await.as_ref()
-        {
+        let app_state = if let Some(provider) = self.inference_provider.read().await.as_ref() {
             let adapter: Arc<dyn LocalInferenceService> = Arc::new(
-                crate::inference_adapter::SovereignInferenceAdapter::new(
-                    provider.clone(),
-                ),
+                crate::inference_adapter::SovereignInferenceAdapter::new(provider.clone()),
             );
             info!("inference adapter: wired into /v1/chat/completions");
             app_state.with_local_inference(adapter)
@@ -1348,9 +1327,7 @@ impl EmbeddedDaemon {
                 );
             }
             let hook: Arc<dyn corpus_engine::YieldHook> =
-                commonwealth_api::yield_hook::AppStateYieldHook::new(
-                    app_state.inner.clone(),
-                );
+                commonwealth_api::yield_hook::AppStateYieldHook::new(app_state.inner.clone());
             engine.set_yield_hook(hook);
             info!("foreground-yield: hook installed on corpus engine");
         }
@@ -1361,7 +1338,10 @@ impl EmbeddedDaemon {
         // collaborate handler falls back to the qwen3-embedding-0.6b default,
         // which won't match a peer running a different model.
         if let Some(embed_info) = self.embed_model.read().await.as_ref() {
-            app_state.inner.inference_store.set_local_embed_model(embed_info);
+            app_state
+                .inner
+                .inference_store
+                .set_local_embed_model(embed_info);
             info!(
                 model_id = %embed_info.model_id,
                 dims = embed_info.dimensions,
@@ -1414,14 +1394,8 @@ impl EmbeddedDaemon {
         // advertise lets remote peers find us; browse populates the
         // discovered-peers table that `perform_join` (Phase B) uses
         // to locate handshake targets.
-        let mdns = MdnsDiscovery::new(
-            node_id,
-            &mesh_id_hex,
-            &mesh_name,
-            &node_name,
-            internal_port,
-        )
-        .map_err(|e| MeshError::Network(format!("mDNS register failed: {e}")))?;
+        let mdns = MdnsDiscovery::new(node_id, &mesh_id_hex, &mesh_name, &node_name, internal_port)
+            .map_err(|e| MeshError::Network(format!("mDNS register failed: {e}")))?;
         let mdns = Arc::new(mdns);
         // A 32-slot channel is plenty — the browse loop pushes on
         // ServiceResolved and we don't actively consume. If the buffer
@@ -1488,8 +1462,7 @@ impl EmbeddedDaemon {
             if let Some(reading_http_router) = reading_http {
                 client_router = client_router.merge(reading_http_router);
             }
-            let internal_router =
-                commonwealth_api::server::internal_router(app_state_clone);
+            let internal_router = commonwealth_api::server::internal_router(app_state_clone);
 
             // Phase 3 takeover: a `sovereign init` invocation may
             // have spawned a standalone `sovereign serve` background
@@ -1545,8 +1518,7 @@ impl EmbeddedDaemon {
             // fail-open). Always use `.into_make_service_with_connect_info`
             // on this listener. Regression test:
             // `admin_http::tests::loopback_guard_works_under_production_listener_shape`.
-            let client_service = client_router
-                .into_make_service_with_connect_info::<SocketAddr>();
+            let client_service = client_router.into_make_service_with_connect_info::<SocketAddr>();
             tokio::select! {
                 _ = axum::serve(client_listener, client_service) => {}
                 _ = axum::serve(internal_listener, internal_router) => {}
@@ -1614,8 +1586,7 @@ impl EmbeddedDaemon {
         // to thread a new field into `DaemonState::Running`.
         let snapshot_emitter = app_state.inner.contribution_emitter.clone();
         let snapshot_engine = corpus_engine.clone();
-        let (snapshot_shutdown_tx, snapshot_shutdown_rx) =
-            tokio::sync::watch::channel(false);
+        let (snapshot_shutdown_tx, snapshot_shutdown_rx) = tokio::sync::watch::channel(false);
         tokio::spawn(async move {
             let _hold_shutdown_tx = snapshot_shutdown_tx;
             commonwealth_state::contributions::run_storage_snapshot_loop(
@@ -1630,12 +1601,7 @@ impl EmbeddedDaemon {
                             Ok(list) => list
                                 .into_iter()
                                 .filter(|i| i.mesh_sharing)
-                                .map(|i| {
-                                    (
-                                        i.corpus_id,
-                                        i.index_size_bytes as f64 / 1e9,
-                                    )
-                                })
+                                .map(|i| (i.corpus_id, i.index_size_bytes as f64 / 1e9))
                                 .collect(),
                             Err(e) => {
                                 tracing::warn!(
@@ -1709,67 +1675,66 @@ impl EmbeddedDaemon {
             );
         }
         if freshness_enabled {
-        if let Some(engine) = corpus_engine.clone() {
-            let newsworthy_config =
-                corpus_engine::update::newsworthy_watcher::NewsworthyConfig::default();
-            let host: std::sync::Arc<
-                dyn corpus_engine::update::newsworthy_watcher::NewsworthyHost,
-            > = std::sync::Arc::new(crate::newsworthy_host::MeshNewsworthyHost::new(
-                app_state.clone(),
-                newsworthy_config.corpus_id.clone(),
-            ));
-            let mw_client: std::sync::Arc<
-                dyn corpus_engine::update::newsworthy_watcher::MediaWikiClient,
-            > = std::sync::Arc::new(
-                corpus_engine::update::newsworthy_watcher::HttpMediaWikiClient {
-                    base_url: "https://en.wikipedia.org/w/api.php".to_string(),
-                    user_agent: "commonwealth-ai/0.1 (newsworthy)".to_string(),
-                    http: reqwest::Client::new(),
-                },
-            );
-            let watcher = std::sync::Arc::new(
-                corpus_engine::update::newsworthy_watcher::WikipediaNewsworthyWatcher::new(
-                    host,
-                    engine,
-                    mw_client,
-                    newsworthy_config,
-                ),
-            );
-            let (newsworthy_shutdown_tx, newsworthy_shutdown_rx) =
-                tokio::sync::watch::channel(false);
-            // Operator-triggered tick channel. Capacity 4 is plenty —
-            // ticks coalesce on the watcher side (one in flight at a
-            // time), so a burst of /internal/newsworthy/tick POSTs
-            // collapses to "one extra tick after the current one
-            // finishes". Sender is published on AppState so the route
-            // handler can fire without holding a watcher handle.
-            let (newsworthy_force_tick_tx, newsworthy_force_tick_rx) =
-                tokio::sync::mpsc::channel::<()>(4);
-            if let Ok(mut slot) = app_state.inner.newsworthy_force_tick.try_write() {
-                *slot = Some(newsworthy_force_tick_tx);
+            if let Some(engine) = corpus_engine.clone() {
+                let newsworthy_config =
+                    corpus_engine::update::newsworthy_watcher::NewsworthyConfig::default();
+                let host: std::sync::Arc<
+                    dyn corpus_engine::update::newsworthy_watcher::NewsworthyHost,
+                > = std::sync::Arc::new(crate::newsworthy_host::MeshNewsworthyHost::new(
+                    app_state.clone(),
+                    newsworthy_config.corpus_id.clone(),
+                ));
+                let mw_client: std::sync::Arc<
+                    dyn corpus_engine::update::newsworthy_watcher::MediaWikiClient,
+                > = std::sync::Arc::new(
+                    corpus_engine::update::newsworthy_watcher::HttpMediaWikiClient {
+                        base_url: "https://en.wikipedia.org/w/api.php".to_string(),
+                        user_agent: "commonwealth-ai/0.1 (newsworthy)".to_string(),
+                        http: reqwest::Client::new(),
+                    },
+                );
+                let watcher = std::sync::Arc::new(
+                    corpus_engine::update::newsworthy_watcher::WikipediaNewsworthyWatcher::new(
+                        host,
+                        engine,
+                        mw_client,
+                        newsworthy_config,
+                    ),
+                );
+                let (newsworthy_shutdown_tx, newsworthy_shutdown_rx) =
+                    tokio::sync::watch::channel(false);
+                // Operator-triggered tick channel. Capacity 4 is plenty —
+                // ticks coalesce on the watcher side (one in flight at a
+                // time), so a burst of /internal/newsworthy/tick POSTs
+                // collapses to "one extra tick after the current one
+                // finishes". Sender is published on AppState so the route
+                // handler can fire without holding a watcher handle.
+                let (newsworthy_force_tick_tx, newsworthy_force_tick_rx) =
+                    tokio::sync::mpsc::channel::<()>(4);
+                if let Ok(mut slot) = app_state.inner.newsworthy_force_tick.try_write() {
+                    *slot = Some(newsworthy_force_tick_tx);
+                }
+                // Wrap `watcher.spawn` in another `tokio::spawn` so the
+                // sender is moved INTO the wrapping task's async block
+                // (mirroring the storage-snapshot loop above). Earlier
+                // attempts bound `let _hold = sender` directly in this
+                // function — but that scope ends as soon as
+                // `start_daemon` returns a few lines down, dropping the
+                // sender, which causes the watcher's
+                // `shutdown_rx.changed()` arm to fire on Err before the
+                // jitter window completes. The watcher would log
+                // `newsworthy.watcher_starting` and then silently exit
+                // without ever ticking. Moving the bind inside the
+                // wrapping async task keeps the sender alive for as long
+                // as the watcher's `JoinHandle` is being awaited — i.e.
+                // for the daemon's lifetime under normal operation.
+                tokio::spawn(async move {
+                    let _hold_shutdown_tx = newsworthy_shutdown_tx;
+                    let handle = watcher.spawn(newsworthy_shutdown_rx, newsworthy_force_tick_rx);
+                    let _ = handle.await;
+                });
+                info!("WikipediaNewsworthyWatcher started");
             }
-            // Wrap `watcher.spawn` in another `tokio::spawn` so the
-            // sender is moved INTO the wrapping task's async block
-            // (mirroring the storage-snapshot loop above). Earlier
-            // attempts bound `let _hold = sender` directly in this
-            // function — but that scope ends as soon as
-            // `start_daemon` returns a few lines down, dropping the
-            // sender, which causes the watcher's
-            // `shutdown_rx.changed()` arm to fire on Err before the
-            // jitter window completes. The watcher would log
-            // `newsworthy.watcher_starting` and then silently exit
-            // without ever ticking. Moving the bind inside the
-            // wrapping async task keeps the sender alive for as long
-            // as the watcher's `JoinHandle` is being awaited — i.e.
-            // for the daemon's lifetime under normal operation.
-            tokio::spawn(async move {
-                let _hold_shutdown_tx = newsworthy_shutdown_tx;
-                let handle =
-                    watcher.spawn(newsworthy_shutdown_rx, newsworthy_force_tick_rx);
-                let _ = handle.await;
-            });
-            info!("WikipediaNewsworthyWatcher started");
-        }
         } // freshness_enabled
 
         let mut state = self.state.write().await;
@@ -1875,14 +1840,10 @@ fn takeover_serve_at(pid_path: &Path) {
 /// model id. The `ModelId` is a deterministic hash of the absolute
 /// path so repeated calls (e.g. after an admin/reload) don't
 /// accumulate duplicate entries keyed on different random IDs.
-fn register_local_model_slots(
-    app_state: &AppState,
-    cfg: &SetupConfig,
-    node_id: NodeId,
-) {
+fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: NodeId) {
+    use commonwealth_core::ids::ModelId;
     use commonwealth_inference::model::{ModelArchitecture, ModelInfo};
     use commonwealth_inference::oicp::CapabilityProfile;
-    use commonwealth_core::ids::ModelId;
     use std::collections::HashMap;
     use std::hash::{DefaultHasher, Hash, Hasher};
 
@@ -1990,16 +1951,10 @@ fn register_local_model_slots(
         match role {
             "primary" | "fast" | "embed" | "code" => {
                 slot_aliases.insert(role.to_string(), info.name.clone());
-                slot_aliases.insert(
-                    format!("commonwealth/{role}"),
-                    info.name.clone(),
-                );
+                slot_aliases.insert(format!("commonwealth/{role}"), info.name.clone());
                 if role == "code" {
                     slot_aliases.insert("coder".into(), info.name.clone());
-                    slot_aliases.insert(
-                        "commonwealth/coder".into(),
-                        info.name.clone(),
-                    );
+                    slot_aliases.insert("commonwealth/coder".into(), info.name.clone());
                 }
             }
             _ => {}
@@ -2104,9 +2059,7 @@ impl Default for EmbeddedDaemon {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::setup_config::{
-        DaemonSection, DataSection, ModelsSection, SetupConfig,
-    };
+    use sovereign_core::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
     use std::path::PathBuf;
 
     /// Regression for: after `sovereign setup`, `GET /v1/models`
@@ -2126,19 +2079,10 @@ mod tests {
             peers: vec![],
         };
         let node_id = commonwealth_core::ids::NodeId::generate();
-        let mesh_store = Arc::new(
-            commonwealth_state::MeshStore::in_memory().unwrap(),
-        );
-        let app_registry = Arc::new(
-            commonwealth_app::registry::AppRegistry::new(),
-        );
-        let app_state = AppState::new_with_platform_and_engine(
-            node_id,
-            mesh,
-            mesh_store,
-            app_registry,
-            None,
-        );
+        let mesh_store = Arc::new(commonwealth_state::MeshStore::in_memory().unwrap());
+        let app_registry = Arc::new(commonwealth_app::registry::AppRegistry::new());
+        let app_state =
+            AppState::new_with_platform_and_engine(node_id, mesh, mesh_store, app_registry, None);
 
         let cfg = SetupConfig {
             models: ModelsSection {
@@ -2279,8 +2223,5 @@ pub enum MeshError {
         "Cannot auto-switch meshes: already in '{mesh_name}' with {members} member(s). \
          Run `sovereign mesh leave` first if you intend to switch."
     )]
-    AlreadyInPopulatedMesh {
-        mesh_name: String,
-        members: usize,
-    },
+    AlreadyInPopulatedMesh { mesh_name: String, members: usize },
 }

@@ -21,8 +21,16 @@ fn walk_for_sources(root: &Path, dir: &Path, depth: usize, exts: &[&str], out: &
         return;
     }
     const SKIP: &[&str] = &[
-        "target", "node_modules", ".git", "__pycache__", ".pytest_cache",
-        "tests", "test", "dist", "build", "vendor",
+        "target",
+        "node_modules",
+        ".git",
+        "__pycache__",
+        ".pytest_cache",
+        "tests",
+        "test",
+        "dist",
+        "build",
+        "vendor",
     ];
     let Ok(rd) = std::fs::read_dir(dir) else {
         return;

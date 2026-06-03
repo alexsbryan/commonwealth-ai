@@ -11,7 +11,7 @@
 //! The golden crate is a SEPARATE workspace, so this is safe — it
 //! doesn't touch the daemon's watched corpus.
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -103,7 +103,11 @@ fn parse_json_events(stdout: &str) -> MechanicalReport {
         if ty != "test" {
             continue;
         }
-        let name = v.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+        let name = v
+            .get("name")
+            .and_then(|n| n.as_str())
+            .unwrap_or("")
+            .to_string();
         match event {
             "ok" => passed += 1,
             "failed" => {
@@ -161,7 +165,10 @@ fn truncate(s: &str, limit: usize) -> String {
 /// Discover the golden manifest path under an experiment repo.
 /// Returns `<experiment_repo>/scorer/golden/Cargo.toml` if it exists.
 pub fn discover_golden_manifest(experiment_repo: &Path) -> Option<PathBuf> {
-    let p = experiment_repo.join("scorer").join("golden").join("Cargo.toml");
+    let p = experiment_repo
+        .join("scorer")
+        .join("golden")
+        .join("Cargo.toml");
     if p.exists() {
         Some(p)
     } else {

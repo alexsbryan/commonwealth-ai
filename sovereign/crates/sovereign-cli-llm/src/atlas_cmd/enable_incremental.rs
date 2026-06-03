@@ -83,10 +83,7 @@ pub async fn run(args: &[String]) -> i32 {
     let target_state = !disable;
     let action = if disable { "disabled" } else { "enabled" };
 
-    println!(
-        "{:<36} {:>10} result",
-        "corpus", "atoms"
-    );
+    println!("{:<36} {:>10} result", "corpus", "atoms");
     println!("{}", "─".repeat(72));
 
     let mut touched = 0usize;
@@ -116,8 +113,9 @@ pub async fn run(args: &[String]) -> i32 {
         // will populate on the first apply).
         if target_state && !force && atoms_present {
             match read_atlas_atoms(&atlas_dir) {
-                Ok(file) if !file.atoms.is_empty()
-                    && !file.atoms.iter().all(|env| env.id().is_content_hash()) =>
+                Ok(file)
+                    if !file.atoms.is_empty()
+                        && !file.atoms.iter().all(|env| env.id().is_content_hash()) =>
                 {
                     println!(
                         "{:<36} {:>10} ✗ sequential-id atoms; run migrate-ids first",
@@ -161,7 +159,6 @@ pub async fn run(args: &[String]) -> i32 {
                 errors += 1;
             }
         }
-
     }
 
     println!();

@@ -139,13 +139,15 @@ impl Tool for CheckDocPathsTool {
             .ok_or_else(|| Error::InvalidInput("missing 'doc_path'".to_string()))?;
 
         // Resolve the document itself.
-        let doc_path = resolve_doc_path(doc_path_str, self.project_root.as_deref())
-            .ok_or_else(|| Error::Tool {
-                tool_id: "check_doc_paths".to_string(),
-                message: format!(
-                    "could not resolve doc path '{doc_path_str}' — \
+        let doc_path =
+            resolve_doc_path(doc_path_str, self.project_root.as_deref()).ok_or_else(|| {
+                Error::Tool {
+                    tool_id: "check_doc_paths".to_string(),
+                    message: format!(
+                        "could not resolve doc path '{doc_path_str}' — \
                      provide an absolute path or start the server from your project root"
-                ),
+                    ),
+                }
             })?;
 
         let doc_dir = doc_path.parent().map(|p| p.to_path_buf());
@@ -325,7 +327,8 @@ fn looks_like_standalone_path(s: &str) -> bool {
         return false;
     }
     // Tree-drawing decoration.
-    if s.contains('├') || s.contains('│') || s.contains('└') || s.contains('─') || s.contains('┬') {
+    if s.contains('├') || s.contains('│') || s.contains('└') || s.contains('─') || s.contains('┬')
+    {
         return false;
     }
     if s.contains(' ') || s.contains('\t') {
@@ -340,9 +343,8 @@ fn looks_like_standalone_path(s: &str) -> bool {
 
     const PATH_PREFIXES: &[&str] = &["crates/", "src/", "./", "../"];
     const PATH_EXTS: &[&str] = &[
-        ".rs", ".toml", ".md", ".json", ".yaml", ".yml",
-        ".sh", ".ts", ".tsx", ".js", ".jsx", ".lock",
-        ".sql", ".txt", ".py", ".go", ".proto",
+        ".rs", ".toml", ".md", ".json", ".yaml", ".yml", ".sh", ".ts", ".tsx", ".js", ".jsx",
+        ".lock", ".sql", ".txt", ".py", ".go", ".proto",
     ];
     let has_prefix = PATH_PREFIXES.iter().any(|p| s.starts_with(p));
     let has_ext = PATH_EXTS.iter().any(|e| s.ends_with(e));
@@ -596,7 +598,9 @@ mod tests {
 
     #[test]
     fn looks_like_standalone_path_accepts_clean_paths() {
-        assert!(looks_like_standalone_path("crates/sovereign-cli/src/main.rs"));
+        assert!(looks_like_standalone_path(
+            "crates/sovereign-cli/src/main.rs"
+        ));
         assert!(looks_like_standalone_path("src/notes.rs"));
     }
 

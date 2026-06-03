@@ -40,8 +40,7 @@ pub const TOOL_DESCRIPTION: &str = crate::search::SEARCH_TOOL_DESCRIPTION;
 /// backend budgets, privacy floor. Loaded via
 /// `BackendsConfig::from_default_toml`; operator overrides parse
 /// the same shape from a user-level TOML file.
-pub const DEFAULT_BACKENDS_TOML: &str =
-    include_str!("assets/default_backends.toml");
+pub const DEFAULT_BACKENDS_TOML: &str = include_str!("assets/default_backends.toml");
 
 /// Operator-tunable orchestrator config. Mirrors the
 /// `default_backends.toml` shape one-to-one.
@@ -124,28 +123,40 @@ mod tests {
         // Pin a load-bearing instruction from the canonical prompt.
         // Changing this is a behavior change that should be a
         // deliberate edit to the asset, not silent drift.
-        assert!(SYSTEM_PROMPT.contains("character-for-character"),
-                "system prompt must instruct verbatim URL citation");
-        assert!(SYSTEM_PROMPT.contains("zero results"),
-                "system prompt must instruct honest-empty behavior");
+        assert!(
+            SYSTEM_PROMPT.contains("character-for-character"),
+            "system prompt must instruct verbatim URL citation"
+        );
+        assert!(
+            SYSTEM_PROMPT.contains("zero results"),
+            "system prompt must instruct honest-empty behavior"
+        );
     }
 
     #[test]
     fn tool_description_is_non_empty() {
         assert!(!TOOL_DESCRIPTION.is_empty());
-        assert!(TOOL_DESCRIPTION.contains("Cite the URL"),
-                "tool description must include the citation directive");
+        assert!(
+            TOOL_DESCRIPTION.contains("Cite the URL"),
+            "tool description must include the citation directive"
+        );
     }
 
     #[test]
     fn default_backends_toml_parses() {
         let cfg = BackendsConfig::from_default_toml();
-        assert!(!cfg.selection.prefer.is_empty(),
-                "default config must declare a preference order");
-        assert!(cfg.selection.prefer.contains(&"tavily".into()),
-                "tavily must be in default preference list");
-        assert!(cfg.budget.per_backend.contains_key("tavily"),
-                "tavily must have a default budget entry");
+        assert!(
+            !cfg.selection.prefer.is_empty(),
+            "default config must declare a preference order"
+        );
+        assert!(
+            cfg.selection.prefer.contains(&"tavily".into()),
+            "tavily must be in default preference list"
+        );
+        assert!(
+            cfg.budget.per_backend.contains_key("tavily"),
+            "tavily must have a default budget entry"
+        );
     }
 
     #[test]

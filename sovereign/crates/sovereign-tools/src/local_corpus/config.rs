@@ -235,7 +235,6 @@ pub enum WatchedEnrichmentConfig {
     },
 }
 
-
 /// One additional root attached to a watched-folder corpus.
 /// Folder-ingest v1 §3.1.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -264,7 +263,6 @@ pub enum SyncMode {
     /// curates in batches.
     Manual,
 }
-
 
 impl Default for WatchedFolderConfig {
     fn default() -> Self {
@@ -402,7 +400,10 @@ pub struct LocalCorpusConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ChunkerKind {
     /// Paragraph-based, good default for PDFs and plain text.
-    Paragraph { max_chars: usize, overlap_chars: usize },
+    Paragraph {
+        max_chars: usize,
+        overlap_chars: usize,
+    },
     /// Heading-aware, used for markdown. `split_on_headings` is a
     /// list of heading levels to split on (`[2, 3]` = H2 and H3).
     /// v1: treated as H2/H3 hint; full parameterisation lands in M3.
@@ -608,7 +609,10 @@ fn sha256_short(path: &Path) -> String {
 /// `content` / `title` / `source_id` fields we wrote.
 pub fn recipe_toml(config: &LocalCorpusConfig, jsonl_source: &Path) -> String {
     let chunk = match &config.chunker {
-        ChunkerKind::Paragraph { max_chars, overlap_chars } => format!(
+        ChunkerKind::Paragraph {
+            max_chars,
+            overlap_chars,
+        } => format!(
             r#"[chunk]
 type = "paragraph"
 max_chars = {max_chars}
@@ -619,7 +623,11 @@ overlap_chars = {overlap_chars}
         // M3 extends it to carry the heading list; until then we emit a
         // paragraph chunker with the same max_chars so ingestion works.
         // When the engine variant is extended, update this branch.
-        ChunkerKind::Semantic { max_chars, overlap_chars, .. } => format!(
+        ChunkerKind::Semantic {
+            max_chars,
+            overlap_chars,
+            ..
+        } => format!(
             r#"[chunk]
 type = "paragraph"
 max_chars = {max_chars}
@@ -829,9 +837,7 @@ mod tests {
             PathBuf::from("/tmp/some-folder"),
             "City council".into(),
         );
-        cfg.source_type = LocalCorpusSourceType::WatchedFolder(
-            WatchedFolderConfig::default(),
-        );
+        cfg.source_type = LocalCorpusSourceType::WatchedFolder(WatchedFolderConfig::default());
         let toml = recipe_toml(&cfg, &PathBuf::from("/tmp/staged.jsonl"));
         assert!(
             toml.contains("[display]\ncategory = \"watched_folder\""),
@@ -850,10 +856,8 @@ mod tests {
         // Document folders are one-shot drag-drop ingest — no daemon
         // sweeper, no tiered enrichment. They should NOT emit a tiered
         // display category OR an enrichment block.
-        let cfg = LocalCorpusConfig::document_folder(
-            PathBuf::from("/tmp/folder"),
-            "Manuals".into(),
-        );
+        let cfg =
+            LocalCorpusConfig::document_folder(PathBuf::from("/tmp/folder"), "Manuals".into());
         let toml = recipe_toml(&cfg, &PathBuf::from("/tmp/staged.jsonl"));
         assert!(
             !toml.contains("[display]"),
@@ -871,7 +875,10 @@ mod tests {
     fn vault_default_has_writeback_and_watcher() {
         let snap = PathBuf::from("/tmp/snapshots");
         let cfg = LocalCorpusConfig::obsidian_vault(PathBuf::from("/tmp/my-vault"), snap);
-        let wb = cfg.write_back.as_ref().expect("vault should have writeback");
+        let wb = cfg
+            .write_back
+            .as_ref()
+            .expect("vault should have writeback");
         assert_eq!(wb.namespace, "sovereign");
         assert_eq!(wb.index_dir, "_sovereign-index");
         assert_eq!(wb.snapshot_retention, 24);
@@ -935,7 +942,10 @@ mod tests {
         // the bug-fix only works as long as the two stay locked.
         let from_default = WatchedFolderConfig::default();
         let from_empty: WatchedFolderConfig = serde_json::from_str("{}").unwrap();
-        assert_eq!(from_default.sweep_interval_secs, from_empty.sweep_interval_secs);
+        assert_eq!(
+            from_default.sweep_interval_secs,
+            from_empty.sweep_interval_secs
+        );
         assert_eq!(
             from_default.soft_delete_grace_secs,
             from_empty.soft_delete_grace_secs
@@ -994,8 +1004,8 @@ mod tests {
         );
         let jsonl = PathBuf::from("/tmp/staged.jsonl");
         let toml = recipe_toml(&cfg, &jsonl);
-        let recipe = corpus_engine::Recipe::from_toml(&toml)
-            .expect("generated recipe TOML must parse");
+        let recipe =
+            corpus_engine::Recipe::from_toml(&toml).expect("generated recipe TOML must parse");
         assert_eq!(recipe.corpus.id, cfg.id);
         assert_eq!(recipe.corpus.scope.as_deref(), Some("local"));
         assert!(!recipe.corpus.mesh_sharing);
@@ -1025,7 +1035,10 @@ mod tests {
                 "mhtml".into(),
             ]
         );
-        assert!(matches!(cfg.source_type, LocalCorpusSourceType::WatchedFolder(_)));
+        assert!(matches!(
+            cfg.source_type,
+            LocalCorpusSourceType::WatchedFolder(_)
+        ));
         assert!(cfg.write_back.is_none()); // Read-only on source — no writeback path.
     }
 
@@ -1042,8 +1055,8 @@ mod tests {
         );
         let jsonl = PathBuf::from("/tmp/staged.jsonl");
         let toml = recipe_toml(&cfg, &jsonl);
-        let recipe = corpus_engine::Recipe::from_toml(&toml)
-            .expect("watched-folder recipe TOML must parse");
+        let recipe =
+            corpus_engine::Recipe::from_toml(&toml).expect("watched-folder recipe TOML must parse");
         assert_eq!(recipe.corpus.scope.as_deref(), Some("local"));
         assert!(!recipe.corpus.mesh_sharing);
     }
@@ -1155,8 +1168,8 @@ mod tests {
         );
         let jsonl = PathBuf::from("/tmp/staged.jsonl");
         let toml = recipe_toml(&cfg, &jsonl);
-        let recipe = corpus_engine::Recipe::from_toml(&toml)
-            .expect("escaped TOML must still parse");
+        let recipe =
+            corpus_engine::Recipe::from_toml(&toml).expect("escaped TOML must still parse");
         // Display name round-trips byte-for-byte.
         assert_eq!(recipe.corpus.name, r#"Alex's "Notes""#);
     }

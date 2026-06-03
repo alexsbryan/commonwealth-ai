@@ -154,10 +154,7 @@ mod tests {
             (DocFormat::Plaintext, "txt"),
         ] {
             let p = document_path(dir, "https://a.example/x", fmt);
-            assert_eq!(
-                p.extension().and_then(|s| s.to_str()),
-                Some(ext)
-            );
+            assert_eq!(p.extension().and_then(|s| s.to_str()), Some(ext));
         }
     }
 }

@@ -35,15 +35,13 @@ use commonwealth_core::ids::NodeId;
 use futures::StreamExt;
 use serde::Deserialize;
 use sovereign_core::oicp::{
-    CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass,
-    ModelStatus, ProviderManifest, ProviderModel, OICP_VERSION,
+    CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass, ModelStatus,
+    ProviderManifest, ProviderModel, OICP_VERSION,
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Speed};
 use sovereign_mesh::daemon::PeerInferenceEndpoint;
-use sovereign_mesh::peer_inference::{
-    MeshInferenceProvider, PeerEndpointSource,
-};
+use sovereign_mesh::peer_inference::{MeshInferenceProvider, PeerEndpointSource};
 
 mod common;
 use common::TestProvider;
@@ -228,8 +226,7 @@ async fn joiner_streams_through_mesh_and_attributes_peer() {
         current_in_flight: None,
         transport: None,
     }];
-    let peer_source: Arc<dyn PeerEndpointSource> =
-        Arc::new(StubPeerSource { peers });
+    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
 
     // 3. Build the local-side provider: a BYOM-class 3B that
     //    cannot satisfy DeepQuery's preferred profile at score
@@ -306,8 +303,7 @@ async fn local_only_sharding_never_routes_to_peer() {
         current_in_flight: None,
         transport: None,
     }];
-    let peer_source: Arc<dyn PeerEndpointSource> =
-        Arc::new(StubPeerSource { peers });
+    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
     let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
 
@@ -362,8 +358,7 @@ async fn explicit_peer_model_id_routes_to_peer_without_oicp_envelope() {
         current_in_flight: None,
         transport: None,
     }];
-    let peer_source: Arc<dyn PeerEndpointSource> =
-        Arc::new(StubPeerSource { peers });
+    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
     let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
 
@@ -410,8 +405,7 @@ async fn explicit_unknown_model_id_errors_instead_of_silent_substitution() {
         current_in_flight: None,
         transport: None,
     }];
-    let peer_source: Arc<dyn PeerEndpointSource> =
-        Arc::new(StubPeerSource { peers });
+    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
     let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
 
@@ -420,9 +414,9 @@ async fn explicit_unknown_model_id_errors_instead_of_silent_substitution() {
         .with_model_id("not-a-real-model-anywhere");
 
     match wrapper.complete_stream_with_id(&request).await {
-        Ok((_, attribution)) => panic!(
-            "unknown model_id should NOT be served; instead got attribution {attribution:?}"
-        ),
+        Ok((_, attribution)) => {
+            panic!("unknown model_id should NOT be served; instead got attribution {attribution:?}")
+        }
         Err(e) => {
             let msg = format!("{e}");
             assert!(
@@ -430,7 +424,8 @@ async fn explicit_unknown_model_id_errors_instead_of_silent_substitution() {
                 "error should mention the requested model id; got {msg:?}"
             );
             assert!(
-                msg.to_lowercase().contains("no node") || msg.to_lowercase().contains("model not loaded"),
+                msg.to_lowercase().contains("no node")
+                    || msg.to_lowercase().contains("model not loaded"),
                 "error should signal that no node advertises the model; got {msg:?}"
             );
         }
@@ -454,8 +449,7 @@ async fn empty_model_id_falls_through_to_oicp_path() {
         current_in_flight: None,
         transport: None,
     }];
-    let peer_source: Arc<dyn PeerEndpointSource> =
-        Arc::new(StubPeerSource { peers });
+    let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource { peers });
     let local: Arc<dyn InferenceProvider> = local_byom();
     let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
 

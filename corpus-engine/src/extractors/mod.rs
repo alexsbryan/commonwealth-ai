@@ -1,26 +1,26 @@
 pub mod alignment_workspace;
 pub mod anthropic_export;
 pub mod column_aware;
+pub mod csv;
+pub mod custom_file;
 pub mod described_asset;
 pub mod docx;
 pub mod email_rfc5322;
-pub mod json;
-pub mod json_api;
-pub mod custom_file;
-pub mod xlsx;
-pub mod xml;
-pub mod xml_sections;
+pub mod gutenberg_catalog;
 pub mod html;
 pub mod html_sections;
-pub mod csv;
-pub mod gutenberg_catalog;
+pub mod json;
+pub mod json_api;
 pub mod parquet;
 pub mod plaintext;
 pub mod wikipedia_api_article;
 pub mod wikipedia_catalog;
-pub mod wikipedia_structured;
 pub mod wikipedia_jsonl;
+pub mod wikipedia_structured;
 pub mod wikipedia_types;
+pub mod xlsx;
+pub mod xml;
+pub mod xml_sections;
 
 #[cfg(feature = "markdown")]
 pub mod markdown;
@@ -149,13 +149,11 @@ pub(crate) fn strip_html(html: &str) -> String {
                         in_style = false;
                     } else if lower == "br" || lower == "br/" {
                         result.push('\n');
-                    } else if (lower == "p"
-                        || lower == "/p"
-                        || lower == "div"
-                        || lower == "/div")
-                        && !result.ends_with('\n') {
-                            result.push('\n');
-                        }
+                    } else if (lower == "p" || lower == "/p" || lower == "div" || lower == "/div")
+                        && !result.ends_with('\n')
+                    {
+                        result.push('\n');
+                    }
                 } else {
                     tag_name.push(ch);
                 }

@@ -18,8 +18,8 @@ use tokio_util::sync::CancellationToken;
 use commonwealth_core::ids::{NodeId, PlanId};
 
 use crate::plan::*;
-use crate::topology::TopologyEvent;
 use crate::scheduler::leader::elect_leader;
+use crate::topology::TopologyEvent;
 
 // ─── Configuration ───────────────────────────────────────────
 
@@ -224,8 +224,7 @@ impl InferenceScheduler {
             let has_inference = node_roles.iter().any(|r| {
                 matches!(
                     r,
-                    NodeRole::ThroughputInference { .. }
-                        | NodeRole::QualityInference { .. }
+                    NodeRole::ThroughputInference { .. } | NodeRole::QualityInference { .. }
                 )
             });
             if !has_inference {
@@ -593,10 +592,7 @@ mod tests {
             .map(|i| (NodeId::from_u128(i), profile(36, &["qwen3_coder_next"])))
             .collect();
 
-        profiles.insert(
-            quality_node,
-            profile(128, &["glm_5_1", "qwen3_coder_next"]),
-        );
+        profiles.insert(quality_node, profile(128, &["glm_5_1", "qwen3_coder_next"]));
 
         // Make scheduler the leader by ensuring it's in online_nodes.
         scheduler.online_nodes = profiles.keys().copied().collect();
@@ -637,12 +633,10 @@ mod tests {
         let mut scheduler = make_test_scheduler();
         scheduler.online_nodes = vec![NodeId::from_u128(1)];
 
-        let profiles: HashMap<NodeId, NodeProfile> = [(
-            NodeId::from_u128(1),
-            profile(36, &["qwen3_coder_next"]),
-        )]
-        .into_iter()
-        .collect();
+        let profiles: HashMap<NodeId, NodeProfile> =
+            [(NodeId::from_u128(1), profile(36, &["qwen3_coder_next"]))]
+                .into_iter()
+                .collect();
 
         let plan1 = scheduler
             .replan(PlanTrigger::ManualReplan, &profiles)

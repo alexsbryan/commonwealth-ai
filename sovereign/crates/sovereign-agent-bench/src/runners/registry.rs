@@ -38,9 +38,7 @@ impl AgentRunnerRegistry {
         // Same daemon, same canonical primitives, no role transitions
         // — measures the verify-discipline gap without the role
         // layer's structural counter-force.
-        r.register("native-monolithic", || {
-            Arc::new(NativeRunner::monolithic())
-        });
+        r.register("native-monolithic", || Arc::new(NativeRunner::monolithic()));
         // 2026-05-24: validated as bench's strongest agent shape —
         // parallel candidate generation with monotonic-improvement
         // gating, no role split, no defensive parsing. See search.rs

@@ -105,10 +105,15 @@ fn restore_real_wikipedia_snapshot_as_sibling() {
     // The wikipedia archive bundled the atlas under indexes/<id>/atlas/
     // rather than enrichment/<id>/, so atlas_included=false in the
     // manifest and enrichment_dir comes back None.
-    assert!(outcome.enrichment_dir.is_none(),
-        "this snapshot has atlas embedded in the index, not a separate enrichment subtree");
     assert!(
-        !restore_root.join("enrichment").join(TARGET_CORPUS_ID).exists(),
+        outcome.enrichment_dir.is_none(),
+        "this snapshot has atlas embedded in the index, not a separate enrichment subtree"
+    );
+    assert!(
+        !restore_root
+            .join("enrichment")
+            .join(TARGET_CORPUS_ID)
+            .exists(),
         "no enrichment subtree should be created for this archive"
     );
 

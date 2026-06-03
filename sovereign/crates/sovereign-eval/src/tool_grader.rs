@@ -107,7 +107,14 @@ pub fn grade(opts: GradeOpts<'_>) -> Result<ToolGradeReport> {
 
         match canonical.as_str() {
             "symbols" => {
-                let g = grade_symbols(&client, opts.mcp_url, &ev.tool_name, ev.args_json.as_deref(), &oracle_names, &ev.call_id);
+                let g = grade_symbols(
+                    &client,
+                    opts.mcp_url,
+                    &ev.tool_name,
+                    ev.args_json.as_deref(),
+                    &oracle_names,
+                    &ev.call_id,
+                );
                 if g.status == GradeStatus::Graded {
                     *tool_graded.entry(canonical.clone()).or_insert(0) += 1;
                     if g.correct == Some(true) {
@@ -123,7 +130,9 @@ pub fn grade(opts: GradeOpts<'_>) -> Result<ToolGradeReport> {
                     args_excerpt: ev.args_json.clone().unwrap_or_default(),
                     status: GradeStatus::UngradeableNoOracle,
                     correct: None,
-                    note: "SCIP query path not yet wired in sovereign-eval; oracle present but unread".to_string(),
+                    note:
+                        "SCIP query path not yet wired in sovereign-eval; oracle present but unread"
+                            .to_string(),
                 });
             }
             _ => {
@@ -140,12 +149,23 @@ pub fn grade(opts: GradeOpts<'_>) -> Result<ToolGradeReport> {
     }
 
     let total = grades.len() as u32;
-    let graded = grades.iter().filter(|g| g.status == GradeStatus::Graded).count() as u32;
+    let graded = grades
+        .iter()
+        .filter(|g| g.status == GradeStatus::Graded)
+        .count() as u32;
     let ungradeable = grades
         .iter()
-        .filter(|g| matches!(g.status, GradeStatus::UngradeableNoOracle | GradeStatus::UngradeableMalformedArgs))
+        .filter(|g| {
+            matches!(
+                g.status,
+                GradeStatus::UngradeableNoOracle | GradeStatus::UngradeableMalformedArgs
+            )
+        })
         .count() as u32;
-    let replay_errors = grades.iter().filter(|g| g.status == GradeStatus::ReplayError).count() as u32;
+    let replay_errors = grades
+        .iter()
+        .filter(|g| g.status == GradeStatus::ReplayError)
+        .count() as u32;
 
     let mut per_tool_summary = BTreeMap::new();
     for (tool, &count) in &tool_call_count {
@@ -193,7 +213,11 @@ fn grade_symbols(
     oracle_names: &HashSet<String>,
     call_id: &str,
 ) -> ToolGrade {
-    let args_excerpt = args_json.unwrap_or_default().chars().take(200).collect::<String>();
+    let args_excerpt = args_json
+        .unwrap_or_default()
+        .chars()
+        .take(200)
+        .collect::<String>();
     let Some(args_str) = args_json else {
         return malformed(tool_name, call_id, args_excerpt, "no args_json captured");
     };
@@ -286,10 +310,9 @@ fn malformed(tool: &str, call_id: &str, excerpt: String, reason: &str) -> ToolGr
 
 fn load_symbols_oracle(oracle_dir: &Path) -> Result<SymbolsOracle> {
     let p = oracle_dir.join("symbols_oracle.json");
-    let text = std::fs::read_to_string(&p)
-        .with_context(|| format!("reading {}", p.display()))?;
-    let oracle: SymbolsOracle = serde_json::from_str(&text)
-        .with_context(|| format!("parsing {}", p.display()))?;
+    let text = std::fs::read_to_string(&p).with_context(|| format!("reading {}", p.display()))?;
+    let oracle: SymbolsOracle =
+        serde_json::from_str(&text).with_context(|| format!("parsing {}", p.display()))?;
     Ok(oracle)
 }
 

@@ -88,9 +88,7 @@ pub(crate) async fn cmd_start_milestone(args: &[String]) -> i32 {
         match list.into_iter().find(|m| &m.id == mid) {
             Some(m) => m,
             None => {
-                eprintln!(
-                    "start-milestone: --milestone-id {mid} not found on feature '{id}'"
-                );
+                eprintln!("start-milestone: --milestone-id {mid} not found on feature '{id}'");
                 return 1;
             }
         }
@@ -493,7 +491,10 @@ pub(crate) async fn cmd_next(args: &[String]) -> i32 {
             "feature '{}' has no unfinished milestone — every ordinal has a passing run.",
             feature.id
         );
-        println!("Run `sovereign atos teardown {}` to wrap it up.", feature.id);
+        println!(
+            "Run `sovereign atos teardown {}` to wrap it up.",
+            feature.id
+        );
         return 0;
     };
 

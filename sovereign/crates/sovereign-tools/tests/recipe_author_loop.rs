@@ -18,11 +18,9 @@
 
 use std::path::PathBuf;
 
-use sovereign_core::types::{ConversationId, StepOutput, ToolContext};
 use sovereign_core::traits::Tool;
-use sovereign_tools::{
-    RecipeReadTool, RecipeValidateTool, RecipeWriteTool, RegistryBrowseTool,
-};
+use sovereign_core::types::{ConversationId, StepOutput, ToolContext};
+use sovereign_tools::{RecipeReadTool, RecipeValidateTool, RecipeWriteTool, RegistryBrowseTool};
 
 fn ctx() -> ToolContext {
     ToolContext {
@@ -121,10 +119,7 @@ type = "sentence"
     // Step 4: validate — should FAIL with `{category}` flagged.
     let validate = RecipeValidateTool::with_recipes_dir(root.clone());
     let bad_validation = validate
-        .execute(
-            &serde_json::json!({"path": "sec-investigation"}),
-            &ctx(),
-        )
+        .execute(&serde_json::json!({"path": "sec-investigation"}), &ctx())
         .await
         .unwrap();
     match bad_validation {
@@ -183,10 +178,7 @@ type = "sentence"
 
     // Step 6: re-validate — should pass now.
     let good_validation = validate
-        .execute(
-            &serde_json::json!({"path": "sec-investigation"}),
-            &ctx(),
-        )
+        .execute(&serde_json::json!({"path": "sec-investigation"}), &ctx())
         .await
         .unwrap();
     match good_validation {
@@ -200,7 +192,11 @@ type = "sentence"
     // Sanity: the file we wrote is on disk where the publish CLI
     // expects it (`<id>/recipe.toml` under the recipes root).
     let on_disk = root.join("sec-investigation/recipe.toml");
-    assert!(on_disk.is_file(), "recipe should land at {}", on_disk.display());
+    assert!(
+        on_disk.is_file(),
+        "recipe should land at {}",
+        on_disk.display()
+    );
     assert!(std::fs::read_to_string(&on_disk)
         .unwrap()
         .contains("[parameters.category]"));
@@ -242,8 +238,8 @@ fn tool_descriptors_carry_recipe_authoring_permission() {
 async fn recipe_author_project_lifecycle_end_to_end() {
     use std::sync::Arc;
 
+    use corpus_engine_atos::FeatureStore;
     use corpus_engine_notes::{NoteScope, NoteStore, ScopeFilter};
-use corpus_engine_atos::{FeatureStore};
     use sovereign_tools::recipe_author::{
         capability_request::CapabilityRequest,
         checkpoint::{do_create as checkpoint_create, restore_checkpoint},
@@ -258,8 +254,7 @@ use corpus_engine_atos::{FeatureStore};
     std::fs::create_dir_all(&recipes_dir).unwrap();
 
     let notes = Arc::new(NoteStore::open(&home.path().join("notes.db")).unwrap());
-    let features =
-        Arc::new(FeatureStore::open(&home.path().join("features.db")).unwrap());
+    let features = Arc::new(FeatureStore::open(&home.path().join("features.db")).unwrap());
 
     let project = RecipeProject::new(
         "Federal case law (CourtListener)",
@@ -353,11 +348,8 @@ use corpus_engine_atos::{FeatureStore};
     // Capability request — refusal path first, then the confirmed
     // path. Persistence side-effect on the inbox lives in a tempdir.
     let inbox = tempfile::tempdir().unwrap();
-    let cap = CapabilityRequestTool::with_stores(
-        Arc::clone(&notes),
-        Arc::clone(&features),
-    )
-    .with_inbox_dir(inbox.path().to_path_buf());
+    let cap = CapabilityRequestTool::with_stores(Arc::clone(&notes), Arc::clone(&features))
+        .with_inbox_dir(inbox.path().to_path_buf());
     let refuse = cap
         .execute(
             &serde_json::json!({
@@ -432,8 +424,7 @@ use corpus_engine_atos::{FeatureStore};
     )
     .await
     .unwrap();
-    let restored_text =
-        std::fs::read_to_string(recipes_dir.join("trial/recipe.toml")).unwrap();
+    let restored_text = std::fs::read_to_string(recipes_dir.join("trial/recipe.toml")).unwrap();
     assert!(restored_text.contains("v1"));
     assert!(!restored_text.contains("v2-broken"));
 

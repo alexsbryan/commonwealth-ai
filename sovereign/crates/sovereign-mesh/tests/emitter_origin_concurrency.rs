@@ -192,7 +192,9 @@ async fn concurrent_serves_stamp_origin_as_self_for_every_event() {
         "{} concurrent requests must produce {} events; got {}. \
          A count below N means events collided on the MeshStore key \
          and clobbered each other.",
-        N_REQUESTERS, N_REQUESTERS, served.len()
+        N_REQUESTERS,
+        N_REQUESTERS,
+        served.len()
     );
 
     // Assertion 2: origin is always self. THE invariant this test

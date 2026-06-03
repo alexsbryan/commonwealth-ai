@@ -116,10 +116,7 @@ pub fn select_excerpts(candidates: &[ScoredChunk]) -> Vec<ExcerptChunk> {
         .into_iter()
         .map(|c| ExcerptChunk {
             text: c.content.clone(),
-            source_name: c
-                .title
-                .clone()
-                .unwrap_or_else(|| "unknown".to_string()),
+            source_name: c.title.clone().unwrap_or_else(|| "unknown".to_string()),
             page_ref: None, // PDFs carry no page metadata in today's pipeline.
         })
         .collect()
@@ -130,8 +127,7 @@ pub fn select_excerpts(candidates: &[ScoredChunk]) -> Vec<ExcerptChunk> {
 /// wants "look, here's what your corpus says" not "look, here's
 /// some filler". A generic query ("key people decisions dates")
 /// pulled methodology and ToC paragraphs too often.
-pub const SEED_QUERY: &str =
-    "main argument central thesis key finding conclusion what matters";
+pub const SEED_QUERY: &str = "main argument central thesis key finding conclusion what matters";
 
 fn display_score(c: &ScoredChunk, used_sources: &HashSet<String>) -> f32 {
     let len_score = length_score(&c.content);
@@ -203,7 +199,10 @@ mod tests {
     }
 
     fn words(n: usize) -> String {
-        (0..n).map(|i| format!("word{i}")).collect::<Vec<_>>().join(" ")
+        (0..n)
+            .map(|i| format!("word{i}"))
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     #[test]
@@ -268,15 +267,13 @@ mod tests {
         // points at findings (but doesn't contain them) beat a
         // self-contained thesis on length alone. The content-quality
         // bias flips the ordering without needing a relevance score.
-        let boilerplate =
-            "These results are then placed in further context by \
+        let boilerplate = "These results are then placed in further context by \
              considering the relative degradation of surface water \
              and groundwater and streamflow alteration. The summary \
              information uses key figures from the other chapters \
              of this volume to illustrate major findings across the \
              regional assessment framework used in the report.";
-        let claim =
-            "Schrödinger argues that life sustains order by feeding \
+        let claim = "Schrödinger argues that life sustains order by feeding \
              on negative entropy drawn from its environment, and \
              that the apparent violation of the second law within \
              a living cell is accounted for by the thermodynamic \

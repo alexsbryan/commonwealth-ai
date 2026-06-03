@@ -70,10 +70,7 @@ impl DocToAtomsFile {
     /// Atoms produced by `doc_id`. Returns empty slice if the doc is
     /// not present.
     pub fn atoms_for(&self, doc_id: &str) -> &[AtomId] {
-        self.by_doc
-            .get(doc_id)
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
+        self.by_doc.get(doc_id).map(|v| v.as_slice()).unwrap_or(&[])
     }
 
     /// All doc ids the sidecar knows about.
@@ -105,9 +102,7 @@ pub fn extract_doc_id(env: &AtomEnvelope) -> Option<String> {
         AtomEnvelope::Position(p) => Some(p.first_appearance.chunk_id.clone()),
         AtomEnvelope::Opposition(o) => Some(o.first_appearance.chunk_id.clone()),
         AtomEnvelope::Event(e) => Some(e.section_position.section_id.clone()),
-        AtomEnvelope::ArgumentReconstruction(a) => {
-            Some(a.section_position.section_id.clone())
-        }
+        AtomEnvelope::ArgumentReconstruction(a) => Some(a.section_position.section_id.clone()),
         AtomEnvelope::State(s) => Some(s.section_range.start.clone()),
         AtomEnvelope::Relation(r) => Some(r.section_range.start.clone()),
         AtomEnvelope::Claim(c) => c
@@ -116,9 +111,7 @@ pub fn extract_doc_id(env: &AtomEnvelope) -> Option<String> {
             .map(|cr| cr.chunk_id.clone())
             .or(c.anchor.clone()),
         AtomEnvelope::Question(q) => q.raised_at.first().map(|cr| cr.chunk_id.clone()),
-        AtomEnvelope::Configuration(cfg) => {
-            cfg.evidence.first().map(|cr| cr.chunk_id.clone())
-        }
+        AtomEnvelope::Configuration(cfg) => cfg.evidence.first().map(|cr| cr.chunk_id.clone()),
         // Asset atoms are document-level not chunk-level. The
         // `first_seen_source_doc_id` field is the doc handle — when
         // empty the caller should fall back to the corpus root.
@@ -277,8 +270,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let atlas_dir = tmp.path().join("nested/dir/atlas");
         let mut f = DocToAtomsFile::new();
-        f.by_doc
-            .insert("doc_x".into(), vec![AtomId::entity(1)]);
+        f.by_doc.insert("doc_x".into(), vec![AtomId::entity(1)]);
         write(&atlas_dir, &f).unwrap();
         assert!(atlas_dir.join(DOC_TO_ATOMS_FILENAME).exists());
     }

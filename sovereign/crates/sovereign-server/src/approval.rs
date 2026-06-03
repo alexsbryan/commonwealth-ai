@@ -160,10 +160,16 @@ impl ApprovalChannel for ServerApprovalChannel {
 
     fn emit_progress(&self, step: &Step, output: &StepOutput) {
         // Fire-and-forget: best effort to notify subscribers.
-        let task_id = self.task_id.try_read().map(|t| t.clone()).unwrap_or_default();
+        let task_id = self
+            .task_id
+            .try_read()
+            .map(|t| t.clone())
+            .unwrap_or_default();
 
         let status = match output {
-            StepOutput::Text(_) | StepOutput::Json(_) | StepOutput::ReasonWithToolsResult { .. } => "done",
+            StepOutput::Text(_)
+            | StepOutput::Json(_)
+            | StepOutput::ReasonWithToolsResult { .. } => "done",
             StepOutput::Jump(t) => {
                 let _ = self.event_tx.send(ServerEvent::StepDone {
                     task_id,

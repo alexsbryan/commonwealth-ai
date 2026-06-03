@@ -17,8 +17,8 @@
 //! exit code or at least one `fail` event marks a run as failed.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 use async_trait::async_trait;
@@ -208,10 +208,7 @@ impl LintWatcher {
                 // a 35B chat slot has pushed RSS to jetsam threshold.
                 let mut logged_wait = false;
                 loop {
-                    let hook_now = yield_hook_shared
-                        .read()
-                        .ok()
-                        .and_then(|g| g.clone());
+                    let hook_now = yield_hook_shared.read().ok().and_then(|g| g.clone());
                     match hook_now {
                         Some(h) if h.should_yield() => {
                             if !logged_wait {
@@ -226,13 +223,16 @@ impl LintWatcher {
                     }
                 }
                 if logged_wait {
-                    tracing::info!(
-                        "LintWatcher: foreground idle — proceeding with cargo run"
-                    );
+                    tracing::info!("LintWatcher: foreground idle — proceeding with cargo run");
                 }
 
-                if let Err(e) =
-                    run_lint_subprocess(command.clone(), working_dir.clone(), timeout_secs, Arc::clone(&store)).await
+                if let Err(e) = run_lint_subprocess(
+                    command.clone(),
+                    working_dir.clone(),
+                    timeout_secs,
+                    Arc::clone(&store),
+                )
+                .await
                 {
                     tracing::warn!("lint runner failed: {e}");
                 }
@@ -424,7 +424,9 @@ async fn run_lint_subprocess(
             Err(_) => {
                 tracing::warn!(timeout_secs, "lint runner timed out");
                 let _ = child.kill().await;
-                store_inner.finish_run(run_id, -2, start.elapsed().as_millis() as u64).await?;
+                store_inner
+                    .finish_run(run_id, -2, start.elapsed().as_millis() as u64)
+                    .await?;
                 return Ok(());
             }
             Ok(Err(e)) => {
@@ -475,7 +477,11 @@ async fn parse_and_record_lint_event(line: &str, run_id: i64, store: &LintResult
             }
         }
         "fail" | "warn" => {
-            let kind = if t == "fail" { LintResultKind::Fail } else { LintResultKind::Warn };
+            let kind = if t == "fail" {
+                LintResultKind::Fail
+            } else {
+                LintResultKind::Warn
+            };
             let file = val.get("n").and_then(|v| v.as_str()).unwrap_or("unknown");
             let output = val.get("out").and_then(|v| v.as_str());
             let line = val.get("line").and_then(|v| v.as_u64()).map(|v| v as u32);
@@ -542,7 +548,9 @@ mod tests {
         let store = make_store().await;
         let watcher = make_watcher("sleep 30", Arc::clone(&store));
 
-        watcher.on_files_changed(vec![PathBuf::from("src/foo.rs")]).await;
+        watcher
+            .on_files_changed(vec![PathBuf::from("src/foo.rs")])
+            .await;
         watcher
             .on_files_changed(vec![PathBuf::from("src/bar.rs")])
             .await;

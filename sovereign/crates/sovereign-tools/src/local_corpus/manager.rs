@@ -16,8 +16,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, SensitiveCorpusOracle, StateStore};
 use tokio::sync::RwLock;
@@ -188,8 +188,7 @@ pub struct LocalCorpusManager {
     /// Debounce delay for `on_sweep_event`. Defaults to 5 minutes per
     /// the plan; tests override via `set_auto_rebuild_debounce` to
     /// keep them fast.
-    auto_rebuild_debounce:
-        Arc<std::sync::RwLock<std::time::Duration>>,
+    auto_rebuild_debounce: Arc<std::sync::RwLock<std::time::Duration>>,
 }
 
 impl LocalCorpusManager {
@@ -289,10 +288,7 @@ impl LocalCorpusManager {
     /// + optional GliNER extractor). Once set, `enable_enrichment`
     /// routes through `start_tiered_build` instead of the legacy
     /// subprocess. Idempotent.
-    pub async fn set_tiered_deps(
-        &self,
-        deps: super::watched::enrich::TieredDeps,
-    ) {
+    pub async fn set_tiered_deps(&self, deps: super::watched::enrich::TieredDeps) {
         self.enrichment_driver.set_tiered_deps(deps).await;
     }
 
@@ -434,11 +430,7 @@ impl LocalCorpusManager {
     /// - Enrichment defaults haven't been installed (daemon boot
     ///   incomplete).
     /// - The synthesised `EnrichConfig` can't be persisted.
-    pub async fn enable_enrichment(
-        &self,
-        corpus_id: &str,
-        pipeline_id: &str,
-    ) -> Result<String> {
+    pub async fn enable_enrichment(&self, corpus_id: &str, pipeline_id: &str) -> Result<String> {
         // Validate the pipeline_id matches one of the atlas
         // pipelines the registry recognises. Reject `literary` (the
         // legacy non-atlas variant) explicitly — `enrich build`
@@ -467,9 +459,7 @@ impl LocalCorpusManager {
             let entry = corpora
                 .get_mut(corpus_id)
                 .ok_or_else(|| Error::Execution(format!("corpus '{corpus_id}' not registered")))?;
-            if let super::config::LocalCorpusSourceType::WatchedFolder(w) =
-                &mut entry.source_type
-            {
+            if let super::config::LocalCorpusSourceType::WatchedFolder(w) = &mut entry.source_type {
                 w.enrichment = super::config::WatchedEnrichmentConfig::On {
                     pipeline_id: pipeline_id.to_string(),
                     last_built_at_unix: 0,
@@ -546,12 +536,10 @@ impl LocalCorpusManager {
                     // variant separately so callers that key off
                     // "did this fail?" stay simple.
                     let status = match &state {
-                        AssetState::Failed { reason } => {
-                            EnrichmentRuntimeStatus::Failed {
-                                failed_at_unix: now_unix(),
-                                reason: reason.clone(),
-                            }
-                        }
+                        AssetState::Failed { reason } => EnrichmentRuntimeStatus::Failed {
+                            failed_at_unix: now_unix(),
+                            reason: reason.clone(),
+                        },
                         AssetState::Ready => EnrichmentRuntimeStatus::Tiered {
                             state: state.clone(),
                             started_at_unix,
@@ -720,9 +708,7 @@ impl LocalCorpusManager {
             .watched_config()
             .map(|w| w.enrichment.clone())
         {
-            Some(super::config::WatchedEnrichmentConfig::On { pipeline_id, .. }) => {
-                pipeline_id
-            }
+            Some(super::config::WatchedEnrichmentConfig::On { pipeline_id, .. }) => pipeline_id,
             _ => {
                 return Err(Error::Execution(
                     "rebuild_enrichment: corpus has no enrichment configured; \
@@ -1089,9 +1075,10 @@ impl LocalCorpusManager {
         config: &super::clusterer::ClusterConfig,
         on_progress: ProgressCallback,
     ) -> Result<super::clusterer::LabeledClusterResult> {
-        let cfg = self.get(id).await.ok_or_else(|| {
-            Error::NotFound(format!("local corpus '{id}' not registered"))
-        })?;
+        let cfg = self
+            .get(id)
+            .await
+            .ok_or_else(|| Error::NotFound(format!("local corpus '{id}' not registered")))?;
         if cfg.enrichment.is_none() {
             return Err(Error::Execution(format!(
                 "corpus '{id}' does not support clustering \
@@ -1104,10 +1091,7 @@ impl LocalCorpusManager {
             )
         })?;
         let inference_fn = crate::corpus::inference_to_inference_fn(inference);
-        let clusterer = super::clusterer::Clusterer::new(
-            Arc::clone(&self.engine),
-            inference_fn,
-        );
+        let clusterer = super::clusterer::Clusterer::new(Arc::clone(&self.engine), inference_fn);
         let result = clusterer.run(id, config, on_progress).await?;
         // Cache for subsequent `get_preview` calls so the UI doesn't
         // have to hand the whole result blob back through Tauri.
@@ -1140,9 +1124,10 @@ impl LocalCorpusManager {
     /// Detect whether the vault is a git repository. Returns `None`
     /// when the vault isn't a repo OR when `git` isn't installed.
     pub async fn check_git(&self, id: &str) -> Result<Option<super::git::GitStatus>> {
-        let cfg = self.get(id).await.ok_or_else(|| {
-            Error::NotFound(format!("local corpus '{id}' not registered"))
-        })?;
+        let cfg = self
+            .get(id)
+            .await
+            .ok_or_else(|| Error::NotFound(format!("local corpus '{id}' not registered")))?;
         Ok(super::git::check_git_repo(&cfg.root_path))
     }
 
@@ -1169,9 +1154,10 @@ impl LocalCorpusManager {
         &self,
         id: &str,
     ) -> Result<Option<super::writeback::WriteBackResult>> {
-        let cfg = self.get(id).await.ok_or_else(|| {
-            Error::NotFound(format!("local corpus '{id}' not registered"))
-        })?;
+        let cfg = self
+            .get(id)
+            .await
+            .ok_or_else(|| Error::NotFound(format!("local corpus '{id}' not registered")))?;
         let Some(wb_cfg) = cfg.write_back.clone() else {
             return Ok(None);
         };
@@ -1184,11 +1170,7 @@ impl LocalCorpusManager {
         }
         let cluster_cfg = super::clusterer::ClusterConfig::default();
         let preview = self.get_preview(id, &cluster_cfg).await?;
-        let wb = super::writeback::WriteBack::new(
-            wb_cfg,
-            cfg.root_path.clone(),
-            cfg.id.clone(),
-        );
+        let wb = super::writeback::WriteBack::new(wb_cfg, cfg.root_path.clone(), cfg.id.clone());
         let version = (wb.list_snapshots().map(|s| s.len()).unwrap_or(0) as u32) + 1;
         let result = wb.execute(&preview, version, None).await?;
         Ok(Some(result))
@@ -1202,9 +1184,10 @@ impl LocalCorpusManager {
         id: &str,
         git_commit: bool,
     ) -> Result<super::writeback::WriteBackResult> {
-        let cfg = self.get(id).await.ok_or_else(|| {
-            Error::NotFound(format!("local corpus '{id}' not registered"))
-        })?;
+        let cfg = self
+            .get(id)
+            .await
+            .ok_or_else(|| Error::NotFound(format!("local corpus '{id}' not registered")))?;
         let wb_cfg = cfg.write_back.clone().ok_or_else(|| {
             Error::Execution(format!(
                 "corpus '{id}' is not configured for write-back (is it a vault?)"
@@ -1215,11 +1198,7 @@ impl LocalCorpusManager {
         // Version monotonically increments per successful write. We
         // derive from existing snapshot count so the number reflects
         // "nth Sovereign pass on this vault".
-        let wb = super::writeback::WriteBack::new(
-            wb_cfg,
-            cfg.root_path.clone(),
-            cfg.id.clone(),
-        );
+        let wb = super::writeback::WriteBack::new(wb_cfg, cfg.root_path.clone(), cfg.id.clone());
         let version = (wb.list_snapshots().map(|s| s.len()).unwrap_or(0) as u32) + 1;
 
         let git_hash = if git_commit {
@@ -1241,17 +1220,13 @@ impl LocalCorpusManager {
     }
 
     /// List every persisted snapshot for a vault, newest first.
-    pub async fn list_snapshots(
-        &self,
-        id: &str,
-    ) -> Result<Vec<super::writeback::SnapshotMeta>> {
-        let cfg = self.get(id).await.ok_or_else(|| {
-            Error::NotFound(format!("local corpus '{id}' not registered"))
-        })?;
+    pub async fn list_snapshots(&self, id: &str) -> Result<Vec<super::writeback::SnapshotMeta>> {
+        let cfg = self
+            .get(id)
+            .await
+            .ok_or_else(|| Error::NotFound(format!("local corpus '{id}' not registered")))?;
         let wb_cfg = cfg.write_back.clone().ok_or_else(|| {
-            Error::Execution(format!(
-                "corpus '{id}' is not configured for write-back"
-            ))
+            Error::Execution(format!("corpus '{id}' is not configured for write-back"))
         })?;
         let wb = super::writeback::WriteBack::new(wb_cfg, cfg.root_path, cfg.id);
         wb.list_snapshots()
@@ -1263,13 +1238,12 @@ impl LocalCorpusManager {
         id: &str,
         snapshot_path: &std::path::Path,
     ) -> Result<super::writeback::RollbackResult> {
-        let cfg = self.get(id).await.ok_or_else(|| {
-            Error::NotFound(format!("local corpus '{id}' not registered"))
-        })?;
+        let cfg = self
+            .get(id)
+            .await
+            .ok_or_else(|| Error::NotFound(format!("local corpus '{id}' not registered")))?;
         let wb_cfg = cfg.write_back.clone().ok_or_else(|| {
-            Error::Execution(format!(
-                "corpus '{id}' is not configured for write-back"
-            ))
+            Error::Execution(format!("corpus '{id}' is not configured for write-back"))
         })?;
         let wb = super::writeback::WriteBack::new(wb_cfg, cfg.root_path, cfg.id);
         let snapshot = wb.load_snapshot(snapshot_path)?;
@@ -1280,13 +1254,12 @@ impl LocalCorpusManager {
     /// every note in the vault; delete the generated index-note
     /// directory. Does NOT touch snapshots.
     pub async fn clean(&self, id: &str) -> Result<super::writeback::CleanResult> {
-        let cfg = self.get(id).await.ok_or_else(|| {
-            Error::NotFound(format!("local corpus '{id}' not registered"))
-        })?;
+        let cfg = self
+            .get(id)
+            .await
+            .ok_or_else(|| Error::NotFound(format!("local corpus '{id}' not registered")))?;
         let wb_cfg = cfg.write_back.clone().ok_or_else(|| {
-            Error::Execution(format!(
-                "corpus '{id}' is not configured for write-back"
-            ))
+            Error::Execution(format!("corpus '{id}' is not configured for write-back"))
         })?;
         let wb = super::writeback::WriteBack::new(wb_cfg, cfg.root_path, cfg.id);
         wb.clean().await
@@ -1297,12 +1270,7 @@ impl LocalCorpusManager {
     ///
     /// Unknown corpus id returns `NotFound`, not an empty result,
     /// because silent empties are a debugging nightmare.
-    pub async fn search(
-        &self,
-        id: &str,
-        query: &str,
-        limit: usize,
-    ) -> Result<Vec<ScoredChunk>> {
+    pub async fn search(&self, id: &str, query: &str, limit: usize) -> Result<Vec<ScoredChunk>> {
         if self.get(id).await.is_none() {
             return Err(Error::NotFound(format!(
                 "local corpus '{id}' not registered"
@@ -1467,15 +1435,10 @@ impl LocalCorpusManager {
     /// in `additional_roots` OR equal to the primary `root_path`)
     /// are rejected. Persists the updated config; the next
     /// scheduler tick walks the new root automatically.
-    pub async fn add_watched_root(
-        &self,
-        corpus_id: &str,
-        path: PathBuf,
-    ) -> Result<()> {
+    pub async fn add_watched_root(&self, corpus_id: &str, path: PathBuf) -> Result<()> {
         use super::config::{LocalCorpusSourceType, RootSpec};
-        let canonical = std::fs::canonicalize(&path).map_err(|e| {
-            Error::Execution(format!("canonicalize {}: {e}", path.display()))
-        })?;
+        let canonical = std::fs::canonicalize(&path)
+            .map_err(|e| Error::Execution(format!("canonicalize {}: {e}", path.display())))?;
         if !canonical.is_dir() {
             return Err(Error::Execution(format!(
                 "additional root '{}' is not a directory",
@@ -1529,11 +1492,7 @@ impl LocalCorpusManager {
     /// apply. The deletion guard still gates catastrophic removal
     /// — if the removed root contributed many docs, the user gets
     /// a `confirm-deletion` prompt before the chunks evaporate.
-    pub async fn remove_watched_root(
-        &self,
-        corpus_id: &str,
-        idx: usize,
-    ) -> Result<()> {
+    pub async fn remove_watched_root(&self, corpus_id: &str, idx: usize) -> Result<()> {
         use super::config::LocalCorpusSourceType;
         let mut corpora = self.corpora.write().await;
         let cfg = corpora
@@ -1759,9 +1718,7 @@ fn now_unix() -> u64 {
 
 // ─── Progress bridge ─────────────────────────────────────────────────
 
-fn ingest_progress_to_local(
-    p: corpus_engine::progress::IngestProgress,
-) -> LocalCorpusProgress {
+fn ingest_progress_to_local(p: corpus_engine::progress::IngestProgress) -> LocalCorpusProgress {
     use corpus_engine::progress::IngestProgress::*;
     match p {
         Downloading {
@@ -1813,7 +1770,9 @@ fn ingest_progress_to_local(
             phase_label: "Optimizing search index".into(),
             current_file: None,
         },
-        Enriching { detail, fraction, .. } => {
+        Enriching {
+            detail, fraction, ..
+        } => {
             // Post-embed enrichment phases (entity extraction,
             // clustering, atlas build). `detail` carries the
             // human-readable phase label the daemon already emits to
@@ -1867,8 +1826,7 @@ fn recipe_path_for(recipes_dir: &Path, corpus_id: &str) -> PathBuf {
 }
 
 fn persist_config(dir: &Path, config: &LocalCorpusConfig) -> Result<()> {
-    std::fs::create_dir_all(dir)
-        .map_err(|e| Error::Execution(format!("create dir: {e}")))?;
+    std::fs::create_dir_all(dir).map_err(|e| Error::Execution(format!("create dir: {e}")))?;
     let path = dir.join(format!("{}.json", config.id));
     let raw = serde_json::to_string_pretty(config)
         .map_err(|e| Error::Execution(format!("serialize config: {e}")))?;
@@ -1907,10 +1865,7 @@ fn load_persisted_configs(dir: &Path) -> Result<HashMap<String, LocalCorpusConfi
                 out.insert(cfg.id.clone(), cfg);
             }
             Err(e) => {
-                tracing::warn!(
-                    "skip unparseable local corpus sidecar {:?}: {e}",
-                    path
-                );
+                tracing::warn!("skip unparseable local corpus sidecar {:?}: {e}", path);
             }
         }
     }
@@ -1935,8 +1890,8 @@ fn project_enrich_progress(
     evt: &corpus_engine::enrichment::pipeline::EnrichProgress,
     started_at_unix: u64,
 ) -> Option<super::watched::state::EnrichmentRuntimeStatus> {
-    use corpus_engine::enrichment::pipeline::EnrichProgress as EP;
     use super::watched::state::EnrichmentRuntimeStatus;
+    use corpus_engine::enrichment::pipeline::EnrichProgress as EP;
     match evt {
         // BuildStart fires once at the very top; we already
         // stamped Building when the build was queued, so this
@@ -1947,14 +1902,17 @@ fn project_enrich_progress(
             total: steps.len(),
             started_at_unix,
         }),
-        EP::StepStart { step, ordinal, total, .. } => {
-            Some(EnrichmentRuntimeStatus::Building {
-                phase: format!("{step:?}"),
-                current: *ordinal,
-                total: *total,
-                started_at_unix,
-            })
-        }
+        EP::StepStart {
+            step,
+            ordinal,
+            total,
+            ..
+        } => Some(EnrichmentRuntimeStatus::Building {
+            phase: format!("{step:?}"),
+            current: *ordinal,
+            total: *total,
+            started_at_unix,
+        }),
         EP::ChapterProgress {
             chapter_id,
             index,
@@ -2022,7 +1980,8 @@ impl sovereign_core::traits::FolderMetadataOracle for LocalCorpusManager {
     ) -> std::collections::HashMap<String, sovereign_core::traits::FolderMetadata> {
         use super::watched::state::WatchedFolderState;
         use sovereign_core::traits::FolderMetadata;
-        let mut out: std::collections::HashMap<String, FolderMetadata> = std::collections::HashMap::new();
+        let mut out: std::collections::HashMap<String, FolderMetadata> =
+            std::collections::HashMap::new();
         let corpora = self.corpora.read().await;
         for (id, cfg) in corpora.iter() {
             if !cfg.source_type.is_watched() {
@@ -2040,11 +1999,8 @@ impl sovereign_core::traits::FolderMetadataOracle for LocalCorpusManager {
                             .map(|(k, v)| (k.clone(), *v))
                             .collect();
                         by_count.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-                        let top: Vec<String> = by_count
-                            .into_iter()
-                            .take(2)
-                            .map(|(ext, _)| ext)
-                            .collect();
+                        let top: Vec<String> =
+                            by_count.into_iter().take(2).map(|(ext, _)| ext).collect();
                         (failed, skipped, top)
                     }
                     _ => (0, 0, Vec::new()),
@@ -2132,7 +2088,9 @@ mod tests {
     #[test]
     fn auto_rebuild_skips_when_off() {
         use super::super::watched::state::EnrichmentRuntimeStatus;
-        assert!(!should_fire_auto_rebuild(Some(&EnrichmentRuntimeStatus::Off)));
+        assert!(!should_fire_auto_rebuild(Some(
+            &EnrichmentRuntimeStatus::Off
+        )));
     }
 
     #[test]

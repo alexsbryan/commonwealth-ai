@@ -15,17 +15,19 @@ use futures::Stream;
 use tokio::sync::Mutex;
 
 use crate::llama::cpp::context::params::{LlamaContextParams, LlamaContextType};
-use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::llama_backend::LlamaBackend;
 use crate::llama::cpp::llama_batch::LlamaBatch;
 use crate::llama::cpp::model::params::LlamaModelParams;
 use crate::llama::cpp::model::{AddBos, LlamaChatMessage, LlamaModel};
+use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
 use sovereign_core::error::Error;
-use sovereign_core::model_family::{EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl};
+use sovereign_core::model_family::{
+    EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
+};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::*;
 use sovereign_core::Result;
@@ -156,8 +158,7 @@ impl FastShortCoalescer {
                 let deadline = tokio::time::Instant::now()
                     + tokio::time::Duration::from_millis(FAST_SHORT_COALESCE_WINDOW_MS);
                 while batch.len() < n_seq_max {
-                    let remaining = deadline
-                        .saturating_duration_since(tokio::time::Instant::now());
+                    let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
                     if remaining.is_zero() {
                         break;
                     }
@@ -178,20 +179,14 @@ impl FastShortCoalescer {
     /// `generate_sync_batched` against the collected jobs on a
     /// blocking thread. Each job's `oneshot::Sender` resolves with
     /// its individual `(text, tokens)` slice.
-    async fn dispatch_batch(
-        slot: Arc<ModelSlot>,
-        quirks: ModelQuirks,
-        batch: Vec<CoalescerJob>,
-    ) {
+    async fn dispatch_batch(slot: Arc<ModelSlot>, quirks: ModelQuirks, batch: Vec<CoalescerJob>) {
         let permit = match slot.inflight.clone().acquire_owned().await {
             Ok(p) => p,
             Err(_) => {
                 for job in batch {
                     let _ = job
                         .response
-                        .send(Err(Error::Inference(
-                            "FastShort slot permit closed".into(),
-                        )));
+                        .send(Err(Error::Inference("FastShort slot permit closed".into())));
                 }
                 return;
             }
@@ -205,8 +200,7 @@ impl FastShortCoalescer {
             let mut ctx_lock = slot.context.blocking_lock();
 
             let model_id = slot.model_id.clone();
-            let requests_refs: Vec<&CompletionRequest> =
-                batch.iter().map(|j| &j.request).collect();
+            let requests_refs: Vec<&CompletionRequest> = batch.iter().map(|j| &j.request).collect();
 
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 ModelSlot::generate_sync_batched(
@@ -255,9 +249,7 @@ impl FastShortCoalescer {
                     );
                     let msg = e.to_string();
                     for job in batch {
-                        let _ = job
-                            .response
-                            .send(Err(Error::Inference(msg.clone())));
+                        let _ = job.response.send(Err(Error::Inference(msg.clone())));
                     }
                 }
                 Err(_) => {
@@ -288,12 +280,9 @@ impl FastShortCoalescer {
                 request,
                 response: tx,
             })
-            .map_err(|_| {
-                Error::Inference("FastShort coalescer is shut down".into())
-            })?;
-        rx.await.map_err(|_| {
-            Error::Inference("FastShort coalescer dropped response".into())
-        })?
+            .map_err(|_| Error::Inference("FastShort coalescer is shut down".into()))?;
+        rx.await
+            .map_err(|_| Error::Inference("FastShort coalescer dropped response".into()))?
     }
 }
 
@@ -557,10 +546,8 @@ impl EmbeddedLlamaCpp {
     /// This is the simple path for development and small deployments.
     pub fn load(model_path: &Path) -> Result<Self> {
         Self::load_dual(
-            model_path,
-            None, // No separate primary model.
-            2048,
-            None,
+            model_path, None, // No separate primary model.
+            2048, None,
         )
     }
 
@@ -835,12 +822,7 @@ impl EmbeddedLlamaCpp {
                 path = %primary_path.display(),
                 "building primary sibling pool — loading weights once + N contexts"
             );
-            let primary_0 = ModelSlot::load(
-                &backend,
-                primary_path,
-                context_size,
-                n_gpu_layers,
-            )?;
+            let primary_0 = ModelSlot::load(&backend, primary_path, context_size, n_gpu_layers)?;
             let shared_model = Arc::clone(&primary_0.model);
             let shared_id = primary_0.model_id.clone();
             let shared_size = primary_0.size_bytes;
@@ -996,11 +978,7 @@ impl EmbeddedLlamaCpp {
         // budget is set via `set_extras_memory_budget` and lives
         // alongside the slot map; reinstalling slots shouldn't
         // implicitly reset eviction behaviour.
-        let preserved_budget = self
-            .extras
-            .read()
-            .map(|g| g.budget_bytes)
-            .unwrap_or(None);
+        let preserved_budget = self.extras.read().map(|g| g.budget_bytes).unwrap_or(None);
         let default_quirks = ModelFamily::Unknown.default_quirks();
         let mut state = ExtrasState::new();
         state.budget_bytes = preserved_budget;
@@ -1010,18 +988,17 @@ impl EmbeddedLlamaCpp {
                 path = %path.display(),
                 "loading extras slot"
             );
-            match ModelSlot::load(
-                &self.primary_backend,
-                &path,
-                context_size,
-                self.gpu_layers,
-            ) {
+            match ModelSlot::load(&self.primary_backend, &path, context_size, self.gpu_layers) {
                 Ok(slot) => {
                     let model_id = slot.model_id.clone();
                     let arc = Arc::new(slot);
                     state.slots.insert(slot_name.clone(), Arc::clone(&arc));
-                    state.by_model_id.insert(model_id.clone(), slot_name.clone());
-                    state.quirks.insert(slot_name.clone(), default_quirks.clone());
+                    state
+                        .by_model_id
+                        .insert(model_id.clone(), slot_name.clone());
+                    state
+                        .quirks
+                        .insert(slot_name.clone(), default_quirks.clone());
                     tracing::info!(
                         slot = %slot_name,
                         model_id = %model_id,
@@ -1058,11 +1035,7 @@ impl EmbeddedLlamaCpp {
     /// Replacing an in-use reranker is safe: the old `Arc<RerankSlot>`
     /// drops when the last in-flight rerank call finishes (RAII via
     /// Arc cloning in the `rerank_batch` hot path).
-    pub fn install_rerank_slot(
-        &self,
-        path: PathBuf,
-        family: ModelFamily,
-    ) -> Result<String> {
+    pub fn install_rerank_slot(&self, path: PathBuf, family: ModelFamily) -> Result<String> {
         let rerank_quirks = family.default_quirks().rerank;
         tracing::info!(
             slot = "rerank",
@@ -1070,12 +1043,7 @@ impl EmbeddedLlamaCpp {
             family = ?family,
             "installing rerank slot"
         );
-        let slot = RerankSlot::load(
-            &self.primary_backend,
-            &path,
-            self.gpu_layers,
-            rerank_quirks,
-        )?;
+        let slot = RerankSlot::load(&self.primary_backend, &path, self.gpu_layers, rerank_quirks)?;
         let model_id = slot.model_id.clone();
         let arc = Arc::new(slot);
         let mut guard = self
@@ -1165,12 +1133,7 @@ impl EmbeddedLlamaCpp {
             self.evict_extras_for_new_load(&slot_name, new_size, budget)?;
         }
 
-        let slot = ModelSlot::load(
-            &self.primary_backend,
-            &path,
-            context_size,
-            self.gpu_layers,
-        )?;
+        let slot = ModelSlot::load(&self.primary_backend, &path, context_size, self.gpu_layers)?;
         let model_id = slot.model_id.clone();
         let arc = Arc::new(slot);
 
@@ -1186,7 +1149,9 @@ impl EmbeddedLlamaCpp {
             guard.by_model_id.remove(prev_model_id);
         }
         guard.slots.insert(slot_name.clone(), Arc::clone(&arc));
-        guard.by_model_id.insert(model_id.clone(), slot_name.clone());
+        guard
+            .by_model_id
+            .insert(model_id.clone(), slot_name.clone());
         guard
             .quirks
             .insert(slot_name.clone(), ModelFamily::Unknown.default_quirks());
@@ -1234,9 +1199,7 @@ impl EmbeddedLlamaCpp {
                 } else {
                     Some(EvictionCandidate {
                         slot_name: name.clone(),
-                        last_used_ms: arc
-                            .last_used
-                            .load(std::sync::atomic::Ordering::Relaxed),
+                        last_used_ms: arc.last_used.load(std::sync::atomic::Ordering::Relaxed),
                         size_bytes: arc.size_bytes,
                     })
                 }
@@ -1369,7 +1332,6 @@ pub(crate) fn pick_evictions(
 // Reopen the impl block so subsequent methods on EmbeddedLlamaCpp
 // keep their existing namespace.
 impl EmbeddedLlamaCpp {
-
     /// Drop an extras slot. Returns the `model_id` that was bound
     /// to that slot, or `None` if the slot wasn't loaded. The slot's
     /// `Arc<ModelSlot>` releases once any in-flight request on it
@@ -1479,7 +1441,12 @@ impl EmbeddedLlamaCpp {
         // silently routes the user to a different model than they
         // asked for.
         if extras_match.is_none() {
-            if let Some(mid) = request.model_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            if let Some(mid) = request
+                .model_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
                 if mid == self.fast.model_id {
                     return SlotTarget::Fast;
                 }
@@ -1592,9 +1559,8 @@ impl EmbeddedLlamaCpp {
                             if Arc::strong_count(arc) > 1 {
                                 return None;
                             }
-                            let last_used = arc
-                                .last_used
-                                .load(std::sync::atomic::Ordering::Relaxed);
+                            let last_used =
+                                arc.last_used.load(std::sync::atomic::Ordering::Relaxed);
                             if now.saturating_sub(last_used) >= threshold_ms {
                                 Some(name.clone())
                             } else {
@@ -1672,7 +1638,6 @@ impl EmbeddedLlamaCpp {
             }
         });
     }
-
 }
 
 #[async_trait]
@@ -1687,7 +1652,11 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             SlotTarget::Extra(name) => format!("extras:{name}"),
         };
         let prompt_chars = request.prompt.len();
-        let system_chars = request.system_message.as_ref().map(|s| s.len()).unwrap_or(0);
+        let system_chars = request
+            .system_message
+            .as_ref()
+            .map(|s| s.len())
+            .unwrap_or(0);
 
         tracing::debug!(
             slot = %slot_name,
@@ -1737,7 +1706,13 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
                 let mut ctx_lock = slot.context.blocking_lock();
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock, &request, &quirks)
+                    ModelSlot::generate_sync(
+                        &slot.model,
+                        &slot.model_id,
+                        &mut ctx_lock,
+                        &request,
+                        &quirks,
+                    )
                 }));
                 let outcome: GenerationOutcome = match result {
                     Ok(Ok(r)) => r,
@@ -1831,12 +1806,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     pool_size,
                     "dispatching to primary sibling"
                 );
-                let _permit = slot
-                    .inflight
-                    .clone()
-                    .acquire_owned()
-                    .await
-                    .map_err(|e| {
+                let _permit =
+                    slot.inflight.clone().acquire_owned().await.map_err(|e| {
                         Error::Inference(format!("primary sibling permit closed: {e}"))
                     })?;
                 let request = request.clone();
@@ -1947,80 +1918,93 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             let loaded_path = Arc::clone(&self.primary_loaded_path);
             let request = request.clone();
 
-            let result: Result<(CompletionResponse, &'static str)> = tokio::task::spawn_blocking(move || {
-                let start = Instant::now();
+            let result: Result<(CompletionResponse, &'static str)> =
+                tokio::task::spawn_blocking(move || {
+                    let start = Instant::now();
 
-                // Hot-swap check: if the lazy slot is holding a
-                // different model than we need, unload + reload.
-                let mut primary = primary_lock.blocking_lock();
-                let mut loaded = loaded_path.blocking_lock();
-                let needs_swap = loaded.as_deref() != Some(target_path.as_path());
-                if needs_swap {
-                    if primary.is_some() {
-                        tracing::info!(
-                            slot = slot_label,
-                            from = ?loaded.as_ref().map(|p| p.display().to_string()),
-                            to = %target_path.display(),
-                            "hot-swapping lazy slot"
-                        );
-                    } else {
-                        tracing::info!(
-                            slot = slot_label,
-                            path = %target_path.display(),
-                            "loading lazy slot (first use)"
-                        );
+                    // Hot-swap check: if the lazy slot is holding a
+                    // different model than we need, unload + reload.
+                    let mut primary = primary_lock.blocking_lock();
+                    let mut loaded = loaded_path.blocking_lock();
+                    let needs_swap = loaded.as_deref() != Some(target_path.as_path());
+                    if needs_swap {
+                        if primary.is_some() {
+                            tracing::info!(
+                                slot = slot_label,
+                                from = ?loaded.as_ref().map(|p| p.display().to_string()),
+                                to = %target_path.display(),
+                                "hot-swapping lazy slot"
+                            );
+                        } else {
+                            tracing::info!(
+                                slot = slot_label,
+                                path = %target_path.display(),
+                                "loading lazy slot (first use)"
+                            );
+                        }
+                        *primary = None;
+                        let s = ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers)?;
+                        *primary = Some(s);
+                        *loaded = Some(target_path.clone());
                     }
-                    *primary = None;
-                    let s = ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers)?;
-                    *primary = Some(s);
-                    *loaded = Some(target_path.clone());
-                }
-                drop(loaded);
+                    drop(loaded);
 
-                let slot = primary.as_ref().unwrap();
-                let model_id = slot.model_id.clone();
-                let mut ctx_lock = slot.context.blocking_lock();
+                    let slot = primary.as_ref().unwrap();
+                    let model_id = slot.model_id.clone();
+                    let mut ctx_lock = slot.context.blocking_lock();
 
-                // Catch panics from llama.cpp (e.g., context overflow assertions).
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock, &request, &quirks)
-                }));
+                    // Catch panics from llama.cpp (e.g., context overflow assertions).
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        ModelSlot::generate_sync(
+                            &slot.model,
+                            &slot.model_id,
+                            &mut ctx_lock,
+                            &request,
+                            &quirks,
+                        )
+                    }));
 
-                let outcome: GenerationOutcome = match result {
-                    Ok(Ok(r)) => r,
-                    Ok(Err(e)) => {
-                        tracing::warn!(slot = slot_label, error = %e, "inference error");
-                        return Err(e);
-                    }
-                    Err(_) => {
-                        tracing::error!(slot = slot_label, "inference panicked — likely context overflow");
-                        return Err(Error::Inference(
+                    let outcome: GenerationOutcome = match result {
+                        Ok(Ok(r)) => r,
+                        Ok(Err(e)) => {
+                            tracing::warn!(slot = slot_label, error = %e, "inference error");
+                            return Err(e);
+                        }
+                        Err(_) => {
+                            tracing::error!(
+                                slot = slot_label,
+                                "inference panicked — likely context overflow"
+                            );
+                            return Err(Error::Inference(
                             "Model inference failed: prompt may exceed the model's context window. \
                              Try a shorter message or reduce conversation history.".to_string(),
                         ));
-                    }
-                };
+                        }
+                    };
 
-                let latency_ms = start.elapsed().as_millis() as u64;
+                    let latency_ms = start.elapsed().as_millis() as u64;
 
-                *last_use.blocking_lock() = Some(Instant::now());
+                    *last_use.blocking_lock() = Some(Instant::now());
 
-                Ok((CompletionResponse {
-                    text: outcome.text,
-                    tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
-                    prompt_tokens: outcome.prompt_tokens,
-                    // `slot` may have been dropped on the fresh-ctx
-                    // path; use the model_id cloned before the
-                    // branch.
-                    model_id: model_id.clone(),
-                    latency_ms,
-                    oicp_meta: None,
-                    finish_reason: Some(outcome.finish_reason),
-                    completion_tokens: Some(outcome.completion_tokens as u32),
-                }, slot_label))
-            })
-            .await
-            .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
+                    Ok((
+                        CompletionResponse {
+                            text: outcome.text,
+                            tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
+                            prompt_tokens: outcome.prompt_tokens,
+                            // `slot` may have been dropped on the fresh-ctx
+                            // path; use the model_id cloned before the
+                            // branch.
+                            model_id: model_id.clone(),
+                            latency_ms,
+                            oicp_meta: None,
+                            finish_reason: Some(outcome.finish_reason),
+                            completion_tokens: Some(outcome.completion_tokens as u32),
+                        },
+                        slot_label,
+                    ))
+                })
+                .await
+                .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
 
             match result {
                 Ok((resp, slot_label)) => {
@@ -2060,7 +2044,13 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 // Catch panics from llama.cpp (e.g., context overflow assertions).
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock, &request, &quirks)
+                    ModelSlot::generate_sync(
+                        &slot.model,
+                        &slot.model_id,
+                        &mut ctx_lock,
+                        &request,
+                        &quirks,
+                    )
                 }));
 
                 let outcome: GenerationOutcome = match result {
@@ -2070,7 +2060,10 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         return Err(e);
                     }
                     Err(_) => {
-                        tracing::error!(slot = "fast", "inference panicked — likely context overflow");
+                        tracing::error!(
+                            slot = "fast",
+                            "inference panicked — likely context overflow"
+                        );
                         return Err(Error::Inference(
                             "Model inference failed: prompt may exceed the model's context window. \
                              Try a shorter message or reduce conversation history.".to_string(),
@@ -2274,9 +2267,15 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let slot = primary.as_ref().unwrap();
                 let mut ctx_lock = slot.context.blocking_lock();
                 *last_use.blocking_lock() = Some(Instant::now());
-                if let Err(e) =
-                    ModelSlot::generate_stream_sync(&slot.model, &slot.model_id, ctx_lock.ctx_mut(), &request, &tx, &quirks, None)
-                {
+                if let Err(e) = ModelSlot::generate_stream_sync(
+                    &slot.model,
+                    &slot.model_id,
+                    ctx_lock.ctx_mut(),
+                    &request,
+                    &tx,
+                    &quirks,
+                    None,
+                ) {
                     tracing::warn!(slot = slot_label, error = %e, "stream error");
                     let _ = tx.blocking_send(Err(e));
                 } else {
@@ -2301,9 +2300,15 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let _permit = _permit;
                 let start = Instant::now();
                 let mut ctx_lock = slot.context.blocking_lock();
-                if let Err(e) =
-                    ModelSlot::generate_stream_sync(&slot.model, &slot.model_id, ctx_lock.ctx_mut(), &request, &tx, &quirks, None)
-                {
+                if let Err(e) = ModelSlot::generate_stream_sync(
+                    &slot.model,
+                    &slot.model_id,
+                    ctx_lock.ctx_mut(),
+                    &request,
+                    &tx,
+                    &quirks,
+                    None,
+                ) {
                     tracing::warn!(slot = "fast", error = %e, "stream error");
                     let _ = tx.blocking_send(Err(e));
                 } else {
@@ -2537,7 +2542,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             Error::Inference(
                 "No embedding model is configured. Open Settings → Embedding model and \
                  select a GGUF embedding model (e.g. Qwen3-Embedding-0.6B-Q4_K_M.gguf), \
-                 then retry.".to_string(),
+                 then retry."
+                    .to_string(),
             )
         })?;
         let slot = Arc::clone(slot);
@@ -2576,7 +2582,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     tracing::error!("embed panicked — input may be malformed");
                     Err(Error::Inference(
                         "Embedding inference panicked — input may be malformed or \
-                         the embed model is incompatible.".to_string(),
+                         the embed model is incompatible."
+                            .to_string(),
                     ))
                 }
             }
@@ -2590,7 +2597,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             Error::Inference(
                 "No embedding model is configured. Open Settings → Embedding model and \
                  select a GGUF embedding model (e.g. Qwen3-Embedding-0.6B-Q4_K_M.gguf), \
-                 then retry.".to_string(),
+                 then retry."
+                    .to_string(),
             )
         })?;
         let slot = Arc::clone(slot);
@@ -2613,7 +2621,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 Ok(Err(e)) => Err(e),
                 Err(_) => Err(Error::Inference(
                     "Embedding inference panicked — input may be malformed or \
-                     the embed model is incompatible.".to_string(),
+                     the embed model is incompatible."
+                        .to_string(),
                 )),
             }
         })
@@ -2626,7 +2635,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             Error::Inference(
                 "No embedding model is configured. Open Settings → Embedding model and \
                  select a GGUF embedding model (e.g. Qwen3-Embedding-0.6B-Q4_K_M.gguf), \
-                 then retry.".to_string(),
+                 then retry."
+                    .to_string(),
             )
         })?;
         let slot = Arc::clone(slot);
@@ -2641,7 +2651,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 Ok(Err(e)) => Err(e),
                 Err(_) => Err(Error::Inference(
                     "Batch embedding inference panicked — one or more inputs may be \
-                     malformed or the embed model is incompatible.".to_string(),
+                     malformed or the embed model is incompatible."
+                        .to_string(),
                 )),
             }
         })
@@ -2857,4 +2868,3 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         .map_err(|e| Error::Inference(format!("warmup join failed: {e}")))?
     }
 }
-

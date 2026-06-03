@@ -86,11 +86,8 @@ pub fn cluster_vectors(
         .map_err(|e| Error::Extraction(format!("HDBSCAN clustering failed: {e:?}")))?;
 
     let noise_count = labels.iter().filter(|&&l| l == -1).count();
-    let cluster_count: std::collections::HashSet<i32> = labels
-        .iter()
-        .copied()
-        .filter(|l| *l >= 0)
-        .collect();
+    let cluster_count: std::collections::HashSet<i32> =
+        labels.iter().copied().filter(|l| *l >= 0).collect();
 
     Ok(VectorClusterResult {
         labels,

@@ -6,14 +6,13 @@
 //! mood_shifts, realisations.
 
 use crate::enrichment::pipeline::atlas::{
-    InteractionSketch, MoodShiftSketch, ObservationSketch, OpenThreadSketch,
-    RealisationSketch, ReflectiveExtension, TypeExtension,
+    InteractionSketch, MoodShiftSketch, ObservationSketch, OpenThreadSketch, RealisationSketch,
+    ReflectiveExtension, TypeExtension,
 };
 use crate::enrichment::pipeline::types::strip_reasoning_tags;
 use crate::error::{Error, Result};
 
-pub const PHASE1_REFLECTIVE_SYSTEM: &str =
-    include_str!("reflective_phase1_system.md");
+pub const PHASE1_REFLECTIVE_SYSTEM: &str = include_str!("reflective_phase1_system.md");
 
 pub fn phase1_reflective_schema() -> serde_json::Value {
     serde_json::json!({
@@ -82,7 +81,10 @@ pub fn phase1_reflective_schema() -> serde_json::Value {
 }
 
 fn str_field(v: &serde_json::Value, key: &str) -> String {
-    v.get(key).and_then(|x| x.as_str()).unwrap_or("").to_string()
+    v.get(key)
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string()
 }
 
 fn required_str(v: &serde_json::Value, key: &str) -> Option<String> {
@@ -194,7 +196,9 @@ pub fn parse_phase1_reflective(response: &str) -> Result<ReflectiveExtension> {
 }
 
 pub fn parse_phase1_reflective_extension(response: &str) -> Result<TypeExtension> {
-    Ok(TypeExtension::Reflective(parse_phase1_reflective(response)?))
+    Ok(TypeExtension::Reflective(parse_phase1_reflective(
+        response,
+    )?))
 }
 
 #[cfg(test)]
@@ -220,7 +224,8 @@ mod tests {
 
     #[test]
     fn mood_shift_requires_both_endpoints() {
-        let json = r#"{"mood_shifts":[{"from":"anxious","to":""},{"from":"unsure","to":"settled"}]}"#;
+        let json =
+            r#"{"mood_shifts":[{"from":"anxious","to":""},{"from":"unsure","to":"settled"}]}"#;
         let e = parse_phase1_reflective(json).expect("parses");
         assert_eq!(e.mood_shifts.len(), 1);
         assert_eq!(e.mood_shifts[0].to, "settled");

@@ -26,17 +26,16 @@ pub mod state;
 pub mod tiered;
 
 pub use state::{
-    sweep_stalled_states, CompositeSink, EnrichmentPhase, EnrichmentProgressSink,
-    EnrichmentState, EnrichmentStateFile, StateFileSink, ENRICHMENT_STATE_FILENAME,
-    STALL_THRESHOLD_SECS,
+    sweep_stalled_states, CompositeSink, EnrichmentPhase, EnrichmentProgressSink, EnrichmentState,
+    EnrichmentStateFile, StateFileSink, ENRICHMENT_STATE_FILENAME, STALL_THRESHOLD_SECS,
 };
 
 pub use atlas::{AtlasData, AtlasIngestion, AtlasIngestionConfig, AtlasIngestionRegistry};
 
-pub use filter::is_chunk_eligible;
-pub use field_engine::{FieldModelEngine, reprocess_skeleton_failures};
 pub use clustering::{EnrichmentProgress, FieldModelStats};
 pub use domain::Domain;
+pub use field_engine::{reprocess_skeleton_failures, FieldModelEngine};
+pub use filter::is_chunk_eligible;
 pub use skeleton::FieldSkeleton;
 
 // v2 enrichment pipeline (coexists with v1 during iteration; see

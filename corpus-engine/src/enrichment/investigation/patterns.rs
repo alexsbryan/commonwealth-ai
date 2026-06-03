@@ -26,9 +26,7 @@ use petgraph::Graph;
 
 use crate::recipe::{Comparison, PatternDecl};
 
-use super::graph::{
-    Entity, PatternFinding, PatternKind, Relationship,
-};
+use super::graph::{Entity, PatternFinding, PatternKind, Relationship};
 
 /// Run every declared pattern detector against the graph.
 /// Returns the flattened list of findings; ordering follows the
@@ -47,13 +45,7 @@ pub fn detect_all(
                 description: _,
                 min_entities,
                 edge_types,
-            } => detect_circular_flow(
-                name,
-                *min_entities,
-                edge_types,
-                entities,
-                relationships,
-            ),
+            } => detect_circular_flow(name, *min_entities, edge_types, entities, relationships),
             PatternDecl::RoleOverlap {
                 name,
                 description: _,
@@ -94,14 +86,9 @@ pub fn detect_all(
                 let mut attributes = serde_json::Map::new();
                 attributes.insert(
                     "status".into(),
-                    serde_json::Value::String(
-                        "reserved_not_yet_implemented".into(),
-                    ),
+                    serde_json::Value::String("reserved_not_yet_implemented".into()),
                 );
-                attributes.insert(
-                    "query".into(),
-                    serde_json::Value::String(query.clone()),
-                );
+                attributes.insert("query".into(), serde_json::Value::String(query.clone()));
                 vec![PatternFinding {
                     pattern_name: name.clone(),
                     pattern_type: PatternKind::CustomSql,
@@ -139,14 +126,12 @@ pub fn detect_circular_flow(
     let allowed: BTreeSet<&str> = edge_types.iter().map(String::as_str).collect();
     let entity_index: HashMap<&str, NodeIndex> = entities
         .iter()
-        
         .map(|e| (e.id.as_str(), NodeIndex::new(0))) // placeholder
         .collect::<HashMap<_, _>>();
 
     // Build the petgraph DiGraph<&str entity_id, &str relationship_id>.
     let mut g: Graph<&str, &str> = Graph::new();
-    let mut id_to_node: HashMap<&str, NodeIndex> =
-        HashMap::with_capacity(entities.len());
+    let mut id_to_node: HashMap<&str, NodeIndex> = HashMap::with_capacity(entities.len());
     for e in entities {
         let n = g.add_node(e.id.as_str());
         id_to_node.insert(e.id.as_str(), n);
@@ -175,10 +160,7 @@ pub fn detect_circular_flow(
             if cycle.len() < min_entities as usize {
                 continue;
             }
-            let entity_ids: Vec<String> = cycle
-                .iter()
-                .map(|n| g[*n].to_string())
-                .collect();
+            let entity_ids: Vec<String> = cycle.iter().map(|n| g[*n].to_string()).collect();
             // Find the relationship_ids that connect this cycle in
             // order. Take ANY edge between consecutive nodes that
             // matches `allowed`; multigraph means there could be
@@ -187,10 +169,7 @@ pub fn detect_circular_flow(
             for i in 0..cycle.len() {
                 let from = cycle[i];
                 let to = cycle[(i + 1) % cycle.len()];
-                if let Some(edge) = g
-                    .edges_connecting(from, to)
-                    .next()
-                {
+                if let Some(edge) = g.edges_connecting(from, to).next() {
                     relationship_ids.push((*edge.weight()).to_string());
                 }
             }
@@ -226,7 +205,16 @@ fn enumerate_simple_cycles(
         let mut on_path: BTreeSet<NodeIndex> = BTreeSet::new();
         path.push(start);
         on_path.insert(start);
-        dfs_cycles(g, scc, start, start, &mut path, &mut on_path, &mut cycles, &mut seen);
+        dfs_cycles(
+            g,
+            scc,
+            start,
+            start,
+            &mut path,
+            &mut on_path,
+            &mut cycles,
+            &mut seen,
+        );
     }
     cycles
 }
@@ -371,8 +359,7 @@ pub fn detect_role_overlap(
         let mut intersection: BTreeSet<&str> =
             by_role.get(*first_role).unwrap().iter().copied().collect();
         for role in iter {
-            let next: BTreeSet<&str> =
-                by_role.get(*role).unwrap().iter().copied().collect();
+            let next: BTreeSet<&str> = by_role.get(*role).unwrap().iter().copied().collect();
             intersection = intersection.intersection(&next).copied().collect();
         }
         for counterparty in intersection {
@@ -464,10 +451,7 @@ pub fn detect_threshold(
         findings.push(PatternFinding {
             pattern_name: name.to_string(),
             pattern_type: PatternKind::Threshold,
-            entity_ids: vec![
-                r.from_entity_id.clone(),
-                r.to_entity_id.clone(),
-            ],
+            entity_ids: vec![r.from_entity_id.clone(), r.to_entity_id.clone()],
             relationship_ids: vec![r.id.clone()],
             attributes,
         });
@@ -557,32 +541,17 @@ mod tests {
 
     #[test]
     fn circular_flow_respects_min_entities() {
-        let entities = vec![
-            ent("A", "company", "A"),
-            ent("B", "company", "B"),
-        ];
+        let entities = vec![ent("A", "company", "A"), ent("B", "company", "B")];
         let relationships = vec![
             rel("r1", "A", "B", "revenue", Default::default()),
             rel("r2", "B", "A", "revenue", Default::default()),
         ];
         // 2-node cycle exists but min_entities = 3 should suppress it.
-        let findings = detect_circular_flow(
-            "x",
-            3,
-            &["revenue".into()],
-            &entities,
-            &relationships,
-        );
+        let findings = detect_circular_flow("x", 3, &["revenue".into()], &entities, &relationships);
         assert!(findings.is_empty());
 
         // Lower the bar — now finds the 2-cycle.
-        let findings = detect_circular_flow(
-            "x",
-            2,
-            &["revenue".into()],
-            &entities,
-            &relationships,
-        );
+        let findings = detect_circular_flow("x", 2, &["revenue".into()], &entities, &relationships);
         assert_eq!(findings.len(), 1);
     }
 
@@ -600,13 +569,7 @@ mod tests {
         ];
         // Only "revenue" allowed — the cycle has an "investment"
         // edge, so it should be excluded.
-        let findings = detect_circular_flow(
-            "x",
-            3,
-            &["revenue".into()],
-            &entities,
-            &relationships,
-        );
+        let findings = detect_circular_flow("x", 3, &["revenue".into()], &entities, &relationships);
         assert!(findings.is_empty());
 
         // Allow both → finds the cycle.
@@ -628,7 +591,13 @@ mod tests {
         revenue_attrs.insert("amount_usd".into(), 50_000_000.into());
 
         let relationships = vec![
-            rel("inv-1", "Microsoft", "OpenAI", "investment", investment_attrs),
+            rel(
+                "inv-1",
+                "Microsoft",
+                "OpenAI",
+                "investment",
+                investment_attrs,
+            ),
             rel("rev-1", "OpenAI", "Microsoft", "revenue", revenue_attrs),
             // Distractor: a third party with revenue from MSFT
             rel("rev-2", "Acme", "Microsoft", "revenue", Default::default()),
@@ -648,7 +617,13 @@ mod tests {
     #[test]
     fn role_overlap_returns_empty_when_no_pair_matches_all_roles() {
         let relationships = vec![
-            rel("inv-1", "Microsoft", "OpenAI", "investment", Default::default()),
+            rel(
+                "inv-1",
+                "Microsoft",
+                "OpenAI",
+                "investment",
+                Default::default(),
+            ),
             // No revenue edge OpenAI -> Microsoft
         ];
         let mut roles = BTreeMap::new();
@@ -764,10 +739,12 @@ mod tests {
         let findings = detect_all(&patterns, &entities, &relationships);
         // Every declared pattern produced at least one finding, in
         // the recipe-author-chosen order.
-        let names: Vec<&str> =
-            findings.iter().map(|f| f.pattern_name.as_str()).collect();
+        let names: Vec<&str> = findings.iter().map(|f| f.pattern_name.as_str()).collect();
         assert!(names.contains(&"cycles"), "missing cycles: {findings:?}");
-        assert!(names.contains(&"ovlap"), "missing role overlap: {findings:?}");
+        assert!(
+            names.contains(&"ovlap"),
+            "missing role overlap: {findings:?}"
+        );
         assert!(names.contains(&"thresh"), "missing threshold: {findings:?}");
         // Order is preserved per pattern family.
         let cycles_idx = names.iter().position(|&n| n == "cycles").unwrap();

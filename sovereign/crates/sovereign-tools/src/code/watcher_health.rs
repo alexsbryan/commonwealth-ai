@@ -35,8 +35,8 @@
 //!   the only correct action — fall back to a direct `cargo` run — is
 //!   unambiguous from a single call.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use corpus_engine::WatcherHeartbeat;
 use serde_json::{json, Value};

@@ -52,11 +52,7 @@ pub fn load_or_create_owner_key_at(path: &Path) -> std::io::Result<SigningKey> {
         if bytes.len() != 32 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!(
-                    "{}: expected 32 bytes, got {}",
-                    path.display(),
-                    bytes.len()
-                ),
+                format!("{}: expected 32 bytes, got {}", path.display(), bytes.len()),
             ));
         }
         let mut seed = [0u8; 32];
@@ -205,12 +201,7 @@ pub struct MultiOfferVastWorkerProvider {
 }
 
 impl MultiOfferVastWorkerProvider {
-    pub fn new(
-        image: String,
-        disk_gb: u32,
-        label_prefix: String,
-        offers: Vec<pod::Offer>,
-    ) -> Self {
+    pub fn new(image: String, disk_gb: u32, label_prefix: String, offers: Vec<pod::Offer>) -> Self {
         Self {
             image,
             disk_gb,
@@ -229,9 +220,10 @@ impl MultiOfferVastWorkerProvider {
 impl WorkerProvider for MultiOfferVastWorkerProvider {
     fn create(&self, bootstrap_b64: &str, _spec: &JobSpec) -> ProviderResult<ProviderInstance> {
         let offer = {
-            let mut guard = self.offers.lock().map_err(|e| {
-                ProviderError::Other(format!("offer queue poisoned: {e}"))
-            })?;
+            let mut guard = self
+                .offers
+                .lock()
+                .map_err(|e| ProviderError::Other(format!("offer queue poisoned: {e}")))?;
             if guard.is_empty() {
                 return Err(ProviderError::Other(
                     "offer queue exhausted — pod_count exceeded staged offers".into(),

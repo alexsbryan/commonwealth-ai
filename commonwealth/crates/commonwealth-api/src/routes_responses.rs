@@ -63,13 +63,13 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, warn};
 
 use crate::frontdoor;
-use crate::reshaping::{
-    in_chunked_write_state, rewrite_synthetic_tool_call, synthetic_file_tools,
-    SYNTHETIC_TOOL_WRITE_FILE_CHUNK, SYNTHETIC_TOOL_WRITE_FILE_END,
-};
 use crate::openai_types::{
     ChatCompletionRequest, ChatCompletionResponse, ChatMessage, FunctionCall, ToolCall,
     ToolDefinition, ToolFunction,
+};
+use crate::reshaping::{
+    in_chunked_write_state, rewrite_synthetic_tool_call, synthetic_file_tools,
+    SYNTHETIC_TOOL_WRITE_FILE_CHUNK, SYNTHETIC_TOOL_WRITE_FILE_END,
 };
 use crate::responses_types::{
     MessageContent, MessageItem, OutputContentPart, OutputFunctionCall, OutputMessage,
@@ -180,7 +180,12 @@ pub async fn responses(
         .as_ref()
         .map(|v| {
             v.iter()
-                .map(|t| t.parameters.as_ref().map(|p| p.to_string().len()).unwrap_or(0))
+                .map(|t| {
+                    t.parameters
+                        .as_ref()
+                        .map(|p| p.to_string().len())
+                        .unwrap_or(0)
+                })
                 .sum()
         })
         .unwrap_or(0);
@@ -360,9 +365,9 @@ fn translate_request(
                         function: ToolFunction {
                             name,
                             description: t.description,
-                            parameters: t.parameters.unwrap_or_else(|| {
-                                serde_json::json!({"type":"object","properties":{}})
-                            }),
+                            parameters: t.parameters.unwrap_or_else(
+                                || serde_json::json!({"type":"object","properties":{}}),
+                            ),
                         },
                     });
                 }
@@ -390,9 +395,9 @@ fn translate_request(
                     function: ToolFunction {
                         name: synthetic_name,
                         description: t.description,
-                        parameters: t.parameters.unwrap_or_else(|| {
-                            serde_json::json!({"type":"object","properties":{}})
-                        }),
+                        parameters: t.parameters.unwrap_or_else(
+                            || serde_json::json!({"type":"object","properties":{}}),
+                        ),
                     },
                 })
             })
@@ -456,7 +461,10 @@ fn translate_request(
         } else {
             tools.unwrap_or_default()
         };
-        let names: Vec<&str> = filtered.iter().map(|td| td.function.name.as_str()).collect();
+        let names: Vec<&str> = filtered
+            .iter()
+            .map(|td| td.function.name.as_str())
+            .collect();
         tracing::info!(
             chunked_write_active,
             outbound_tool_count = filtered.len(),
@@ -549,12 +557,12 @@ fn translate_request(
         chat_template_kwargs,
         think_budget,
         tool_profile: None,
-    sampling_mode: None,
-    assistant_prefix: None,
-    cmd_prefix: None,
-    url_allowlist: None,
-    evidence_id_allowlist: None,
-    lark_grammar: None,
+        sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
     })
 }
 
@@ -663,7 +671,11 @@ async fn translate_non_streaming_response(
         }
     };
 
-    let model = if chat.model.is_empty() { model_label.clone() } else { chat.model.clone() };
+    let model = if chat.model.is_empty() {
+        model_label.clone()
+    } else {
+        chat.model.clone()
+    };
     let resp = build_non_streaming_response(chat, response_id, model, created_at, metadata);
     (StatusCode::OK, Json(resp)).into_response()
 }
@@ -719,13 +731,11 @@ fn build_non_streaming_response(
                 // exec_command call.
                 let raw_name = tc.function.name.clone();
                 let raw_args = tc.function.arguments.clone();
-                let (name, arguments) = match rewrite_synthetic_tool_call(
-                    &tc.function.name,
-                    &tc.function.arguments,
-                ) {
-                    Some(pair) => pair,
-                    None => (tc.function.name, tc.function.arguments),
-                };
+                let (name, arguments) =
+                    match rewrite_synthetic_tool_call(&tc.function.name, &tc.function.arguments) {
+                        Some(pair) => pair,
+                        None => (tc.function.name, tc.function.arguments),
+                    };
                 let parsed_ok = serde_json::from_str::<serde_json::Value>(&raw_args).is_ok();
                 let mut fc_rec = serde_json::Map::new();
                 fc_rec.insert("name".into(), serde_json::Value::String(raw_name.clone()));
@@ -821,13 +831,17 @@ async fn translate_streaming_response(
                 Ok(b) => buf.extend_from_slice(&b),
                 Err(e) => {
                     warn!(error = %e, "responses: inner stream read error");
-                    let _ = tx.send(Ok(state.emit_failed(&format!("stream error: {e}")))).await;
+                    let _ = tx
+                        .send(Ok(state.emit_failed(&format!("stream error: {e}"))))
+                        .await;
                     return;
                 }
             }
 
             while let Some(event_bytes) = take_one_sse_event(&mut buf) {
-                let Some(data) = parse_sse_data(&event_bytes) else { continue };
+                let Some(data) = parse_sse_data(&event_bytes) else {
+                    continue;
+                };
                 if data == "[DONE]" {
                     got_done = true;
                     break;
@@ -1014,7 +1028,10 @@ impl ResponsesStreamState {
             return out;
         };
 
-        let delta = choice.get("delta").cloned().unwrap_or(serde_json::json!({}));
+        let delta = choice
+            .get("delta")
+            .cloned()
+            .unwrap_or(serde_json::json!({}));
 
         // Text content delta.
         if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
@@ -1022,8 +1039,7 @@ impl ResponsesStreamState {
                 // Open a message if this is the first text we've seen.
                 if self.message.is_none() {
                     self.message_id_counter += 1;
-                    let item_id =
-                        format!("msg_{}_{}", self.response_id, self.message_id_counter);
+                    let item_id = format!("msg_{}_{}", self.response_id, self.message_id_counter);
                     let output_index = self.next_output_index;
                     self.next_output_index += 1;
                     self.message = Some(OpenMessage {
@@ -1190,7 +1206,10 @@ impl ResponsesStreamState {
                         "output_index": output_index,
                         "delta": arguments,
                     });
-                    out.push(sse_event("response.function_call_arguments.delta", &payload));
+                    out.push(sse_event(
+                        "response.function_call_arguments.delta",
+                        &payload,
+                    ));
                 }
                 // function_call_arguments.done.
                 {
@@ -1259,8 +1278,8 @@ impl ResponsesStreamState {
                     .function_calls
                     .iter()
                     .map(|fc| {
-                        let parsed_ok = serde_json::from_str::<serde_json::Value>(&fc.arguments)
-                            .is_ok();
+                        let parsed_ok =
+                            serde_json::from_str::<serde_json::Value>(&fc.arguments).is_ok();
                         let mut rec = serde_json::Map::new();
                         rec.insert("name".into(), serde_json::Value::String(fc.name.clone()));
                         rec.insert(
@@ -1509,7 +1528,6 @@ fn parse_sse_data(event_bytes: &[u8]) -> Option<&str> {
 fn sse_event(event_name: &'static str, payload: &serde_json::Value) -> Event {
     Event::default().event(event_name).data(payload.to_string())
 }
-
 
 // ─── Generic helpers ────────────────────────────────────────────────
 
@@ -1890,14 +1908,12 @@ mod tests {
 
     #[test]
     fn in_chunked_write_state_false_when_last_call_is_other_tool() {
-        let items = vec![
-            ResponsesInputItem::FunctionCall(RFnCall {
-                call_id: "c1".into(),
-                name: "exec_command".into(),
-                arguments: "{}".into(),
-                id: None,
-            }),
-        ];
+        let items = vec![ResponsesInputItem::FunctionCall(RFnCall {
+            call_id: "c1".into(),
+            name: "exec_command".into(),
+            arguments: "{}".into(),
+            id: None,
+        })];
         assert!(!in_chunked_write_state(&items));
     }
 
@@ -2065,8 +2081,12 @@ mod tests {
     #[test]
     fn translate_request_message_parts_concat() {
         let parts = vec![
-            ResponsesContentPart::InputText { text: "first".into() },
-            ResponsesContentPart::OutputText { text: "second".into() },
+            ResponsesContentPart::InputText {
+                text: "first".into(),
+            },
+            ResponsesContentPart::OutputText {
+                text: "second".into(),
+            },
             ResponsesContentPart::Other,
         ];
         let req = req_with_input(ResponsesInput::Items(vec![ResponsesInputItem::Message(
@@ -2208,7 +2228,9 @@ mod tests {
         let req = req_with_input(ResponsesInput::Text("go".into()));
         // Synthetic tools are gated on frontdoor_on as of 2026-05-13.
         let chat = translate_request(req, false, frontdoor::Harness::Opencode).unwrap();
-        let tools = chat.tools.expect("synthetic tools present when frontdoor on");
+        let tools = chat
+            .tools
+            .expect("synthetic tools present when frontdoor on");
         let names: Vec<&str> = tools.iter().map(|t| t.function.name.as_str()).collect();
         assert!(names.contains(&"write_file"));
         assert!(names.contains(&"read_file"));
@@ -2229,8 +2251,9 @@ mod tests {
         let names: Vec<&str> = tools.iter().map(|t| t.function.name.as_str()).collect();
         assert!(names.contains(&"exec_command"));
         assert!(
-            !names.iter().any(|n| n.starts_with("write_file")
-                || *n == "read_file"),
+            !names
+                .iter()
+                .any(|n| n.starts_with("write_file") || *n == "read_file"),
             "synthetic tools must NOT be injected when frontdoor off — \
              they pollute codex's apply_patch-trained tool prior. names={:?}",
             names
@@ -2271,8 +2294,7 @@ mod tests {
         // Construct content above the 350-byte ceiling.
         let big_content = "fn x() {}\n".repeat(60); // 600 bytes
         assert!(big_content.len() > 350);
-        let args =
-            serde_json::json!({"path":"/abs/x.rs","content":big_content}).to_string();
+        let args = serde_json::json!({"path":"/abs/x.rs","content":big_content}).to_string();
         let (name, cmd_args) = rewrite_synthetic_tool_call("write_file", &args).unwrap();
         assert_eq!(name, "exec_command");
         let cmd = serde_json::from_str::<serde_json::Value>(&cmd_args).unwrap()["cmd"]
@@ -2307,8 +2329,7 @@ mod tests {
     #[test]
     fn write_file_begin_truncates_and_creates_parent() {
         let args = serde_json::json!({"path":"/abs/sub/x.rs"}).to_string();
-        let (name, cmd_args) =
-            rewrite_synthetic_tool_call("write_file_begin", &args).unwrap();
+        let (name, cmd_args) = rewrite_synthetic_tool_call("write_file_begin", &args).unwrap();
         assert_eq!(name, "exec_command");
         let cmd = serde_json::from_str::<serde_json::Value>(&cmd_args).unwrap()["cmd"]
             .as_str()
@@ -2327,8 +2348,7 @@ mod tests {
             "chunk":"pub fn hi() {}\n"
         })
         .to_string();
-        let (name, cmd_args) =
-            rewrite_synthetic_tool_call("write_file_chunk", &args).unwrap();
+        let (name, cmd_args) = rewrite_synthetic_tool_call("write_file_chunk", &args).unwrap();
         assert_eq!(name, "exec_command");
         let cmd = serde_json::from_str::<serde_json::Value>(&cmd_args).unwrap()["cmd"]
             .as_str()
@@ -2343,8 +2363,7 @@ mod tests {
     #[test]
     fn write_file_end_reports_final_size() {
         let args = serde_json::json!({"path":"/abs/x.rs"}).to_string();
-        let (_, cmd_args) =
-            rewrite_synthetic_tool_call("write_file_end", &args).unwrap();
+        let (_, cmd_args) = rewrite_synthetic_tool_call("write_file_end", &args).unwrap();
         let cmd = serde_json::from_str::<serde_json::Value>(&cmd_args).unwrap()["cmd"]
             .as_str()
             .unwrap()
@@ -2357,8 +2376,7 @@ mod tests {
         // Single-shot write_file also benefits from on-demand parent
         // creation — the model can write `/abs/sub/x.rs` even when
         // `/abs/sub` doesn't exist yet.
-        let args =
-            serde_json::json!({"path":"/abs/sub/x.rs","content":"hi"}).to_string();
+        let args = serde_json::json!({"path":"/abs/sub/x.rs","content":"hi"}).to_string();
         let (_, cmd_args) = rewrite_synthetic_tool_call("write_file", &args).unwrap();
         let cmd = serde_json::from_str::<serde_json::Value>(&cmd_args).unwrap()["cmd"]
             .as_str()
@@ -2392,8 +2410,7 @@ mod tests {
         assert_eq!(name, "exec_command");
         let (name, _) = rewrite_synthetic_tool_call("write_file", "{}").unwrap();
         assert_eq!(name, "exec_command");
-        let (name, args) =
-            rewrite_synthetic_tool_call("write_file", r#"{"path":""}"#).unwrap();
+        let (name, args) = rewrite_synthetic_tool_call("write_file", r#"{"path":""}"#).unwrap();
         assert_eq!(name, "exec_command");
         let parsed: serde_json::Value = serde_json::from_str(&args).unwrap();
         let cmd = parsed["cmd"].as_str().unwrap();
@@ -2414,22 +2431,13 @@ mod tests {
 
     #[test]
     fn normalize_path_segments_preserves_clean_absolute_path() {
-        assert_eq!(
-            normalize_path_segments("/abs/x/y.rs"),
-            "/abs/x/y.rs"
-        );
+        assert_eq!(normalize_path_segments("/abs/x/y.rs"), "/abs/x/y.rs");
     }
 
     #[test]
     fn normalize_path_segments_handles_relative_path() {
-        assert_eq!(
-            normalize_path_segments("foo/bar/baz"),
-            "foo/bar/baz"
-        );
-        assert_eq!(
-            normalize_path_segments(" foo / bar / baz "),
-            "foo/bar/baz"
-        );
+        assert_eq!(normalize_path_segments("foo/bar/baz"), "foo/bar/baz");
+        assert_eq!(normalize_path_segments(" foo / bar / baz "), "foo/bar/baz");
     }
 
     #[test]
@@ -2598,7 +2606,10 @@ mod tests {
         assert!(event_type(&created).contains("response.created"));
         assert!(event_type(&in_progress).contains("response.in_progress"));
         // Sequence numbers are monotonic.
-        let _ = (body_field(&created, "sequence_number"), body_field(&in_progress, "sequence_number"));
+        let _ = (
+            body_field(&created, "sequence_number"),
+            body_field(&in_progress, "sequence_number"),
+        );
     }
 
     fn chat_text_chunk(content: &str, finish: Option<&str>) -> serde_json::Value {

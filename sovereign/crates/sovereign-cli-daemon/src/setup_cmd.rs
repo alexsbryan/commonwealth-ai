@@ -17,8 +17,7 @@ use std::time::Duration;
 use sovereign_core::models_manifest::SlotConfig;
 use sovereign_inference::hardware::{self, HardwareProfile};
 use sovereign_inference::setup_planner::{
-    build_primary_catalog, download_gguf, hf_download_url, resolve_slot,
-    PrimaryOption, SlotKind,
+    build_primary_catalog, download_gguf, hf_download_url, resolve_slot, PrimaryOption, SlotKind,
 };
 
 // Imports used only by the in-file test modules. Kept behind
@@ -48,10 +47,7 @@ pub async fn run_setup(args: &[String]) -> i32 {
     let invoked_via_daemon_path = args.iter().any(|a| a == "--wizard-only");
     let mut effective_args: Vec<String> = args.to_vec();
     if !invoked_via_daemon_path {
-        crate::util::deprecation::announce(
-            "sovereign setup",
-            "sovereign daemon --setup-only",
-        );
+        crate::util::deprecation::announce("sovereign setup", "sovereign daemon --setup-only");
         // The legacy `sovereign setup` is now wizard-only. Force the
         // flag on so `finish_with_paths` short-circuits before the
         // service-install branch — that branch belongs to
@@ -288,7 +284,8 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
             "--data-dir" => {
                 i += 1;
                 opts.data_dir = Some(PathBuf::from(
-                    args.get(i).ok_or_else(|| "--data-dir needs a path".to_string())?,
+                    args.get(i)
+                        .ok_or_else(|| "--data-dir needs a path".to_string())?,
                 ));
             }
             "--help" | "-h" => opts.help = true,
@@ -301,18 +298,23 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
     command: "sovereign setup",
-    summary:
-        "First-run onboarding wizard: detect hardware, download models, write config. \
+    summary: "First-run onboarding wizard: detect hardware, download models, write config. \
          Now an alias for `sovereign daemon --setup-only`.",
     sections: &[
         crate::util::help::HelpSection::Usage(
             "sovereign setup [--yes] [--reset] [--data-dir <path>]",
         ),
         crate::util::help::HelpSection::Flags(&[
-            ("--yes, -y",       "Non-interactive; accept recommended choices"),
-            ("--reset",         "Wipe config and re-run (uninstalls service first if present)"),
-            ("--data-dir <p>",  "Override the default data root (~/.sovereign)"),
-            ("--help, -h",      "Show this message"),
+            ("--yes, -y", "Non-interactive; accept recommended choices"),
+            (
+                "--reset",
+                "Wipe config and re-run (uninstalls service first if present)",
+            ),
+            (
+                "--data-dir <p>",
+                "Override the default data root (~/.sovereign)",
+            ),
+            ("--help, -h", "Show this message"),
         ]),
         crate::util::help::HelpSection::Notes(
             "Writes config to ~/.sovereign/config.toml (alongside the rest of the user-scoped\n\
@@ -349,7 +351,11 @@ fn pick_primary(catalog: &[PrimaryOption], yes: bool) -> Pick {
     println!();
     println!("    #   Model                          Size     Notes");
     for (i, opt) in catalog.iter().enumerate() {
-        let tag = if opt.recommended { "← recommended" } else { "" };
+        let tag = if opt.recommended {
+            "← recommended"
+        } else {
+            ""
+        };
         println!(
             "    {}   {:30}  {:>5.1} GB {tag}",
             i + 1,
@@ -362,7 +368,10 @@ fn pick_primary(catalog: &[PrimaryOption], yes: bool) -> Pick {
     println!();
 
     if yes {
-        let rec = catalog.iter().find(|o| o.recommended).or_else(|| catalog.first());
+        let rec = catalog
+            .iter()
+            .find(|o| o.recommended)
+            .or_else(|| catalog.first());
         return match rec {
             Some(o) => Pick::Slot(o.slot.clone()),
             None => Pick::Abort,
@@ -393,7 +402,10 @@ fn pick_primary(catalog: &[PrimaryOption], yes: bool) -> Pick {
                 return Pick::Slot(catalog[n - 1].slot.clone());
             }
         }
-        eprintln!("  (Enter a number 1..{}, 'b', or press enter for recommended.)", catalog.len());
+        eprintln!(
+            "  (Enter a number 1..{}, 'b', or press enter for recommended.)",
+            catalog.len()
+        );
     }
 }
 
@@ -448,7 +460,12 @@ fn prompt_byom_paths(opts: &Opts) -> Result<ModelPaths, String> {
     // model." Users who want a dedicated coder can add one later
     // via Settings.
     let code = prompt_path("  Code specialist GGUF path (optional, Enter to skip): ")?;
-    Ok(ModelPaths { primary, fast, embed, code })
+    Ok(ModelPaths {
+        primary,
+        fast,
+        embed,
+        code,
+    })
 }
 
 /// Prompt for a path, error out if the user leaves it blank.
@@ -507,9 +524,7 @@ pub(crate) async fn download_with_progress(
     let last_print = std::sync::Mutex::new(std::time::Instant::now() - Duration::from_secs(1));
     let result = download_gguf(url, dest, &expected, &|done, total| {
         let mut lp = last_print.lock().unwrap();
-        if lp.elapsed() > Duration::from_millis(250)
-            || total.map(|t| done >= t).unwrap_or(false)
-        {
+        if lp.elapsed() > Duration::from_millis(250) || total.map(|t| done >= t).unwrap_or(false) {
             print_progress(&display_owned, done, total);
             *lp = std::time::Instant::now();
         }
@@ -543,7 +558,10 @@ async fn run_repair() -> i32 {
     let cfg = match SetupConfig::load() {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("error: could not read {}: {e}", SetupConfig::default_path().display());
+            eprintln!(
+                "error: could not read {}: {e}",
+                SetupConfig::default_path().display()
+            );
             eprintln!("hint: run `sovereign setup` to set up from scratch.");
             return 1;
         }
@@ -565,7 +583,7 @@ async fn run_repair() -> i32 {
     // adding it to the sweep.
     let mut slots: Vec<(&str, &std::path::Path)> = vec![
         ("primary", cfg.models.primary.as_path()),
-        ("embed",   cfg.models.embed.as_path()),
+        ("embed", cfg.models.embed.as_path()),
     ];
     if cfg.models.has_explicit_fast() {
         slots.push(("fast", cfg.models.fast_path()));
@@ -601,7 +619,11 @@ async fn run_repair() -> i32 {
         "  Summary: {kept} valid, {removed} removed. \
          Run `sovereign setup` to re-download the removed slots."
     );
-    if removed > 0 { 1 } else { 0 }
+    if removed > 0 {
+        1
+    } else {
+        0
+    }
 }
 
 /// Given a model file path, look up the slot's advertised
@@ -616,7 +638,10 @@ fn lookup_slot_size_gb(
 ) -> Option<f64> {
     let file_name = path.file_name()?.to_str()?;
     for profile in manifest.profiles.values() {
-        for s in [&profile.thoughtful, &profile.fast, &profile.embed].into_iter().flatten() {
+        for s in [&profile.thoughtful, &profile.fast, &profile.embed]
+            .into_iter()
+            .flatten()
+        {
             if s.file == file_name {
                 return Some(s.size_gb);
             }
@@ -686,7 +711,9 @@ async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
             primary_pool: None,
         },
         daemon: DaemonSection::default(),
-        data: DataSection { dir: data_dir.clone() },
+        data: DataSection {
+            dir: data_dir.clone(),
+        },
         watched_folders: Default::default(),
         memory: Default::default(),
     };
@@ -741,7 +768,10 @@ async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
         println!(" ready");
     } else {
         println!();
-        eprintln!("  warning: daemon didn't respond on :{} within 30s.", cfg.daemon.client_port);
+        eprintln!(
+            "  warning: daemon didn't respond on :{} within 30s.",
+            cfg.daemon.client_port
+        );
         diagnose_daemon_failure(&data_dir);
         return 0;
     }
@@ -761,7 +791,10 @@ async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     // ── Banner ───────────────────────────────────────────────────
     println!();
     println!("  \u{2713} Mesh running — 1 node (you)");
-    println!("  \u{2713} Endpoint: localhost:{}/v1", cfg.daemon.client_port);
+    println!(
+        "  \u{2713} Endpoint: localhost:{}/v1",
+        cfg.daemon.client_port
+    );
 
     // ── opencode config — write the global file directly ─────────
     //
@@ -773,10 +806,7 @@ async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     match install_opencode_config(cfg.daemon.client_port) {
         Ok(OpencodeInstall::Created(path)) => {
             println!();
-            println!(
-                "  \u{2713} Wrote opencode config — {}",
-                path.display()
-            );
+            println!("  \u{2713} Wrote opencode config — {}", path.display());
         }
         Ok(OpencodeInstall::MergedInto(path)) => {
             println!();
@@ -796,9 +826,7 @@ async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
             // Non-fatal: print the snippet the user can paste themselves.
             eprintln!();
             eprintln!("  warning: couldn't write opencode config: {e}");
-            eprintln!(
-                "  paste this into ~/.config/opencode/opencode.json yourself:"
-            );
+            eprintln!("  paste this into ~/.config/opencode/opencode.json yourself:");
             eprintln!("{}", opencode_config_snippet(cfg.daemon.client_port));
         }
     }
@@ -869,10 +897,7 @@ fn install_opencode_config(client_port: u16) -> Result<OpencodeInstall, String> 
     install_opencode_config_at(&opencode_config_path(), client_port)
 }
 
-fn install_opencode_config_at(
-    path: &Path,
-    client_port: u16,
-) -> Result<OpencodeInstall, String> {
+fn install_opencode_config_at(path: &Path, client_port: u16) -> Result<OpencodeInstall, String> {
     // Fresh install — easy path.
     if !path.exists() {
         if let Some(parent) = path.parent() {
@@ -885,10 +910,9 @@ fn install_opencode_config_at(
     }
 
     // Existing file — parse, merge our keys, write back.
-    let raw = std::fs::read_to_string(path)
-        .map_err(|e| format!("read {}: {e}", path.display()))?;
-    let mut cfg: serde_json::Value = serde_json::from_str(&raw)
-        .map_err(|e| format!("parse {}: {e}", path.display()))?;
+    let raw = std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let mut cfg: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", path.display()))?;
     if !cfg.is_object() {
         return Err(format!(
             "{} is not a JSON object — refusing to overwrite",
@@ -948,10 +972,9 @@ fn install_opencode_config_at(
         }),
     );
 
-    let pretty = serde_json::to_string_pretty(&cfg)
-        .map_err(|e| format!("serialize merged config: {e}"))?;
-    std::fs::write(path, pretty)
-        .map_err(|e| format!("write {}: {e}", path.display()))?;
+    let pretty =
+        serde_json::to_string_pretty(&cfg).map_err(|e| format!("serialize merged config: {e}"))?;
+    std::fs::write(path, pretty).map_err(|e| format!("write {}: {e}", path.display()))?;
     Ok(OpencodeInstall::MergedInto(path.to_path_buf()))
 }
 
@@ -969,7 +992,9 @@ fn diagnose_daemon_failure(data_dir: &Path) {
     #[cfg(target_os = "linux")]
     eprintln!("    systemctl --user status sovereign     # is the unit active?");
 
-    eprintln!("    sovereign daemon run                  # run in the foreground to see errors live");
+    eprintln!(
+        "    sovereign daemon run                  # run in the foreground to see errors live"
+    );
     eprintln!();
 
     if err_log.exists() {
@@ -984,7 +1009,10 @@ fn diagnose_daemon_failure(data_dir: &Path) {
             Err(e) => eprintln!("    (couldn't read: {e})"),
         }
     } else {
-        eprintln!("  No log at {} yet — service likely didn't start.", err_log.display());
+        eprintln!(
+            "  No log at {} yet — service likely didn't start.",
+            err_log.display()
+        );
     }
 }
 
@@ -996,7 +1024,13 @@ async fn wait_for_daemon(port: u16, timeout: Duration) -> bool {
         .build()
         .unwrap();
     while std::time::Instant::now() < deadline {
-        if client.get(&url).send().await.map(|r| r.status().is_success()).unwrap_or(false) {
+        if client
+            .get(&url)
+            .send()
+            .await
+            .map(|r| r.status().is_success())
+            .unwrap_or(false)
+        {
             return true;
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
@@ -1071,7 +1105,10 @@ mod download_failure_tests {
         )
         .await
         .unwrap_err();
-        assert!(err.contains("content-type") || err.contains("text/html"), "err: {err}");
+        assert!(
+            err.contains("content-type") || err.contains("text/html"),
+            "err: {err}"
+        );
         assert!(!dest.exists(), "no stub should land at final path");
         assert!(!part.exists(), "no .part should remain");
     }
@@ -1112,14 +1149,9 @@ mod download_failure_tests {
         // body passes the size check, so the GGUF magic check is
         // what fires. This is the important case: servers that
         // return HTML with an innocuous content-type header.
-        let err = download_with_progress(
-            &format!("{base}/fake-model.gguf"),
-            &dest,
-            "fake",
-            0.001,
-        )
-        .await
-        .unwrap_err();
+        let err = download_with_progress(&format!("{base}/fake-model.gguf"), &dest, "fake", 0.001)
+            .await
+            .unwrap_err();
         assert!(
             err.contains("not a GGUF") || err.contains("GGUF") || err.contains("magic"),
             "err should mention magic mismatch: {err}"
@@ -1156,14 +1188,9 @@ mod download_failure_tests {
         let dest = tmp.path().join("real.gguf");
         // size_gb 0.001 so the 50% floor (512 KB) comfortably
         // accepts our 2 MB test payload.
-        download_with_progress(
-            &format!("{base}/real-model.gguf"),
-            &dest,
-            "real",
-            0.001,
-        )
-        .await
-        .expect("happy path should succeed");
+        download_with_progress(&format!("{base}/real-model.gguf"), &dest, "real", 0.001)
+            .await
+            .expect("happy path should succeed");
         assert!(dest.exists(), "final path should hold the downloaded file");
         assert_eq!(dest.metadata().unwrap().len(), 2 * 1024 * 1024);
     }
@@ -1330,7 +1357,10 @@ mod tests {
             } else {
                 opt.slot.base_name.clone()
             };
-            assert!(seen.insert(key.clone()), "duplicate base_name in catalog: {key}");
+            assert!(
+                seen.insert(key.clone()),
+                "duplicate base_name in catalog: {key}"
+            );
         }
     }
 
@@ -1466,7 +1496,10 @@ mod tests {
             parsed["mcp"]["servers"]["github"]["url"],
             "https://example.com/mcp"
         );
-        assert_eq!(parsed["provider"]["openrouter"]["npm"], "@openrouter/ai-sdk");
+        assert_eq!(
+            parsed["provider"]["openrouter"]["npm"],
+            "@openrouter/ai-sdk"
+        );
         assert_eq!(parsed["model"]["id"], "auto");
         assert_eq!(parsed["skills"][0], ".opencode/skills/sovereign-code");
     }

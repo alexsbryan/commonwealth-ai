@@ -141,8 +141,8 @@ pub async fn import_anthropic_zip(
         "imports: zip unpacked"
     );
 
-    let total_messages = count_messages_in_file(&extracted_bytes.canonical_path)
-        .unwrap_or_else(|e| {
+    let total_messages =
+        count_messages_in_file(&extracted_bytes.canonical_path).unwrap_or_else(|e| {
             // Counting is best-effort. We have the file at the
             // canonical path either way; the ETA just degrades to
             // "we don't know" rather than blocking the install.
@@ -311,8 +311,8 @@ pub async fn import_anthropic_zip(
 /// `~/.sovereign/indexes/<corpus_id>` the daemon's `CorpusEngine`
 /// uses by convention (see `state.rs::build_app_state`).
 fn conversations_anthropic_index_dir() -> Result<PathBuf, String> {
-    let home = dirs::home_dir()
-        .ok_or_else(|| "HOME is not set; cannot resolve index dir".to_string())?;
+    let home =
+        dirs::home_dir().ok_or_else(|| "HOME is not set; cannot resolve index dir".to_string())?;
     Ok(home
         .join(".sovereign")
         .join("indexes")
@@ -361,8 +361,7 @@ fn canonical_landing_path() -> Result<PathBuf, String> {
     let home = dirs::home_dir()
         .ok_or_else(|| "HOME is not set; cannot resolve ~/.sovereign/conversations/".to_string())?;
     let dir = home.join(CANONICAL_REL_DIR);
-    fs::create_dir_all(&dir)
-        .map_err(|e| format!("create {}: {e}", dir.display()))?;
+    fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
     Ok(dir.join(CANONICAL_FILE))
 }
 
@@ -374,14 +373,10 @@ fn canonical_landing_path() -> Result<PathBuf, String> {
 ///
 /// Returns the resolved destination plus the entry's uncompressed
 /// byte length (for the glassbox tracing event).
-fn unpack_conversations_json(
-    zip_path: &Path,
-    dest: &Path,
-) -> Result<ExtractedEntry, String> {
-    let file = fs::File::open(zip_path)
-        .map_err(|e| format!("open {}: {e}", zip_path.display()))?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| format!("read zip {}: {e}", zip_path.display()))?;
+fn unpack_conversations_json(zip_path: &Path, dest: &Path) -> Result<ExtractedEntry, String> {
+    let file = fs::File::open(zip_path).map_err(|e| format!("open {}: {e}", zip_path.display()))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| format!("read zip {}: {e}", zip_path.display()))?;
 
     // Locate the first entry whose path ends in `conversations.json`.
     // Anthropic ships the export either at the archive root or under
@@ -471,8 +466,7 @@ fn unpack_conversations_json(
 /// inside message text — the pre-flight ETA is a `±30%` band
 /// anyway, so a few stray matches don't matter.
 fn count_messages_in_file(path: &Path) -> Result<u64, String> {
-    let file = fs::File::open(path)
-        .map_err(|e| format!("open {}: {e}", path.display()))?;
+    let file = fs::File::open(path).map_err(|e| format!("open {}: {e}", path.display()))?;
     let mut reader = std::io::BufReader::new(file);
     let needle = b"\"sender\"";
     let mut total: u64 = 0;
@@ -524,8 +518,8 @@ mod tests {
         let mut writer = zip::ZipWriter::new(file);
         // Match the Anthropic-nested layout — one folder above
         // conversations.json.
-        let options =
-            zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
         writer
             .start_file("data-deadbeef-batch-0000/conversations.json", options)
             .unwrap();
@@ -567,7 +561,9 @@ mod tests {
             .map(|e| e.file_name().to_string_lossy().to_string())
             .collect();
         assert!(
-            entries.iter().any(|n| n.starts_with("conversations.json.bak-")),
+            entries
+                .iter()
+                .any(|n| n.starts_with("conversations.json.bak-")),
             "prior canonical must rotate to .bak-<ts>; entries={entries:?}"
         );
     }

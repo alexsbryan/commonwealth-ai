@@ -4,8 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::glob::glob_match;
 use crate::oicp::{
-    infer_hint_from_profile, Capability, CapabilityHint, CapabilityProfile,
-    LatencyClass,
+    infer_hint_from_profile, Capability, CapabilityHint, CapabilityProfile, LatencyClass,
 };
 
 /// The built-in default aliases, embedded at compile time.
@@ -104,9 +103,7 @@ impl ModelAliasTable {
                 // higher TTFT); best_effort / unset → Normal.
                 let latency_class = match entry.latency.as_deref() {
                     Some("interactive") => LatencyClass::Fast,
-                    Some("throughput") | Some("background") => {
-                        LatencyClass::Extended
-                    }
+                    Some("throughput") | Some("background") => LatencyClass::Extended,
                     _ => LatencyClass::Normal,
                 };
 
@@ -118,15 +115,8 @@ impl ModelAliasTable {
                 // the highest-proficiency entry in the preferred
                 // profile (and non-zero), route as code; otherwise
                 // general.
-                let code_level = preferred
-                    .get(&Capability::Code)
-                    .copied()
-                    .unwrap_or(0);
-                let max_level = preferred
-                    .values()
-                    .copied()
-                    .max()
-                    .unwrap_or(0);
+                let code_level = preferred.get(&Capability::Code).copied().unwrap_or(0);
+                let max_level = preferred.values().copied().max().unwrap_or(0);
                 let hint = if code_level > 0 && code_level >= max_level {
                     CapabilityHint::code()
                 } else {
@@ -217,9 +207,7 @@ mod tests {
     fn omo_codex_resolves_to_code_hint() {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("gpt-5.3-codex").unwrap();
-        assert!(
-            oicp::proficiency(&result.inferred_preferred, Capability::Code) >= 3
-        );
+        assert!(oicp::proficiency(&result.inferred_preferred, Capability::Code) >= 3);
         // The alias's "throughput" latency maps to Extended in v0.3.
         assert_eq!(result.latency_class, LatencyClass::Extended);
     }
@@ -247,9 +235,7 @@ mod tests {
     fn generic_coder_pattern() {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("deepseek-coder-v3").unwrap();
-        assert!(
-            oicp::proficiency(&result.inferred_preferred, Capability::Code) >= 3
-        );
+        assert!(oicp::proficiency(&result.inferred_preferred, Capability::Code) >= 3);
     }
 
     #[test]
@@ -263,10 +249,7 @@ mod tests {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("gpt-5.3-codex").unwrap();
         // The first match (OmO Hephaestus) has instruction: 3.
-        assert!(
-            oicp::proficiency(&result.inferred_preferred, Capability::Instruction)
-                >= 3
-        );
+        assert!(oicp::proficiency(&result.inferred_preferred, Capability::Instruction) >= 3);
     }
 
     #[test]
@@ -314,9 +297,7 @@ creative = 4
     fn kimi_resolves() {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("kimi-k2-latest").unwrap();
-        assert!(
-            oicp::proficiency(&result.inferred_preferred, Capability::Code) >= 3
-        );
+        assert!(oicp::proficiency(&result.inferred_preferred, Capability::Code) >= 3);
     }
 
     #[test]

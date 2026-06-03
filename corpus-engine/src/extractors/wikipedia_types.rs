@@ -51,9 +51,7 @@ pub fn wiki_title_from_url(url: &str) -> Option<String> {
     let after_wiki = &url[wiki_idx + 6..];
 
     // Strip query strings and fragments.
-    let end = after_wiki
-        .find(['?', '#'])
-        .unwrap_or(after_wiki.len());
+    let end = after_wiki.find(['?', '#']).unwrap_or(after_wiki.len());
     let raw_title = &after_wiki[..end];
 
     if raw_title.is_empty() {
@@ -88,10 +86,7 @@ fn percent_decode(s: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let (Some(h), Some(l)) = (
-                hex_digit(bytes[i + 1]),
-                hex_digit(bytes[i + 2]),
-            ) {
+            if let (Some(h), Some(l)) = (hex_digit(bytes[i + 1]), hex_digit(bytes[i + 2])) {
                 buf.push((h << 4) | l);
                 i += 3;
                 continue;

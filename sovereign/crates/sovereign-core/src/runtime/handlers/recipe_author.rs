@@ -143,12 +143,10 @@ impl Runtime {
         // schema builder + Lark string locally because sovereign-core
         // can't take a sovereign-inference dep (cycle).
         let envelope_schema = build_envelope_schema(&tool_schemas).map(inject_done_variant);
-        let lark_grammar_string = envelope_schema
-            .as_ref()
-            .map(|schema| {
-                let schema_json = serde_json::to_string(schema).unwrap_or_default();
-                build_tool_alternation_grammar(&schema_json)
-            });
+        let lark_grammar_string = envelope_schema.as_ref().map(|schema| {
+            let schema_json = serde_json::to_string(schema).unwrap_or_default();
+            build_tool_alternation_grammar(&schema_json)
+        });
 
         tracing::info!(
             conversation_id,
@@ -328,18 +326,16 @@ impl Runtime {
                     // transparent without bolting tool-specific
                     // signalling onto the Tool trait.
                     if let Ok(StepOutput::Json(ref v)) = exec_result {
-                        if matches!(call.name.as_str(),
-                            "recipe_write" | "recipe_write_structured")
-                        {
+                        if matches!(
+                            call.name.as_str(),
+                            "recipe_write" | "recipe_write_structured"
+                        ) {
                             if let Some(p) = v.get("path").and_then(|p| p.as_str()) {
                                 last_recipe_path = Some(p.to_string());
                             }
                         }
                         if call.name == "recipe_validate" {
-                            let passed = v
-                                .get("passed")
-                                .and_then(|p| p.as_bool())
-                                .unwrap_or(false);
+                            let passed = v.get("passed").and_then(|p| p.as_bool()).unwrap_or(false);
                             let err_count = v
                                 .get("errors")
                                 .and_then(|e| e.as_array())
@@ -363,8 +359,8 @@ impl Runtime {
                         "recipe_author_loop: tool executed"
                     );
 
-                    let args_json = serde_json::to_string(&call.arguments)
-                        .unwrap_or_else(|_| "{}".to_string());
+                    let args_json =
+                        serde_json::to_string(&call.arguments).unwrap_or_else(|_| "{}".to_string());
                     transcript.push_str(&format!(
                         "<tool_call>{{\"name\":\"{}\",\"arguments\":{args_json}}}</tool_call>\n\
                          <tool_result>{result_str}</tool_result>\n\n[Agent]:",
@@ -395,9 +391,7 @@ impl Runtime {
                         msg.push_str(&format!("- Recipe: `{path}` ({val})\n"));
                     }
                     (Some(path), None) => {
-                        msg.push_str(&format!(
-                            "- Recipe: `{path}` (not validated this turn)\n"
-                        ));
+                        msg.push_str(&format!("- Recipe: `{path}` (not validated this turn)\n"));
                     }
                     (None, Some(val)) => {
                         msg.push_str(&format!("- Last action: {val}\n"));
@@ -419,8 +413,7 @@ impl Runtime {
                 }
                 msg
             } else if final_text.trim().is_empty() {
-                "(The agent finished cleanly without a partner-facing reply this turn.)"
-                    .to_string()
+                "(The agent finished cleanly without a partner-facing reply this turn.)".to_string()
             } else {
                 final_text
             };
@@ -488,7 +481,10 @@ impl Runtime {
         let handle = self
             .handle_recipe_author_turn_stream(message, conversation_id, context, tool_descriptors)
             .await?;
-        let StreamHandle { message_id, mut stream } = handle;
+        let StreamHandle {
+            message_id,
+            mut stream,
+        } = handle;
 
         let mut text = String::new();
         while let Some(item) = stream.next().await {
@@ -753,7 +749,8 @@ mod tests {
 
     #[test]
     fn parses_string_encoded_arguments() {
-        let text = r#"<tool_call>{"name":"recipe_read","arguments":"{\"path\":\"foo\"}"}</tool_call>"#;
+        let text =
+            r#"<tool_call>{"name":"recipe_read","arguments":"{\"path\":\"foo\"}"}</tool_call>"#;
         let (_, calls) = parse_assistant_text(text);
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].arguments, serde_json::json!({"path": "foo"}));
@@ -831,9 +828,7 @@ mod tests {
         // Each variant pins `name` to a single tool id.
         let names: Vec<&str> = variants
             .iter()
-            .filter_map(|v| {
-                v["properties"]["name"]["enum"][0].as_str()
-            })
+            .filter_map(|v| v["properties"]["name"]["enum"][0].as_str())
             .collect();
         assert_eq!(names, vec!["recipe_read", "recipe_validate"]);
     }

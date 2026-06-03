@@ -60,11 +60,7 @@ async fn try_resume_brings_back_persisted_mesh_and_serves_internal_http() {
             .expect("app_state after create_mesh");
         let mesh = state.inner.mesh.read().await;
         let invite = daemon.current_invite().await;
-        let snap = (
-            mesh.name.clone(),
-            mesh.members.len(),
-            invite,
-        );
+        let snap = (mesh.name.clone(), mesh.members.len(), invite);
         drop(mesh);
         daemon.shutdown().await.expect("graceful shutdown");
         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -110,11 +106,10 @@ async fn try_resume_brings_back_persisted_mesh_and_serves_internal_http() {
     // open, no auth) and assert it responds. A bound listener that
     // answers ANY route proves start_daemon finished its bind step
     // inside try_resume.
-    let client_addr = daemon
-        .api_address()
-        .await
-        .expect("api_address must be Some after try_resume — \
-                 None means start_daemon never recorded a bound socket");
+    let client_addr = daemon.api_address().await.expect(
+        "api_address must be Some after try_resume — \
+                 None means start_daemon never recorded a bound socket",
+    );
     // The default port is 9741. If we got a non-zero port, the
     // daemon committed a bind decision. Hitting it confirms the
     // listener task is alive.

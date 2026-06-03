@@ -44,10 +44,7 @@ fn print_enrichment_scoreboard(rows: &[&BenchOutcome]) {
     println!("  Enrichment-eval scoreboard (atom F1 per axis vs hand-authored goldens)");
     println!("  ─────────────────────────────────────────────────────────────────────");
     for o in rows {
-        let label = format!(
-            "{} ({}/{})",
-            o.corpus_id, o.group, o.id,
-        );
+        let label = format!("{} ({}/{})", o.corpus_id, o.group, o.id,);
         let summary = enrichment_summary(o);
         println!("  {label:<46}  {summary}");
         if let Some(note) = &o.note {
@@ -136,7 +133,10 @@ fn retrieval_summary(o: &BenchOutcome) -> String {
     //     fact is conveyed; treat as a calibration metric, not a
     //     quality metric.
     let judge = mean(&cur.results, |r| {
-        r.synth.as_ref().and_then(|s| s.judge_fact_score.as_ref()).and_then(|s| s.ratio)
+        r.synth
+            .as_ref()
+            .and_then(|s| s.judge_fact_score.as_ref())
+            .and_then(|s| s.ratio)
     });
     let fact = mean(&cur.results, |r| r.fact_score.ratio);
     let src = mean(&cur.results, |r| r.source_score.ratio);
@@ -169,7 +169,9 @@ fn retrieval_summary(o: &BenchOutcome) -> String {
 }
 
 fn retrieval_lever_cell(label: &str, cur: Option<f32>, prev: Option<f32>) -> String {
-    let Some(c) = cur else { return format!("{label} —") };
+    let Some(c) = cur else {
+        return format!("{label} —");
+    };
     let delta = prev.map(|p| c - p);
     let glyph = match delta {
         Some(d) if d < -REGRESSION_THRESHOLD => format!("↓{:.2}", -d),
@@ -186,7 +188,9 @@ fn mean_run_src(run: &crate::eval_cmd::runner::EvalRun) -> f32 {
     mean(&run.results, |r| r.source_score.ratio).unwrap_or(0.0)
 }
 fn mean_run_essay(run: &crate::eval_cmd::runner::EvalRun) -> Option<f32> {
-    mean(&run.results, |r| r.essay_readiness.as_ref().map(|e| e.ratio()))
+    mean(&run.results, |r| {
+        r.essay_readiness.as_ref().map(|e| e.ratio())
+    })
 }
 fn mean_run_judge(run: &crate::eval_cmd::runner::EvalRun) -> Option<f32> {
     mean(&run.results, |r| {
@@ -225,7 +229,12 @@ fn print_enrichment_matrix(rows: &[&BenchOutcome]) {
         .collect();
 
     let axis_w = axes.iter().map(|a| a.len()).max().unwrap_or(10).max(10);
-    let col_w = corpus_cols.iter().map(|c| c.len()).max().unwrap_or(12).max(12);
+    let col_w = corpus_cols
+        .iter()
+        .map(|c| c.len())
+        .max()
+        .unwrap_or(12)
+        .max(12);
 
     print!("  {:<width$}", "axis", width = axis_w + 2);
     for c in &corpus_cols {
@@ -375,8 +384,18 @@ fn print_retrieval_matrix_for(
         .map(|o| o.corpus_id.as_str())
         .collect();
 
-    let cat_w = categories.iter().map(|c| c.len()).max().unwrap_or(20).max(20);
-    let col_w = corpus_cols.iter().map(|c| c.len()).max().unwrap_or(12).max(12);
+    let cat_w = categories
+        .iter()
+        .map(|c| c.len())
+        .max()
+        .unwrap_or(20)
+        .max(20);
+    let col_w = corpus_cols
+        .iter()
+        .map(|c| c.len())
+        .max()
+        .unwrap_or(12)
+        .max(12);
 
     print!("  {:<width$}", "category", width = cat_w + 2);
     for c in &corpus_cols {
@@ -422,7 +441,11 @@ fn format_category_cell(ret: &RetrievalOutcome, category: &str, lever: Retrieval
     }
     let cur_mean: f32 = vals.iter().sum::<f32>() / vals.len() as f32;
     let prev_mean: Option<f32> = ret.baseline.as_ref().map(|b| {
-        let prev: Vec<&_> = b.results.iter().filter(|r| r.category == category).collect();
+        let prev: Vec<&_> = b
+            .results
+            .iter()
+            .filter(|r| r.category == category)
+            .collect();
         if prev.is_empty() {
             return 0.0;
         }

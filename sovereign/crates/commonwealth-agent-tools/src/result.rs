@@ -29,10 +29,7 @@ pub struct ToolResult {
 impl ToolResult {
     /// Build a successful result from a structured payload.
     pub fn ok(payload: serde_json::Value) -> Self {
-        Self {
-            ok: true,
-            payload,
-        }
+        Self { ok: true, payload }
     }
 }
 
@@ -65,10 +62,7 @@ pub enum ToolError {
     },
     /// Subprocess exceeded its wall-clock budget.
     #[error("subprocess timed out in {primitive} after {secs}s")]
-    Timeout {
-        primitive: &'static str,
-        secs: u64,
-    },
+    Timeout { primitive: &'static str, secs: u64 },
     /// Pre-write syntax check rejected a write_file call before
     /// touching disk. Closes the "model emits English prose / typos
     /// inside `content`" class observed on 3.2-lights-out-python
@@ -97,7 +91,9 @@ pub enum ToolError {
     /// (drift into JS syntax, lost whitespace, escape confusion).
     /// `patch_file` with ≤30-line ranges sidesteps the regime
     /// where this corruption emerges.
-    #[error("write_file rejected: {path} has {existing_lines} lines (> {threshold}); use patch_file")]
+    #[error(
+        "write_file rejected: {path} has {existing_lines} lines (> {threshold}); use patch_file"
+    )]
     WriteFileTooLarge {
         path: String,
         existing_lines: usize,
@@ -111,9 +107,8 @@ mod tests {
 
     #[test]
     fn workdir_access_renders_help_for_absolute_path() {
-        let e = ToolError::WorkdirAccess(
-            "absolute path not allowed: /home/user/lights_out.py".into(),
-        );
+        let e =
+            ToolError::WorkdirAccess("absolute path not allowed: /home/user/lights_out.py".into());
         let s = e.render_for_agent();
         assert!(s.contains("error: workdir access violation"));
         assert!(s.contains("reason:"));
@@ -124,9 +119,7 @@ mod tests {
 
     #[test]
     fn workdir_access_renders_help_for_parent_traversal() {
-        let e = ToolError::WorkdirAccess(
-            "parent-dir traversal not allowed: ../etc/passwd".into(),
-        );
+        let e = ToolError::WorkdirAccess("parent-dir traversal not allowed: ../etc/passwd".into());
         let s = e.render_for_agent();
         assert!(s.contains("workdir access violation"));
         assert!(s.contains("help:"));
@@ -218,7 +211,8 @@ mod tests {
         let b = ToolError::SyntaxRejected {
             primitive: "patch_file",
             language: "Rust".to_string(),
-            rendered_errors: "error: weird unparseable thing happened (slightly different prose)".into(),
+            rendered_errors: "error: weird unparseable thing happened (slightly different prose)"
+                .into(),
         };
         assert_eq!(a.sticky_signature(), b.sticky_signature());
         assert!(a.sticky_signature().contains("<unknown>"));
@@ -331,7 +325,11 @@ impl ToolError {
                  breaking it into smaller steps; otherwise this likely \
                  indicates a hang in the spawned process."
             ),
-            ToolError::SyntaxRejected { primitive, language, rendered_errors } => format!(
+            ToolError::SyntaxRejected {
+                primitive,
+                language,
+                rendered_errors,
+            } => format!(
                 "error: pre-write syntax check rejected `{primitive}` ({language})\n\
                  {rendered_errors}\n  \
                  = help: re-emit `write_file` with a corrected `content` field. \
@@ -340,7 +338,11 @@ impl ToolError {
                  be valid {language} source code; do not include reasoning, \
                  narration, or English sentences outside of comments/docstrings."
             ),
-            ToolError::WriteFileTooLarge { path, existing_lines, threshold } => format!(
+            ToolError::WriteFileTooLarge {
+                path,
+                existing_lines,
+                threshold,
+            } => format!(
                 "error: write_file rejected for large existing file\n  \
                  = reason: `{path}` already has {existing_lines} lines, above the {threshold}-line \
                  threshold for full-file rewrites. Empirically the model accumulates \
@@ -373,7 +375,11 @@ impl ToolError {
     /// variant tag plus the primitive name (when present).
     pub fn sticky_signature(&self) -> String {
         match self {
-            ToolError::SyntaxRejected { primitive, language, rendered_errors } => {
+            ToolError::SyntaxRejected {
+                primitive,
+                language,
+                rendered_errors,
+            } => {
                 let site = extract_file_line_col(rendered_errors)
                     .unwrap_or_else(|| "<unknown>".to_string());
                 format!("SyntaxRejected:{primitive}:{language}:{site}")
@@ -414,7 +420,11 @@ fn extract_file_line_col(s: &str) -> Option<String> {
         }
         let path = &s[start..i];
         // Must contain a '.' (extension) and not be all dots.
-        if path.contains('.') && path.bytes().any(|b| b != b'.') && i < bytes.len() && bytes[i] == b':' {
+        if path.contains('.')
+            && path.bytes().any(|b| b != b'.')
+            && i < bytes.len()
+            && bytes[i] == b':'
+        {
             // Optional :line[:col] suffix.
             let mut j = i + 1;
             let line_start = j;

@@ -220,7 +220,8 @@ impl ChunkFilter {
                 // JSON string — the SQLite acquirer emits all non-text
                 // values as strings, so both shapes may appear in the
                 // wild).
-                x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse::<f64>().ok()))
+                x.as_f64()
+                    .or_else(|| x.as_str().and_then(|s| s.parse::<f64>().ok()))
             });
             let Some(v) = actual else {
                 return false;

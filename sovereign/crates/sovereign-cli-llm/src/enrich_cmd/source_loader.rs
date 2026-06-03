@@ -109,7 +109,10 @@ fn strip_rtf(input: &str) -> String {
             '{' => {
                 let parent_skip = groups.last().map(|g| g.skip).unwrap_or(false);
                 let parent_uc = groups.last().map(|g| g.uc).unwrap_or(1);
-                groups.push(Group { skip: parent_skip, uc: parent_uc });
+                groups.push(Group {
+                    skip: parent_skip,
+                    uc: parent_uc,
+                });
             }
             '}' => {
                 if groups.len() > 1 {
@@ -204,7 +207,9 @@ struct Group {
     uc: usize,
 }
 
-fn read_control_word(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> (String, Option<i32>) {
+fn read_control_word(
+    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+) -> (String, Option<i32>) {
     let mut word = String::new();
     while let Some(&c) = chars.peek() {
         if c.is_ascii_alphabetic() {
@@ -318,11 +323,7 @@ fn handle_control_word(
         "u" => {
             if let Some(n) = param {
                 // \uN can be negative — it's a signed i16 that wraps.
-                let code = if n < 0 {
-                    (65536 + n) as u32
-                } else {
-                    n as u32
-                };
+                let code = if n < 0 { (65536 + n) as u32 } else { n as u32 };
                 if let Some(ch) = char::from_u32(code) {
                     if !current_skip(groups) {
                         out.push(ch);
@@ -428,7 +429,10 @@ mod tests {
             The chapter body starts here.}";
         let got = strip_rtf(rtf);
         assert!(got.contains("Chapter I."), "got: {got:?}");
-        assert!(got.contains("The chapter body starts here."), "got: {got:?}");
+        assert!(
+            got.contains("The chapter body starts here."),
+            "got: {got:?}"
+        );
         assert!(!got.contains("fonttbl"), "font table leaked: {got:?}");
         assert!(!got.contains("colortbl"), "color table leaked: {got:?}");
         assert!(!got.contains("\\rtf"), "header leaked: {got:?}");
@@ -436,18 +440,23 @@ mod tests {
 
     #[test]
     fn rtf_par_produces_line_breaks_so_line_anchored_regexes_match() {
-        let rtf = "{\\rtf1\\ansi Chapter I.\\par Body line one.\\par Chapter II.\\par Body line two.}";
+        let rtf =
+            "{\\rtf1\\ansi Chapter I.\\par Body line one.\\par Chapter II.\\par Body line two.}";
         let got = strip_rtf(rtf);
         // The chunker's default pattern is line-anchored (`^Chapter …`).
         // Strip must emit real newlines between logical lines so the
         // second chapter heading is at a line start.
         let lines: Vec<&str> = got.lines().collect();
         assert!(
-            lines.iter().any(|l| l.trim_start().starts_with("Chapter I.")),
+            lines
+                .iter()
+                .any(|l| l.trim_start().starts_with("Chapter I.")),
             "Chapter I. not on a line start: {got:?}"
         );
         assert!(
-            lines.iter().any(|l| l.trim_start().starts_with("Chapter II.")),
+            lines
+                .iter()
+                .any(|l| l.trim_start().starts_with("Chapter II.")),
             "Chapter II. not on a line start: {got:?}"
         );
     }
@@ -465,7 +474,10 @@ mod tests {
         // \uc1 舒? ← the ? is the 1-byte ANSI fallback to eat.
         let rtf = "{\\rtf1\\ansi \\uc1 word\\u8212?word}";
         let got = strip_rtf(rtf);
-        assert!(got.contains("word—word"), "expected emdash between words: {got:?}");
+        assert!(
+            got.contains("word—word"),
+            "expected emdash between words: {got:?}"
+        );
     }
 
     #[test]

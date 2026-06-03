@@ -64,9 +64,7 @@ pub async fn save_config(
     if rebuild {
         state::rebuild_runtime(&state).await
     } else {
-        tracing::info!(
-            "save_config: no structural changes — skipping runtime rebuild"
-        );
+        tracing::info!("save_config: no structural changes — skipping runtime rebuild");
         Ok(())
     }
 }
@@ -111,12 +109,8 @@ fn config_needs_rebuild(old: &DesktopConfig, new: &DesktopConfig) -> bool {
 /// exist (matches `sovereign setup` behaviour). Leaves `daemon`
 /// defaults in place — port changes go through the CLI's `sovereign
 /// setup`, not the desktop Settings panel.
-async fn mirror_to_setup_config(
-    desktop: &DesktopConfig,
-) -> Result<(), String> {
-    use sovereign_core::setup_config::{
-        DaemonSection, DataSection, ModelsSection, SetupConfig,
-    };
+async fn mirror_to_setup_config(desktop: &DesktopConfig) -> Result<(), String> {
+    use sovereign_core::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
 
     let mut cli = SetupConfig::load().unwrap_or_else(|_| SetupConfig {
         models: ModelsSection {
@@ -138,7 +132,9 @@ async fn mirror_to_setup_config(
             primary_pool: None,
         },
         daemon: DaemonSection::default(),
-        data: DataSection { dir: desktop.data_dir.clone() },
+        data: DataSection {
+            dir: desktop.data_dir.clone(),
+        },
         watched_folders: Default::default(),
         memory: Default::default(),
     });
@@ -358,10 +354,7 @@ pub async fn get_setup_context_size(
         .map(|c| c.models.effective_context_size())
         .unwrap_or(16384);
     let (effective, n_ctx_train) = match state.inference.read().await.as_ref() {
-        Some(inf) => (
-            inf.effective_context_size(),
-            inf.n_ctx_train_for_primary(),
-        ),
+        Some(inf) => (inf.effective_context_size(), inf.n_ctx_train_for_primary()),
         None => (None, None),
     };
     Ok(SetupContextWindow {
@@ -439,9 +432,7 @@ pub async fn set_setup_context_size(
     };
 
     cfg.models.context_size = Some(new_ctx);
-    let path = cfg
-        .save()
-        .map_err(|e| format!("save SetupConfig: {e}"))?;
+    let path = cfg.save().map_err(|e| format!("save SetupConfig: {e}"))?;
     tracing::info!(
         new_ctx,
         target = %path.display(),
@@ -586,4 +577,3 @@ pub async fn complete_setup(
 
     Ok(())
 }
-

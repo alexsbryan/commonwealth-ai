@@ -40,9 +40,7 @@ use corpus_engine::types::{CorpusKind, CorpusSpec};
 use corpus_engine::CorpusEngine;
 use serde::{Deserialize, Serialize};
 
-use crate::enrich::{
-    run_enrich_build, CancellationFlag, EnrichBuildConfig, EnrichProgressFn,
-};
+use crate::enrich::{run_enrich_build, CancellationFlag, EnrichBuildConfig, EnrichProgressFn};
 
 /// Compose a per-work corpus id from the catalog id + work id.
 /// Centralised so search-time partition logic
@@ -113,8 +111,7 @@ pub struct AtlasSummary {
 /// Caller-supplied callback that receives each [`CatalogIngestEvent`]
 /// in order. Boxed `Send + Sync + 'static` so a Tauri command can
 /// emit them on a channel from a spawned task.
-pub type CatalogIngestProgressFn =
-    Arc<dyn Fn(CatalogIngestEvent) + Send + Sync + 'static>;
+pub type CatalogIngestProgressFn = Arc<dyn Fn(CatalogIngestEvent) + Send + Sync + 'static>;
 
 /// Inputs to [`run_catalog_ingest`].
 pub struct CatalogIngestRequest {
@@ -162,10 +159,7 @@ pub enum CatalogIngestError {
     CatalogNotInstalled { catalog_corpus_id: String },
 
     #[error("corpus `{corpus_id}` is not a catalog (kind = {kind:?}) — only catalog corpora can drive on-demand work ingest")]
-    NotACatalog {
-        corpus_id: String,
-        kind: CorpusKind,
-    },
+    NotACatalog { corpus_id: String, kind: CorpusKind },
 
     #[error("catalog corpus `{catalog_corpus_id}` has no `[catalog]` recipe block")]
     MissingCatalogConfig { catalog_corpus_id: String },
@@ -245,11 +239,13 @@ pub async fn run_catalog_ingest(
             content_recipe: catalog_corpus_id.clone(),
             source,
         })?;
-    let catalog_cfg = catalog_recipe.catalog.clone().ok_or_else(|| {
-        CatalogIngestError::MissingCatalogConfig {
-            catalog_corpus_id: catalog_corpus_id.clone(),
-        }
-    })?;
+    let catalog_cfg =
+        catalog_recipe
+            .catalog
+            .clone()
+            .ok_or_else(|| CatalogIngestError::MissingCatalogConfig {
+                catalog_corpus_id: catalog_corpus_id.clone(),
+            })?;
 
     // ── Step 3: FTS-lookup the work in the catalog index. ──────
     //
@@ -258,20 +254,14 @@ pub async fn run_catalog_ingest(
     // chunk content as `Gutenberg ID: <id>`. Fall back to a plain
     // text search if FTS isn't built (small catalogs use a flat
     // scan).
-    let title_for_event = lookup_work_title(
-        &engine,
-        catalog_info,
-        &work_id,
-    )
-    .await
-    .ok_or_else(|| CatalogIngestError::WorkNotFound {
-        catalog_corpus_id: catalog_corpus_id.clone(),
-        work_id: work_id.clone(),
-    })?;
+    let title_for_event = lookup_work_title(&engine, catalog_info, &work_id)
+        .await
+        .ok_or_else(|| CatalogIngestError::WorkNotFound {
+            catalog_corpus_id: catalog_corpus_id.clone(),
+            work_id: work_id.clone(),
+        })?;
 
-    let download_url = catalog_cfg
-        .download_url_template
-        .replace("{id}", &work_id);
+    let download_url = catalog_cfg.download_url_template.replace("{id}", &work_id);
 
     // The "user-visible" corpus id — what the user queries against.
     // When the catalog declares `target_corpus_id`, every fetch lands
@@ -318,12 +308,14 @@ pub async fn run_catalog_ingest(
 
     // ── Step 5: ingest. ─────────────────────────────────
     let ingest_progress: Option<corpus_engine::progress::ProgressCallback> =
-        progress.as_ref().map(|outer| -> corpus_engine::progress::ProgressCallback {
-            let outer = outer.clone();
-            Box::new(move |ev: IngestProgress| {
-                outer(CatalogIngestEvent::Ingest(ev));
-            })
-        });
+        progress
+            .as_ref()
+            .map(|outer| -> corpus_engine::progress::ProgressCallback {
+                let outer = outer.clone();
+                Box::new(move |ev: IngestProgress| {
+                    outer(CatalogIngestEvent::Ingest(ev));
+                })
+            });
     let mut ingest_result = engine
         .ingest(
             &CorpusSpec::Inline(Box::new(content_recipe)),
@@ -452,13 +444,13 @@ pub async fn run_catalog_ingest(
         )
         .await
         {
-            crate::atlas_postinstall::StructuralAtlasOutcome::Built {
-                elapsed_secs, ..
-            } => tracing::info!(
-                corpus = %final_corpus_id,
-                elapsed_s = elapsed_secs,
-                "catalog_ingest: structural atlas built"
-            ),
+            crate::atlas_postinstall::StructuralAtlasOutcome::Built { elapsed_secs, .. } => {
+                tracing::info!(
+                    corpus = %final_corpus_id,
+                    elapsed_s = elapsed_secs,
+                    "catalog_ingest: structural atlas built"
+                )
+            }
             crate::atlas_postinstall::StructuralAtlasOutcome::AlreadyPresent { .. } => {
                 tracing::debug!(
                     corpus = %final_corpus_id,
@@ -477,9 +469,8 @@ pub async fn run_catalog_ingest(
 
     // ── Step 6: enrich (optional). ─────────────────────
     if enrich && !cancelled_mid {
-        let enrich_progress: Option<EnrichProgressFn> = progress
-            .as_ref()
-            .map(|outer| -> EnrichProgressFn {
+        let enrich_progress: Option<EnrichProgressFn> =
+            progress.as_ref().map(|outer| -> EnrichProgressFn {
                 let outer = outer.clone();
                 Arc::new(move |ev| {
                     outer(CatalogIngestEvent::Enrich(Box::new(ev)));
@@ -495,7 +486,9 @@ pub async fn run_catalog_ingest(
             enrich_progress,
         )
         .await
-        .map_err(|e| CatalogIngestError::Enrich { exit_code: e.raw_os_error().unwrap_or(-1) })?;
+        .map_err(|e| CatalogIngestError::Enrich {
+            exit_code: e.raw_os_error().unwrap_or(-1),
+        })?;
 
         if outcome.exit_code != 0 && !outcome.cancelled {
             emit(CatalogIngestEvent::Failed {
@@ -532,39 +525,28 @@ pub async fn run_catalog_ingest(
     //
     // The recursive expansion call sets `expand_links = false` so
     // we never run more than one hop deep automatically.
-    if expand_links
-        && catalog_cfg.expansion_enabled
-        && catalog_cfg.target_corpus_id.is_some()
-    {
-        let neighbours = match collect_expansion_neighbours(
-            &engine,
-            &catalog_cfg,
-            &final_corpus_id,
-            &work_id,
-        )
-        .await
-        {
-            Ok(list) => list,
-            Err(e) => {
-                tracing::warn!(
-                    primary = %work_id,
-                    error = %e,
-                    "catalog_ingest: link-expansion enumeration failed (non-fatal)"
-                );
-                Vec::new()
-            }
-        };
+    if expand_links && catalog_cfg.expansion_enabled && catalog_cfg.target_corpus_id.is_some() {
+        let neighbours =
+            match collect_expansion_neighbours(&engine, &catalog_cfg, &final_corpus_id, &work_id)
+                .await
+            {
+                Ok(list) => list,
+                Err(e) => {
+                    tracing::warn!(
+                        primary = %work_id,
+                        error = %e,
+                        "catalog_ingest: link-expansion enumeration failed (non-fatal)"
+                    );
+                    Vec::new()
+                }
+            };
         if !neighbours.is_empty() {
             tracing::info!(
                 primary = %work_id,
                 queued = neighbours.len(),
                 "catalog_ingest: queued one-hop minesweeper expansion"
             );
-            spawn_minesweeper_queue(
-                Arc::clone(&engine),
-                catalog_corpus_id.clone(),
-                neighbours,
-            );
+            spawn_minesweeper_queue(Arc::clone(&engine), catalog_corpus_id.clone(), neighbours);
         }
     }
 
@@ -593,9 +575,7 @@ async fn collect_expansion_neighbours(
     if cap == 0 {
         return Ok(Vec::new());
     }
-    let url = catalog_cfg
-        .download_url_template
-        .replace("{id}", work_id);
+    let url = catalog_cfg.download_url_template.replace("{id}", work_id);
 
     // Fetch the same Action API endpoint the primary ingest just
     // pulled. Cheap (~50ms) and isolates link extraction from any
@@ -621,10 +601,7 @@ async fn collect_expansion_neighbours(
     let parse = body
         .get("parse")
         .ok_or_else(|| "missing `parse` field".to_string())?;
-    let resolved_title = parse
-        .get("title")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let resolved_title = parse.get("title").and_then(|v| v.as_str()).unwrap_or("");
 
     let raw_links: Vec<String> = parse
         .get("links")
@@ -637,16 +614,11 @@ async fn collect_expansion_neighbours(
                     if ns != 0 {
                         return None;
                     }
-                    let exists = l
-                        .get("exists")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(true);
+                    let exists = l.get("exists").and_then(|v| v.as_bool()).unwrap_or(true);
                     if !exists {
                         return None;
                     }
-                    l.get("title")
-                        .and_then(|v| v.as_str())
-                        .map(String::from)
+                    l.get("title").and_then(|v| v.as_str()).map(String::from)
                 })
                 .collect()
         })
@@ -682,8 +654,7 @@ async fn collect_expansion_neighbours(
     );
 
     let mut out = Vec::with_capacity(cap);
-    let mut seen_titles: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
+    let mut seen_titles: std::collections::HashSet<String> = std::collections::HashSet::new();
     for title in raw_links {
         if out.len() >= cap {
             break;
@@ -774,7 +745,13 @@ pub(crate) fn patch_content_recipe(
     download_url: &str,
 ) {
     recipe.corpus.id = new_corpus_id.to_string();
-    if recipe.corpus.parent_corpus_id.as_deref().unwrap_or("").is_empty() {
+    if recipe
+        .corpus
+        .parent_corpus_id
+        .as_deref()
+        .unwrap_or("")
+        .is_empty()
+    {
         recipe.corpus.parent_corpus_id = Some(parent_corpus_id.to_string());
     }
     // The on-demand guard in `ingest()` only relaxes when the recipe
@@ -957,9 +934,6 @@ mod tests {
     #[test]
     fn per_work_corpus_id_is_stable() {
         assert_eq!(per_work_corpus_id("gutenberg", "2701"), "gutenberg-2701");
-        assert_eq!(
-            per_work_corpus_id("gutenberg", "1342"),
-            "gutenberg-1342"
-        );
+        assert_eq!(per_work_corpus_id("gutenberg", "1342"), "gutenberg-1342");
     }
 }

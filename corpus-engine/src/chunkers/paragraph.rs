@@ -68,12 +68,7 @@ fn chunk_text(text: &str, max_chars: usize, overlap_chars: usize) -> Vec<TextChu
         if segment.len() > max_chars {
             // Flush current buffer first.
             if !current.is_empty() {
-                finalize_chunk(
-                    &mut chunks,
-                    &mut current,
-                    &mut chunk_index,
-                    overlap_chars,
-                );
+                finalize_chunk(&mut chunks, &mut current, &mut chunk_index, overlap_chars);
             }
             // Break the oversized segment at sentence/word boundaries.
             split_oversized_segment(
@@ -88,12 +83,7 @@ fn chunk_text(text: &str, max_chars: usize, overlap_chars: usize) -> Vec<TextChu
 
         // If adding this segment exceeds the limit, finalize current chunk.
         if !current.is_empty() && current.len() + segment.len() + 2 > max_chars {
-            finalize_chunk(
-                &mut chunks,
-                &mut current,
-                &mut chunk_index,
-                overlap_chars,
-            );
+            finalize_chunk(&mut chunks, &mut current, &mut chunk_index, overlap_chars);
         }
 
         if !current.is_empty() {

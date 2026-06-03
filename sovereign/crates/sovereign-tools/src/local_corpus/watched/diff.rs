@@ -87,11 +87,17 @@ mod tests {
     }
 
     fn snapshot(items: &[(&str, &str)]) -> HashMap<String, EntryRecord> {
-        items.iter().map(|(k, v)| (k.to_string(), entry(v))).collect()
+        items
+            .iter()
+            .map(|(k, v)| (k.to_string(), entry(v)))
+            .collect()
     }
 
     fn prior(items: &[(&str, &str)]) -> HashMap<String, String> {
-        items.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        items
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     #[test]
@@ -105,10 +111,10 @@ mod tests {
     fn detects_all_three_buckets() {
         let p = prior(&[("a", "h1"), ("b", "h2"), ("c", "h3")]);
         let s = snapshot(&[
-            ("a", "h1"),         // unchanged
-            ("b", "h2-new"),     // modified
-            ("d", "h4"),         // added
-            // c removed
+            ("a", "h1"),     // unchanged
+            ("b", "h2-new"), // modified
+            ("d", "h4"),     // added
+                             // c removed
         ]);
         let d = compute_diff(&p, &s);
         assert_eq!(d.added, vec!["d"]);

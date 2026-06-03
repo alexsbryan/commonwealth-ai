@@ -110,7 +110,7 @@ pub fn compare_to_baseline(
         fixes,
         new_passing_tests,
         new_failing_tests: regressions, // best-effort; reviewer disambiguates
-        removed_tests: vec![], // not detectable from failed-only manifests
+        removed_tests: vec![],          // not detectable from failed-only manifests
         regression_count,
     }
 }

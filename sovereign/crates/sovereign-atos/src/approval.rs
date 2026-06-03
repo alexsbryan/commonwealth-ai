@@ -139,21 +139,19 @@ fn find_approval_via_git(repo_root: &Path, feature_id: &str) -> Option<FeatureAp
         return None;
     }
     let stdout = String::from_utf8(output.stdout).ok()?;
-    let (hash, email, name, ts) = stdout
-        .lines()
-        .find_map(|line| {
-            let parts: Vec<&str> = line.split('\t').collect();
-            if parts.len() < 4 {
-                return None;
-            }
-            let ts = parts[3].parse::<i64>().ok()?;
-            Some((
-                parts[0].to_string(),
-                parts[1].to_string(),
-                parts[2].to_string(),
-                ts,
-            ))
-        })?;
+    let (hash, email, name, ts) = stdout.lines().find_map(|line| {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() < 4 {
+            return None;
+        }
+        let ts = parts[3].parse::<i64>().ok()?;
+        Some((
+            parts[0].to_string(),
+            parts[1].to_string(),
+            parts[2].to_string(),
+            ts,
+        ))
+    })?;
 
     // Read the spec content AT that commit and hash it. `git show
     // <hash>:<path>` streams the blob.
@@ -208,9 +206,8 @@ pub fn record_approval(
         witness: format!("{origin:?}"),
         spec_content_snapshot: snapshot,
     };
-    let encoded = serde_json::to_vec(&approval).map_err(|e| {
-        std::io::Error::other(format!("serialize FeatureApproval: {e}"))
-    })?;
+    let encoded = serde_json::to_vec(&approval)
+        .map_err(|e| std::io::Error::other(format!("serialize FeatureApproval: {e}")))?;
     mesh.set(
         ATOS_APPROVALS_APP_ID,
         feature_id,
@@ -421,7 +418,11 @@ mod tests {
         assert_eq!(appr.feature_id, "fx");
         // `build_scratch_repo` lands two commits; the newest one is
         // the witness regardless of committer identity.
-        assert!(appr.approved_by.contains("Marcus"), "got: {}", appr.approved_by);
+        assert!(
+            appr.approved_by.contains("Marcus"),
+            "got: {}",
+            appr.approved_by
+        );
         assert_eq!(appr.source, ApprovalSource::Git);
         let current = current_spec_hash(&repo, "fx").unwrap();
         assert_eq!(appr.spec_content_hash, current);
@@ -474,12 +475,18 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let repo = build_scratch_repo(tmp.path(), "fx");
         let appr = find_approval_via_git(&repo, "fx").unwrap();
-        assert!(!detect_drift(&appr, &repo), "no drift immediately after approval");
+        assert!(
+            !detect_drift(&appr, &repo),
+            "no drift immediately after approval"
+        );
 
         // Yara edits spec.md mid-implementation.
         let spec = spec_path(&repo, "fx");
         std::fs::write(&spec, "# mutated\n").unwrap();
-        assert!(detect_drift(&appr, &repo), "drift should fire on content change");
+        assert!(
+            detect_drift(&appr, &repo),
+            "drift should fire on content change"
+        );
     }
 
     #[test]
@@ -492,13 +499,19 @@ mod tests {
         std::fs::create_dir_all(uncommitted_dir).unwrap();
         run_git(uncommitted_dir, &["init", "-q", "-b", "main"]);
         run_git(uncommitted_dir, &["config", "user.name", "Solo"]);
-        run_git(uncommitted_dir, &["config", "user.email", "solo@example.test"]);
+        run_git(
+            uncommitted_dir,
+            &["config", "user.email", "solo@example.test"],
+        );
         // Bootstrap commit that doesn't touch the spec path.
         std::fs::write(uncommitted_dir.join("README.md"), "hi\n").unwrap();
         run_git(uncommitted_dir, &["add", "README.md"]);
         run_git(uncommitted_dir, &["commit", "-q", "-m", "bootstrap"]);
         // Spec lives in the working tree but is never committed.
-        let spec_dir = uncommitted_dir.join(".sovereign").join("features").join("solo");
+        let spec_dir = uncommitted_dir
+            .join(".sovereign")
+            .join("features")
+            .join("solo");
         std::fs::create_dir_all(&spec_dir).unwrap();
         std::fs::write(spec_dir.join("spec.md"), "# solo\n").unwrap();
 
@@ -557,8 +570,7 @@ mod tests {
         std::fs::write(&spec, "# mutated spec\n\nNew invariant.\n").unwrap();
         assert!(detect_drift(&original, &repo));
 
-        let accepted =
-            accept_drift(&mesh, node_id(), &repo, "fx", &original).unwrap();
+        let accepted = accept_drift(&mesh, node_id(), &repo, "fx", &original).unwrap();
         assert_ne!(accepted.spec_content_hash, original.spec_content_hash);
         assert_eq!(accepted.approved_by, original.approved_by);
         assert_eq!(accepted.source, ApprovalSource::Commonwealth);

@@ -32,9 +32,7 @@ impl McpAuth {
     pub fn resolve(server_name: &str, config: &McpAuthConfig) -> Self {
         match config {
             McpAuthConfig::None => McpAuth::None,
-            McpAuthConfig::Bearer
-            | McpAuthConfig::ApiKey { .. }
-            | McpAuthConfig::Basic => {
+            McpAuthConfig::Bearer | McpAuthConfig::ApiKey { .. } | McpAuthConfig::Basic => {
                 tracing::warn!(
                     server = server_name,
                     "MCP credential store not configured — falling back to unauthenticated access"
@@ -48,14 +46,9 @@ impl McpAuth {
     pub fn inject(&self, req: RequestBuilder) -> RequestBuilder {
         match self {
             McpAuth::None => req,
-            McpAuth::BearerToken(token) => {
-                req.header("Authorization", format!("Bearer {token}"))
-            }
+            McpAuth::BearerToken(token) => req.header("Authorization", format!("Bearer {token}")),
             McpAuth::ApiKey { header, value } => req.header(header, value),
-            McpAuth::Basic {
-                username,
-                password,
-            } => req.basic_auth(username, Some(password)),
+            McpAuth::Basic { username, password } => req.basic_auth(username, Some(password)),
         }
     }
 }

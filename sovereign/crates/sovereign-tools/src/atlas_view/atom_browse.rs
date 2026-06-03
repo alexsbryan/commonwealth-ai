@@ -11,9 +11,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
 
-use corpus_engine::enrichment::atlas::atoms::{
-    AtomEnvelope, AtomId, AtomType, AtomsFile,
-};
+use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomType, AtomsFile};
 use corpus_engine::enrichment::atlas::read_atlas_atoms;
 use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
 use serde::{Deserialize, Serialize};
@@ -57,7 +55,10 @@ impl Default for PageCursor {
     /// twice over without sending wiki-scale payloads on every
     /// keystroke. Matches the Phase 1 plan.
     fn default() -> Self {
-        Self { offset: 0, limit: 200 }
+        Self {
+            offset: 0,
+            limit: 200,
+        }
     }
 }
 
@@ -268,7 +269,10 @@ fn filter_and_page(
             }
         }
         if let Some(needle) = &name_needle {
-            if !display_name_of(atom).to_lowercase().contains(needle.as_str()) {
+            if !display_name_of(atom)
+                .to_lowercase()
+                .contains(needle.as_str())
+            {
                 continue;
             }
         }
@@ -283,9 +287,7 @@ fn filter_and_page(
     // Recency is the *only* reordering signal — salience etc. are left
     // to the per-type tiebreak that insertion order already encodes.
     if !freshness.is_empty() {
-        matches.sort_by(|a, b| {
-            atom_freshness(b, freshness).cmp(&atom_freshness(a, freshness))
-        });
+        matches.sort_by(|a, b| atom_freshness(b, freshness).cmp(&atom_freshness(a, freshness)));
     }
 
     let total_matching = matches.len() as u64;
@@ -301,11 +303,7 @@ fn filter_and_page(
         .map(|a| build_summary(corpus_id, a, freshness))
         .collect();
 
-    let next_offset = if end < matches.len() {
-        Some(end)
-    } else {
-        None
-    };
+    let next_offset = if end < matches.len() { Some(end) } else { None };
 
     AtomListPage {
         items,
@@ -367,7 +365,11 @@ fn display_name_of(atom: &AtomEnvelope) -> String {
         AtomEnvelope::Opposition(a) => a.canonical_label.clone(),
         AtomEnvelope::Asset(a) => {
             if a.original_filename.is_empty() {
-                format!("{} asset {}", a.asset_kind, &a.sha256[..12.min(a.sha256.len())])
+                format!(
+                    "{} asset {}",
+                    a.asset_kind,
+                    &a.sha256[..12.min(a.sha256.len())]
+                )
             } else {
                 a.original_filename.clone()
             }
@@ -474,9 +476,9 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![],
-                    provenance: Default::default(),
-                    concept_kind: None,
-})
+            provenance: Default::default(),
+            concept_kind: None,
+        })
     }
 
     fn claim(id: usize, content: &str) -> AtomEnvelope {
@@ -495,10 +497,10 @@ mod tests {
             confidence: None,
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-                    claim_kind: None,
+            claim_kind: None,
             concession_outcome: None,
             evidence_kind: None,
-})
+        })
     }
 
     fn write_atoms(atlas_dir: &Path, atoms: Vec<AtomEnvelope>) {
@@ -605,7 +607,14 @@ mod tests {
     async fn list_atoms_paginates() {
         let (_tmp, reader) = make_atlas();
         let first = reader
-            .list_atoms("wiki", AtomFilter::default(), PageCursor { offset: 0, limit: 2 })
+            .list_atoms(
+                "wiki",
+                AtomFilter::default(),
+                PageCursor {
+                    offset: 0,
+                    limit: 2,
+                },
+            )
             .await
             .unwrap();
         assert_eq!(first.items.len(), 2);
@@ -613,21 +622,42 @@ mod tests {
         assert_eq!(first.next_offset, Some(2));
 
         let second = reader
-            .list_atoms("wiki", AtomFilter::default(), PageCursor { offset: 2, limit: 2 })
+            .list_atoms(
+                "wiki",
+                AtomFilter::default(),
+                PageCursor {
+                    offset: 2,
+                    limit: 2,
+                },
+            )
             .await
             .unwrap();
         assert_eq!(second.items.len(), 2);
         assert_eq!(second.next_offset, Some(4));
 
         let third = reader
-            .list_atoms("wiki", AtomFilter::default(), PageCursor { offset: 4, limit: 2 })
+            .list_atoms(
+                "wiki",
+                AtomFilter::default(),
+                PageCursor {
+                    offset: 4,
+                    limit: 2,
+                },
+            )
             .await
             .unwrap();
         assert_eq!(third.items.len(), 1);
         assert!(third.next_offset.is_none());
 
         let past_end = reader
-            .list_atoms("wiki", AtomFilter::default(), PageCursor { offset: 99, limit: 10 })
+            .list_atoms(
+                "wiki",
+                AtomFilter::default(),
+                PageCursor {
+                    offset: 99,
+                    limit: 10,
+                },
+            )
             .await
             .unwrap();
         assert!(past_end.items.is_empty());
@@ -675,10 +705,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let reader = FileAtlasReader::new(tmp.path().to_path_buf());
         let long = "x".repeat(200);
-        write_atoms(
-            &tmp.path().join("c").join("atlas"),
-            vec![claim(1, &long)],
-        );
+        write_atoms(&tmp.path().join("c").join("atlas"), vec![claim(1, &long)]);
         let page = reader
             .list_atoms("c", AtomFilter::default(), PageCursor::default())
             .await
@@ -788,8 +815,7 @@ mod tests {
         let AtomEnvelope::Entity(mut e) = entity(id, name, salience) else {
             unreachable!("entity() builds an Entity")
         };
-        e.first_appearance = ChunkRef::new("sec_0001", None)
-            .with_source_doc(Some(doc.to_string()));
+        e.first_appearance = ChunkRef::new("sec_0001", None).with_source_doc(Some(doc.to_string()));
         AtomEnvelope::Entity(e)
     }
 

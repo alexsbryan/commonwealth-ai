@@ -22,12 +22,12 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use corpus_engine::engine::CorpusEngine;
 use corpus_engine::enrichment::skeleton::FieldSkeleton;
 use corpus_engine::error::{Error as CorpusError, Result as CorpusResult};
 use corpus_engine::recipe::Recipe;
 use corpus_engine::types::{CorpusSpec, InferenceFn};
-use async_trait::async_trait;
 use sovereign_core::observer::StateStoreObserver;
 use sovereign_core::traits::LandscapeDigestProvider;
 use sovereign_core::types::{ConversationContext, LandscapeDigest};
@@ -155,8 +155,14 @@ impl KnowledgeViewManager {
             .parent()
             .map(|p| p.join("notes.db"))
             .unwrap_or_else(|| PathBuf::from("notes.db"));
-        Self::new_with_notes_path(engine, inference, db_path, notes_db_path, local_only_skill_ids)
-            .await
+        Self::new_with_notes_path(
+            engine,
+            inference,
+            db_path,
+            notes_db_path,
+            local_only_skill_ids,
+        )
+        .await
     }
 
     /// Construct with an explicit path for the agent's working-notes
@@ -475,7 +481,10 @@ impl KnowledgeViewManager {
         // registry — see signature docstring.
 
         let mut view_budgets: Vec<(ViewKind, usize)> = Vec::with_capacity(3);
-        view_budgets.push((ViewKind::Personal, ViewKind::Personal.default_budget_tokens()));
+        view_budgets.push((
+            ViewKind::Personal,
+            ViewKind::Personal.default_budget_tokens(),
+        ));
         if !active_is_local_only {
             view_budgets.push((
                 ViewKind::Conversational,
@@ -581,11 +590,7 @@ impl KnowledgeViewManager {
         //    aren't configured — `AtosSnapshot::empty()` returns no
         //    matches so the strategic block degrades gracefully.
         let features = self.features_store_handle().await;
-        let atos = AtosSnapshot::build(
-            features.as_ref(),
-            self.project_toml_path.as_deref(),
-        )
-        .await;
+        let atos = AtosSnapshot::build(features.as_ref(), self.project_toml_path.as_deref()).await;
 
         // 3. Pull timelines from both atlas sources. We compute the
         //    per-corpus index directory directly (engine.index_dir +
@@ -595,10 +600,7 @@ impl KnowledgeViewManager {
         //    only needs the directory layout and is happy when the
         //    file is missing (it returns an empty vec).
         let mut timelines = Vec::new();
-        for view_id in [
-            ViewKind::Personal.id(),
-            ViewKind::Conversational.id(),
-        ] {
+        for view_id in [ViewKind::Personal.id(), ViewKind::Conversational.id()] {
             let corpus_dir = self.engine.index_dir().join(view_id);
             match assemble_timelines_from_atlas(&corpus_dir, &chunk_ts, &atos) {
                 Ok(mut tls) => timelines.append(&mut tls),
@@ -637,9 +639,7 @@ impl KnowledgeViewManager {
         }
 
         // 5. In-conversation predicate from the current message thread.
-        let corpus = ConversationCorpus::from_messages(
-            conversation_messages.iter().cloned(),
-        );
+        let corpus = ConversationCorpus::from_messages(conversation_messages.iter().cloned());
         let in_conv = |name: &str| corpus.contains_entity(name);
 
         let now = chrono::Utc::now().timestamp();
@@ -1020,7 +1020,7 @@ mod tests {
                 deleted_at: None,
                 skill_id: None,
                 enabled_corpora: None,
-            searched_sources: None,
+                searched_sources: None,
             },
             memories: vec![],
             working_memory: None,
@@ -1043,7 +1043,9 @@ mod tests {
         mgr.splice_into(&mut ctx, Some("inner-work")).await;
         let digests = ctx.knowledge_view_digests.unwrap();
         assert!(
-            !digests.iter().any(|d| d.view_id == VIEW_CONVERSATION_HISTORY),
+            !digests
+                .iter()
+                .any(|d| d.view_id == VIEW_CONVERSATION_HISTORY),
             "conversation-history must be omitted for local_only active skill: {digests:?}"
         );
     }
@@ -1181,9 +1183,11 @@ mod tests {
     #[cfg(feature = "treesitter")]
     fn seed_personal_atlas_with_entities(indexes_dir: &std::path::Path) {
         use corpus_engine::enrichment::atlas::atoms::{
-            AtomId, AtomsFile, AtomEnvelope, ChunkRef, Entity,
+            AtomEnvelope, AtomId, AtomsFile, ChunkRef, Entity,
         };
-        use corpus_engine::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgesFile, EdgeType};
+        use corpus_engine::enrichment::atlas::edges::{
+            Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile,
+        };
         use corpus_engine::enrichment::atlas::writer::ATLAS_DIRNAME;
         use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 
@@ -1203,9 +1207,9 @@ mod tests {
             role: Some("VP Eng".into()),
             participants: Vec::new(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-};
+            provenance: Default::default(),
+            concept_kind: None,
+        };
         let api_migration = Entity {
             id: AtomId::entity(2),
             canonical_name: "API migration".into(),
@@ -1219,9 +1223,9 @@ mod tests {
             role: None,
             participants: vec![AtomId::entity(1)],
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-};
+            provenance: Default::default(),
+            concept_kind: None,
+        };
 
         let edge_sarah = Edge {
             id: EdgeId::new(1),
@@ -1370,11 +1374,15 @@ mod tests {
         mgr.splice_into(&mut ctx, Some("inner-work")).await;
         let digests = ctx.knowledge_view_digests.unwrap();
         assert!(
-            !digests.iter().any(|d| d.view_id == ViewKind::Relational.id()),
+            !digests
+                .iter()
+                .any(|d| d.view_id == ViewKind::Relational.id()),
             "relational digest must be suppressed for local_only active skill"
         );
         assert!(
-            !digests.iter().any(|d| d.view_id == ViewKind::Strategic.id()),
+            !digests
+                .iter()
+                .any(|d| d.view_id == ViewKind::Strategic.id()),
             "strategic digest must be suppressed for local_only active skill"
         );
     }

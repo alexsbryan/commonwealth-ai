@@ -32,9 +32,7 @@ pub mod conv;
 pub mod reader;
 pub mod stable_key;
 
-pub use atom_browse::{
-    AtomBrowseError, AtomFilter, AtomListPage, AtomSummary, PageCursor,
-};
+pub use atom_browse::{AtomBrowseError, AtomFilter, AtomListPage, AtomSummary, PageCursor};
 pub use atom_detail::{
     AtomDetail, AtomDetailError, CrossCorpusLink, EvidenceExcerpt, ReferencedAtom, RelatedAtom,
 };

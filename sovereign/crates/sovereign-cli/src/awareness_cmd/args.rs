@@ -87,7 +87,13 @@ mod tests {
 
     #[test]
     fn boolean_flag_does_not_consume_next_token() {
-        let (pos, flags) = split_args(&s(&["timeline", "Sarah", "--include-chunks", "--window", "30"]));
+        let (pos, flags) = split_args(&s(&[
+            "timeline",
+            "Sarah",
+            "--include-chunks",
+            "--window",
+            "30",
+        ]));
         assert_eq!(pos, vec!["timeline", "Sarah"]);
         assert!(has_flag(&flags, "include-chunks"));
         assert_eq!(get_flag(&flags, "window"), Some("30".into()));

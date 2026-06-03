@@ -21,16 +21,14 @@ use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use commonwealth_api::server::{client_router, internal_router};
 use commonwealth_api::state::AppState;
-use commonwealth_core::capabilities::{
-    AvailableResources, HardwareProfile, NodeCapabilities,
-};
+use commonwealth_app::registry::AppRegistry;
+use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::knowledge::CorpusShardInfo;
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use commonwealth_state::MeshStore;
-use commonwealth_app::registry::AppRegistry;
-use corpus_engine::{CorpusEngine, EmbedFn};
 use corpus_engine::index::{CorpusIndex, InsertChunk};
+use corpus_engine::{CorpusEngine, EmbedFn};
 use tower::ServiceExt;
 
 /// 8-dim zero vector — matches what mock-embed-backed indexes ship
@@ -55,12 +53,12 @@ async fn make_engine_with_corpus(
     let index = CorpusIndex::create(
         &idx_path,
         corpus_id,
-        corpus_id,          // corpus_name
+        corpus_id,              // corpus_name
         "qwen3-embedding-0.6b", // embedding_model — must match what
-                               // the engine will look for when it
-                               // opens the index via `open_index`.
+        // the engine will look for when it
+        // opens the index via `open_index`.
         8,
-        true,      // mesh_sharing
+        true, // mesh_sharing
         "CC0-1.0",
     )
     .await
@@ -154,11 +152,7 @@ fn member(
 /// Build an `AppState` around `node_id`, optionally attached to a
 /// `CorpusEngine` and populated with a two-member `Mesh` that
 /// includes `peer` as an online member with `hosted_corpora`.
-fn make_state(
-    node_id: NodeId,
-    peer: MemberRecord,
-    engine: Option<Arc<CorpusEngine>>,
-) -> AppState {
+fn make_state(node_id: NodeId, peer: MemberRecord, engine: Option<Arc<CorpusEngine>>) -> AppState {
     let mesh_id = MeshId::from_u128(42);
     let hash = [7u8; 32];
     // Include self — otherwise the fan-out logic can't tell which
@@ -183,13 +177,7 @@ fn make_state(
 
     let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
     let app_registry = Arc::new(AppRegistry::new());
-    AppState::new_with_platform_and_engine(
-        node_id,
-        mesh,
-        mesh_store,
-        app_registry,
-        engine,
-    )
+    AppState::new_with_platform_and_engine(node_id, mesh, mesh_store, app_registry, engine)
 }
 
 /// Issue a `/v1/knowledge/search` POST against `state` via
@@ -224,11 +212,10 @@ async fn fanout_fetches_sep_chunk_from_peer_with_attribution() {
         host_dir.path(),
         "sep",
         vec![InsertChunk {
-            content:
-                "Compatibilists hold that free will is compatible with \
+            content: "Compatibilists hold that free will is compatible with \
                  determinism, reinterpreting 'freedom' as responsiveness \
                  to reasons rather than the power to do otherwise."
-                    .into(),
+                .into(),
             title: Some("Compatibilism".into()),
             url: Some("https://plato.stanford.edu/entries/compatibilism/".into()),
             metadata: None,
@@ -284,17 +271,14 @@ async fn fanout_fetches_sep_chunk_from_peer_with_attribution() {
     let first = &results[0];
     assert_eq!(first["corpus_id"], "sep", "hit must be from the sep corpus");
     assert_eq!(
-        first["metadata"]["peer_name"],
-        "BeefyMac",
+        first["metadata"]["peer_name"], "BeefyMac",
         "peer attribution must survive fan-out: {first:?}"
     );
-    assert!(
-        body["corpora_searched"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|c| c == "sep")
-    );
+    assert!(body["corpora_searched"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c == "sep"));
 }
 
 #[tokio::test]

@@ -327,9 +327,9 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![],
-                    provenance: Default::default(),
-                    concept_kind: None,
-})
+            provenance: Default::default(),
+            concept_kind: None,
+        })
     }
 
     fn sample_claim(id: usize, content: &str) -> AtomEnvelope {
@@ -345,10 +345,10 @@ mod tests {
             confidence: None,
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-                    claim_kind: None,
+            claim_kind: None,
             concession_outcome: None,
             evidence_kind: None,
-})
+        })
     }
 
     fn make_reader() -> (TempDir, FileAtlasReader) {
@@ -489,8 +489,11 @@ mod tests {
         // but keep its mtime + size identical so the cache key
         // still matches. The summary cache should still satisfy.
         let original = std::fs::metadata(atlas_dir.join("atoms.json")).unwrap();
-        std::fs::write(atlas_dir.join("atoms.json"), vec![0u8; original.len() as usize])
-            .unwrap();
+        std::fs::write(
+            atlas_dir.join("atoms.json"),
+            vec![0u8; original.len() as usize],
+        )
+        .unwrap();
         filetime::set_file_mtime(
             atlas_dir.join("atoms.json"),
             filetime::FileTime::from_system_time(original.modified().unwrap()),

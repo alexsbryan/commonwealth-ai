@@ -125,7 +125,11 @@ pub async fn run(req: SessionRequest) -> i32 {
             return 1;
         }
     };
-    eprintln!("  \u{2713} session {} bootstrapped at {}", session.id, session.dir.display());
+    eprintln!(
+        "  \u{2713} session {} bootstrapped at {}",
+        session.id,
+        session.dir.display()
+    );
 
     // ── Dispatch ───────────────────────────────────────────────────
     match preflight.chosen_transport {
@@ -138,7 +142,9 @@ pub async fn run(req: SessionRequest) -> i32 {
             );
             1
         }
-        TransportChoice::Default => unreachable!("preflight must resolve Default to a concrete transport"),
+        TransportChoice::Default => {
+            unreachable!("preflight must resolve Default to a concrete transport")
+        }
     }
 }
 
@@ -197,14 +203,20 @@ async fn preflight(req: &SessionRequest) -> Result<PreflightResult, i32> {
     let daemon = probe_daemon(req.daemon_port).await;
     if let DaemonState::Down { reason } = &daemon {
         eprintln!();
-        eprintln!("  \u{2717} Commonwealth daemon isn't responding at http://localhost:{}.", req.daemon_port);
+        eprintln!(
+            "  \u{2717} Commonwealth daemon isn't responding at http://localhost:{}.",
+            req.daemon_port
+        );
         eprintln!("    ({reason})");
         eprintln!();
         eprintln!("    Start it with:    commonwealth daemon start");
         eprintln!("    Or run `sovereign project design --solo` to continue without the agent.");
         return Err(2);
     }
-    eprintln!("  \u{2713} Commonwealth daemon up at http://localhost:{}", req.daemon_port);
+    eprintln!(
+        "  \u{2713} Commonwealth daemon up at http://localhost:{}",
+        req.daemon_port
+    );
 
     // 2. opencode readiness — only when we're planning to use it.
     let opencode = match req.transport {
@@ -395,7 +407,14 @@ fn render_session_brief(req: &SessionRequest, design_path: &Path) -> String {
             .gaps
             .iter()
             .take(12)
-            .map(|g| format!("  - [{:?}] §{} · {}", g.reason, g.section, truncate(&g.snippet, 80)))
+            .map(|g| {
+                format!(
+                    "  - [{:?}] §{} · {}",
+                    g.reason,
+                    g.section,
+                    truncate(&g.snippet, 80)
+                )
+            })
             .collect::<Vec<_>>()
             .join("\n")
     };
@@ -532,7 +551,9 @@ fn run_opencode(req: &SessionRequest, session: &BootstrappedSession) -> i32 {
         }
         Err(e) => {
             eprintln!("  \u{2717} could not spawn opencode: {e}");
-            eprintln!("    This usually means opencode isn't on PATH — try `--stopgap` or `--solo`.");
+            eprintln!(
+                "    This usually means opencode isn't on PATH — try `--stopgap` or `--solo`."
+            );
             1
         }
     }
@@ -551,13 +572,17 @@ fn run_stopgap(_req: &SessionRequest, session: &BootstrappedSession) -> i32 {
     // Every line here respects the "push toward opencode ASAP"
     // invariant from the plan.
     eprintln!();
-    eprintln!("  \u{26a0} `--stopgap` is provisional and its embedded chat loop hasn't landed yet.");
+    eprintln!(
+        "  \u{26a0} `--stopgap` is provisional and its embedded chat loop hasn't landed yet."
+    );
     eprintln!();
     eprintln!("    Your session is real — brief + state written at:");
     eprintln!("      {}", session.dir.display());
     eprintln!();
     eprintln!("    Until the stopgap ships, your options are:");
-    eprintln!("      \u{00b7} Install opencode, then re-run `sovereign project design` (blessed path).");
+    eprintln!(
+        "      \u{00b7} Install opencode, then re-run `sovereign project design` (blessed path)."
+    );
     eprintln!("      \u{00b7} Run `sovereign project design --solo` for structural-parser-driven");
     eprintln!("        CLI prompts against your DESIGN.md (no agent, but real gaps get captured).");
     eprintln!();
@@ -647,7 +672,11 @@ fn prompt_for_gaps(gaps: &[GapMarker]) -> Vec<SoloAnswer> {
         eprintln!("    Anchor: DESIGN.md §{}", gap.section);
         let synth_question = synthesize_question(gap);
         eprintln!("    Q: {synth_question}");
-        eprintln!("       (context: {:?}{})", gap.reason, format_snippet(&gap.snippet));
+        eprintln!(
+            "       (context: {:?}{})",
+            gap.reason,
+            format_snippet(&gap.snippet)
+        );
         eprint!("    A (blank = skip): ");
         let _ = std::io::Write::flush(&mut std::io::stderr());
         let answer = crate::util::prompts::prompt_string("").unwrap_or_default();
@@ -669,7 +698,10 @@ fn synthesize_question(gap: &GapMarker) -> String {
     match gap.reason {
         GapReason::TbdMarker => format!("Resolve this TBD: {}", gap.snippet.trim()),
         GapReason::UnclearMarker => {
-            format!("You marked this unclear — what do you want it to say?: {}", gap.snippet.trim())
+            format!(
+                "You marked this unclear — what do you want it to say?: {}",
+                gap.snippet.trim()
+            )
         }
         GapReason::EmptySection => format!(
             "Section `{}` is empty — what belongs here? (Or write `skip` if it's intentional.)",
@@ -897,7 +929,10 @@ mod tests {
         assert!(brief.contains("sha:"));
         // First 12 chars of a sha256 is not accidentally zero-length.
         assert!(brief.contains("[TbdMarker]"));
-        assert!(brief.contains("`probe`"), "session brief mentions project_id");
+        assert!(
+            brief.contains("`probe`"),
+            "session brief mentions project_id"
+        );
     }
 
     #[test]

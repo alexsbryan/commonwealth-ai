@@ -104,9 +104,7 @@ impl GlinerChunkExtractor {
         Self { store, extractor }
     }
 
-    pub fn into_handle(
-        self,
-    ) -> Arc<dyn ChunkEntityExtractor> {
+    pub fn into_handle(self) -> Arc<dyn ChunkEntityExtractor> {
         Arc::new(self)
     }
 }
@@ -162,10 +160,7 @@ impl GlinerChunkExtractor {
             if chunk_ids.iter().all(|id| already.contains(id)) {
                 continue;
             }
-            let rows = match index
-                .chunks_for_source_doc_with_embeddings(conv_uuid)
-                .await
-            {
+            let rows = match index.chunks_for_source_doc_with_embeddings(conv_uuid).await {
                 Ok(r) => r,
                 Err(e) => {
                     tracing::warn!(
@@ -198,16 +193,10 @@ impl GlinerChunkExtractor {
                     continue;
                 }
             };
-            let mut conv_rows: Vec<sovereign_core::conv_tiered::ChunkEntityRow> =
-                Vec::new();
+            let mut conv_rows: Vec<sovereign_core::conv_tiered::ChunkEntityRow> = Vec::new();
             for (chunk, mentions) in delta.iter().zip(mention_batches.into_iter()) {
                 for m in mentions {
-                    conv_rows.push(m.into_row(
-                        corpus_id,
-                        chunk.id,
-                        Some(conv_uuid),
-                        now,
-                    ));
+                    conv_rows.push(m.into_row(corpus_id, chunk.id, Some(conv_uuid), now));
                 }
                 let chunk_id = chunk.id as i64;
                 high_chunk_id = Some(high_chunk_id.map_or(chunk_id, |p| p.max(chunk_id)));
@@ -233,9 +222,7 @@ impl GlinerChunkExtractor {
             .store
             .get_chunk_entity_progress(corpus_id)
             .await
-            .map_err(|e| {
-                Error::Database(format!("get_chunk_entity_progress({corpus_id}): {e}"))
-            })?;
+            .map_err(|e| Error::Database(format!("get_chunk_entity_progress({corpus_id}): {e}")))?;
         let needs_write = new_chunks_processed > 0
             || existing
                 .as_ref()
@@ -246,8 +233,8 @@ impl GlinerChunkExtractor {
             let prior_processed = existing.as_ref().map(|p| p.chunks_processed).unwrap_or(0);
             let prior_mentions = existing.as_ref().map(|p| p.mentions_extracted).unwrap_or(0);
             let started_at = existing.as_ref().map(|p| p.started_at).unwrap_or(now);
-            let last_chunk_id = high_chunk_id
-                .or_else(|| existing.as_ref().and_then(|p| p.last_chunk_id));
+            let last_chunk_id =
+                high_chunk_id.or_else(|| existing.as_ref().and_then(|p| p.last_chunk_id));
             let row = sovereign_core::conv_tiered::ChunkEntityProgressRow {
                 corpus_id: corpus_id.to_string(),
                 chunks_processed: prior_processed + new_chunks_processed as i64,
@@ -292,11 +279,7 @@ impl GlinerChunkExtractor {
 #[cfg(feature = "gliner-ner")]
 #[async_trait]
 impl ChunkEntityExtractor for GlinerChunkExtractor {
-    async fn extract_delta_for_corpus(
-        &self,
-        corpus_id: &str,
-        index_path: &Path,
-    ) -> Result<usize> {
+    async fn extract_delta_for_corpus(&self, corpus_id: &str, index_path: &Path) -> Result<usize> {
         // Delegate to the inherent method so the trait + inherent
         // entry points stay bit-identical. Keeping the inherent
         // method also lets callers in sovereign-tools call directly
@@ -326,12 +309,7 @@ impl ChunkEntityExtractor for GlinerChunkExtractor {
         let mut rows: Vec<sovereign_core::conv_tiered::ChunkEntityRow> = Vec::new();
         for (chunk, mentions) in chunks.iter().zip(mention_batches.into_iter()) {
             for m in mentions {
-                rows.push(m.into_row(
-                    corpus_id,
-                    chunk.id,
-                    Some(conv_uuid),
-                    extracted_at,
-                ));
+                rows.push(m.into_row(corpus_id, chunk.id, Some(conv_uuid), extracted_at));
             }
         }
         let count = rows.len();
@@ -374,12 +352,14 @@ impl TieredEnrichmentProvider for ConvTieredProvider {
 
         let result: std::result::Result<Vec<ConvRaptorNodeRow>, Error> = match bucket {
             ConvBucket::Tiny => Ok(synthesize_tiny_node(
-                corpus_id, conv_uuid, &title, &chunks, &embeddings, updated_at,
+                corpus_id,
+                conv_uuid,
+                &title,
+                &chunks,
+                &embeddings,
+                updated_at,
             )),
-            ConvBucket::Small
-            | ConvBucket::Medium
-            | ConvBucket::Large
-            | ConvBucket::LongTail => {
+            ConvBucket::Small | ConvBucket::Medium | ConvBucket::Large | ConvBucket::LongTail => {
                 build_raptor_rows(
                     corpus_id,
                     conv_uuid,
@@ -717,10 +697,7 @@ impl FolderTieredProvider {
     /// Wire the per-corpus index-dir resolver so this provider
     /// publishes `_enrichment_state.json` while it runs. Daemons
     /// should always set this; tests can skip it.
-    pub fn with_index_dir_resolver(
-        mut self,
-        resolver: Arc<dyn IndexDirResolver>,
-    ) -> Self {
+    pub fn with_index_dir_resolver(mut self, resolver: Arc<dyn IndexDirResolver>) -> Self {
         self.index_dir_resolver = Some(resolver);
         self
     }
@@ -787,11 +764,10 @@ impl FolderTieredProvider {
         };
         let chunk_ids: Vec<u32> = chunks.iter().map(|c| c.id as u32).collect();
         let embedding_dim = embeddings.first().map(|e| e.len()).unwrap_or(0);
-        let input_hash =
-            crate::raptor_checkpoint::RaptorCheckpointHandle::compute_input_hash(
-                &chunk_ids,
-                embedding_dim,
-            );
+        let input_hash = crate::raptor_checkpoint::RaptorCheckpointHandle::compute_input_hash(
+            &chunk_ids,
+            embedding_dim,
+        );
         let checkpoint =
             crate::raptor_checkpoint::RaptorCheckpointHandle::at(&index_dir, input_hash);
         let sink: Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink> =
@@ -948,10 +924,7 @@ impl FolderTieredProvider {
     /// 6. Persist as `VaultThemeRow`s.
     ///
     /// Returns the number of themes persisted (or 0 on a no-op skip).
-    pub(crate) async fn run_vault_synthesis(
-        &self,
-        corpus_id: &str,
-    ) -> Result<usize> {
+    pub(crate) async fn run_vault_synthesis(&self, corpus_id: &str) -> Result<usize> {
         use crate::raptor_atlas::{build_raptor_atlas, ChunkInput};
         use sovereign_core::conv_tiered::VaultThemeRow;
 
@@ -989,11 +962,7 @@ impl FolderTieredProvider {
         // back to the originating notes.
         let mut source_for_input: Vec<String> = Vec::new();
         for doc_id in &source_doc_ids {
-            let nodes = match self
-                .store
-                .list_conv_raptor_nodes(corpus_id, doc_id)
-                .await
-            {
+            let nodes = match self.store.list_conv_raptor_nodes(corpus_id, doc_id).await {
                 Ok(n) => n,
                 Err(e) => {
                     tracing::warn!(
@@ -1111,7 +1080,10 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
             EnrichmentPhase::Scanning,
             0,
             chunk_count as u64,
-            Some(&format!("loaded {chunk_count} chunks; bucket {}", bucket.label())),
+            Some(&format!(
+                "loaded {chunk_count} chunks; bucket {}",
+                bucket.label()
+            )),
         );
         // Folder corpora often have chunks tagged with the source file
         // name as `title`; reuse that as the overview when present,
@@ -1165,8 +1137,8 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                     // The handle is shaped against the input chunk IDs
                     // + embedding dim so re-runs after the chunk set
                     // changes invalidate cleanly.
-                    let (checkpoint_owned, progress_sink_owned) = self
-                        .build_checkpoint_and_sink(corpus_id, &chunks, embeddings.as_slice());
+                    let (checkpoint_owned, progress_sink_owned) =
+                        self.build_checkpoint_and_sink(corpus_id, &chunks, embeddings.as_slice());
                     let checkpoint_ref = checkpoint_owned.as_ref();
                     let progress_ref = progress_sink_owned.as_ref();
                     build_folder_artifacts(
@@ -1207,10 +1179,7 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                         updated_at,
                     )
                     .await;
-                    self.fail_state(
-                        corpus_id,
-                        &format!("save_conv_raptor_nodes: {e}"),
-                    );
+                    self.fail_state(corpus_id, &format!("save_conv_raptor_nodes: {e}"));
                     return Err(Error::Database(format!(
                         "folder_tiered: save_conv_raptor_nodes({corpus_id}, {conv_uuid}): {e}"
                     )));
@@ -1400,8 +1369,8 @@ async fn build_folder_artifacts(
     let motif_rows: Vec<ConvMotifRow> = motifs
         .into_iter()
         .map(|m| {
-            let occ_json = serde_json::to_string(&m.occurrence_chunk_ids)
-                .unwrap_or_else(|_| "[]".into());
+            let occ_json =
+                serde_json::to_string(&m.occurrence_chunk_ids).unwrap_or_else(|_| "[]".into());
             ConvMotifRow {
                 corpus_id: corpus_id.to_string(),
                 conv_uuid: conv_uuid.to_string(),
@@ -1467,8 +1436,14 @@ mod tests {
             mk_chunk(11, "more", None),
         ];
         let embeds = vec![vec![1.0, 0.0], vec![3.0, 0.0]];
-        let rows =
-            synthesize_tiny_node("corpus-x", "conv-y", "Convo About React", &chunks, &embeds, 42);
+        let rows = synthesize_tiny_node(
+            "corpus-x",
+            "conv-y",
+            "Convo About React",
+            &chunks,
+            &embeds,
+            42,
+        );
         assert_eq!(rows.len(), 1);
         let row = &rows[0];
         assert_eq!(row.summary, "Convo About React");
@@ -1480,10 +1455,8 @@ mod tests {
         assert_eq!(row.created_at, 42);
         assert!(row.direct_member_chunk_ids_json.is_some());
         // Member chunk ids must round-trip the Lance row ids.
-        let parsed: Vec<u64> = serde_json::from_str(
-            row.direct_member_chunk_ids_json.as_ref().unwrap(),
-        )
-        .unwrap();
+        let parsed: Vec<u64> =
+            serde_json::from_str(row.direct_member_chunk_ids_json.as_ref().unwrap()).unwrap();
         assert_eq!(parsed, vec![10u64, 11]);
     }
 

@@ -175,7 +175,12 @@ impl AgentRunner for BareMetalRunner {
         ];
 
         // One emit at daemon default temperature.
-        let body = chat_body(&ctx.model_handle, messages.clone(), None, self.emit_max_tokens);
+        let body = chat_body(
+            &ctx.model_handle,
+            messages.clone(),
+            None,
+            self.emit_max_tokens,
+        );
         let request_started = Instant::now();
         let response_json = match post_chat_completion(&self.http, &self.provider_url, &body).await
         {
@@ -228,7 +233,10 @@ impl AgentRunner for BareMetalRunner {
         // Parse + apply.
         let Some(parsed) = parse_response(&content) else {
             info!(problem = %ctx.problem_id, "bare-metal: response had no parseable action+block");
-            let final_text = format!("(bare-metal: no parseable action; raw response truncated)\n{}", content.chars().take(500).collect::<String>());
+            let final_text = format!(
+                "(bare-metal: no parseable action; raw response truncated)\n{}",
+                content.chars().take(500).collect::<String>()
+            );
             return Ok(AgentRunArtifact {
                 workdir,
                 tokens,
@@ -251,7 +259,12 @@ impl AgentRunner for BareMetalRunner {
         let apply_msg = match apply_edit(&exec_ctx, &source_file, &parsed).await {
             Ok(()) => format!("applied {shape}"),
             Err(e) => {
-                let detail = e.render_for_agent().lines().next().unwrap_or("").to_string();
+                let detail = e
+                    .render_for_agent()
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
                 info!(problem = %ctx.problem_id, shape = %shape, error = %detail, "bare-metal: apply rejected");
                 format!("apply rejected ({shape}): {detail}")
             }
@@ -259,13 +272,8 @@ impl AgentRunner for BareMetalRunner {
 
         // Final test run — even if apply was rejected, the workdir
         // is in its pre-edit state so the witness can still score.
-        let test_result = run_tests(
-            workdir.path(),
-            &ctx.verify_cmd,
-            language,
-            self.test_timeout,
-        )
-        .await;
+        let test_result =
+            run_tests(workdir.path(), &ctx.verify_cmd, language, self.test_timeout).await;
 
         let final_text = format!(
             "Bare-metal result: {} → tests {}/{} ({} failed)",

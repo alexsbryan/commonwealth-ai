@@ -173,7 +173,9 @@ impl Tool for WriteNoteTool {
             .get("content")
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
-            .ok_or_else(|| Error::InvalidInput("write_note requires non-empty 'content'".to_string()))?;
+            .ok_or_else(|| {
+                Error::InvalidInput("write_note requires non-empty 'content'".to_string())
+            })?;
         Ok(())
     }
 

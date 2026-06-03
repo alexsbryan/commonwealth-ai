@@ -59,7 +59,11 @@ pub async fn install_app(
             .into_response();
     }
     state.inner.app_registry.register(body.manifest).await;
-    (StatusCode::OK, Json(serde_json::json!({"status": "registered"}))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"status": "registered"})),
+    )
+        .into_response()
 }
 
 /// `GET /v1/apps/{app_id}/status` — check if an app is registered and running locally.
@@ -85,9 +89,17 @@ pub async fn uninstall_app(
     let removed = state.inner.app_registry.unregister(&app_id).await;
     state.inner.app_port_map.remove(&app_id).await;
     if removed {
-        (StatusCode::OK, Json(serde_json::json!({"status": "uninstalled"}))).into_response()
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({"status": "uninstalled"})),
+        )
+            .into_response()
     } else {
-        (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "app not found"}))).into_response()
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "app not found"})),
+        )
+            .into_response()
     }
 }
 
@@ -124,8 +136,8 @@ pub async fn proxy_app(
         }
     }
 
-    let req_method = reqwest::Method::from_bytes(method.as_str().as_bytes())
-        .unwrap_or(reqwest::Method::GET);
+    let req_method =
+        reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap_or(reqwest::Method::GET);
 
     match commonwealth_app::proxy::forward(
         &client,

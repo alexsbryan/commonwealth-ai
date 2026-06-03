@@ -236,11 +236,7 @@ mod tests {
         let b = NodeId::from_u128(200);
 
         let mut local = mesh_with(vec![member(a, "A", 10)], mesh_id, hash);
-        let remote = mesh_with(
-            vec![member(a, "A", 10), member(b, "B", 20)],
-            mesh_id,
-            hash,
-        );
+        let remote = mesh_with(vec![member(a, "A", 10), member(b, "B", 20)], mesh_id, hash);
 
         let report = local.merge_from(a, &remote);
         assert_eq!(report.added, 1);
@@ -262,11 +258,7 @@ mod tests {
             mesh_id,
             hash,
         );
-        let remote = mesh_with(
-            vec![member(b, "B-fresh", 50)],
-            mesh_id,
-            hash,
-        );
+        let remote = mesh_with(vec![member(b, "B-fresh", 50)], mesh_id, hash);
 
         let report = local.merge_from(a, &remote);
         assert_eq!(report.added, 0);

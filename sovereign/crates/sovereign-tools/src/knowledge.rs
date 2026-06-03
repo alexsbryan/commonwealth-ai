@@ -9,9 +9,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
 use sovereign_core::types::*;
 
-use crate::catalog::{
-    partition_hits_by_kind, CatalogHit, CatalogResolutionContext,
-};
+use crate::catalog::{partition_hits_by_kind, CatalogHit, CatalogResolutionContext};
 
 /// Search over ingested documents using vector similarity or text search.
 pub struct KnowledgeTool {
@@ -79,11 +77,7 @@ impl Tool for KnowledgeTool {
         Ok(())
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -114,66 +108,54 @@ impl Tool for KnowledgeTool {
         // as a separate "I know of these — want me to read one?"
         // section so the runtime never confabulates plot details
         // from metadata.
-        let (corpus_chunks, catalog_hits): (
-            Vec<(String, String, f32)>,
-            Vec<CatalogHit>,
-        ) = if let (Some(ref engine), Some(ref emb)) =
-            (&self.corpus_engine, &embedding)
-        {
-            let mut full_text: Vec<(String, String, f32)> = Vec::new();
-            let mut catalog: Vec<CatalogHit> = Vec::new();
+        let (corpus_chunks, catalog_hits): (Vec<(String, String, f32)>, Vec<CatalogHit>) =
+            if let (Some(ref engine), Some(ref emb)) = (&self.corpus_engine, &embedding) {
+                let mut full_text: Vec<(String, String, f32)> = Vec::new();
+                let mut catalog: Vec<CatalogHit> = Vec::new();
 
-            let indexes = engine.installed_indexes().await.unwrap_or_default();
-            // Build the `corpus_id → CorpusKind` map once.
-            let mut kinds: HashMap<String, CorpusKind> = HashMap::new();
-            for info in &indexes {
-                kinds.insert(info.corpus_id.clone(), info.kind);
-            }
-            // Resolve each catalog corpus's `[catalog]` block
-            // through the engine's recipe registry. Best-effort —
-            // a missing CatalogConfig drops the hit back into the
-            // full-text stream rather than dropping it outright
-            // (see `partition_hits_by_kind`).
-            let mut catalog_configs: HashMap<String, CatalogConfig> = HashMap::new();
-            for info in &indexes {
-                if info.kind == CorpusKind::Catalog {
-                    if let Ok(recipe) =
-                        engine.registry().fetch_recipe(&info.corpus_id).await
-                    {
-                        if let Some(cat) = recipe.catalog {
-                            catalog_configs.insert(info.corpus_id.clone(), cat);
+                let indexes = engine.installed_indexes().await.unwrap_or_default();
+                // Build the `corpus_id → CorpusKind` map once.
+                let mut kinds: HashMap<String, CorpusKind> = HashMap::new();
+                for info in &indexes {
+                    kinds.insert(info.corpus_id.clone(), info.kind);
+                }
+                // Resolve each catalog corpus's `[catalog]` block
+                // through the engine's recipe registry. Best-effort —
+                // a missing CatalogConfig drops the hit back into the
+                // full-text stream rather than dropping it outright
+                // (see `partition_hits_by_kind`).
+                let mut catalog_configs: HashMap<String, CatalogConfig> = HashMap::new();
+                for info in &indexes {
+                    if info.kind == CorpusKind::Catalog {
+                        if let Ok(recipe) = engine.registry().fetch_recipe(&info.corpus_id).await {
+                            if let Some(cat) = recipe.catalog {
+                                catalog_configs.insert(info.corpus_id.clone(), cat);
+                            }
                         }
                     }
                 }
-            }
-            let ctx = CatalogResolutionContext::from_indexes(
-                &indexes,
-                catalog_configs,
-            );
+                let ctx = CatalogResolutionContext::from_indexes(&indexes, catalog_configs);
 
-            for info in &indexes {
-                let idx = match engine.open_index(&info.path).await {
-                    Ok(i) => i,
-                    Err(_) => continue,
-                };
-                let scored = match idx.search(emb, query, 5).await {
-                    Ok(s) => s,
-                    Err(_) => continue,
-                };
-                let (ft, cat) = partition_hits_by_kind(scored, &kinds, &ctx);
-                for sc in ft {
-                    let source = sc
-                        .title
-                        .clone()
-                        .unwrap_or_else(|| sc.corpus_id.clone());
-                    full_text.push((source, sc.content, sc.score));
+                for info in &indexes {
+                    let idx = match engine.open_index(&info.path).await {
+                        Ok(i) => i,
+                        Err(_) => continue,
+                    };
+                    let scored = match idx.search(emb, query, 5).await {
+                        Ok(s) => s,
+                        Err(_) => continue,
+                    };
+                    let (ft, cat) = partition_hits_by_kind(scored, &kinds, &ctx);
+                    for sc in ft {
+                        let source = sc.title.clone().unwrap_or_else(|| sc.corpus_id.clone());
+                        full_text.push((source, sc.content, sc.score));
+                    }
+                    catalog.extend(cat);
                 }
-                catalog.extend(cat);
-            }
-            (full_text, catalog)
-        } else {
-            (Vec::new(), Vec::new())
-        };
+                (full_text, catalog)
+            } else {
+                (Vec::new(), Vec::new())
+            };
 
         // ── Merge, sort by score, truncate ───────────────────
         let mut all: Vec<(String, String, f32)> = store_chunks;
@@ -190,7 +172,13 @@ impl Tool for KnowledgeTool {
             let results: Vec<String> = messages
                 .iter()
                 .take(5)
-                .map(|m| format!("[{}] {}", m.role_str(), &m.content[..m.content.len().min(500)]))
+                .map(|m| {
+                    format!(
+                        "[{}] {}",
+                        m.role_str(),
+                        &m.content[..m.content.len().min(500)]
+                    )
+                })
                 .collect();
             return Ok(StepOutput::Text(results.join("\n\n")));
         }
@@ -225,9 +213,8 @@ impl Tool for KnowledgeTool {
 /// matching guidance — invent nothing beyond the metadata, end
 /// with an explicit ingest offer.
 fn format_catalog_hits(hits: &[CatalogHit]) -> String {
-    let mut out = String::from(
-        "CATALOG-AWARE SOURCES (metadata only, full text not yet ingested):",
-    );
+    let mut out =
+        String::from("CATALOG-AWARE SOURCES (metadata only, full text not yet ingested):");
     for (i, h) in hits.iter().take(5).enumerate() {
         let mut line = format!("\n  [C{}] {}", i + 1, h.title);
         if let Some(a) = &h.authors {

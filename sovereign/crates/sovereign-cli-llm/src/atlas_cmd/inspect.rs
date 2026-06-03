@@ -53,11 +53,9 @@ const SHOW_ATOM_HELP: Help = Help {
     command: "sovereign atlas show-atom",
     summary: "Show full inspector record for one atom — type-specific body, \
               evidence excerpts, related atoms, cross-corpus links.",
-    sections: &[
-        HelpSection::Usage(
-            "sovereign atlas show-atom <corpus_id> <atom_id> [--format=text|json]",
-        ),
-    ],
+    sections: &[HelpSection::Usage(
+        "sovereign atlas show-atom <corpus_id> <atom_id> [--format=text|json]",
+    )],
 };
 
 // ─── list-corpora ────────────────────────────────────────────
@@ -308,11 +306,7 @@ pub async fn run_show_atom(args: &[String]) -> i32 {
             for c in &detail.cross_corpus {
                 println!(
                     "  → [{:?}] {}: {} (signal {}, conf {:.2})",
-                    c.edge_type,
-                    c.peer_corpus_id,
-                    c.peer_canonical_name,
-                    c.signal,
-                    c.confidence,
+                    c.edge_type, c.peer_corpus_id, c.peer_canonical_name, c.signal, c.confidence,
                 );
             }
         }
@@ -380,13 +374,10 @@ fn parse_atom_type(s: &str) -> Option<AtomType> {
         "Relation" | "relation" => Some(AtomType::Relation),
         "Claim" | "claim" => Some(AtomType::Claim),
         "Question" | "question" => Some(AtomType::Question),
-        "Configuration" | "configuration" | "Config" | "config" => {
-            Some(AtomType::Configuration)
+        "Configuration" | "configuration" | "Config" | "config" => Some(AtomType::Configuration),
+        "ArgumentReconstruction" | "argumentreconstruction" | "Argument" | "argument" => {
+            Some(AtomType::ArgumentReconstruction)
         }
-        "ArgumentReconstruction"
-        | "argumentreconstruction"
-        | "Argument"
-        | "argument" => Some(AtomType::ArgumentReconstruction),
         _ => None,
     }
 }

@@ -32,20 +32,24 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use clap::Parser;
-use corpus_engine_notes::{
-    EmbedFn, NoteScope, NoteSource, NoteStore, ScopeFilter,
-};
+use corpus_engine_notes::{EmbedFn, NoteScope, NoteSource, NoteStore, ScopeFilter};
 use serde::Deserialize;
 
 #[derive(Parser, Debug)]
 #[command(about = "T1 retrieval bench for NoteStore")]
 struct Args {
     /// Path to notes fixture TOML.
-    #[arg(long, default_value = "sovereign/bench/notes_tiered/fixtures/notes.toml")]
+    #[arg(
+        long,
+        default_value = "sovereign/bench/notes_tiered/fixtures/notes.toml"
+    )]
     notes: PathBuf,
 
     /// Path to query fixture TOML.
-    #[arg(long, default_value = "sovereign/bench/notes_tiered/fixtures/queries.toml")]
+    #[arg(
+        long,
+        default_value = "sovereign/bench/notes_tiered/fixtures/queries.toml"
+    )]
     queries: PathBuf,
 
     /// Daemon URL for the embed slot. Empty / --no-daemon disables T1.
@@ -332,7 +336,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn print_summary(report: &BenchReport) {
     println!();
     println!("notes_tiered bench — k={}", report.target_k);
-    println!("  daemon: {} ({})", report.daemon_url, if report.daemon_reachable { "reachable" } else { "unreachable / baseline-only" });
+    println!(
+        "  daemon: {} ({})",
+        report.daemon_url,
+        if report.daemon_reachable {
+            "reachable"
+        } else {
+            "unreachable / baseline-only"
+        }
+    );
     println!("  embed_weight: {:.2}", report.embed_weight);
     println!();
     let expected_total: usize = report.queries.iter().map(|q| q.expected.len()).sum();
@@ -359,7 +371,11 @@ fn print_summary(report: &BenchReport) {
         if report.daemon_reachable {
             println!(
                 "    {:14} baseline {}/{}   semantic {}/{}",
-                cls, agg.baseline_correct, agg.expected_total, agg.semantic_correct, agg.expected_total
+                cls,
+                agg.baseline_correct,
+                agg.expected_total,
+                agg.semantic_correct,
+                agg.expected_total
             );
         } else {
             println!(

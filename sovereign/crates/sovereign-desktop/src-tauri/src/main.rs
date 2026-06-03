@@ -8,7 +8,6 @@ mod friendly_names;
 mod import_commands;
 mod insight_commands;
 mod local_corpus_commands;
-mod watched_folder_commands;
 mod mesh_commands;
 mod recipe_author_commands;
 mod recipe_commands;
@@ -20,6 +19,7 @@ mod supervisor;
 mod supervisor_setup;
 mod tray;
 mod update_commands;
+mod watched_folder_commands;
 
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -98,9 +98,7 @@ fn main() -> ExitCode {
                 let app = window.app_handle().clone();
                 tauri::async_runtime::spawn(async move {
                     use tauri::Manager;
-                    if let Some(state) =
-                        app.try_state::<std::sync::Arc<state::AppState>>()
-                    {
+                    if let Some(state) = app.try_state::<std::sync::Arc<state::AppState>>() {
                         let provider = {
                             let guard = state.inference.read().await;
                             guard.as_ref().map(std::sync::Arc::clone)
@@ -147,8 +145,7 @@ fn main() -> ExitCode {
             // inevitable) and route inference + mesh mutations over
             // HTTP instead. `detect()` is a ≤4s worst-case probe so
             // it's fine to block app setup on it.
-            let bootstrap_mode =
-                tauri::async_runtime::block_on(bootstrap::detect());
+            let bootstrap_mode = tauri::async_runtime::block_on(bootstrap::detect());
             tracing::info!(?bootstrap_mode, "bootstrap mode resolved");
 
             // If `SOVEREIGN_USE_SUPERVISOR=1`, try to bring the daemon
@@ -157,11 +154,9 @@ fn main() -> ExitCode {
             // or supervision fails to come up healthy. This is the
             // PR-2 dogfood path; PR-3 will flip the default. See
             // supervisor_setup.rs.
-            let (bootstrap_mode, supervisor) =
-                tauri::async_runtime::block_on(supervisor_setup::maybe_start(
-                    bootstrap_mode,
-                    handle.clone(),
-                ));
+            let (bootstrap_mode, supervisor) = tauri::async_runtime::block_on(
+                supervisor_setup::maybe_start(bootstrap_mode, handle.clone()),
+            );
             if supervisor.is_some() {
                 tracing::info!(
                     ?bootstrap_mode,
@@ -170,11 +165,8 @@ fn main() -> ExitCode {
             }
 
             // Create app state (loads config, no Runtime yet).
-            let app_state = AppState::new_with_mode(
-                Arc::clone(&approval),
-                bootstrap_mode,
-                supervisor,
-            );
+            let app_state =
+                AppState::new_with_mode(Arc::clone(&approval), bootstrap_mode, supervisor);
             let app_state = Arc::new(app_state);
             app.manage(app_state.clone());
 
@@ -221,7 +213,9 @@ fn main() -> ExitCode {
                     if !setup_done {
                         tracing::info!("First launch — waiting for setup wizard");
                     } else {
-                        tracing::warn!("Model not found — clearing stale path and returning to setup wizard");
+                        tracing::warn!(
+                            "Model not found — clearing stale path and returning to setup wizard"
+                        );
                         // Clear the stale model path so the wizard starts fresh.
                         let mut config = state_clone.config.write().await;
                         config.setup_complete = false;
@@ -260,8 +254,7 @@ fn main() -> ExitCode {
                             .as_ref()
                             .map(|c| c.ceiling);
                         if let Some(ceiling) = consent_ceiling {
-                            if let Err(e) =
-                                commands::set_contribution_ceiling(Some(ceiling)).await
+                            if let Err(e) = commands::set_contribution_ceiling(Some(ceiling)).await
                             {
                                 tracing::warn!(
                                     error = %e,
@@ -280,13 +273,7 @@ fn main() -> ExitCode {
                         // and the Tesseract sidecar is bundled. No-op
                         // when not available — `lc_ocr_available`
                         // tells the UI to hide the OCR offer.
-                        if let Some(mgr) = state_clone
-                            .local_corpus
-                            .read()
-                            .await
-                            .as_ref()
-                            .cloned()
-                        {
+                        if let Some(mgr) = state_clone.local_corpus.read().await.as_ref().cloned() {
                             // Default daemon URL — same one the
                             // existing inference path uses.
                             let daemon_url = "http://127.0.0.1:9741".to_string();
@@ -321,10 +308,8 @@ fn main() -> ExitCode {
                     }
                     Err(e) => {
                         tracing::error!("Bootstrap failed: {e}");
-                        let _ = handle_clone.emit(
-                            "backend-error",
-                            approval::ErrorPayload { message: e },
-                        );
+                        let _ = handle_clone
+                            .emit("backend-error", approval::ErrorPayload { message: e });
                     }
                 }
             });

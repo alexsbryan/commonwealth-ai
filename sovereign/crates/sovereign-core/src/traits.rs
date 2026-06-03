@@ -8,7 +8,9 @@ use crate::types::*;
 
 // Re-export observer types so `sovereign_core::StateStoreObserver`
 // works alongside `sovereign_core::StateStore`.
-pub use crate::observer::{noop_observer, NoopObserver, SharedStateStoreObserver, StateStoreObserver};
+pub use crate::observer::{
+    noop_observer, NoopObserver, SharedStateStoreObserver, StateStoreObserver,
+};
 
 /// Produces `knowledge_view_digests` for a
 /// [`ConversationContext`][crate::types::ConversationContext] after
@@ -564,11 +566,7 @@ pub trait Tool: Send + Sync {
     fn descriptor(&self) -> ToolDescriptor;
     fn required_permissions(&self) -> Vec<Permission>;
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput>;
+    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput>;
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {
         let _ = params;
@@ -769,10 +767,7 @@ pub trait MemoryStore: Send + Sync {
     /// Default impl loads everything and filters in-process so
     /// existing impls compile without a server-side override; the
     /// production sqlite/postgres impls override for efficiency.
-    async fn list_memories_for_conversation(
-        &self,
-        conversation_id: &str,
-    ) -> Result<Vec<Memory>> {
+    async fn list_memories_for_conversation(&self, conversation_id: &str) -> Result<Vec<Memory>> {
         let mut all = self.get_all_memories().await?;
         all.retain(|m| {
             m.source_conversation_id.as_deref() == Some(conversation_id)
@@ -793,11 +788,7 @@ pub trait MemoryStore: Send + Sync {
     /// summary is a no-op. Marking with a different summary id
     /// overwrites — last-writer-wins, matching the single-threaded
     /// compaction worker contract.
-    async fn mark_superseded(
-        &self,
-        memory_id: &str,
-        summary_id: &str,
-    ) -> Result<()> {
+    async fn mark_superseded(&self, memory_id: &str, summary_id: &str) -> Result<()> {
         let _ = (memory_id, summary_id);
         Err(crate::error::Error::NotImplemented(
             "mark_superseded not implemented for this store".into(),
@@ -853,11 +844,7 @@ pub trait RoutingStore: Send + Sync {
     /// previously written by `log_routing`. A future calibration
     /// job tunes confidence thresholds from the aggregate of these
     /// signals. Default no-op so legacy implementations compile.
-    async fn mark_routing_redirected(
-        &self,
-        message_hash: &str,
-        redirect_to: &str,
-    ) -> Result<()> {
+    async fn mark_routing_redirected(&self, message_hash: &str, redirect_to: &str) -> Result<()> {
         let _ = (message_hash, redirect_to);
         Ok(())
     }
@@ -883,7 +870,10 @@ pub trait DocumentStore: Send + Sync {
             .await?;
         Ok(chunks
             .into_iter()
-            .map(|c| ScoredChunk { chunk: c, score: 0.0 })
+            .map(|c| ScoredChunk {
+                chunk: c,
+                score: 0.0,
+            })
             .collect())
     }
     async fn get_chunks_by_source(&self, source: &str) -> Result<Vec<DocumentChunk>>;
@@ -964,23 +954,15 @@ pub trait PermissionStore: Send + Sync {
 
 #[async_trait]
 pub trait HealthStore: Send + Sync {
-    async fn save_health_report(
-        &self,
-        report: &crate::health::HealthReport,
-    ) -> Result<()> {
+    async fn save_health_report(&self, report: &crate::health::HealthReport) -> Result<()> {
         let _ = report;
         Ok(())
     }
-    async fn save_pending_decision(
-        &self,
-        d: &crate::health::PendingDecision,
-    ) -> Result<()> {
+    async fn save_pending_decision(&self, d: &crate::health::PendingDecision) -> Result<()> {
         let _ = d;
         Ok(())
     }
-    async fn list_pending_decisions(
-        &self,
-    ) -> Result<Vec<crate::health::PendingDecision>> {
+    async fn list_pending_decisions(&self) -> Result<Vec<crate::health::PendingDecision>> {
         Ok(vec![])
     }
     async fn resolve_pending_decision(
@@ -1050,11 +1032,7 @@ pub trait DocumentAssetStore: Send + Sync {
     /// Persist all RAPTOR nodes for an asset in one transaction.
     /// Replaces any existing nodes for the same asset — the tree is
     /// rebuilt atomically, not incrementally.
-    async fn save_raptor_nodes(
-        &self,
-        asset_id: &str,
-        nodes: &[RaptorNode],
-    ) -> Result<()>;
+    async fn save_raptor_nodes(&self, asset_id: &str, nodes: &[RaptorNode]) -> Result<()>;
 
     /// All RAPTOR nodes for an asset, ordered by level ascending
     /// (leaves first).
@@ -1067,11 +1045,7 @@ pub trait DocumentAssetStore: Send + Sync {
 
     /// Persist the motif index for an asset. Replaces any existing
     /// motifs for the same asset.
-    async fn save_asset_motifs(
-        &self,
-        asset_id: &str,
-        motifs: &[AssetMotif],
-    ) -> Result<()>;
+    async fn save_asset_motifs(&self, asset_id: &str, motifs: &[AssetMotif]) -> Result<()>;
 
     /// Motif index for an asset, distinctive motifs first.
     async fn list_asset_motifs(&self, asset_id: &str) -> Result<Vec<AssetMotif>>;
@@ -1081,10 +1055,19 @@ pub trait DocumentAssetStore: Send + Sync {
 
 #[async_trait]
 pub trait StateStore:
-    ConversationStore + TaskStore + MemoryStore + RoutingStore
-    + DocumentStore + CorpusStateStore + BudgetStore + PermissionStore
-    + HealthStore + DocumentSessionStore + DocumentAssetStore
-{}
+    ConversationStore
+    + TaskStore
+    + MemoryStore
+    + RoutingStore
+    + DocumentStore
+    + CorpusStateStore
+    + BudgetStore
+    + PermissionStore
+    + HealthStore
+    + DocumentSessionStore
+    + DocumentAssetStore
+{
+}
 
 // ─── Approval Channel ─────────────────────────────────────────
 

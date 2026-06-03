@@ -52,7 +52,14 @@ pub fn all_exporters() -> &'static [ScipExporterConfig] {
             // `--config-path {config}` tells rust-analyzer to use all cargo features so
             // that feature-gated modules (e.g. `#[cfg(feature = "treesitter")]`) are
             // included in the SCIP output and visible to find_callers / find_callees.
-            args: &["scip", ".", "--config-path", "{config}", "--output", "{output}"],
+            args: &[
+                "scip",
+                ".",
+                "--config-path",
+                "{config}",
+                "--output",
+                "{output}",
+            ],
             extensions: &["rs"],
             workspace_level: true,
             install_hint: "Install via rustup: rustup component add rust-analyzer",
@@ -146,9 +153,18 @@ pub struct SkippedLanguage {
 
 /// Progress callback for the export process.
 pub enum ScipProgress<'a> {
-    Exporting { language: &'a str },
-    Ingested { language: &'a str, symbols: usize, refs: usize },
-    Skipped { language: &'a str, reason: &'a str },
+    Exporting {
+        language: &'a str,
+    },
+    Ingested {
+        language: &'a str,
+        symbols: usize,
+        refs: usize,
+    },
+    Skipped {
+        language: &'a str,
+        reason: &'a str,
+    },
 }
 
 // ─── Export runner ───────────────────────────────────────────
@@ -292,7 +308,11 @@ pub async fn export_all(
         None => {
             owned_auto = {
                 let roots = find_cargo_workspace_roots(repo_root);
-                if roots.is_empty() { vec![repo_root.to_path_buf()] } else { roots }
+                if roots.is_empty() {
+                    vec![repo_root.to_path_buf()]
+                } else {
+                    roots
+                }
             };
             &owned_auto
         }
@@ -308,7 +328,8 @@ pub async fn export_all(
                 language = m.language_id,
                 command = m.command,
                 "SCIP exporter not found in PATH — {} call graph will be empty. {}",
-                m.language_id, m.install_hint,
+                m.language_id,
+                m.install_hint,
             );
         }
         check.available
@@ -324,8 +345,7 @@ pub async fn export_all(
     // Clear existing data before re-importing.
     graph.clear().await?;
 
-    std::fs::create_dir_all(output_dir)
-        .map_err(Error::Io)?;
+    std::fs::create_dir_all(output_dir).map_err(Error::Io)?;
 
     for exporter in exporters {
         // workspace_level exporters run once per Cargo workspace root so that
@@ -347,10 +367,7 @@ pub async fn export_all(
                 continue;
             }
 
-            let ws_label = run_dir
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("?");
+            let ws_label = run_dir.file_name().and_then(|n| n.to_str()).unwrap_or("?");
 
             progress(ScipProgress::Exporting {
                 language: exporter.language_id,
@@ -358,23 +375,19 @@ pub async fn export_all(
 
             // Unique output path per (language, workspace) to avoid collisions
             // when the same exporter runs in multiple workspaces.
-            let scip_path = output_dir.join(format!(
-                "{}-{}.scip",
-                exporter.language_id, ws_label
-            ));
+            let scip_path = output_dir.join(format!("{}-{}.scip", exporter.language_id, ws_label));
 
             // Write a temp config file if the exporter needs one (e.g. rust-analyzer
             // uses a JSON config to enable all Cargo features so feature-gated modules
             // appear in the SCIP output).
-            let config_file: Option<tempfile::NamedTempFile> = if let Some(json) = exporter.config_json {
-                let mut f = tempfile::NamedTempFile::new()
-                    .map_err(Error::Io)?;
-                std::io::Write::write_all(&mut f, json.as_bytes())
-                    .map_err(Error::Io)?;
-                Some(f)
-            } else {
-                None
-            };
+            let config_file: Option<tempfile::NamedTempFile> =
+                if let Some(json) = exporter.config_json {
+                    let mut f = tempfile::NamedTempFile::new().map_err(Error::Io)?;
+                    std::io::Write::write_all(&mut f, json.as_bytes()).map_err(Error::Io)?;
+                    Some(f)
+                } else {
+                    None
+                };
             let config_path_str = config_file
                 .as_ref()
                 .map(|f| f.path().to_str().unwrap_or("").to_owned())
@@ -385,7 +398,7 @@ pub async fn export_all(
                 .iter()
                 .map(|a| {
                     a.replace("{output}", scip_path.to_str().unwrap_or(""))
-                     .replace("{config}", &config_path_str)
+                        .replace("{config}", &config_path_str)
                 })
                 .collect();
 
@@ -447,8 +460,13 @@ pub async fn export_all(
 
             graph.ingest_symbols_and_refs(symbols, refs).await?;
 
-            if !summary.languages_exported.contains(&exporter.language_id.to_string()) {
-                summary.languages_exported.push(exporter.language_id.to_string());
+            if !summary
+                .languages_exported
+                .contains(&exporter.language_id.to_string())
+            {
+                summary
+                    .languages_exported
+                    .push(exporter.language_id.to_string());
             }
             summary.total_symbols += sym_count;
             summary.total_refs += ref_count;
@@ -491,8 +509,7 @@ pub fn parse_scip_file(
     path: &Path,
     language_id: &str,
 ) -> Result<(Vec<ScipSymbolRecord>, Vec<ScipRefRecord>)> {
-    let data = std::fs::read(path)
-        .map_err(Error::Io)?;
+    let data = std::fs::read(path).map_err(Error::Io)?;
 
     let index = scip_proto::Index::decode(&*data)
         .map_err(|e| Error::Database(format!("SCIP decode: {e}")))?;
@@ -621,13 +638,19 @@ pub fn parse_scip_file(
                         }
                     })
                     .or_else(|| {
-                        index.external_symbols.iter().find(|s| scip_proto::sym_to_string(&s.symbol) == occ.symbol).map(|s| {
-                            if s.display_name.is_empty() {
-                                scip_proto::extract_symbol_name(&scip_proto::sym_to_string(&s.symbol))
-                            } else {
-                                s.display_name.clone()
-                            }
-                        })
+                        index
+                            .external_symbols
+                            .iter()
+                            .find(|s| scip_proto::sym_to_string(&s.symbol) == occ.symbol)
+                            .map(|s| {
+                                if s.display_name.is_empty() {
+                                    scip_proto::extract_symbol_name(&scip_proto::sym_to_string(
+                                        &s.symbol,
+                                    ))
+                                } else {
+                                    s.display_name.clone()
+                                }
+                            })
                     })
                     .unwrap_or_else(|| scip_proto::extract_symbol_name(&occ.symbol));
 

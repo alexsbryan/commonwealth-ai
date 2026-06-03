@@ -37,9 +37,9 @@ use std::path::Path;
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use streaming_iterator::StreamingIterator;
 use tree_sitter::{Node, Parser, Query, QueryCursor};
 use tree_sitter_language::LanguageFn;
-use streaming_iterator::StreamingIterator;
 
 use crate::error::{Error, Result};
 use crate::extractors::{ExtractedDoc, Extractor};
@@ -211,7 +211,9 @@ fn kind_from_node_type(node_type: &str) -> SymbolKind {
 
         "impl_item" => SymbolKind::Impl,
 
-        "type_item" | "type_alias_declaration" | "type_declaration" | "type_spec" => SymbolKind::Type,
+        "type_item" | "type_alias_declaration" | "type_declaration" | "type_spec" => {
+            SymbolKind::Type
+        }
 
         "const_item" | "const_declaration" | "const_spec" | "static_item" | "var_spec"
         | "var_declaration" => SymbolKind::Const,
@@ -272,7 +274,10 @@ impl CodeChunk {
         if let Some(doc) = &self.doc_comment {
             obj.as_object_mut()
                 .expect("metadata JSON is an object")
-                .insert("doc_comment".to_string(), serde_json::Value::String(doc.clone()));
+                .insert(
+                    "doc_comment".to_string(),
+                    serde_json::Value::String(doc.clone()),
+                );
         }
         obj
     }
@@ -554,9 +559,7 @@ fn collect_preceding_doc_comments(
     let mut cursor = def_node.prev_sibling();
     while let Some(node) = cursor {
         let kind = node.kind();
-        let is_comment = kind == "line_comment"
-            || kind == "block_comment"
-            || kind == "comment";
+        let is_comment = kind == "line_comment" || kind == "block_comment" || kind == "comment";
         if !is_comment {
             break;
         }
@@ -636,7 +639,11 @@ fn jsdoc_metadata_extractor(def_node: Node, source: &[u8]) -> (bool, Option<Stri
                 .map(|rest| rest.trim_end_matches("*/"))
                 .unwrap_or(trimmed);
             body.lines()
-                .map(|l| l.trim_start().trim_start_matches('*').trim_start_matches(' '))
+                .map(|l| {
+                    l.trim_start()
+                        .trim_start_matches('*')
+                        .trim_start_matches(' ')
+                })
                 .collect::<Vec<_>>()
                 .join("\n")
                 .trim()
@@ -817,8 +824,7 @@ fn rust_visibility_and_docs(def_node: Node, source: &[u8]) -> (bool, Option<Stri
             Err(_) => break,
         };
         let trimmed = text.trim_start();
-        let is_outer_doc =
-            trimmed.starts_with("///") || trimmed.starts_with("/**");
+        let is_outer_doc = trimmed.starts_with("///") || trimmed.starts_with("/**");
         if !is_outer_doc {
             break;
         }
@@ -858,7 +864,11 @@ fn strip_doc_comment_markers(text: &str) -> String {
         // Drop common leading " * " on each interior line.
         return body
             .lines()
-            .map(|l| l.trim_start().trim_start_matches('*').trim_start_matches(' '))
+            .map(|l| {
+                l.trim_start()
+                    .trim_start_matches('*')
+                    .trim_start_matches(' ')
+            })
             .collect::<Vec<_>>()
             .join("\n");
     }
@@ -955,10 +965,8 @@ pub struct Undocumented;
 ";
         let ex = CodeExtractor::default();
         let chunks = ex.extract_file(src, "src/lib.rs", 0).unwrap();
-        let by_name: std::collections::HashMap<_, _> = chunks
-            .iter()
-            .map(|c| (c.symbol_name.as_str(), c))
-            .collect();
+        let by_name: std::collections::HashMap<_, _> =
+            chunks.iter().map(|c| (c.symbol_name.as_str(), c)).collect();
         let documented_fn = by_name.get("documented_fn").expect("documented_fn");
         assert!(documented_fn.is_public, "documented_fn should be public");
         assert_eq!(
@@ -998,7 +1006,10 @@ pub struct Undocumented;
         assert!(chunks.len() > 1, "expected the large symbol to split");
         for c in &chunks {
             let line_count = c.content.lines().count();
-            assert!(line_count <= 80 + 2, "split chunk exceeded max lines: {line_count}");
+            assert!(
+                line_count <= 80 + 2,
+                "split chunk exceeded max lines: {line_count}"
+            );
         }
     }
 
@@ -1064,17 +1075,15 @@ pub struct Undocumented;
         assert!(!private_class.is_public);
         let public_fn = by_name.get("public_fn").expect("public_fn missing");
         assert!(public_fn.is_public);
-        assert_eq!(
-            public_fn.doc_comment.as_deref(),
-            Some("Top-level fn doc.")
-        );
+        assert_eq!(public_fn.doc_comment.as_deref(), Some("Top-level fn doc."));
         let hidden = by_name.get("_hidden").expect("_hidden missing");
         assert!(!hidden.is_public);
     }
 
     #[test]
     fn typescript_visibility_uses_export_keyword() {
-        let src = "/** Documented TS function. */\nexport function greet(): string { return 'hi'; }\n\n\
+        let src =
+            "/** Documented TS function. */\nexport function greet(): string { return 'hi'; }\n\n\
                    function internal(): string { return 'no'; }\n\n\
                    export class MyClass { do(): void {} }\n";
         let ex = CodeExtractor::default();
@@ -1083,7 +1092,10 @@ pub struct Undocumented;
             chunks.iter().map(|c| (c.symbol_name.as_str(), c)).collect();
         let greet = by_name.get("greet").expect("greet missing");
         assert!(greet.is_public, "exported greet must be flagged public");
-        assert_eq!(greet.doc_comment.as_deref(), Some("Documented TS function."));
+        assert_eq!(
+            greet.doc_comment.as_deref(),
+            Some("Documented TS function.")
+        );
         let internal = by_name.get("internal").expect("internal missing");
         assert!(!internal.is_public);
         let class = by_name.get("MyClass").expect("MyClass missing");

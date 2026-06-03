@@ -20,13 +20,15 @@ use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, Error};
 /// Tiny no-op embed fn — never called by the on-demand guard, so the
 /// values don't matter.
 fn dummy_embed_fn() -> EmbedFn {
-    Arc::new(|_text: &str| -> Pin<
-        Box<
-            dyn std::future::Future<
-                    Output = std::result::Result<Vec<f32>, corpus_engine::Error>,
-                > + Send,
-        >,
-    > { Box::pin(async { Ok(vec![0.0_f32; 768]) }) })
+    Arc::new(
+        |_text: &str| -> Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = std::result::Result<Vec<f32>, corpus_engine::Error>,
+                    > + Send,
+            >,
+        > { Box::pin(async { Ok(vec![0.0_f32; 768]) }) },
+    )
 }
 
 #[tokio::test]

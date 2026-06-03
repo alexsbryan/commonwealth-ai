@@ -98,9 +98,7 @@ impl ResearchFindingTool {
     }
 
     pub fn with_notes(notes: Arc<NoteStore>) -> Self {
-        Self {
-            notes: Some(notes),
-        }
+        Self { notes: Some(notes) }
     }
 }
 
@@ -110,8 +108,7 @@ impl Tool for ResearchFindingTool {
         ToolDescriptor {
             id: "research_finding".into(),
             name: "ResearchFinding".into(),
-            description:
-                "Record a fact you confirmed from a network source — \
+            description: "Record a fact you confirmed from a network source — \
                  typically right after a `web_fetch` or `probe_url` \
                  that gave you ground truth about an API contract or \
                  domain detail. Each finding becomes a durable note \
@@ -128,7 +125,7 @@ impl Tool for ResearchFindingTool {
                  partner's field-specific framing) so audit views \
                  stay legible. Call this whenever a web tool gives \
                  you a non-obvious fact you'll bake into the recipe."
-                    .into(),
+                .into(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -160,10 +157,9 @@ impl Tool for ResearchFindingTool {
                 "required": ["feature_id", "claim", "source_url", "confidence", "scope"]
             }),
             examples: vec![ToolExample {
-                situation:
-                    "Just probed the CourtListener v4 endpoint and saw the \
+                situation: "Just probed the CourtListener v4 endpoint and saw the \
                      `next` field is a fully-qualified URL, not a token."
-                        .into(),
+                    .into(),
                 call: json!({
                     "feature_id": "<project-uuid>",
                     "claim":
@@ -194,11 +190,7 @@ impl Tool for ResearchFindingTool {
         vec![Permission::RecipeAuthoring]
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let notes = self.notes.as_ref().ok_or_else(|| {
             Error::InvalidInput(
                 "ResearchFindingTool was constructed without a NoteStore; \
@@ -250,24 +242,17 @@ impl Tool for ResearchFindingTool {
                 Some(&payload_json),
             )
             .await
-            .map_err(|e| {
-                Error::Storage(format!("research_finding write failed: {e}"))
-            })?;
+            .map_err(|e| Error::Storage(format!("research_finding write failed: {e}")))?;
 
         Ok(StepOutput::Json(json!({"finding_id": id})))
     }
 }
 
-fn required_str<'a>(
-    params: &'a serde_json::Value,
-    key: &str,
-) -> Result<&'a str> {
+fn required_str<'a>(params: &'a serde_json::Value, key: &str) -> Result<&'a str> {
     params
         .get(key)
         .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            Error::InvalidInput(format!("ResearchFindingTool requires `{key}`"))
-        })
+        .ok_or_else(|| Error::InvalidInput(format!("ResearchFindingTool requires `{key}`")))
 }
 
 #[cfg(test)]
@@ -278,8 +263,7 @@ mod tests {
     async fn fresh_stores() -> (Arc<NoteStore>, Arc<FeatureStore>, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
-        let features =
-            Arc::new(FeatureStore::open(&dir.path().join("features.db")).unwrap());
+        let features = Arc::new(FeatureStore::open(&dir.path().join("features.db")).unwrap());
         (notes, features, dir)
     }
 

@@ -49,8 +49,11 @@ pub async fn detect_fault_lines(
 
     // Find pairs of clusters assigned to different positions
     // whose centroids are semantically adjacent.
-    let candidate_pairs =
-        find_adjacent_cross_position_clusters(clusters, &alignment.aligned, config.proximity_threshold);
+    let candidate_pairs = find_adjacent_cross_position_clusters(
+        clusters,
+        &alignment.aligned,
+        config.proximity_threshold,
+    );
 
     for (cluster_a, cluster_b) in &candidate_pairs {
         let Some(pos_a_id) = alignment.aligned.get(&cluster_a.id) else {
@@ -124,7 +127,10 @@ fn find_adjacent_cross_position_clusters<'a>(
     clusters: &'a ClusterResult,
     aligned: &HashMap<i32, String>,
     proximity_threshold: f32,
-) -> Vec<(&'a super::clustering::ClusterInfo, &'a super::clustering::ClusterInfo)> {
+) -> Vec<(
+    &'a super::clustering::ClusterInfo,
+    &'a super::clustering::ClusterInfo,
+)> {
     let mut pairs = Vec::new();
     let aligned_clusters: Vec<&super::clustering::ClusterInfo> = clusters
         .clusters
@@ -161,7 +167,11 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
         norm_b += y * y;
     }
     let denom = norm_a.sqrt() * norm_b.sqrt();
-    if denom < 1e-12 { 0.0 } else { (dot / denom) as f32 }
+    if denom < 1e-12 {
+        0.0
+    } else {
+        (dot / denom) as f32
+    }
 }
 
 /// Extract a JSON block from model output. Handles three shapes the
@@ -220,10 +230,7 @@ mod tests {
     #[test]
     fn extract_json_block_from_json_fence() {
         let text = "Here:\n```json\n{\"crux\": \"test\"}\n```\nDone.";
-        assert_eq!(
-            extract_json_block(text),
-            Some("{\"crux\": \"test\"}")
-        );
+        assert_eq!(extract_json_block(text), Some("{\"crux\": \"test\"}"));
     }
 
     #[test]
@@ -349,12 +356,10 @@ mod tests {
             noise_count: 0,
         };
         // Both clusters assigned to the SAME position.
-        let aligned: HashMap<i32, String> = [
-            (0, "p_compat".to_string()),
-            (1, "p_compat".to_string()),
-        ]
-        .into_iter()
-        .collect();
+        let aligned: HashMap<i32, String> =
+            [(0, "p_compat".to_string()), (1, "p_compat".to_string())]
+                .into_iter()
+                .collect();
 
         let pairs = find_adjacent_cross_position_clusters(&clusters, &aligned, 0.5);
         assert!(pairs.is_empty(), "same-position pairs should be excluded");
@@ -382,12 +387,9 @@ mod tests {
             ],
             noise_count: 0,
         };
-        let aligned: HashMap<i32, String> = [
-            (0, "p_a".to_string()),
-            (1, "p_b".to_string()),
-        ]
-        .into_iter()
-        .collect();
+        let aligned: HashMap<i32, String> = [(0, "p_a".to_string()), (1, "p_b".to_string())]
+            .into_iter()
+            .collect();
 
         let pairs = find_adjacent_cross_position_clusters(&clusters, &aligned, 0.5);
         assert!(

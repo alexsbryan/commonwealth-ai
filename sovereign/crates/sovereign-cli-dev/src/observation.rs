@@ -48,9 +48,7 @@ pub struct LanguageObservation {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ScipTooling {
     /// The tool is on PATH and ready to index.
-    Available {
-        binary: &'static str,
-    },
+    Available { binary: &'static str },
     /// The language is present but the indexer binary is missing.
     /// `install_cmd` is the copy-pasteable one-liner.
     Missing {
@@ -278,13 +276,7 @@ fn parse_cargo_deps(root: &Path, out: &mut Vec<DetectedDependency>) {
     // manifest, deps usually live on member crates — still, workspace
     // `[workspace.dependencies]` is a useful signal.
     push_toml_deps(&parsed, "dependencies", "Cargo.toml", DepKind::Direct, out);
-    push_toml_deps(
-        &parsed,
-        "dev-dependencies",
-        "Cargo.toml",
-        DepKind::Dev,
-        out,
-    );
+    push_toml_deps(&parsed, "dev-dependencies", "Cargo.toml", DepKind::Dev, out);
     if let Some(ws) = parsed.get("workspace") {
         push_toml_deps(ws, "dependencies", "Cargo.toml", DepKind::Direct, out);
     }

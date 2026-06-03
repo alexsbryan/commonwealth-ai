@@ -206,10 +206,7 @@ pub enum EnrichProgress {
     /// etc.). Distinct from `Aborted` because no step ran — the
     /// UI should surface "couldn't start" rather than attribute
     /// the failure to `Seed` or any other step.
-    SpawnFailed {
-        corpus_id: String,
-        message: String,
-    },
+    SpawnFailed { corpus_id: String, message: String },
 
     /// Terminal event when a user-initiated cancellation killed
     /// the build mid-flight. Distinct from `Aborted` (a real
@@ -253,9 +250,7 @@ impl EnrichProgress {
             super::types::PhaseFailureKind::EmptyExtraction => "empty_extraction",
             super::types::PhaseFailureKind::Skipped => "skipped",
             super::types::PhaseFailureKind::UnresolvedEntityName => "unresolved_entity_name",
-            super::types::PhaseFailureKind::EntityMergeAmbiguous => {
-                "entity_merge_ambiguous"
-            }
+            super::types::PhaseFailureKind::EntityMergeAmbiguous => "entity_merge_ambiguous",
             super::types::PhaseFailureKind::UnresolvedRelationParticipant => {
                 "unresolved_relation_participant"
             }
@@ -300,8 +295,7 @@ fn truncate_reason(s: &str) -> String {
 /// between a spawned tokio task (desktop path) and the
 /// synchronous CLI printer that constructs it. Cheap: one
 /// allocation at build start, passed by reference to each step.
-pub type EnrichProgressFn =
-    std::sync::Arc<dyn Fn(EnrichProgress) + Send + Sync + 'static>;
+pub type EnrichProgressFn = std::sync::Arc<dyn Fn(EnrichProgress) + Send + Sync + 'static>;
 
 #[cfg(test)]
 mod tests {

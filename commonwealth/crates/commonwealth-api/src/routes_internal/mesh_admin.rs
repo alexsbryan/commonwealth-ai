@@ -39,10 +39,10 @@ pub async fn node_activity(
     Json(payload): Json<NodeActivityPayload>,
 ) -> StatusCode {
     let availability = match payload.level.as_str() {
-        "hot"  => 0.20_f32,
+        "hot" => 0.20_f32,
         "warm" => 0.65_f32,
         "cool" => 0.85_f32,
-        _      => 1.00_f32,
+        _ => 1.00_f32,
     };
     tracing::info!(
         level = %payload.level,
@@ -155,12 +155,7 @@ pub async fn models_load(
         Ok(model_id) => {
             // Reflect the new slot in the inference store so
             // `/v1/models` advertises it immediately.
-            register_extras_in_store(
-                &state,
-                &req.slot_name,
-                &req.path,
-                model_id.as_str(),
-            );
+            register_extras_in_store(&state, &req.slot_name, &req.path, model_id.as_str());
             Ok(Json(LoadModelResponse {
                 model_id,
                 slot_name: req.slot_name,
@@ -176,7 +171,10 @@ pub async fn models_load(
 /// loaded entries hash to the same id when the operator declares
 /// the same `(slot_name, path)` pair statically and dynamically.
 /// Keep both paths in sync.
-fn compute_extras_model_id(slot_name: &str, path: &std::path::Path) -> commonwealth_core::ids::ModelId {
+fn compute_extras_model_id(
+    slot_name: &str,
+    path: &std::path::Path,
+) -> commonwealth_core::ids::ModelId {
     use std::hash::{DefaultHasher, Hash, Hasher};
     let role = format!("extras:{slot_name}");
     let mut h = DefaultHasher::new();
@@ -304,9 +302,7 @@ pub async fn inference_warmup(
 
 /// `GET /internal/models/inventory` — list the currently-loaded
 /// extras lineup.
-pub async fn models_inventory(
-    State(state): State<AppState>,
-) -> Json<InventoryResponse> {
+pub async fn models_inventory(State(state): State<AppState>) -> Json<InventoryResponse> {
     let Some(service) = state.inner.local_inference.as_ref() else {
         return Json(InventoryResponse { extras: Vec::new() });
     };
@@ -314,7 +310,10 @@ pub async fn models_inventory(
     Json(InventoryResponse {
         extras: inventory
             .into_iter()
-            .map(|(slot_name, model_id)| InventoryEntry { slot_name, model_id })
+            .map(|(slot_name, model_id)| InventoryEntry {
+                slot_name,
+                model_id,
+            })
             .collect(),
     })
 }
@@ -358,9 +357,7 @@ pub struct ForegroundStateResponse {
 
 /// `GET /internal/daemon/foreground_state` — read-only snapshot of
 /// the foreground-yield atomics. See [`ForegroundStateResponse`].
-pub async fn foreground_state(
-    State(state): State<AppState>,
-) -> Json<ForegroundStateResponse> {
+pub async fn foreground_state(State(state): State<AppState>) -> Json<ForegroundStateResponse> {
     let active_ingests_count = state.inner.active_ingests.read().await.len();
     Json(ForegroundStateResponse {
         last_active_unix_ts: state.foreground_last_active_ts(),
@@ -455,10 +452,7 @@ pub async fn ingest_budget_set(
                 throttle_factor: applied,
             }))
         }
-        Err(msg) => Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorBody { error: msg }),
-        )),
+        Err(msg) => Err((StatusCode::BAD_REQUEST, Json(ErrorBody { error: msg }))),
     }
 }
 
@@ -508,10 +502,10 @@ pub struct SetStorageBudgetRequest {
 pub fn recommended_storage_budget_bytes(free_disk_bytes: u64) -> u64 {
     const TARGET: u64 = 100 * 1_073_741_824; // 100 GiB.
     const MIN_BASELINE: u64 = 20 * 1_073_741_824; // 20 GiB.
-    // Want ≥25 GiB headroom above the target so we don't fill the
-    // disk; if the user's disk has at least 125 GiB free, recommend
-    // the full 100 GiB. Otherwise back off to half free, floor at
-    // 20 GiB so the recommendation stays meaningful on small disks.
+                                                  // Want ≥25 GiB headroom above the target so we don't fill the
+                                                  // disk; if the user's disk has at least 125 GiB free, recommend
+                                                  // the full 100 GiB. Otherwise back off to half free, floor at
+                                                  // 20 GiB so the recommendation stays meaningful on small disks.
     if free_disk_bytes >= TARGET + (25 * 1_073_741_824) {
         TARGET
     } else {
@@ -529,9 +523,7 @@ fn current_free_disk_bytes() -> u64 {
 /// `GET /internal/storage/budget` — current budget, observed usage,
 /// raw free-disk total, and a recommended baseline the desktop can
 /// surface as a one-click default.
-pub async fn storage_budget_get(
-    State(state): State<AppState>,
-) -> Json<StorageBudgetState> {
+pub async fn storage_budget_get(State(state): State<AppState>) -> Json<StorageBudgetState> {
     let free_disk_bytes = current_free_disk_bytes();
     Json(StorageBudgetState {
         budget_bytes: state.storage_budget_bytes(),
@@ -775,7 +767,10 @@ mod tests {
         let (state, app) = activity_router();
         post_activity(app, "warm", "recent_edits").await;
         let val = *state.inner.local_inference_availability.read().await;
-        assert!((val - 0.65).abs() < 1e-6, "warm must set availability to 0.65, got {val}");
+        assert!(
+            (val - 0.65).abs() < 1e-6,
+            "warm must set availability to 0.65, got {val}"
+        );
     }
 
     #[tokio::test]
@@ -783,7 +778,10 @@ mod tests {
         let (state, app) = activity_router();
         post_activity(app, "cool", "settling").await;
         let val = *state.inner.local_inference_availability.read().await;
-        assert!((val - 0.85).abs() < 1e-6, "cool must set availability to 0.85, got {val}");
+        assert!(
+            (val - 0.85).abs() < 1e-6,
+            "cool must set availability to 0.85, got {val}"
+        );
     }
 
     #[tokio::test]
@@ -793,7 +791,10 @@ mod tests {
         post_activity(app.clone(), "hot", "start").await;
         post_activity(app, "idle", "long_pause").await;
         let val = *state.inner.local_inference_availability.read().await;
-        assert!((val - 1.00).abs() < 1e-6, "idle must set availability to 1.00, got {val}");
+        assert!(
+            (val - 1.00).abs() < 1e-6,
+            "idle must set availability to 1.00, got {val}"
+        );
     }
 
     #[tokio::test]
@@ -801,7 +802,10 @@ mod tests {
         let (state, app) = activity_router();
         post_activity(app, "turbo", "unknown_level").await;
         let val = *state.inner.local_inference_availability.read().await;
-        assert!((val - 1.00).abs() < 1e-6, "unknown level must default to 1.00, got {val}");
+        assert!(
+            (val - 1.00).abs() < 1e-6,
+            "unknown level must default to 1.00, got {val}"
+        );
     }
 
     // ── Runtime model slot management tests ──────────────────
@@ -841,9 +845,7 @@ mod tests {
             &self,
             _request: crate::openai_types::ChatCompletionRequest,
         ) -> Result<
-            std::pin::Pin<
-                Box<dyn futures::Stream<Item = crate::openai_types::StreamFrame> + Send>,
-            >,
+            std::pin::Pin<Box<dyn futures::Stream<Item = crate::openai_types::StreamFrame> + Send>>,
             String,
         > {
             Err("stub".into())
@@ -891,7 +893,10 @@ mod tests {
         Router::new()
             .route("/internal/models/load", post(models_load))
             .route("/internal/models/unload", post(models_unload))
-            .route("/internal/models/inventory", axum::routing::get(models_inventory))
+            .route(
+                "/internal/models/inventory",
+                axum::routing::get(models_inventory),
+            )
             .with_state(state)
     }
 
@@ -919,7 +924,10 @@ mod tests {
 
     #[tokio::test]
     async fn models_load_forwards_to_provider_and_returns_model_id() {
-        let stub = Arc::new(StubLocalInference::new(Ok("Qwen3.5-9B.Q8_0".into()), vec![]));
+        let stub = Arc::new(StubLocalInference::new(
+            Ok("Qwen3.5-9B.Q8_0".into()),
+            vec![],
+        ));
         let app = models_router(Arc::clone(&stub));
         let body = serde_json::json!({
             "slot_name": "bulk",
@@ -1477,14 +1485,13 @@ pub async fn activity_summary(
         .window_days
         .unwrap_or(commonwealth_core::activity::DEFAULT_ACTIVITY_WINDOW_DAYS)
         .min(365);
-    let activity =
-        commonwealth_state::current_activity(&state.inner.mesh_store, window_days)
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("activity_summary: aggregate failed: {e}"),
-                )
-            })?;
+    let activity = commonwealth_state::current_activity(&state.inner.mesh_store, window_days)
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("activity_summary: aggregate failed: {e}"),
+            )
+        })?;
 
     // Fold in this node's own contribution totals. Self-origin
     // contribution events land on the self node's `NodeContributions`,
@@ -1517,9 +1524,7 @@ pub async fn activity_summary(
 
     Ok(Json(ActivitySummaryResponse {
         activity,
-        peer_inference_served_requests: self_c
-            .map(|c| c.inference_served.requests)
-            .unwrap_or(0),
+        peer_inference_served_requests: self_c.map(|c| c.inference_served.requests).unwrap_or(0),
         peer_inference_served_tokens: self_c
             .map(|c| c.inference_served.total_tokens_generated)
             .unwrap_or(0),

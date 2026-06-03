@@ -29,10 +29,19 @@ const HELP: Help = Help {
     sections: &[
         HelpSection::Usage("sovereign chat ask \"<question>\" [flags]"),
         HelpSection::Flags(&[
-            ("--conversation <id>",  "Reuse an existing conversation id (default: fresh uuid)."),
-            ("--format text|json",   "Output format. `json` dumps the full message + metadata."),
-            ("--show-reasoning",     "Render <think> blocks inline instead of a collapsed handle."),
-            ("--help, -h",           "Show this message."),
+            (
+                "--conversation <id>",
+                "Reuse an existing conversation id (default: fresh uuid).",
+            ),
+            (
+                "--format text|json",
+                "Output format. `json` dumps the full message + metadata.",
+            ),
+            (
+                "--show-reasoning",
+                "Render <think> blocks inline instead of a collapsed handle.",
+            ),
+            ("--help, -h", "Show this message."),
         ]),
         HelpSection::Notes(
             "The question is taken from the first non-flag positional argument. \
@@ -111,7 +120,14 @@ pub async fn cmd_ask(args: &[String]) -> i32 {
     };
 
     let conversation_id = conversation_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    let exit = run_turn(&session, &question, &conversation_id, format, show_reasoning).await;
+    let exit = run_turn(
+        &session,
+        &question,
+        &conversation_id,
+        format,
+        show_reasoning,
+    )
+    .await;
     exit
 }
 
@@ -243,7 +259,10 @@ fn render_json(
     });
     // Print JSON on stdout so it's pipe-friendly; the conversational
     // chrome stays on stderr.
-    println!("{}", serde_json::to_string_pretty(&payload).unwrap_or_default());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&payload).unwrap_or_default()
+    );
 }
 
 const BAR: &str = "─────────────────────────────────────────────────────────────";

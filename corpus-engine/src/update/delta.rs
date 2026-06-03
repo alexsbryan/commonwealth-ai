@@ -117,16 +117,19 @@ pub struct UpdateProgressLog {
 }
 
 impl UpdateProgressLog {
-    pub fn is_complete(
-        &self,
-        diff: &ManifestDiff,
-    ) -> bool {
-        let deletions_done =
-            diff.deleted_documents.iter().all(|id| self.deleted_ids.contains(id));
-        let updates_done =
-            diff.updated_documents.iter().all(|id| self.updated_ids.contains(id));
-        let additions_done =
-            diff.new_documents.iter().all(|id| self.added_ids.contains(id));
+    pub fn is_complete(&self, diff: &ManifestDiff) -> bool {
+        let deletions_done = diff
+            .deleted_documents
+            .iter()
+            .all(|id| self.deleted_ids.contains(id));
+        let updates_done = diff
+            .updated_documents
+            .iter()
+            .all(|id| self.updated_ids.contains(id));
+        let additions_done = diff
+            .new_documents
+            .iter()
+            .all(|id| self.added_ids.contains(id));
         deletions_done && updates_done && additions_done
     }
 }
@@ -146,7 +149,10 @@ pub struct CorpusUpdater {
 
 impl CorpusUpdater {
     pub fn new(engine: Arc<CorpusEngine>) -> Self {
-        Self { engine, progress_tx: None }
+        Self {
+            engine,
+            progress_tx: None,
+        }
     }
 
     /// Attach a channel to receive real-time progress updates.
@@ -163,9 +169,16 @@ impl CorpusUpdater {
         corpus_id: &str,
         diff: &ManifestDiff,
         new_manifest: &VersionManifest,
-        fetch_content: impl Fn(&str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send>>,
+        fetch_content: impl Fn(
+            &str,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<String>> + Send>,
+        >,
     ) -> Result<()> {
-        let mut log = self.engine.load_update_progress(corpus_id).unwrap_or_default();
+        let mut log = self
+            .engine
+            .load_update_progress(corpus_id)
+            .unwrap_or_default();
 
         if diff.is_empty() || log.is_complete(diff) {
             self.engine.clear_update_progress(corpus_id)?;
@@ -174,13 +187,16 @@ impl CorpusUpdater {
         }
 
         // ── Phase 1: Deletions ────────────────────────────────────────────────
-        self.phase_deletions(corpus_id, diff, &mut log, &fetch_content).await?;
+        self.phase_deletions(corpus_id, diff, &mut log, &fetch_content)
+            .await?;
 
         // ── Phase 2: Updates (delete-last) ────────────────────────────────────
-        self.phase_updates(corpus_id, diff, &mut log, &fetch_content).await?;
+        self.phase_updates(corpus_id, diff, &mut log, &fetch_content)
+            .await?;
 
         // ── Phase 3: Additions ────────────────────────────────────────────────
-        self.phase_additions(corpus_id, diff, &mut log, &fetch_content).await?;
+        self.phase_additions(corpus_id, diff, &mut log, &fetch_content)
+            .await?;
 
         // ── Move 6 P5.b/c: post-update atlas delta ──────────────────────────
         // Best-effort. A failure here does not roll the chunk-side
@@ -211,11 +227,7 @@ impl CorpusUpdater {
     /// / obsidian / philosophy) yield an empty article map from the
     /// aggregator and contribute only the deletion side of the delta —
     /// adds + updates fall back to whatever next ran the pipeline.
-    async fn maybe_apply_atlas_delta(
-        &self,
-        corpus_id: &str,
-        diff: &ManifestDiff,
-    ) -> Result<()> {
+    async fn maybe_apply_atlas_delta(&self, corpus_id: &str, diff: &ManifestDiff) -> Result<()> {
         use crate::enrichment::atlas::atoms_delta::{apply_atom_delta, AtomsDelta};
         use crate::enrichment::atlas::strategies::structure_first::{
             aggregate_articles_from_chunks, extract_atoms_for_articles, StructureFirstConfig,
@@ -246,7 +258,10 @@ impl CorpusUpdater {
             }
         };
         if !atoms_file.atoms.is_empty()
-            && !atoms_file.atoms.iter().all(|env| env.id().is_content_hash())
+            && !atoms_file
+                .atoms
+                .iter()
+                .all(|env| env.id().is_content_hash())
         {
             tracing::warn!(
                 corpus_id,
@@ -281,11 +296,7 @@ impl CorpusUpdater {
             let chunks = index
                 .chunks_by_source_doc_ids(&touched)
                 .await
-                .map_err(|e| {
-                    Error::Database(format!(
-                        "chunks_by_source_doc_ids: {e}"
-                    ))
-                })?;
+                .map_err(|e| Error::Database(format!("chunks_by_source_doc_ids: {e}")))?;
             let agg = aggregate_articles_from_chunks(&chunks);
             if !agg.articles.is_empty() {
                 let cfg = StructureFirstConfig {
@@ -353,7 +364,11 @@ impl CorpusUpdater {
         corpus_id: &str,
         diff: &ManifestDiff,
         log: &mut UpdateProgressLog,
-        _fetch_content: &impl Fn(&str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send>>,
+        _fetch_content: &impl Fn(
+            &str,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<String>> + Send>,
+        >,
     ) -> Result<()> {
         let total = diff.deleted_documents.len();
         let index = self.engine.open_index_for_corpus(corpus_id).await?;
@@ -370,7 +385,8 @@ impl CorpusUpdater {
                 phase: UpdatePhase::Deletions,
                 current: i + 1,
                 total,
-            }).await;
+            })
+            .await;
         }
         Ok(())
     }
@@ -380,7 +396,11 @@ impl CorpusUpdater {
         corpus_id: &str,
         diff: &ManifestDiff,
         log: &mut UpdateProgressLog,
-        fetch_content: &impl Fn(&str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send>>,
+        fetch_content: &impl Fn(
+            &str,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<String>> + Send>,
+        >,
     ) -> Result<()> {
         let total = diff.updated_documents.len();
         let recipe = self.engine.load_recipe(corpus_id).await?;
@@ -405,7 +425,8 @@ impl CorpusUpdater {
                 phase: UpdatePhase::Updates,
                 current: i + 1,
                 total,
-            }).await;
+            })
+            .await;
         }
         Ok(())
     }
@@ -415,7 +436,11 @@ impl CorpusUpdater {
         corpus_id: &str,
         diff: &ManifestDiff,
         log: &mut UpdateProgressLog,
-        fetch_content: &impl Fn(&str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send>>,
+        fetch_content: &impl Fn(
+            &str,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<String>> + Send>,
+        >,
     ) -> Result<()> {
         let total = diff.new_documents.len();
         let recipe = self.engine.load_recipe(corpus_id).await?;
@@ -438,7 +463,8 @@ impl CorpusUpdater {
                 phase: UpdatePhase::Additions,
                 current: i + 1,
                 total,
-            }).await;
+            })
+            .await;
         }
         Ok(())
     }
@@ -460,7 +486,10 @@ mod tests {
         VersionManifest {
             corpus_id: corpus_id.into(),
             version: version.into(),
-            entries: entries.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            entries: entries
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
         }
     }
 
@@ -469,19 +498,15 @@ mod tests {
         let old = make_manifest(
             "sep",
             "v1",
-            &[
-                ("doc-a", "hash1"),
-                ("doc-b", "hash2"),
-                ("doc-c", "hash3"),
-            ],
+            &[("doc-a", "hash1"), ("doc-b", "hash2"), ("doc-c", "hash3")],
         );
         let new = make_manifest(
             "sep",
             "v2",
             &[
                 ("doc-b", "hash2-updated"),
-                ("doc-c", "hash3"),              // unchanged
-                ("doc-d", "hash4"),              // new
+                ("doc-c", "hash3"), // unchanged
+                ("doc-d", "hash4"), // new
             ],
         );
         let diff = ManifestDiff::compute(&old, &new);

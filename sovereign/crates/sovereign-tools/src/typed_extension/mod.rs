@@ -27,9 +27,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use corpus_engine::enrichment::atlas::atoms::{
-    AtomId, Claim, Entity, Opposition, Position,
-};
+use corpus_engine::enrichment::atlas::atoms::{AtomId, Claim, Entity, Opposition, Position};
 use corpus_engine::enrichment::atlas::edges::Edge;
 use corpus_engine::enrichment::atlas::resolution::{
     resolve_type_extensions, TypeExtensionResolveOutput,
@@ -236,13 +234,8 @@ pub async fn run_typed_extension(
     for theme in &themes {
         pass_b_calls += 1;
         let member_quotes = collect_member_quotes_for_theme(theme, &leaves_by_doc);
-        match pass::pass_b_one_theme_with_excerpts(
-            corpus_id,
-            theme,
-            &member_quotes,
-            inference,
-        )
-        .await
+        match pass::pass_b_one_theme_with_excerpts(corpus_id, theme, &member_quotes, inference)
+            .await
         {
             Ok(Some((section, citation))) => {
                 citations.insert(section.section_id.clone(), citation);
@@ -396,7 +389,13 @@ fn content_hash_remap(
     corpus_id: &str,
     mut resolved: TypeExtensionResolveOutput,
     citations: &HashMap<String, SourceCitation>,
-) -> (Vec<Entity>, Vec<Position>, Vec<Opposition>, Vec<Claim>, Vec<Edge>) {
+) -> (
+    Vec<Entity>,
+    Vec<Position>,
+    Vec<Opposition>,
+    Vec<Claim>,
+    Vec<Edge>,
+) {
     // Apply primary-source citations to every ChunkRef the resolver
     // emitted BEFORE the content-hash rewrite. The walk is a single
     // call into corpus-engine atlas's lifted helper — no inline
@@ -409,7 +408,7 @@ fn content_hash_remap(
     let TypeExtensionResolveOutput {
         new_entities,
         entity_qualifier_updates: _, // we don't have existing entities; resolver only emits these
-                                     // for fuzzy-merged existing concepts, of which we have none.
+        // for fuzzy-merged existing concepts, of which we have none.
         new_claims,
         new_positions,
         new_oppositions,
@@ -442,8 +441,7 @@ fn content_hash_remap(
     // Oppositions.
     let mut oppositions_out = Vec::with_capacity(new_oppositions.len());
     for mut opposition in new_oppositions {
-        let new_id =
-            AtomId::opposition_content_hash(&opposition.canonical_label, corpus_id);
+        let new_id = AtomId::opposition_content_hash(&opposition.canonical_label, corpus_id);
         id_remap.insert(opposition.id.clone(), new_id.clone());
         opposition.id = new_id;
         oppositions_out.push(opposition);
@@ -481,7 +479,13 @@ fn content_hash_remap(
         })
         .collect();
 
-    (entities_out, positions_out, oppositions_out, claims_out, edges_out)
+    (
+        entities_out,
+        positions_out,
+        oppositions_out,
+        claims_out,
+        edges_out,
+    )
 }
 
 /// Helper used by both passes: wrap an `ArgumentativeExtension` in a

@@ -45,8 +45,8 @@ use std::path::Path;
 use serde_json::Value;
 
 use super::wikipedia_structured::{
-    classify_section, DEFAULT_CONTROVERSY_PATTERNS, DEFAULT_FACTUAL_PATTERNS,
-    MAX_SECTION_DEPTH, MIN_SECTION_TEXT,
+    classify_section, DEFAULT_CONTROVERSY_PATTERNS, DEFAULT_FACTUAL_PATTERNS, MAX_SECTION_DEPTH,
+    MIN_SECTION_TEXT,
 };
 use super::wikipedia_types::{WikiLink, WikipediaChunkMetadata};
 use super::{slug, ExtractedDoc, Extractor};
@@ -84,12 +84,10 @@ impl Extractor for WikipediaApiArticleExtractor {
             ))
         })?;
         let mut raw = String::new();
-        file.read_to_string(&mut raw).map_err(|e| {
-            Error::Extraction(format!("wikipedia_api_article: read body: {e}"))
-        })?;
-        let v: Value = serde_json::from_str(&raw).map_err(|e| {
-            Error::Extraction(format!("wikipedia_api_article: parse JSON: {e}"))
-        })?;
+        file.read_to_string(&mut raw)
+            .map_err(|e| Error::Extraction(format!("wikipedia_api_article: read body: {e}")))?;
+        let v: Value = serde_json::from_str(&raw)
+            .map_err(|e| Error::Extraction(format!("wikipedia_api_article: parse JSON: {e}")))?;
 
         // The Action API surfaces errors at top-level; surface them
         // cleanly so the catalog ingest path can tell missing-page
@@ -100,9 +98,9 @@ impl Extractor for WikipediaApiArticleExtractor {
                 serde_json::to_string(err).unwrap_or_default()
             )));
         }
-        let parse = v
-            .get("parse")
-            .ok_or_else(|| Error::Extraction("wikipedia_api_article: missing `parse` field".into()))?;
+        let parse = v.get("parse").ok_or_else(|| {
+            Error::Extraction("wikipedia_api_article: missing `parse` field".into())
+        })?;
 
         let docs = build_docs(parse, &self.controversy_patterns, &self.factual_patterns);
         Ok(Box::new(docs.into_iter().map(Ok)))
@@ -122,10 +120,7 @@ fn build_docs(
     if title.is_empty() {
         return Vec::new();
     }
-    let url = format!(
-        "https://en.wikipedia.org/wiki/{}",
-        title.replace(' ', "_")
-    );
+    let url = format!("https://en.wikipedia.org/wiki/{}", title.replace(' ', "_"));
 
     let page_id = parse.get("pageid").and_then(|v| v.as_i64());
     let revision_id = parse.get("revid").and_then(|v| v.as_i64());
@@ -258,10 +253,7 @@ fn build_docs(
         if super::wikipedia_structured::should_skip_section(&name) {
             continue;
         }
-        let start = sec
-            .get("byteoffset")
-            .and_then(|n| n.as_u64())
-            .unwrap_or(0) as usize;
+        let start = sec.get("byteoffset").and_then(|n| n.as_u64()).unwrap_or(0) as usize;
         let end = sections
             .get(i + 1)
             .and_then(|s| s.get("byteoffset").and_then(|n| n.as_u64()))
@@ -492,9 +484,7 @@ fn strip_wikitext(input: &str) -> String {
         // reads as "raw wikitext leaked through."
         let cleaned = strip_apostrophe_emphasis(&cleaned);
         // Drop leading wikitext list / table / quote markers.
-        let stripped = cleaned
-            .trim_start_matches(['*', '#', ':', ';', '|'])
-            .trim();
+        let stripped = cleaned.trim_start_matches(['*', '#', ':', ';', '|']).trim();
         if !stripped.is_empty() {
             out.push_str(stripped);
             out.push('\n');
@@ -559,7 +549,10 @@ fn drop_tag_blocks(input: &str, tag: &str) -> String {
         out.push_str(&rest[..idx]);
         // Find end of this opening tag (>) so we don't grab attrs.
         let after_open = &rest[idx..];
-        let opening_end = after_open.find('>').map(|p| idx + p + 1).unwrap_or(rest.len());
+        let opening_end = after_open
+            .find('>')
+            .map(|p| idx + p + 1)
+            .unwrap_or(rest.len());
         // Self-closing `<ref ... />` — handled by drop_self_closing later.
         if rest.get(opening_end.saturating_sub(2)..opening_end) == Some("/>") {
             rest = &rest[opening_end..];
@@ -626,7 +619,8 @@ mod tests {
         // Portal:Current_events headers use bold (`'''X'''`); article
         // bodies sprinkle italics. Both must vanish from atom
         // descriptions while leaving normal apostrophes intact.
-        let input = "'''Armed conflicts''' include the ''2026 Iran war''. Don't lose the apostrophe.";
+        let input =
+            "'''Armed conflicts''' include the ''2026 Iran war''. Don't lose the apostrophe.";
         let out = strip_apostrophe_emphasis(input);
         assert_eq!(
             out,
@@ -699,7 +693,10 @@ mod tests {
         assert_eq!(lead_meta.revision_id, Some(12345));
         // Article-level links land on the lead and exclude
         // category-namespace entries.
-        assert!(lead_meta.outgoing_links.iter().any(|l| l.target_title == "Ulm"));
+        assert!(lead_meta
+            .outgoing_links
+            .iter()
+            .any(|l| l.target_title == "Ulm"));
         assert!(!lead_meta
             .outgoing_links
             .iter()
@@ -711,7 +708,8 @@ mod tests {
 
     #[test]
     fn surfaces_api_error_cleanly() {
-        let body = r#"{"error":{"code":"missingtitle","info":"The page you specified doesn't exist."}}"#;
+        let body =
+            r#"{"error":{"code":"missingtitle","info":"The page you specified doesn't exist."}}"#;
         let dir = write_response(body);
         let path = dir.path().join("api_response.json");
         let err = WikipediaApiArticleExtractor::default().extract(&path).err();

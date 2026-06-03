@@ -20,8 +20,8 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use corpus_engine_notes::{NoteStore};
-use corpus_engine_atos::{FeatureStore};
+use corpus_engine_atos::FeatureStore;
+use corpus_engine_notes::NoteStore;
 use serde::{Deserialize, Serialize};
 use sovereign_atos::{AtosOrchestrator, LocalAtosOrchestrator, RunMode};
 use sovereign_tools::code::atos_utils::{
@@ -124,7 +124,9 @@ impl DriverKind {
 impl RunCfg {
     fn from_args(args: &[String]) -> Result<Self, String> {
         let (positional, flags) = split_args(args);
-        let show_help = positional.iter().any(|p| p == "help" || p == "--help" || p == "-h");
+        let show_help = positional
+            .iter()
+            .any(|p| p == "help" || p == "--help" || p == "-h");
 
         let workdir = match get_flag(&flags, "--workdir") {
             Some(s) => PathBuf::from(s),
@@ -135,9 +137,11 @@ impl RunCfg {
             None | Some("") | Some("opencode") => DriverKind::Opencode,
             Some("claude") => DriverKind::Claude,
             Some("codex") => DriverKind::Codex,
-            Some(other) => return Err(format!(
-                "unknown --driver '{other}' (use opencode|claude|codex)"
-            )),
+            Some(other) => {
+                return Err(format!(
+                    "unknown --driver '{other}' (use opencode|claude|codex)"
+                ))
+            }
         };
 
         let max_iters = match get_flag(&flags, "--max-iters") {
@@ -150,17 +154,17 @@ impl RunCfg {
             return Err("--max-iters must be > 0".into());
         }
 
-        let daemon_url = get_flag(&flags, "--daemon-url")
-            .unwrap_or_else(|| DEFAULT_DAEMON_URL.to_string());
+        let daemon_url =
+            get_flag(&flags, "--daemon-url").unwrap_or_else(|| DEFAULT_DAEMON_URL.to_string());
 
         let reviewer_model = get_flag(&flags, "--reviewer-model")
             .unwrap_or_else(|| DEFAULT_REVIEWER_MODEL.to_string());
 
-        let driver_model = get_flag(&flags, "--driver-model")
-            .unwrap_or_else(|| DEFAULT_DRIVER_MODEL.to_string());
+        let driver_model =
+            get_flag(&flags, "--driver-model").unwrap_or_else(|| DEFAULT_DRIVER_MODEL.to_string());
 
-        let done_marker = get_flag(&flags, "--done-marker")
-            .unwrap_or_else(|| DEFAULT_DONE_MARKER.to_string());
+        let done_marker =
+            get_flag(&flags, "--done-marker").unwrap_or_else(|| DEFAULT_DONE_MARKER.to_string());
 
         let dry_run = flags.iter().any(|(k, _)| k == "dry-run");
         let fresh_plan = flags.iter().any(|(k, _)| k == "fresh-plan");
@@ -168,7 +172,11 @@ impl RunCfg {
 
         let resolve_against_workdir = |raw: String| -> PathBuf {
             let p = PathBuf::from(&raw);
-            if p.is_absolute() { p } else { workdir.join(p) }
+            if p.is_absolute() {
+                p
+            } else {
+                workdir.join(p)
+            }
         };
 
         Ok(Self {
@@ -195,7 +203,10 @@ impl RunCfg {
             return Ok(());
         }
         if !self.workdir.is_dir() {
-            return Err(format!("--workdir not a directory: {}", self.workdir.display()));
+            return Err(format!(
+                "--workdir not a directory: {}",
+                self.workdir.display()
+            ));
         }
         for (label, p) in [
             ("--design", &self.design_path),
@@ -230,8 +241,8 @@ struct NamedDoc {
 
 fn resolve_artifacts(cfg: &RunCfg) -> Result<ResolvedArtifacts, String> {
     fn read_named(path: &Path) -> Result<NamedDoc, String> {
-        let body = std::fs::read_to_string(path)
-            .map_err(|e| format!("read {}: {e}", path.display()))?;
+        let body =
+            std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
         Ok(NamedDoc {
             label: path
                 .file_name()
@@ -242,10 +253,7 @@ fn resolve_artifacts(cfg: &RunCfg) -> Result<ResolvedArtifacts, String> {
         })
     }
     fn first_existing(workdir: &Path, names: &[&str]) -> Option<PathBuf> {
-        names
-            .iter()
-            .map(|n| workdir.join(n))
-            .find(|p| p.is_file())
+        names.iter().map(|n| workdir.join(n)).find(|p| p.is_file())
     }
 
     let design = match cfg.design_path.as_ref() {
@@ -280,7 +288,11 @@ fn resolve_artifacts(cfg: &RunCfg) -> Result<ResolvedArtifacts, String> {
         );
     }
 
-    Ok(ResolvedArtifacts { design, charter, plan })
+    Ok(ResolvedArtifacts {
+        design,
+        charter,
+        plan,
+    })
 }
 
 // ─── Plan-execute FSM types ──────────────────────────────────────────────────
@@ -458,15 +470,14 @@ impl Plan {
     }
 
     fn save(&self, path: &Path) -> Result<(), String> {
-        let body = serde_json::to_string_pretty(self)
-            .map_err(|e| format!("serialize plan: {e}"))?;
-        std::fs::write(path, body)
-            .map_err(|e| format!("write {}: {e}", path.display()))
+        let body =
+            serde_json::to_string_pretty(self).map_err(|e| format!("serialize plan: {e}"))?;
+        std::fs::write(path, body).map_err(|e| format!("write {}: {e}", path.display()))
     }
 
     fn load(path: &Path) -> Result<Self, String> {
-        let body = std::fs::read_to_string(path)
-            .map_err(|e| format!("read {}: {e}", path.display()))?;
+        let body =
+            std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
         let plan: Self = serde_json::from_str(&body)
             .map_err(|e| format!("parse plan {}: {e}", path.display()))?;
         plan.validate()?;
@@ -553,7 +564,11 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
         ("plan", &artifacts.plan),
     ] {
         match doc {
-            Some(d) => println!("  {label:>8} = {} ({} bytes)", d.path.display(), d.body.len()),
+            Some(d) => println!(
+                "  {label:>8} = {} ({} bytes)",
+                d.path.display(),
+                d.body.len()
+            ),
             None => println!("  {label:>8} = (none)"),
         }
     }
@@ -571,8 +586,12 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
         println!("  stop_cond = `{cmd}` (gates reviewer)");
     }
 
-    let orc = open_orchestrator_for(&cfg.workdir)
-        .map_err(|e| format!("open .sovereign stores under {}: {e}", cfg.workdir.display()))?;
+    let orc = open_orchestrator_for(&cfg.workdir).map_err(|e| {
+        format!(
+            "open .sovereign stores under {}: {e}",
+            cfg.workdir.display()
+        )
+    })?;
     let feature_id = resolve_or_provision_feature(&orc, &cfg, &artifacts).await?;
 
     // Open a single run row that spans all iterations. Per-iteration
@@ -596,14 +615,22 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
     };
 
     let run_ctx = orc
-        .begin_run(&feature_id, &milestone_id, cfg.driver.label(), RunMode::Normal)
+        .begin_run(
+            &feature_id,
+            &milestone_id,
+            cfg.driver.label(),
+            RunMode::Normal,
+        )
         .await
         .map_err(|e| format!("begin_run: {e}"))?;
     let run_id = run_ctx.run_id.clone();
     let run_dir = sovereign_runs_dir().join(&run_id);
     std::fs::create_dir_all(&run_dir)
         .map_err(|e| format!("create run dir {}: {e}", run_dir.display()))?;
-    println!("atos run: feature={feature_id} run_id={run_id} dir={}", run_dir.display());
+    println!(
+        "atos run: feature={feature_id} run_id={run_id} dir={}",
+        run_dir.display()
+    );
 
     let iter_log_path = run_dir.join("iterations.jsonl");
 
@@ -715,13 +742,14 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
         };
         let iter_start = Instant::now();
         let started_at = chrono::Utc::now().to_rfc3339();
-        let iter_dir = run_dir.join(format!("iter-{iter:03}-{}", phase_label.replace(['(', ')', ',', ' '], "_")));
+        let iter_dir = run_dir.join(format!(
+            "iter-{iter:03}-{}",
+            phase_label.replace(['(', ')', ',', ' '], "_")
+        ));
         std::fs::create_dir_all(&iter_dir)
             .map_err(|e| format!("create iter dir {}: {e}", iter_dir.display()))?;
 
-        println!(
-            "\natos run: ─── iter {iter:03} · phase={phase_label} ──────────────────────"
-        );
+        println!("\natos run: ─── iter {iter:03} · phase={phase_label} ──────────────────────");
         use std::io::Write as _;
         let _ = std::io::stdout().flush();
 
@@ -783,44 +811,43 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                 // into a Plan. Legacy paths (json on disk, prose JSON
                 // extract) survive as fallbacks so partial migrations
                 // and resumed runs keep working.
-                let load_result: Result<Plan, String> = match std::fs::read_to_string(
-                    &workdir_plan_md,
-                ) {
-                    Ok(text) => match parse_plan_md(&text) {
-                        Ok(mut parsed) => {
-                            if parsed.feature_id.trim().is_empty() {
-                                parsed.feature_id = feature_id.clone();
+                let load_result: Result<Plan, String> =
+                    match std::fs::read_to_string(&workdir_plan_md) {
+                        Ok(text) => match parse_plan_md(&text) {
+                            Ok(mut parsed) => {
+                                if parsed.feature_id.trim().is_empty() {
+                                    parsed.feature_id = feature_id.clone();
+                                }
+                                if parsed.created_at.trim().is_empty() {
+                                    parsed.created_at = chrono::Utc::now().to_rfc3339();
+                                }
+                                parsed.validate().map(|_| parsed)
                             }
-                            if parsed.created_at.trim().is_empty() {
-                                parsed.created_at = chrono::Utc::now().to_rfc3339();
+                            Err(e) => Err(e),
+                        },
+                        Err(_) => {
+                            if workdir_plan_path.exists() {
+                                Plan::load(&workdir_plan_path)
+                            } else {
+                                // PLAN.md not on disk — the agent may have
+                                // emitted it via a `write` tool call (pure
+                                // tool-call responses don't show up in text
+                                // extraction). Try extracting from the
+                                // opencode session text first; fall back to
+                                // fenced-JSON extraction.
+                                let text = fetch_last_assistant_text(&cfg.workdir);
+                                let defaults = PlanDefaults {
+                                    feature_id: feature_id.clone(),
+                                    design_sha: None,
+                                    created_at: chrono::Utc::now().to_rfc3339(),
+                                };
+                                match try_parse_tool_emitted_plan(&text, &defaults, true) {
+                                    Some(result) => result,
+                                    None => extract_and_validate_plan(&cfg.workdir, &iter_dir),
+                                }
                             }
-                            parsed.validate().map(|_| parsed)
                         }
-                        Err(e) => Err(e),
-                    },
-                    Err(_) => {
-                        if workdir_plan_path.exists() {
-                            Plan::load(&workdir_plan_path)
-                        } else {
-                            // PLAN.md not on disk — the agent may have
-                            // emitted it via a `write` tool call (pure
-                            // tool-call responses don't show up in text
-                            // extraction). Try extracting from the
-                            // opencode session text first; fall back to
-                            // fenced-JSON extraction.
-                            let text = fetch_last_assistant_text(&cfg.workdir);
-                            let defaults = PlanDefaults {
-                                feature_id: feature_id.clone(),
-                                design_sha: None,
-                                created_at: chrono::Utc::now().to_rfc3339(),
-                            };
-                            match try_parse_tool_emitted_plan(&text, &defaults, true) {
-                                Some(result) => result,
-                                None => extract_and_validate_plan(&cfg.workdir, &iter_dir),
-                            }
-                        }
-                    }
-                };
+                    };
                 match load_result {
                     Ok(p) => {
                         // Validate plan against workdir state.
@@ -828,9 +855,16 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                         // when Cargo.toml doesn't exist is structurally
                         // valid but impossible to execute — the agent
                         // skipped the scaffold step entirely.
-                        let step_verify_cmds: Vec<String> = p.steps.iter().map(|s| s.verify_cmd.clone()).collect();
-                        let step01_files: Vec<String> = p.steps.first().map(|s| s.files_touched.clone()).unwrap_or_default();
-                        if let Some(gap) = detect_missing_scaffold(&step_verify_cmds, &step01_files, &cfg.workdir) {
+                        let step_verify_cmds: Vec<String> =
+                            p.steps.iter().map(|s| s.verify_cmd.clone()).collect();
+                        let step01_files: Vec<String> = p
+                            .steps
+                            .first()
+                            .map(|s| s.files_touched.clone())
+                            .unwrap_or_default();
+                        if let Some(gap) =
+                            detect_missing_scaffold(&step_verify_cmds, &step01_files, &cfg.workdir)
+                        {
                             record.verdict = "plan_invalid".into();
                             record.notes = Some(gap);
                             record.wall_seconds = iter_start.elapsed().as_secs();
@@ -845,11 +879,8 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                             p.revision
                         );
                         record.verdict = "plan_written".into();
-                        record.notes = Some(format!(
-                            "{} steps, revision {}",
-                            p.steps.len(),
-                            p.revision
-                        ));
+                        record.notes =
+                            Some(format!("{} steps, revision {}", p.steps.len(), p.revision));
                         plan = Some(p);
                         steps_since_reassess = 0;
                         // Clear the carried-over rejection memo from
@@ -1045,8 +1076,7 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                     // doesn't match the canonical crate name. Catches
                     // the classic PLAN-time hallucinated-typo failure
                     // mode without a model round-trip.
-                    if let Ok(cargo_body) =
-                        std::fs::read_to_string(cfg.workdir.join("Cargo.toml"))
+                    if let Ok(cargo_body) = std::fs::read_to_string(cfg.workdir.join("Cargo.toml"))
                     {
                         if let Some(canonical) = parse_crate_name(&cargo_body) {
                             if canonicalize_verify_cmds(&mut p, &canonical) {
@@ -1167,9 +1197,8 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                     design_sha: Some(prior_design_sha.clone()),
                     created_at: prior_created_at.clone(),
                 };
-                let load_result: Result<Plan, String> = match std::fs::read_to_string(
-                    &plan_md_path,
-                ) {
+                let load_result: Result<Plan, String> = match std::fs::read_to_string(&plan_md_path)
+                {
                     Ok(text) => parse_plan_md(&text).map(|mut parsed| {
                         apply_plan_defaults(&mut parsed, &reassess_defaults);
                         parsed
@@ -1192,7 +1221,7 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                                 ),
                             },
                         }
-                    },
+                    }
                 };
                 match load_result {
                     Ok(mut new_plan) => {
@@ -1218,7 +1247,9 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                                 if prev.state == StepState::Done {
                                     s.state = StepState::Done;
                                 }
-                                if matches!(prev.state, StepState::Failed) && s.state == StepState::Pending {
+                                if matches!(prev.state, StepState::Failed)
+                                    && s.state == StepState::Pending
+                                {
                                     s.attempts = prev.attempts;
                                     s.last_failure = prev.last_failure.clone();
                                     s.last_verify_stdout = prev.last_verify_stdout.clone();
@@ -1259,7 +1290,12 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                             append_jsonl(&iter_log_path, &record)?;
                             continue;
                         }
-                        save_plan_dual(&new_plan, &plan_path, &workdir_plan_path, &workdir_plan_md)?;
+                        save_plan_dual(
+                            &new_plan,
+                            &plan_path,
+                            &workdir_plan_path,
+                            &workdir_plan_md,
+                        )?;
                         println!(
                             "atos run: ✓ plan reassessed → revision {}",
                             new_plan.revision
@@ -1308,8 +1344,7 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                 append_jsonl(&iter_log_path, &record)?;
             }
             Phase::Final => {
-                let prompt =
-                    compose_agent_prompt(iter, &artifacts, last_rejection.as_ref());
+                let prompt = compose_agent_prompt(iter, &artifacts, last_rejection.as_ref());
                 let prompt_path = iter_dir.join("prompt.md");
                 std::fs::write(&prompt_path, &prompt)
                     .map_err(|e| format!("write {}: {e}", prompt_path.display()))?;
@@ -1609,15 +1644,12 @@ async fn resolve_or_provision_feature(
     // Synthesize a feature from the workdir basename so we always have
     // an audit anchor. The id is stable across reruns of the same
     // workdir.
-    let id = cfg
-        .feature_id
-        .clone()
-        .unwrap_or_else(|| {
-            cfg.workdir
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_else(|| "atos-run".into())
-        });
+    let id = cfg.feature_id.clone().unwrap_or_else(|| {
+        cfg.workdir
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "atos-run".into())
+    });
     if orc
         .get_feature(&id)
         .await
@@ -1631,9 +1663,7 @@ async fn resolve_or_provision_feature(
         .charter
         .as_ref()
         .map(|c| c.body.clone())
-        .unwrap_or_else(|| {
-            "(no charter — runner provisioned from workdir basename)\n".to_string()
-        });
+        .unwrap_or_else(|| "(no charter — runner provisioned from workdir basename)\n".to_string());
     orc.provision_feature_parts(&id, &title, &charter_md, "", "")
         .await
         .map_err(|e| format!("provision synthetic feature {id}: {e}"))?;
@@ -1816,7 +1846,10 @@ async fn call_reviewer(
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
-        return Err(format!("daemon returned {status}: {}", truncate(&text, 1024)));
+        return Err(format!(
+            "daemon returned {status}: {}",
+            truncate(&text, 1024)
+        ));
     }
     let v: serde_json::Value = resp
         .json()
@@ -1840,13 +1873,11 @@ async fn call_reviewer(
     })?;
 
     // Save reviewer transcript next to the verdict for audit.
-    let transcript_path = sovereign_runs_dir()
-        .join("transcripts")
-        .join(format!(
-            "iter-{:03}-reviewer-{}.json",
-            inputs.iter,
-            chrono::Utc::now().timestamp()
-        ));
+    let transcript_path = sovereign_runs_dir().join("transcripts").join(format!(
+        "iter-{:03}-reviewer-{}.json",
+        inputs.iter,
+        chrono::Utc::now().timestamp()
+    ));
     if let Some(parent) = transcript_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
@@ -1880,7 +1911,10 @@ fn build_reviewer_prompt(inputs: &ReviewerInputs<'_>) -> String {
     }
 
     if let Some(design) = inputs.artifacts.design.as_ref() {
-        out.push_str(&format!("=== DESIGN ({}) — the technical contract ===\n", design.label));
+        out.push_str(&format!(
+            "=== DESIGN ({}) — the technical contract ===\n",
+            design.label
+        ));
         out.push_str(&design.body);
         out.push_str("\n\n");
     }
@@ -1977,7 +2011,9 @@ fn build_plan_prompt(
             // Fence the prior emit so its markdown can't break out of
             // the prompt's own markdown frame. Use a backtick fence
             // wide enough to escape any reasonable nesting.
-            out.push_str("### What you wrote last time (pasted back so you can see the shape problem)\n\n");
+            out.push_str(
+                "### What you wrote last time (pasted back so you can see the shape problem)\n\n",
+            );
             out.push_str("````markdown\n");
             out.push_str(prior);
             if !prior.ends_with('\n') {
@@ -2095,7 +2131,7 @@ fn build_plan_prompt(
            step's behaviour and exits non-zero on failure.\n\n",
     );
     out.push_str(
-         "## Constraints\n\n\
+        "## Constraints\n\n\
           - **3 to 12 steps**, 32 hard cap. Fewer = better. Each step adds a \
             FSM transition cost; consolidate what naturally ships together.\n\
           - **If the workdir has no build file** (Cargo.toml, package.json, \
@@ -2399,7 +2435,10 @@ fn parse_plan_md(text: &str) -> Result<Plan, String> {
             let (head, marker) = split_state_marker(rest);
             const EM_DASH_SEP: &str = " — ";
             let (id, goal) = match head.find(':') {
-                Some(i) => (head[..i].trim().to_string(), head[i + 1..].trim().to_string()),
+                Some(i) => (
+                    head[..i].trim().to_string(),
+                    head[i + 1..].trim().to_string(),
+                ),
                 None => match head.find(EM_DASH_SEP) {
                     // Byte length of " — " is 5 (em-dash is 3 UTF-8
                     // bytes); use `.len()` not a hardcoded char count
@@ -2593,7 +2632,9 @@ fn fetch_last_assistant_text(workdir: &Path) -> String {
     };
     // Resolve the workdir's canonical path the way opencode stored it.
     // opencode uses /private-prefixed canonical paths on macOS.
-    let canon = workdir.canonicalize().unwrap_or_else(|_| workdir.to_path_buf());
+    let canon = workdir
+        .canonicalize()
+        .unwrap_or_else(|_| workdir.to_path_buf());
     let canon_str = canon.to_string_lossy().to_string();
     let alt_str = if canon_str.starts_with("/private/") {
         canon_str.trim_start_matches("/private").to_string()
@@ -2756,10 +2797,7 @@ fn apply_plan_defaults(plan: &mut Plan, defaults: &PlanDefaults) {
 /// Persist the agent's reply (PLAN or REASSESS) and pull a JSON block
 /// out of it, validating against the Plan schema. Returns the extracted
 /// Plan (with revision possibly bumped) ready to save.
-fn extract_and_validate_plan(
-    workdir: &Path,
-    iter_dir: &Path,
-) -> Result<Plan, String> {
+fn extract_and_validate_plan(workdir: &Path, iter_dir: &Path) -> Result<Plan, String> {
     extract_and_validate_plan_with_defaults(workdir, iter_dir, "", "", "")
 }
 
@@ -2874,10 +2912,7 @@ fn refresh_atos_context(workdir: &Path, plan: Option<&Plan>) -> String {
     // Plan progress (if any). One line per step; lets the agent see
     // what's done without re-reading plan.json.
     if let Some(p) = plan {
-        out.push_str(&format!(
-            "## Plan progress (revision {})\n\n",
-            p.revision
-        ));
+        out.push_str(&format!("## Plan progress (revision {})\n\n", p.revision));
         for s in &p.steps {
             let marker = match s.state {
                 StepState::Pending => "·",
@@ -2972,7 +3007,9 @@ const PATTERN_FIXES: &[PatternFix] = &[
 ];
 
 fn pattern_fix_guidance(last_failure: Option<&str>) -> Option<String> {
-    let Some(text) = last_failure else { return None; };
+    let Some(text) = last_failure else {
+        return None;
+    };
     let lower = text.to_lowercase();
     let mut hits: Vec<&PatternFix> = PATTERN_FIXES
         .iter()
@@ -3056,7 +3093,9 @@ fn sanitize_crate_name(s: &str) -> String {
             out.push('-');
         }
     }
-    let trimmed = out.trim_matches(|c: char| c == '-' || c.is_ascii_digit()).to_string();
+    let trimmed = out
+        .trim_matches(|c: char| c == '-' || c.is_ascii_digit())
+        .to_string();
     if trimmed.is_empty() {
         "atos-feature".into()
     } else if trimmed.len() > 64 {
@@ -3084,7 +3123,10 @@ fn build_execute_prompt(
     }
     out.push_str(&format!("# ATOS run — EXECUTE phase · {}\n\n", step.id));
     out.push_str(&format!("**Goal:** {}\n", step.goal));
-    out.push_str(&format!("**Files this step touches:** {}\n", step.files_touched.join(", ")));
+    out.push_str(&format!(
+        "**Files this step touches:** {}\n",
+        step.files_touched.join(", ")
+    ));
     out.push_str(&format!("**Verify command:** `{}`\n", step.verify_cmd));
     out.push_str(&format!("**Why this step:** {}\n\n", step.rationale));
 
@@ -3110,7 +3152,7 @@ fn build_execute_prompt(
     }
 
     out.push_str(
-         "## What you must NOT touch\n\n\
+        "## What you must NOT touch\n\n\
           These files are runner-managed. Editing them during EXECUTE \
           confuses the FSM and produces broken plan state — observed \
           failure mode where the model edits `PLAN.md` instead of the \
@@ -3149,10 +3191,7 @@ fn build_execute_prompt(
     );
 
     if step.attempts > 0 {
-        out.push_str(&format!(
-            "## Previous attempt(s): {}\n\n",
-            step.attempts
-        ));
+        out.push_str(&format!("## Previous attempt(s): {}\n\n", step.attempts));
         if let Some(failure) = step.last_failure.as_ref() {
             out.push_str(&format!(
                 "Last failure (truncated):\n```\n{}\n```\n\n",
@@ -3175,7 +3214,11 @@ fn build_execute_prompt(
     out.push_str("## Plan context — where this step fits\n\n");
     out.push_str(&format!("Plan revision: {}\n\n", plan.revision));
     out.push_str("Done so far:\n");
-    let done: Vec<&Step> = plan.steps.iter().filter(|s| s.state == StepState::Done).collect();
+    let done: Vec<&Step> = plan
+        .steps
+        .iter()
+        .filter(|s| s.state == StepState::Done)
+        .collect();
     if done.is_empty() {
         out.push_str("- (none — this is the first executing step)\n");
     } else {
@@ -3204,7 +3247,9 @@ fn build_execute_prompt(
         out.push_str(&truncate(diff_since_plan, 8 * 1024));
         out.push_str("\n```\n\n");
     } else {
-        out.push_str("## Repo state\n\nWorkdir is at the plan-creation snapshot — no prior changes yet.\n\n");
+        out.push_str(
+            "## Repo state\n\nWorkdir is at the plan-creation snapshot — no prior changes yet.\n\n",
+        );
     }
 
     if !recent_notes.trim().is_empty() {
@@ -3250,8 +3295,10 @@ fn build_reassess_prompt(
         "Trigger: **{}**\n\n",
         match trigger {
             ReassessTrigger::Cadence => "scheduled (every K steps)",
-            ReassessTrigger::StepFailure => "a step's verify_cmd failed and the agent couldn't unstick it",
-            ReassessTrigger::ReviewerReject => "the reviewer rejected DONE.md — plan needs to address the gaps",
+            ReassessTrigger::StepFailure =>
+                "a step's verify_cmd failed and the agent couldn't unstick it",
+            ReassessTrigger::ReviewerReject =>
+                "the reviewer rejected DONE.md — plan needs to address the gaps",
         }
     ));
     out.push_str(&format!(
@@ -3288,7 +3335,10 @@ fn build_reassess_prompt(
          later steps depend on.\n\n",
     );
 
-    out.push_str(&format!("## Current plan state (revision {})\n\n", plan.revision));
+    out.push_str(&format!(
+        "## Current plan state (revision {})\n\n",
+        plan.revision
+    ));
     out.push_str("Compact summary — the runner already knows the execution history; do NOT include `last_failure`, `last_verify_stdout`, or `attempts` in your output JSON. Output `state` as `pending` or `skipped` only.\n\n");
     for s in &plan.steps {
         out.push_str(&format!(
@@ -3482,8 +3532,8 @@ impl IterationRecord {
 
 fn append_jsonl(path: &Path, row: &IterationRecord) -> Result<(), String> {
     use std::io::Write;
-    let line = serde_json::to_string(row)
-        .map_err(|e| format!("serialize iteration record: {e}"))?;
+    let line =
+        serde_json::to_string(row).map_err(|e| format!("serialize iteration record: {e}"))?;
     let mut f = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -3707,11 +3757,8 @@ mod tests {
 
     #[test]
     fn validates_workdir_must_be_dir() {
-        let cfg = RunCfg::from_args(&[
-            "--workdir".into(),
-            "/this/path/does/not/exist".into(),
-        ])
-        .unwrap();
+        let cfg =
+            RunCfg::from_args(&["--workdir".into(), "/this/path/does/not/exist".into()]).unwrap();
         let err = cfg.validate().unwrap_err();
         assert!(err.contains("not a directory"));
     }
@@ -3935,12 +3982,13 @@ serde = "1"
     fn detect_hollow_files_flags_empty_lib_rs() {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(tmp.path().join("src")).unwrap();
-        std::fs::write(tmp.path().join("Cargo.toml"), "[package]\nname = \"x\"\nversion = \"0.1.0\"\nedition = \"2021\"\n").unwrap();
+        std::fs::write(
+            tmp.path().join("Cargo.toml"),
+            "[package]\nname = \"x\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
         std::fs::write(tmp.path().join("src/lib.rs"), "").unwrap();
-        let warning = detect_hollow_files(
-            tmp.path(),
-            &["Cargo.toml".into(), "src/lib.rs".into()],
-        );
+        let warning = detect_hollow_files(tmp.path(), &["Cargo.toml".into(), "src/lib.rs".into()]);
         assert!(warning.is_some());
         let msg = warning.unwrap();
         assert!(msg.contains("src/lib.rs"));
@@ -3950,24 +3998,24 @@ serde = "1"
     fn detect_hollow_files_passes_substantive_files() {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(tmp.path().join("src")).unwrap();
-        std::fs::write(tmp.path().join("Cargo.toml"), "[package]\nname = \"x\"\nversion = \"0.1.0\"\nedition = \"2021\"\n").unwrap();
+        std::fs::write(
+            tmp.path().join("Cargo.toml"),
+            "[package]\nname = \"x\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
         std::fs::write(
             tmp.path().join("src/lib.rs"),
             "pub fn add(a: i32, b: i32) -> i32 { a + b }\n",
         )
         .unwrap();
-        let warning = detect_hollow_files(
-            tmp.path(),
-            &["Cargo.toml".into(), "src/lib.rs".into()],
-        );
+        let warning = detect_hollow_files(tmp.path(), &["Cargo.toml".into(), "src/lib.rs".into()]);
         assert!(warning.is_none());
     }
 
     #[test]
     fn detect_hollow_files_flags_missing_files() {
         let tmp = tempfile::tempdir().unwrap();
-        let warning =
-            detect_hollow_files(tmp.path(), &["Cargo.toml".into(), "src/lib.rs".into()]);
+        let warning = detect_hollow_files(tmp.path(), &["Cargo.toml".into(), "src/lib.rs".into()]);
         assert!(warning.is_some());
         assert!(warning.unwrap().contains("missing"));
     }
@@ -4081,7 +4129,10 @@ serde = "1"
         save_plan_dual(&plan, &run_path, &workdir_path, &workdir_md).unwrap();
         let md = std::fs::read_to_string(&workdir_md).unwrap();
         assert!(md.contains("step-01"));
-        assert!(md.contains("[DONE]"), "markdown must reflect post-EXECUTE state, got:\n{md}");
+        assert!(
+            md.contains("[DONE]"),
+            "markdown must reflect post-EXECUTE state, got:\n{md}"
+        );
         assert!(md.contains("revision 2"));
     }
 
@@ -4134,7 +4185,10 @@ serde = "1"
             }],
         };
         let err = plan.validate().unwrap_err();
-        assert!(err.contains("non-ASCII"), "expected non-ASCII rejection, got: {err}");
+        assert!(
+            err.contains("non-ASCII"),
+            "expected non-ASCII rejection, got: {err}"
+        );
     }
 
     #[test]
@@ -4160,7 +4214,10 @@ serde = "1"
             }],
         };
         let err = plan.validate().unwrap_err();
-        assert!(err.contains("prose"), "expected prose rejection, got: {err}");
+        assert!(
+            err.contains("prose"),
+            "expected prose rejection, got: {err}"
+        );
     }
 
     #[test]
@@ -4278,11 +4335,7 @@ serde = "1"
     #[test]
     fn pre_seed_cargo_toml_writes_when_missing() {
         let tmp = tempfile::tempdir().unwrap();
-        let result = pre_seed_cargo_toml_if_needed(
-            tmp.path(),
-            &["Cargo.toml".into()],
-            "my-crate",
-        );
+        let result = pre_seed_cargo_toml_if_needed(tmp.path(), &["Cargo.toml".into()], "my-crate");
         assert!(result.is_some());
         let body = std::fs::read_to_string(tmp.path().join("Cargo.toml")).unwrap();
         assert!(body.contains("name = \"my-crate\""));
@@ -4298,11 +4351,7 @@ serde = "1"
             "[package]\nname = invalid-no-quotes\n",
         )
         .unwrap();
-        let result = pre_seed_cargo_toml_if_needed(
-            tmp.path(),
-            &["Cargo.toml".into()],
-            "x",
-        );
+        let result = pre_seed_cargo_toml_if_needed(tmp.path(), &["Cargo.toml".into()], "x");
         assert!(result.is_some());
         let body = std::fs::read_to_string(tmp.path().join("Cargo.toml")).unwrap();
         assert!(toml::from_str::<toml::Value>(&body).is_ok());
@@ -4311,8 +4360,7 @@ serde = "1"
     #[test]
     fn pre_seed_cargo_toml_leaves_valid_toml_alone() {
         let tmp = tempfile::tempdir().unwrap();
-        let original =
-            "[package]\nname = \"keep-me\"\nversion = \"0.5.0\"\nedition = \"2021\"\n";
+        let original = "[package]\nname = \"keep-me\"\nversion = \"0.5.0\"\nedition = \"2021\"\n";
         std::fs::write(tmp.path().join("Cargo.toml"), original).unwrap();
         let result = pre_seed_cargo_toml_if_needed(
             tmp.path(),
@@ -4327,11 +4375,7 @@ serde = "1"
     #[test]
     fn pre_seed_cargo_toml_skips_when_files_touched_excludes_it() {
         let tmp = tempfile::tempdir().unwrap();
-        let result = pre_seed_cargo_toml_if_needed(
-            tmp.path(),
-            &["src/lib.rs".into()],
-            "x",
-        );
+        let result = pre_seed_cargo_toml_if_needed(tmp.path(), &["src/lib.rs".into()], "x");
         assert!(result.is_none());
         assert!(!tmp.path().join("Cargo.toml").exists());
     }
@@ -4419,7 +4463,10 @@ serde = "1"
         assert!(rewrote);
         assert_eq!(plan.steps[0].verify_cmd, "cargo check -p oicp-types");
         assert_eq!(plan.steps[1].verify_cmd, "cargo check -p oicp-types");
-        assert_eq!(plan.steps[2].verify_cmd, "cargo test --package oicp-types scoring");
+        assert_eq!(
+            plan.steps[2].verify_cmd,
+            "cargo test --package oicp-types scoring"
+        );
     }
 
     #[test]
@@ -4656,4 +4703,3 @@ prose
         assert!(matches!(p, Phase::Final));
     }
 }
-

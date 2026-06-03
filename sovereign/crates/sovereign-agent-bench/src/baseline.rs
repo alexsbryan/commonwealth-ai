@@ -96,7 +96,14 @@ fn slug(s: &str) -> String {
     s.chars()
         .map(|c| match c {
             '/' | ' ' | ':' | '\\' => '-',
-            other if other.is_ascii_alphanumeric() || other == '.' || other == '-' || other == '_' => other,
+            other
+                if other.is_ascii_alphanumeric()
+                    || other == '.'
+                    || other == '-'
+                    || other == '_' =>
+            {
+                other
+            }
             _ => '-',
         })
         .collect()

@@ -168,7 +168,11 @@ pub(crate) fn format_conversation_history(
         messages.len()
     };
     let start = cap.saturating_sub(max_turns);
-    let slice = if cap == 0 { &[][..] } else { &messages[start..cap] };
+    let slice = if cap == 0 {
+        &[][..]
+    } else {
+        &messages[start..cap]
+    };
 
     let mut sections: Vec<String> = Vec::new();
     if let Some(preamble) = compacted_preamble.map(str::trim).filter(|s| !s.is_empty()) {
@@ -214,7 +218,7 @@ mod truncate_chunk_tests {
     #[test]
     fn truncate_does_not_panic_inside_multibyte_char() {
         let a_block = "a".repeat(MAX_CHUNK_CHARS - 1); // byte 0..=598
-        // Inject em-dash at byte 598..601 so byte 600 lands inside it.
+                                                       // Inject em-dash at byte 598..601 so byte 600 lands inside it.
         let content = format!("{a_block}—tail");
         let out = truncate_chunk_content(&content);
         assert!(out.ends_with("..."), "should have truncation marker");
@@ -336,10 +340,7 @@ mod format_conversation_history_tests {
     /// kept in full — there's no in-flight turn to elide.
     #[test]
     fn assistant_trailing_is_kept() {
-        let msgs = vec![
-            msg(Role::User, "q"),
-            msg(Role::Assistant, "a"),
-        ];
+        let msgs = vec![msg(Role::User, "q"), msg(Role::Assistant, "a")];
         let out = format_conversation_history(&msgs, 8, |_| 500, None).unwrap();
         assert!(out.contains("USER: q"));
         assert!(out.contains("ASSISTANT: a"));
@@ -349,10 +350,7 @@ mod format_conversation_history_tests {
     #[test]
     fn per_message_budget_truncates() {
         let long = "x".repeat(800);
-        let msgs = vec![
-            msg(Role::User, "q"),
-            msg(Role::Assistant, &long),
-        ];
+        let msgs = vec![msg(Role::User, "q"), msg(Role::Assistant, &long)];
         let out = format_conversation_history(&msgs, 8, |_| 100, None).unwrap();
         assert!(out.contains("ASSISTANT:"));
         assert!(out.contains("..."));
@@ -381,10 +379,16 @@ mod format_conversation_history_tests {
         let msgs: Vec<_> = bodies
             .iter()
             .enumerate()
-            .map(|(i, body)| msg(
-                if i % 2 == 0 { Role::User } else { Role::Assistant },
-                body,
-            ))
+            .map(|(i, body)| {
+                msg(
+                    if i % 2 == 0 {
+                        Role::User
+                    } else {
+                        Role::Assistant
+                    },
+                    body,
+                )
+            })
             .collect();
 
         // Age budget shaped like the production tier:
@@ -420,10 +424,16 @@ mod format_conversation_history_tests {
     #[test]
     fn max_turns_clamps_slice() {
         let msgs: Vec<_> = (0..10)
-            .map(|i| msg(
-                if i % 2 == 0 { Role::User } else { Role::Assistant },
-                &format!("turn-{i}"),
-            ))
+            .map(|i| {
+                msg(
+                    if i % 2 == 0 {
+                        Role::User
+                    } else {
+                        Role::Assistant
+                    },
+                    &format!("turn-{i}"),
+                )
+            })
             .collect();
         // 10 messages, last is U/A pattern; tail-user-elide makes cap=9.
         // max_turns=3 keeps only 3 messages.

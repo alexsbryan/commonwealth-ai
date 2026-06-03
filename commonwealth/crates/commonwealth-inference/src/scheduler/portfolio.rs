@@ -1,6 +1,6 @@
-use commonwealth_core::ids::ModelId;
-use crate::model::ModelInfo;
 use crate::inference_plan::{ModelTransition, ShardPlan, TransitionState};
+use crate::model::ModelInfo;
+use commonwealth_core::ids::ModelId;
 
 /// Default threshold: only swap if the improvement is > 0.3 (on 0-1 scale).
 pub const SWAP_THRESHOLD: f32 = 0.3;
@@ -147,10 +147,10 @@ fn estimate_model_vram_gb(plan: &ShardPlan) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commonwealth_core::ids::{ModelId, NodeId};
+    use crate::inference_plan::{LayerRange, ShardAssignment};
     use crate::model::ModelArchitecture;
     use crate::oicp::CapabilityProfile;
-    use crate::inference_plan::{LayerRange, ShardAssignment};
+    use commonwealth_core::ids::{ModelId, NodeId};
     use std::collections::HashMap;
 
     fn test_model(id: u128, size_gb: u64) -> ModelInfo {

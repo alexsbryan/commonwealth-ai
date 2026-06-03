@@ -52,8 +52,8 @@ fn print_help() {
 }
 
 async fn cmd_build(args: &[String]) -> i32 {
-    let mut out_path = default_meta_atlas_path()
-        .unwrap_or_else(|| PathBuf::from("./canonical_atoms.json"));
+    let mut out_path =
+        default_meta_atlas_path().unwrap_or_else(|| PathBuf::from("./canonical_atoms.json"));
     let mut indexes_dir: Option<PathBuf> = None;
     let mut iter = args.iter();
     while let Some(a) = iter.next() {
@@ -109,16 +109,17 @@ async fn cmd_build(args: &[String]) -> i32 {
         eprintln!("error: write {}: {e}", out_path.display());
         return 1;
     }
-    eprintln!("\nwrote {} ({} meta-atoms)", out_path.display(), file.atoms.len());
+    eprintln!(
+        "\nwrote {} ({} meta-atoms)",
+        out_path.display(),
+        file.atoms.len()
+    );
     0
 }
 
 fn print_diagnostics(file: &MetaAtlasFile) {
     println!("Atlases seen: {}", file.atlases_seen.len());
-    println!(
-        "{:<32} {:>10} {:<12}",
-        "corpus", "entities", "stability"
-    );
+    println!("{:<32} {:>10} {:<12}", "corpus", "entities", "stability");
     println!("{}", "─".repeat(64));
     for a in &file.atlases_seen {
         let stab = a
@@ -156,21 +157,9 @@ fn print_diagnostics(file: &MetaAtlasFile) {
     }
     let pct = |n: usize| (n as f32 / total as f32) * 100.0;
     println!("\nArticulation histogram (per-anchor dominant):");
-    println!(
-        "  inventory  {:>8}  ({:>5.1}%)",
-        inv,
-        pct(inv)
-    );
-    println!(
-        "  argument   {:>8}  ({:>5.1}%)",
-        arg,
-        pct(arg)
-    );
-    println!(
-        "  trace      {:>8}  ({:>5.1}%)",
-        trc,
-        pct(trc)
-    );
+    println!("  inventory  {:>8}  ({:>5.1}%)", inv, pct(inv));
+    println!("  argument   {:>8}  ({:>5.1}%)", arg, pct(arg));
+    println!("  trace      {:>8}  ({:>5.1}%)", trc, pct(trc));
     if ambig > 0 {
         println!(
             "  ambiguous  {:>8}  ({:>5.1}%)  [flagged for review]",
@@ -181,8 +170,8 @@ fn print_diagnostics(file: &MetaAtlasFile) {
 }
 
 async fn cmd_list(args: &[String]) -> i32 {
-    let mut path = default_meta_atlas_path()
-        .unwrap_or_else(|| PathBuf::from("./canonical_atoms.json"));
+    let mut path =
+        default_meta_atlas_path().unwrap_or_else(|| PathBuf::from("./canonical_atoms.json"));
     let mut key_filter: Option<String> = None;
     let mut axis_filter: Option<Articulation> = None;
     let mut limit: usize = 40;
@@ -210,7 +199,9 @@ async fn cmd_list(args: &[String]) -> i32 {
                         "argument" => Some(Articulation::Argument),
                         "trace" => Some(Articulation::Trace),
                         other => {
-                            eprintln!("--axis must be one of inventory|argument|trace, got {other}");
+                            eprintln!(
+                                "--axis must be one of inventory|argument|trace, got {other}"
+                            );
                             return 1;
                         }
                     };
@@ -255,9 +246,7 @@ async fn cmd_list(args: &[String]) -> i32 {
         .filter(|m| {
             if let Some(k) = &key_filter {
                 let needle = corpus_engine::atlas_canonical::lookup_key(k);
-                if !needle.is_empty() && m.canonical_key != needle
-                    && !m.aliases.contains(&needle)
-                {
+                if !needle.is_empty() && m.canonical_key != needle && !m.aliases.contains(&needle) {
                     return false;
                 }
             }
@@ -272,7 +261,8 @@ async fn cmd_list(args: &[String]) -> i32 {
 
     println!("Matched {} meta-atoms", matched.len());
     for atom in matched.iter().take(limit) {
-        println!("\n[{}] {} (aliases: {})",
+        println!(
+            "\n[{}] {} (aliases: {})",
             atom.canonical_key,
             atom.display,
             atom.aliases.iter().cloned().collect::<Vec<_>>().join(", ")

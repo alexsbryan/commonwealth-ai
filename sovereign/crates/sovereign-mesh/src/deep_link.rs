@@ -57,9 +57,7 @@ pub fn parse_deep_link(url: &str) -> Option<DeepLink> {
             let join_key = parts[1].to_string();
             let params = parse_query_params(query);
             let relay_hint = params.get("relay").cloned();
-            let mesh_name = params
-                .get("name")
-                .map(|n| n.replace('+', " "));
+            let mesh_name = params.get("name").map(|n| n.replace('+', " "));
 
             Some(DeepLink::Join {
                 join_key,
@@ -265,9 +263,7 @@ fn percent_decode(input: &str) -> String {
     // produced valid UTF-8 — true for anything `encodeURIComponent`
     // emits. On malformed input, fall back to lossy conversion so we
     // still return something the caller can pattern-match.
-    String::from_utf8(out).unwrap_or_else(|e| {
-        String::from_utf8_lossy(e.as_bytes()).into_owned()
-    })
+    String::from_utf8(out).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())
 }
 
 #[cfg(test)]
@@ -318,11 +314,7 @@ mod tests {
 
     #[test]
     fn build_and_parse_round_trip() {
-        let url = build_join_link(
-            "cwth-abcd-efgh-ijkl",
-            Some("10.0.0.5"),
-            Some("My Mesh"),
-        );
+        let url = build_join_link("cwth-abcd-efgh-ijkl", Some("10.0.0.5"), Some("My Mesh"));
         assert_eq!(
             url,
             "sovereign://join/cwth-abcd-efgh-ijkl?relay=10.0.0.5&name=My+Mesh"
@@ -345,7 +337,11 @@ mod tests {
     #[test]
     fn parse_https_simple() {
         let link = parse_https_join("https://sovereign.dev/join/cwth-7f3a-9b2e-4d1c").unwrap();
-        let DeepLink::Join { join_key, relay_hint, mesh_name } = link;
+        let DeepLink::Join {
+            join_key,
+            relay_hint,
+            mesh_name,
+        } = link;
         assert_eq!(join_key, "cwth-7f3a-9b2e-4d1c");
         assert!(relay_hint.is_none());
         assert!(mesh_name.is_none());
@@ -357,7 +353,11 @@ mod tests {
             "https://sovereign.dev/join/cwth-7f3a-9b2e-4d1c?relay=10.0.0.5&name=Lab+Squad",
         )
         .unwrap();
-        let DeepLink::Join { join_key, relay_hint, mesh_name } = link;
+        let DeepLink::Join {
+            join_key,
+            relay_hint,
+            mesh_name,
+        } = link;
         assert_eq!(join_key, "cwth-7f3a-9b2e-4d1c");
         assert_eq!(relay_hint.as_deref(), Some("10.0.0.5"));
         assert_eq!(mesh_name.as_deref(), Some("Lab Squad"));
@@ -379,8 +379,7 @@ mod tests {
 
     #[test]
     fn parse_join_argument_accepts_https() {
-        let link =
-            parse_join_argument("https://sovereign.dev/join/cwth-abcd-ef01-2345").unwrap();
+        let link = parse_join_argument("https://sovereign.dev/join/cwth-abcd-ef01-2345").unwrap();
         let DeepLink::Join { join_key, .. } = link;
         assert_eq!(join_key, "cwth-abcd-ef01-2345");
     }
@@ -401,17 +400,17 @@ mod tests {
 
     #[test]
     fn build_https_join_link_round_trip() {
-        let url = build_https_join_link(
-            "cwth-abcd-ef01-2345",
-            Some("10.0.0.5"),
-            Some("My Mesh"),
-        );
+        let url = build_https_join_link("cwth-abcd-ef01-2345", Some("10.0.0.5"), Some("My Mesh"));
         assert_eq!(
             url,
             "https://sovereign.dev/join/cwth-abcd-ef01-2345?relay=10.0.0.5&name=My+Mesh"
         );
         let link = parse_https_join(&url).unwrap();
-        let DeepLink::Join { join_key, relay_hint, mesh_name } = link;
+        let DeepLink::Join {
+            join_key,
+            relay_hint,
+            mesh_name,
+        } = link;
         assert_eq!(join_key, "cwth-abcd-ef01-2345");
         assert_eq!(relay_hint.as_deref(), Some("10.0.0.5"));
         assert_eq!(mesh_name.as_deref(), Some("My Mesh"));
@@ -427,7 +426,11 @@ mod tests {
         let link = parse_deep_link(
             "sovereign://join/cwth-4d5f-6211-64d6?name=Alexs-MacBook-Pro-2.local%27s+Mesh&relay=100.104.36.28%3A9742"
         ).unwrap();
-        let DeepLink::Join { join_key, relay_hint, mesh_name } = link;
+        let DeepLink::Join {
+            join_key,
+            relay_hint,
+            mesh_name,
+        } = link;
         assert_eq!(join_key, "cwth-4d5f-6211-64d6");
         assert_eq!(relay_hint.as_deref(), Some("100.104.36.28:9742"));
         assert_eq!(

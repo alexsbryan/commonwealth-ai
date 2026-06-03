@@ -35,12 +35,11 @@ impl Tool for ProvisionFeatureTool {
         ToolDescriptor {
             id: "provision_feature".to_string(),
             name: "Provision Feature".to_string(),
-            description:
-                "Create an ATOS feature charter. The feature holds the human-approved \
+            description: "Create an ATOS feature charter. The feature holds the human-approved \
                  spec (charter_md), per-feature invariants (sovereign_md), and a \
                  machine-checkable stop condition. Returns the feature id to pass \
                  back to `start-milestone`. Fails if the id already exists."
-                    .to_string(),
+                .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -72,9 +71,10 @@ impl Tool for ProvisionFeatureTool {
                 "required": ["id", "title", "charter_md"]
             }),
             examples: vec![ToolExample {
-                situation: "The operator has approved a spec and wants to kick off ATOS milestone 1. \
+                situation:
+                    "The operator has approved a spec and wants to kick off ATOS milestone 1. \
                             Call this before any implementation tool to register the feature."
-                    .into(),
+                        .into(),
                 call: serde_json::json!({
                     "id": "atos-version-flag",
                     "title": "Add --version flag to `sovereign atos`",

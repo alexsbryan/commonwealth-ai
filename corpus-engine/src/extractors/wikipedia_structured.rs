@@ -34,13 +34,13 @@ use std::collections::VecDeque;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use arrow::array::{Array, ArrayRef, ListArray, LargeListArray, StructArray};
+use arrow::array::{Array, ArrayRef, LargeListArray, ListArray, StructArray};
 use arrow::datatypes::Int64Type;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
-use super::wikipedia_types::{WikiLink, WikipediaChunkMetadata, wiki_title_from_url};
+use super::wikipedia_types::{wiki_title_from_url, WikiLink, WikipediaChunkMetadata};
+use super::{slug, ExtractedDoc, Extractor};
 use crate::error::{Error, Result};
-use super::{ExtractedDoc, Extractor, slug};
 
 /// Maximum recursion depth for `has_parts` traversal.
 pub const MAX_SECTION_DEPTH: u32 = 5;
@@ -239,12 +239,8 @@ impl Iterator for WikipediaShardIterator {
 // ─── Batch-level iterator ───────────────────────────────
 
 type RecordBatchReader = Box<
-    dyn Iterator<
-            Item = std::result::Result<
-                arrow::array::RecordBatch,
-                arrow::error::ArrowError,
-            >,
-        > + Send,
+    dyn Iterator<Item = std::result::Result<arrow::array::RecordBatch, arrow::error::ArrowError>>
+        + Send,
 >;
 
 struct WikipediaBatchIterator {
@@ -268,9 +264,7 @@ impl Iterator for WikipediaBatchIterator {
             let batch = match self.reader.next()? {
                 Ok(b) => b,
                 Err(e) => {
-                    return Some(Err(Error::Extraction(format!(
-                        "Parquet read error: {e}"
-                    ))));
+                    return Some(Err(Error::Extraction(format!("Parquet read error: {e}"))));
                 }
             };
 
@@ -285,10 +279,7 @@ impl Iterator for WikipediaBatchIterator {
 }
 
 impl WikipediaBatchIterator {
-    fn process_batch(
-        &self,
-        batch: &arrow::array::RecordBatch,
-    ) -> Result<Vec<ExtractedDoc>> {
+    fn process_batch(&self, batch: &arrow::array::RecordBatch) -> Result<Vec<ExtractedDoc>> {
         let mut docs = Vec::new();
 
         // ── Top-level string columns ────────────────────
@@ -362,8 +353,8 @@ impl WikipediaBatchIterator {
                     page_id,
                     &self.controversy_patterns,
                     &self.factual_patterns,
-                    &[],  // parent path
-                    0,    // depth
+                    &[], // parent path
+                    0,   // depth
                     &mut docs,
                 );
             }
@@ -438,31 +429,32 @@ impl PerArticleSignalsArray {
     }
 }
 
-fn extract_article_signals(
-    batch: &arrow::array::RecordBatch,
-) -> Option<PerArticleSignalsArray> {
+fn extract_article_signals(batch: &arrow::array::RecordBatch) -> Option<PerArticleSignalsArray> {
     let version_col = batch.column_by_name("version")?;
     let version = try_as_struct_ref(version_col)?;
 
-    let is_flagged_stable = version
-        .column_by_name("is_flagged_stable")
-        .and_then(|c| {
-            c.as_any()
-                .downcast_ref::<arrow_array::BooleanArray>()
-                .cloned()
-        });
+    let is_flagged_stable = version.column_by_name("is_flagged_stable").and_then(|c| {
+        c.as_any()
+            .downcast_ref::<arrow_array::BooleanArray>()
+            .cloned()
+    });
 
     // Revision ID lives at version.identifier (Int64).
-    let revision_id = version
-        .column_by_name("identifier")
-        .and_then(|c| c.as_any().downcast_ref::<arrow_array::Int64Array>().cloned());
+    let revision_id = version.column_by_name("identifier").and_then(|c| {
+        c.as_any()
+            .downcast_ref::<arrow_array::Int64Array>()
+            .cloned()
+    });
 
     let mt_col = version.column_by_name("maintenance_tags")?;
     let mt = try_as_struct_ref(mt_col)?;
 
     let get_i64 = |name: &str| -> Option<arrow_array::PrimitiveArray<Int64Type>> {
-        mt.column_by_name(name)
-            .and_then(|c| c.as_any().downcast_ref::<arrow_array::Int64Array>().cloned())
+        mt.column_by_name(name).and_then(|c| {
+            c.as_any()
+                .downcast_ref::<arrow_array::Int64Array>()
+                .cloned()
+        })
     };
 
     // Wikidata QID lives at main_entity.identifier (Utf8 or LargeUtf8).
@@ -618,8 +610,8 @@ fn extract_sections_range(
     out: &mut Vec<ExtractedDoc>,
 ) {
     for idx in start..end {
-        let section_name = struct_get_string(sections, "name", idx)
-            .unwrap_or_else(|| "Unnamed".to_string());
+        let section_name =
+            struct_get_string(sections, "name", idx).unwrap_or_else(|| "Unnamed".to_string());
 
         if should_skip_section(&section_name) {
             continue;
@@ -663,11 +655,7 @@ fn extract_sections_range(
                     title: Some(article_title.to_string()),
                     content: text,
                     url: Some(section_url),
-                    source_id: format!(
-                        "{}-{}",
-                        slug(article_title),
-                        slug(&section_name)
-                    ),
+                    source_id: format!("{}-{}", slug(article_title), slug(&section_name)),
                     metadata: serde_json::to_value(&meta).ok(),
                     source_file: None,
                     embed_text: None,

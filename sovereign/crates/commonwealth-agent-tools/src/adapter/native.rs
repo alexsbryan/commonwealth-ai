@@ -9,9 +9,8 @@ use serde_json::Value;
 use crate::adapter::{AgentToolAdapter, TranslateOutcome};
 use crate::descriptor::descriptors;
 use crate::primitive::{
-    AgentDoneArgs, AgentPlanArgs, HandoffToEvaluatorArgs, HandoffToImplementerArgs,
-    InspectIntent, PatchFileArgs, Primitive, PrimitiveKind, ReplaceFunctionArgs, SmokeArgs,
-    WriteFileArgs,
+    AgentDoneArgs, AgentPlanArgs, HandoffToEvaluatorArgs, HandoffToImplementerArgs, InspectIntent,
+    PatchFileArgs, Primitive, PrimitiveKind, ReplaceFunctionArgs, SmokeArgs, WriteFileArgs,
 };
 
 /// Passthrough adapter — the canonical primitives ARE the agent's
@@ -44,38 +43,28 @@ impl AgentToolAdapter for Adapter {
                 .cloned()
                 .and_then(|v| serde_json::from_value::<InspectIntent>(v).ok())
                 .map(Primitive::InspectWorkdir),
-            PrimitiveKind::WriteFile => {
-                serde_json::from_value::<WriteFileArgs>(raw_args.clone())
-                    .ok()
-                    .map(Primitive::WriteFile)
-            }
-            PrimitiveKind::PatchFile => {
-                serde_json::from_value::<PatchFileArgs>(raw_args.clone())
-                    .ok()
-                    .map(Primitive::PatchFile)
-            }
+            PrimitiveKind::WriteFile => serde_json::from_value::<WriteFileArgs>(raw_args.clone())
+                .ok()
+                .map(Primitive::WriteFile),
+            PrimitiveKind::PatchFile => serde_json::from_value::<PatchFileArgs>(raw_args.clone())
+                .ok()
+                .map(Primitive::PatchFile),
             PrimitiveKind::ReplaceFunction => {
                 serde_json::from_value::<ReplaceFunctionArgs>(raw_args.clone())
                     .ok()
                     .map(Primitive::ReplaceFunction)
             }
             PrimitiveKind::Build => Some(Primitive::Build),
-            PrimitiveKind::Smoke => {
-                serde_json::from_value::<SmokeArgs>(raw_args.clone())
-                    .ok()
-                    .or_else(|| Some(SmokeArgs::default()))
-                    .map(Primitive::Smoke)
-            }
-            PrimitiveKind::AgentDone => {
-                serde_json::from_value::<AgentDoneArgs>(raw_args.clone())
-                    .ok()
-                    .map(Primitive::AgentDone)
-            }
-            PrimitiveKind::AgentPlan => {
-                serde_json::from_value::<AgentPlanArgs>(raw_args.clone())
-                    .ok()
-                    .map(Primitive::AgentPlan)
-            }
+            PrimitiveKind::Smoke => serde_json::from_value::<SmokeArgs>(raw_args.clone())
+                .ok()
+                .or_else(|| Some(SmokeArgs::default()))
+                .map(Primitive::Smoke),
+            PrimitiveKind::AgentDone => serde_json::from_value::<AgentDoneArgs>(raw_args.clone())
+                .ok()
+                .map(Primitive::AgentDone),
+            PrimitiveKind::AgentPlan => serde_json::from_value::<AgentPlanArgs>(raw_args.clone())
+                .ok()
+                .map(Primitive::AgentPlan),
             PrimitiveKind::HandoffToEvaluator => {
                 serde_json::from_value::<HandoffToEvaluatorArgs>(raw_args.clone())
                     .ok()
@@ -179,7 +168,10 @@ mod tests {
             "handoff_to_implementer",
             &json!({"diagnosis": "build failed"}),
         );
-        assert_eq!(r.canonical_kind(), Some(PrimitiveKind::HandoffToImplementer));
+        assert_eq!(
+            r.canonical_kind(),
+            Some(PrimitiveKind::HandoffToImplementer)
+        );
     }
 
     #[test]

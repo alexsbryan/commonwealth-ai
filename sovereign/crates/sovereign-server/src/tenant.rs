@@ -21,11 +21,7 @@ impl TenantRuntime {
         format!("{}:{}", self.tenant_id, conversation_id)
     }
 
-    pub async fn handle_message(
-        &self,
-        message: &str,
-        conversation_id: &str,
-    ) -> Result<Response> {
+    pub async fn handle_message(&self, message: &str, conversation_id: &str) -> Result<Response> {
         let scoped = self.scoped_id(conversation_id);
         self.runtime.handle_message(message, &scoped).await
     }

@@ -35,9 +35,7 @@ use corpus_engine::recipe::AcquirerConfig;
 use corpus_engine::{CorpusEngine, EmbedFn};
 use sovereign_core::observer::SharedStateStoreObserver;
 use sovereign_core::traits::{ConversationStore, MemoryStore};
-use sovereign_core::types::{
-    Conversation, ConversationContext, Memory, Message, Role,
-};
+use sovereign_core::types::{Conversation, ConversationContext, Memory, Message, Role};
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::knowledge_view::{
     conversation_history_recipe, KnowledgeViewManager, VIEW_PERSONAL_KNOWLEDGE,
@@ -127,7 +125,7 @@ fn empty_context(conv_id: &str) -> ConversationContext {
             deleted_at: None,
             skill_id: None,
             enabled_corpora: None,
-        searched_sources: None,
+            searched_sources: None,
         },
         memories: vec![],
         working_memory: None,
@@ -136,10 +134,10 @@ fn empty_context(conv_id: &str) -> ConversationContext {
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
-            compacted_history: None,
-            history_retrieval_hits: None,
-            tool_dossier: None,
-            intent_policy: None,
+        compacted_history: None,
+        history_retrieval_hits: None,
+        tool_dossier: None,
+        intent_policy: None,
     }
 }
 
@@ -165,11 +163,7 @@ async fn boot_engine() -> (Arc<CorpusEngine>, TempDir, PathBuf) {
 /// without running the full 5-phase enrichment. The enrichment pipeline
 /// has been verified separately in corpus-engine's own tests; here we
 /// test the *splice* path specifically.
-fn plant_skeleton(
-    engine: &CorpusEngine,
-    view_id: &str,
-    domain_id: &str,
-) -> FieldSkeleton {
+fn plant_skeleton(engine: &CorpusEngine, view_id: &str, domain_id: &str) -> FieldSkeleton {
     let skeleton = FieldSkeleton {
         schema_version: 1,
         corpus_id: view_id.to_string(),
@@ -243,13 +237,24 @@ async fn personal_view_ingest_plus_planted_skeleton_splices_into_context() {
 
     // Seed a few memories so the acquirer has rows to emit.
     let store = Arc::new(SqliteStateStore::open(&db_path).expect("open store"));
-    store.save_memory(&mem("m1", "I keep coming back to the question of meaningful work.", None))
+    store
+        .save_memory(&mem(
+            "m1",
+            "I keep coming back to the question of meaningful work.",
+            None,
+        ))
         .await
         .unwrap();
-    store.save_memory(&mem("m2", "I value simplicity — but I keep designing complex systems.", None))
+    store
+        .save_memory(&mem(
+            "m2",
+            "I value simplicity — but I keep designing complex systems.",
+            None,
+        ))
         .await
         .unwrap();
-    store.save_memory(&mem("m3", "My work matters when it serves others.", None))
+    store
+        .save_memory(&mem("m3", "My work matters when it serves others.", None))
         .await
         .unwrap();
 
@@ -420,13 +425,8 @@ async fn splice_without_any_enrichment_still_sets_some_empty_vec() {
     // called out as the biggest risk.
     let (engine, _tmp, db_path) = boot_engine().await;
     let manager = Arc::new(
-        KnowledgeViewManager::new(
-            engine,
-            stub_inference(),
-            db_path,
-            vec!["inner-work".into()],
-        )
-        .await,
+        KnowledgeViewManager::new(engine, stub_inference(), db_path, vec!["inner-work".into()])
+            .await,
     );
     // Deliberately skip init() — no ingest, no enrichment, no
     // skeleton. splice_into must still produce `Some(_)`.
@@ -494,9 +494,10 @@ fn plant_skeleton_into(engine: &CorpusEngine, view_id: &str, skeleton: &FieldSke
     let skeleton_clone = skeleton.clone();
     tokio::task::block_in_place(|| {
         tokio::runtime::Handle::current().block_on(async move {
-            let index = engine.open_index(&target).await.unwrap_or_else(|e| {
-                panic!("open index at {}: {e}", target.display())
-            });
+            let index = engine
+                .open_index(&target)
+                .await
+                .unwrap_or_else(|e| panic!("open index at {}: {e}", target.display()));
             index
                 .write_field_skeleton(&skeleton_clone)
                 .unwrap_or_else(|e| panic!("write skeleton for {view}: {e}"));
@@ -657,8 +658,8 @@ async fn cross_view_digest_surfaces_resonance_across_personal_and_conversational
     // The match that must be present: "meaningful work" in
     // personal resonates with "purpose" in conversations, OR the
     // autonomy theme matches across both views.
-    let has_work_purpose = cross.body.contains("meaningful work")
-        && cross.body.contains("purpose of this project");
+    let has_work_purpose =
+        cross.body.contains("meaningful work") && cross.body.contains("purpose of this project");
     let has_autonomy = cross.body.contains("autonomy");
     assert!(
         has_work_purpose || has_autonomy,

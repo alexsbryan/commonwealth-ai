@@ -9,9 +9,8 @@ use tokio::sync::Mutex;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::observer::{noop_observer, SharedStateStoreObserver};
 use sovereign_core::traits::{
-    BudgetStore, ConversationStore, CorpusStateStore, DocumentAssetStore,
-    DocumentSessionStore, DocumentStore, HealthStore, MemoryStore,
-    PermissionStore, RoutingStore, StateStore, TaskStore,
+    BudgetStore, ConversationStore, CorpusStateStore, DocumentAssetStore, DocumentSessionStore,
+    DocumentStore, HealthStore, MemoryStore, PermissionStore, RoutingStore, StateStore, TaskStore,
 };
 use sovereign_core::types::*;
 
@@ -167,8 +166,9 @@ impl SqliteStateStore {
                 skill_id: row.get(4)?,
                 enabled_corpora: enabled_corpora_json
                     .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok()),
-                searched_sources: searched_sources_json
-                    .and_then(|s| serde_json::from_str::<Vec<sovereign_core::types::SearchedSourceEntry>>(&s).ok()),
+                searched_sources: searched_sources_json.and_then(|s| {
+                    serde_json::from_str::<Vec<sovereign_core::types::SearchedSourceEntry>>(&s).ok()
+                }),
             })
         };
         let rows: Vec<Conversation> = match surface_skill_id {
@@ -211,10 +211,7 @@ impl SqliteStateStore {
     /// `None` if no row is found. Exposed for PR4 integration
     /// tests + future calibration job introspection — the schema
     /// columns are otherwise private to the SQLite impl.
-    pub async fn read_redirect_signal(
-        &self,
-        message_hash: &str,
-    ) -> Option<(bool, Option<String>)> {
+    pub async fn read_redirect_signal(&self, message_hash: &str) -> Option<(bool, Option<String>)> {
         let conn = self.conn.lock().await;
         conn.query_row(
             "SELECT was_redirected, redirect_to FROM routing_log \
@@ -302,7 +299,8 @@ impl SqliteStateStore {
     /// Run `PRAGMA wal_checkpoint(TRUNCATE)` to shrink the WAL file.
     pub async fn wal_checkpoint(&self) -> Result<()> {
         let conn = self.conn.lock().await;
-        conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)").map_err(map_db)?;
+        conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+            .map_err(map_db)?;
         Ok(())
     }
 
@@ -369,8 +367,7 @@ fn map_json(e: serde_json::Error) -> Error {
 /// the row-reading helper and the SQL strings stay in lockstep — if
 /// you add a column to the projection, update [`row_to_memory_full`]
 /// in the same edit.
-const MEMORY_FULL_COLUMNS: &str =
-    "id, content, source, confidence, created_at, last_used, \
+const MEMORY_FULL_COLUMNS: &str = "id, content, source, confidence, created_at, last_used, \
      source_conversation_id, source_skill_id, \
      kind, source_memory_ids, superseded_by";
 
@@ -514,8 +511,7 @@ impl ConversationStore for SqliteStateStore {
                     },
                     content: row.get(3)?,
                     created_at: row.get(4)?,
-                    metadata: metadata_str
-                        .and_then(|s| serde_json::from_str(&s).ok()),
+                    metadata: metadata_str.and_then(|s| serde_json::from_str(&s).ok()),
                     version: 0,
                 })
             })
@@ -534,8 +530,9 @@ impl ConversationStore for SqliteStateStore {
             skill_id,
             enabled_corpora: enabled_corpora_json
                 .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok()),
-            searched_sources: searched_sources_json
-                .and_then(|s| serde_json::from_str::<Vec<sovereign_core::types::SearchedSourceEntry>>(&s).ok()),
+            searched_sources: searched_sources_json.and_then(|s| {
+                serde_json::from_str::<Vec<sovereign_core::types::SearchedSourceEntry>>(&s).ok()
+            }),
         })
     }
 
@@ -567,8 +564,10 @@ impl ConversationStore for SqliteStateStore {
                     skill_id: row.get(4)?,
                     enabled_corpora: enabled_corpora_json
                         .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok()),
-                    searched_sources: searched_sources_json
-                        .and_then(|s| serde_json::from_str::<Vec<sovereign_core::types::SearchedSourceEntry>>(&s).ok()),
+                    searched_sources: searched_sources_json.and_then(|s| {
+                        serde_json::from_str::<Vec<sovereign_core::types::SearchedSourceEntry>>(&s)
+                            .ok()
+                    }),
                 })
             })
             .map_err(map_db)?
@@ -607,8 +606,7 @@ impl ConversationStore for SqliteStateStore {
                     },
                     content: row.get(3)?,
                     created_at: row.get(4)?,
-                    metadata: metadata_str
-                        .and_then(|s| serde_json::from_str(&s).ok()),
+                    metadata: metadata_str.and_then(|s| serde_json::from_str(&s).ok()),
                     version: 0,
                 })
             })
@@ -678,9 +676,10 @@ impl ConversationStore for SqliteStateStore {
         enabled_corpora: Option<Vec<String>>,
     ) -> Result<()> {
         let encoded = match enabled_corpora {
-            Some(ref ids) => Some(serde_json::to_string(ids).map_err(|e| {
-                Error::Storage(format!("encode enabled_corpora: {e}"))
-            })?),
+            Some(ref ids) => Some(
+                serde_json::to_string(ids)
+                    .map_err(|e| Error::Storage(format!("encode enabled_corpora: {e}")))?,
+            ),
             None => None,
         };
         let conn = self.conn.lock().await;
@@ -703,9 +702,10 @@ impl ConversationStore for SqliteStateStore {
         entries: Option<Vec<sovereign_core::types::SearchedSourceEntry>>,
     ) -> Result<()> {
         let encoded = match entries {
-            Some(ref es) => Some(serde_json::to_string(es).map_err(|e| {
-                Error::Storage(format!("encode searched_sources: {e}"))
-            })?),
+            Some(ref es) => Some(
+                serde_json::to_string(es)
+                    .map_err(|e| Error::Storage(format!("encode searched_sources: {e}")))?,
+            ),
             None => None,
         };
         let conn = self.conn.lock().await;
@@ -820,8 +820,8 @@ impl MemoryStore for SqliteStateStore {
                 sovereign_core::types::MemoryKind::Raw => "raw",
                 sovereign_core::types::MemoryKind::Summary => "summary",
             };
-            let source_memory_ids_json = serde_json::to_string(&memory.source_memory_ids)
-                .unwrap_or_else(|_| "[]".into());
+            let source_memory_ids_json =
+                serde_json::to_string(&memory.source_memory_ids).unwrap_or_else(|_| "[]".into());
             conn.execute(
                 "INSERT OR REPLACE INTO memories
                    (id, content, source, confidence, created_at, last_used,
@@ -885,7 +885,10 @@ impl MemoryStore for SqliteStateStore {
         let mut stmt = conn.prepare(&sql).map_err(map_db)?;
 
         let memories: Vec<Memory> = stmt
-            .query_map(rusqlite::params![fts_context, (limit * 3) as i64], row_to_memory_full)
+            .query_map(
+                rusqlite::params![fts_context, (limit * 3) as i64],
+                row_to_memory_full,
+            )
             .map_err(map_db)?
             .collect::<std::result::Result<Vec<_>, _>>()
             .unwrap_or_default();
@@ -981,14 +984,10 @@ impl MemoryStore for SqliteStateStore {
         // path has to honor the same invariant or scoped memories
         // could leak through the keyword fallback.
         let (scope_clause, scope_param): (&str, Option<String>) = match scope {
-            sovereign_core::MemoryScope::General => (
-                "AND m.source_skill_id IS NULL",
-                None,
-            ),
-            sovereign_core::MemoryScope::Scoped(id) => (
-                "AND m.source_skill_id = ?3",
-                Some(id.clone()),
-            ),
+            sovereign_core::MemoryScope::General => ("AND m.source_skill_id IS NULL", None),
+            sovereign_core::MemoryScope::Scoped(id) => {
+                ("AND m.source_skill_id = ?3", Some(id.clone()))
+            }
         };
         let cols = MEMORY_FULL_COLUMNS
             .split(", ")
@@ -1099,10 +1098,7 @@ impl MemoryStore for SqliteStateStore {
         Ok(())
     }
 
-    async fn list_memories_for_conversation(
-        &self,
-        conversation_id: &str,
-    ) -> Result<Vec<Memory>> {
+    async fn list_memories_for_conversation(&self, conversation_id: &str) -> Result<Vec<Memory>> {
         let conn = self.conn.lock().await;
         let sql = format!(
             "SELECT {cols} \
@@ -1122,11 +1118,7 @@ impl MemoryStore for SqliteStateStore {
         Ok(memories)
     }
 
-    async fn mark_superseded(
-        &self,
-        memory_id: &str,
-        summary_id: &str,
-    ) -> Result<()> {
+    async fn mark_superseded(&self, memory_id: &str, summary_id: &str) -> Result<()> {
         let conn = self.conn.lock().await;
         conn.execute(
             "UPDATE memories SET superseded_by = ?2 WHERE id = ?1",
@@ -1210,11 +1202,7 @@ impl RoutingStore for SqliteStateStore {
         Ok(())
     }
 
-    async fn mark_routing_redirected(
-        &self,
-        message_hash: &str,
-        redirect_to: &str,
-    ) -> Result<()> {
+    async fn mark_routing_redirected(&self, message_hash: &str, redirect_to: &str) -> Result<()> {
         let conn = self.conn.lock().await;
         conn.execute(
             "UPDATE routing_log SET was_redirected = 1, redirect_to = ?2 \
@@ -1231,11 +1219,10 @@ impl DocumentStore for SqliteStateStore {
     async fn store_chunks(&self, chunks: &[DocumentChunk]) -> Result<()> {
         let conn = self.conn.lock().await;
         for chunk in chunks {
-            let embedding_blob = chunk.embedding.as_ref().map(|v| {
-                v.iter()
-                    .flat_map(|f| f.to_le_bytes())
-                    .collect::<Vec<u8>>()
-            });
+            let embedding_blob = chunk
+                .embedding
+                .as_ref()
+                .map(|v| v.iter().flat_map(|f| f.to_le_bytes()).collect::<Vec<u8>>());
             let (source_type_str, corpus_id) = chunk.source_type.to_db_columns();
 
             conn.execute(
@@ -1297,7 +1284,9 @@ impl DocumentStore for SqliteStateStore {
                             })
                             .collect::<Vec<f32>>()
                     });
-                    let st: String = row.get::<_, Option<String>>(6)?.unwrap_or_else(|| "user".to_string());
+                    let st: String = row
+                        .get::<_, Option<String>>(6)?
+                        .unwrap_or_else(|| "user".to_string());
                     let cid: Option<String> = row.get(7)?;
                     Ok(DocumentChunk {
                         id: row.get(0)?,
@@ -1344,7 +1333,9 @@ impl DocumentStore for SqliteStateStore {
                             .collect::<Vec<f32>>()
                     });
                     let id: String = row.get(0)?;
-                    let st: String = row.get::<_, Option<String>>(6)?.unwrap_or_else(|| "user".to_string());
+                    let st: String = row
+                        .get::<_, Option<String>>(6)?
+                        .unwrap_or_else(|| "user".to_string());
                     let cid: Option<String> = row.get(7)?;
                     Ok((
                         id.clone(),
@@ -1414,31 +1405,36 @@ impl DocumentStore for SqliteStateStore {
                 .map_err(map_db)?;
 
             let fts_results: Vec<DocumentChunk> = fts_stmt
-                .query_map(rusqlite::params![fts_query_scored, (limit * 2) as i64], |row| {
-                    let embedding_blob: Option<Vec<u8>> = row.get(4)?;
-                    let embedding = embedding_blob.map(|blob| {
-                        blob.chunks(4)
-                            .map(|c| {
-                                let mut bytes = [0u8; 4];
-                                bytes.copy_from_slice(c);
-                                f32::from_le_bytes(bytes)
-                            })
-                            .collect::<Vec<f32>>()
-                    });
-                    let st: String = row.get::<_, Option<String>>(6)?.unwrap_or_else(|| "user".to_string());
-                    let cid: Option<String> = row.get(7)?;
-                    Ok(DocumentChunk {
-                        id: row.get(0)?,
-                        source: row.get(1)?,
-                        content: row.get(2)?,
-                        chunk_index: row.get::<_, i64>(3)? as usize,
-                        embedding,
-                        created_at: row.get(5)?,
-                        source_type: SourceType::from_db_columns(&st, cid.as_deref()),
-                        version: 0,
-                        deleted_at: None,
-                    })
-                })
+                .query_map(
+                    rusqlite::params![fts_query_scored, (limit * 2) as i64],
+                    |row| {
+                        let embedding_blob: Option<Vec<u8>> = row.get(4)?;
+                        let embedding = embedding_blob.map(|blob| {
+                            blob.chunks(4)
+                                .map(|c| {
+                                    let mut bytes = [0u8; 4];
+                                    bytes.copy_from_slice(c);
+                                    f32::from_le_bytes(bytes)
+                                })
+                                .collect::<Vec<f32>>()
+                        });
+                        let st: String = row
+                            .get::<_, Option<String>>(6)?
+                            .unwrap_or_else(|| "user".to_string());
+                        let cid: Option<String> = row.get(7)?;
+                        Ok(DocumentChunk {
+                            id: row.get(0)?,
+                            source: row.get(1)?,
+                            content: row.get(2)?,
+                            chunk_index: row.get::<_, i64>(3)? as usize,
+                            embedding,
+                            created_at: row.get(5)?,
+                            source_type: SourceType::from_db_columns(&st, cid.as_deref()),
+                            version: 0,
+                            deleted_at: None,
+                        })
+                    },
+                )
                 .map_err(map_db)?
                 .collect::<std::result::Result<Vec<_>, _>>()
                 .unwrap_or_default();
@@ -1470,7 +1466,9 @@ impl DocumentStore for SqliteStateStore {
                             .collect::<Vec<f32>>()
                     });
                     let id: String = row.get(0)?;
-                    let st: String = row.get::<_, Option<String>>(6)?.unwrap_or_else(|| "user".to_string());
+                    let st: String = row
+                        .get::<_, Option<String>>(6)?
+                        .unwrap_or_else(|| "user".to_string());
                     let cid: Option<String> = row.get(7)?;
                     Ok((
                         id.clone(),
@@ -1539,7 +1537,9 @@ impl DocumentStore for SqliteStateStore {
                         })
                         .collect::<Vec<f32>>()
                 });
-                let st: String = row.get::<_, Option<String>>(6)?.unwrap_or_else(|| "user".to_string());
+                let st: String = row
+                    .get::<_, Option<String>>(6)?
+                    .unwrap_or_else(|| "user".to_string());
                 let cid: Option<String> = row.get(7)?;
                 Ok(DocumentChunk {
                     id: row.get(0)?,
@@ -1575,7 +1575,9 @@ impl DocumentStore for SqliteStateStore {
     async fn list_sources(&self) -> Result<Vec<String>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn
-            .prepare("SELECT DISTINCT source FROM documents WHERE deleted_at IS NULL ORDER BY source")
+            .prepare(
+                "SELECT DISTINCT source FROM documents WHERE deleted_at IS NULL ORDER BY source",
+            )
             .map_err(map_db)?;
 
         let sources: Vec<String> = stmt
@@ -1825,9 +1827,7 @@ impl HealthStore for SqliteStateStore {
         Ok(())
     }
 
-    async fn list_pending_decisions(
-        &self,
-    ) -> Result<Vec<sovereign_core::health::PendingDecision>> {
+    async fn list_pending_decisions(&self) -> Result<Vec<sovereign_core::health::PendingDecision>> {
         use std::time::{Duration, UNIX_EPOCH};
         let conn = self.conn.lock().await;
         let mut stmt = conn
@@ -1853,16 +1853,23 @@ impl HealthStore for SqliteStateStore {
 
         let mut out = Vec::new();
         for row in rows {
-            let (id, component_json, issue_json, question, options_json, consequence, surfaced_at_secs) =
-                row.map_err(map_db)?;
+            let (
+                id,
+                component_json,
+                issue_json,
+                question,
+                options_json,
+                consequence,
+                surfaced_at_secs,
+            ) = row.map_err(map_db)?;
             let component: sovereign_core::health::Component =
                 serde_json::from_str(&component_json).map_err(map_json)?;
             let issue: sovereign_core::health::HealthIssue =
                 serde_json::from_str(&issue_json).map_err(map_json)?;
             let options: Vec<sovereign_core::health::UserOption> =
                 serde_json::from_str(&options_json).map_err(map_json)?;
-            let surfaced_at = UNIX_EPOCH
-                .checked_add(Duration::from_secs(surfaced_at_secs.max(0) as u64));
+            let surfaced_at =
+                UNIX_EPOCH.checked_add(Duration::from_secs(surfaced_at_secs.max(0) as u64));
             out.push(sovereign_core::health::PendingDecision {
                 id: Some(id),
                 component,
@@ -1901,19 +1908,16 @@ impl StateStore for SqliteStateStore {}
 /// for broader matching.
 fn sanitize_fts5_query(query: &str) -> String {
     const STOPWORDS: &[&str] = &[
-        "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
-        "have", "has", "had", "do", "does", "did", "will", "would", "could",
-        "should", "may", "might", "shall", "can", "need", "dare", "ought",
-        "to", "of", "in", "for", "on", "with", "at", "by", "from", "as",
-        "into", "through", "during", "before", "after", "above", "below",
-        "between", "out", "off", "over", "under", "again", "further", "then",
-        "once", "here", "there", "when", "where", "why", "how", "all", "both",
-        "each", "few", "more", "most", "other", "some", "such", "no", "nor",
-        "not", "only", "own", "same", "so", "than", "too", "very", "just",
-        "because", "but", "and", "or", "if", "while", "about", "what", "which",
-        "who", "whom", "this", "that", "these", "those", "am", "it", "its",
-        "he", "she", "his", "her", "they", "them", "their", "we", "us", "our",
-        "you", "your", "i", "me", "my",
+        "a", "an", "the", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
+        "do", "does", "did", "will", "would", "could", "should", "may", "might", "shall", "can",
+        "need", "dare", "ought", "to", "of", "in", "for", "on", "with", "at", "by", "from", "as",
+        "into", "through", "during", "before", "after", "above", "below", "between", "out", "off",
+        "over", "under", "again", "further", "then", "once", "here", "there", "when", "where",
+        "why", "how", "all", "both", "each", "few", "more", "most", "other", "some", "such", "no",
+        "nor", "not", "only", "own", "same", "so", "than", "too", "very", "just", "because", "but",
+        "and", "or", "if", "while", "about", "what", "which", "who", "whom", "this", "that",
+        "these", "those", "am", "it", "its", "he", "she", "his", "her", "they", "them", "their",
+        "we", "us", "our", "you", "your", "i", "me", "my",
     ];
 
     // Split on every non-alphanumeric character, INCLUDING dashes.
@@ -2099,8 +2103,7 @@ impl DocumentAssetStore for SqliteStateStore {
 
     async fn update_asset_state(&self, id: &str, state: &AssetState) -> Result<()> {
         let conn = self.conn.lock().await;
-        let state_json =
-            serde_json::to_string(state).map_err(|e| Error::Storage(e.to_string()))?;
+        let state_json = serde_json::to_string(state).map_err(|e| Error::Storage(e.to_string()))?;
         conn.execute(
             "UPDATE document_assets SET state_json = ?1 WHERE id = ?2",
             rusqlite::params![state_json, id],
@@ -2198,11 +2201,7 @@ impl DocumentAssetStore for SqliteStateStore {
         Ok(())
     }
 
-    async fn save_raptor_nodes(
-        &self,
-        asset_id: &str,
-        nodes: &[RaptorNode],
-    ) -> Result<()> {
+    async fn save_raptor_nodes(&self, asset_id: &str, nodes: &[RaptorNode]) -> Result<()> {
         let mut conn = self.conn.lock().await;
         let tx = conn.transaction().map_err(map_db)?;
         tx.execute(
@@ -2303,11 +2302,7 @@ impl DocumentAssetStore for SqliteStateStore {
         }
     }
 
-    async fn save_asset_motifs(
-        &self,
-        asset_id: &str,
-        motifs: &[AssetMotif],
-    ) -> Result<()> {
+    async fn save_asset_motifs(&self, asset_id: &str, motifs: &[AssetMotif]) -> Result<()> {
         let mut conn = self.conn.lock().await;
         let tx = conn.transaction().map_err(map_db)?;
         tx.execute(
@@ -2358,8 +2353,8 @@ impl DocumentAssetStore for SqliteStateStore {
         let mut out = Vec::new();
         for row in rows {
             let (term, score, occurrences_json, is_distinctive) = row.map_err(map_db)?;
-            let occurrence_chunk_ids: Vec<u32> =
-                serde_json::from_str(&occurrences_json).map_err(|e| Error::Storage(e.to_string()))?;
+            let occurrence_chunk_ids: Vec<u32> = serde_json::from_str(&occurrences_json)
+                .map_err(|e| Error::Storage(e.to_string()))?;
             out.push(AssetMotif {
                 term,
                 tf_idf_score: score as f32,
@@ -2463,8 +2458,7 @@ fn row_to_document_asset(row: &rusqlite::Row) -> DocumentAsset {
 
 fn row_to_document_session(row: &rusqlite::Row) -> DocumentSession {
     let history_json: String = row.get(11).unwrap_or_else(|_| "[]".to_string());
-    let history: Vec<DocumentOperation> =
-        serde_json::from_str(&history_json).unwrap_or_default();
+    let history: Vec<DocumentOperation> = serde_json::from_str(&history_json).unwrap_or_default();
     DocumentSession {
         id: row.get(0).unwrap_or_default(),
         conversation_id: row.get(1).unwrap_or_default(),
@@ -2522,18 +2516,15 @@ impl ConvTieredReader for SqliteStateStore {
     async fn get_chunk_entity_progress(
         &self,
         corpus_id: &str,
-    ) -> sovereign_core::error::Result<
-        Option<sovereign_core::conv_tiered::ChunkEntityProgressRow>,
-    > {
+    ) -> sovereign_core::error::Result<Option<sovereign_core::conv_tiered::ChunkEntityProgressRow>>
+    {
         SqliteStateStore::get_chunk_entity_progress(self, corpus_id).await
     }
 
     async fn list_vault_themes_for_corpus(
         &self,
         corpus_id: &str,
-    ) -> sovereign_core::error::Result<
-        Vec<sovereign_core::conv_tiered::VaultThemeRow>,
-    > {
+    ) -> sovereign_core::error::Result<Vec<sovereign_core::conv_tiered::VaultThemeRow>> {
         SqliteStateStore::list_vault_themes_for_corpus(self, corpus_id).await
     }
 }
@@ -2588,10 +2579,7 @@ impl SqliteStateStore {
     /// corpus, local vs peer), turns, and per-model usage. Messages
     /// that predate provenance, or whose metadata fails to parse, are
     /// skipped — a best-effort read, never an error for the caller.
-    pub async fn summarize_chat_activity(
-        &self,
-        window_secs: i64,
-    ) -> Result<ChatActivitySummary> {
+    pub async fn summarize_chat_activity(&self, window_secs: i64) -> Result<ChatActivitySummary> {
         use std::collections::BTreeMap;
 
         let cutoff = now().saturating_sub(window_secs);
@@ -2626,9 +2614,7 @@ impl SqliteStateStore {
             // across the conn/stmt block boundary).
             for meta in rows.flatten() {
                 let Some(meta) = meta else { continue };
-                let Ok(value) =
-                    serde_json::from_str::<serde_json::Value>(&meta)
-                else {
+                let Ok(value) = serde_json::from_str::<serde_json::Value>(&meta) else {
                     continue;
                 };
                 // Provenance is nested under `metadata["provenance"]`
@@ -2636,9 +2622,8 @@ impl SqliteStateStore {
                 let Some(prov_value) = value.get("provenance") else {
                     continue;
                 };
-                let Ok(prov) = serde_json::from_value::<ResponseProvenance>(
-                    prov_value.clone(),
-                ) else {
+                let Ok(prov) = serde_json::from_value::<ResponseProvenance>(prov_value.clone())
+                else {
                     continue;
                 };
 
@@ -2662,8 +2647,7 @@ impl SqliteStateStore {
                     } else {
                         &mut corpus_local
                     };
-                    *bucket.entry(s.origin.clone()).or_insert(0) +=
-                        s.count as u64;
+                    *bucket.entry(s.origin.clone()).or_insert(0) += s.count as u64;
                 }
             }
         }
@@ -3020,9 +3004,7 @@ impl SqliteStateStore {
                     corpus_id: r.get(0)?,
                     theme_id: r.get(1)?,
                     summary: r.get(2)?,
-                    summary_embedding: decode_f32_vec(
-                        r.get::<_, Vec<u8>>(3)?.as_slice(),
-                    ),
+                    summary_embedding: decode_f32_vec(r.get::<_, Vec<u8>>(3)?.as_slice()),
                     member_source_doc_ids_json: r.get(4)?,
                     cluster_coherence: r.get(5)?,
                     created_at: r.get(6)?,
@@ -3040,10 +3022,7 @@ impl SqliteStateStore {
     /// disable-enrichment teardown path so the briefing stops
     /// referencing themes that no longer reflect the current vault
     /// state.
-    pub async fn delete_vault_themes_for_corpus(
-        &self,
-        corpus_id: &str,
-    ) -> Result<usize> {
+    pub async fn delete_vault_themes_for_corpus(&self, corpus_id: &str) -> Result<usize> {
         let conn = self.conn.lock().await;
         let deleted = conn
             .execute(
@@ -3083,8 +3062,7 @@ impl SqliteStateStore {
         );
         let conn = self.conn.lock().await;
         let mut stmt = conn.prepare(&sql).map_err(map_db)?;
-        let mut params: Vec<&dyn rusqlite::ToSql> =
-            Vec::with_capacity(max_in_list + 1);
+        let mut params: Vec<&dyn rusqlite::ToSql> = Vec::with_capacity(max_in_list + 1);
         params.push(&corpus_id);
         for uuid in conv_uuids.iter().take(max_in_list) {
             params.push(uuid);
@@ -3175,13 +3153,14 @@ impl SqliteStateStore {
             ""
         };
         // Total count first.
-        let count_sql = format!(
-            "SELECT COUNT(*) FROM conv_skeletons WHERE corpus_id = ?1 {filter_clause}"
-        );
+        let count_sql =
+            format!("SELECT COUNT(*) FROM conv_skeletons WHERE corpus_id = ?1 {filter_clause}");
         let total: i64 = if let Some(f) = filter {
             let needle = format!("%{}%", f.replace('%', "\\%").replace('_', "\\_"));
-            conn.query_row(&count_sql, rusqlite::params![corpus_id, needle], |r| r.get(0))
-                .map_err(map_db)?
+            conn.query_row(&count_sql, rusqlite::params![corpus_id, needle], |r| {
+                r.get(0)
+            })
+            .map_err(map_db)?
         } else {
             conn.query_row(&count_sql, rusqlite::params![corpus_id], |r| r.get(0))
                 .map_err(map_db)?
@@ -3364,9 +3343,7 @@ impl SqliteStateStore {
     ) -> Result<std::collections::HashSet<u64>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn
-            .prepare(
-                "SELECT DISTINCT chunk_id FROM chunk_entities WHERE corpus_id = ?1",
-            )
+            .prepare("SELECT DISTINCT chunk_id FROM chunk_entities WHERE corpus_id = ?1")
             .map_err(map_db)?;
         let rows = stmt
             .query_map(rusqlite::params![corpus_id], |r| r.get::<_, i64>(0))
@@ -3468,15 +3445,12 @@ impl SqliteStateStore {
             )
             .map_err(map_db)?;
         let top_convs: Vec<EntityConvHit> = conv_stmt
-            .query_map(
-                rusqlite::params![corpus_id, text, conv_limit as i64],
-                |r| {
-                    Ok(EntityConvHit {
-                        conv_uuid: r.get::<_, String>(0)?,
-                        mention_count: r.get::<_, i64>(1)?,
-                    })
-                },
-            )
+            .query_map(rusqlite::params![corpus_id, text, conv_limit as i64], |r| {
+                Ok(EntityConvHit {
+                    conv_uuid: r.get::<_, String>(0)?,
+                    mention_count: r.get::<_, i64>(1)?,
+                })
+            })
             .map_err(map_db)?
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(map_db)?;
@@ -3503,16 +3477,13 @@ impl SqliteStateStore {
             )
             .map_err(map_db)?;
         let co_occurring: Vec<CoOccurringEntity> = co_stmt
-            .query_map(
-                rusqlite::params![corpus_id, text, co_limit as i64],
-                |r| {
-                    Ok(CoOccurringEntity {
-                        text: r.get::<_, String>(0)?,
-                        label: r.get::<_, String>(1)?,
-                        shared_chunk_count: r.get::<_, i64>(2)?,
-                    })
-                },
-            )
+            .query_map(rusqlite::params![corpus_id, text, co_limit as i64], |r| {
+                Ok(CoOccurringEntity {
+                    text: r.get::<_, String>(0)?,
+                    label: r.get::<_, String>(1)?,
+                    shared_chunk_count: r.get::<_, i64>(2)?,
+                })
+            })
             .map_err(map_db)?
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(map_db)?;

@@ -201,7 +201,10 @@ pub enum StalenessCaution {
 
     /// Language never had SCIP exported.
     /// Different from stale — the data simply doesn't exist.
-    LanguageNotIndexed { language: String, install_hint: String },
+    LanguageNotIndexed {
+        language: String,
+        install_hint: String,
+    },
 }
 
 impl StalenessCaution {
@@ -312,8 +315,7 @@ impl ScipGraph {
     /// Open or create the SQLite database at the given path.
     pub fn open(db_path: &Path, corpus_id: &str) -> Result<Self> {
         if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(Error::Io)?;
+            std::fs::create_dir_all(parent).map_err(Error::Io)?;
         }
 
         let conn = Connection::open(db_path)
@@ -379,11 +381,8 @@ impl ScipGraph {
             // `PRAGMA integrity_check` returns "ok" when the DB is
             // sound, or one or more error lines otherwise. We check
             // only the first row — any non-"ok" value means quarantine.
-            let verdict: rusqlite::Result<String> = conn.query_row(
-                "PRAGMA integrity_check",
-                [],
-                |row| row.get(0),
-            );
+            let verdict: rusqlite::Result<String> =
+                conn.query_row("PRAGMA integrity_check", [], |row| row.get(0));
             let quarantined = match verdict {
                 Ok(v) if v == "ok" => false,
                 _ => true,
@@ -442,9 +441,7 @@ impl ScipGraph {
     /// `None` means another writer holds the lock; the caller should
     /// drop this rebuild attempt and let the current holder finish
     /// (the Reindexer's debouncer will re-fire after it's done).
-    pub fn try_rebuild_lock(
-        db_dir: &Path,
-    ) -> std::io::Result<Option<RebuildLock>> {
+    pub fn try_rebuild_lock(db_dir: &Path) -> std::io::Result<Option<RebuildLock>> {
         use fs4::fs_std::FileExt;
 
         std::fs::create_dir_all(db_dir)?;
@@ -619,10 +616,7 @@ impl ScipGraph {
     /// Called by CodeWatcher when a file is re-indexed.
     /// Marks call graph entries for that file's symbols as potentially stale.
     pub async fn mark_file_stale(&self, file_path: &str) {
-        self.stale_files
-            .write()
-            .await
-            .insert(file_path.to_string());
+        self.stale_files.write().await.insert(file_path.to_string());
 
         // Persist to survive process restarts.
         self.persist_stale_files().await;
@@ -648,11 +642,7 @@ impl ScipGraph {
 
     async fn persist_stale_files(&self) {
         let stale = self.stale_files.read().await;
-        let csv = stale
-            .iter()
-            .cloned()
-            .collect::<Vec<_>>()
-            .join(",");
+        let csv = stale.iter().cloned().collect::<Vec<_>>().join(",");
         let conn = self.conn.lock().await;
         conn.execute(
             "INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('stale_files', ?)",
@@ -793,14 +783,10 @@ impl ScipGraph {
                          ORDER BY corpus_id, file_path, line_start \
                          LIMIT ?3",
                     )
-                    .map_err(|e| {
-                        Error::Database(format!("find_symbols_by_name prepare: {e}"))
-                    })?;
+                    .map_err(|e| Error::Database(format!("find_symbols_by_name prepare: {e}")))?;
                 let iter = stmt
                     .query_map(params![name, k, limit_clamped], map_row)
-                    .map_err(|e| {
-                        Error::Database(format!("find_symbols_by_name query: {e}"))
-                    })?;
+                    .map_err(|e| Error::Database(format!("find_symbols_by_name query: {e}")))?;
                 iter.filter_map(|r| r.ok()).collect()
             }
             None => {
@@ -813,14 +799,10 @@ impl ScipGraph {
                          ORDER BY corpus_id, file_path, line_start \
                          LIMIT ?2",
                     )
-                    .map_err(|e| {
-                        Error::Database(format!("find_symbols_by_name prepare: {e}"))
-                    })?;
+                    .map_err(|e| Error::Database(format!("find_symbols_by_name prepare: {e}")))?;
                 let iter = stmt
                     .query_map(params![name, limit_clamped], map_row)
-                    .map_err(|e| {
-                        Error::Database(format!("find_symbols_by_name query: {e}"))
-                    })?;
+                    .map_err(|e| Error::Database(format!("find_symbols_by_name query: {e}")))?;
                 iter.filter_map(|r| r.ok()).collect()
             }
         };
@@ -828,10 +810,7 @@ impl ScipGraph {
     }
 
     /// Find all symbols that the given symbol calls.
-    pub async fn find_callees(
-        &self,
-        symbol_name: &str,
-    ) -> Result<(Vec<Callee>, StalenessCaution)> {
+    pub async fn find_callees(&self, symbol_name: &str) -> Result<(Vec<Callee>, StalenessCaution)> {
         let resolved = self.resolve_symbol(symbol_name).await?;
         let Some(resolved) = resolved else {
             return Ok((vec![], StalenessCaution::None));
@@ -869,8 +848,7 @@ impl ScipGraph {
         // files of each callee symbol.  A stale definition file means the
         // callee's signature may have changed since the last SCIP export, which
         // is equally important to surface.
-        let mut result_files: Vec<String> =
-            callees.iter().map(|c| c.file_path.clone()).collect();
+        let mut result_files: Vec<String> = callees.iter().map(|c| c.file_path.clone()).collect();
         if !callees.is_empty() {
             let conn = self.conn.lock().await;
             for callee in &callees {
@@ -1025,21 +1003,18 @@ impl ScipGraph {
             )
             .map_err(|e| Error::Database(format!("symbols_in_crate prepare: {e}")))?;
         let rows: Vec<SymbolRow> = stmt
-            .query_map(
-                params![self.corpus_id, name_pattern, file_pattern],
-                |row| {
-                    Ok(SymbolRow {
-                        corpus_id: row.get(0)?,
-                        name: row.get(1)?,
-                        qualified_name: row.get(2)?,
-                        kind: row.get(3)?,
-                        file_path: row.get(4)?,
-                        line_start: row.get(5)?,
-                        line_end: row.get(6)?,
-                        language: row.get(7)?,
-                    })
-                },
-            )
+            .query_map(params![self.corpus_id, name_pattern, file_pattern], |row| {
+                Ok(SymbolRow {
+                    corpus_id: row.get(0)?,
+                    name: row.get(1)?,
+                    qualified_name: row.get(2)?,
+                    kind: row.get(3)?,
+                    file_path: row.get(4)?,
+                    line_start: row.get(5)?,
+                    line_end: row.get(6)?,
+                    language: row.get(7)?,
+                })
+            })
             .map_err(|e| Error::Database(format!("symbols_in_crate query: {e}")))?
             .filter_map(|r| r.ok())
             .collect();
@@ -1265,15 +1240,19 @@ impl ScipGraph {
     /// Number of symbols in the graph.
     pub async fn symbol_count(&self) -> usize {
         let conn = self.conn.lock().await;
-        conn.query_row("SELECT COUNT(*) FROM symbols", [], |row| row.get::<_, usize>(0))
-            .unwrap_or(0)
+        conn.query_row("SELECT COUNT(*) FROM symbols", [], |row| {
+            row.get::<_, usize>(0)
+        })
+        .unwrap_or(0)
     }
 
     /// Number of references in the graph.
     pub async fn ref_count(&self) -> usize {
         let conn = self.conn.lock().await;
-        conn.query_row("SELECT COUNT(*) FROM refs", [], |row| row.get::<_, usize>(0))
-            .unwrap_or(0)
+        conn.query_row("SELECT COUNT(*) FROM refs", [], |row| {
+            row.get::<_, usize>(0)
+        })
+        .unwrap_or(0)
     }
 
     /// Record which languages have SCIP coverage.
@@ -1327,11 +1306,9 @@ impl ScipGraph {
             .ok()
             .or_else(|| {
                 other_conn
-                    .query_row(
-                        "SELECT corpus_id FROM symbols LIMIT 1",
-                        [],
-                        |row| row.get::<_, String>(0),
-                    )
+                    .query_row("SELECT corpus_id FROM symbols LIMIT 1", [], |row| {
+                        row.get::<_, String>(0)
+                    })
                     .ok()
             })
             .unwrap_or_default();
@@ -1413,10 +1390,16 @@ impl ScipGraph {
         conn.execute_batch("BEGIN TRANSACTION")
             .map_err(|e| Error::Database(format!("replace begin: {e}")))?;
 
-        conn.execute("DELETE FROM symbols WHERE corpus_id = ?", params![source_corpus_id])
-            .map_err(|e| Error::Database(format!("replace delete symbols: {e}")))?;
-        conn.execute("DELETE FROM refs WHERE corpus_id = ?", params![source_corpus_id])
-            .map_err(|e| Error::Database(format!("replace delete refs: {e}")))?;
+        conn.execute(
+            "DELETE FROM symbols WHERE corpus_id = ?",
+            params![source_corpus_id],
+        )
+        .map_err(|e| Error::Database(format!("replace delete symbols: {e}")))?;
+        conn.execute(
+            "DELETE FROM refs WHERE corpus_id = ?",
+            params![source_corpus_id],
+        )
+        .map_err(|e| Error::Database(format!("replace delete refs: {e}")))?;
 
         for sym in &symbols {
             conn.execute(
@@ -1678,7 +1661,11 @@ mod integrity_tests {
         // Plant a file that looks like SQLite but isn't. Any bytes
         // past the SQLite magic that don't form a valid page → the
         // first query fails integrity_check.
-        std::fs::write(&path, b"SQLite format 3\0and then garbage that breaks pages").unwrap();
+        std::fs::write(
+            &path,
+            b"SQLite format 3\0and then garbage that breaks pages",
+        )
+        .unwrap();
 
         let err = match ScipGraph::open_with_integrity(&path, "test") {
             Ok(_) => panic!("open should have failed"),
@@ -1759,7 +1746,10 @@ mod integrity_tests {
         assert!(first.is_some(), "first acquire should succeed");
 
         let second = ScipGraph::try_rebuild_lock(tmp.path()).unwrap();
-        assert!(second.is_none(), "second acquire must not succeed while first is held");
+        assert!(
+            second.is_none(),
+            "second acquire must not succeed while first is held"
+        );
 
         drop(first);
         let third = ScipGraph::try_rebuild_lock(tmp.path()).unwrap();
@@ -1881,7 +1871,12 @@ mod integrity_tests {
         let path = tmp.path().join("scip_graph.db");
         let g = ScipGraph::open_with_integrity(&path, "test").unwrap();
 
-        g.record_rebuild("fs_change", Some("abc123"), Some(r#"[{"lang":"rust","ok":true}]"#)).await;
+        g.record_rebuild(
+            "fs_change",
+            Some("abc123"),
+            Some(r#"[{"lang":"rust","ok":true}]"#),
+        )
+        .await;
 
         assert_eq!(g.last_indexed_head().await.as_deref(), Some("abc123"));
         let conn = g.conn.lock().await;
@@ -2239,7 +2234,7 @@ mod tests {
                 vec![ScipSymbolRecord {
                     name: "my_crate::module::my_fn".into(),
                     qualified_name: String::new(),
-                kind: "function".into(),
+                    kind: "function".into(),
                     file_path: "src/lib.rs".into(),
                     line_start: 1,
                     line_end: 10,
@@ -2307,9 +2302,16 @@ mod tests {
 
         // blast_radius of issue_token_pair should find login_handler and refresh_handler.
         let result = graph.blast_radius("issue_token_pair", 1, 50).await.unwrap();
-        let names: Vec<&str> = result.entries.iter().map(|e| e.symbol_name.as_str()).collect();
+        let names: Vec<&str> = result
+            .entries
+            .iter()
+            .map(|e| e.symbol_name.as_str())
+            .collect();
         assert!(names.contains(&"login_handler"), "expected login_handler");
-        assert!(names.contains(&"refresh_handler"), "expected refresh_handler");
+        assert!(
+            names.contains(&"refresh_handler"),
+            "expected refresh_handler"
+        );
         assert!(!result.capped);
         assert_eq!(result.depth_reached, 1);
     }
@@ -2420,7 +2422,10 @@ mod tests {
             .await
             .unwrap();
 
-        let rows = graph.symbols_in_file("src/middleware/auth.rs").await.unwrap();
+        let rows = graph
+            .symbols_in_file("src/middleware/auth.rs")
+            .await
+            .unwrap();
         let names: Vec<&str> = rows.iter().map(|r| r.name.as_str()).collect();
         assert_eq!(names, vec!["auth_middleware", "extract_bearer_token"]);
 

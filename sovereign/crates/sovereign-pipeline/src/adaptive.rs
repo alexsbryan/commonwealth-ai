@@ -64,12 +64,7 @@ pub enum Outcome {
 /// yet understand the shape of.
 pub fn outcome_from_bucket(bucket: &str) -> Outcome {
     match bucket {
-        "timeout"
-        | "refused"
-        | "vram_thrash"
-        | "gpu_vulkan"
-        | "gpu_rocm"
-        | "inference_5xx"
+        "timeout" | "refused" | "vram_thrash" | "gpu_vulkan" | "gpu_rocm" | "inference_5xx"
         | "daemon_down" => Outcome::ElasticFail,
         _ => Outcome::NonElasticFail,
     }

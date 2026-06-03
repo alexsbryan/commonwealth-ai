@@ -277,12 +277,12 @@ pub async fn score_facts_judge(
             tool_choice: None,
             model_id: None,
             enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
 
         match inference.complete(&request).await {
@@ -496,12 +496,12 @@ pub async fn score_sources_loose(
         tool_choice: None,
         model_id: None,
         enable_thinking: None,
-    sampling_mode: None,
-    assistant_prefix: None,
-    cmd_prefix: None,
-    url_allowlist: None,
-    evidence_id_allowlist: None,
-    lark_grammar: None,
+        sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
     };
 
     let mut all_matched = rigid.matched.clone();
@@ -518,10 +518,8 @@ pub async fn score_sources_loose(
     match inference.complete(&request).await {
         Ok(resp) => match parse_loose_credit(&resp.text) {
             Some((credited, rationale)) => {
-                let credit_set: std::collections::HashSet<String> = credited
-                    .iter()
-                    .map(|s| s.to_lowercase())
-                    .collect();
+                let credit_set: std::collections::HashSet<String> =
+                    credited.iter().map(|s| s.to_lowercase()).collect();
                 let mut new_missing = Vec::new();
                 for src in &rigid.missing {
                     let loose = credit_set.contains(&src.to_lowercase());
@@ -821,12 +819,12 @@ pub async fn score_essay_readiness(
         tool_choice: None,
         model_id: judge_model_override,
         enable_thinking: None,
-    sampling_mode: None,
-    assistant_prefix: None,
-    cmd_prefix: None,
-    url_allowlist: None,
-    evidence_id_allowlist: None,
-    lark_grammar: None,
+        sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
     };
 
     match inference.complete(&request).await {
@@ -905,18 +903,21 @@ mod tests {
     #[test]
     fn source_match_reports_missing() {
         let retrieved = vec![chunk("Niels Bohr", "...")];
-        let s = score_sources(
-            &["Albert Einstein".into(), "Niels Bohr".into()],
-            &retrieved,
-        );
+        let s = score_sources(&["Albert Einstein".into(), "Niels Bohr".into()], &retrieved);
         assert_eq!(s.matched, vec!["Niels Bohr".to_string()]);
         assert_eq!(s.missing, vec!["Albert Einstein".to_string()]);
     }
 
     #[test]
     fn fact_match_requires_all_tokens() {
-        let retrieved = vec![chunk("Einstein", "Einstein discovered photoelectric effect in 1905.")];
-        let s = score_facts(&["photoelectric effect".into(), "Brownian motion".into()], &retrieved);
+        let retrieved = vec![chunk(
+            "Einstein",
+            "Einstein discovered photoelectric effect in 1905.",
+        )];
+        let s = score_facts(
+            &["photoelectric effect".into(), "Brownian motion".into()],
+            &retrieved,
+        );
         assert_eq!(s.matched, vec!["photoelectric effect".to_string()]);
         assert_eq!(s.missing, vec!["Brownian motion".to_string()]);
     }

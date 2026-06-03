@@ -64,8 +64,8 @@ impl Fixture {
         std::fs::write(root.join("web/store.ts"), STORE_TS).unwrap();
 
         // Backdate executor.rs to 30 days ago for mtime tests (T-10).
-        let thirty_days_ago = std::time::SystemTime::now()
-            - std::time::Duration::from_secs(30 * 24 * 3600);
+        let thirty_days_ago =
+            std::time::SystemTime::now() - std::time::Duration::from_secs(30 * 24 * 3600);
         let ft = filetime::FileTime::from_system_time(thirty_days_ago);
         filetime::set_file_mtime(root.join("src/executor.rs"), ft).unwrap();
 
@@ -163,7 +163,12 @@ vector = false
     }
 
     async fn symbol(&self, name: &str) -> String {
-        text(&self.sym.execute(&serde_json::json!({ "name": name }), &self.ctx()).await)
+        text(
+            &self
+                .sym
+                .execute(&serde_json::json!({ "name": name }), &self.ctx())
+                .await,
+        )
     }
 
     async fn symbol_kind(&self, name: &str, kind: &str) -> String {
@@ -380,8 +385,7 @@ async fn t04_unknown_symbol_graceful() {
     let result = fx.symbol("nonexistent_symbol_xyz_987").await;
 
     assert!(
-        result.to_lowercase().contains("no symbol")
-            || result.to_lowercase().contains("not found"),
+        result.to_lowercase().contains("no symbol") || result.to_lowercase().contains("not found"),
         "Expected not-found message: {result}"
     );
     assert!(
@@ -396,8 +400,7 @@ async fn t05_kind_filter_is_enforced() {
     let result = fx.symbol_kind("validate_plan", "struct").await;
 
     assert!(
-        result.to_lowercase().contains("no symbol")
-            || !result.contains("validate_plan"),
+        result.to_lowercase().contains("no symbol") || !result.contains("validate_plan"),
         "Kind filter not enforced — function returned for struct query: {result}"
     );
 }
@@ -467,18 +470,13 @@ async fn t08_approximate_label_always_present() {
 #[tokio::test]
 async fn t09_empty_search_graceful() {
     let fx = Fixture::setup().await;
-    let result = fx
-        .search_code_lang("xyzzy frobnicate quux", "ruby")
-        .await;
+    let result = fx.search_code_lang("xyzzy frobnicate quux", "ruby").await;
 
     assert!(
         !result.contains("ERROR"),
         "Empty search produced an error: {result}"
     );
-    assert!(
-        !result.is_empty(),
-        "Empty search produced an empty string"
-    );
+    assert!(!result.is_empty(), "Empty search produced an empty string");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -635,8 +633,8 @@ fn percentile(times: &[u128], p: usize) -> u128 {
 // ═══════════════════════════════════════════════════════════════
 
 use arc_swap::ArcSwap;
+use corpus_engine_scip::scip_graph::{ScipGraph, ScipRefRecord, ScipSymbolRecord};
 use sovereign_tools::{FindCalleesTool, FindCallersTool, ScipGraphHandle};
-use corpus_engine_scip::scip_graph::{ScipGraph, ScipSymbolRecord, ScipRefRecord};
 
 struct AuthFixture {
     #[allow(dead_code)]
@@ -785,7 +783,12 @@ vector = false
     }
 
     async fn symbol_lookup(&self, name: &str) -> String {
-        text(&self.sym.execute(&serde_json::json!({ "name": name }), &self.ctx()).await)
+        text(
+            &self
+                .sym
+                .execute(&serde_json::json!({ "name": name }), &self.ctx())
+                .await,
+        )
     }
 
     async fn code_search(&self, query: &str) -> String {
@@ -802,14 +805,44 @@ vector = false
 
 fn auth_demo_symbols() -> Vec<ScipSymbolRecord> {
     vec![
-        sym("auth_middleware", "function", "src/middleware/auth.rs", 1, 15),
-        sym("extract_bearer_token", "function", "src/middleware/auth.rs", 17, 25),
-        sym("validate_access_token", "function", "src/auth/tokens.rs", 1, 10),
+        sym(
+            "auth_middleware",
+            "function",
+            "src/middleware/auth.rs",
+            1,
+            15,
+        ),
+        sym(
+            "extract_bearer_token",
+            "function",
+            "src/middleware/auth.rs",
+            17,
+            25,
+        ),
+        sym(
+            "validate_access_token",
+            "function",
+            "src/auth/tokens.rs",
+            1,
+            10,
+        ),
         sym("issue_token_pair", "function", "src/auth/tokens.rs", 12, 20),
         sym("decode_jwt", "function", "src/auth/tokens.rs", 22, 28),
         sym("sign_jwt", "function", "src/auth/tokens.rs", 30, 36),
-        sym("refresh_if_expired", "function", "src/auth/refresh.rs", 1, 12),
-        sym("rotate_refresh_token", "function", "src/auth/refresh.rs", 14, 22),
+        sym(
+            "refresh_if_expired",
+            "function",
+            "src/auth/refresh.rs",
+            1,
+            12,
+        ),
+        sym(
+            "rotate_refresh_token",
+            "function",
+            "src/auth/refresh.rs",
+            14,
+            22,
+        ),
         sym("login_handler", "function", "src/routes/auth.rs", 1, 10),
         sym("refresh_handler", "function", "src/routes/auth.rs", 12, 20),
         sym("verify_password", "function", "src/routes/auth.rs", 22, 28),
@@ -834,15 +867,50 @@ fn sym(name: &str, kind: &str, file: &str, start: i32, end: i32) -> ScipSymbolRe
 fn auth_demo_refs() -> Vec<ScipRefRecord> {
     vec![
         // auth_middleware calls:
-        refr("auth_middleware", "extract_bearer_token", "src/middleware/auth.rs", 5),
-        refr("auth_middleware", "validate_access_token", "src/middleware/auth.rs", 6),
-        refr("auth_middleware", "find_by_email", "src/middleware/auth.rs", 7),
+        refr(
+            "auth_middleware",
+            "extract_bearer_token",
+            "src/middleware/auth.rs",
+            5,
+        ),
+        refr(
+            "auth_middleware",
+            "validate_access_token",
+            "src/middleware/auth.rs",
+            6,
+        ),
+        refr(
+            "auth_middleware",
+            "find_by_email",
+            "src/middleware/auth.rs",
+            7,
+        ),
         // validate_access_token calls:
-        refr("validate_access_token", "decode_jwt", "src/auth/tokens.rs", 3),
-        refr("validate_access_token", "refresh_if_expired", "src/auth/tokens.rs", 5),
+        refr(
+            "validate_access_token",
+            "decode_jwt",
+            "src/auth/tokens.rs",
+            3,
+        ),
+        refr(
+            "validate_access_token",
+            "refresh_if_expired",
+            "src/auth/tokens.rs",
+            5,
+        ),
         // refresh_if_expired calls:
-        refr("refresh_if_expired", "rotate_refresh_token", "src/auth/refresh.rs", 6),
-        refr("refresh_if_expired", "issue_token_pair", "src/auth/refresh.rs", 7),
+        refr(
+            "refresh_if_expired",
+            "rotate_refresh_token",
+            "src/auth/refresh.rs",
+            6,
+        ),
+        refr(
+            "refresh_if_expired",
+            "issue_token_pair",
+            "src/auth/refresh.rs",
+            7,
+        ),
         // issue_token_pair calls:
         refr("issue_token_pair", "sign_jwt", "src/auth/tokens.rs", 14),
         // login_handler calls:
@@ -850,8 +918,18 @@ fn auth_demo_refs() -> Vec<ScipRefRecord> {
         refr("login_handler", "verify_password", "src/routes/auth.rs", 4),
         refr("login_handler", "issue_token_pair", "src/routes/auth.rs", 5),
         // refresh_handler calls:
-        refr("refresh_handler", "rotate_refresh_token", "src/routes/auth.rs", 14),
-        refr("refresh_handler", "issue_token_pair", "src/routes/auth.rs", 15),
+        refr(
+            "refresh_handler",
+            "rotate_refresh_token",
+            "src/routes/auth.rs",
+            14,
+        ),
+        refr(
+            "refresh_handler",
+            "issue_token_pair",
+            "src/routes/auth.rs",
+            15,
+        ),
         // register_user calls:
         refr("register_user", "find_by_email", "src/routes/users.rs", 10),
         refr("register_user", "create_user", "src/routes/users.rs", 15),
@@ -1038,8 +1116,7 @@ async fn t21_find_callees_correct() {
     // auth_middleware calls extract_bearer_token, validate_access_token,
     // find_by_email (as find_user_by_id proxy)
     assert!(
-        result.contains("extract_bearer_token")
-            || result.contains("validate_access_token"),
+        result.contains("extract_bearer_token") || result.contains("validate_access_token"),
         "find_callees missing known callees of auth_middleware: {result}"
     );
 
@@ -1095,7 +1172,10 @@ async fn t24_staleness_note_after_file_modification() {
     let h = AuthFixture::setup().await;
 
     // Mark a file as stale — simulating what CodeWatcher would do.
-    h.graph.load_full().mark_file_stale("src/auth/tokens.rs").await;
+    h.graph
+        .load_full()
+        .mark_file_stale("src/auth/tokens.rs")
+        .await;
 
     // Query a symbol whose callees include that file — should show
     // staleness note.
@@ -1119,7 +1199,9 @@ async fn t24_staleness_note_after_file_modification() {
 async fn t25_demo_auth_surface_discovery() {
     let h = AuthFixture::setup().await;
 
-    let result = h.code_search("OAuth JWT token authentication middleware").await;
+    let result = h
+        .code_search("OAuth JWT token authentication middleware")
+        .await;
 
     // Must surface at least one auth entry point.
     let found_entry_points = result.contains("auth_middleware")
@@ -1331,13 +1413,11 @@ vector = false
              intelligence tools — symbols, code_search, recent_changes — \
              skip Knowledge-kind corpora rather than attempting to query \
              their chunks tables on typed code columns that do not exist. \
-             Pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad."
+             Pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad.",
         ]);
-        let batch = ArrowRecordBatch::try_new(
-            schema.clone(),
-            vec![Arc::new(titles), Arc::new(texts)],
-        )
-        .expect("build record batch");
+        let batch =
+            ArrowRecordBatch::try_new(schema.clone(), vec![Arc::new(titles), Arc::new(texts)])
+                .expect("build record batch");
         let file = std::fs::File::create(&parquet_path).expect("create parquet");
         let mut writer = ArrowWriter::try_new(file, schema, None).expect("arrow writer");
         writer.write(&batch).expect("write batch");
@@ -1395,11 +1475,10 @@ embedding_dimensions = 8
     );
 
     // ── Run the three tools. Each must succeed (no Lance error). ─
-    let mixed_graph: sovereign_tools::ScipGraphHandle =
-        Arc::new(arc_swap::ArcSwap::from_pointee(
-            corpus_engine_scip::ScipGraph::open_in_memory("mixed")
-                .expect("in-memory ScipGraph for mixed-corpora test"),
-        ));
+    let mixed_graph: sovereign_tools::ScipGraphHandle = Arc::new(arc_swap::ArcSwap::from_pointee(
+        corpus_engine_scip::ScipGraph::open_in_memory("mixed")
+            .expect("in-memory ScipGraph for mixed-corpora test"),
+    ));
     let sym = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&mixed_graph));
     let search = CodeSearchTool::new(Arc::clone(&engine));
     let recent = RecentChangesTool::new(Arc::clone(&engine));

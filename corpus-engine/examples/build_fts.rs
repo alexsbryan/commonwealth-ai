@@ -32,9 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Building FTS indexes (vector skipped)...");
     index
         .build_indexes(
-            /* build_vector */ false,
-            /* build_fts */ true,
-            None,
+            /* build_vector */ false, /* build_fts */ true, None,
         )
         .await?;
     index.mark_ingestion_complete()?;

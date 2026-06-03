@@ -163,7 +163,10 @@ pub(crate) fn format_scored_chunks_with_kinds(
                 &mut folder_parts,
             )
         } else if is_catalog {
-            (format!("[Catalog: {title}{contested_suffix}]"), &mut catalog_parts)
+            (
+                format!("[Catalog: {title}{contested_suffix}]"),
+                &mut catalog_parts,
+            )
         } else if c.url.is_some() {
             (format!("[Web: {title}{contested_suffix}]"), &mut web_parts)
         } else if let Some(axis) = articulation_tag {
@@ -182,7 +185,10 @@ pub(crate) fn format_scored_chunks_with_kinds(
                 bucket,
             )
         } else {
-            (format!("[Source: {title}{contested_suffix}]"), &mut corpus_parts)
+            (
+                format!("[Source: {title}{contested_suffix}]"),
+                &mut corpus_parts,
+            )
         };
 
         let part = format!("{label}\n{content}");
@@ -305,11 +311,7 @@ pub(crate) fn build_provenance_components(
         })
         .collect();
     // Stable order so message-metadata diffs and tests don't churn.
-    sources.sort_by(|a, b| {
-        b.count
-            .cmp(&a.count)
-            .then_with(|| a.origin.cmp(&b.origin))
-    });
+    sources.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.origin.cmp(&b.origin)));
 
     let mut thin_folders: Vec<ThinFolder> = source_map
         .iter()
@@ -404,10 +406,7 @@ pub(crate) fn build_coverage_gaps_note(
             ));
         }
         if m.failed_count > 0 {
-            bits.push(format!(
-                "{} files we couldn't extract",
-                m.failed_count
-            ));
+            bits.push(format!("{} files we couldn't extract", m.failed_count));
         }
         lines.push(format!(
             "- Their \"{}\" folder has {}.",
@@ -479,10 +478,7 @@ mod folder_attribution_tests {
         source_map.insert("folder_thin".into(), 1);
         source_map.insert("sep".into(), 12); // non-folder, irrelevant to chip
         let mut folder_meta: HashMap<String, FolderMetadata> = HashMap::new();
-        folder_meta.insert(
-            "folder_thin".into(),
-            folder("Research Notes", 0, 0, &[]),
-        );
+        folder_meta.insert("folder_thin".into(), folder("Research Notes", 0, 0, &[]));
 
         let (_sources, coverage) =
             build_provenance_components(&source_map, &HashMap::new(), &folder_meta, None);
@@ -499,12 +495,8 @@ mod folder_attribution_tests {
         source_map.insert("sep".into(), 1);
         source_map.insert("wikipedia".into(), 0);
         // No folder_meta entries.
-        let (_, coverage) = build_provenance_components(
-            &source_map,
-            &HashMap::new(),
-            &HashMap::new(),
-            None,
-        );
+        let (_, coverage) =
+            build_provenance_components(&source_map, &HashMap::new(), &HashMap::new(), None);
         assert!(
             coverage.is_none(),
             "non-folder corpora returning thin retrieval must NOT surface a chip"
@@ -520,7 +512,10 @@ mod folder_attribution_tests {
             folder("Case Files", 2, 9, &["pages", "key"]),
         );
         let note = build_coverage_gaps_note(&chunks, &folder_meta);
-        assert!(note.contains("\"Case Files\""), "must name the folder: {note}");
+        assert!(
+            note.contains("\"Case Files\""),
+            "must name the folder: {note}"
+        );
         assert!(
             note.contains("9 files in unsupported formats"),
             "must enumerate skipped count: {note}"
@@ -555,7 +550,10 @@ mod folder_attribution_tests {
         let note = build_coverage_gaps_note(&chunks, &folder_meta);
         // Highest-magnitude folder must appear; one of the smaller two
         // is dropped to keep the prompt overhead bounded.
-        assert!(note.contains("\"Ccc\""), "highest-gap folder must be present: {note}");
+        assert!(
+            note.contains("\"Ccc\""),
+            "highest-gap folder must be present: {note}"
+        );
         let appears = ["\"Aaa\"", "\"Bbb\""]
             .iter()
             .filter(|s| note.contains(*s))
@@ -579,7 +577,13 @@ mod formatter_stream_section_tests {
     use corpus_engine::ScoredChunk;
     use std::collections::HashMap;
 
-    fn chunk(corpus: &str, title: &str, content: &str, axis: Option<&str>, stab: Option<&str>) -> ScoredChunk {
+    fn chunk(
+        corpus: &str,
+        title: &str,
+        content: &str,
+        axis: Option<&str>,
+        stab: Option<&str>,
+    ) -> ScoredChunk {
         let mut metadata = HashMap::new();
         if let Some(a) = axis {
             metadata.insert("articulation".into(), a.into());
@@ -631,7 +635,9 @@ mod formatter_stream_section_tests {
         assert!(out.contains("## Lived practice (traces)"));
         // Each section's header includes [corpus_id ... · stability].
         assert!(out.contains("[wikipedia: Albert Einstein · frozen]"));
-        assert!(out.contains("[sep-einstein-philscience: Einstein's Philosophy of Science · frozen]"));
+        assert!(
+            out.contains("[sep-einstein-philscience: Einstein's Philosophy of Science · frozen]")
+        );
         assert!(out.contains("[conversation-history: Yesterday's discussion · rolling]"));
         // Catch-all bucket is NOT rendered (no untagged corpus chunks).
         assert!(!out.contains("## From knowledge base"));
@@ -639,13 +645,7 @@ mod formatter_stream_section_tests {
 
     #[test]
     fn untagged_chunks_fall_through_to_catch_all() {
-        let chunks = vec![chunk(
-            "wikipedia",
-            "Some article",
-            "Body",
-            None,
-            None,
-        )];
+        let chunks = vec![chunk("wikipedia", "Some article", "Body", None, None)];
         let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None, None);
         assert!(out.contains("## From knowledge base"));
         assert!(!out.contains("## Broad map"));

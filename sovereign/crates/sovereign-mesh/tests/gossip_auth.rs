@@ -38,10 +38,7 @@ use common::{member_with_last_seen as member, spawn_router};
 /// Build a founder AppState pinned to (mesh_id, join_key_hash) +
 /// install a counter-incrementing mesh-mutation hook so the test
 /// can assert the hook does NOT fire on rejected payloads.
-fn build_founder(
-    mesh_id: MeshId,
-    join_key_hash: [u8; 32],
-) -> (AppState, NodeId, Arc<AtomicUsize>) {
+fn build_founder(mesh_id: MeshId, join_key_hash: [u8; 32]) -> (AppState, NodeId, Arc<AtomicUsize>) {
     let founder_id = NodeId::from_u128(0xCAFE_BABE_CAFE_BABE);
     let mut members = HashMap::new();
     members.insert(
@@ -113,8 +110,18 @@ async fn wrong_mesh_id_rejects_with_401_and_no_mutation() {
         mesh_b, // ← mismatching mesh_id
         hash,
         vec![
-            member(founder_id, "Founder", 100, "127.0.0.1:9742".parse().unwrap()),
-            member(intruder, "Intruder", 200, "192.168.1.99:9742".parse().unwrap()),
+            member(
+                founder_id,
+                "Founder",
+                100,
+                "127.0.0.1:9742".parse().unwrap(),
+            ),
+            member(
+                intruder,
+                "Intruder",
+                200,
+                "192.168.1.99:9742".parse().unwrap(),
+            ),
         ],
     );
 
@@ -172,8 +179,18 @@ async fn wrong_join_key_hash_rejects_with_401_and_no_mutation() {
         mesh_id,
         fake_hash, // ← mismatching hash
         vec![
-            member(founder_id, "Founder", 100, "127.0.0.1:9742".parse().unwrap()),
-            member(intruder, "Intruder", 200, "192.168.1.99:9742".parse().unwrap()),
+            member(
+                founder_id,
+                "Founder",
+                100,
+                "127.0.0.1:9742".parse().unwrap(),
+            ),
+            member(
+                intruder,
+                "Intruder",
+                200,
+                "192.168.1.99:9742".parse().unwrap(),
+            ),
         ],
     );
 
@@ -217,7 +234,12 @@ async fn matching_credentials_accept_new_member_and_fire_hook() {
         mesh_id,
         hash,
         vec![
-            member(founder_id, "Founder", 100, "127.0.0.1:9742".parse().unwrap()),
+            member(
+                founder_id,
+                "Founder",
+                100,
+                "127.0.0.1:9742".parse().unwrap(),
+            ),
             member(newcomer, "Newcomer", 200, "10.0.0.5:9742".parse().unwrap()),
         ],
     );

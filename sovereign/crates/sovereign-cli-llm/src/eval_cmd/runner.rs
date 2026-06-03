@@ -24,16 +24,13 @@ use std::time::Instant;
 
 use corpus_engine::enrichment::atlas::{
     atoms_content_hash, read_atlas_atoms, read_atlas_edges, read_atlas_embeddings,
-    write_atlas_embeddings, AtomEnvelope, CachedAtlasEntry, EdgeType,
-    ATLAS_DIRNAME,
+    write_atlas_embeddings, AtomEnvelope, CachedAtlasEntry, EdgeType, ATLAS_DIRNAME,
 };
 use corpus_engine::ScoredChunk;
-use std::collections::{HashMap, HashSet};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
-use sovereign_core::atlas_context::{
-    atlas_top_k_across, cosine, AtlasContext, AtlasEntry,
-};
+use sovereign_core::atlas_context::{atlas_top_k_across, cosine, AtlasContext, AtlasEntry};
+use std::collections::{HashMap, HashSet};
 
 use crate::chat_cmd::bootstrap::ChatSession;
 use crate::chat_cmd::render::split_reasoning;
@@ -342,7 +339,7 @@ async fn run_question_routing(session: &ChatSession, q: &Question) -> RoutingRes
             deleted_at: None,
             skill_id: None,
             enabled_corpora: None,
-        searched_sources: None,
+            searched_sources: None,
         },
         memories: vec![],
         working_memory: None,
@@ -351,10 +348,10 @@ async fn run_question_routing(session: &ChatSession, q: &Question) -> RoutingRes
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
-            compacted_history: None,
-            history_retrieval_hits: None,
-            tool_dossier: None,
-            intent_policy: None,
+        compacted_history: None,
+        history_retrieval_hits: None,
+        tool_dossier: None,
+        intent_policy: None,
     };
 
     // Expose a `web_search` tool descriptor so the router's
@@ -552,9 +549,8 @@ pub(crate) fn endpoint_text(atom: Option<&AtomEnvelope>, atom_id: &str) -> Strin
 // `sovereign_core::atlas_context` — single canonical implementation
 // shared by the eval CLI and the production daemon
 // (`AtlasContextManager`).
-pub use sovereign_core::atlas_context::AtlasGraph;
 pub use sovereign_core::atlas_context::atlas_navigate;
-
+pub use sovereign_core::atlas_context::AtlasGraph;
 
 /// Filters applied during atlas-context loading. Used to keep the
 /// embed pass tractable on large atlases (e.g. wiki-l5-* has 50K+
@@ -677,14 +673,11 @@ pub async fn load_atlas_context(
         }
         Ok(None) => {} // soft miss; fall through to embed
         Err(e) => {
-            eprintln!(
-                "atlas-context: cache read error ({e}) — re-embedding from atoms.json"
-            );
+            eprintln!("atlas-context: cache read error ({e}) — re-embedding from atoms.json");
         }
     }
 
-    let atoms = read_atlas_atoms(&atlas_dir)
-        .map_err(|e| format!("read atlas atoms.json: {e}"))?;
+    let atoms = read_atlas_atoms(&atlas_dir).map_err(|e| format!("read atlas atoms.json: {e}"))?;
 
     // Build embed-text per Entity, applying filters. Counters track
     // why each entity was kept or dropped so the pre-embed log is
@@ -820,8 +813,7 @@ pub async fn load_atlas_context(
                         continue;
                     }
                 }
-                let mut text =
-                    format!("[Configuration: {}] {}", cfg.label, cfg.description);
+                let mut text = format!("[Configuration: {}] {}", cfg.label, cfg.description);
                 if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
                     text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
                 }
@@ -900,11 +892,8 @@ pub async fn load_atlas_context(
         // resolves two endpoints. Cheap — atlases are at most a few
         // thousand atoms.
         use std::collections::HashMap;
-        let atoms_by_id: HashMap<&str, &AtomEnvelope> = atoms
-            .atoms
-            .iter()
-            .map(|a| (a.id().as_str(), a))
-            .collect();
+        let atoms_by_id: HashMap<&str, &AtomEnvelope> =
+            atoms.atoms.iter().map(|a| (a.id().as_str(), a)).collect();
         match read_atlas_edges(&atlas_dir) {
             Ok(edges_file) => {
                 for edge in &edges_file.edges {
@@ -1210,7 +1199,11 @@ async fn run_question(
         // (same articles, different positions). With a wider pool,
         // atlas can actually rescue topically-aligned chunks lance
         // ranked just outside the limit.
-        let search_limit = if !atlases.is_empty() { limit * 3 } else { limit };
+        let search_limit = if !atlases.is_empty() {
+            limit * 3
+        } else {
+            limit
+        };
         // Route through `search_with_rerank` so a runtime-wired
         // cross-encoder reranker actually fires on this path (the
         // eval bypasses `Runtime::search_corpus_indexes`). When no
@@ -1258,14 +1251,22 @@ async fn run_question(
     // density is highest in the question's atom-vicinity. Those
     // chunks are then fetched via FTS-by-passage_preview against the
     // SEP corpus, restricted to the atom's article.
-    let atlas_chunk_requests = if !atlases.is_empty() && !graphs.is_empty() && !embedding.is_empty() {
+    let atlas_chunk_requests = if !atlases.is_empty() && !graphs.is_empty() && !embedding.is_empty()
+    {
         // Seeds: top-12 atom matches across all atlases (more than
         // the operator's atlas-top-k since seeds drive expansion;
         // many seeds → broader neighborhood).
         let max_seeds = atlases.first().map(|c| c.top_k).unwrap_or(3).max(12);
         let ctx_refs: Vec<&AtlasContext> = atlases.iter().collect();
         let graph_refs: Vec<&AtlasGraph> = graphs.iter().collect();
-        atlas_navigate(&q.question, &embedding, &ctx_refs, &graph_refs, max_seeds, /*max_hops=*/ 2)
+        atlas_navigate(
+            &q.question,
+            &embedding,
+            &ctx_refs,
+            &graph_refs,
+            max_seeds,
+            /*max_hops=*/ 2,
+        )
     } else {
         Vec::new()
     };
@@ -1330,9 +1331,7 @@ async fn run_question(
     let mut article_excerpts: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
     for req in &atlas_chunk_requests {
-        let s = article_score
-            .entry(req.article_slug.clone())
-            .or_insert(0.0);
+        let s = article_score.entry(req.article_slug.clone()).or_insert(0.0);
         if req.score > *s {
             *s = req.score;
         }
@@ -1358,9 +1357,11 @@ async fn run_question(
                 .filter(|s| s.starts_with("Argument:"))
                 .collect();
             prioritised.extend(req.verbatim_excerpts.iter().filter(is_contested));
-            prioritised.extend(req.verbatim_excerpts.iter().filter(|s| {
-                !s.starts_with("Argument:") && !is_contested(s)
-            }));
+            prioritised.extend(
+                req.verbatim_excerpts
+                    .iter()
+                    .filter(|s| !s.starts_with("Argument:") && !is_contested(s)),
+            );
             for ex in prioritised {
                 if bucket.len() >= 8 {
                     break;
@@ -1371,8 +1372,7 @@ async fn run_question(
             }
         }
     }
-    let mut articles_ranked: Vec<(String, f32)> =
-        article_score.into_iter().collect();
+    let mut articles_ranked: Vec<(String, f32)> = article_score.into_iter().collect();
     articles_ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     articles_ranked.truncate(atlas_fetch_budget);
 
@@ -1410,11 +1410,7 @@ async fn run_question(
                 if hit.title.as_deref() != Some(article_slug.as_str()) {
                     continue;
                 }
-                let dedupe_key = format!(
-                    "{}|{}",
-                    article_slug,
-                    truncate(&hit.content, 80)
-                );
+                let dedupe_key = format!("{}|{}", article_slug, truncate(&hit.content, 80));
                 if !atlas_internal_seen.insert(dedupe_key) {
                     continue;
                 }
@@ -1480,7 +1476,11 @@ async fn run_question(
     // lance's question-direct retrieval AND atlas's article-
     // targeted supplement. Judge prompt grows by ~2K chars per
     // question; well within the fast slot's budget.
-    all_hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    all_hits.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     all_hits.truncate(limit);
 
     // Dedup atlas chunks against lance's retained set.
@@ -1544,16 +1544,14 @@ async fn run_question(
             .iter()
             .map(|h| {
                 let mut filtered = h.clone();
-                filtered.content =
-                    attribution::filter_chunk_content(&h.content, attribution_mode);
+                filtered.content = attribution::filter_chunk_content(&h.content, attribution_mode);
                 filtered
             })
             .collect()
     };
     let rigid_source = score_sources(&q.expected_sources, &hits_for_scoring);
     let source_score: ScoreSnapshot = rigid_source.clone().into();
-    let fact_score: ScoreSnapshot =
-        score_facts(&q.expected_facts, &hits_for_scoring).into();
+    let fact_score: ScoreSnapshot = score_facts(&q.expected_facts, &hits_for_scoring).into();
 
     // 3b. Loose-judge source scoring (Option A). Opt-in via
     //     `--loose-source-judge`. Adds an LLM pass that looks at the
@@ -1564,19 +1562,21 @@ async fn run_question(
     //     only lifts it. Audit detail per source lands in
     //     `loose_source_evidence` so a reviewer can verify each
     //     loose-credit decision without re-running.
-    let (loose_source_score, loose_source_evidence): (Option<ScoreSnapshot>, Vec<JudgeSourceDetail>) =
-        if loose_source_judge && !q.expected_sources.is_empty() {
-            let (loose, details) = score_sources_loose(
-                &q.question,
-                &rigid_source,
-                &hits_for_scoring,
-                session.inference.as_ref(),
-            )
-            .await;
-            (Some(loose.into()), details)
-        } else {
-            (None, Vec::new())
-        };
+    let (loose_source_score, loose_source_evidence): (
+        Option<ScoreSnapshot>,
+        Vec<JudgeSourceDetail>,
+    ) = if loose_source_judge && !q.expected_sources.is_empty() {
+        let (loose, details) = score_sources_loose(
+            &q.question,
+            &rigid_source,
+            &hits_for_scoring,
+            session.inference.as_ref(),
+        )
+        .await;
+        (Some(loose.into()), details)
+    } else {
+        (None, Vec::new())
+    };
 
     // 3c. Essay-readiness multi-axis judge (Option C). Opt-in via
     //     `--essay-judge`. Asks the LLM whether the retrieved set is
@@ -1934,10 +1934,7 @@ async fn run_question_synth(
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(str::to_string),
-            url: c
-                .get("url")
-                .and_then(|v| v.as_str())
-                .map(str::to_string),
+            url: c.get("url").and_then(|v| v.as_str()).map(str::to_string),
             score: 0.0,
             snippet: c
                 .get("snippet")
@@ -1966,12 +1963,10 @@ async fn run_question_synth(
             .collect::<Vec<_>>()
             .join("\n")
     };
-    let fact_score: ScoreSnapshot =
-        score_facts_in_text(&q.expected_facts, &visible).into();
+    let fact_score: ScoreSnapshot = score_facts_in_text(&q.expected_facts, &visible).into();
     let chunks_fact_score: ScoreSnapshot =
         score_facts_in_text(&q.expected_facts, &snippet_haystack).into();
-    let source_score: ScoreSnapshot =
-        score_sources_titles(&q.expected_sources, &titles).into();
+    let source_score: ScoreSnapshot = score_sources_titles(&q.expected_sources, &titles).into();
 
     // 8b. Instructor-mode pass — LLM-as-judge concept-conveyed score.
     //     Strict keyword score above is preserved unchanged; this

@@ -131,7 +131,11 @@ pub fn import_design(repo_root: &Path, source: &Path) -> OnboardOutcome {
             "  \u{26a0} {} already exists ({} line{}).",
             target.display(),
             existing.lines().count(),
-            if existing.lines().count() == 1 { "" } else { "s" }
+            if existing.lines().count() == 1 {
+                ""
+            } else {
+                "s"
+            }
         );
         eprintln!(
             "    Importing from {} ({} lines).",
@@ -150,17 +154,11 @@ pub fn import_design(repo_root: &Path, source: &Path) -> OnboardOutcome {
     }
 
     if let Err(e) = fs::write(&target, source_text) {
-        eprintln!(
-            "    \u{2717} Could not write {}: {e}",
-            target.display()
-        );
+        eprintln!("    \u{2717} Could not write {}: {e}", target.display());
         return OnboardOutcome::Cancelled;
     }
 
-    eprintln!(
-        "    \u{2713} DESIGN.md imported from {}.",
-        source.display()
-    );
+    eprintln!("    \u{2713} DESIGN.md imported from {}.", source.display());
     OnboardOutcome::Imported { written: target }
 }
 
@@ -256,7 +254,10 @@ mod tests {
         let out = ensure_template(tmp.path());
         assert!(matches!(out, OnboardOutcome::PreservedExisting { .. }));
         let contents = fs::read_to_string(target).unwrap();
-        assert_eq!(contents, "# mine\n", "existing content must not be clobbered");
+        assert_eq!(
+            contents, "# mine\n",
+            "existing content must not be clobbered"
+        );
     }
 
     #[test]

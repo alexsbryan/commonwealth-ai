@@ -127,10 +127,7 @@ impl EvidenceIdAllowlistConstraint {
     /// Returns `None` if the allowlist is empty — no ids to
     /// constrain → no-op constraint, caller should treat None as
     /// "do not apply".
-    pub fn new(
-        allowed_ids: &[String],
-        vocab_bytes: Arc<Vec<Vec<u8>>>,
-    ) -> Option<Self> {
+    pub fn new(allowed_ids: &[String], vocab_bytes: Arc<Vec<Vec<u8>>>) -> Option<Self> {
         if allowed_ids.is_empty() {
             return None;
         }
@@ -396,10 +393,7 @@ mod tests {
     #[test]
     fn second_id_after_first_completes() {
         let mut c = build(&["ev-T0-0001", "ev-T0-0002"]);
-        assert!(feed(
-            &mut c,
-            "first [ev-T0-0001], then [ev-T0-0002]."
-        ));
+        assert!(feed(&mut c, "first [ev-T0-0001], then [ev-T0-0002]."));
         assert!(!c.in_id_mode());
     }
 
@@ -429,16 +423,8 @@ mod tests {
         // must remain valid.
         let mut data = LlamaTokenDataArray::from_iter(
             vec![
-                crate::llama::cpp::token::data::LlamaTokenData::new(
-                    LlamaToken(0),
-                    0.0,
-                    0.0,
-                ),
-                crate::llama::cpp::token::data::LlamaTokenData::new(
-                    LlamaToken(1),
-                    0.0,
-                    0.0,
-                ),
+                crate::llama::cpp::token::data::LlamaTokenData::new(LlamaToken(0), 0.0, 0.0),
+                crate::llama::cpp::token::data::LlamaTokenData::new(LlamaToken(1), 0.0, 0.0),
             ],
             false,
         );

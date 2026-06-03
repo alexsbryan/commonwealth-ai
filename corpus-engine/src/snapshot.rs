@@ -252,9 +252,8 @@ pub fn default_snapshot_filename(manifest: &SnapshotManifest) -> String {
 pub fn read_local_index_meta(index_dir: &Path) -> Result<LocalIndexMetaSummary> {
     let meta_path = index_dir.join("_corpus_meta.json");
     let bytes = std::fs::read(&meta_path)?;
-    let raw: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| {
-        Error::Serialization(format!("parse {}: {e}", meta_path.display()))
-    })?;
+    let raw: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|e| Error::Serialization(format!("parse {}: {e}", meta_path.display())))?;
     Ok(LocalIndexMetaSummary {
         corpus_id: raw
             .get("corpus_id")
@@ -420,7 +419,11 @@ pub async fn publish_snapshot(opts: PublishOptions) -> Result<PublishOutcome> {
     manifest.source_recipe_sha256 = opts.source_recipe_sha256.clone();
     manifest.residual_gap_pct = opts.residual_gap_pct;
     manifest.notes = opts.notes.clone();
-    manifest.bundled_corpora = opts.sibling_index_dirs.iter().map(|(id, _)| id.clone()).collect();
+    manifest.bundled_corpora = opts
+        .sibling_index_dirs
+        .iter()
+        .map(|(id, _)| id.clone())
+        .collect();
 
     // Anchor a transactional view of any LanceDB datasets under
     // index_dir BEFORE the (slow) tar pass. The view is just a list of
@@ -701,10 +704,7 @@ fn append_lance_snapshot<W: io::Write>(
     //    the "latest version" race trivially.
     let manifest_rel = format!("_versions/{}", view.manifest_filename);
     let manifest_abs = lance_dir.join("_versions").join(&view.manifest_filename);
-    tar.append_path_with_name(
-        &manifest_abs,
-        format!("{archive_prefix}/{manifest_rel}"),
-    )?;
+    tar.append_path_with_name(&manifest_abs, format!("{archive_prefix}/{manifest_rel}"))?;
 
     // 2. Fragment data files. These are content-addressed and immutable
     //    on disk per Lance's storage model, so we can rely on their
@@ -813,7 +813,6 @@ pub fn read_manifest_from_archive(archive_path: &Path) -> Result<SnapshotManifes
         archive_path.display()
     )))
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -960,7 +959,10 @@ mod tests {
         assert!(outcome.archive_size_bytes > 0);
         assert_eq!(outcome.archive_sha256.len(), 64);
         assert!(outcome.manifest.atlas_included);
-        assert_eq!(outcome.manifest.canonical_fingerprint.as_deref(), Some("fp-abc"));
+        assert_eq!(
+            outcome.manifest.canonical_fingerprint.as_deref(),
+            Some("fp-abc")
+        );
 
         let read_back = read_manifest_from_archive(&output_path).unwrap();
         assert_eq!(read_back.corpus_id, "wikitest");
@@ -1154,10 +1156,19 @@ mod tests {
         )
         .unwrap();
         assert_eq!(result.manifest.bundled_corpora.len(), 2);
-        assert!(restore_tmp.path().join("indexes/sep-aristotle/atlas/atoms.json").exists());
-        assert!(restore_tmp.path().join("indexes/sep-descartes/atlas/atoms.json").exists());
+        assert!(restore_tmp
+            .path()
+            .join("indexes/sep-aristotle/atlas/atoms.json")
+            .exists());
+        assert!(restore_tmp
+            .path()
+            .join("indexes/sep-descartes/atlas/atoms.json")
+            .exists());
         // Primary still landed correctly.
-        assert!(restore_tmp.path().join("indexes/sep/_corpus_meta.json").exists());
+        assert!(restore_tmp
+            .path()
+            .join("indexes/sep/_corpus_meta.json")
+            .exists());
     }
 
     #[tokio::test]
@@ -1217,7 +1228,12 @@ mod tests {
         assert!(result.enrichment_dir.is_some());
         assert!(result.index_dir.join("_corpus_meta.json").exists());
         assert!(result.index_dir.join("atlas/_summary.json").exists());
-        assert!(result.enrichment_dir.as_ref().unwrap().join("config.json").exists());
+        assert!(result
+            .enrichment_dir
+            .as_ref()
+            .unwrap()
+            .join("config.json")
+            .exists());
         // The archive-internal manifest must NOT land on disk.
         assert!(!restore_tmp.path().join(SNAPSHOT_MANIFEST_FILENAME).exists());
     }
@@ -1239,18 +1255,33 @@ mod tests {
         .unwrap();
 
         // Rename lands under the target id, not the archive's.
-        assert_eq!(result.index_dir, restore_tmp.path().join("indexes/wikitest-sibling"));
-        assert!(restore_tmp.path().join("indexes/wikitest-sibling/_corpus_meta.json").exists());
-        assert!(restore_tmp.path().join("indexes/wikitest-sibling/atlas/_summary.json").exists());
+        assert_eq!(
+            result.index_dir,
+            restore_tmp.path().join("indexes/wikitest-sibling")
+        );
+        assert!(restore_tmp
+            .path()
+            .join("indexes/wikitest-sibling/_corpus_meta.json")
+            .exists());
+        assert!(restore_tmp
+            .path()
+            .join("indexes/wikitest-sibling/atlas/_summary.json")
+            .exists());
         // Original archive_corpus_id path must NOT be created.
         assert!(!restore_tmp.path().join("indexes/wikitest").exists());
         // Enrichment subtree renamed too.
-        assert!(restore_tmp.path().join("enrichment/wikitest-sibling/config.json").exists());
+        assert!(restore_tmp
+            .path()
+            .join("enrichment/wikitest-sibling/config.json")
+            .exists());
         assert!(!restore_tmp.path().join("enrichment/wikitest").exists());
         // Patched _corpus_meta.json points at the new id.
         let meta = std::fs::read_to_string(result.index_dir.join("_corpus_meta.json")).unwrap();
         let v: serde_json::Value = serde_json::from_str(&meta).unwrap();
-        assert_eq!(v.get("corpus_id").and_then(|x| x.as_str()), Some("wikitest-sibling"));
+        assert_eq!(
+            v.get("corpus_id").and_then(|x| x.as_str()),
+            Some("wikitest-sibling")
+        );
         // The returned manifest still reflects the archive's original id —
         // it's a description of the archive, not of the on-disk state.
         assert_eq!(result.manifest.corpus_id, "wikitest");

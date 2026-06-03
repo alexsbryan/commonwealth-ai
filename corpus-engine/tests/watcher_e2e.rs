@@ -123,12 +123,8 @@ pub struct Node { pub id: String }
         // `with_embedding_model` is a hard precondition of `ingest()`
         // (see `engine/ingest.rs` for the rationale).
         Arc::new(
-            CorpusEngine::new(
-                self.data_dir.join("_recipes"),
-                self.data_dir.clone(),
-                embed,
-            )
-            .with_embedding_model("test-mock"),
+            CorpusEngine::new(self.data_dir.join("_recipes"), self.data_dir.clone(), embed)
+                .with_embedding_model("test-mock"),
         )
     }
 
@@ -171,10 +167,7 @@ vector = false
 
         let engine = self.engine();
         let spec = CorpusSpec::RecipePath(recipe_path);
-        engine
-            .ingest(&spec, None)
-            .await
-            .expect("initial ingest");
+        engine.ingest(&spec, None).await.expect("initial ingest");
     }
 
     /// Open the corpus for in-test assertions.
@@ -231,9 +224,7 @@ async fn t12_new_symbol_findable_after_save() {
     // state can mask the failure.
     let planner = fx.root.join("src/planner.rs");
     let mut content = std::fs::read_to_string(&planner).unwrap();
-    content.push_str(
-        "\npub fn orchestrate_recovery(node_id: &str) {\n    let _ = node_id;\n}\n",
-    );
+    content.push_str("\npub fn orchestrate_recovery(node_id: &str) {\n    let _ = node_id;\n}\n");
     std::fs::write(&planner, content).unwrap();
 
     // Give the watcher time to debounce (300ms) + reindex + write.
@@ -392,4 +383,3 @@ async fn source_path_round_trip() {
         "source_path round trip mismatch"
     );
 }
-

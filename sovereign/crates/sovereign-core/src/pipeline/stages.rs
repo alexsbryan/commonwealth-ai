@@ -205,7 +205,11 @@ impl CuratedPackage {
         }
 
         let mut out = String::with_capacity(
-            self.kept_chunks.iter().map(|c| c.content.len()).sum::<usize>() + 1024,
+            self.kept_chunks
+                .iter()
+                .map(|c| c.content.len())
+                .sum::<usize>()
+                + 1024,
         );
 
         // Chunk catalogue first — addressed by index inside each
@@ -305,10 +309,7 @@ mod tests {
 
     #[test]
     fn format_passthrough_renders_chunks_and_one_section() {
-        let pkg = CuratedPackage::passthrough(
-            vec![chunk(0, "alpha"), chunk(1, "bravo")],
-            512,
-        );
+        let pkg = CuratedPackage::passthrough(vec![chunk(0, "alpha"), chunk(1, "bravo")], 512);
         let s = pkg.format_for_drafter();
         assert!(s.contains("<chunks>"));
         assert!(s.contains("alpha"));

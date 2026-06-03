@@ -72,22 +72,36 @@ fn parse_args() -> Result<Args, String> {
         match arg.as_str() {
             "--pdf" => pdf = Some(PathBuf::from(next(&mut it, "--pdf")?)),
             "--truth" => truth = Some(PathBuf::from(next(&mut it, "--truth")?)),
-            "--dpi" => dpi = next(&mut it, "--dpi")?.parse().map_err(|e| format!("--dpi: {e}"))?,
+            "--dpi" => {
+                dpi = next(&mut it, "--dpi")?
+                    .parse()
+                    .map_err(|e| format!("--dpi: {e}"))?
+            }
             "--max-pages" => {
                 max_pages = next(&mut it, "--max-pages")?
                     .parse()
                     .map_err(|e| format!("--max-pages: {e}"))?
             }
             "--unclip" => {
-                unclip = Some(next(&mut it, "--unclip")?.parse().map_err(|e| format!("--unclip: {e}"))?)
+                unclip = Some(
+                    next(&mut it, "--unclip")?
+                        .parse()
+                        .map_err(|e| format!("--unclip: {e}"))?,
+                )
             }
             "--box-thresh" => {
-                box_thresh =
-                    Some(next(&mut it, "--box-thresh")?.parse().map_err(|e| format!("--box-thresh: {e}"))?)
+                box_thresh = Some(
+                    next(&mut it, "--box-thresh")?
+                        .parse()
+                        .map_err(|e| format!("--box-thresh: {e}"))?,
+                )
             }
             "--det-limit" => {
-                det_limit =
-                    Some(next(&mut it, "--det-limit")?.parse().map_err(|e| format!("--det-limit: {e}"))?)
+                det_limit = Some(
+                    next(&mut it, "--det-limit")?
+                        .parse()
+                        .map_err(|e| format!("--det-limit: {e}"))?,
+                )
             }
             "--skip-pages" => {
                 skip_pages = next(&mut it, "--skip-pages")?
@@ -129,7 +143,10 @@ struct EngineStats {
 
 impl EngineStats {
     fn new(name: &str) -> Self {
-        Self { name: name.to_string(), ..Default::default() }
+        Self {
+            name: name.to_string(),
+            ..Default::default()
+        }
     }
     fn record_page(&mut self, text: String, elapsed: Duration) {
         if !self.full_text.is_empty() {
@@ -181,7 +198,9 @@ fn include_help() -> &'static str {
 
 fn run(args: Args) -> Result<(), String> {
     // ── Resolve the runtime context ─────────────────────────────────
-    let pdfium_lib_path = std::env::var("SOVEREIGN_PDFIUM_LIB").ok().map(PathBuf::from);
+    let pdfium_lib_path = std::env::var("SOVEREIGN_PDFIUM_LIB")
+        .ok()
+        .map(PathBuf::from);
     if pdfium_lib_path.is_none() {
         eprintln!(
             "WARN: SOVEREIGN_PDFIUM_LIB unset — falling back to system pdfium search \
@@ -194,8 +213,8 @@ fn run(args: Args) -> Result<(), String> {
     let tessdata_dir = std::env::var("TESSDATA_PREFIX")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("/opt/homebrew/share/tessdata"));
-    let model_id =
-        std::env::var("SOVEREIGN_PADDLE_OCR_MODEL").unwrap_or_else(|_| DEFAULT_MODEL_ID.to_string());
+    let model_id = std::env::var("SOVEREIGN_PADDLE_OCR_MODEL")
+        .unwrap_or_else(|_| DEFAULT_MODEL_ID.to_string());
 
     let ctx = OcrCtx {
         tesseract_bin,
@@ -211,10 +230,20 @@ fn run(args: Args) -> Result<(), String> {
 
     // ── Rasterize ───────────────────────────────────────────────────
     println!("== bake-off: {} ==", args.pdf.display());
-    println!("dpi={} max_pages={}", args.dpi, if args.max_pages == 0 { "all".into() } else { args.max_pages.to_string() });
+    println!(
+        "dpi={} max_pages={}",
+        args.dpi,
+        if args.max_pages == 0 {
+            "all".into()
+        } else {
+            args.max_pages.to_string()
+        }
+    );
     let raster = PdfiumRasterizer::new(&ctx).map_err(|e| format!("rasterizer: {e}"))?;
     let t0 = Instant::now();
-    let mut pages = raster.pdf_to_pages(&args.pdf).map_err(|e| format!("rasterize: {e}"))?;
+    let mut pages = raster
+        .pdf_to_pages(&args.pdf)
+        .map_err(|e| format!("rasterize: {e}"))?;
     println!("rasterized {} page(s) in {:?}", pages.len(), t0.elapsed());
     if pages.is_empty() {
         return Err("no pages rendered (encrypted/corrupt PDF?)".into());
@@ -260,7 +289,11 @@ fn run(args: Args) -> Result<(), String> {
 
     for (idx, image) in pages.iter().enumerate() {
         let page_no = idx + 1;
-        println!("\n── page {page_no} ({}×{}) ──", image.width(), image.height());
+        println!(
+            "\n── page {page_no} ({}×{}) ──",
+            image.width(),
+            image.height()
+        );
 
         run_engine_on_page(&paddle, image, page_no, &mut paddle_stats);
         if let Some(t) = tesseract.as_ref() {
@@ -280,7 +313,11 @@ fn run(args: Args) -> Result<(), String> {
     match truth {
         Some(truth) => {
             println!("\n----- CER / WER (lower is better) -----");
-            println!("ground-truth chars={} words={}", truth.chars().count(), word_count(&truth));
+            println!(
+                "ground-truth chars={} words={}",
+                truth.chars().count(),
+                word_count(&truth)
+            );
             report_accuracy(&paddle_stats, &truth);
             if tesseract.is_some() {
                 report_accuracy(&tess_stats, &truth);
@@ -297,7 +334,12 @@ fn run(args: Args) -> Result<(), String> {
     Ok(())
 }
 
-fn run_engine_on_page(engine: &dyn OcrEngine, image: &DynamicImage, page_no: usize, stats: &mut EngineStats) {
+fn run_engine_on_page(
+    engine: &dyn OcrEngine,
+    image: &DynamicImage,
+    page_no: usize,
+    stats: &mut EngineStats,
+) {
     let t = Instant::now();
     match engine.recognize(image) {
         Ok(text) => {
@@ -315,7 +357,11 @@ fn run_engine_on_page(engine: &dyn OcrEngine, image: &DynamicImage, page_no: usi
             stats.record_page(text, elapsed);
         }
         Err(e) => {
-            println!("  [{:>10}] FAILED page {page_no}: {}", engine.name(), e.detail());
+            println!(
+                "  [{:>10}] FAILED page {page_no}: {}",
+                engine.name(),
+                e.detail()
+            );
             stats.failures += 1;
             stats.page_ms.push(t.elapsed().as_millis());
         }
@@ -346,7 +392,8 @@ fn report_accuracy(s: &EngineStats, truth: &str) {
 /// layer and no --truth).
 fn load_truth(args: &Args) -> Result<Option<String>, String> {
     if let Some(p) = &args.truth {
-        let raw = std::fs::read_to_string(p).map_err(|e| format!("read --truth {}: {e}", p.display()))?;
+        let raw =
+            std::fs::read_to_string(p).map_err(|e| format!("read --truth {}: {e}", p.display()))?;
         return Ok(Some(normalize(&raw)));
     }
     // Born-digital fallback: extract the PDF's own text layer as oracle.
@@ -421,7 +468,11 @@ fn word_count(s: &str) -> usize {
 
 /// First `n` chars of `text` on one line (newlines → ⏎) for the table.
 fn preview(text: &str, n: usize) -> String {
-    let flat: String = text.chars().take(n).map(|c| if c == '\n' { '⏎' } else { c }).collect();
+    let flat: String = text
+        .chars()
+        .take(n)
+        .map(|c| if c == '\n' { '⏎' } else { c })
+        .collect();
     if text.chars().count() > n {
         format!("{flat}…")
     } else {

@@ -292,7 +292,11 @@ fn from_entity_state(
         embed_text: format!("{}: {}", s.entity_name, s.label),
         secondary_key: {
             let key = s.entity_name.trim().to_lowercase();
-            if key.is_empty() { None } else { Some(key) }
+            if key.is_empty() {
+                None
+            } else {
+                Some(key)
+            }
         },
     }
 }
@@ -307,11 +311,7 @@ fn from_relation_state(
         section_id: section.section_id.clone(),
         section_ordinal: ordinal,
         sketch_index: index,
-        embed_text: format!(
-            "{} :: {}",
-            s.participants.join(" × "),
-            s.label
-        ),
+        embed_text: format!("{} :: {}", s.participants.join(" × "), s.label),
         secondary_key: Some(participants_key(&s.participants)),
     }
 }
@@ -555,8 +555,12 @@ fn apply_merges(
         grouped
             .entry(root)
             .and_modify(|existing| {
-                existing.member_indices.extend_from_slice(&draft.member_indices);
-                existing.secondary_signal.extend(draft.secondary_signal.clone());
+                existing
+                    .member_indices
+                    .extend_from_slice(&draft.member_indices);
+                existing
+                    .secondary_signal
+                    .extend(draft.secondary_signal.clone());
                 // Recompute the centroid across the union.
                 existing.centroid = centroid_of(&existing.member_indices, embeddings);
             })
@@ -767,17 +771,13 @@ mod tests {
                 label: 0,
                 member_indices: vec![0],
                 centroid: vec![1.0, 0.0, 0.0],
-                secondary_signal: vec![SignalEntry::ParticipantSet(
-                    "jane|rochester".into(),
-                )],
+                secondary_signal: vec![SignalEntry::ParticipantSet("jane|rochester".into())],
             },
             ClusterDraft {
                 label: 1,
                 member_indices: vec![1],
                 centroid: vec![0.9, 0.1, 0.0],
-                secondary_signal: vec![SignalEntry::ParticipantSet(
-                    "jane|rochester".into(),
-                )],
+                secondary_signal: vec![SignalEntry::ParticipantSet("jane|rochester".into())],
             },
         ];
         let merges = find_secondary_signal_merges(&clusters);
@@ -791,17 +791,13 @@ mod tests {
                 label: 0,
                 member_indices: vec![0],
                 centroid: vec![1.0, 0.0, 0.0],
-                secondary_signal: vec![SignalEntry::ParticipantSet(
-                    "jane|rochester".into(),
-                )],
+                secondary_signal: vec![SignalEntry::ParticipantSet("jane|rochester".into())],
             },
             ClusterDraft {
                 label: 1,
                 member_indices: vec![1],
                 centroid: vec![1.0, 0.0, 0.0],
-                secondary_signal: vec![SignalEntry::ParticipantSet(
-                    "anna|vronsky".into(),
-                )],
+                secondary_signal: vec![SignalEntry::ParticipantSet("anna|vronsky".into())],
             },
         ];
         let merges = find_secondary_signal_merges(&clusters);

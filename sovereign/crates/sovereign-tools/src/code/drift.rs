@@ -241,7 +241,10 @@ mod tests {
         std::fs::write(features.join("README.md"), "").unwrap();
 
         let ids = list_feature_ids(tmp.path());
-        assert_eq!(ids, vec!["p0-payments".to_string(), "p0-search".to_string()]);
+        assert_eq!(
+            ids,
+            vec!["p0-payments".to_string(), "p0-search".to_string()]
+        );
     }
 
     #[test]

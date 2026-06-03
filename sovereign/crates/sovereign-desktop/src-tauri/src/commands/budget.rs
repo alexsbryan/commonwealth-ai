@@ -259,9 +259,7 @@ pub async fn get_storage_budget(
                 let mut cfg = state.config.write().await;
                 cfg.storage_budget_bytes = applied.budget_bytes;
                 if let Err(e) = cfg.save() {
-                    tracing::warn!(
-                        "get_storage_budget: seed persist failed: {e}"
-                    );
+                    tracing::warn!("get_storage_budget: seed persist failed: {e}");
                 }
                 tracing::info!(
                     budget_bytes = ?applied.budget_bytes,
@@ -414,4 +412,3 @@ pub async fn retry_enrichment_failures(
 
     Ok(salvaged as u64)
 }
-

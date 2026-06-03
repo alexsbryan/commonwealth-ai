@@ -76,11 +76,11 @@ impl HardwareProfile {
 ///   for the always-resident Fast (~2 GB) and Embed (~2.5 GB) slots.
 pub fn select_profile(hw: &HardwareProfile) -> ProfileName {
     match hw.effective_vram_gb() as u32 {
-        0       => ProfileName::CpuOnly,
-        1..=7   => ProfileName::LowMem,
-        8..=19  => ProfileName::Default,
+        0 => ProfileName::CpuOnly,
+        1..=7 => ProfileName::LowMem,
+        8..=19 => ProfileName::Default,
         20..=23 => ProfileName::High,
-        _       => ProfileName::VeryHigh,
+        _ => ProfileName::VeryHigh,
     }
 }
 
@@ -142,8 +142,8 @@ mod tests {
 
     #[test]
     fn profile_selection() {
-        assert_eq!(select_profile(&hw(0.0)),  ProfileName::CpuOnly);
-        assert_eq!(select_profile(&hw(4.0)),  ProfileName::LowMem);
+        assert_eq!(select_profile(&hw(0.0)), ProfileName::CpuOnly);
+        assert_eq!(select_profile(&hw(4.0)), ProfileName::LowMem);
         assert_eq!(select_profile(&hw(12.0)), ProfileName::Default);
         assert_eq!(select_profile(&hw(19.0)), ProfileName::Default);
         assert_eq!(select_profile(&hw(20.0)), ProfileName::High);

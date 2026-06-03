@@ -53,9 +53,7 @@ pub async fn run(args: &[String]) -> i32 {
             // ~/Library/LaunchAgents permission, etc. Tell the user
             // they can still run the daemon manually so they aren't
             // stuck.
-            eprintln!(
-                "hint: you can still run the daemon foreground via `sovereign daemon`."
-            );
+            eprintln!("hint: you can still run the daemon foreground via `sovereign daemon`.");
             1
         }
     }

@@ -118,7 +118,14 @@ pub(crate) async fn run_reflect_view(args: &[String]) -> i32 {
 
     // ── Retirement mode ──────────────────────────────────────────────────────
     if retire_mode {
-        return run_retire(&store, tool_filter.as_deref(), retire_id.as_deref(), retire_reason.as_deref(), yes).await;
+        return run_retire(
+            &store,
+            tool_filter.as_deref(),
+            retire_id.as_deref(),
+            retire_reason.as_deref(),
+            yes,
+        )
+        .await;
     }
 
     let since_ts = unix_now() - (since_days * 86_400) as i64;
@@ -134,7 +141,14 @@ pub(crate) async fn run_reflect_view(args: &[String]) -> i32 {
     }
 
     // ── Main summary ─────────────────────────────────────────────────────────
-    run_summary(&store, since_ts, tool_filter.as_deref(), raw, include_history).await
+    run_summary(
+        &store,
+        since_ts,
+        tool_filter.as_deref(),
+        raw,
+        include_history,
+    )
+    .await
 }
 
 // ─── Summary ──────────────────────────────────────────────────────────────────
@@ -146,7 +160,10 @@ async fn run_summary(
     raw: bool,
     include_history: bool,
 ) -> i32 {
-    let reflections = match store.read_reflections(since_ts, tool_filter, include_history).await {
+    let reflections = match store
+        .read_reflections(since_ts, tool_filter, include_history)
+        .await
+    {
         Ok(r) => r,
         Err(e) => {
             eprintln!("error reading reflections: {e}");
@@ -154,14 +171,23 @@ async fn run_summary(
         }
     };
 
-    let log_rows = store.tool_call_log_rows(since_ts, 50_000).await.unwrap_or_default();
+    let log_rows = store
+        .tool_call_log_rows(since_ts, 50_000)
+        .await
+        .unwrap_or_default();
     let todos = store.open_todos(5).await.unwrap_or_default();
 
     // Count sessions.
     let all_sessions: std::collections::HashSet<&str> =
         reflections.iter().map(|n| n.session_id.as_str()).collect();
-    let active_count = reflections.iter().filter(|n| n.retired_at.is_none()).count();
-    let retired_count = reflections.iter().filter(|n| n.retired_at.is_some()).count();
+    let active_count = reflections
+        .iter()
+        .filter(|n| n.retired_at.is_none())
+        .count();
+    let retired_count = reflections
+        .iter()
+        .filter(|n| n.retired_at.is_some())
+        .count();
     let period_label = format!("last {} days", (unix_now() - since_ts) / 86_400);
 
     println!();
@@ -228,7 +254,10 @@ async fn run_summary(
 
         if session_count > 0 {
             println!();
-            println!("[{session_count} session{}] {tool}", if session_count == 1 { "" } else { "s" });
+            println!(
+                "[{session_count} session{}] {tool}",
+                if session_count == 1 { "" } else { "s" }
+            );
 
             if let Some(rows) = signals.get(tool) {
                 for note in rows.iter().take(5) {
@@ -317,12 +346,20 @@ fn print_raw(reflections: &[NoteRow]) -> i32 {
     }
     for note in reflections {
         println!();
-        println!("  [{}] {} — session {}", note.kind, note.created_at, &note.session_id[..8.min(note.session_id.len())]);
+        println!(
+            "  [{}] {} — session {}",
+            note.kind,
+            note.created_at,
+            &note.session_id[..8.min(note.session_id.len())]
+        );
         if let Some(ref tool) = note.tool_name {
             println!("  tool: {tool}");
         }
         if note.retired_at.is_some() {
-            println!("  [RETIRED: {}]", note.retired_by.as_deref().unwrap_or("no reason"));
+            println!(
+                "  [RETIRED: {}]",
+                note.retired_by.as_deref().unwrap_or("no reason")
+            );
         }
         println!("  {}", note.content);
     }
@@ -354,7 +391,10 @@ async fn run_todos(store: &NoteStore) -> i32 {
 // ─── Tool call log ────────────────────────────────────────────────────────────
 
 async fn run_log(store: &NoteStore, since_ts: i64) -> i32 {
-    let rows = store.tool_call_log_rows(since_ts, 1000).await.unwrap_or_default();
+    let rows = store
+        .tool_call_log_rows(since_ts, 1000)
+        .await
+        .unwrap_or_default();
     if rows.is_empty() {
         println!("No tool call log entries in this period.");
         return 0;
@@ -378,7 +418,7 @@ async fn run_log(store: &NoteStore, since_ts: i64) -> i32 {
         }
     }
     let mut tool_list: Vec<_> = tool_counts.iter().collect();
-    tool_list.sort_by(|a, b| (b.1.0 + b.1.1 + b.1.2).cmp(&(a.1.0 + a.1.1 + a.1.2)));
+    tool_list.sort_by(|a, b| (b.1 .0 + b.1 .1 + b.1 .2).cmp(&(a.1 .0 + a.1 .1 + a.1 .2)));
     for (tool, (ok, err, empty)) in tool_list.iter().take(20) {
         println!("  {:<25} ok:{:<6} err:{:<6} empty:{}", tool, ok, err, empty);
     }
@@ -408,7 +448,9 @@ async fn run_retire(
     let reason = match reason {
         Some(r) => r,
         None => {
-            eprintln!("error: --reason is required with --retire (e.g. --reason \"fixed in PR #88\")");
+            eprintln!(
+                "error: --reason is required with --retire (e.g. --reason \"fixed in PR #88\")"
+            );
             return 1;
         }
     };
@@ -456,9 +498,15 @@ async fn run_retire(
     }
 
     println!();
-    println!("Retiring {} active reflection{} about {}:", active.len(), if active.len() == 1 { "" } else { "s" }, tool);
+    println!(
+        "Retiring {} active reflection{} about {}:",
+        active.len(),
+        if active.len() == 1 { "" } else { "s" },
+        tool
+    );
     for note in &active {
-        let snippet = extract_task_summary(&note.content).unwrap_or_else(|| truncate(&note.content, 80));
+        let snippet =
+            extract_task_summary(&note.content).unwrap_or_else(|| truncate(&note.content, 80));
         println!("  [{}] \"{}\"", note.id, snippet);
     }
     println!();
@@ -470,7 +518,11 @@ async fn run_retire(
 
     match store.retire_by_tool(tool, reason).await {
         Ok(ids) => {
-            println!("Retired {} reflection{}.", ids.len(), if ids.len() == 1 { "" } else { "s" });
+            println!(
+                "Retired {} reflection{}.",
+                ids.len(),
+                if ids.len() == 1 { "" } else { "s" }
+            );
             println!("These reflections will no longer surface to agents or in reflect output.");
             println!("Run `sovereign reflect --history --tool {tool}` to see them.");
         }
@@ -625,7 +677,11 @@ fn extract_tool_from_content(content: &str) -> Option<String> {
 fn extract_negative_snippets(content: &str) -> Vec<String> {
     let mut out = Vec::new();
     if let Ok(v) = serde_json::from_str::<serde_json::Value>(content) {
-        for key in &["manual_work_that_should_be_a_tool", "misleading_outputs", "wished_i_had_known"] {
+        for key in &[
+            "manual_work_that_should_be_a_tool",
+            "misleading_outputs",
+            "wished_i_had_known",
+        ] {
             if let Some(s) = v.get(key).and_then(|v| v.as_str()) {
                 if !s.is_empty() {
                     out.push(s.to_string());
@@ -685,7 +741,10 @@ fn infer_patterns(rows: &[ToolCallLogRow]) -> HashMap<String, Vec<(String, usize
         for calls in session_groups.values() {
             let has_blast = calls.iter().any(|r| r.tool_name == "blast_radius");
             if has_blast {
-                let symbol_lookups = calls.iter().filter(|r| r.tool_name == "symbol_lookup").count();
+                let symbol_lookups = calls
+                    .iter()
+                    .filter(|r| r.tool_name == "symbol_lookup")
+                    .count();
                 if symbol_lookups >= 4 {
                     count += 1;
                 }
@@ -721,7 +780,12 @@ fn confirm(prompt: &str) -> bool {
     print!("{} [y/N] ", prompt);
     io::stdout().flush().ok();
     let stdin = io::stdin();
-    let line = stdin.lock().lines().next().and_then(|l| l.ok()).unwrap_or_default();
+    let line = stdin
+        .lock()
+        .lines()
+        .next()
+        .and_then(|l| l.ok())
+        .unwrap_or_default();
     matches!(line.trim().to_lowercase().as_str(), "y" | "yes")
 }
 

@@ -140,10 +140,18 @@ impl TestReport {
 
     /// Render this report as the `TEST_REPORT.md` file.
     pub fn to_markdown(&self) -> String {
-        let status = if self.passed() { "✅ PASS" } else { "❌ FAIL" };
+        let status = if self.passed() {
+            "✅ PASS"
+        } else {
+            "❌ FAIL"
+        };
         let warnings = self.warnings();
         let has_warnings = !warnings.is_empty();
-        let display_status = if self.passed() && has_warnings { "⚠️ PASS (with warnings)" } else { status };
+        let display_status = if self.passed() && has_warnings {
+            "⚠️ PASS (with warnings)"
+        } else {
+            status
+        };
 
         let mut md = String::new();
 
@@ -159,7 +167,11 @@ impl TestReport {
         }
         md.push_str(&format!(
             "| Embed phase | {} |\n",
-            if self.embed_enabled { "enabled" } else { "skipped (--no-embed)" }
+            if self.embed_enabled {
+                "enabled"
+            } else {
+                "skipped (--no-embed)"
+            }
         ));
         md.push('\n');
 
@@ -175,11 +187,26 @@ impl TestReport {
         // ── Validation ──────────────────────────────────────────────────────
         md.push_str("## Validation\n\n");
         md.push_str("| Check | Status |\n|---|---|\n");
-        md.push_str(&format!("| `corpus.id` present | {} |\n", check(self.validation.corpus_id_present)));
-        md.push_str(&format!("| `corpus.name` present | {} |\n", check(self.validation.corpus_name_present)));
-        md.push_str(&format!("| `corpus.license` present | {} |\n", check(self.validation.license_present)));
-        md.push_str(&format!("| Source configured | {} |\n", check(self.validation.source_present)));
-        md.push_str(&format!("| Format known | {} |\n", check(self.validation.format_known)));
+        md.push_str(&format!(
+            "| `corpus.id` present | {} |\n",
+            check(self.validation.corpus_id_present)
+        ));
+        md.push_str(&format!(
+            "| `corpus.name` present | {} |\n",
+            check(self.validation.corpus_name_present)
+        ));
+        md.push_str(&format!(
+            "| `corpus.license` present | {} |\n",
+            check(self.validation.license_present)
+        ));
+        md.push_str(&format!(
+            "| Source configured | {} |\n",
+            check(self.validation.source_present)
+        ));
+        md.push_str(&format!(
+            "| Format known | {} |\n",
+            check(self.validation.format_known)
+        ));
         match self.validation.source_reachable {
             Some(true) => md.push_str("| Source reachable | ✅ |\n"),
             Some(false) => md.push_str("| Source reachable | ❌ (HEAD request failed) |\n"),
@@ -200,7 +227,10 @@ impl TestReport {
         if let Some(ref acq) = self.acquisition {
             md.push_str(&format!("- **Source:** {}\n", acq.source_url));
             md.push_str(&format!("- **Records fetched:** {}\n", acq.records_fetched));
-            md.push_str(&format!("- **Bytes downloaded:** {}\n", format_bytes(acq.bytes_downloaded)));
+            md.push_str(&format!(
+                "- **Bytes downloaded:** {}\n",
+                format_bytes(acq.bytes_downloaded)
+            ));
             md.push_str(&format!("- **Duration:** {}ms\n", acq.duration_ms));
         } else {
             md.push_str("*Skipped (validation-only mode or acquisition failed)*\n");
@@ -279,7 +309,12 @@ impl TestReport {
             md.push_str("### Sample chunks\n\n");
             for (i, sc) in self.sample_chunks.iter().enumerate() {
                 let title_part = sc.title.as_deref().unwrap_or("(untitled)");
-                md.push_str(&format!("**{}. {}** · {} chars\n\n", i + 1, title_part, sc.char_count));
+                md.push_str(&format!(
+                    "**{}. {}** · {} chars\n\n",
+                    i + 1,
+                    title_part,
+                    sc.char_count
+                ));
                 md.push_str("> ");
                 md.push_str(&sc.preview.replace('\n', "\n> "));
                 if sc.preview.chars().count() == 400 {
@@ -298,9 +333,15 @@ impl TestReport {
         } else {
             md.push_str("| Query | Hits | Top score | Top result |\n|---|---|---|---|\n");
             for q in &self.test_queries {
-                let score = q.top_score.map(|s| format!("{s:.3}")).unwrap_or_else(|| "—".into());
+                let score = q
+                    .top_score
+                    .map(|s| format!("{s:.3}"))
+                    .unwrap_or_else(|| "—".into());
                 let top = q.top_title.as_deref().unwrap_or("—");
-                md.push_str(&format!("| `{}` | {} | {} | {} |\n", q.query, q.hit_count, score, top));
+                md.push_str(&format!(
+                    "| `{}` | {} | {} | {} |\n",
+                    q.query, q.hit_count, score, top
+                ));
             }
         }
         md.push('\n');
@@ -308,7 +349,9 @@ impl TestReport {
         // ── Full-corpus estimate ─────────────────────────────────────────────
         md.push_str("## Full-Corpus Estimate\n\n");
         if let Some(ref est) = self.corpus_estimate {
-            md.push_str("*Estimated from sample metrics only — treat as a rough order of magnitude.*\n\n");
+            md.push_str(
+                "*Estimated from sample metrics only — treat as a rough order of magnitude.*\n\n",
+            );
             md.push_str(&format!(
                 "Calculation: `total_records × {:.2} (extraction) × {:.1} (chunks/record)`\n\n",
                 est.extraction_rate, est.avg_chunks_per_record,
@@ -318,8 +361,14 @@ impl TestReport {
                 Some(n) => md.push_str(&format!("| Total source records | ~{n} |\n")),
                 None => md.push_str("| Total source records | unknown (single-shard sample) |\n"),
             }
-            md.push_str(&format!("| Extraction rate | {:.1}% |\n", est.extraction_rate * 100.0));
-            md.push_str(&format!("| Avg chunks/record | {:.1} |\n", est.avg_chunks_per_record));
+            md.push_str(&format!(
+                "| Extraction rate | {:.1}% |\n",
+                est.extraction_rate * 100.0
+            ));
+            md.push_str(&format!(
+                "| Avg chunks/record | {:.1} |\n",
+                est.avg_chunks_per_record
+            ));
             match est.estimated_total_chunks {
                 Some(n) => md.push_str(&format!("| Estimated total chunks | ~{n} |\n")),
                 None => md.push_str("| Estimated total chunks | — |\n"),
@@ -329,7 +378,10 @@ impl TestReport {
                 None => md.push_str("| Estimated index size | — |\n"),
             }
             if est.test_index_bytes > 0 {
-                md.push_str(&format!("| Test index size | {} |\n", format_bytes(est.test_index_bytes)));
+                md.push_str(&format!(
+                    "| Test index size | {} |\n",
+                    format_bytes(est.test_index_bytes)
+                ));
             }
         } else {
             md.push_str("*Not available — extraction did not run.*\n");
@@ -444,11 +496,8 @@ pub(crate) async fn run_test(
     // schema look right?" — not "would these specific values
     // resolve?". The validate-only path should never require the
     // LLM to fabricate parameter values just to pass.
-    let skip_param_resolution =
-        options.sample_size == 0 && options.parameters.is_empty();
-    if !skip_param_resolution
-        && (!recipe.parameters.is_empty() || !options.parameters.is_empty())
-    {
+    let skip_param_resolution = options.sample_size == 0 && options.parameters.is_empty();
+    if !skip_param_resolution && (!recipe.parameters.is_empty() || !options.parameters.is_empty()) {
         match recipe.resolve_parameters(&options.parameters) {
             Ok(resolved) => {
                 recipe = recipe.with_resolved_parameters(resolved);
@@ -511,7 +560,10 @@ pub(crate) async fn run_test(
     let source_path = match acquire_for_test(engine, &recipe, &download_dir).await {
         Ok(p) => p,
         Err(e) => {
-            report.validation.errors.push(format!("Acquisition failed: {e}"));
+            report
+                .validation
+                .errors
+                .push(format!("Acquisition failed: {e}"));
             return Ok(report);
         }
     };
@@ -520,7 +572,9 @@ pub(crate) async fn run_test(
     let bytes_downloaded = {
         // Best-effort: report size of what we downloaded (may be pre-existing).
         if source_path.is_file() {
-            std::fs::metadata(&source_path).map(|m| m.len()).unwrap_or(0)
+            std::fs::metadata(&source_path)
+                .map(|m| m.len())
+                .unwrap_or(0)
         } else if source_path.is_dir() {
             dir_size_bytes(&source_path)
         } else {
@@ -540,7 +594,10 @@ pub(crate) async fn run_test(
     let doc_iter = match extractor.extract(&source_path) {
         Ok(iter) => iter,
         Err(e) => {
-            report.validation.errors.push(format!("Extractor failed to open source: {e}"));
+            report
+                .validation
+                .errors
+                .push(format!("Extractor failed to open source: {e}"));
             return Ok(report);
         }
     };
@@ -615,9 +672,8 @@ pub(crate) async fn run_test(
     for candidate in &misses_candidates {
         if candidate.is_file() {
             if let Ok(raw) = std::fs::read_to_string(candidate) {
-                if let Ok(parsed) = serde_json::from_str::<
-                    Vec<crate::extractors::html_sections::MissReport>,
-                >(&raw)
+                if let Ok(parsed) =
+                    serde_json::from_str::<Vec<crate::extractors::html_sections::MissReport>>(&raw)
                 {
                     report.section_misses = parsed;
                     break;
@@ -667,11 +723,17 @@ pub(crate) async fn run_test(
 
     let total_chunks = all_chunks.len();
     let avg_per_record = total_chunks as f32 / docs.len() as f32;
-    let char_counts: Vec<usize> = all_chunks.iter().map(|(_, _, c)| c.chars().count()).collect();
+    let char_counts: Vec<usize> = all_chunks
+        .iter()
+        .map(|(_, _, c)| c.chars().count())
+        .collect();
     let avg_chars = char_counts.iter().sum::<usize>() as f32 / char_counts.len() as f32;
     let min_chars = char_counts.iter().copied().min().unwrap_or(0);
     let max_chunk_chars = char_counts.iter().copied().max().unwrap_or(0);
-    let chunks_over_limit = char_counts.iter().filter(|&&c| c > recipe_max_chars).count();
+    let chunks_over_limit = char_counts
+        .iter()
+        .filter(|&&c| c > recipe_max_chars)
+        .count();
 
     report.chunking = Some(ChunkingResult {
         total_chunks,
@@ -695,10 +757,8 @@ pub(crate) async fn run_test(
 
     // ── Phase 6: Embed + test index ──────────────────────────────────────────
     if options.embed && !all_chunks.is_empty() {
-        let test_index_dir = std::env::temp_dir().join(format!(
-            "corpus-engine-test-index-{}",
-            recipe.corpus.id
-        ));
+        let test_index_dir =
+            std::env::temp_dir().join(format!("corpus-engine-test-index-{}", recipe.corpus.id));
         let _ = std::fs::remove_dir_all(&test_index_dir);
         std::fs::create_dir_all(&test_index_dir)?;
 
@@ -706,9 +766,10 @@ pub(crate) async fn run_test(
         let probe = match engine.embed("probe").await {
             Ok(v) => v,
             Err(e) => {
-                report.validation.warnings.push(format!(
-                    "Embed probe failed — skipping embed phase: {e}"
-                ));
+                report
+                    .validation
+                    .warnings
+                    .push(format!("Embed probe failed — skipping embed phase: {e}"));
                 return Ok(report);
             }
         };
@@ -727,9 +788,10 @@ pub(crate) async fn run_test(
         {
             Ok(idx) => idx,
             Err(e) => {
-                report.validation.warnings.push(format!(
-                    "Failed to create test index: {e}"
-                ));
+                report
+                    .validation
+                    .warnings
+                    .push(format!("Failed to create test index: {e}"));
                 let _ = std::fs::remove_dir_all(&test_index_dir);
                 return Ok(report);
             }
@@ -756,15 +818,19 @@ pub(crate) async fn run_test(
                     ));
                 }
                 Err(e) => {
-                    report.validation.warnings.push(format!(
-                        "Embed failed for chunk: {e}"
-                    ));
+                    report
+                        .validation
+                        .warnings
+                        .push(format!("Embed failed for chunk: {e}"));
                 }
             }
         }
 
         let test_index_bytes = if let Err(e) = index.insert_batch(&batch).await {
-            report.validation.warnings.push(format!("Index insert failed: {e}"));
+            report
+                .validation
+                .warnings
+                .push(format!("Index insert failed: {e}"));
             0u64
         } else {
             let _ = index.build_indexes(true, true, None).await;
@@ -787,12 +853,7 @@ pub(crate) async fn run_test(
                 .iter()
                 .filter_map(|sc| sc.title.as_deref())
                 .take(5)
-                .map(|t| {
-                    t.split_whitespace()
-                        .take(4)
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                })
+                .map(|t| t.split_whitespace().take(4).collect::<Vec<_>>().join(" "))
                 .filter(|q| !q.is_empty())
                 .collect()
         });
@@ -856,7 +917,8 @@ async fn validate_recipe(recipe: &Recipe, offline: bool) -> ValidationResult {
         errors.push("`corpus.name` is required but missing".into());
     }
     if !license_present {
-        warnings.push("`corpus.license` is empty — add a SPDX identifier (e.g. `CC-BY-SA-4.0`)".into());
+        warnings
+            .push("`corpus.license` is empty — add a SPDX identifier (e.g. `CC-BY-SA-4.0`)".into());
     }
 
     // ── html_sections regex compilation + section breadth heuristic ───
@@ -871,9 +933,7 @@ async fn validate_recipe(recipe: &Recipe, offline: bool) -> ValidationResult {
 
     // ── http_api: URL-template lint vs declared parameters ────────────
     if let crate::recipe::AcquirerConfig::HttpApi {
-        requests,
-        headers,
-        ..
+        requests, headers, ..
     } = &recipe.acquire
     {
         validate_http_api_templates(
@@ -941,10 +1001,7 @@ fn validate_html_sections(
     warnings: &mut Vec<String>,
 ) {
     if sections.is_empty() {
-        errors.push(
-            "html_sections extractor declared but `[[extract.sections]]` is empty"
-                .into(),
-        );
+        errors.push("html_sections extractor declared but `[[extract.sections]]` is empty".into());
         return;
     }
     for s in sections {
@@ -988,9 +1045,8 @@ fn validate_http_api_templates(
 ) {
     use std::sync::OnceLock;
     static PLACEHOLDER: OnceLock<regex::Regex> = OnceLock::new();
-    let re = PLACEHOLDER.get_or_init(|| {
-        regex::Regex::new(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}").unwrap()
-    });
+    let re =
+        PLACEHOLDER.get_or_init(|| regex::Regex::new(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}").unwrap());
 
     let known: std::collections::HashSet<String> = parameters
         .keys()
@@ -1007,11 +1063,7 @@ fn validate_http_api_templates(
                 errors.push(format!(
                     "request[{idx}].for_each references undeclared parameter `{name}` \
                      — declared: [{}]",
-                    parameters
-                        .keys()
-                        .cloned()
-                        .collect::<Vec<_>>()
-                        .join(", ")
+                    parameters.keys().cloned().collect::<Vec<_>>().join(", ")
                 ));
             }
         }
@@ -1049,19 +1101,12 @@ fn validate_http_api_templates(
     }
 
     if !undeclared.is_empty() {
-        let names: Vec<String> = undeclared
-            .iter()
-            .map(|n| format!("{{{n}}}"))
-            .collect();
+        let names: Vec<String> = undeclared.iter().map(|n| format!("{{{n}}}")).collect();
         errors.push(format!(
             "http_api templates reference undeclared placeholder(s): {} — \
              declared parameters: [{}]",
             names.join(", "),
-            parameters
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(", ")
+            parameters.keys().cloned().collect::<Vec<_>>().join(", ")
         ));
     }
 }
@@ -1116,11 +1161,7 @@ async fn acquire_for_test(
         // For other acquirers, use the engine's standard implementation.
         // BulkDownload: downloads the full file (potentially large).
         // LocalFile: validates the path and returns it.
-        _ => {
-            engine
-                .acquire_source(recipe, download_dir, &None)
-                .await
-        }
+        _ => engine.acquire_source(recipe, download_dir, &None).await,
     }
 }
 
@@ -1136,13 +1177,12 @@ fn acquirer_source_url(recipe: &Recipe) -> String {
             Some(s) => format!("https://huggingface.co/datasets/{repo} (subset: {s})"),
             None => format!("https://huggingface.co/datasets/{repo}"),
         },
-        AcquirerConfig::WebCrawl { seed_urls, .. } => {
-            seed_urls.first().cloned().unwrap_or_else(|| "(no seed URL)".into())
-        }
+        AcquirerConfig::WebCrawl { seed_urls, .. } => seed_urls
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "(no seed URL)".into()),
         AcquirerConfig::HttpApi {
-            base_url,
-            requests,
-            ..
+            base_url, requests, ..
         } => {
             // Prefer the base_url for surfacing in test reports; fall
             // back to the first request's URL template (which may
@@ -1189,7 +1229,11 @@ async fn head_check(url: &str) -> bool {
         Err(_) => return false,
     };
     match client.head(url).send().await {
-        Ok(resp) => resp.status().is_success() || resp.status().as_u16() == 301 || resp.status().as_u16() == 302,
+        Ok(resp) => {
+            resp.status().is_success()
+                || resp.status().as_u16() == 301
+                || resp.status().as_u16() == 302
+        }
         Err(_) => false,
     }
 }
@@ -1225,7 +1269,11 @@ fn format_bytes(bytes: u64) -> String {
 
 /// Return `✅` or `❌` for a boolean check.
 fn check(v: bool) -> &'static str {
-    if v { "✅" } else { "❌" }
+    if v {
+        "✅"
+    } else {
+        "❌"
+    }
 }
 
 /// Generate a rough RFC3339 timestamp using stdlib only (no chrono).
@@ -1257,7 +1305,20 @@ fn unix_to_date_parts(secs: u64) -> (u64, u64, u64, u64, u64, u64) {
     }
 
     let leap = is_leap(year);
-    let month_days: [u64; 12] = [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let month_days: [u64; 12] = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
     let mut month = 0u64;
     for &md in &month_days {
         if days < md {

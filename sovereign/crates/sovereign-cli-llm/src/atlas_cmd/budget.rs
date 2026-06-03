@@ -24,8 +24,7 @@ use crate::util::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign atlas budget",
-    summary:
-        "Show or set the Tier-2 enrichment budget + expansion knobs for a corpus's atlas.",
+    summary: "Show or set the Tier-2 enrichment budget + expansion knobs for a corpus's atlas.",
     sections: &[
         HelpSection::Usage(
             "sovereign atlas budget <corpus_id> [<count>] [--expansion-fraction <0..0.9>] \
@@ -100,9 +99,7 @@ pub async fn run(args: &[String]) -> i32 {
         }
     };
 
-    let data_dir = parsed
-        .data_dir
-        .unwrap_or_else(default_data_dir);
+    let data_dir = parsed.data_dir.unwrap_or_else(default_data_dir);
     let atlas_dir = data_dir
         .join("indexes")
         .join(&parsed.corpus_id)
@@ -295,11 +292,7 @@ fn parse_args(args: &[String]) -> Result<Parsed, String> {
     }
 
     let corpus_id = corpus_id.ok_or("missing <corpus_id>".to_string())?;
-    if unset
-        && (set_to.is_some()
-            || expansion_fraction.is_some()
-            || expansion_hops.is_some())
-    {
+    if unset && (set_to.is_some() || expansion_fraction.is_some() || expansion_hops.is_some()) {
         return Err("--unset is mutually exclusive with set values".into());
     }
     Ok(Parsed {
@@ -377,12 +370,8 @@ mod tests {
 
     #[test]
     fn parse_rejects_invalid_hops() {
-        let err = parse_args(&[
-            "wikipedia".into(),
-            "--expansion-hops".into(),
-            "5".into(),
-        ])
-        .unwrap_err();
+        let err =
+            parse_args(&["wikipedia".into(), "--expansion-hops".into(), "5".into()]).unwrap_err();
         assert!(err.contains("1 or 2"));
     }
 

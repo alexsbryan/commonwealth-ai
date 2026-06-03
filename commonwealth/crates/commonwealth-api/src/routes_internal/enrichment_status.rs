@@ -19,9 +19,7 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::enrichment::state::{
-    EnrichmentPhase, EnrichmentState, EnrichmentStateFile,
-};
+use corpus_engine::enrichment::state::{EnrichmentPhase, EnrichmentState, EnrichmentStateFile};
 
 use crate::state::AppState;
 
@@ -67,7 +65,11 @@ pub async fn enrichment_status(
     let (is_terminal, is_stalled, fraction_complete) = match &parsed {
         Some(s) => {
             let frac = derive_fraction(s);
-            (s.phase.is_terminal(), matches!(s.phase, EnrichmentPhase::Stalled), frac)
+            (
+                s.phase.is_terminal(),
+                matches!(s.phase, EnrichmentPhase::Stalled),
+                frac,
+            )
         }
         None => (false, false, 0.0),
     };
@@ -84,7 +86,10 @@ fn derive_fraction(state: &EnrichmentState) -> f32 {
     if matches!(state.phase, EnrichmentPhase::Complete) {
         return 1.0;
     }
-    if matches!(state.phase, EnrichmentPhase::Failed | EnrichmentPhase::Stalled) {
+    if matches!(
+        state.phase,
+        EnrichmentPhase::Failed | EnrichmentPhase::Stalled
+    ) {
         return 0.0;
     }
     let base = state.phase.coarse_fraction();
@@ -111,8 +116,6 @@ fn next_phase_floor(phase: EnrichmentPhase) -> f32 {
         EnrichmentPhase::MotifExtraction => EnrichmentPhase::Persisting.coarse_fraction(),
         EnrichmentPhase::AtomExtraction => EnrichmentPhase::Persisting.coarse_fraction(),
         EnrichmentPhase::Persisting => 1.0,
-        EnrichmentPhase::Complete
-        | EnrichmentPhase::Failed
-        | EnrichmentPhase::Stalled => 1.0,
+        EnrichmentPhase::Complete | EnrichmentPhase::Failed | EnrichmentPhase::Stalled => 1.0,
     }
 }

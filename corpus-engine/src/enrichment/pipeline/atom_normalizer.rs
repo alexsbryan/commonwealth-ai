@@ -90,7 +90,9 @@ impl AtomPostProcessorRegistry {
     /// uses [`AtomPostProcessorRegistry::default_chain`] instead;
     /// reach for this only when assembling a custom chain (tests).
     pub fn empty() -> Self {
-        Self { processors: Vec::new() }
+        Self {
+            processors: Vec::new(),
+        }
     }
 
     /// Default chain for production: anchor snap-to-source then
@@ -224,20 +226,16 @@ impl AtomPostProcessor for BacktickAugmentProcessor {
         for e in extraction.entities_introduced.iter_mut() {
             promote_longer_backtick_anchor(
                 &mut e.anchor,
-                [e.description.as_str(), e.canonical_name.as_str()].iter().copied(),
+                [e.description.as_str(), e.canonical_name.as_str()]
+                    .iter()
+                    .copied(),
             );
         }
         for c in extraction.claims.iter_mut() {
-            promote_longer_backtick_anchor(
-                &mut c.anchor,
-                [c.content.as_str()].iter().copied(),
-            );
+            promote_longer_backtick_anchor(&mut c.anchor, [c.content.as_str()].iter().copied());
         }
         for q in extraction.questions_raised.iter_mut() {
-            promote_longer_backtick_anchor(
-                &mut q.anchor,
-                [q.content.as_str()].iter().copied(),
-            );
+            promote_longer_backtick_anchor(&mut q.anchor, [q.content.as_str()].iter().copied());
         }
         for ev in extraction.events.iter_mut() {
             promote_longer_backtick_anchor(
@@ -283,7 +281,9 @@ fn backtick_spans(s: &str) -> Vec<String> {
         if bytes[i] == b'`' {
             if let Some(close_rel) = bytes[i + 1..].iter().position(|&b| b == b'`') {
                 let close = i + 1 + close_rel;
-                let span = std::str::from_utf8(&bytes[i + 1..close]).unwrap_or("").trim();
+                let span = std::str::from_utf8(&bytes[i + 1..close])
+                    .unwrap_or("")
+                    .trim();
                 if !span.is_empty() {
                     out.push(span.to_string());
                 }
@@ -417,9 +417,9 @@ fn source_anchor_candidates(source: &str) -> Vec<String> {
                 // Segment must still look like an identifier — skip
                 // generic prose words that happened to land in a
                 // path-shaped token.
-                let has_path_char = seg.chars().any(|c| {
-                    matches!(c, '_' | '.' | '{' | '}' | '<' | '>' | '(' | ')')
-                });
+                let has_path_char = seg
+                    .chars()
+                    .any(|c| matches!(c, '_' | '.' | '{' | '}' | '<' | '>' | '(' | ')'));
                 if !has_path_char {
                     continue;
                 }
@@ -493,7 +493,8 @@ mod tests {
             questions_raised: Vec::new(),
             argument_reconstructions: Vec::new(),
             type_extension: None,
-            type_extensions: Vec::new(),        }
+            type_extensions: Vec::new(),
+        }
     }
 
     fn claim(content: &str, anchor: &str) -> ClaimSketch {
@@ -607,7 +608,10 @@ mod tests {
     #[test]
     fn verbatim_anchor_is_returned_unchanged() {
         let src = "Use `ToolRegistry::register` to bind tools.";
-        assert_eq!(snap_to_source("ToolRegistry::register", src), "ToolRegistry::register");
+        assert_eq!(
+            snap_to_source("ToolRegistry::register", src),
+            "ToolRegistry::register"
+        );
     }
 
     #[test]
@@ -616,10 +620,7 @@ mod tests {
         // a real failure observed on Qwen3.5-9B in the 2026-05-11
         // grounded-claim eval. Snap recovers the verbatim source path.
         let src = "Path: `corpus-engine/src/enrichment/domain_registry.rs` lives here.";
-        let got = snap_to_source(
-            "corpus-engine/src/enrichement/domain_registry.rs",
-            src,
-        );
+        let got = snap_to_source("corpus-engine/src/enrichement/domain_registry.rs", src);
         assert_eq!(got, "corpus-engine/src/enrichment/domain_registry.rs");
     }
 
@@ -639,7 +640,8 @@ mod tests {
         // backtick span wins because it appears in the candidate
         // list first and gets discovered before equal-distance
         // alternatives.
-        let src = "Generic prose mentioning enrichment and `corpus-engine/src/enrichment.rs` in a path.";
+        let src =
+            "Generic prose mentioning enrichment and `corpus-engine/src/enrichment.rs` in a path.";
         let got = snap_to_source("corpus-engine/src/enrichment.rss", src);
         assert_eq!(got, "corpus-engine/src/enrichment.rs");
     }

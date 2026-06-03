@@ -106,7 +106,11 @@ pub(super) async fn cmd_filter(args: &[String]) -> i32 {
         total_kept,
         if total_kept == 1 { "" } else { "s" },
         total_dropped,
-        if dry_run { " (dry-run; no atlas changes)" } else { "" }
+        if dry_run {
+            " (dry-run; no atlas changes)"
+        } else {
+            ""
+        }
     );
     0
 }
@@ -239,9 +243,11 @@ async fn filter_atlas(
         eprintln!("─── filter prompt ───────────────────────────────────");
         eprintln!("{user_prompt}");
         eprintln!("─── filter schema ───────────────────────────────────");
-        eprintln!("{}", serde_json::to_string_pretty(
-            chat_prompt.response_schema.as_ref().unwrap()
-        ).unwrap_or_default());
+        eprintln!(
+            "{}",
+            serde_json::to_string_pretty(chat_prompt.response_schema.as_ref().unwrap())
+                .unwrap_or_default()
+        );
         eprintln!("─────────────────────────────────────────────────────");
     }
 
@@ -610,9 +616,9 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![AtomId::entity(2), AtomId::entity(3)],
-                    provenance: Default::default(),
-                    concept_kind: None,
-};
+            provenance: Default::default(),
+            concept_kind: None,
+        };
         let mut counts = HashMap::new();
         counts.insert(entity.id.clone(), 5);
         let candidates = vec![&entity];

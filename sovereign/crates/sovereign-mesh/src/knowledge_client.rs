@@ -66,7 +66,7 @@ impl MeshKnowledgeSource for MeshKnowledgeClient {
             query_embedding: query_embedding.to_vec(),
             query_text: query_text.to_string(),
             corpora: None, // Let Commonwealth decide — it knows the
-                           // mesh's hosted corpora, we don't here.
+            // mesh's hosted corpora, we don't here.
             limit: Some(limit as u32),
         };
         let url = format!("{}/v1/knowledge/search", self.base_url);
@@ -129,10 +129,7 @@ impl MeshKnowledgeSource for MeshKnowledgeClient {
                 }
             })
             .collect();
-        tracing::info!(
-            hits = total,
-            "mesh knowledge client: received"
-        );
+        tracing::info!(hits = total, "mesh knowledge client: received");
         results
     }
 }

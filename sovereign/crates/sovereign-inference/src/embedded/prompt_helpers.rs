@@ -15,17 +15,19 @@ use futures::Stream;
 use tokio::sync::Mutex;
 
 use crate::llama::cpp::context::params::{LlamaContextParams, LlamaContextType};
-use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::llama_backend::LlamaBackend;
 use crate::llama::cpp::llama_batch::LlamaBatch;
 use crate::llama::cpp::model::params::LlamaModelParams;
 use crate::llama::cpp::model::{AddBos, LlamaChatMessage, LlamaModel};
+use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
 use sovereign_core::error::Error;
-use sovereign_core::model_family::{EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl};
+use sovereign_core::model_family::{
+    EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
+};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::*;
 use sovereign_core::Result;
@@ -111,7 +113,6 @@ pub(crate) fn is_recurrent_arch(arch: &str) -> bool {
     false
 }
 
-
 pub(crate) fn clamp_max_tokens(
     requested: Option<usize>,
     prompt_tokens: usize,
@@ -160,7 +161,10 @@ pub(crate) fn format_prompt(
     // template the inner dispatch handles ends at the generation
     // marker, so the append point is consistent.
     let rendered = format_prompt_inner(model, model_id, request, quirks)?;
-    Ok(append_assistant_prefix(rendered, request.assistant_prefix.as_deref()))
+    Ok(append_assistant_prefix(
+        rendered,
+        request.assistant_prefix.as_deref(),
+    ))
 }
 
 /// Append a non-empty `assistant_prefix` to the rendered prompt.
@@ -200,7 +204,11 @@ fn format_prompt_inner(
     let base_system = request.system_message.as_deref().unwrap_or("");
     let system_with_thinking = match &quirks.thinking {
         ThinkingControl::SystemPromptToken { enable, disable } => {
-            let token = if request.think_budget == Some(0) { disable } else { enable };
+            let token = if request.think_budget == Some(0) {
+                disable
+            } else {
+                enable
+            };
             if base_system.is_empty() {
                 token.clone()
             } else {
@@ -228,7 +236,7 @@ fn format_prompt_inner(
             "\n\n# Tools\n\nYou may call one or more of the following tools by emitting a \
              `<tool_call>{\"name\": ..., \"arguments\": {...}}</tool_call>` block. One call per \
              block. After a block, stop — the runtime will execute the tool and feed the result \
-             back to you in the next turn.\n\n<tools>\n"
+             back to you in the next turn.\n\n<tools>\n",
         );
         for t in tools {
             let entry = serde_json::json!({
@@ -453,7 +461,7 @@ fn apply_chat_template_minijinja(
                     .unwrap_or_else(|| key.to_string());
                 match value.get_attr(&key_str) {
                     Ok(v) if !v.is_undefined() => Ok(v),
-                    _ => Ok(default.unwrap_or(Value::from(())))
+                    _ => Ok(default.unwrap_or(Value::from(()))),
                 }
             }
             "split" => {
@@ -463,8 +471,7 @@ fn apply_chat_template_minijinja(
                     Error::new(ErrorKind::InvalidOperation, "split on non-string")
                 })?;
                 let (sep,): (String,) = from_args(args)?;
-                let parts: Vec<Value> =
-                    s.split(&sep).map(|p| Value::from(p.to_string())).collect();
+                let parts: Vec<Value> = s.split(&sep).map(|p| Value::from(p.to_string())).collect();
                 Ok(Value::from(parts))
             }
             "startswith" => {
@@ -505,9 +512,8 @@ fn apply_chat_template_minijinja(
             _ => Err(Error::from(ErrorKind::UnknownMethod)),
         }
     });
-    env.add_template("chat", template).map_err(|e| {
-        Error::Inference(format!("minijinja: compile chat template: {e}"))
-    })?;
+    env.add_template("chat", template)
+        .map_err(|e| Error::Inference(format!("minijinja: compile chat template: {e}")))?;
     let tmpl = env
         .get_template("chat")
         .map_err(|e| Error::Inference(format!("minijinja: load chat template: {e}")))?;
@@ -668,13 +674,9 @@ mod chat_template_minijinja_tests {
 <|im_start|>{{ m.role }}\n{{ m.content }}<|im_end|>\n\
 {%- endfor -%}\
 {%- if add_generation_prompt -%}<|im_start|>assistant\n{%- endif -%}";
-        let out = apply_chat_template_minijinja(
-            template,
-            "you are a helpful assistant",
-            "hello",
-            false,
-        )
-        .expect("renders cleanly");
+        let out =
+            apply_chat_template_minijinja(template, "you are a helpful assistant", "hello", false)
+                .expect("renders cleanly");
         assert!(out.contains("<|im_start|>system"));
         assert!(out.contains("you are a helpful assistant"));
         assert!(out.contains("<|im_start|>user"));
@@ -785,14 +787,14 @@ mod jump_fwd_env_tests {
     fn jump_fwd_t2_disable_independent_of_master_gate() {
         // The two gates read different env vars; disabling one must
         // not affect the other.
-        let only_t2_disabled =
-            |k: &str| if k == "SOVEREIGN_JUMP_FWD_T2_DISABLE" {
+        let only_t2_disabled = |k: &str| {
+            if k == "SOVEREIGN_JUMP_FWD_T2_DISABLE" {
                 Some("1".to_string())
             } else {
                 None
-            };
+            }
+        };
         assert!(jump_fwd_enabled_from_env(only_t2_disabled));
         assert!(!jump_fwd_t2_enabled_from_env(only_t2_disabled));
     }
 }
-

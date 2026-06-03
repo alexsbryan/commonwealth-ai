@@ -273,9 +273,7 @@ async fn obsidian_vault_ingest_reads_markdown_and_strips_frontmatter() -> SovRes
 #[tokio::test]
 async fn vault_write_rollback_clean_round_trip() -> SovResult<()> {
     use sovereign_tools::local_corpus::clusterer::LabeledCluster;
-    use sovereign_tools::local_corpus::preview::{
-        ClusterSummary, FileAssignment, VaultPreview,
-    };
+    use sovereign_tools::local_corpus::preview::{ClusterSummary, FileAssignment, VaultPreview};
     use sovereign_tools::local_corpus::writeback::WriteBack;
 
     let h = harness().await;

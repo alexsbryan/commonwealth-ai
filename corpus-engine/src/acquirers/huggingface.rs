@@ -81,9 +81,7 @@ impl HuggingFaceDatasetAcquirer {
 
             // Resume: skip fully-downloaded shards.
             if final_path.exists() {
-                let existing = std::fs::metadata(&final_path)
-                    .map(|m| m.len())
-                    .unwrap_or(0);
+                let existing = std::fs::metadata(&final_path).map(|m| m.len()).unwrap_or(0);
                 total_bytes_downloaded += existing;
                 continue;
             }
@@ -105,9 +103,10 @@ impl HuggingFaceDatasetAcquirer {
             }
 
             let is_partial = response.status().as_u16() == 206;
-            let shard_total = response.content_length().map(|cl| {
-                if is_partial { cl + existing_len } else { cl }
-            });
+            let shard_total =
+                response
+                    .content_length()
+                    .map(|cl| if is_partial { cl + existing_len } else { cl });
 
             // Extrapolate total size from the first shard's content-length.
             if let Some(sz) = shard_total {
@@ -171,7 +170,10 @@ impl HuggingFaceDatasetAcquirer {
     /// filename, matching what the parquet extractor uses when opening files
     /// from a directory — so both acquirer and extractor agree on which
     /// `file_index` corresponds to which physical file.
-    pub(crate) async fn list_shards(&self, client: &reqwest::Client) -> Result<Vec<(String, String)>> {
+    pub(crate) async fn list_shards(
+        &self,
+        client: &reqwest::Client,
+    ) -> Result<Vec<(String, String)>> {
         // ── Pass 1: siblings API ──────────────────────────────────────
         let siblings_shards = self.list_from_siblings(client).await?;
         if !siblings_shards.is_empty() {
@@ -187,7 +189,8 @@ impl HuggingFaceDatasetAcquirer {
                 Ok(_) => {}
                 Err(e) => tracing::debug!(
                     "Parquet API fallback for '{}' config '{}' failed: {e}",
-                    self.repo, subset
+                    self.repo,
+                    subset
                 ),
             }
         }
@@ -226,10 +229,7 @@ impl HuggingFaceDatasetAcquirer {
     /// Subset matching (either pattern may apply depending on the repo layout):
     /// - `data/{subset}-*`  e.g. `data/en-00000-of-00052-hash.parquet`
     /// - `{subset}/*`       e.g. `20231101.en/train-00000-of-00041.parquet`
-    async fn list_from_siblings(
-        &self,
-        client: &reqwest::Client,
-    ) -> Result<Vec<(String, String)>> {
+    async fn list_from_siblings(&self, client: &reqwest::Client) -> Result<Vec<(String, String)>> {
         let api_url = format!("https://huggingface.co/api/datasets/{}", self.repo);
         let resp = client.get(&api_url).send().await?;
         if !resp.status().is_success() {
@@ -260,7 +260,11 @@ impl HuggingFaceDatasetAcquirer {
                 _ => false,
             })
             .map(|rfilename| {
-                let local = rfilename.rsplit('/').next().unwrap_or(rfilename).to_string();
+                let local = rfilename
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or(rfilename)
+                    .to_string();
                 let url = format!(
                     "https://huggingface.co/datasets/{}/resolve/main/{}",
                     self.repo, rfilename
@@ -295,7 +299,9 @@ impl HuggingFaceDatasetAcquirer {
         }
 
         let urls: Vec<String> = resp.json().await.map_err(|e| {
-            Error::Recipe(format!("HuggingFace parquet API returned unexpected JSON: {e}"))
+            Error::Recipe(format!(
+                "HuggingFace parquet API returned unexpected JSON: {e}"
+            ))
         })?;
 
         let shards: Vec<(String, String)> = urls
@@ -310,7 +316,11 @@ impl HuggingFaceDatasetAcquirer {
                     .and_then(|s| {
                         // Strip query strings and decode %2F etc.
                         let s = s.split('?').next().unwrap_or(s);
-                        if s.ends_with(".parquet") { Some(s.to_string()) } else { None }
+                        if s.ends_with(".parquet") {
+                            Some(s.to_string())
+                        } else {
+                            None
+                        }
                     })
                     .unwrap_or_else(|| format!("{i:05}.parquet"));
                 (local, url)

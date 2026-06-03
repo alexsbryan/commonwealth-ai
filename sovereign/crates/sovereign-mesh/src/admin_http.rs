@@ -48,10 +48,8 @@ use crate::loopback_guard::enforce_localhost;
 /// of llama.cpp loading details.
 #[async_trait::async_trait]
 pub trait ProviderFactory: Send + Sync {
-    async fn build_provider(
-        &self,
-        cfg: &SetupConfig,
-    ) -> Result<Arc<dyn InferenceProvider>, String>;
+    async fn build_provider(&self, cfg: &SetupConfig)
+        -> Result<Arc<dyn InferenceProvider>, String>;
 }
 
 /// Build the admin HTTP router. Merged into the daemon's client router
@@ -66,7 +64,9 @@ pub trait ProviderFactory: Send + Sync {
 pub fn admin_router(daemon: Arc<EmbeddedDaemon>) -> Router {
     Router::new()
         .route("/v1/admin/reload", post(admin_reload))
-        .layer(axum::middleware::from_fn(crate::loopback_guard::loopback_only))
+        .layer(axum::middleware::from_fn(
+            crate::loopback_guard::loopback_only,
+        ))
         .layer(Extension(daemon))
 }
 
@@ -109,12 +109,11 @@ async fn admin_reload(
     }
     let req = body.map(|Json(b)| b).unwrap_or_default();
 
-    match daemon.reload_from_setup_config(req.config_path.as_deref()).await {
-        Ok(report) => (
-            StatusCode::OK,
-            Json(serde_json::to_value(report).unwrap()),
-        )
-            .into_response(),
+    match daemon
+        .reload_from_setup_config(req.config_path.as_deref())
+        .await
+    {
+        Ok(report) => (StatusCode::OK, Json(serde_json::to_value(report).unwrap())).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": e.to_string() })),
@@ -197,19 +196,13 @@ mod tests {
             _request: &sovereign_core::types::CompletionRequest,
         ) -> sovereign_core::error::Result<
             std::pin::Pin<
-                Box<
-                    dyn futures::Stream<Item = sovereign_core::error::Result<String>>
-                        + Send,
-                >,
+                Box<dyn futures::Stream<Item = sovereign_core::error::Result<String>> + Send>,
             >,
         > {
             unimplemented!("stub")
         }
 
-        async fn embed(
-            &self,
-            _text: &str,
-        ) -> sovereign_core::error::Result<Vec<f32>> {
+        async fn embed(&self, _text: &str) -> sovereign_core::error::Result<Vec<f32>> {
             unimplemented!("stub")
         }
 
@@ -301,10 +294,7 @@ mod tests {
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 7)), 9741),
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(100, 64, 0, 2)), 9741),
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 9741),
-            SocketAddr::new(
-                IpAddr::V6(Ipv6Addr::new(0x2606, 0, 0, 0, 0, 0, 0, 1)),
-                9741,
-            ),
+            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0x2606, 0, 0, 0, 0, 0, 0, 1)), 9741),
         ];
         for addr in denied {
             let Err(resp) = enforce_localhost(&addr) else {
@@ -340,7 +330,11 @@ mod tests {
         let body: ReloadResponse = resp.json().await.unwrap();
         assert!(body.reloaded_fields.is_empty());
         assert!(!body.restart_required);
-        assert_eq!(counter.load(Ordering::SeqCst), 0, "factory must not be called");
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            0,
+            "factory must not be called"
+        );
     }
 
     #[tokio::test]
@@ -455,8 +449,7 @@ mod tests {
             // Exact shape `daemon::start_daemon` uses — if this line
             // ever drifts from the production call site, the admin
             // surface breaks for localhost and this test must fail.
-            let service =
-                app.into_make_service_with_connect_info::<SocketAddr>();
+            let service = app.into_make_service_with_connect_info::<SocketAddr>();
             axum::serve(listener, service).await.ok();
         });
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;

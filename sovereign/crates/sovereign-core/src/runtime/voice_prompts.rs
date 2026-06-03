@@ -20,7 +20,8 @@ use crate::types::{ConversationContext, TemporalTension};
 /// Prepended to all Primary-slot (Speed::Slow) completions when the
 /// active skill operates in the **factual** register (default).
 /// Sets the epistemic contract for fact-based and synthesis responses.
-pub(crate) const PRIMARY_BASE_SYSTEM_PROMPT: &str = "You are a precise local assistant with access to \
+pub(crate) const PRIMARY_BASE_SYSTEM_PROMPT: &str =
+    "You are a precise local assistant with access to \
 installed knowledge bases. Accuracy is your highest priority.\n\n\
 On factual questions:\n\
 - If you are not certain of a specific name, number, date, or list item, say so explicitly. \
@@ -326,10 +327,7 @@ pub(crate) fn build_witness_grounding(
             parts.push(format!("Current user goal: {goal}"));
         }
         if !wm.facts.is_empty() {
-            parts.push(format!(
-                "Session context:\n- {}",
-                wm.facts.join("\n- ")
-            ));
+            parts.push(format!("Session context:\n- {}", wm.facts.join("\n- ")));
         }
     }
 
@@ -372,7 +370,10 @@ pub(crate) fn render_temporal_tensions(tensions: &[TemporalTension]) -> String {
         } else {
             String::new()
         };
-        lines.push(format!("  — {date_prefix}You said: \"{}\"", t.prior_content));
+        lines.push(format!(
+            "  — {date_prefix}You said: \"{}\"",
+            t.prior_content
+        ));
         lines.push(format!("    Now you said: \"{}\"", t.current_excerpt));
     }
     lines.join("\n")

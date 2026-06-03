@@ -8,8 +8,8 @@
 //!
 //! Read-only against the daemon: just one UPDATE, idempotent.
 
-use anyhow::{Context, Result, bail};
-use rusqlite::{Connection, OpenFlags, params};
+use anyhow::{bail, Context, Result};
+use rusqlite::{params, Connection, OpenFlags};
 use std::path::Path;
 
 /// Finalize the run by setting `ended_at` if it isn't already set.

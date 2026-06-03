@@ -83,7 +83,7 @@ args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/alice"]
         let config: McpServerConfig = toml::from_str(toml).unwrap();
         assert_eq!(config.name, "filesystem");
         assert!(config.enabled); // default true
-        assert!(config.global);  // default true
+        assert!(config.global); // default true
         assert!(matches!(
             config.transport,
             McpTransportConfig::Stdio { ref command, .. } if command == "npx"

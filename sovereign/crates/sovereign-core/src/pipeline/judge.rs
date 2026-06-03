@@ -78,10 +78,7 @@ impl JudgeScore {
 /// JSON-schema constraint on the output. The schema mirrors
 /// [`JudgeScore`] so the response can be `serde_json::from_str`'d
 /// into the typed struct.
-pub fn voice_judge_request(
-    original_user_message: &str,
-    candidate: &str,
-) -> CompletionRequest {
+pub fn voice_judge_request(original_user_message: &str, candidate: &str) -> CompletionRequest {
     let rubric = __voice_test_voice_judge_prompt();
     let prompt = format!(
         "{rubric}\n\n\
@@ -307,9 +304,7 @@ mod tests {
     async fn spawn_voice_judge_returns_default_score_on_provider_error() {
         use crate::error::Error;
         use crate::traits::InferenceProvider;
-        use crate::types::{
-            CompletionRequest, CompletionResponse, ProviderCapabilities,
-        };
+        use crate::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
         use async_trait::async_trait;
         use futures::Stream;
         use std::pin::Pin;

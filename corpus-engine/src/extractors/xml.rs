@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use quick_xml::events::Event;
 use quick_xml::reader::Reader as XmlReader;
 
-use crate::error::{Error, Result};
 use super::{slug, strip_html, ExtractedDoc, Extractor};
+use crate::error::{Error, Result};
 
 // ═══════════════════════════════════════════════════════════════
 // MediaWiki XML Extractor
@@ -49,13 +49,12 @@ impl Extractor for MediawikiExtractor {
         &self,
         source_path: &Path,
     ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send>> {
-        let file = File::open(source_path)
-            .map_err(|e| Error::Extraction(format!("Failed to open {}: {e}", source_path.display())))?;
+        let file = File::open(source_path).map_err(|e| {
+            Error::Extraction(format!("Failed to open {}: {e}", source_path.display()))
+        })?;
 
         let is_bz2 = self.decompress.as_deref() == Some("bzip2")
-            || (source_path
-                .extension()
-                .and_then(|e| e.to_str()) == Some("bz2"));
+            || (source_path.extension().and_then(|e| e.to_str()) == Some("bz2"));
 
         let reader: Box<dyn std::io::Read + Send> = if is_bz2 {
             Box::new(bzip2::read::BzDecoder::new(BufReader::new(file)))
@@ -319,8 +318,7 @@ fn find_posts_files(path: &Path) -> Result<Vec<PathBuf>> {
         .map_err(|e| Error::Extraction(format!("Failed to read {}: {e}", path.display())))?;
     let mut top_entries = Vec::new();
     for entry in entries {
-        let entry =
-            entry.map_err(|e| Error::Extraction(format!("Directory entry error: {e}")))?;
+        let entry = entry.map_err(|e| Error::Extraction(format!("Directory entry error: {e}")))?;
         top_entries.push(entry.path());
     }
     for p in &top_entries {
@@ -334,8 +332,7 @@ fn find_posts_files(path: &Path) -> Result<Vec<PathBuf>> {
     let entries = std::fs::read_dir(path)
         .map_err(|e| Error::Extraction(format!("Failed to read {}: {e}", path.display())))?;
     for entry in entries {
-        let entry =
-            entry.map_err(|e| Error::Extraction(format!("Directory entry error: {e}")))?;
+        let entry = entry.map_err(|e| Error::Extraction(format!("Directory entry error: {e}")))?;
         let p = entry.path();
         if p.is_dir() {
             let posts = p.join("Posts.xml");
@@ -448,9 +445,8 @@ impl Iterator for StackExchangeIterator {
             if let Some(ref mut cp) = self.current {
                 match read_next_answer(cp, self.min_score) {
                     Ok(Some((title, question_body, answer_body, score, community))) => {
-                        let content = format!(
-                            "Q: {question_body}\n\nA (score {score}): {answer_body}",
-                        );
+                        let content =
+                            format!("Q: {question_body}\n\nA (score {score}): {answer_body}",);
                         let source_id = slug(&format!("{community}-{title}"));
                         self.pending.push_back(ExtractedDoc {
                             title: Some(title),
@@ -524,14 +520,9 @@ fn read_next_answer(
                         // Question: store for later lookup.
                         if let Some(id_str) = attrs.get("Id") {
                             if let Ok(id) = id_str.parse::<u64>() {
-                                let title = attrs
-                                    .get("Title")
-                                    .cloned()
-                                    .unwrap_or_default();
-                                let body = attrs
-                                    .get("Body")
-                                    .map(|b| strip_html(b))
-                                    .unwrap_or_default();
+                                let title = attrs.get("Title").cloned().unwrap_or_default();
+                                let body =
+                                    attrs.get("Body").map(|b| strip_html(b)).unwrap_or_default();
                                 cp.questions.insert(id, (title, body));
                             }
                         }
@@ -545,17 +536,12 @@ fn read_next_answer(
                         if score < min_score {
                             continue;
                         }
-                        let parent_id = attrs
-                            .get("ParentId")
-                            .and_then(|s| s.parse::<u64>().ok());
+                        let parent_id = attrs.get("ParentId").and_then(|s| s.parse::<u64>().ok());
                         let (title, q_body) = parent_id
                             .and_then(|pid| cp.questions.get(&pid))
                             .cloned()
                             .unwrap_or_else(|| ("Unknown Question".to_string(), String::new()));
-                        let a_body = attrs
-                            .get("Body")
-                            .map(|b| strip_html(b))
-                            .unwrap_or_default();
+                        let a_body = attrs.get("Body").map(|b| strip_html(b)).unwrap_or_default();
                         return Ok(Some((title, q_body, a_body, score, cp.community.clone())));
                     }
                     _ => {}
@@ -672,10 +658,7 @@ impl QuestionWithAnswersIterator {
                                 continue;
                             };
                             let title = attrs.get("Title").cloned().unwrap_or_default();
-                            let body = attrs
-                                .get("Body")
-                                .map(|b| strip_html(b))
-                                .unwrap_or_default();
+                            let body = attrs.get("Body").map(|b| strip_html(b)).unwrap_or_default();
                             let tags = parse_tags(attrs.get("Tags").map(|s| s.as_str()));
                             let closed = attrs
                                 .get("ClosedDate")
@@ -709,15 +692,14 @@ impl QuestionWithAnswersIterator {
                             else {
                                 continue;
                             };
-                            let body = attrs
-                                .get("Body")
-                                .map(|b| strip_html(b))
-                                .unwrap_or_default();
+                            let body = attrs.get("Body").map(|b| strip_html(b)).unwrap_or_default();
                             if body.chars().count() < self.min_answer_length {
                                 continue;
                             }
-                            let answer_id =
-                                attrs.get("Id").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+                            let answer_id = attrs
+                                .get("Id")
+                                .and_then(|s| s.parse::<u64>().ok())
+                                .unwrap_or(0);
                             let is_accepted = questions
                                 .get(&parent_id)
                                 .and_then(|q| q.accepted_answer_id)
@@ -838,7 +820,9 @@ fn parse_tags(raw: Option<&str>) -> Vec<String> {
 /// `metadata` carries knowledge-density signals so the
 /// `KnowledgeDensity` document filter can act on them post-extraction.
 fn build_grouped_doc(qid: u64, q: &QMeta, answers: &[AMeta]) -> ExtractedDoc {
-    let mut content = String::with_capacity(q.body.len() + answers.iter().map(|a| a.body.len()).sum::<usize>() + 256);
+    let mut content = String::with_capacity(
+        q.body.len() + answers.iter().map(|a| a.body.len()).sum::<usize>() + 256,
+    );
     content.push_str("Question: ");
     content.push_str(q.title.trim());
     content.push_str("\n\n");
@@ -934,13 +918,10 @@ fn first_sentence_skipping_code(body: &str) -> String {
 }
 
 /// Parse attributes from a <row> element into a HashMap.
-fn parse_row_attrs(
-    e: &quick_xml::events::BytesStart<'_>,
-) -> Result<HashMap<String, String>> {
+fn parse_row_attrs(e: &quick_xml::events::BytesStart<'_>) -> Result<HashMap<String, String>> {
     let mut map = HashMap::new();
     for attr in e.attributes() {
-        let attr =
-            attr.map_err(|e| Error::Extraction(format!("XML attribute error: {e}")))?;
+        let attr = attr.map_err(|e| Error::Extraction(format!("XML attribute error: {e}")))?;
         let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
         let val = attr
             .unescape_value()
@@ -1050,17 +1031,19 @@ pub(crate) fn strip_mediawiki(text: &str) -> String {
                     is_closing = true;
                     tag = tag[1..].to_string();
                 }
-                let tag_name = tag
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or("")
-                    .to_lowercase();
+                let tag_name = tag.split_whitespace().next().unwrap_or("").to_lowercase();
                 // For ref, nowiki, gallery, etc. -- skip content until closing tag.
                 if !is_closing
                     && !tag.ends_with('/')
                     && matches!(
                         tag_name.as_str(),
-                        "ref" | "nowiki" | "gallery" | "math" | "source" | "syntaxhighlight" | "code"
+                        "ref"
+                            | "nowiki"
+                            | "gallery"
+                            | "math"
+                            | "source"
+                            | "syntaxhighlight"
+                            | "code"
                     )
                 {
                     let close = format!("</{tag_name}>");
@@ -1206,10 +1189,7 @@ Python emphasizes code readability.
         // Should have docs for Rust and Python, not Talk or Redirect.
         assert!(docs.len() >= 2);
 
-        let all_titles: Vec<_> = docs
-            .iter()
-            .filter_map(|d| d.title.as_ref())
-            .collect();
+        let all_titles: Vec<_> = docs.iter().filter_map(|d| d.title.as_ref()).collect();
         let all_content: String = docs.iter().map(|d| d.content.clone()).collect();
 
         assert!(all_titles.iter().any(|t| t.contains("Rust")));
@@ -1438,7 +1418,10 @@ Python emphasizes code readability.
         let redis = body.find("Redis").expect("redis present");
         let dynamo = body.find("DynamoDB").expect("dynamo present");
         assert!(redis < pg, "accepted answer should be Approach 1");
-        assert!(pg < dynamo, "answers should be sorted by score desc after accepted");
+        assert!(
+            pg < dynamo,
+            "answers should be sorted by score desc after accepted"
+        );
 
         // Score-2 answer is below min_score=3 and must not appear.
         assert!(!body.contains("Just use SQLite"));
@@ -1529,7 +1512,10 @@ Python emphasizes code readability.
             .unwrap()
             .collect::<std::result::Result<Vec<_>, _>>()
             .unwrap();
-        assert!(docs.is_empty(), "min_answer_length should reject everything");
+        assert!(
+            docs.is_empty(),
+            "min_answer_length should reject everything"
+        );
     }
 
     #[test]
@@ -1596,14 +1582,18 @@ Python emphasizes code readability.
 
     #[test]
     fn parse_tags_handles_se_format() {
-        assert_eq!(parse_tags(Some("<rust><memory-management>")), vec!["rust", "memory-management"]);
+        assert_eq!(
+            parse_tags(Some("<rust><memory-management>")),
+            vec!["rust", "memory-management"]
+        );
         assert_eq!(parse_tags(None), Vec::<String>::new());
         assert_eq!(parse_tags(Some("")), Vec::<String>::new());
     }
 
     #[test]
     fn first_sentence_skips_leading_code_block() {
-        let body = "```python\nprint('hi')\n```\nUse the standard library to parse JSON. It's faster.";
+        let body =
+            "```python\nprint('hi')\n```\nUse the standard library to parse JSON. It's faster.";
         let s = first_sentence_skipping_code(body);
         assert!(s.starts_with("Use the standard library"));
     }
@@ -1694,7 +1684,10 @@ Python emphasizes code readability.
         assert_eq!(docs.len(), 1);
         assert!(docs[0].title.as_deref().unwrap().contains("Index design"));
         // Sentinel was written so a re-run skips the decompress step.
-        assert!(bundle.join("dba.stackexchange.com").join(".extracted").is_file());
+        assert!(bundle
+            .join("dba.stackexchange.com")
+            .join(".extracted")
+            .is_file());
 
         // Re-run is idempotent: the extracted dir + sentinel mean
         // ensure_seven_zip_extracted short-circuits; docs still come out.

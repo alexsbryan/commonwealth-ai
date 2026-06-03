@@ -11,9 +11,7 @@ use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use commonwealth_api::server::internal_router;
 use commonwealth_api::state::AppState;
-use commonwealth_core::capabilities::{
-    AvailableResources, HardwareProfile, NodeCapabilities,
-};
+use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use tower::ServiceExt;
@@ -51,11 +49,7 @@ fn member(id: NodeId, name: &str, last_seen: u64) -> MemberRecord {
     }
 }
 
-fn mesh_with(
-    mesh_id: MeshId,
-    hash: [u8; 32],
-    members: Vec<MemberRecord>,
-) -> Mesh {
+fn mesh_with(mesh_id: MeshId, hash: [u8; 32], members: Vec<MemberRecord>) -> Mesh {
     let mut map = HashMap::new();
     for m in members {
         map.insert(m.node_id, m);
@@ -116,8 +110,7 @@ async fn gossip_merges_incoming_member_into_local_view() {
             Request::post("/internal/gossip")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    serde_json::to_string(&gossip_request_body(&incoming))
-                        .unwrap(),
+                    serde_json::to_string(&gossip_request_body(&incoming)).unwrap(),
                 ))
                 .unwrap(),
         )
@@ -157,8 +150,7 @@ async fn gossip_rejects_wrong_mesh_id() {
             Request::post("/internal/gossip")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    serde_json::to_string(&gossip_request_body(&foreign))
-                        .unwrap(),
+                    serde_json::to_string(&gossip_request_body(&foreign)).unwrap(),
                 ))
                 .unwrap(),
         )
@@ -223,8 +215,7 @@ async fn gossip_does_not_overwrite_self_record() {
             Request::post("/internal/gossip")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    serde_json::to_string(&gossip_request_body(&incoming))
-                        .unwrap(),
+                    serde_json::to_string(&gossip_request_body(&incoming)).unwrap(),
                 ))
                 .unwrap(),
         )

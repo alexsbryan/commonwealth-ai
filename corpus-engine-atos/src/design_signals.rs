@@ -169,7 +169,10 @@ fn parse_sections(md: &str, line_starts: &[usize]) -> Vec<Section> {
     // Pass 2: slice bodies between consecutive headings.
     let mut sections = Vec::with_capacity(headings.len());
     for (i, h) in headings.iter().enumerate() {
-        let body_end = headings.get(i + 1).map(|next| next.start).unwrap_or(md.len());
+        let body_end = headings
+            .get(i + 1)
+            .map(|next| next.start)
+            .unwrap_or(md.len());
         // Guard against empty or inverted ranges (shouldn't happen for
         // well-formed markdown but pulldown-cmark can report unusual
         // offsets for malformed input).
@@ -277,10 +280,7 @@ fn detect_gaps(sections: &[Section], _line_starts: &[usize]) -> Vec<GapMarker> {
         }
 
         // Signal 2: body is a single empty-bullet placeholder.
-        let non_empty: Vec<&str> = body_trim
-            .lines()
-            .filter(|l| !l.trim().is_empty())
-            .collect();
+        let non_empty: Vec<&str> = body_trim.lines().filter(|l| !l.trim().is_empty()).collect();
         if non_empty.len() == 1 {
             let only = non_empty[0].trim();
             if only == "-" || only == "*" {
@@ -361,9 +361,7 @@ fn detect_gaps(sections: &[Section], _line_starts: &[usize]) -> Vec<GapMarker> {
             // Signal 6: literal question. Skip lines that are under the
             // "Open questions" heading — those are legitimately the place
             // for open questions to live.
-            if line.ends_with('?')
-                && !section.heading.eq_ignore_ascii_case("open questions")
-            {
+            if line.ends_with('?') && !section.heading.eq_ignore_ascii_case("open questions") {
                 gaps.push(GapMarker {
                     section: section.heading.clone(),
                     snippet: truncate(line),
@@ -422,7 +420,14 @@ fn has_unresolved_vs(lower_line: &str) -> bool {
         return false;
     }
     // Resolution signals on the same line.
-    let resolution = ["chose", "picked", "decided", "we use", "we picked", "we chose"];
+    let resolution = [
+        "chose",
+        "picked",
+        "decided",
+        "we use",
+        "we picked",
+        "we chose",
+    ];
     !resolution.iter().any(|kw| lower_line.contains(kw))
 }
 
@@ -441,7 +446,17 @@ fn truncate(s: &str) -> String {
 fn detect_keywords(md: &str) -> KeywordBuckets {
     let stripped = strip_code_and_comments(md).to_lowercase();
     KeywordBuckets {
-        time: any_word(&stripped, &["time", "timestamp", "timestamps", "utc", "timezone", "schedule"]),
+        time: any_word(
+            &stripped,
+            &[
+                "time",
+                "timestamp",
+                "timestamps",
+                "utc",
+                "timezone",
+                "schedule",
+            ],
+        ),
         persistence: any_word(
             &stripped,
             &[
@@ -456,13 +471,30 @@ fn detect_keywords(md: &str) -> KeywordBuckets {
                 "disk",
             ],
         ),
-        api: any_word(&stripped, &["api", "http", "endpoint", "rest", "graphql", "grpc"]),
-        queue: any_word(&stripped, &["queue", "kafka", "redis", "pubsub", "mq", "nats"]),
+        api: any_word(
+            &stripped,
+            &["api", "http", "endpoint", "rest", "graphql", "grpc"],
+        ),
+        queue: any_word(
+            &stripped,
+            &["queue", "kafka", "redis", "pubsub", "mq", "nats"],
+        ),
         concurrency: any_word(
             &stripped,
-            &["async", "thread", "actor", "goroutine", "tokio", "mutex", "channel"],
+            &[
+                "async",
+                "thread",
+                "actor",
+                "goroutine",
+                "tokio",
+                "mutex",
+                "channel",
+            ],
         ),
-        secrets: any_word(&stripped, &["secret", "vault", "kms", "credential", "credentials"]),
+        secrets: any_word(
+            &stripped,
+            &["secret", "vault", "kms", "credential", "credentials"],
+        ),
         consumers: any_word(&stripped, &["consumer", "downstream", "caller", "client"]),
     }
 }
@@ -705,10 +737,9 @@ mod tests {
         let md = "# P\n\n## Anchors\n\n- Primary persistence: sqlite\n- Primary interface: HTTP\n- Language: Rust\n\n## Next\n\nfoo\n";
         let s = extract(md);
         assert_eq!(s.anchors.len(), 3);
-        let empty_for_anchors = s
-            .gaps
-            .iter()
-            .find(|g| g.section.eq_ignore_ascii_case("anchors") && g.reason == GapReason::EmptySection);
+        let empty_for_anchors = s.gaps.iter().find(|g| {
+            g.section.eq_ignore_ascii_case("anchors") && g.reason == GapReason::EmptySection
+        });
         assert!(empty_for_anchors.is_none(), "anchors should not be flagged");
     }
 
@@ -754,7 +785,8 @@ mod tests {
     #[test]
     fn keyword_scan_skips_code_fences() {
         // Put "timestamp" only inside a code fence — should NOT fire.
-        let md = "# P\n\n## Plan\n\n```rust\nlet timestamp = 0;\n```\n\nNo temporal concerns here.\n";
+        let md =
+            "# P\n\n## Plan\n\n```rust\nlet timestamp = 0;\n```\n\nNo temporal concerns here.\n";
         let s = extract(md);
         assert!(!s.keywords.time);
     }
@@ -839,7 +871,11 @@ mod tests {
             .iter()
             .filter(|g| g.reason == GapReason::EmptySection)
             .count();
-        assert!(empty_count >= 3, "expected >=3 empty-section gaps, got {empty_count}: {:?}", s.gaps);
+        assert!(
+            empty_count >= 3,
+            "expected >=3 empty-section gaps, got {empty_count}: {:?}",
+            s.gaps
+        );
         // HTML comments mentioning "timestamps" etc. must NOT inflate
         // keyword buckets (none of the comments mention those anyway).
         assert!(!s.keywords.time);

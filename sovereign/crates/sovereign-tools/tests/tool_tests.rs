@@ -23,10 +23,7 @@ fn shell_tool_descriptor() {
     assert_eq!(desc.id, "shell");
     assert_eq!(desc.name, "Shell");
     assert!(!tool.required_permissions().is_empty());
-    assert!(matches!(
-        tool.required_permissions()[0],
-        Permission::Shell
-    ));
+    assert!(matches!(tool.required_permissions()[0], Permission::Shell));
 }
 
 #[test]

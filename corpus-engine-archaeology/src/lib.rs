@@ -21,6 +21,6 @@
 //! - [`rough_edges`] — Finds TODOs / FIXMEs / red-team flags that
 //!   accumulate without resolution.
 
-pub mod git_archaeology;
 pub mod archaeology_eval;
+pub mod git_archaeology;
 pub mod rough_edges;

@@ -17,9 +17,9 @@
 
 use serde::Serialize;
 
-use crate::gym_judge::{Judge, Verdict};
 use super::predicate::Predicate;
 use super::runner::Transcript;
+use crate::gym_judge::{Judge, Verdict};
 
 /// Number of independent judge trials to run per semantic assertion.
 /// 3 lets us take a majority vote: 2-1 or 3-0 either way. Empirical
@@ -150,9 +150,7 @@ pub fn score(slug: &str, predicate: &Predicate, tx: &Transcript) -> Scored {
                 ));
             }
         } else if predicate.should_call_search != Some(false) {
-            reasons.push(
-                "expected_query_max_tokens set but no search call observed".into(),
-            );
+            reasons.push("expected_query_max_tokens set but no search call observed".into());
         }
     }
 
@@ -196,9 +194,7 @@ pub fn score(slug: &str, predicate: &Predicate, tx: &Transcript) -> Scored {
     // operators running `--no-judge` see the asymmetry instead of a
     // misleading green pass. score_with_judge() clears this reason
     // before evaluating the assertions itself.
-    if !predicate.final_message_satisfies.is_empty()
-        || !predicate.query_satisfies.is_empty()
-    {
+    if !predicate.final_message_satisfies.is_empty() || !predicate.query_satisfies.is_empty() {
         reasons.push(format!(
             "semantic predicates set ({} on final_message, {} on query) but no judge \
              provided — re-run without --no-judge to evaluate them",
@@ -481,7 +477,10 @@ pub fn render_table(aggregates: &[AggregatedFixture]) -> String {
         "{:<40} {:>9} {:>6}   fail reasons (first 3)\n",
         "fixture", "pass", "rate"
     ));
-    out.push_str(&format!("{:-<40} {:->9} {:->6}   {:-<40}\n", "", "", "", ""));
+    out.push_str(&format!(
+        "{:-<40} {:->9} {:->6}   {:-<40}\n",
+        "", "", "", ""
+    ));
     let mut total_pass = 0usize;
     let mut total_run = 0usize;
     for a in aggregates {
@@ -670,7 +669,8 @@ fn extract_urls(text: &str) -> Vec<String> {
             // `https://x](https://x` which never matches mock_urls).
             let end = text[abs..]
                 .find(|c: char| {
-                    c.is_whitespace() || matches!(c, ',' | '<' | '>' | ')' | '(' | '[' | ']' | '"' | '\'')
+                    c.is_whitespace()
+                        || matches!(c, ',' | '<' | '>' | ')' | '(' | '[' | ']' | '"' | '\'')
                 })
                 .map(|n| abs + n)
                 .unwrap_or(text.len());
@@ -691,8 +691,8 @@ fn extract_urls(text: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::runner::ObservedToolCall;
+    use super::*;
 
     fn tx_with_calls(calls: Vec<ObservedToolCall>, final_msg: &str) -> Transcript {
         Transcript {
@@ -761,7 +761,10 @@ mod tests {
     fn must_cite_url_from_mock_counts_distinct_appearances() {
         let mut p = pred_default();
         p.must_cite_url_from_mock = Some(2);
-        let mut tx = tx_with_calls(vec![], "Per [1] (https://example.com/a) and [2] (https://example.com/b)…");
+        let mut tx = tx_with_calls(
+            vec![],
+            "Per [1] (https://example.com/a) and [2] (https://example.com/b)…",
+        );
         tx.mock_urls = vec![
             "https://example.com/a".into(),
             "https://example.com/b".into(),
@@ -779,13 +782,23 @@ mod tests {
         tx.mock_urls = vec!["https://real.example.com/y".into()];
         let s = score("01", &p, &tx);
         assert!(!s.pass);
-        assert!(s.reasons[0].contains("hallucinated"), "reasons={:?}", s.reasons);
+        assert!(
+            s.reasons[0].contains("hallucinated"),
+            "reasons={:?}",
+            s.reasons
+        );
     }
 
     #[test]
     fn count_mock_citations_inline_url() {
-        let urls = vec!["https://a.test/x".to_string(), "https://b.test/y".to_string()];
-        assert_eq!(count_mock_citations("see https://a.test/x for context.", &urls), 1);
+        let urls = vec![
+            "https://a.test/x".to_string(),
+            "https://b.test/y".to_string(),
+        ];
+        assert_eq!(
+            count_mock_citations("see https://a.test/x for context.", &urls),
+            1
+        );
         assert_eq!(
             count_mock_citations("see https://a.test/x and https://b.test/y", &urls),
             2
@@ -807,7 +820,10 @@ mod tests {
 
     #[test]
     fn count_mock_citations_combines_forms() {
-        let urls = vec!["https://a.test/x".to_string(), "https://b.test/y".to_string()];
+        let urls = vec![
+            "https://a.test/x".to_string(),
+            "https://b.test/y".to_string(),
+        ];
         // Inline URL covers index 0; [2] covers index 1.
         let s = "https://a.test/x says X, and footnote [2] adds Y.";
         assert_eq!(count_mock_citations(s, &urls), 2);
@@ -815,7 +831,10 @@ mod tests {
 
     #[test]
     fn count_mock_citations_rejects_out_of_range_markers() {
-        let urls = vec!["https://a.test/x".to_string(), "https://b.test/y".to_string()];
+        let urls = vec![
+            "https://a.test/x".to_string(),
+            "https://b.test/y".to_string(),
+        ];
         // [5] and [99] don't map to any mock_url — must NOT count.
         assert_eq!(count_mock_citations("claim [5] and [99]", &urls), 0);
     }
@@ -862,45 +881,95 @@ mod tests {
     #[tokio::test]
     async fn judge_consensus_3_pass_returns_pass() {
         let j = SequencedJudge::new(vec![
-            Ok(Verdict { passes: true, rationale: "yes".into() }),
-            Ok(Verdict { passes: true, rationale: "indeed".into() }),
-            Ok(Verdict { passes: true, rationale: "correct".into() }),
+            Ok(Verdict {
+                passes: true,
+                rationale: "yes".into(),
+            }),
+            Ok(Verdict {
+                passes: true,
+                rationale: "indeed".into(),
+            }),
+            Ok(Verdict {
+                passes: true,
+                rationale: "correct".into(),
+            }),
         ]);
-        let v = judge_consensus(&j, "assertion", "subject", 3).await.unwrap();
+        let v = judge_consensus(&j, "assertion", "subject", 3)
+            .await
+            .unwrap();
         assert!(v.passes);
-        assert!(v.rationale.contains("3/3 judges passed"), "got: {}", v.rationale);
+        assert!(
+            v.rationale.contains("3/3 judges passed"),
+            "got: {}",
+            v.rationale
+        );
     }
 
     #[tokio::test]
     async fn judge_consensus_2_pass_1_fail_returns_pass() {
         let j = SequencedJudge::new(vec![
-            Ok(Verdict { passes: true, rationale: "yes".into() }),
-            Ok(Verdict { passes: false, rationale: "no".into() }),
-            Ok(Verdict { passes: true, rationale: "yes again".into() }),
+            Ok(Verdict {
+                passes: true,
+                rationale: "yes".into(),
+            }),
+            Ok(Verdict {
+                passes: false,
+                rationale: "no".into(),
+            }),
+            Ok(Verdict {
+                passes: true,
+                rationale: "yes again".into(),
+            }),
         ]);
         let v = judge_consensus(&j, "a", "s", 3).await.unwrap();
         assert!(v.passes);
-        assert!(v.rationale.contains("2/3 judges passed"), "got: {}", v.rationale);
+        assert!(
+            v.rationale.contains("2/3 judges passed"),
+            "got: {}",
+            v.rationale
+        );
     }
 
     #[tokio::test]
     async fn judge_consensus_1_pass_2_fail_returns_fail() {
         let j = SequencedJudge::new(vec![
-            Ok(Verdict { passes: false, rationale: "no".into() }),
-            Ok(Verdict { passes: true, rationale: "yes".into() }),
-            Ok(Verdict { passes: false, rationale: "still no".into() }),
+            Ok(Verdict {
+                passes: false,
+                rationale: "no".into(),
+            }),
+            Ok(Verdict {
+                passes: true,
+                rationale: "yes".into(),
+            }),
+            Ok(Verdict {
+                passes: false,
+                rationale: "still no".into(),
+            }),
         ]);
         let v = judge_consensus(&j, "a", "s", 3).await.unwrap();
         assert!(!v.passes);
-        assert!(v.rationale.contains("2/3 judges failed"), "got: {}", v.rationale);
+        assert!(
+            v.rationale.contains("2/3 judges failed"),
+            "got: {}",
+            v.rationale
+        );
     }
 
     #[tokio::test]
     async fn judge_consensus_3_fail_returns_fail() {
         let j = SequencedJudge::new(vec![
-            Ok(Verdict { passes: false, rationale: "no".into() }),
-            Ok(Verdict { passes: false, rationale: "no".into() }),
-            Ok(Verdict { passes: false, rationale: "no".into() }),
+            Ok(Verdict {
+                passes: false,
+                rationale: "no".into(),
+            }),
+            Ok(Verdict {
+                passes: false,
+                rationale: "no".into(),
+            }),
+            Ok(Verdict {
+                passes: false,
+                rationale: "no".into(),
+            }),
         ]);
         let v = judge_consensus(&j, "a", "s", 3).await.unwrap();
         assert!(!v.passes);
@@ -910,9 +979,15 @@ mod tests {
     #[tokio::test]
     async fn judge_consensus_tolerates_one_error_with_majority() {
         let j = SequencedJudge::new(vec![
-            Ok(Verdict { passes: true, rationale: "yes".into() }),
+            Ok(Verdict {
+                passes: true,
+                rationale: "yes".into(),
+            }),
             Err("transient".into()),
-            Ok(Verdict { passes: true, rationale: "yes2".into() }),
+            Ok(Verdict {
+                passes: true,
+                rationale: "yes2".into(),
+            }),
         ]);
         let v = judge_consensus(&j, "a", "s", 3).await.unwrap();
         assert!(v.passes);
@@ -925,18 +1000,17 @@ mod tests {
 
     #[tokio::test]
     async fn judge_consensus_all_errors_surfaces_error() {
-        let j = SequencedJudge::new(vec![
-            Err("e1".into()),
-            Err("e2".into()),
-            Err("e3".into()),
-        ]);
+        let j = SequencedJudge::new(vec![Err("e1".into()), Err("e2".into()), Err("e3".into())]);
         let err = judge_consensus(&j, "a", "s", 3).await.unwrap_err();
         assert!(!err.is_empty());
     }
 
     #[test]
     fn count_mock_citations_accepts_pandoc_footnotes() {
-        let urls = vec!["https://a.test/x".to_string(), "https://b.test/y".to_string()];
+        let urls = vec![
+            "https://a.test/x".to_string(),
+            "https://b.test/y".to_string(),
+        ];
         assert_eq!(count_mock_citations("claim [^1]", &urls), 1);
         assert_eq!(count_mock_citations("two [^1] and [^2]", &urls), 2);
         // `[^N]` and `[N]` for the same index should dedupe.
@@ -1124,10 +1198,7 @@ mod tests {
         // get the full per-replay payload, not just dedup'd reasons.
         let tx = tx_with_calls(vec![], "hi");
         let p = pred_default();
-        let scored = vec![
-            score("01", &p, &tx),
-            score("01", &p, &tx),
-        ];
+        let scored = vec![score("01", &p, &tx), score("01", &p, &tx)];
         let agg = aggregate("01_fixture", &scored);
         assert_eq!(agg.replay_records.len(), 2);
         // Round-trip via JSON so we catch any skip_serializing slip.

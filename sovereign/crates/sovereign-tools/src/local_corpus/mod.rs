@@ -33,22 +33,20 @@ pub mod manager;
 pub mod ocr;
 pub mod pre_scanner;
 pub mod preview;
-pub mod recipe_extractor;
 pub mod progress;
+pub mod recipe_extractor;
 pub mod watched;
 pub mod writeback;
 
 pub use config::{
-    CorpusScope, LocalCorpusConfig, LocalCorpusSourceType, PreScanConfig, WatcherConfig,
-    WatchedFolderConfig, DeletionGuardConfig, WriteBackConfig,
+    CorpusScope, DeletionGuardConfig, LocalCorpusConfig, LocalCorpusSourceType, PreScanConfig,
+    WatchedFolderConfig, WatcherConfig, WriteBackConfig,
 };
 pub use humanise::humanise_display_name;
-pub use manager::{
-    IncompleteJob, IngestStats, LocalCorpusManager, WatchedIncompleteJob,
-};
+pub use manager::{IncompleteJob, IngestStats, LocalCorpusManager, WatchedIncompleteJob};
 pub use pre_scanner::{FileMeta, PdfClass, PreScanResult, PreScanner};
 pub use progress::{ClusterStage, CompletionResult, ExcerptChunk, LocalCorpusProgress};
 pub use watched::{
-    Scheduler as WatchedFolderScheduler, Worker as WatchedFolderWorker,
-    WatchedFolderEvent, WatchedFolderRegistry, WatchedFolderStatus,
+    Scheduler as WatchedFolderScheduler, WatchedFolderEvent, WatchedFolderRegistry,
+    WatchedFolderStatus, Worker as WatchedFolderWorker,
 };

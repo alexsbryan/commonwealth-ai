@@ -101,11 +101,10 @@ pub fn corpus_watch_router() -> Router {
             "/internal/corpus/watch/{corpus_id}/enrich/rebuild",
             post(enrich_rebuild_handler),
         )
-        .route(
-            "/internal/corpus/watch/{corpus_id}",
-            delete(remove_handler),
-        )
-        .layer(axum::middleware::from_fn(crate::loopback_guard::loopback_only))
+        .route("/internal/corpus/watch/{corpus_id}", delete(remove_handler))
+        .layer(axum::middleware::from_fn(
+            crate::loopback_guard::loopback_only,
+        ))
 }
 
 // ─── Wire types ──────────────────────────────────────────────────
@@ -141,8 +140,13 @@ pub struct RegisterResponse {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum InitialSweepStatus {
     Skipped,
-    Spawned { corpus_id: String },
-    Completed { files_indexed: usize, chunks_written: u64 },
+    Spawned {
+        corpus_id: String,
+    },
+    Completed {
+        files_indexed: usize,
+        chunks_written: u64,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -407,7 +411,11 @@ async fn register_handler(
         .display_name
         .clone()
         .unwrap_or_else(|| basename_or_unknown(&req.path));
-    let cfg = LocalCorpusConfig::watched_folder(req.path.clone(), display_name.clone(), req.config.clone());
+    let cfg = LocalCorpusConfig::watched_folder(
+        req.path.clone(),
+        display_name.clone(),
+        req.config.clone(),
+    );
     let corpus_id = cfg.id.clone();
     let sweep_interval = req.config.sweep_interval_secs;
     let sync_mode = req.config.sync_mode;
@@ -597,8 +605,7 @@ async fn details_handler(
     // so the extension comes off the key string. Files without an
     // extension bucket as `(no extension)` to mirror the same
     // labelling the skipped-by-extension breakdown uses.
-    let mut formats: std::collections::HashMap<String, usize> =
-        std::collections::HashMap::new();
+    let mut formats: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for doc_id in state.entries.keys() {
         let ext = std::path::Path::new(doc_id)
             .extension()
@@ -611,8 +618,7 @@ async fn details_handler(
     // Folder-ingest v1 §3.1 — assemble the roots array. `doc_count`
     // is computed from `state.entries[*].source_root_index`, which
     // the walker stamps in `walk_one_root`.
-    let mut docs_per_root: std::collections::HashMap<u8, usize> =
-        std::collections::HashMap::new();
+    let mut docs_per_root: std::collections::HashMap<u8, usize> = std::collections::HashMap::new();
     for entry in state.entries.values() {
         *docs_per_root.entry(entry.source_root_index).or_insert(0) += 1;
     }
@@ -639,7 +645,9 @@ async fn details_handler(
     }
 
     let last_sweep_unix = match &state.status {
-        WatchedFolderStatus::Idle { last_sweep_unix, .. } => *last_sweep_unix,
+        WatchedFolderStatus::Idle {
+            last_sweep_unix, ..
+        } => *last_sweep_unix,
         WatchedFolderStatus::PausedManual { since_unix, .. } => *since_unix,
         WatchedFolderStatus::PausedAwaitingConfirmation {
             sweep_started_unix, ..
@@ -660,11 +668,7 @@ async fn details_handler(
     // manager's in-memory map — the on-disk state file is only
     // refreshed on terminal transitions to avoid fsync churn at
     // every chapter event.
-    let pipeline_id_for_enrichment = match cfg
-        .source_type
-        .watched_config()
-        .map(|w| &w.enrichment)
-    {
+    let pipeline_id_for_enrichment = match cfg.source_type.watched_config().map(|w| &w.enrichment) {
         Some(sovereign_tools::local_corpus::config::WatchedEnrichmentConfig::On {
             pipeline_id,
             ..
@@ -672,9 +676,7 @@ async fn details_handler(
         _ => None,
     };
     let live_status = manager.enrichment_progress(&corpus_id);
-    let runtime_status = live_status
-        .as_ref()
-        .unwrap_or(&state.enrichment_status);
+    let runtime_status = live_status.as_ref().unwrap_or(&state.enrichment_status);
     let enrichment = match runtime_status {
         sovereign_tools::local_corpus::watched::state::EnrichmentRuntimeStatus::Off => {
             EnrichmentStatus::Off
@@ -740,7 +742,10 @@ async fn details_handler(
                     total: 0,
                     started_at_unix: *started_at_unix,
                 },
-                AssetState::Indexing { chunks_done, chunks_total } => EnrichmentStatus::Building {
+                AssetState::Indexing {
+                    chunks_done,
+                    chunks_total,
+                } => EnrichmentStatus::Building {
                     pipeline_id: pipeline_id_for_enrichment.clone().unwrap_or_default(),
                     phase: "tiered:indexing".into(),
                     current: *chunks_done,
@@ -754,7 +759,10 @@ async fn details_handler(
                     total: 0,
                     started_at_unix: *started_at_unix,
                 },
-                AssetState::BuildingSkeleton { chunks_done, chunks_total } => EnrichmentStatus::Building {
+                AssetState::BuildingSkeleton {
+                    chunks_done,
+                    chunks_total,
+                } => EnrichmentStatus::Building {
                     pipeline_id: pipeline_id_for_enrichment.clone().unwrap_or_default(),
                     phase: "tiered:building_skeleton".into(),
                     current: *chunks_done,
@@ -847,9 +855,7 @@ async fn document_handler(
     .into_response()
 }
 
-async fn incomplete_jobs_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-) -> impl IntoResponse {
+async fn incomplete_jobs_handler(ConnectInfo(peer): ConnectInfo<SocketAddr>) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
         return r;
     }
@@ -876,7 +882,11 @@ async fn pause_handler(
         .unwrap_or_default()
         .unwrap_or_else(|| "user".into());
     match manager.pause_watched(&corpus_id, reason).await {
-        Ok(()) => Json(AckResponse { corpus_id, ok: true }).into_response(),
+        Ok(()) => Json(AckResponse {
+            corpus_id,
+            ok: true,
+        })
+        .into_response(),
         Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
@@ -892,7 +902,11 @@ async fn resume_handler(
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
     match manager.resume_watched(&corpus_id).await {
-        Ok(()) => Json(AckResponse { corpus_id, ok: true }).into_response(),
+        Ok(()) => Json(AckResponse {
+            corpus_id,
+            ok: true,
+        })
+        .into_response(),
         Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
@@ -908,7 +922,11 @@ async fn confirm_deletion_handler(
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
     match manager.confirm_pending_deletion(&corpus_id).await {
-        Ok(()) => Json(AckResponse { corpus_id, ok: true }).into_response(),
+        Ok(()) => Json(AckResponse {
+            corpus_id,
+            ok: true,
+        })
+        .into_response(),
         Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
@@ -929,7 +947,11 @@ async fn add_root_handler(
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
     match manager.add_watched_root(&corpus_id, req.path).await {
-        Ok(()) => Json(AckResponse { corpus_id, ok: true }).into_response(),
+        Ok(()) => Json(AckResponse {
+            corpus_id,
+            ok: true,
+        })
+        .into_response(),
         Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
@@ -950,7 +972,11 @@ async fn remove_root_handler(
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
     match manager.remove_watched_root(&corpus_id, idx).await {
-        Ok(()) => Json(AckResponse { corpus_id, ok: true }).into_response(),
+        Ok(()) => Json(AckResponse {
+            corpus_id,
+            ok: true,
+        })
+        .into_response(),
         Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
@@ -971,8 +997,16 @@ async fn enrich_enable_handler(
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
-    match manager.enable_enrichment(&corpus_id, &req.pipeline_id).await {
-        Ok(job_id) => Json(EnrichJobAck { corpus_id, job_id, ok: true }).into_response(),
+    match manager
+        .enable_enrichment(&corpus_id, &req.pipeline_id)
+        .await
+    {
+        Ok(job_id) => Json(EnrichJobAck {
+            corpus_id,
+            job_id,
+            ok: true,
+        })
+        .into_response(),
         Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
@@ -992,7 +1026,11 @@ async fn enrich_disable_handler(
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
     match manager.disable_enrichment(&corpus_id).await {
-        Ok(()) => Json(AckResponse { corpus_id, ok: true }).into_response(),
+        Ok(()) => Json(AckResponse {
+            corpus_id,
+            ok: true,
+        })
+        .into_response(),
         Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
@@ -1013,7 +1051,12 @@ async fn enrich_rebuild_handler(
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
     match manager.rebuild_enrichment(&corpus_id).await {
-        Ok(job_id) => Json(EnrichJobAck { corpus_id, job_id, ok: true }).into_response(),
+        Ok(job_id) => Json(EnrichJobAck {
+            corpus_id,
+            job_id,
+            ok: true,
+        })
+        .into_response(),
         Err(e) => error(StatusCode::BAD_REQUEST, format!("{e}")).into_response(),
     }
 }
@@ -1063,7 +1106,11 @@ async fn sync_now_handler(
             "sync-now: registry slot missing; on-disk flag set, scheduler will pick up after auto-resume"
         );
     }
-    Json(AckResponse { corpus_id, ok: true }).into_response()
+    Json(AckResponse {
+        corpus_id,
+        ok: true,
+    })
+    .into_response()
 }
 
 async fn remove_handler(
@@ -1081,7 +1128,11 @@ async fn remove_handler(
     };
     registry.deregister(&corpus_id).await;
     match manager.remove(&corpus_id).await {
-        Ok(()) => Json(AckResponse { corpus_id, ok: true }).into_response(),
+        Ok(()) => Json(AckResponse {
+            corpus_id,
+            ok: true,
+        })
+        .into_response(),
         Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, format!("{e}")).into_response(),
     }
 }
@@ -1132,8 +1183,7 @@ mod tests {
             "display_name": "My notes",
             "sync_initial": true,
         });
-        let req: RegisterRequest =
-            serde_json::from_value(body).expect("register body must parse");
+        let req: RegisterRequest = serde_json::from_value(body).expect("register body must parse");
         assert_eq!(req.path, PathBuf::from("/tmp/notes"));
         assert_eq!(req.display_name.as_deref(), Some("My notes"));
         assert!(req.sync_initial);

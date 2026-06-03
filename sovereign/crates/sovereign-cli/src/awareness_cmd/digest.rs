@@ -23,8 +23,8 @@ use std::sync::Arc;
 
 use sovereign_tools::knowledge_view::relational::{format_relational, RelationalNote};
 use sovereign_tools::knowledge_view::splice_extension::{
-    load_chunk_timestamps, relational_notes_for_entity, strategic_goals_for_entity,
-    AtosSnapshot, ConversationCorpus,
+    load_chunk_timestamps, relational_notes_for_entity, strategic_goals_for_entity, AtosSnapshot,
+    ConversationCorpus,
 };
 use sovereign_tools::knowledge_view::strategic::{format_strategic, StrategicGoal};
 use sovereign_tools::knowledge_view::timeline::{
@@ -154,7 +154,10 @@ pub(super) async fn cmd_digest(args: &[String]) -> i32 {
 
     let rel_index_for_closure = Arc::clone(&rel_index);
     let rel_lookup = move |entity: &str| -> Vec<RelationalNote> {
-        rel_index_for_closure.get(entity).cloned().unwrap_or_default()
+        rel_index_for_closure
+            .get(entity)
+            .cloned()
+            .unwrap_or_default()
     };
     let strat_index_for_closure = Arc::clone(&strat_index);
     let strat_lookup = move |entity: &str| -> Vec<StrategicGoal> {
@@ -174,20 +177,10 @@ pub(super) async fn cmd_digest(args: &[String]) -> i32 {
     let now = unix_now();
 
     // Render relational.
-    let (rel_block, rel_count) = format_relational(
-        &all_timelines,
-        &rel_lookup,
-        &in_conv,
-        now,
-        rel_budget,
-    );
-    let (strat_block, strat_count) = format_strategic(
-        &all_timelines,
-        &strat_lookup,
-        &in_conv,
-        now,
-        strat_budget,
-    );
+    let (rel_block, rel_count) =
+        format_relational(&all_timelines, &rel_lookup, &in_conv, now, rel_budget);
+    let (strat_block, strat_count) =
+        format_strategic(&all_timelines, &strat_lookup, &in_conv, now, strat_budget);
 
     if rel_block.is_empty() && strat_block.is_empty() {
         println!("(no digest output — all timelines empty or below budget)");
@@ -195,17 +188,23 @@ pub(super) async fn cmd_digest(args: &[String]) -> i32 {
     }
 
     if !rel_block.is_empty() {
-        println!("═══ Relational Digest ({} {}, budget {}) ═══", rel_count,
+        println!(
+            "═══ Relational Digest ({} {}, budget {}) ═══",
+            rel_count,
             if rel_count == 1 { "entry" } else { "entries" },
-            rel_budget);
+            rel_budget
+        );
         println!();
         println!("{rel_block}");
     }
     if !strat_block.is_empty() {
         println!();
-        println!("═══ Strategic Digest ({} {}, budget {}) ═══", strat_count,
+        println!(
+            "═══ Strategic Digest ({} {}, budget {}) ═══",
+            strat_count,
             if strat_count == 1 { "entry" } else { "entries" },
-            strat_budget);
+            strat_budget
+        );
         println!();
         println!("{strat_block}");
     }

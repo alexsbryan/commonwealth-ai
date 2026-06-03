@@ -53,7 +53,9 @@ pub async fn corpus_collaborate(
     let engine = state.inner.corpus_engine.as_ref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorBody { error: "no corpus engine available on this node".into() }),
+            Json(ErrorBody {
+                error: "no corpus engine available on this node".into(),
+            }),
         )
     })?;
 
@@ -63,17 +65,25 @@ pub async fn corpus_collaborate(
     let local_member = mesh.members.get(&self_id).cloned().ok_or_else(|| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorBody { error: "local node not found in mesh".into() }),
+            Json(ErrorBody {
+                error: "local node not found in mesh".into(),
+            }),
         )
     })?;
 
-    let local_embed_model = state.inner.inference_store.get_local_embed_model()
-        .ok_or_else(|| (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorBody {
-                error: "embed model not configured on this node — cannot plan collaboration".into(),
-            }),
-        ))?;
+    let local_embed_model = state
+        .inner
+        .inference_store
+        .get_local_embed_model()
+        .ok_or_else(|| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorBody {
+                    error: "embed model not configured on this node — cannot plan collaboration"
+                        .into(),
+                }),
+            )
+        })?;
 
     // Include online peers whose *gossiped* embed_model matches ours
     // exactly. Without this upfront filter the coordinator would ship
@@ -180,9 +190,7 @@ pub async fn corpus_collaborate(
     // lease reaper. See `commonwealth-knowledge::work_queue`.
     if use_pull_queue() {
         let units = if is_jsonl {
-            let shard_count = engine
-                .jsonl_source_shard_count(&req.corpus_id)
-                .unwrap_or(1);
+            let shard_count = engine.jsonl_source_shard_count(&req.corpus_id).unwrap_or(1);
             if shard_count > 1 {
                 // Union LOCAL processed_shards (this peer's partition
                 // dirs on disk) with PEER processed_shards (every
@@ -217,21 +225,19 @@ pub async fn corpus_collaborate(
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(ErrorBody {
-                            error: format!(
-                                "count_jsonl_articles failed for '{}'",
-                                req.corpus_id
-                            ),
+                            error: format!("count_jsonl_articles failed for '{}'", req.corpus_id),
                         }),
                     )
                 })?;
-                let committed_iter_pos =
-                    engine.corpus_committed_iter_pos(&req.corpus_id);
+                let committed_iter_pos = engine.corpus_committed_iter_pos(&req.corpus_id);
                 let current_article = engine
                     .estimate_article_pos(&req.corpus_id, committed_iter_pos, 500)
                     .map_err(|e| {
                         (
                             StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(ErrorBody { error: e.to_string() }),
+                            Json(ErrorBody {
+                                error: e.to_string(),
+                            }),
                         )
                     })?
                     .unwrap_or(0);
@@ -240,18 +246,21 @@ pub async fn corpus_collaborate(
                 build_work_units_jsonl_single(current_article, total_articles, 32)
             }
         } else {
-            let remaining = engine
-                .remaining_source_files(&req.corpus_id)
-                .map_err(|e| {
-                    let status = if e.to_string().contains("No index found") {
-                        StatusCode::NOT_FOUND
-                    } else if e.to_string().contains("No source manifest") {
-                        StatusCode::UNPROCESSABLE_ENTITY
-                    } else {
-                        StatusCode::INTERNAL_SERVER_ERROR
-                    };
-                    (status, Json(ErrorBody { error: e.to_string() }))
-                })?;
+            let remaining = engine.remaining_source_files(&req.corpus_id).map_err(|e| {
+                let status = if e.to_string().contains("No index found") {
+                    StatusCode::NOT_FOUND
+                } else if e.to_string().contains("No source manifest") {
+                    StatusCode::UNPROCESSABLE_ENTITY
+                } else {
+                    StatusCode::INTERNAL_SERVER_ERROR
+                };
+                (
+                    status,
+                    Json(ErrorBody {
+                        error: e.to_string(),
+                    }),
+                )
+            })?;
             build_work_units_hf(&remaining)
         };
 
@@ -307,7 +316,10 @@ pub async fn corpus_collaborate(
                 )
                 .await;
                 match outcome {
-                    crate::auto_recover::RecoveryOutcome::Recovered { chunks, shards_covered } => {
+                    crate::auto_recover::RecoveryOutcome::Recovered {
+                        chunks,
+                        shards_covered,
+                    } => {
                         tracing::info!(
                             corpus = %req.corpus_id,
                             chunks,
@@ -472,8 +484,7 @@ pub async fn corpus_collaborate(
         let handoff_id_for_log = handoff.handoff_id;
         let corpus_id_for_log = handoff.corpus_id.clone();
         for peer in &candidates {
-            let mut ordered_addrs: Vec<std::net::SocketAddr> =
-                peer.addresses.to_vec();
+            let mut ordered_addrs: Vec<std::net::SocketAddr> = peer.addresses.to_vec();
             if ordered_addrs.is_empty() {
                 tracing::warn!(
                     node = %peer.node_id,
@@ -485,11 +496,19 @@ pub async fn corpus_collaborate(
             ordered_addrs.sort_by_key(|addr| match addr.ip() {
                 std::net::IpAddr::V4(v4) => {
                     let o = v4.octets();
-                    if o[0] == 100 && (o[1] & 0xc0) == 64 { 0 } else { 1 }
+                    if o[0] == 100 && (o[1] & 0xc0) == 64 {
+                        0
+                    } else {
+                        1
+                    }
                 }
                 std::net::IpAddr::V6(v6) => {
                     let s = v6.segments();
-                    if s[0] == 0xfd7a && s[1] == 0x115c && s[2] == 0xa1e0 { 0 } else { 2 }
+                    if s[0] == 0xfd7a && s[1] == 0x115c && s[2] == 0xa1e0 {
+                        0
+                    } else {
+                        2
+                    }
                 }
             });
             let body = serde_json::json!({
@@ -590,9 +609,7 @@ pub async fn corpus_collaborate(
         // was unsafe (silent corruption when snapshots drifted, a
         // confusing "zero chunks" error when B's extraction was
         // truncated) and is now only used for the single-shard case.
-        let shard_count = engine
-            .jsonl_source_shard_count(&req.corpus_id)
-            .unwrap_or(1);
+        let shard_count = engine.jsonl_source_shard_count(&req.corpus_id).unwrap_or(1);
         if shard_count > 1 {
             let processed: std::collections::HashSet<usize> = engine
                 .corpus_processed_shards(&req.corpus_id)
@@ -619,74 +636,92 @@ pub async fn corpus_collaborate(
                 &local_embed_model,
             )
             .map_err(|e| {
-                let body = Json(ErrorBody { error: e.to_string() });
+                let body = Json(ErrorBody {
+                    error: e.to_string(),
+                });
                 match e {
                     CollaborativeIngestionError::AlreadyComplete(_) => (StatusCode::CONFLICT, body),
                     _ => (StatusCode::UNPROCESSABLE_ENTITY, body),
                 }
             })?
         } else {
+            // Re-use the count we already computed during corpus-type detection.
+            let total_articles = jsonl_article_count.ok_or_else(|| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorBody {
+                        error: format!("count_jsonl_articles failed for '{}'", req.corpus_id),
+                    }),
+                )
+            })?;
 
-        // Re-use the count we already computed during corpus-type detection.
-        let total_articles = jsonl_article_count
-            .ok_or_else(|| (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody { error: format!("count_jsonl_articles failed for '{}'", req.corpus_id) }),
-            ))?;
+            // Load committed_iter_pos to estimate how far Machine A has gone.
+            let committed_iter_pos = engine.corpus_committed_iter_pos(&req.corpus_id);
+            let current_article = engine
+                .estimate_article_pos(&req.corpus_id, committed_iter_pos, 500)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ErrorBody {
+                            error: e.to_string(),
+                        }),
+                    )
+                })?
+                .unwrap_or(0);
 
-        // Load committed_iter_pos to estimate how far Machine A has gone.
-        let committed_iter_pos = engine.corpus_committed_iter_pos(&req.corpus_id);
-        let current_article = engine
-            .estimate_article_pos(&req.corpus_id, committed_iter_pos, 500)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody { error: e.to_string() })))?
-            .unwrap_or(0);
+            tracing::info!(
+                corpus = %req.corpus_id,
+                total_articles,
+                current_article,
+                committed_iter_pos,
+                "collaborate: planning JSONL article-range partition"
+            );
 
-        tracing::info!(
-            corpus = %req.corpus_id,
-            total_articles,
-            current_article,
-            committed_iter_pos,
-            "collaborate: planning JSONL article-range partition"
-        );
-
-        plan_collaborative_ingestion_jsonl(
-            &req.corpus_id,
-            recipe_id,
-            current_article,
-            total_articles,
-            &local_member,
-            &candidates,
-            &local_embed_model,
-        )
-        .map_err(|e| {
-            let body = Json(ErrorBody { error: e.to_string() });
-            match e {
-                CollaborativeIngestionError::AlreadyComplete(_) => (StatusCode::CONFLICT, body),
-                _ => (StatusCode::UNPROCESSABLE_ENTITY, body),
-            }
-        })?
-
+            plan_collaborative_ingestion_jsonl(
+                &req.corpus_id,
+                recipe_id,
+                current_article,
+                total_articles,
+                &local_member,
+                &candidates,
+                &local_embed_model,
+            )
+            .map_err(|e| {
+                let body = Json(ErrorBody {
+                    error: e.to_string(),
+                });
+                match e {
+                    CollaborativeIngestionError::AlreadyComplete(_) => (StatusCode::CONFLICT, body),
+                    _ => (StatusCode::UNPROCESSABLE_ENTITY, body),
+                }
+            })?
         }
     } else {
         // ── HF parquet path (Gutenberg, StackExchange, …) ─────────────────
-        let remaining = engine
-            .remaining_source_files(&req.corpus_id)
-            .map_err(|e| {
-                let status = if e.to_string().contains("No index found") {
-                    StatusCode::NOT_FOUND
-                } else if e.to_string().contains("No source manifest") {
-                    StatusCode::UNPROCESSABLE_ENTITY
-                } else {
-                    StatusCode::INTERNAL_SERVER_ERROR
-                };
-                (status, Json(ErrorBody { error: e.to_string() }))
-            })?;
+        let remaining = engine.remaining_source_files(&req.corpus_id).map_err(|e| {
+            let status = if e.to_string().contains("No index found") {
+                StatusCode::NOT_FOUND
+            } else if e.to_string().contains("No source manifest") {
+                StatusCode::UNPROCESSABLE_ENTITY
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            (
+                status,
+                Json(ErrorBody {
+                    error: e.to_string(),
+                }),
+            )
+        })?;
 
         if remaining.is_empty() {
             return Err((
                 StatusCode::CONFLICT,
                 Json(ErrorBody {
-                    error: format!("corpus '{}' is already complete — no remaining files", req.corpus_id),
+                    error: format!(
+                        "corpus '{}' is already complete — no remaining files",
+                        req.corpus_id
+                    ),
                 }),
             ));
         }
@@ -700,7 +735,9 @@ pub async fn corpus_collaborate(
             &local_embed_model,
         )
         .map_err(|e| {
-            let body = Json(ErrorBody { error: e.to_string() });
+            let body = Json(ErrorBody {
+                error: e.to_string(),
+            });
             match e {
                 CollaborativeIngestionError::AlreadyComplete(_) => (StatusCode::CONFLICT, body),
                 CollaborativeIngestionError::NoManifest(_) => (StatusCode::NOT_FOUND, body),
@@ -761,18 +798,25 @@ pub async fn corpus_collaborate(
             // — that's how Machine A ended up unable to dispatch to B
             // even though both machines had routable Tailscale addresses
             // advertised in `MemberRecord.addresses`.
-            let mut ordered_addrs: Vec<std::net::SocketAddr> =
-                peer.addresses.to_vec();
+            let mut ordered_addrs: Vec<std::net::SocketAddr> = peer.addresses.to_vec();
             ordered_addrs.sort_by_key(|addr| match addr.ip() {
                 std::net::IpAddr::V4(v4) => {
                     let o = v4.octets();
                     // CGNAT 100.64.0.0/10 → Tailscale IPv4.
-                    if o[0] == 100 && (o[1] & 0xc0) == 64 { 0 } else { 1 }
+                    if o[0] == 100 && (o[1] & 0xc0) == 64 {
+                        0
+                    } else {
+                        1
+                    }
                 }
                 std::net::IpAddr::V6(v6) => {
                     let s = v6.segments();
                     // Tailscale ULA fd7a:115c:a1e0::/48.
-                    if s[0] == 0xfd7a && s[1] == 0x115c && s[2] == 0xa1e0 { 0 } else { 2 }
+                    if s[0] == 0xfd7a && s[1] == 0x115c && s[2] == 0xa1e0 {
+                        0
+                    } else {
+                        2
+                    }
                 }
             });
             let payload = IngestPartitionRequest {
@@ -808,10 +852,8 @@ pub async fn corpus_collaborate(
                         std::net::IpAddr::V4(_) => addr.ip().to_string(),
                         std::net::IpAddr::V6(v6) => format!("[{v6}]"),
                     };
-                    let peer_url = format!(
-                        "http://{host}:{}/internal/corpus/ingest_partition",
-                        9742
-                    );
+                    let peer_url =
+                        format!("http://{host}:{}/internal/corpus/ingest_partition", 9742);
                     match client.post(&peer_url).json(&payload).send().await {
                         Ok(resp) if resp.status().is_success() => {
                             tracing::info!(
@@ -838,9 +880,7 @@ pub async fn corpus_collaborate(
                             );
                             accepted = false;
                             attempt_errors.clear();
-                            attempt_errors.push(format!(
-                                "{peer_url}: {status} {body}"
-                            ));
+                            attempt_errors.push(format!("{peer_url}: {status} {body}"));
                             break;
                         }
                         Err(e) => {

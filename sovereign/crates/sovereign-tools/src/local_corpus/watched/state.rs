@@ -138,10 +138,7 @@ pub enum EnrichmentRuntimeStatus {
     /// human-readable string the UI surfaces verbatim. The user
     /// can either re-enable (which kicks off a fresh Build) or
     /// disable to clear state.
-    Failed {
-        failed_at_unix: u64,
-        reason: String,
-    },
+    Failed { failed_at_unix: u64, reason: String },
     /// Tiered (in-process) enrichment status. Carries an explicit
     /// `AssetState` so the UI can render the same T1 / T2 / T3
     /// milestones as attached documents do. `state` advances
@@ -160,7 +157,6 @@ pub enum EnrichmentRuntimeStatus {
         doc_count: usize,
     },
 }
-
 
 impl WatchedFolderState {
     /// New, empty state for a freshly-registered corpus.

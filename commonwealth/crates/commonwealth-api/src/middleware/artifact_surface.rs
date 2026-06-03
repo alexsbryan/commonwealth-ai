@@ -147,7 +147,9 @@ async fn compute_delta(repo_root: &Path, feature_id: &str, since: i64) -> Artifa
                     // progress — by design, M3.
                     continue;
                 }
-                let Some(ended_at) = run.ended_at else { continue };
+                let Some(ended_at) = run.ended_at else {
+                    continue;
+                };
                 if ended_at <= since {
                     continue;
                 }
@@ -189,11 +191,7 @@ fn rfc3339_to_unix(s: &str) -> Option<i64> {
     let mm: i64 = tparts.next()?.parse().ok()?;
     // Seconds may have fractional part; take integer portion.
     let sec_str = tparts.next()?;
-    let ss: i64 = sec_str
-        .split('.')
-        .next()?
-        .parse()
-        .ok()?;
+    let ss: i64 = sec_str.split('.').next()?.parse().ok()?;
 
     // Days-from-civil epoch (Howard Hinnant's algorithm).
     let y = if month <= 2 { year - 1 } else { year };
@@ -314,9 +312,6 @@ mod tests {
 
         let delta = session.pending_artifact_delta.expect("delta staged");
         assert_eq!(delta.notes_by_kind.get("uncertainty"), Some(&1));
-        assert_eq!(
-            delta.recent_note_ids.get("uncertainty").unwrap()[0],
-            id
-        );
+        assert_eq!(delta.recent_note_ids.get("uncertainty").unwrap()[0], id);
     }
 }

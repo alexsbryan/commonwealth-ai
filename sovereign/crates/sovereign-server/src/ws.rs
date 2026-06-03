@@ -16,9 +16,18 @@ use crate::tenant::TenantRuntime;
 #[serde(tag = "type", content = "data")]
 #[serde(rename_all = "snake_case")]
 enum ClientEvent {
-    Message { content: String },
-    Approve { task_id: String, step_id: usize, approved: bool },
-    UserReply { task_id: String, content: String },
+    Message {
+        content: String,
+    },
+    Approve {
+        task_id: String,
+        step_id: usize,
+        approved: bool,
+    },
+    UserReply {
+        task_id: String,
+        content: String,
+    },
 }
 
 // Server → Client traffic flows through `ServerEvent` over the approval
@@ -34,9 +43,7 @@ pub async fn ws_handler(
     Extension(approval): Extension<Arc<ServerApprovalChannel>>,
     Path(conversation_id): Path<String>,
 ) -> Response {
-    ws.on_upgrade(move |socket| {
-        handle_ws(socket, runtime, tenant, approval, conversation_id)
-    })
+    ws.on_upgrade(move |socket| handle_ws(socket, runtime, tenant, approval, conversation_id))
 }
 
 async fn handle_ws(
@@ -101,7 +108,11 @@ async fn handle_ws(
                     }
                 }
             }
-            ClientEvent::Approve { task_id, step_id, approved } => {
+            ClientEvent::Approve {
+                task_id,
+                step_id,
+                approved,
+            } => {
                 let key = format!("{task_id}:{step_id}");
                 approval.submit_approval(&key, approved).await;
             }

@@ -85,8 +85,8 @@ fn strategic_score(
     let recency = (-age / STRATEGIC_HALF_LIFE_SECS * std::f64::consts::LN_2).exp();
     // 120-day frequency window per requirements §4.3.
     let window_start = now_unix - 120 * 86_400;
-    let freq = crate::knowledge_view::timeline::interactions_within(t, window_start, now_unix)
-        as f64;
+    let freq =
+        crate::knowledge_view::timeline::interactions_within(t, window_start, now_unix) as f64;
     let conv_boost = if in_conversation(&t.entity_name) {
         2.0
     } else {
@@ -100,16 +100,16 @@ fn strategic_score(
     recency + 0.05 * freq + conv_boost + drift_score
 }
 
-fn render_entry(
-    t: &InteractionTimeline,
-    goals: &[StrategicGoal],
-    now_unix: i64,
-) -> String {
+fn render_entry(t: &InteractionTimeline, goals: &[StrategicGoal], now_unix: i64) -> String {
     let mut s = String::with_capacity(120);
     s.push_str("- ");
     s.push_str(&t.entity_name);
 
-    let n = t.interactions.iter().filter(|i| i.timestamp.is_some()).count();
+    let n = t
+        .interactions
+        .iter()
+        .filter(|i| i.timestamp.is_some())
+        .count();
     if n > 0 {
         s.push_str(" — ");
         s.push_str(&format!(
@@ -205,13 +205,7 @@ mod tests {
 
     #[test]
     fn empty_input_returns_empty_block() {
-        let (out, n) = format_strategic(
-            &[],
-            &|_: &str| Vec::new(),
-            &|_: &str| false,
-            0,
-            100,
-        );
+        let (out, n) = format_strategic(&[], &|_: &str| Vec::new(), &|_: &str| false, 0, 100);
         assert!(out.is_empty());
         assert_eq!(n, 0);
     }
@@ -245,13 +239,7 @@ mod tests {
             total_phases: Some(4),
             charter_status: CharterStatus::Drifted,
         });
-        let (out, _) = format_strategic(
-            &[t],
-            &|_: &str| Vec::new(),
-            &|_: &str| false,
-            now,
-            100,
-        );
+        let (out, _) = format_strategic(&[t], &|_: &str| Vec::new(), &|_: &str| false, now, 100);
         assert!(out.contains("ATOS project phase 2/4"), "got: {}", out);
         assert!(out.contains("(drift)"));
     }
@@ -260,13 +248,7 @@ mod tests {
     fn no_atos_link_renders_without_phase_filler() {
         let now = 1_700_000_000;
         let t = initiative_timeline("Q3 enterprise push", &[now]);
-        let (out, _) = format_strategic(
-            &[t],
-            &|_: &str| Vec::new(),
-            &|_: &str| false,
-            now,
-            100,
-        );
+        let (out, _) = format_strategic(&[t], &|_: &str| Vec::new(), &|_: &str| false, now, 100);
         assert!(out.contains("Q3 enterprise push"));
         assert!(!out.contains("phase"));
         assert!(!out.contains("n/a"));
@@ -286,8 +268,7 @@ mod tests {
                 Vec::new()
             }
         };
-        let (out, _) =
-            format_strategic(&[t], &goals, &|_: &str| false, now, 200);
+        let (out, _) = format_strategic(&[t], &goals, &|_: &str| false, now, 200);
         assert!(out.contains("goal: under 5% by Q3"));
         assert!(out.contains("(no recent discussion)"));
     }

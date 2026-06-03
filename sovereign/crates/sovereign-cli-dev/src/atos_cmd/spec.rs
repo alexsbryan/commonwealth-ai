@@ -49,38 +49,37 @@ pub(crate) async fn cmd_spec_diff(args: &[String]) -> i32 {
     };
 
     let mesh = open_repo_mesh(&repo_root).ok();
-    let approval = match sovereign_atos::approval::find_approval(
-        &repo_root,
-        &feature_id,
-        mesh.as_ref(),
-    ) {
-        Some(a) => a,
-        None => {
-            eprintln!(
-                "spec diff: no approval found for '{feature_id}' — \
+    let approval =
+        match sovereign_atos::approval::find_approval(&repo_root, &feature_id, mesh.as_ref()) {
+            Some(a) => a,
+            None => {
+                eprintln!(
+                    "spec diff: no approval found for '{feature_id}' — \
                  `git commit` the spec or run `sovereign atos feature approve {feature_id}`"
-            );
-            return 1;
-        }
-    };
+                );
+                return 1;
+            }
+        };
 
-    let approved = match sovereign_atos::approval::resolve_approved_spec_content(
-        &repo_root, &approval,
-    ) {
-        Some(c) => c,
-        None => {
-            eprintln!(
-                "spec diff: could not resolve approved spec content \
+    let approved =
+        match sovereign_atos::approval::resolve_approved_spec_content(&repo_root, &approval) {
+            Some(c) => c,
+            None => {
+                eprintln!(
+                    "spec diff: could not resolve approved spec content \
                  (witness commit may have been orphaned; run `spec accept` \
                  to re-anchor)"
-            );
-            return 1;
-        }
-    };
+                );
+                return 1;
+            }
+        };
 
     let current_path = repo_root.join(&approval.spec_path);
     if !current_path.exists() {
-        eprintln!("spec diff: current spec missing at {}", current_path.display());
+        eprintln!(
+            "spec diff: current spec missing at {}",
+            current_path.display()
+        );
         return 1;
     }
 
@@ -161,11 +160,8 @@ pub(crate) async fn cmd_spec_accept(args: &[String]) -> i32 {
         }
     };
 
-    let prior = match sovereign_atos::approval::find_approval(
-        &repo_root,
-        &feature_id,
-        Some(&mesh),
-    ) {
+    let prior = match sovereign_atos::approval::find_approval(&repo_root, &feature_id, Some(&mesh))
+    {
         Some(a) => a,
         None => {
             eprintln!(
@@ -179,10 +175,8 @@ pub(crate) async fn cmd_spec_accept(args: &[String]) -> i32 {
     // Capture diff BEFORE accepting, so the deviation note records
     // the change. If the current spec matches the approval, bail —
     // there's nothing to accept.
-    let approved_text = sovereign_atos::approval::resolve_approved_spec_content(
-        &repo_root, &prior,
-    )
-    .unwrap_or_default();
+    let approved_text = sovereign_atos::approval::resolve_approved_spec_content(&repo_root, &prior)
+        .unwrap_or_default();
     let current_path = repo_root.join(&prior.spec_path);
     let current_text = match std::fs::read_to_string(&current_path) {
         Ok(s) => s,
@@ -196,12 +190,15 @@ pub(crate) async fn cmd_spec_accept(args: &[String]) -> i32 {
         return 0;
     }
 
-    let origin = derive_node_id_from_git(&repo_root).unwrap_or_else(|| {
-        commonwealth_core::ids::NodeId::from_u128(0xA7057E07_A7057E07u128)
-    });
+    let origin = derive_node_id_from_git(&repo_root)
+        .unwrap_or_else(|| commonwealth_core::ids::NodeId::from_u128(0xA7057E07_A7057E07u128));
 
     let accepted = match sovereign_atos::approval::accept_drift(
-        &mesh, origin, &repo_root, &feature_id, &prior,
+        &mesh,
+        origin,
+        &repo_root,
+        &feature_id,
+        &prior,
     ) {
         Ok(a) => a,
         Err(e) => {
@@ -220,8 +217,8 @@ pub(crate) async fn cmd_spec_accept(args: &[String]) -> i32 {
     } else {
         reason
     };
-    let committer = git_committer_identity(&repo_root)
-        .unwrap_or_else(|| "<unknown committer>".to_string());
+    let committer =
+        git_committer_identity(&repo_root).unwrap_or_else(|| "<unknown committer>".to_string());
     let note_content = format!(
         "Spec drift accepted by {committer}.\n\n\
          Reason: {reason_line}\n\n\
@@ -260,9 +257,7 @@ pub(crate) async fn cmd_spec_accept(args: &[String]) -> i32 {
     0
 }
 
-fn open_repo_mesh(
-    repo_root: &Path,
-) -> Result<commonwealth_state::MeshStore, String> {
+fn open_repo_mesh(repo_root: &Path) -> Result<commonwealth_state::MeshStore, String> {
     let mesh_path = repo_root.join(".sovereign").join("mesh.db");
     if let Some(parent) = mesh_path.parent() {
         let _ = std::fs::create_dir_all(parent);

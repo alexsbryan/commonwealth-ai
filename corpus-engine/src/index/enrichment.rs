@@ -2,10 +2,7 @@
 
 use std::collections::HashMap;
 
-use arrow_array::{
-    Array, Float32Array, Int64Array, RecordBatch, StringArray,
-    FixedSizeListArray,
-};
+use arrow_array::{Array, FixedSizeListArray, Float32Array, Int64Array, RecordBatch, StringArray};
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
 
@@ -203,13 +200,25 @@ impl CorpusIndex {
                 out.push(StoredChunkWithMetadata {
                     id: ids.value(i) as u64,
                     title: titles.and_then(|t| {
-                        if t.is_null(i) { None } else { Some(t.value(i).to_string()) }
+                        if t.is_null(i) {
+                            None
+                        } else {
+                            Some(t.value(i).to_string())
+                        }
                     }),
                     url: urls.and_then(|u| {
-                        if u.is_null(i) { None } else { Some(u.value(i).to_string()) }
+                        if u.is_null(i) {
+                            None
+                        } else {
+                            Some(u.value(i).to_string())
+                        }
                     }),
                     metadata_raw: metadatas.and_then(|m| {
-                        if m.is_null(i) { None } else { Some(m.value(i).to_string()) }
+                        if m.is_null(i) {
+                            None
+                        } else {
+                            Some(m.value(i).to_string())
+                        }
                     }),
                 });
             }
@@ -273,16 +282,32 @@ impl CorpusIndex {
                     id: ids.value(i) as u64,
                     content: contents.value(i).to_string(),
                     title: titles.and_then(|t| {
-                        if t.is_null(i) { None } else { Some(t.value(i).to_string()) }
+                        if t.is_null(i) {
+                            None
+                        } else {
+                            Some(t.value(i).to_string())
+                        }
                     }),
                     url: urls.and_then(|u| {
-                        if u.is_null(i) { None } else { Some(u.value(i).to_string()) }
+                        if u.is_null(i) {
+                            None
+                        } else {
+                            Some(u.value(i).to_string())
+                        }
                     }),
                     metadata_raw: metadatas.and_then(|m| {
-                        if m.is_null(i) { None } else { Some(m.value(i).to_string()) }
+                        if m.is_null(i) {
+                            None
+                        } else {
+                            Some(m.value(i).to_string())
+                        }
                     }),
                     source_doc_id: source_doc_ids.and_then(|s| {
-                        if s.is_null(i) { None } else { Some(s.value(i).to_string()) }
+                        if s.is_null(i) {
+                            None
+                        } else {
+                            Some(s.value(i).to_string())
+                        }
                     }),
                 });
             }
@@ -303,10 +328,7 @@ impl CorpusIndex {
     /// (LanceDB plans degrade on huge `IN (…)` lists) and union the
     /// results. Duplicate ids in the input are deduped before
     /// dispatching.
-    pub async fn chunks_by_ids(
-        &self,
-        ids: &[u64],
-    ) -> Result<Vec<EnrichmentChunkRow>> {
+    pub async fn chunks_by_ids(&self, ids: &[u64]) -> Result<Vec<EnrichmentChunkRow>> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -368,16 +390,32 @@ impl CorpusIndex {
                         id: id_col.value(i) as u64,
                         content: contents.value(i).to_string(),
                         title: titles.and_then(|t| {
-                            if t.is_null(i) { None } else { Some(t.value(i).to_string()) }
+                            if t.is_null(i) {
+                                None
+                            } else {
+                                Some(t.value(i).to_string())
+                            }
                         }),
                         url: urls.and_then(|u| {
-                            if u.is_null(i) { None } else { Some(u.value(i).to_string()) }
+                            if u.is_null(i) {
+                                None
+                            } else {
+                                Some(u.value(i).to_string())
+                            }
                         }),
                         metadata_raw: metadatas.and_then(|m| {
-                            if m.is_null(i) { None } else { Some(m.value(i).to_string()) }
+                            if m.is_null(i) {
+                                None
+                            } else {
+                                Some(m.value(i).to_string())
+                            }
                         }),
                         source_doc_id: source_doc_ids.and_then(|s| {
-                            if s.is_null(i) { None } else { Some(s.value(i).to_string()) }
+                            if s.is_null(i) {
+                                None
+                            } else {
+                                Some(s.value(i).to_string())
+                            }
                         }),
                     });
                 }

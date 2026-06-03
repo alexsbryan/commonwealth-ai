@@ -59,7 +59,9 @@ impl InferenceStateStore {
 
     pub fn set_plan(&self, plan: &InferencePlan) {
         if let Ok(bytes) = serde_json::to_vec(plan) {
-            let _ = self.store.set(APP_ID, "plan", Bytes::from(bytes), self.node_id);
+            let _ = self
+                .store
+                .set(APP_ID, "plan", Bytes::from(bytes), self.node_id);
         }
     }
 
@@ -77,7 +79,9 @@ impl InferenceStateStore {
     pub fn set_model_info(&self, info: &ModelInfo) {
         let key = format!("model:{}", model_id_hex(info.id));
         if let Ok(bytes) = serde_json::to_vec(info) {
-            let _ = self.store.set(APP_ID, &key, Bytes::from(bytes), self.node_id);
+            let _ = self
+                .store
+                .set(APP_ID, &key, Bytes::from(bytes), self.node_id);
         }
     }
 
@@ -125,7 +129,9 @@ impl InferenceStateStore {
     /// Write the current MeshPlan. All nodes read this to know their role.
     pub fn set_mesh_plan(&self, plan: &crate::plan::MeshPlan) {
         if let Ok(bytes) = serde_json::to_vec(plan) {
-            let _ = self.store.set(APP_ID, "mesh_plan", Bytes::from(bytes), self.node_id);
+            let _ = self
+                .store
+                .set(APP_ID, "mesh_plan", Bytes::from(bytes), self.node_id);
         }
     }
 
@@ -143,7 +149,9 @@ impl InferenceStateStore {
     pub fn set_queue_depths(&self, depths: &crate::plan::TierQueueDepths) {
         let key = format!("queue_depth:{}", node_id_hex(self.node_id));
         if let Ok(bytes) = serde_json::to_vec(depths) {
-            let _ = self.store.set(APP_ID, &key, Bytes::from(bytes), self.node_id);
+            let _ = self
+                .store
+                .set(APP_ID, &key, Bytes::from(bytes), self.node_id);
         }
     }
 
@@ -169,12 +177,9 @@ impl InferenceStateStore {
 
     pub fn set_llama_address(&self, model_id: ModelId, addr: &str) {
         let key = format!("llama_addr:{}", model_id_hex(model_id));
-        let _ = self.store.set(
-            APP_ID,
-            &key,
-            Bytes::from(addr.to_string()),
-            self.node_id,
-        );
+        let _ = self
+            .store
+            .set(APP_ID, &key, Bytes::from(addr.to_string()), self.node_id);
     }
 
     // ── Embed model info (for collaborative ingestion) ───────────────
@@ -183,7 +188,9 @@ impl InferenceStateStore {
     /// Called by the Sovereign side when it loads an embed model slot.
     pub fn set_local_embed_model(&self, info: &commonwealth_core::oicp::EmbedModelInfo) {
         if let Ok(bytes) = serde_json::to_vec(info) {
-            let _ = self.store.set(APP_ID, "embed_model", Bytes::from(bytes), self.node_id);
+            let _ = self
+                .store
+                .set(APP_ID, "embed_model", Bytes::from(bytes), self.node_id);
         }
     }
 
@@ -200,15 +207,14 @@ impl InferenceStateStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
-    use commonwealth_core::ids::{ModelId, NodeId};
     use crate::model::{ModelArchitecture, ModelInfo};
     use crate::oicp::{Capability, CapabilityProfile};
+    use commonwealth_core::ids::{ModelId, NodeId};
+    use std::collections::HashMap;
 
     fn make_store() -> InferenceStateStore {
-        let mesh_store = Arc::new(
-            commonwealth_state::MeshStore::in_memory().expect("in-memory store"),
-        );
+        let mesh_store =
+            Arc::new(commonwealth_state::MeshStore::in_memory().expect("in-memory store"));
         InferenceStateStore::new(mesh_store, NodeId::from_u128(1))
     }
 

@@ -87,9 +87,8 @@ impl HealthCheckable for EnrichmentChecker {
     fn repair(
         &self,
         issue: &HealthIssue,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<RepairOutcome>> + Send + '_>,
-    > {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<RepairOutcome>> + Send + '_>>
+    {
         let issue = issue.clone();
         Box::pin(async move {
             match &issue {
@@ -108,8 +107,8 @@ impl HealthCheckable for EnrichmentChecker {
                             sovereign_core::health::UserOption {
                                 kind: RepairKind::Dismiss,
                                 label: "Dismiss".into(),
-                                description: "Ignore — partial enrichment may affect search quality."
-                                    .into(),
+                                description:
+                                    "Ignore — partial enrichment may affect search quality.".into(),
                             },
                         ],
                         consequence: "Resuming will use inference credits for remaining phases."
@@ -126,13 +125,15 @@ impl HealthCheckable for EnrichmentChecker {
                             sovereign_core::health::UserOption {
                                 kind: RepairKind::RefreshEnrichment,
                                 label: "Run field model enrichment".into(),
-                                description: "Build the field model (HDBSCAN clustering + LLM analysis)."
-                                    .into(),
+                                description:
+                                    "Build the field model (HDBSCAN clustering + LLM analysis)."
+                                        .into(),
                             },
                             sovereign_core::health::UserOption {
                                 kind: RepairKind::Dismiss,
                                 label: "Dismiss".into(),
-                                description: "Ignore — epistemic search will be unavailable.".into(),
+                                description: "Ignore — epistemic search will be unavailable."
+                                    .into(),
                             },
                         ],
                         consequence: "Enrichment uses ~860 inference calls for SEP (~52 minutes)."

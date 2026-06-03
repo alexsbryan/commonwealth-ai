@@ -228,7 +228,9 @@ fn parse_args(args: &[String]) -> Result<ParsedMedian, String> {
     while i < args.len() {
         match args[i].as_str() {
             "--runs" => {
-                let raw = args.get(i + 1).ok_or("--runs requires a value".to_string())?;
+                let raw = args
+                    .get(i + 1)
+                    .ok_or("--runs requires a value".to_string())?;
                 runs = raw
                     .parse::<usize>()
                     .map_err(|e| format!("--runs must be a positive integer: {e}"))?;
@@ -239,13 +241,15 @@ fn parse_args(args: &[String]) -> Result<ParsedMedian, String> {
             }
             "--phase" => {
                 phase = PhaseFilter::parse(
-                    args.get(i + 1).ok_or("--phase requires a value".to_string())?,
+                    args.get(i + 1)
+                        .ok_or("--phase requires a value".to_string())?,
                 )?;
                 i += 2;
             }
             "--report" => {
                 report_path = Some(PathBuf::from(
-                    args.get(i + 1).ok_or("--report requires a path".to_string())?,
+                    args.get(i + 1)
+                        .ok_or("--report requires a path".to_string())?,
                 ));
                 i += 2;
             }
@@ -323,7 +327,10 @@ struct AggregatedReport {
 
 fn aggregate(runs: &[EvalReport]) -> AggregatedReport {
     let mut a = AggregatedReport {
-        corpus_id: runs.first().map(|r| r.corpus_id.clone()).unwrap_or_default(),
+        corpus_id: runs
+            .first()
+            .map(|r| r.corpus_id.clone())
+            .unwrap_or_default(),
         golden_path: runs
             .first()
             .map(|r| r.golden_path.clone())
@@ -494,10 +501,7 @@ fn print_text_report(a: &AggregatedReport, durations: &[Duration]) {
         let total: f32 = durations.iter().map(|d| d.as_secs_f32()).sum();
         let avg = total / durations.len() as f32;
         println!();
-        println!(
-            "  Wall-clock: {:.1}s total, {:.1}s avg per run",
-            total, avg
-        );
+        println!("  Wall-clock: {:.1}s total, {:.1}s avg per run", total, avg);
     }
 }
 
@@ -562,16 +566,10 @@ mod tests {
 
     #[test]
     fn parse_args_runs_and_keep_state() {
-        let args: Vec<String> = [
-            "fwd",
-            "/tmp/g.toml",
-            "--runs",
-            "5",
-            "--keep-state",
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+        let args: Vec<String> = ["fwd", "/tmp/g.toml", "--runs", "5", "--keep-state"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let p = parse_args(&args).unwrap();
         assert_eq!(p.runs, 5);
         assert!(p.keep_state);

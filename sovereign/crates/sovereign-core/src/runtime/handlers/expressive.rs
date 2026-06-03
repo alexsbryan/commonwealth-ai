@@ -6,7 +6,6 @@
 
 use std::sync::Arc;
 
-
 use crate::error::Result;
 use crate::traits::*;
 
@@ -84,9 +83,7 @@ impl Runtime {
             // fails to None — Pass B then proceeds without an explicit
             // "what may be missing" cue.
             let pass_a_start = std::time::Instant::now();
-            let contradiction = self
-                .detect_contradiction(message, &context.memories)
-                .await;
+            let contradiction = self.detect_contradiction(message, &context.memories).await;
             metrics.pass_a_ms = Some(pass_a_start.elapsed().as_millis() as u64);
 
             let mut s = self.build_compact_relational_system_message(context, message);
@@ -352,9 +349,7 @@ impl Runtime {
         // off the factual branch.
         let (contradiction, pass_a_ms) = if register == SkillRegister::Relational {
             let pass_a_start = std::time::Instant::now();
-            let c = self
-                .detect_contradiction(message, &context.memories)
-                .await;
+            let c = self.detect_contradiction(message, &context.memories).await;
             let elapsed = pass_a_start.elapsed().as_millis() as u64;
             tracing::info!(
                 pass_a_ms = elapsed,
@@ -450,10 +445,7 @@ impl Runtime {
         };
 
         let _synth_start = std::time::Instant::now();
-        let (inner_stream, model_id) = self
-            .inference
-            .complete_stream_with_id(&request)
-            .await?;
+        let (inner_stream, model_id) = self.inference.complete_stream_with_id(&request).await?;
         // Compose: strip the planning trace first (drops content up
         // to `</think>`), then strip any hallucinated `[Source: ...]`
         // citation markers from the reply tokens. Both transformers
@@ -592,10 +584,7 @@ impl Runtime {
                     Err(e) => {
                         let err_msg = format!("{e}");
                         let _ = tx.send(Err(e));
-                        tracing::warn!(
-                            error = err_msg,
-                            "expressive_stream: inner stream errored"
-                        );
+                        tracing::warn!(error = err_msg, "expressive_stream: inner stream errored");
                         return;
                     }
                 }
@@ -634,5 +623,4 @@ impl Runtime {
             stream: Box::pin(stream),
         })
     }
-
 }

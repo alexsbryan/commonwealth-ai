@@ -205,19 +205,15 @@ impl EnrichmentStateFile {
         }
         let bytes = std::fs::read(&path).map_err(Error::Io)?;
         let state: EnrichmentState = serde_json::from_slice(&bytes).map_err(|e| {
-            Error::Extraction(format!(
-                "enrichment_state: parse {}: {e}",
-                path.display()
-            ))
+            Error::Extraction(format!("enrichment_state: parse {}: {e}", path.display()))
         })?;
         Ok(Some(state))
     }
 
     pub fn write(index_dir: &Path, state: &EnrichmentState) -> Result<()> {
         let path = Self::path(index_dir);
-        let json = serde_json::to_vec_pretty(state).map_err(|e| {
-            Error::Extraction(format!("enrichment_state: serialize: {e}"))
-        })?;
+        let json = serde_json::to_vec_pretty(state)
+            .map_err(|e| Error::Extraction(format!("enrichment_state: serialize: {e}")))?;
         // Write through a sibling tempfile + rename so a concurrent
         // reader never sees a truncated file. Cheap on local FS.
         let tmp = path.with_extension("json.tmp");
@@ -239,9 +235,8 @@ impl EnrichmentStateFile {
         step_total: u64,
         message: Option<&str>,
     ) -> Result<EnrichmentState> {
-        let mut state = Self::read(index_dir)?.unwrap_or_else(|| {
-            EnrichmentState::new(corpus_id, pipeline_id.map(String::from))
-        });
+        let mut state = Self::read(index_dir)?
+            .unwrap_or_else(|| EnrichmentState::new(corpus_id, pipeline_id.map(String::from)));
         state.phase = phase;
         state.step_current = step_current;
         state.step_total = step_total;
@@ -260,9 +255,8 @@ impl EnrichmentStateFile {
     /// failure reason instead of silently retaining the last
     /// successful phase.
     pub fn fail(index_dir: &Path, corpus_id: &str, error: &str) -> Result<EnrichmentState> {
-        let mut state = Self::read(index_dir)?.unwrap_or_else(|| {
-            EnrichmentState::new(corpus_id, None)
-        });
+        let mut state =
+            Self::read(index_dir)?.unwrap_or_else(|| EnrichmentState::new(corpus_id, None));
         state.phase = EnrichmentPhase::Failed;
         state.last_progress_at = now_secs();
         state.error = Some(error.to_string());
@@ -442,9 +436,7 @@ pub fn sweep_stalled_states(indexes_root: &Path) -> Result<Vec<String>> {
         if let Err(e) = EnrichmentStateFile::fail(
             &path,
             &corpus_id,
-            &format!(
-                "stalled — no progress for {elapsed}s (daemon likely restarted mid-pipeline)"
-            ),
+            &format!("stalled — no progress for {elapsed}s (daemon likely restarted mid-pipeline)"),
         ) {
             tracing::warn!(
                 corpus = %corpus_id,

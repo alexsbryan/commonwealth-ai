@@ -27,7 +27,6 @@ mod predicate;
 mod runner;
 mod score;
 
-
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -403,13 +402,14 @@ async fn execute_run(opts: RunOpts) -> i32 {
     }
 
     let any_failure = aggregates.iter().any(|a| a.passes < a.replays);
-    if any_failure { 1 } else { 0 }
+    if any_failure {
+        1
+    } else {
+        0
+    }
 }
 
-fn discover_fixtures(
-    dir: &Path,
-    filter: &[String],
-) -> Result<Vec<runner::Fixture>, String> {
+fn discover_fixtures(dir: &Path, filter: &[String]) -> Result<Vec<runner::Fixture>, String> {
     if !dir.exists() {
         return Err(format!("fixtures dir not found: {}", dir.display()));
     }
@@ -487,10 +487,7 @@ fn parse_calibrate_args(args: &[String]) -> Result<CalibrateOpts, String> {
                 i += 2;
             }
             "--cases" => {
-                opts.cases_path = args
-                    .get(i + 1)
-                    .ok_or("--cases requires a value")?
-                    .into();
+                opts.cases_path = args.get(i + 1).ok_or("--cases requires a value")?.into();
                 i += 2;
             }
             "--json" => {
@@ -555,8 +552,7 @@ async fn execute_calibrate(opts: CalibrateOpts) -> i32 {
         );
     }
 
-    let (result, proof) = match judge_calibration::calibrate(&j, &bank, &opts.judge_model).await
-    {
+    let (result, proof) = match judge_calibration::calibrate(&j, &bank, &opts.judge_model).await {
         Ok(tuple) => tuple,
         Err(e) => {
             eprintln!("search-gym calibrate-judge: {e}");
@@ -567,7 +563,8 @@ async fn execute_calibrate(opts: CalibrateOpts) -> i32 {
     if opts.json {
         println!(
             "{}",
-            serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
+            serde_json::to_string_pretty(&result)
+                .unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
         );
     } else {
         println!("{}", judge_calibration::render_report(&result));

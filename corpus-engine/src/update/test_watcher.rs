@@ -30,8 +30,8 @@
 //! new run starts so WatcherStatus reflects current reality even during a run.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 use async_trait::async_trait;
@@ -171,10 +171,7 @@ impl TestWatcher {
                 // hook activates on the next cargo invocation.
                 let mut logged_wait = false;
                 loop {
-                    let hook_now = yield_hook_shared
-                        .read()
-                        .ok()
-                        .and_then(|g| g.clone());
+                    let hook_now = yield_hook_shared.read().ok().and_then(|g| g.clone());
                     match hook_now {
                         Some(h) if h.should_yield() => {
                             if !logged_wait {
@@ -189,13 +186,16 @@ impl TestWatcher {
                     }
                 }
                 if logged_wait {
-                    tracing::info!(
-                        "TestWatcher: foreground idle — proceeding with cargo run"
-                    );
+                    tracing::info!("TestWatcher: foreground idle — proceeding with cargo run");
                 }
 
-                if let Err(e) =
-                    run_subprocess(command.clone(), working_dir.clone(), timeout_secs, Arc::clone(&store)).await
+                if let Err(e) = run_subprocess(
+                    command.clone(),
+                    working_dir.clone(),
+                    timeout_secs,
+                    Arc::clone(&store),
+                )
+                .await
                 {
                     tracing::warn!("test runner failed: {e}");
                 }
@@ -280,19 +280,17 @@ impl BackgroundWatcher for TestWatcher {
 
         match self.store.latest_run().await {
             Err(_) | Ok(None) => WatcherStatus::NeverRun,
-            Ok(Some(summary)) => {
-                match self.store.stale_files_since_last_run().await {
-                    Ok(stale) if stale.is_empty() => WatcherStatus::Fresh {
-                        pass: summary.passed(),
-                        last_run_at: summary.finished_at,
-                    },
-                    Ok(stale) => WatcherStatus::Stale { stale_since: stale },
-                    Err(_) => WatcherStatus::Fresh {
-                        pass: summary.passed(),
-                        last_run_at: summary.finished_at,
-                    },
-                }
-            }
+            Ok(Some(summary)) => match self.store.stale_files_since_last_run().await {
+                Ok(stale) if stale.is_empty() => WatcherStatus::Fresh {
+                    pass: summary.passed(),
+                    last_run_at: summary.finished_at,
+                },
+                Ok(stale) => WatcherStatus::Stale { stale_since: stale },
+                Err(_) => WatcherStatus::Fresh {
+                    pass: summary.passed(),
+                    last_run_at: summary.finished_at,
+                },
+            },
         }
     }
 }
@@ -354,10 +352,7 @@ async fn run_subprocess(
     loop {
         match tokio::time::timeout_at(deadline, reader.next_line()).await {
             Err(_elapsed) => {
-                tracing::warn!(
-                    timeout_secs,
-                    "test runner: timed out — killing process"
-                );
+                tracing::warn!(timeout_secs, "test runner: timed out — killing process");
                 let _ = child.kill().await;
                 store_stdout.finish_run(run_id, -2).await?;
                 return Ok(());
@@ -382,12 +377,7 @@ async fn run_subprocess(
     };
 
     let elapsed_ms = start.elapsed().as_millis() as u64;
-    tracing::info!(
-        run_id,
-        exit_code,
-        elapsed_ms,
-        "test run finished"
-    );
+    tracing::info!(run_id, exit_code, elapsed_ms, "test run finished");
 
     // Store the full raw output for get_run_output.
     let raw = raw_output_lines.join("\n");
@@ -434,11 +424,7 @@ async fn parse_and_record_tier2(line: &str, run_id: i64, store: &TestResultStore
             // The summary line is informational. We derive pass/fail counts
             // from the individual events, not the summary, so they stay in
             // sync even if the command exits mid-run.
-            tracing::info!(
-                run_id,
-                "test runner summary: {}",
-                line
-            );
+            tracing::info!(run_id, "test runner summary: {}", line);
         }
         other => {
             tracing::trace!("test runner unknown event type '{other}': {line}");
@@ -529,7 +515,9 @@ mod tests {
         // semantics; under new semantics it stays running).
         let watcher = make_watcher("sleep 30", Arc::clone(&store));
 
-        watcher.on_files_changed(vec![PathBuf::from("src/foo.rs")]).await;
+        watcher
+            .on_files_changed(vec![PathBuf::from("src/foo.rs")])
+            .await;
         // Fire again — must not abort the in-flight sleep.
         watcher
             .on_files_changed(vec![PathBuf::from("src/bar.rs")])

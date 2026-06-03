@@ -27,12 +27,8 @@ pub struct MergedGraphSummary {
 /// Walk `data_dir/*/scip_graph.db` and merge each into a fresh
 /// in-memory ScipGraph. If `verbose`, prints a per-graph line to
 /// stderr (used for the startup banner); reloads pass `false`.
-pub async fn load_merged_graph(
-    data_dir: &Path,
-    verbose: bool,
-) -> (ScipGraph, MergedGraphSummary) {
-    let merged = ScipGraph::open_in_memory("merged")
-        .expect("in-memory ScipGraph");
+pub async fn load_merged_graph(data_dir: &Path, verbose: bool) -> (ScipGraph, MergedGraphSummary) {
+    let merged = ScipGraph::open_in_memory("merged").expect("in-memory ScipGraph");
 
     let mut summary = MergedGraphSummary::default();
 
@@ -46,10 +42,7 @@ pub async fn load_merged_graph(
             if !scip_path.exists() {
                 continue;
             }
-            let corpus_name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("?");
+            let corpus_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
             match merged.import_from_path(&scip_path).await {
                 Ok((syms, refs)) => {
                     if syms > 0 || refs > 0 {

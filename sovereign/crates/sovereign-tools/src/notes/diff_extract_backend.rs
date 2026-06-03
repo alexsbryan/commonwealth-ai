@@ -270,7 +270,11 @@ fn parse_schema_envelope(raw: &str) -> Option<Vec<DecisionExtraction>> {
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
             .map(String::from);
-        out.push(DecisionExtraction { kind, body, supersedes });
+        out.push(DecisionExtraction {
+            kind,
+            body,
+            supersedes,
+        });
     }
     Some(out)
 }
@@ -350,11 +354,9 @@ mod tests {
         .to_string();
         let (addr, _) = spawn_stub(chat_envelope(&payload)).await;
 
-        let backend = LocalLlmBackend::new(LocalLlmConfig::for_daemon(
-            format!("http://{addr}"),
-            "stub",
-        ))
-        .unwrap();
+        let backend =
+            LocalLlmBackend::new(LocalLlmConfig::for_daemon(format!("http://{addr}"), "stub"))
+                .unwrap();
         let out = backend.extract(&req()).await.unwrap();
         assert_eq!(out.len(), 2);
         assert_eq!(out[0].kind, "decision");
@@ -393,11 +395,9 @@ mod tests {
         let payload = "{\"kind\":\"decision\",\"body\":\"single\"}\n";
         let (addr, _) = spawn_stub(chat_envelope(payload)).await;
 
-        let backend = LocalLlmBackend::new(LocalLlmConfig::for_daemon(
-            format!("http://{addr}"),
-            "stub",
-        ))
-        .unwrap();
+        let backend =
+            LocalLlmBackend::new(LocalLlmConfig::for_daemon(format!("http://{addr}"), "stub"))
+                .unwrap();
         let out = backend.extract(&req()).await.unwrap();
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].body, "single");
@@ -411,11 +411,9 @@ mod tests {
         let payload = serde_json::json!({ "decisions": [] }).to_string();
         let (addr, _) = spawn_stub(chat_envelope(&payload)).await;
 
-        let backend = LocalLlmBackend::new(LocalLlmConfig::for_daemon(
-            format!("http://{addr}"),
-            "stub",
-        ))
-        .unwrap();
+        let backend =
+            LocalLlmBackend::new(LocalLlmConfig::for_daemon(format!("http://{addr}"), "stub"))
+                .unwrap();
         let out = backend.extract(&req()).await.unwrap();
         assert!(out.is_empty());
     }
@@ -443,11 +441,9 @@ mod tests {
         });
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
 
-        let backend = LocalLlmBackend::new(LocalLlmConfig::for_daemon(
-            format!("http://{addr}"),
-            "stub",
-        ))
-        .unwrap();
+        let backend =
+            LocalLlmBackend::new(LocalLlmConfig::for_daemon(format!("http://{addr}"), "stub"))
+                .unwrap();
         let err = backend.extract(&req()).await.unwrap_err();
         assert!(
             err.contains("500"),

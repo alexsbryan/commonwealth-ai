@@ -23,21 +23,17 @@ impl OpenAlexParser {
 }
 
 impl CorpusParser for OpenAlexParser {
-    fn parse(
-        &self,
-        source_path: &Path,
-    ) -> Result<Box<dyn Iterator<Item = Result<DocumentChunk>>>> {
-        let file = File::open(source_path)
-            .map_err(|e| Error::Storage(format!("Failed to open {}: {e}", source_path.display())))?;
+    fn parse(&self, source_path: &Path) -> Result<Box<dyn Iterator<Item = Result<DocumentChunk>>>> {
+        let file = File::open(source_path).map_err(|e| {
+            Error::Storage(format!("Failed to open {}: {e}", source_path.display()))
+        })?;
 
-        let reader: Box<dyn BufRead> = if source_path
-            .extension()
-            .and_then(|e| e.to_str()) == Some("gz")
-        {
-            Box::new(BufReader::new(flate2::read::GzDecoder::new(file)))
-        } else {
-            Box::new(BufReader::new(file))
-        };
+        let reader: Box<dyn BufRead> =
+            if source_path.extension().and_then(|e| e.to_str()) == Some("gz") {
+                Box::new(BufReader::new(flate2::read::GzDecoder::new(file)))
+            } else {
+                Box::new(BufReader::new(file))
+            };
 
         Ok(Box::new(OpenAlexIterator {
             lines: reader.lines(),

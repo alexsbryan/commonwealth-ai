@@ -90,9 +90,8 @@ impl GoldenSet {
             if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with('#') {
                 continue;
             }
-            let record: GoldenLine = serde_json::from_str(trimmed).map_err(|e| {
-                format!("line {}: invalid JSONL record: {e}", lineno + 1)
-            })?;
+            let record: GoldenLine = serde_json::from_str(trimmed)
+                .map_err(|e| format!("line {}: invalid JSONL record: {e}", lineno + 1))?;
             out.expected_entities.extend(record.expected_entities);
             for s in record.expected_suggestions {
                 out.expected_suggestions.push(ExpectedSuggestion {
@@ -173,10 +172,8 @@ pub(super) fn score_entities(
     expected: &[ExpectedEntity],
     extracted_names: &[String],
 ) -> EntityScore {
-    let exp_set: std::collections::HashMap<String, &ExpectedEntity> = expected
-        .iter()
-        .map(|e| (fold(&e.name), e))
-        .collect();
+    let exp_set: std::collections::HashMap<String, &ExpectedEntity> =
+        expected.iter().map(|e| (fold(&e.name), e)).collect();
     let ext_set: std::collections::HashSet<String> =
         extracted_names.iter().map(|n| fold(n)).collect();
 
@@ -367,7 +364,11 @@ mod tests {
             ex("Acme Corp", "organization"),
             ex("API migration", "initiative"),
         ];
-        let extracted: Vec<String> = vec!["Sarah Chen".into(), "Mike Torres".into(), "API migration".into()];
+        let extracted: Vec<String> = vec![
+            "Sarah Chen".into(),
+            "Mike Torres".into(),
+            "API migration".into(),
+        ];
         let s = score_entities(&expected, &extracted);
         assert_eq!(s.matched, 2); // Sarah Chen + API migration
         assert_eq!(s.expected, 3);
@@ -453,19 +454,22 @@ mod tests {
                 related_entity: None,
             },
         ];
-        let detected = vec![DetectedSuggestion {
-            conversation_id: "c2".into(),
-            turn: 1,
-            kind: "follow_up".into(),
-            content: "circle back".into(),
-            related_entity: None,
-        }, DetectedSuggestion {
-            conversation_id: "c3".into(),
-            turn: 1,
-            kind: "commitment".into(),
-            content: "ship Tuesday".into(),
-            related_entity: None,
-        }];
+        let detected = vec![
+            DetectedSuggestion {
+                conversation_id: "c2".into(),
+                turn: 1,
+                kind: "follow_up".into(),
+                content: "circle back".into(),
+                related_entity: None,
+            },
+            DetectedSuggestion {
+                conversation_id: "c3".into(),
+                turn: 1,
+                kind: "commitment".into(),
+                content: "ship Tuesday".into(),
+                related_entity: None,
+            },
+        ];
         let s = score_suggestions(&expected, &detected);
         assert_eq!(s.matched, 1); // c2 follow_up
         assert_eq!(s.missed.len(), 1); // c1 goal

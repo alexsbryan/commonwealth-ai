@@ -49,9 +49,7 @@ pub fn is_chunk_eligible(passage: &str, section_heading: Option<&str>) -> bool {
 
     // 4. Named fictional agents — space-padded to avoid false positives on
     //    "Timothy", "harmless", "Smithsonian", etc.
-    const FICTIONAL_NAMES: &[&str] = &[
-        " tim ", " harry ", " mary ", " jones ", " smith ",
-    ];
+    const FICTIONAL_NAMES: &[&str] = &[" tim ", " harry ", " mary ", " jones ", " smith "];
     // Pad the lowercased passage on both sides so names at the very start or
     // end of the text are also caught by the space-pad check.
     let padded = format!(" {} ", lc_passage);
@@ -62,10 +60,7 @@ pub fn is_chunk_eligible(passage: &str, section_heading: Option<&str>) -> bool {
     // 5. Bibliographic density — more than 40 % of non-empty lines contain a
     //    year-in-parentheses pattern like "(1984)" or "(2023)".
     {
-        let non_empty_lines: Vec<&str> = passage
-            .lines()
-            .filter(|l| !l.trim().is_empty())
-            .collect();
+        let non_empty_lines: Vec<&str> = passage.lines().filter(|l| !l.trim().is_empty()).collect();
         if !non_empty_lines.is_empty() {
             let bib_lines = non_empty_lines
                 .iter()
@@ -81,7 +76,10 @@ pub fn is_chunk_eligible(passage: &str, section_heading: Option<&str>) -> bool {
     //    word count suggests a passage of formal derivations, not prose claims.
     {
         const LOGIC_SYMBOLS: &[char] = &['∀', '∃', '→', '↔', '¬'];
-        let symbol_count = passage.chars().filter(|c| LOGIC_SYMBOLS.contains(c)).count();
+        let symbol_count = passage
+            .chars()
+            .filter(|c| LOGIC_SYMBOLS.contains(c))
+            .count();
         // Threshold: more than 1 symbol per 30 words.
         if symbol_count as f32 / word_count as f32 > 1.0 / 30.0 {
             return false;

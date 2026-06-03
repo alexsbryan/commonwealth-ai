@@ -124,10 +124,7 @@ pub async fn extract_pdf_with_engine<R: Rasterizer + ?Sized>(
         // Recognition is CPU-bound; hop onto a blocking thread so the
         // async cleanup HTTP call below doesn't block the runtime.
         let engine_for_blocking = Arc::clone(&engine);
-        let raw = tokio::task::spawn_blocking(move || {
-            engine_for_blocking.recognize(&image)
-        })
-        .await;
+        let raw = tokio::task::spawn_blocking(move || engine_for_blocking.recognize(&image)).await;
 
         let cleaned = match raw {
             Ok(Ok(raw_text)) => match cleanup_page(&raw_text, ctx).await {
@@ -237,16 +234,9 @@ mod tests {
             PathBuf::from("/no-tessdata"),
             "http://127.0.0.1:1".into(),
         );
-        let res = extract_pdf_with_rasterizer(
-            &stub,
-            Path::new("/fake.pdf"),
-            &ctx,
-            "fake",
-            1,
-            1,
-            None,
-        )
-        .await;
+        let res =
+            extract_pdf_with_rasterizer(&stub, Path::new("/fake.pdf"), &ctx, "fake", 1, 1, None)
+                .await;
         assert!(res.is_err());
         assert!(res.unwrap_err().contains("no pages rendered"));
     }
@@ -264,17 +254,10 @@ mod tests {
             PathBuf::from("/no-tessdata"),
             "http://127.0.0.1:1".into(),
         );
-        let out = extract_pdf_with_rasterizer(
-            &stub,
-            Path::new("/fake.pdf"),
-            &ctx,
-            "fake",
-            1,
-            1,
-            None,
-        )
-        .await
-        .unwrap();
+        let out =
+            extract_pdf_with_rasterizer(&stub, Path::new("/fake.pdf"), &ctx, "fake", 1, 1, None)
+                .await
+                .unwrap();
         // Two pages, two placeholders, separator between them.
         assert!(out.contains("page 1: could not be read"));
         assert!(out.contains("page 2: could not be read"));

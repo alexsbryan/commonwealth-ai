@@ -30,9 +30,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use crate::worker_http::{
-    CompletedUnit, EmitCompletedFn, JobManifest, WorkerRunner, WorkerState, worker_router,
+    worker_router, CompletedUnit, EmitCompletedFn, JobManifest, WorkerRunner, WorkerState,
 };
-use crate::worker_pod::{BootstrapBlob, WORKER_PORT, self_signed_cert};
+use crate::worker_pod::{self_signed_cert, BootstrapBlob, WORKER_PORT};
 
 /// Disk-dump coordination signals — `(complete_flag, notify_handle)`.
 /// Shared between [`WorkerState`] (writer; flips on dump completion)
@@ -222,7 +222,7 @@ pub async fn run_worker_mode_with_signals(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::worker_pod::{BootstrapInputs, mint_bootstrap};
+    use crate::worker_pod::{mint_bootstrap, BootstrapInputs};
     use ed25519_dalek::SigningKey;
     use std::collections::BTreeMap;
 
@@ -240,11 +240,15 @@ mod tests {
         let encoded = crate::worker_pod::encode_bootstrap(&blob).unwrap();
         // SAFETY: tests are single-threaded by default within a module
         // and we don't spawn elsewhere here.
-        unsafe { std::env::set_var("TEST_WORKER_BOOTSTRAP", &encoded); }
+        unsafe {
+            std::env::set_var("TEST_WORKER_BOOTSTRAP", &encoded);
+        }
         let (loaded, source) = load_bootstrap_blob("TEST_WORKER_BOOTSTRAP", None).unwrap();
         assert_eq!(loaded, blob);
         assert!(source.starts_with("env:"));
-        unsafe { std::env::remove_var("TEST_WORKER_BOOTSTRAP"); }
+        unsafe {
+            std::env::remove_var("TEST_WORKER_BOOTSTRAP");
+        }
     }
 
     #[test]

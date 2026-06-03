@@ -106,7 +106,10 @@ pub async fn run_extract_entities(args: &[String]) -> i32 {
     let index = match CorpusIndex::open(&corpus_index_path).await {
         Ok(i) => i,
         Err(e) => {
-            eprintln!("error: open corpus index {}: {e}", corpus_index_path.display());
+            eprintln!(
+                "error: open corpus index {}: {e}",
+                corpus_index_path.display()
+            );
             return 1;
         }
     };
@@ -137,15 +140,17 @@ pub async fn run_extract_entities(args: &[String]) -> i32 {
     // Load GliNER (one-time, ~500ms).
     eprintln!("Loading GliNER {}…", parsed.model_id);
     let load_start = Instant::now();
-    let extractor =
-        match GlinerExtractor::new(&parsed.model_id, &labels_ref(&parsed.labels), parsed.threshold)
-        {
-            Ok(e) => e,
-            Err(e) => {
-                eprintln!("error: load GliNER: {e}");
-                return 1;
-            }
-        };
+    let extractor = match GlinerExtractor::new(
+        &parsed.model_id,
+        &labels_ref(&parsed.labels),
+        parsed.threshold,
+    ) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("error: load GliNER: {e}");
+            return 1;
+        }
+    };
     eprintln!("Loaded in {:.2?}", load_start.elapsed());
 
     // Initialise progress row.
@@ -181,10 +186,7 @@ pub async fn run_extract_entities(args: &[String]) -> i32 {
     let mut convs_done = 0usize;
 
     for (conv_uuid, _chunk_ids) in conv_list.iter() {
-        let rows = match index
-            .chunks_for_source_doc_with_embeddings(conv_uuid)
-            .await
-        {
+        let rows = match index.chunks_for_source_doc_with_embeddings(conv_uuid).await {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("warn: fetch chunks for {conv_uuid}: {e}");
@@ -426,9 +428,18 @@ fn print_help() {
     eprintln!("  Run GliNER per-chunk NER and persist into chunk_entities.");
     eprintln!();
     eprintln!("  Flags:");
-    eprintln!("    --model <id>       GliNER model id (default: {})", DEFAULT_MODEL_ID);
-    eprintln!("    --threshold <f>    Score threshold (default: {})", DEFAULT_THRESHOLD);
-    eprintln!("    --labels <l1,...>  Label set CSV (default: {})", DEFAULT_LABELS.join(","));
+    eprintln!(
+        "    --model <id>       GliNER model id (default: {})",
+        DEFAULT_MODEL_ID
+    );
+    eprintln!(
+        "    --threshold <f>    Score threshold (default: {})",
+        DEFAULT_THRESHOLD
+    );
+    eprintln!(
+        "    --labels <l1,...>  Label set CSV (default: {})",
+        DEFAULT_LABELS.join(",")
+    );
     eprintln!("    --dry-run          Inventory only — don't load model or write.");
     eprintln!("    --download-model   Fetch the GliNER model files + exit (no extraction).");
     eprintln!();

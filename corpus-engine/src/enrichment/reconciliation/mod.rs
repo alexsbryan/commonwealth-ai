@@ -31,18 +31,10 @@ pub use signals::{MergeSignal, MergeSignalCheck};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrichment::atlas::atoms::{
-        AtomId, ChunkRef, Entity, Provenance, SignalKind,
-    };
+    use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity, Provenance, SignalKind};
     use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 
-    fn ent(
-        id: &str,
-        name: &str,
-        et: EntityType,
-        signal_kind: SignalKind,
-        doc: &str,
-    ) -> Entity {
+    fn ent(id: &str, name: &str, et: EntityType, signal_kind: SignalKind, doc: &str) -> Entity {
         Entity {
             id: AtomId::from_raw(id),
             canonical_name: name.to_string(),
@@ -56,11 +48,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-            provenance: Provenance::new(
-                signal_kind_extractor_name(&signal_kind),
-                doc,
-                signal_kind,
-            ),
+            provenance: Provenance::new(signal_kind_extractor_name(&signal_kind), doc, signal_kind),
             concept_kind: None,
         }
     }
@@ -80,9 +68,27 @@ mod tests {
     #[test]
     fn name_match_collapses_surface_forms() {
         let entities = vec![
-            ent("entity-001", "Ken Lay", EntityType::Person, SignalKind::EmailHeader, "msg-1"),
-            ent("entity-002", "Kenneth L. Lay", EntityType::Person, SignalKind::EmailHeader, "msg-1"),
-            ent("entity-003", "Jeff Skilling", EntityType::Person, SignalKind::EmailHeader, "msg-2"),
+            ent(
+                "entity-001",
+                "Ken Lay",
+                EntityType::Person,
+                SignalKind::EmailHeader,
+                "msg-1",
+            ),
+            ent(
+                "entity-002",
+                "Kenneth L. Lay",
+                EntityType::Person,
+                SignalKind::EmailHeader,
+                "msg-1",
+            ),
+            ent(
+                "entity-003",
+                "Jeff Skilling",
+                EntityType::Person,
+                SignalKind::EmailHeader,
+                "msg-2",
+            ),
         ];
         let policy = ReconciliationPolicy::default();
         let outcome = reconcile(entities, &policy);
@@ -95,7 +101,11 @@ mod tests {
             .find(|e| e.canonical_name.contains("Lay"))
             .expect("lay reconciled entity");
         assert_eq!(lay.surface_forms.len(), 2);
-        let signals = lay.signals_fired.iter().map(|s| s.as_str()).collect::<Vec<_>>();
+        let signals = lay
+            .signals_fired
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>();
         assert!(signals.contains(&"name_similarity"));
     }
 
@@ -104,8 +114,20 @@ mod tests {
         // Two name-similar mentions from different origins — default
         // policy demands two signals.
         let entities = vec![
-            ent("entity-001", "Williams", EntityType::Institution, SignalKind::ColumnHeader, "spread.xlsx"),
-            ent("entity-002", "Williams", EntityType::Institution, SignalKind::LlmBatch, "msg-1"),
+            ent(
+                "entity-001",
+                "Williams",
+                EntityType::Institution,
+                SignalKind::ColumnHeader,
+                "spread.xlsx",
+            ),
+            ent(
+                "entity-002",
+                "Williams",
+                EntityType::Institution,
+                SignalKind::LlmBatch,
+                "msg-1",
+            ),
         ];
         let mut policy = ReconciliationPolicy::default();
         policy.cross_origin_required_signals = 2;

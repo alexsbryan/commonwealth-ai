@@ -23,12 +23,15 @@ pub struct MakePassingArgs {
 
 pub fn make_failing_tests_pass(args: MakePassingArgs) -> Trial {
     let workdir_path: &Path = args.workdir.path();
-    let test_command = args
-        .test_command
-        .unwrap_or_else(|| detect_framework(workdir_path).default_test_command().to_string());
-    let prompt = args
-        .task
-        .unwrap_or_else(|| "Make all currently-failing tests pass without regressing any currently-passing test.".to_string());
+    let test_command = args.test_command.unwrap_or_else(|| {
+        detect_framework(workdir_path)
+            .default_test_command()
+            .to_string()
+    });
+    let prompt = args.task.unwrap_or_else(|| {
+        "Make all currently-failing tests pass without regressing any currently-passing test."
+            .to_string()
+    });
     Trial {
         workdir: args.workdir,
         model: args.model,

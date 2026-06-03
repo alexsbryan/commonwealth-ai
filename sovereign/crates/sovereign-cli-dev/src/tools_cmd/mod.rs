@@ -99,10 +99,7 @@ async fn cmd_list(_args: &[String]) -> i32 {
     for d in env.registry.descriptors() {
         let effect = effect_label(d.effect).to_string();
         let scope = scope_label(d.scope).to_string();
-        grouped
-            .entry((effect, scope))
-            .or_default()
-            .push(d);
+        grouped.entry((effect, scope)).or_default().push(d);
     }
 
     // Print groups in a stable, human-ordered sequence rather than
@@ -120,7 +117,10 @@ async fn cmd_list(_args: &[String]) -> i32 {
         ("ReadWrite", "External"),
     ];
 
-    println!("sovereign tools — {} tool(s) available\n", env.registry.count());
+    println!(
+        "sovereign tools — {} tool(s) available\n",
+        env.registry.count()
+    );
     for (effect, scope) in order {
         let key = (effect.to_string(), scope.to_string());
         let Some(mut tools) = grouped.remove(&key) else {
@@ -154,7 +154,10 @@ async fn cmd_list(_args: &[String]) -> i32 {
 /// on one terminal row.
 fn first_sentence(desc: &str) -> String {
     let cleaned: String = desc.split_whitespace().collect::<Vec<_>>().join(" ");
-    let cut = cleaned.find(". ").map(|i| &cleaned[..i]).unwrap_or(&cleaned);
+    let cut = cleaned
+        .find(". ")
+        .map(|i| &cleaned[..i])
+        .unwrap_or(&cleaned);
     if cut.len() > 80 {
         format!("{}…", &cut[..77])
     } else {
@@ -201,7 +204,8 @@ async fn cmd_describe(args: &[String]) -> i32 {
     println!(
         "{}",
         indent(
-            &serde_json::to_string_pretty(&d.parameters).unwrap_or_else(|_| d.parameters.to_string()),
+            &serde_json::to_string_pretty(&d.parameters)
+                .unwrap_or_else(|_| d.parameters.to_string()),
             "    ",
         )
     );
@@ -226,7 +230,11 @@ async fn cmd_describe(args: &[String]) -> i32 {
         for ex in &d.examples {
             println!("    • {}", ex.situation);
             let call = serde_json::to_string(&ex.call).unwrap_or_else(|_| ex.call.to_string());
-            println!("      sovereign tools call {} {}", d.id, json_to_flags(&ex.call));
+            println!(
+                "      sovereign tools call {} {}",
+                d.id,
+                json_to_flags(&ex.call)
+            );
             println!("      (raw JSON: {call})");
         }
     }
@@ -234,7 +242,10 @@ async fn cmd_describe(args: &[String]) -> i32 {
 }
 
 fn indent(s: &str, prefix: &str) -> String {
-    s.lines().map(|l| format!("{prefix}{l}")).collect::<Vec<_>>().join("\n")
+    s.lines()
+        .map(|l| format!("{prefix}{l}"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Render a JSON object's keys as `--key=value` flags for display in
@@ -257,7 +268,9 @@ fn json_to_flags(v: &Value) -> String {
 }
 
 fn shell_quote(s: &str) -> String {
-    if s.chars().any(|c| c.is_whitespace() || matches!(c, '"' | '\'' | '$' | '&' | '|')) {
+    if s.chars()
+        .any(|c| c.is_whitespace() || matches!(c, '"' | '\'' | '$' | '&' | '|'))
+    {
         format!("'{}'", s.replace('\'', "'\\''"))
     } else {
         s.to_string()

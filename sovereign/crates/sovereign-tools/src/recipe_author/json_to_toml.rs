@@ -89,10 +89,7 @@ fn convert(v: &serde_json::Value, path: &str) -> Result<toml::Value, ConvertErro
     }
 }
 
-fn convert_number(
-    n: &serde_json::Number,
-    path: &str,
-) -> Result<toml::Value, ConvertError> {
+fn convert_number(n: &serde_json::Number, path: &str) -> Result<toml::Value, ConvertError> {
     if let Some(i) = n.as_i64() {
         return Ok(toml::Value::Integer(i));
     }
@@ -107,9 +104,7 @@ fn convert_number(
     }
     Err(ConvertError {
         path: path.to_string(),
-        message: format!(
-            "number {n} is not representable as a TOML integer or float"
-        ),
+        message: format!("number {n} is not representable as a TOML integer or float"),
     })
 }
 

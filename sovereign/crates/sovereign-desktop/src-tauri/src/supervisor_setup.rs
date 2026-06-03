@@ -202,7 +202,6 @@ enum StartupOutcome {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn is_enabled_off_by_default() {

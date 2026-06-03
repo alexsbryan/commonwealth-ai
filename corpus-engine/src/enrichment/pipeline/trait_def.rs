@@ -23,9 +23,7 @@
 //! - `parse_phaseN(response)` — validates the model's JSON output
 //!   against the expected schema.
 
-use super::atlas::{
-    EntitySketch, SectionExtraction, SeedEntities, SeedEntity, SeedStrategy,
-};
+use super::atlas::{EntitySketch, SectionExtraction, SeedEntities, SeedEntity, SeedStrategy};
 use super::exemplar_bank::Exemplar;
 use super::types::*;
 use crate::enrichment::domain::ClusteringConfig;
@@ -58,11 +56,7 @@ pub trait Pipeline: Send + Sync + 'static {
     // The runner calls these once per input, passing the top-K
     // exemplars it selected via `ExemplarBank::select_top_k`.
 
-    fn compose_phase1(
-        &self,
-        chapter: &ChapterInput,
-        exemplars: &[&Exemplar],
-    ) -> ChatPrompt;
+    fn compose_phase1(&self, chapter: &ChapterInput, exemplars: &[&Exemplar]) -> ChatPrompt;
 
     /// Variant of `compose_phase1` that threads a seed entity list
     /// into the user message. The default impl ignores the seed
@@ -108,10 +102,7 @@ pub trait Pipeline: Send + Sync + 'static {
     /// strategy must override this or the runner errors with a
     /// clear "strategy says Llm but compose_seed_prompt returned
     /// None" message.
-    fn compose_seed_prompt(
-        &self,
-        _first_section: &ChapterInput,
-    ) -> Option<ChatPrompt> {
+    fn compose_seed_prompt(&self, _first_section: &ChapterInput) -> Option<ChatPrompt> {
         None
     }
 
@@ -138,10 +129,7 @@ pub trait Pipeline: Send + Sync + 'static {
     /// impl can walk wikilinks, infoboxes, or whatever structural
     /// signal the pipeline uses. Default errors for strategies
     /// other than `Structural`.
-    fn extract_seed_structural(
-        &self,
-        _ctx: &CorpusContext,
-    ) -> Result<Vec<SeedEntity>> {
+    fn extract_seed_structural(&self, _ctx: &CorpusContext) -> Result<Vec<SeedEntity>> {
         Err(crate::error::Error::Serialization(
             "pipeline does not implement extract_seed_structural — \
              declare SeedStrategy::Llm or SeedStrategy::None if no \
@@ -162,10 +150,7 @@ pub trait Pipeline: Send + Sync + 'static {
     /// any exemplar block to save tokens on chapters that already
     /// blew past the output budget. The parser is shared with the
     /// default variant — terse output follows the same schema.
-    fn compose_phase1_terse(
-        &self,
-        _chapter: &ChapterInput,
-    ) -> Option<ChatPrompt> {
+    fn compose_phase1_terse(&self, _chapter: &ChapterInput) -> Option<ChatPrompt> {
         None
     }
 
@@ -214,10 +199,7 @@ pub trait Pipeline: Send + Sync + 'static {
     /// `entities_introduced` (deduping by canonical name).
     /// Default `Err` so a pipeline that composes a coverage prompt
     /// without parsing it surfaces a clear contract error.
-    fn parse_phase1b_coverage(
-        &self,
-        _response: &str,
-    ) -> Result<Vec<EntitySketch>> {
+    fn parse_phase1b_coverage(&self, _response: &str) -> Result<Vec<EntitySketch>> {
         Err(crate::error::Error::Serialization(
             "pipeline does not implement parse_phase1b_coverage — \
              override it alongside compose_phase1b_*_coverage, or \
@@ -252,11 +234,7 @@ pub trait Pipeline: Send + Sync + 'static {
     /// Default `Err` so pipelines that implement the compose half
     /// without the parse half produce a clear contract error
     /// rather than a silent empty result.
-    fn parse_phase3_facet(
-        &self,
-        _facet: Facet,
-        _response: &str,
-    ) -> Result<Phase3FacetParseResult> {
+    fn parse_phase3_facet(&self, _facet: Facet, _response: &str) -> Result<Phase3FacetParseResult> {
         Err(crate::error::Error::Serialization(
             "pipeline does not implement parse_phase3_facet — call compose_phase3_facet \
              first to confirm support, or use the v1 name-concerns flow"

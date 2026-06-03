@@ -106,7 +106,9 @@ pub enum JoinError {
     /// No peer on the LAN accepted the join (either none advertised
     /// the expected mesh_name in `timeout`, or every one rejected
     /// the join key as invalid).
-    #[error("no peer on this network accepted the join key for mesh '{mesh_name}'{direct_hint_msg}")]
+    #[error(
+        "no peer on this network accepted the join key for mesh '{mesh_name}'{direct_hint_msg}"
+    )]
     NoPeerFound {
         mesh_name: String,
         /// Appended to the error when a direct-peer hint was
@@ -119,10 +121,7 @@ pub enum JoinError {
     /// An accepting peer returned a malformed response. Rare; usually
     /// a version mismatch between the founder and joiner binaries.
     #[error("peer at {address} returned a malformed response: {reason}")]
-    BadResponse {
-        address: SocketAddr,
-        reason: String,
-    },
+    BadResponse { address: SocketAddr, reason: String },
 }
 
 /// Flatten an error's `source()` chain into a Vec of messages —
@@ -277,7 +276,8 @@ pub async fn perform_join(
     if let Some(raw) = direct_peer_hint {
         if let Some(authority) = normalise_peer_hint(raw) {
             info!(peer = %authority, "handshake_sent: direct-peer hint, POST /internal/join");
-            match http.post(format!("http://{authority}/internal/join"))
+            match http
+                .post(format!("http://{authority}/internal/join"))
                 .json(&body)
                 .send()
                 .await

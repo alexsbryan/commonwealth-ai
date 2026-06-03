@@ -156,13 +156,9 @@ impl CapacityReport {
         s.push_str("VRAM capacity check refused this configuration:\n");
         s.push_str(&format!(
             "  available:   {} MiB (after {} MiB safety reserved)\n",
-            self.available_mb,
-            self.safety_reserved_mb,
+            self.available_mb, self.safety_reserved_mb,
         ));
-        s.push_str(&format!(
-            "  required:    {} MiB\n",
-            self.total_required_mb,
-        ));
+        s.push_str(&format!("  required:    {} MiB\n", self.total_required_mb,));
         s.push_str(&format!(
             "  overcommit:  {} MiB\n\n",
             self.total_required_mb.saturating_sub(self.available_mb),
@@ -175,7 +171,11 @@ impl CapacityReport {
         for (role, est) in &self.per_slot {
             s.push_str(&format!(
                 "  {:<22} {:>8} {:>8} {:>8} {:>8}\n",
-                role, est.weights_mb, est.kv_cache_mb, est.scratch_mb, est.total_mb(),
+                role,
+                est.weights_mb,
+                est.kv_cache_mb,
+                est.scratch_mb,
+                est.total_mb(),
             ));
         }
         s.push_str("\nSuggested actions:\n");
@@ -245,9 +245,7 @@ pub fn check_fit(slots: &[SlotPlan], hw: &HardwareProfile) -> CapacityReport {
 /// sovereign-inference rather than sovereign-mesh because the
 /// dependency arrow runs core ← inference ← mesh; reaching the
 /// other way would cycle.
-pub fn build_slots_from_config(
-    cfg: &sovereign_core::setup_config::SetupConfig,
-) -> Vec<SlotPlan> {
+pub fn build_slots_from_config(cfg: &sovereign_core::setup_config::SetupConfig) -> Vec<SlotPlan> {
     // Primary's context is the operator-configured one; everything
     // else stays at 8K (fast/embed don't benefit from long ctx and
     // would balloon KV cache estimates well past their real cost).
@@ -341,10 +339,7 @@ mod tests {
     /// instantly, only the inode's reported length matters for
     /// the planner.
     fn fake_gguf(size_mb: u64) -> tempfile::NamedTempFile {
-        let f = tempfile::Builder::new()
-            .suffix(".gguf")
-            .tempfile()
-            .unwrap();
+        let f = tempfile::Builder::new().suffix(".gguf").tempfile().unwrap();
         let len_bytes = size_mb * 1024 * 1024;
         f.as_file().set_len(len_bytes).unwrap();
         f
@@ -359,12 +354,31 @@ mod tests {
         let fast = fake_gguf(10_000);
         let embed = fake_gguf(700);
         let slots = vec![
-            SlotPlan { role: "primary".into(), path: primary.path().into(), n_seq_max: 1, n_ctx: 32_768 },
-            SlotPlan { role: "fast".into(),    path: fast.path().into(),    n_seq_max: 4, n_ctx: 8_192 },
-            SlotPlan { role: "embed".into(),   path: embed.path().into(),   n_seq_max: 8, n_ctx: 8_192 },
+            SlotPlan {
+                role: "primary".into(),
+                path: primary.path().into(),
+                n_seq_max: 1,
+                n_ctx: 32_768,
+            },
+            SlotPlan {
+                role: "fast".into(),
+                path: fast.path().into(),
+                n_seq_max: 4,
+                n_ctx: 8_192,
+            },
+            SlotPlan {
+                role: "embed".into(),
+                path: embed.path().into(),
+                n_seq_max: 8,
+                n_ctx: 8_192,
+            },
         ];
         let r = check_fit(&slots, &synthetic_hw(48.0));
-        assert!(r.fits, "1-copy + fast + embed should fit in 48 GB: {}", r.refuse_message());
+        assert!(
+            r.fits,
+            "1-copy + fast + embed should fit in 48 GB: {}",
+            r.refuse_message()
+        );
     }
 
     #[test]
@@ -375,8 +389,18 @@ mod tests {
         // in-flight request. Planner must refuse.
         let primary = fake_gguf(21_000);
         let slots = vec![
-            SlotPlan { role: "primary_0".into(), path: primary.path().into(), n_seq_max: 1, n_ctx: 32_768 },
-            SlotPlan { role: "primary_1".into(), path: primary.path().into(), n_seq_max: 1, n_ctx: 32_768 },
+            SlotPlan {
+                role: "primary_0".into(),
+                path: primary.path().into(),
+                n_seq_max: 1,
+                n_ctx: 32_768,
+            },
+            SlotPlan {
+                role: "primary_1".into(),
+                path: primary.path().into(),
+                n_seq_max: 1,
+                n_ctx: 32_768,
+            },
         ];
         let r = check_fit(&slots, &synthetic_hw(48.0));
         assert!(
@@ -392,9 +416,12 @@ mod tests {
         // Confirms the planner also catches the obvious case, not
         // just the subtle tight-margin case.
         let primary = fake_gguf(21_000);
-        let slots = vec![
-            SlotPlan { role: "primary".into(), path: primary.path().into(), n_seq_max: 1, n_ctx: 32_768 },
-        ];
+        let slots = vec![SlotPlan {
+            role: "primary".into(),
+            path: primary.path().into(),
+            n_seq_max: 1,
+            n_ctx: 32_768,
+        }];
         let r = check_fit(&slots, &synthetic_hw(8.0));
         assert!(!r.fits);
         assert!(r.total_required_mb > r.available_mb);
@@ -407,24 +434,45 @@ mod tests {
         let fast = fake_gguf(5_000);
         let embed = fake_gguf(700);
         let slots = vec![
-            SlotPlan { role: "fast".into(),  path: fast.path().into(),  n_seq_max: 2, n_ctx: 8_192 },
-            SlotPlan { role: "embed".into(), path: embed.path().into(), n_seq_max: 4, n_ctx: 8_192 },
+            SlotPlan {
+                role: "fast".into(),
+                path: fast.path().into(),
+                n_seq_max: 2,
+                n_ctx: 8_192,
+            },
+            SlotPlan {
+                role: "embed".into(),
+                path: embed.path().into(),
+                n_seq_max: 4,
+                n_ctx: 8_192,
+            },
         ];
         let r = check_fit(&slots, &synthetic_hw(8.0));
-        assert!(r.fits, "8GB card should fit 9B-Q4 + embed: {}", r.refuse_message());
+        assert!(
+            r.fits,
+            "8GB card should fit 9B-Q4 + embed: {}",
+            r.refuse_message()
+        );
     }
 
     #[test]
     fn unreadable_file_forces_refusal() {
         // A configured slot pointing at a non-existent file should
         // be a hard error, not a "fits because we counted 0".
-        let slots = vec![
-            SlotPlan { role: "primary".into(), path: "/nonexistent/model.gguf".into(), n_seq_max: 1, n_ctx: 32_768 },
-        ];
+        let slots = vec![SlotPlan {
+            role: "primary".into(),
+            path: "/nonexistent/model.gguf".into(),
+            n_seq_max: 1,
+            n_ctx: 32_768,
+        }];
         let r = check_fit(&slots, &synthetic_hw(48.0));
         assert!(!r.fits);
         let msg = r.refuse_message();
-        assert!(msg.contains("UNREADABLE"), "must surface the file error: {}", msg);
+        assert!(
+            msg.contains("UNREADABLE"),
+            "must surface the file error: {}",
+            msg
+        );
     }
 
     #[test]

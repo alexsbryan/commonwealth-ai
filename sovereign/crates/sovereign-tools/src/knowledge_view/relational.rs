@@ -120,8 +120,8 @@ fn relational_score(
     let recency = (-age_secs / RELATIONAL_HALF_LIFE_SECS * std::f64::consts::LN_2).exp();
     // Frequency over a 90-day window per requirements §4.2.
     let window_start = now_unix - 90 * 86_400;
-    let freq = crate::knowledge_view::timeline::interactions_within(t, window_start, now_unix)
-        as f64;
+    let freq =
+        crate::knowledge_view::timeline::interactions_within(t, window_start, now_unix) as f64;
     // Boost if the entity has any outstanding note.
     let has_note = !notes(&t.entity_name).is_empty();
     let note_boost = if has_note { 0.5 } else { 0.0 };
@@ -147,7 +147,11 @@ fn render_entry(t: &InteractionTimeline, notes: &[RelationalNote]) -> String {
     }
 
     // Frequency phrasing: "3 conversations" or "1 conversation".
-    let n = t.interactions.iter().filter(|i| i.timestamp.is_some()).count();
+    let n = t
+        .interactions
+        .iter()
+        .filter(|i| i.timestamp.is_some())
+        .count();
     if n > 0 {
         s.push_str(" — ");
         if n == 1 {
@@ -267,13 +271,7 @@ mod tests {
         let now = chrono::Utc::now().timestamp();
         let mut t = person_timeline("Sarah Chen", &[now - 86_400, now - 3 * 86_400]);
         t.affiliation = Some("Acme Corp".into());
-        let (out, n) = format_relational(
-            &[t],
-            &|_: &str| Vec::new(),
-            &|_: &str| false,
-            now,
-            150,
-        );
+        let (out, n) = format_relational(&[t], &|_: &str| Vec::new(), &|_: &str| false, now, 150);
         assert_eq!(n, 1);
         assert!(out.contains("Sarah Chen"));
         assert!(out.contains("Acme Corp"));
@@ -337,7 +335,10 @@ mod tests {
         );
         assert!(n >= 1);
         assert!(n < 20, "budget should clip the list; got {n}");
-        assert!(estimate_tokens(&out) <= 130, "block within (close to) budget");
+        assert!(
+            estimate_tokens(&out) <= 130,
+            "block within (close to) budget"
+        );
     }
 
     #[test]

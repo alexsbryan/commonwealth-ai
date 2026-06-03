@@ -131,7 +131,10 @@ impl Tool for RecordAtosEventTool {
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let run_id = params.get("run_id").and_then(|v| v.as_str()).unwrap_or("");
         let call_id = params.get("call_id").and_then(|v| v.as_str()).unwrap_or("");
-        let tool_name = params.get("tool_name").and_then(|v| v.as_str()).unwrap_or("");
+        let tool_name = params
+            .get("tool_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let phase = params.get("phase").and_then(|v| v.as_str()).unwrap_or("");
         let args_json = params.get("args_json").and_then(|v| v.as_str());
         let outcome = params.get("outcome").and_then(|v| v.as_str());
@@ -150,7 +153,15 @@ impl Tool for RecordAtosEventTool {
 
         let event_id = self
             .features
-            .record_tool_event(run_id, call_id, tool_name, phase, args_json, outcome, duration_ms)
+            .record_tool_event(
+                run_id,
+                call_id,
+                tool_name,
+                phase,
+                args_json,
+                outcome,
+                duration_ms,
+            )
             .await
             .map_err(|e| Error::Tool {
                 tool_id: "record_atos_event".into(),

@@ -103,9 +103,7 @@ pub async fn mesh_create(
 /// Called when the user taps a `sovereign://join/...` link but before they
 /// confirm — gives the UI info to render the confirmation dialog.
 #[tauri::command]
-pub async fn mesh_preview_join_link(
-    link: String,
-) -> Result<JoinConfirmation, String> {
+pub async fn mesh_preview_join_link(link: String) -> Result<JoinConfirmation, String> {
     let parsed = parse_deep_link(&link).ok_or_else(|| "Invalid join link".to_string())?;
     sovereign_mesh::deep_link::join_confirmation_from_link(&parsed)
         .ok_or_else(|| "Could not build confirmation from link".to_string())
@@ -188,8 +186,10 @@ pub async fn mesh_get_state(
             );
             return Ok(None);
         }
-        let remote: sovereign_mesh::mesh_http::StatusResponse =
-            resp.json().await.map_err(|e| format!("parse mesh/status: {e}"))?;
+        let remote: sovereign_mesh::mesh_http::StatusResponse = resp
+            .json()
+            .await
+            .map_err(|e| format!("parse mesh/status: {e}"))?;
         if remote.mesh_name.is_none() {
             tracing::warn!(
                 target: "mesh_state",
@@ -384,7 +384,9 @@ pub async fn mesh_relay_candidates(
             return Ok(Vec::new());
         }
         #[derive(serde::Deserialize)]
-        struct Body { candidates: Vec<RelayCandidate> }
+        struct Body {
+            candidates: Vec<RelayCandidate>,
+        }
         return Ok(resp
             .json::<Body>()
             .await
@@ -412,9 +414,7 @@ pub fn suggest_node_name() -> String {
 /// Snapshot of mDNS-discovered peers and daemon health. Polled by
 /// the MeshDiagnosticsPanel every few seconds.
 #[tauri::command]
-pub async fn mesh_diagnostics(
-    state: State<'_, Arc<AppState>>,
-) -> Result<MeshDiagnostics, String> {
+pub async fn mesh_diagnostics(state: State<'_, Arc<AppState>>) -> Result<MeshDiagnostics, String> {
     let (peers, daemon_running) = match state.mesh.as_ref() {
         Some(m) => {
             let peers = m
@@ -438,7 +438,10 @@ pub async fn mesh_diagnostics(
             (Vec::new(), true)
         }
     };
-    Ok(MeshDiagnostics { discovered_peers: peers, daemon_running })
+    Ok(MeshDiagnostics {
+        discovered_peers: peers,
+        daemon_running,
+    })
 }
 
 // ── Serializable wrappers for MeshState ──────────────────
@@ -612,9 +615,7 @@ pub async fn mesh_get_contributions(
             inference_served_tokens: c.inference_served.total_tokens_generated,
             inference_served_wall_seconds: c.inference_served.wall_seconds,
             inference_consumed_requests: c.inference_consumed.requests,
-            inference_consumed_tokens: c
-                .inference_consumed
-                .total_tokens_generated,
+            inference_consumed_tokens: c.inference_consumed.total_tokens_generated,
             corpora_hosted: c
                 .corpora_hosted
                 .into_iter()
@@ -642,12 +643,10 @@ pub async fn mesh_set_peer_preference(
     reason: Option<String>,
 ) -> Result<(), String> {
     if attached_port(&state).is_some() {
-        return Err(
-            "peer preferences are not yet exposed over the daemon HTTP \
+        return Err("peer preferences are not yet exposed over the daemon HTTP \
              API in Attach mode — set via `commonwealth peer-preference \
              set` instead"
-                .into(),
-        );
+            .into());
     }
     let Some(mesh) = state.mesh.as_ref() else {
         return Err("mesh daemon not available".into());
@@ -656,8 +655,8 @@ pub async fn mesh_set_peer_preference(
         return Err("mesh daemon not running".into());
     };
     let target = parse_node_id_hex(&node_id)?;
-    let pref = commonwealth_state::PeerPreference::new(multiplier, reason)
-        .map_err(|e| format!("{e}"))?;
+    let pref =
+        commonwealth_state::PeerPreference::new(multiplier, reason).map_err(|e| format!("{e}"))?;
     app_state
         .inner
         .peer_preferences
@@ -672,12 +671,10 @@ pub async fn mesh_clear_peer_preference(
     node_id: String,
 ) -> Result<bool, String> {
     if attached_port(&state).is_some() {
-        return Err(
-            "peer preferences are not yet exposed over the daemon HTTP \
+        return Err("peer preferences are not yet exposed over the daemon HTTP \
              API in Attach mode — clear via `commonwealth peer-preference \
              clear` instead"
-                .into(),
-        );
+            .into());
     }
     let Some(mesh) = state.mesh.as_ref() else {
         return Err("mesh daemon not available".into());
@@ -735,11 +732,9 @@ fn parse_node_id_hex(s: &str) -> Result<commonwealth_core::ids::NodeId, String> 
         let pair = s
             .get(i * 2..i * 2 + 2)
             .ok_or_else(|| format!("invalid hex id '{s}'"))?;
-        *b = u8::from_str_radix(pair, 16)
-            .map_err(|_| format!("invalid hex id '{s}'"))?;
+        *b = u8::from_str_radix(pair, 16).map_err(|_| format!("invalid hex id '{s}'"))?;
     }
     Ok(commonwealth_core::ids::NodeId::from_u128(
         u128::from_be_bytes(bytes),
     ))
 }
-

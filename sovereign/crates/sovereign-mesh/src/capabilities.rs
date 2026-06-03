@@ -36,9 +36,7 @@
 use std::sync::Arc;
 
 use commonwealth_api::state::AppState;
-use commonwealth_core::capabilities::{
-    AvailableResources, HardwareProfile, NodeCapabilities,
-};
+use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::knowledge::{ChunkRange as CoreChunkRange, CorpusShardInfo};
 use commonwealth_core::oicp::EmbedModelInfo;
 use commonwealth_discovery::hardware;
@@ -128,10 +126,10 @@ pub async fn build_local_capabilities(
         hardware,
         available,
         active_processes: Vec::new(), // sovereign-mesh doesn't spawn
-                                      // llama-server / rpc-server —
-                                      // that's the full Commonwealth
-                                      // orchestrator's job. Empty is
-                                      // the honest answer here.
+        // llama-server / rpc-server —
+        // that's the full Commonwealth
+        // orchestrator's job. Empty is
+        // the honest answer here.
         hosted_corpora,
         reported_at: now_secs,
         inference_availability,
@@ -155,8 +153,7 @@ pub async fn build_local_capabilities(
         // for why this field exists and why gossiping it is the only
         // way the founder learns BeefyMac is busy serving local
         // traffic the founder never dispatched.
-        current_in_flight: app_state
-            .and_then(|s| s.current_local_in_flight()),
+        current_in_flight: app_state.and_then(|s| s.current_local_in_flight()),
     }
 }
 
@@ -186,51 +183,52 @@ async fn build_hosted_corpora(
 ) -> Vec<CorpusShardInfo> {
     let indexes_dir = engine.index_dir().to_path_buf();
     indexes
-            .iter().filter(|&idx| idx.query_sharing).cloned()
-            .map(|idx| {
-                // Phase C1: read the atlas summary if the corpus
-                // has one. The summary helper caches by atoms.json
-                // mtime so this is O(1) read per gossip round
-                // unless the atlas just changed.
-                let atlas_dir = indexes_dir.join(&idx.corpus_id).join("atlas");
-                let summary = corpus_engine::enrichment::atlas::read_or_compute_atlas_summary(
-                    &atlas_dir,
-                )
-                .ok()
-                .flatten();
-                let (atom_count, tier2_count, fingerprint) = match summary {
-                    Some(s) => (s.atom_count, s.tier2_count, Some(s.fingerprint)),
-                    None => (0, 0, None),
-                };
-                CorpusShardInfo {
-                    corpus_id: idx.corpus_id,
-                    // `corpus_engine::ChunkRange` and
-                    // `commonwealth_core::knowledge::ChunkRange` are
-                    // structurally identical but different types —
-                    // they live in different crates by design (the
-                    // engine doesn't know Commonwealth exists). Copy.
-                    chunk_range: idx.chunk_range.map(|r| CoreChunkRange {
-                        start_id: r.start_id,
-                        end_id: r.end_id,
-                    }),
-                    is_replica: idx.is_shard && idx.chunk_range.is_some(),
-                    last_updated: idx.last_updated,
-                    // Phase 6 canonical-sync surface: chunk_count,
-                    // canonical_fingerprint, total_shards, processed_shards.
-                    // Peers compute coverage_ratio() on this struct to
-                    // decide which canonical to pull when several mirror
-                    // the same corpus.
-                    chunk_count: idx.chunk_count,
-                    canonical_fingerprint: idx.canonical_fingerprint,
-                    total_shards: idx.total_shards,
-                    processed_shards: idx.processed_shards,
-                    // Phase C1 — atlas advertisement.
-                    atlas_atom_count: atom_count,
-                    atlas_tier2_count: tier2_count,
-                    atlas_fingerprint: fingerprint,
-                }
-            })
-            .collect()
+        .iter()
+        .filter(|&idx| idx.query_sharing)
+        .cloned()
+        .map(|idx| {
+            // Phase C1: read the atlas summary if the corpus
+            // has one. The summary helper caches by atoms.json
+            // mtime so this is O(1) read per gossip round
+            // unless the atlas just changed.
+            let atlas_dir = indexes_dir.join(&idx.corpus_id).join("atlas");
+            let summary =
+                corpus_engine::enrichment::atlas::read_or_compute_atlas_summary(&atlas_dir)
+                    .ok()
+                    .flatten();
+            let (atom_count, tier2_count, fingerprint) = match summary {
+                Some(s) => (s.atom_count, s.tier2_count, Some(s.fingerprint)),
+                None => (0, 0, None),
+            };
+            CorpusShardInfo {
+                corpus_id: idx.corpus_id,
+                // `corpus_engine::ChunkRange` and
+                // `commonwealth_core::knowledge::ChunkRange` are
+                // structurally identical but different types —
+                // they live in different crates by design (the
+                // engine doesn't know Commonwealth exists). Copy.
+                chunk_range: idx.chunk_range.map(|r| CoreChunkRange {
+                    start_id: r.start_id,
+                    end_id: r.end_id,
+                }),
+                is_replica: idx.is_shard && idx.chunk_range.is_some(),
+                last_updated: idx.last_updated,
+                // Phase 6 canonical-sync surface: chunk_count,
+                // canonical_fingerprint, total_shards, processed_shards.
+                // Peers compute coverage_ratio() on this struct to
+                // decide which canonical to pull when several mirror
+                // the same corpus.
+                chunk_count: idx.chunk_count,
+                canonical_fingerprint: idx.canonical_fingerprint,
+                total_shards: idx.total_shards,
+                processed_shards: idx.processed_shards,
+                // Phase C1 — atlas advertisement.
+                atlas_atom_count: atom_count,
+                atlas_tier2_count: tier2_count,
+                atlas_fingerprint: fingerprint,
+            }
+        })
+        .collect()
 }
 
 /// Best-effort live resource snapshot. Numbers drift between rounds

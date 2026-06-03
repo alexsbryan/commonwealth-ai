@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use commonwealth_core::ids::{ModelId, NodeId};
 use crate::oicp::CapabilityProfile;
+use commonwealth_core::ids::{ModelId, NodeId};
 
 /// Information about a model known to the mesh.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,7 +20,6 @@ pub struct ModelInfo {
     pub quantization: String,
 
     // ── Deployment constraints (used by the adaptive mesh scheduler) ──
-
     /// Minimum unified/VRAM memory required to load this model at all.
     #[serde(default)]
     pub min_memory_gb: u32,

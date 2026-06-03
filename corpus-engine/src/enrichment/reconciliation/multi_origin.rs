@@ -15,8 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use super::oplog::OplogEntry;
 use super::signals::{
-    collect_emails, default_signals, fold_name, strip_org_suffixes, MergeSignal,
-    MergeSignalCheck,
+    collect_emails, default_signals, fold_name, strip_org_suffixes, MergeSignal, MergeSignalCheck,
 };
 use crate::enrichment::atlas::atoms::{AtomId, Entity, Provenance};
 use crate::enrichment::pipeline::atlas::EntityType;
@@ -153,8 +152,7 @@ pub fn reconcile_with_signals(
         if fired.is_empty() {
             continue;
         }
-        let cross_origin =
-            entities[i].provenance.signal_kind != entities[j].provenance.signal_kind;
+        let cross_origin = entities[i].provenance.signal_kind != entities[j].provenance.signal_kind;
         let needed = if cross_origin {
             policy.cross_origin_required_signals as usize
         } else {
@@ -195,8 +193,7 @@ pub fn reconcile_with_signals(
         let canonical_idx = pick_canonical(&entities, &members);
         let canonical_id = entities[canonical_idx].id.clone();
         let canonical_name = entities[canonical_idx].canonical_name.clone();
-        let mut surface_forms: Vec<(String, Provenance)> =
-            Vec::with_capacity(members.len());
+        let mut surface_forms: Vec<(String, Provenance)> = Vec::with_capacity(members.len());
         let mut signals_fired: Vec<MergeSignal> = Vec::new();
         let mut source_atom_ids: Vec<AtomId> = Vec::with_capacity(members.len());
         for &m in &members {
@@ -357,9 +354,7 @@ fn candidate_pairs(entities: &[Entity]) -> Vec<(usize, usize)> {
         for em in collect_emails(e) {
             buckets.entry(format!("e:{em}")).or_default().push(i);
             if let Some(local) = em.split('@').next() {
-                if let Some(last) = local
-                    .split(['.', '_', '-']).rfind(|t| !t.is_empty())
-                {
+                if let Some(last) = local.split(['.', '_', '-']).rfind(|t| !t.is_empty()) {
                     buckets.entry(format!("s:{last}")).or_default().push(i);
                 }
             }
@@ -431,7 +426,12 @@ mod tests {
     fn three_lay_surface_forms_collapse_to_one() {
         let entities = vec![
             ent("Ken Lay", "entity-001", SignalKind::EmailHeader, "msg-1"),
-            ent("Kenneth L. Lay", "entity-002", SignalKind::EmailHeader, "msg-1"),
+            ent(
+                "Kenneth L. Lay",
+                "entity-002",
+                SignalKind::EmailHeader,
+                "msg-1",
+            ),
             ent("Kenneth Lay", "entity-003", SignalKind::LlmBatch, "msg-2"),
         ];
         // Same-origin merge needs 1 signal; cross-origin needs 2 by
@@ -467,16 +467,10 @@ mod tests {
     fn split_reverses_a_merge() {
         let entry = split_atom(
             AtomId::from_raw("entity-fused"),
-            vec![
-                AtomId::from_raw("entity-a"),
-                AtomId::from_raw("entity-b"),
-            ],
+            vec![AtomId::from_raw("entity-a"), AtomId::from_raw("entity-b")],
             "operator reversed",
         );
-        assert!(matches!(
-            entry.op,
-            super::super::oplog::OpKind::Split
-        ));
+        assert!(matches!(entry.op, super::super::oplog::OpKind::Split));
         assert_eq!(entry.split_outputs.len(), 2);
     }
 

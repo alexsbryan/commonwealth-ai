@@ -187,7 +187,9 @@ mod tests {
         let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
         assert_eq!(r.demoted_count, 0);
         assert_eq!(r.verified_count, 1);
-        assert!(r.rewritten.contains(r#""drawing circles, circles, circles; innumerable circles, concentric, eccentric""#));
+        assert!(r.rewritten.contains(
+            r#""drawing circles, circles, circles; innumerable circles, concentric, eccentric""#
+        ));
     }
 
     #[test]
@@ -230,7 +232,8 @@ mod tests {
     fn whitespace_normalised_quote_verifies() {
         // Source has a hard line break inside the quoted phrase.
         let source = "He found himself walking\nthrough the empty streets at dawn.".to_string();
-        let answer = r#"Conrad says he was "walking through the empty streets at dawn" — a key moment."#;
+        let answer =
+            r#"Conrad says he was "walking through the empty streets at dawn" — a key moment."#;
         let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
         assert_eq!(r.verified_count, 1);
         assert_eq!(r.demoted_count, 0);
@@ -259,19 +262,25 @@ mod tests {
 
     #[test]
     fn multiple_quotes_in_one_answer_independent_outcomes() {
-        let source = "Stevie drew his circles, circles, circles all afternoon long in silence.".to_string();
+        let source =
+            "Stevie drew his circles, circles, circles all afternoon long in silence.".to_string();
         let answer = r#"The narrator says "Stevie drew his circles, circles, circles all afternoon" but also "the moon rose over the empty hills above the silent town" later."#;
         let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
         assert_eq!(r.verified_count, 1);
         assert_eq!(r.demoted_count, 1);
-        assert!(r.rewritten.contains(r#""Stevie drew his circles, circles, circles all afternoon""#));
+        assert!(r
+            .rewritten
+            .contains(r#""Stevie drew his circles, circles, circles all afternoon""#));
         assert!(r.rewritten.contains("[unverified excerpt: the moon"));
     }
 
     #[test]
     fn normalise_whitespace_collapses_runs() {
         assert_eq!(normalise_whitespace("a  b\t\nc"), "a b c");
-        assert_eq!(normalise_whitespace("  leading and trailing  "), "leading and trailing");
+        assert_eq!(
+            normalise_whitespace("  leading and trailing  "),
+            "leading and trailing"
+        );
         assert_eq!(normalise_whitespace(""), "");
     }
 }

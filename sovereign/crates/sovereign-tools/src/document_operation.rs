@@ -52,22 +52,16 @@ pub enum DocOpProgress {
         words: usize,
     },
     /// Map phase starting.
-    MapStarting {
-        total_batches: usize,
-    },
+    MapStarting { total_batches: usize },
     /// Map phase progress — emitted after each batch group completes.
     MapProgress {
         batches_done: usize,
         total_batches: usize,
     },
     /// Reduce phase starting.
-    ReduceStarting {
-        fragments: usize,
-    },
+    ReduceStarting { fragments: usize },
     /// Reduce phase progress — emitted per recursion depth.
-    ReduceProgress {
-        depth: usize,
-    },
+    ReduceProgress { depth: usize },
     /// Final synthesis in progress.
     Synthesising,
 }
@@ -107,11 +101,7 @@ impl DocumentOperationTool {
     /// Dispatches N_PARALLEL batches concurrently via `complete_batch`.
     /// Against embedded inference this serializes (same speed).
     /// Against a remote server with --parallel N, batches run simultaneously.
-    async fn map_chunks(
-        &self,
-        chunks: &[DocumentChunk],
-        map_prompt: &str,
-    ) -> Result<Vec<String>> {
+    async fn map_chunks(&self, chunks: &[DocumentChunk], map_prompt: &str) -> Result<Vec<String>> {
         let batches: Vec<&[DocumentChunk]> = chunks.chunks(CHUNKS_PER_BATCH).collect();
         let total_batches = batches.len();
         let total_groups = total_batches.div_ceil(N_PARALLEL);
@@ -192,9 +182,17 @@ impl DocumentOperationTool {
 
             batches_done += group_size;
             let elapsed = map_start.elapsed().as_secs();
-            let rate = if elapsed > 0 { batches_done as f32 / elapsed as f32 } else { 0.0 };
+            let rate = if elapsed > 0 {
+                batches_done as f32 / elapsed as f32
+            } else {
+                0.0
+            };
             let remaining = total_batches - batches_done;
-            let eta = if rate > 0.0 { (remaining as f32 / rate) as u64 } else { 0 };
+            let eta = if rate > 0.0 {
+                (remaining as f32 / rate) as u64
+            } else {
+                0
+            };
             tracing::debug!(
                 group = group_idx + 1,
                 total_groups,
@@ -258,9 +256,17 @@ impl DocumentOperationTool {
                 intermediate.push(merged);
 
                 let elapsed = reduce_start.elapsed().as_secs();
-                let rate = if elapsed > 0 { (i + 1) as f32 / elapsed as f32 } else { 0.0 };
+                let rate = if elapsed > 0 {
+                    (i + 1) as f32 / elapsed as f32
+                } else {
+                    0.0
+                };
                 let remaining = total_reduce - i - 1;
-                let eta = if rate > 0.0 { (remaining as f32 / rate) as u64 } else { 0 };
+                let eta = if rate > 0.0 {
+                    (remaining as f32 / rate) as u64
+                } else {
+                    0
+                };
                 tracing::debug!(
                     batch = i + 1,
                     total = total_reduce,
@@ -277,11 +283,7 @@ impl DocumentOperationTool {
         })
     }
 
-    async fn reduce_once(
-        &self,
-        fragments: &[String],
-        reduce_prompt: &str,
-    ) -> Result<String> {
+    async fn reduce_once(&self, fragments: &[String], reduce_prompt: &str) -> Result<String> {
         let combined = fragments.join("\n\n---\n\n");
         // Weave the caller-supplied `reduce_prompt` into the
         // intermediate-pass merge. Earlier this function hardcoded
@@ -308,14 +310,14 @@ impl DocumentOperationTool {
             oicp: None,
             tools: None,
             tool_choice: None,
-                    model_id: None,
-                    enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
 
         let response = self.inference.complete(&request).await?;
@@ -325,11 +327,7 @@ impl DocumentOperationTool {
     /// Final reduce — uses the primary model for quality synthesis.
     /// This produces the user-facing response, so quality matters more
     /// than speed here.
-    async fn reduce_final(
-        &self,
-        fragments: &[String],
-        reduce_prompt: &str,
-    ) -> Result<String> {
+    async fn reduce_final(&self, fragments: &[String], reduce_prompt: &str) -> Result<String> {
         let combined = fragments.join("\n\n---\n\n");
         let prompt = format!(
             "{reduce_prompt}\n\nFragments:\n{combined}\n\n\
@@ -353,14 +351,14 @@ impl DocumentOperationTool {
             oicp: None,
             tools: None,
             tool_choice: None,
-                    model_id: None,
-                    enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
 
         let response = self.inference.complete(&request).await?;
@@ -411,17 +409,15 @@ impl Tool for DocumentOperationTool {
                 },
                 "required": ["source", "operation", "map_prompt", "reduce_prompt"]
             }),
-            examples: vec![
-                ToolExample {
-                    situation: "User wants to extract character arcs from a novel".to_string(),
-                    call: serde_json::json!({
-                        "source": "manuscript.pdf",
-                        "operation": "extract character arcs",
-                        "map_prompt": "From this section, extract: character names, key actions they take, and how they change.",
-                        "reduce_prompt": "Synthesize all character information into a comprehensive character map with arcs."
-                    }),
-                },
-            ],
+            examples: vec![ToolExample {
+                situation: "User wants to extract character arcs from a novel".to_string(),
+                call: serde_json::json!({
+                    "source": "manuscript.pdf",
+                    "operation": "extract character arcs",
+                    "map_prompt": "From this section, extract: character names, key actions they take, and how they change.",
+                    "reduce_prompt": "Synthesize all character information into a comprehensive character map with arcs."
+                }),
+            }],
             effect: Effect::Read,
             idempotency: Idempotency::Idempotent,
             latency: Latency::Slow,
@@ -450,11 +446,7 @@ impl Tool for DocumentOperationTool {
         Ok(())
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let source = params["source"].as_str().unwrap();
         let operation = params["operation"].as_str().unwrap();
         let map_prompt = params["map_prompt"].as_str().unwrap();
@@ -467,7 +459,11 @@ impl Tool for DocumentOperationTool {
         // 1. Retrieve all chunks for this source.
         tracing::info!(source = source, "document_operation: looking up chunks");
         let chunks = self.store.get_chunks_by_source(source).await?;
-        tracing::info!(source = source, chunks = chunks.len(), "document_operation: exact match result");
+        tracing::info!(
+            source = source,
+            chunks = chunks.len(),
+            "document_operation: exact match result"
+        );
 
         if chunks.is_empty() {
             // Try fuzzy match on filename. The planner may introduce typos
@@ -558,7 +554,10 @@ impl DocumentOperationTool {
         reduce_prompt: &str,
         conversation_id: &str,
     ) -> Result<StepOutput> {
-        let word_count: usize = chunks.iter().map(|c| c.content.split_whitespace().count()).sum();
+        let word_count: usize = chunks
+            .iter()
+            .map(|c| c.content.split_whitespace().count())
+            .sum();
 
         tracing::info!(
             source = %source,
@@ -582,9 +581,7 @@ impl DocumentOperationTool {
                 .collect::<Vec<_>>()
                 .join("\n\n");
 
-            let prompt = format!(
-                "{map_prompt}\n\nDocument:\n{full_text}\n\nReturn JSON."
-            );
+            let prompt = format!("{map_prompt}\n\nDocument:\n{full_text}\n\nReturn JSON.");
 
             let request = CompletionRequest {
                 prompt,
@@ -600,16 +597,16 @@ impl DocumentOperationTool {
                 top_k: None,
                 top_p: None,
                 oicp: None,
-            tools: None,
-            tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
+                tools: None,
+                tool_choice: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
             };
 
             self.inference.complete(&request).await?.text
@@ -631,11 +628,7 @@ impl DocumentOperationTool {
         };
 
         // Persist to document session.
-        let filename = source
-            .rsplit('/')
-            .next()
-            .unwrap_or(source)
-            .to_string();
+        let filename = source.rsplit('/').next().unwrap_or(source).to_string();
 
         let session = DocumentSession {
             id: uuid::Uuid::new_v4().to_string(),

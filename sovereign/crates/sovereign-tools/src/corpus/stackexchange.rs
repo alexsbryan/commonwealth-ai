@@ -26,10 +26,7 @@ impl StackExchangeParser {
 }
 
 impl CorpusParser for StackExchangeParser {
-    fn parse(
-        &self,
-        source_path: &Path,
-    ) -> Result<Box<dyn Iterator<Item = Result<DocumentChunk>>>> {
+    fn parse(&self, source_path: &Path) -> Result<Box<dyn Iterator<Item = Result<DocumentChunk>>>> {
         let files = find_posts_files(source_path)?;
         Ok(Box::new(StackExchangeIterator {
             files: files.into(),
@@ -51,8 +48,7 @@ fn find_posts_files(path: &Path) -> Result<Vec<PathBuf>> {
     let entries = std::fs::read_dir(path)
         .map_err(|e| Error::Storage(format!("Failed to read {}: {e}", path.display())))?;
     for entry in entries {
-        let entry =
-            entry.map_err(|e| Error::Storage(format!("Directory entry error: {e}")))?;
+        let entry = entry.map_err(|e| Error::Storage(format!("Directory entry error: {e}")))?;
         let p = entry.path();
         if p.is_dir() {
             let posts = p.join("Posts.xml");
@@ -182,14 +178,9 @@ fn read_next_answer(
                         // Question: store for later lookup.
                         if let Some(id_str) = attrs.get("Id") {
                             if let Ok(id) = id_str.parse::<u64>() {
-                                let title = attrs
-                                    .get("Title")
-                                    .cloned()
-                                    .unwrap_or_default();
-                                let body = attrs
-                                    .get("Body")
-                                    .map(|b| strip_html(b))
-                                    .unwrap_or_default();
+                                let title = attrs.get("Title").cloned().unwrap_or_default();
+                                let body =
+                                    attrs.get("Body").map(|b| strip_html(b)).unwrap_or_default();
                                 cp.questions.insert(id, (title, body));
                             }
                         }
@@ -203,17 +194,12 @@ fn read_next_answer(
                         if score < min_score {
                             continue;
                         }
-                        let parent_id = attrs
-                            .get("ParentId")
-                            .and_then(|s| s.parse::<u64>().ok());
+                        let parent_id = attrs.get("ParentId").and_then(|s| s.parse::<u64>().ok());
                         let (title, q_body) = parent_id
                             .and_then(|pid| cp.questions.get(&pid))
                             .cloned()
                             .unwrap_or_else(|| ("Unknown Question".to_string(), String::new()));
-                        let a_body = attrs
-                            .get("Body")
-                            .map(|b| strip_html(b))
-                            .unwrap_or_default();
+                        let a_body = attrs.get("Body").map(|b| strip_html(b)).unwrap_or_default();
                         return Ok(Some((title, q_body, a_body, score)));
                     }
                     _ => {}
@@ -225,13 +211,10 @@ fn read_next_answer(
     }
 }
 
-fn parse_row_attrs(
-    e: &quick_xml::events::BytesStart<'_>,
-) -> Result<HashMap<String, String>> {
+fn parse_row_attrs(e: &quick_xml::events::BytesStart<'_>) -> Result<HashMap<String, String>> {
     let mut map = HashMap::new();
     for attr in e.attributes() {
-        let attr =
-            attr.map_err(|e| Error::Storage(format!("XML attribute error: {e}")))?;
+        let attr = attr.map_err(|e| Error::Storage(format!("XML attribute error: {e}")))?;
         let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
         let val = attr
             .unescape_value()

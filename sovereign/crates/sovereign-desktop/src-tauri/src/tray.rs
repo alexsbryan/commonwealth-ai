@@ -32,8 +32,7 @@ use tauri::{
 };
 
 use crate::commands::{
-    self, get_contribution_status, pause_contributions, resume_contributions,
-    ContributionStatus,
+    self, get_contribution_status, pause_contributions, resume_contributions, ContributionStatus,
 };
 
 /// Items the 5s poller mutates. Held in an `Arc` so the poller task
@@ -45,16 +44,13 @@ struct TrayItems {
 
 pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let status = MenuItem::with_id(app, "status", "Status: Starting…", false, None::<&str>)?;
-    let pause_15m =
-        MenuItem::with_id(app, "pause:900", "15 minutes", true, None::<&str>)?;
-    let pause_1h =
-        MenuItem::with_id(app, "pause:3600", "1 hour", true, None::<&str>)?;
+    let pause_15m = MenuItem::with_id(app, "pause:900", "15 minutes", true, None::<&str>)?;
+    let pause_1h = MenuItem::with_id(app, "pause:3600", "1 hour", true, None::<&str>)?;
     // 0 encodes "until I resume" — handled in the event handler by
     // stamping a far-future expiry. Keeping the wire field a single
     // `duration_secs` u64 means the daemon route doesn't need a
     // separate "indefinite" code path.
-    let pause_indef =
-        MenuItem::with_id(app, "pause:0", "Until I resume", true, None::<&str>)?;
+    let pause_indef = MenuItem::with_id(app, "pause:0", "Until I resume", true, None::<&str>)?;
     let pause_submenu = Submenu::with_items(
         app,
         "Pause sharing",
@@ -257,10 +253,7 @@ mod tests {
         // Just under 1 year — what handle_event encodes for the
         // "Until I resume" menu item.
         let s = status(0, Some(365 * 24 * 3600), None);
-        assert_eq!(
-            render_status_text(&s),
-            "Status: Paused (until I resume)"
-        );
+        assert_eq!(render_status_text(&s), "Status: Paused (until I resume)");
     }
 
     #[test]

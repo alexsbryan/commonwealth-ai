@@ -111,10 +111,7 @@ async fn memory_source_conversation_id_round_trips() {
         "source_conversation_id must round-trip through SQLite"
     );
 
-    let relevant = store
-        .get_relevant_memories("meaningful", 5)
-        .await
-        .unwrap();
+    let relevant = store.get_relevant_memories("meaningful", 5).await.unwrap();
     assert_eq!(relevant.len(), 1);
     assert_eq!(
         relevant[0].source_conversation_id.as_deref(),
@@ -173,14 +170,31 @@ async fn inner_work_scope_recall_excludes_general_memories() {
     // The wall, direction A: an inner-work conversation MUST NOT
     // recall memories from sales-call/research/general surfaces.
     let store = SqliteStateStore::open_in_memory().unwrap();
-    store.save_memory(&mem_with_skill("g1", "user prefers Rust", None)).await.unwrap();
-    store.save_memory(&mem_with_skill("g2", "user attended SaaS conference", None)).await.unwrap();
-    store.save_memory(&mem_with_skill("iw1", "user has been processing grief about mother", Some("inner-work"))).await.unwrap();
+    store
+        .save_memory(&mem_with_skill("g1", "user prefers Rust", None))
+        .await
+        .unwrap();
+    store
+        .save_memory(&mem_with_skill("g2", "user attended SaaS conference", None))
+        .await
+        .unwrap();
+    store
+        .save_memory(&mem_with_skill(
+            "iw1",
+            "user has been processing grief about mother",
+            Some("inner-work"),
+        ))
+        .await
+        .unwrap();
 
     let scope = sovereign_core::MemoryScope::Scoped("inner-work".into());
 
     let all = store.get_all_memories_for_scope(&scope).await.unwrap();
-    assert_eq!(all.len(), 1, "scoped recall returns only inner-work memories");
+    assert_eq!(
+        all.len(),
+        1,
+        "scoped recall returns only inner-work memories"
+    );
     assert_eq!(all[0].id, "iw1");
 
     let relevant = store
@@ -201,14 +215,27 @@ async fn general_scope_recall_excludes_inner_work_memories() {
     // inner-work memories. This is the privacy contract — nothing
     // the user said in journaling can leak into a professional chat.
     let store = SqliteStateStore::open_in_memory().unwrap();
-    store.save_memory(&mem_with_skill("g1", "user prefers Rust", None)).await.unwrap();
-    store.save_memory(&mem_with_skill("iw1", "user has been processing grief about mother", Some("inner-work"))).await.unwrap();
+    store
+        .save_memory(&mem_with_skill("g1", "user prefers Rust", None))
+        .await
+        .unwrap();
+    store
+        .save_memory(&mem_with_skill(
+            "iw1",
+            "user has been processing grief about mother",
+            Some("inner-work"),
+        ))
+        .await
+        .unwrap();
 
     let scope = sovereign_core::MemoryScope::General;
 
     let all = store.get_all_memories_for_scope(&scope).await.unwrap();
     assert_eq!(all.len(), 1);
-    assert_eq!(all[0].id, "g1", "general recall excludes inner-work memories");
+    assert_eq!(
+        all[0].id, "g1",
+        "general recall excludes inner-work memories"
+    );
 
     let relevant = store
         .get_relevant_memories_for_scope(&scope, "user", 10)
@@ -227,8 +254,14 @@ async fn tombstoned_memory_excluded_from_scope_recall() {
     // in either scope path — this is what makes the "drop" UX
     // gracefully invalidate without losing the audit trail.
     let store = SqliteStateStore::open_in_memory().unwrap();
-    store.save_memory(&mem_with_skill("iw1", "fact A", Some("inner-work"))).await.unwrap();
-    store.save_memory(&mem_with_skill("iw2", "fact B", Some("inner-work"))).await.unwrap();
+    store
+        .save_memory(&mem_with_skill("iw1", "fact A", Some("inner-work")))
+        .await
+        .unwrap();
+    store
+        .save_memory(&mem_with_skill("iw2", "fact B", Some("inner-work")))
+        .await
+        .unwrap();
     store.delete_memory("iw1").await.unwrap();
 
     let scope = sovereign_core::MemoryScope::Scoped("inner-work".into());
@@ -244,8 +277,14 @@ async fn scope_constructor_maps_none_to_general() {
     // (defensive against a buggy upstream that writes "" instead of
     // NULL).
     use sovereign_core::MemoryScope;
-    assert_eq!(MemoryScope::from_conversation_skill(None), MemoryScope::General);
-    assert_eq!(MemoryScope::from_conversation_skill(Some("")), MemoryScope::General);
+    assert_eq!(
+        MemoryScope::from_conversation_skill(None),
+        MemoryScope::General
+    );
+    assert_eq!(
+        MemoryScope::from_conversation_skill(Some("")),
+        MemoryScope::General
+    );
     assert_eq!(
         MemoryScope::from_conversation_skill(Some("inner-work")),
         MemoryScope::Scoped("inner-work".into()),

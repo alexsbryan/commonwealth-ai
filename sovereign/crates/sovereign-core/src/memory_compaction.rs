@@ -70,7 +70,6 @@ pub enum CompactionMode {
     Async,
 }
 
-
 /// Operator-tunable knobs for [`CompactionWorker`]. Persisted under
 /// `[memory.compaction]` in the daemon's `config.toml`.
 ///
@@ -248,10 +247,7 @@ impl CompactionWorker {
     /// threshold (no work to do). Returns `Ok(Some(pass))` with the
     /// summary id + folded source ids on a successful pass. Errors
     /// only when the synthesis call or a store write fails.
-    pub async fn run_one_sync(
-        &self,
-        conversation_id: &str,
-    ) -> Result<Option<CompactionPass>> {
+    pub async fn run_one_sync(&self, conversation_id: &str) -> Result<Option<CompactionPass>> {
         run_pass(
             conversation_id,
             self.memory_store.as_ref(),
@@ -360,8 +356,7 @@ async fn run_pass(
     // (a summary built from inner-work memories MUST be inner-work-
     // scoped; mixing scopes would leak across the surface wall).
     let oldest = &to_fold[0];
-    let confidence = to_fold.iter().map(|m| m.confidence).sum::<f64>()
-        / (to_fold.len() as f64);
+    let confidence = to_fold.iter().map(|m| m.confidence).sum::<f64>() / (to_fold.len() as f64);
     let summary = Memory {
         id: summary_id.clone(),
         content: summary_text,

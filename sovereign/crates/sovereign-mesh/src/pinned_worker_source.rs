@@ -195,12 +195,7 @@ impl PinnedWorkerEndpointSource {
     /// Used by [`CompositeEndpointSource`] to short-circuit ledger
     /// emission for pinned pods.
     pub async fn node_ids(&self) -> HashSet<NodeId> {
-        self.inner
-            .read()
-            .await
-            .iter()
-            .map(|p| p.node_id)
-            .collect()
+        self.inner.read().await.iter().map(|p| p.node_id).collect()
     }
 
     async fn endpoints(&self) -> Vec<PeerInferenceEndpoint> {
@@ -263,10 +258,7 @@ pub struct CompositeEndpointSource {
 }
 
 impl CompositeEndpointSource {
-    pub fn new(
-        mesh: Arc<dyn PeerEndpointSource>,
-        pinned: Arc<PinnedWorkerEndpointSource>,
-    ) -> Self {
+    pub fn new(mesh: Arc<dyn PeerEndpointSource>, pinned: Arc<PinnedWorkerEndpointSource>) -> Self {
         Self { mesh, pinned }
     }
 }
@@ -440,13 +432,15 @@ mod tests {
             mesh_peer(1, "mesh-a"),
             mesh_peer(2, "mesh-b"),
         ]));
-        let pinned = Arc::new(PinnedWorkerEndpointSource::from_pods(vec![PinnedPod::from_blob(
-            &mint([4u8; 32], "pin"),
-            "h",
-            9742,
-            PodCapabilities::default(),
-        )
-        .unwrap()]));
+        let pinned = Arc::new(PinnedWorkerEndpointSource::from_pods(vec![
+            PinnedPod::from_blob(
+                &mint([4u8; 32], "pin"),
+                "h",
+                9742,
+                PodCapabilities::default(),
+            )
+            .unwrap(),
+        ]));
         let composite = CompositeEndpointSource::new(mesh, pinned);
         let endpoints = composite.peer_inference_endpoints().await;
         assert_eq!(endpoints.len(), 3);

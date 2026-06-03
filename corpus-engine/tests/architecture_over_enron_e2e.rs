@@ -19,9 +19,7 @@
 use std::sync::Arc;
 
 use corpus_engine::asset_store::{AssetStore, FilesystemAssetStore};
-use corpus_engine::enrichment::atlas::atoms::{
-    AtomId, ChunkRef, Entity, Provenance, SignalKind,
-};
+use corpus_engine::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity, Provenance, SignalKind};
 use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 use corpus_engine::enrichment::reconciliation::{reconcile, ReconciliationPolicy};
 
@@ -194,8 +192,8 @@ Counterparty,Notes\r\nDynegy,gas\r\nEl Paso,gas\r\n\
         asset_atoms_sidecar: dir.path().join("atlas/asset_atoms.jsonl"),
         asset_edges_sidecar: dir.path().join("atlas/asset_edges.jsonl"),
     };
-    let extractor = EmailExtractor::new(EmailExtractorConfig::default())
-        .with_asset_dispatch(dispatch.clone());
+    let extractor =
+        EmailExtractor::new(EmailExtractorConfig::default()).with_asset_dispatch(dispatch.clone());
 
     let docs: Vec<_> = extractor
         .extract(&inbox)

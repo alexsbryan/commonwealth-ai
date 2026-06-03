@@ -65,9 +65,7 @@ fn main() {
         let src = match find_asset(asset, &candidates) {
             Some(p) => p,
             None => {
-                eprintln!(
-                    "cargo:warning=corpus-engine build.rs: '{asset}' not found in any of:"
-                );
+                eprintln!("cargo:warning=corpus-engine build.rs: '{asset}' not found in any of:");
                 for c in &candidates {
                     eprintln!("cargo:warning=  - {}", c.join(asset).display());
                 }
@@ -81,13 +79,8 @@ fn main() {
             }
         };
         let dest = out_dir.join(asset);
-        std::fs::copy(&src, &dest).unwrap_or_else(|e| {
-            panic!(
-                "copy {} -> {} failed: {e}",
-                src.display(),
-                dest.display()
-            )
-        });
+        std::fs::copy(&src, &dest)
+            .unwrap_or_else(|e| panic!("copy {} -> {} failed: {e}", src.display(), dest.display()));
         // Re-run the build script (and recompile dependents) when the
         // source file changes. Without this, regenerating
         // vital_articles_l5.txt in sovereign-recipes wouldn't

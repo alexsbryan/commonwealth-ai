@@ -40,9 +40,7 @@ pub enum FetchError {
     Io(#[from] std::io::Error),
     #[error("peer doesn't advertise '{0}'")]
     NotAdvertised(String),
-    #[error(
-        "integrity check failed for '{name}': expected sha256 {expected}, got {got}"
-    )]
+    #[error("integrity check failed for '{name}': expected sha256 {expected}, got {got}")]
     IntegrityMismatch {
         name: String,
         expected: String,
@@ -94,11 +92,7 @@ pub async fn fetch_model_to_dir(
 
     std::fs::create_dir_all(dest_dir)?;
     let final_path = dest_dir.join(&info.name);
-    let partial_path = dest_dir.join(format!(
-        ".{}.{}.partial",
-        info.name,
-        std::process::id()
-    ));
+    let partial_path = dest_dir.join(format!(".{}.{}.partial", info.name, std::process::id()));
 
     let url = format!(
         "{}/internal/v1/models/file/{}",
@@ -223,10 +217,8 @@ mod tests {
                 hasher.update(&bytes);
                 let sha = format!("{:x}", hasher.finalize());
                 let mut resp = (axum::http::StatusCode::OK, bytes).into_response();
-                resp.headers_mut().insert(
-                    "X-Sha256",
-                    axum::http::HeaderValue::from_str(&sha).unwrap(),
-                );
+                resp.headers_mut()
+                    .insert("X-Sha256", axum::http::HeaderValue::from_str(&sha).unwrap());
                 resp
             }
         };
@@ -330,15 +322,10 @@ mod tests {
         let (base, _h) = spawn_test_server(src.path()).await;
 
         let client = reqwest::Client::new();
-        let err = fetch_named_model_from_peer(
-            &client,
-            &base,
-            "missing.gguf",
-            dest.path(),
-            |_, _| {},
-        )
-        .await
-        .unwrap_err();
+        let err =
+            fetch_named_model_from_peer(&client, &base, "missing.gguf", dest.path(), |_, _| {})
+                .await
+                .unwrap_err();
         assert!(matches!(err, FetchError::NotAdvertised(ref n) if n == "missing.gguf"));
     }
 }

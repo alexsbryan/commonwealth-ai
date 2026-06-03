@@ -45,10 +45,8 @@ const MAX_CHUNKS_PER_SECTION_AT_MERGE: usize = 4;
 /// the cases that path misses.
 pub(crate) fn extract_comparison_entities(text: &str) -> Vec<String> {
     const STOP_PREFIX: &[&str] = &[
-        "how", "what", "when", "where", "why", "who", "which",
-        "do", "did", "does", "is", "are", "was", "were",
-        "compare", "contrast", "describe", "explain",
-        "the", "a", "an",
+        "how", "what", "when", "where", "why", "who", "which", "do", "did", "does", "is", "are",
+        "was", "were", "compare", "contrast", "describe", "explain", "the", "a", "an",
     ];
     let trim_word = |w: &str| -> String {
         w.trim_matches(|c: char| !c.is_alphanumeric() && c != '\'')
@@ -99,10 +97,10 @@ pub(crate) fn extract_comparison_entities(text: &str) -> Vec<String> {
                     }
                 }
                 let y_part = &after_and[..y_end];
-                let x: String = strip_lead_stops(&x_part.split_whitespace().collect::<Vec<_>>())
-                    .join(" ");
-                let y: String = strip_lead_stops(&y_part.split_whitespace().collect::<Vec<_>>())
-                    .join(" ");
+                let x: String =
+                    strip_lead_stops(&x_part.split_whitespace().collect::<Vec<_>>()).join(" ");
+                let y: String =
+                    strip_lead_stops(&y_part.split_whitespace().collect::<Vec<_>>()).join(" ");
                 if !x.is_empty() && !y.is_empty() {
                     let mut out = vec![x.clone(), y.clone()];
                     if x.eq_ignore_ascii_case(&y) {
@@ -211,18 +209,33 @@ pub(crate) fn comparison_axis(text: &str, entities: &[String]) -> Option<String>
     let tail = &text[start..];
 
     // Tail ends at the first terminal punctuation.
-    let tail_end = tail
-        .find(['?', '.', ',', ';', '!'])
-        .unwrap_or(tail.len());
+    let tail_end = tail.find(['?', '.', ',', ';', '!']).unwrap_or(tail.len());
     let span = &tail[..tail_end];
 
     // Strip lead-side filler words — "the X", "a Y", "their Z".
     const LEAD_DROP: &[&str] = &[
-        "the", "a", "an", "their", "his", "her", "its",
-        "concept", "concepts", "conception", "conceptions",
-        "view", "views", "treatment", "treatments",
-        "notion", "notions", "idea", "ideas",
-        "of", "on", "about",
+        "the",
+        "a",
+        "an",
+        "their",
+        "his",
+        "her",
+        "its",
+        "concept",
+        "concepts",
+        "conception",
+        "conceptions",
+        "view",
+        "views",
+        "treatment",
+        "treatments",
+        "notion",
+        "notions",
+        "idea",
+        "ideas",
+        "of",
+        "on",
+        "about",
     ];
     let entity_lowers: Vec<String> = entities.iter().map(|e| e.to_lowercase()).collect();
     let words: Vec<String> = span
@@ -276,18 +289,36 @@ pub(crate) fn comparison_axis(text: &str, entities: &[String]) -> Option<String>
 /// entities almost always have. Tune toward catching too many.
 pub(crate) fn extract_question_entities(text: &str) -> Vec<String> {
     const SKIP_LEAD: &[&str] = &[
-        "How", "What", "When", "Where", "Why", "Who", "Which",
-        "Compare", "Contrast", "Describe", "Explain", "Tell", "Give",
-        "List", "Discuss", "Summarize", "Show", "Did", "Does", "Do",
-        "Is", "Are", "Was", "Were",
+        "How",
+        "What",
+        "When",
+        "Where",
+        "Why",
+        "Who",
+        "Which",
+        "Compare",
+        "Contrast",
+        "Describe",
+        "Explain",
+        "Tell",
+        "Give",
+        "List",
+        "Discuss",
+        "Summarize",
+        "Show",
+        "Did",
+        "Does",
+        "Do",
+        "Is",
+        "Are",
+        "Was",
+        "Were",
     ];
     let mut out: Vec<String> = Vec::new();
     let mut current: Vec<String> = Vec::new();
     let mut at_sentence_start = true;
     for word in text.split_whitespace() {
-        let trimmed = word.trim_matches(|c: char| {
-            !c.is_alphanumeric() && c != '\'' && c != '-'
-        });
+        let trimmed = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '\'' && c != '-');
         let starts_upper = trimmed
             .chars()
             .next()
@@ -325,18 +356,24 @@ pub(crate) fn extract_question_entities(text: &str) -> Vec<String> {
 pub(crate) fn extract_commitment_phrase(message: &str) -> Option<String> {
     let lower = message.to_lowercase();
     const MARKERS: &[&str] = &[
-        "i'll ", "i will ", "i'm going to ", "i am going to ",
-        "i'm gonna ", "i plan to ", "i'll be ",
-        "remind me to ", "remind me about ", "remind me later to ",
-        "remind me on ", "remind me in ",
+        "i'll ",
+        "i will ",
+        "i'm going to ",
+        "i am going to ",
+        "i'm gonna ",
+        "i plan to ",
+        "i'll be ",
+        "remind me to ",
+        "remind me about ",
+        "remind me later to ",
+        "remind me on ",
+        "remind me in ",
     ];
     for marker in MARKERS {
         if let Some(pos) = lower.find(marker) {
             let after = &message[pos + marker.len()..];
             // Cap at sentence boundary to avoid dragging in unrelated trailing context.
-            let end = after
-                .find(['.', '!', '?', '\n'])
-                .unwrap_or(after.len());
+            let end = after.find(['.', '!', '?', '\n']).unwrap_or(after.len());
             let phrase = after[..end].trim();
             if !phrase.is_empty() {
                 return Some(phrase.to_string());
@@ -391,9 +428,8 @@ pub(crate) fn parse_metalingual_locator(message: &str) -> MetalingualLocator {
             // Take up to 3 words, stop at common terminators.
             let mut name_words: Vec<&str> = Vec::new();
             for w in after.split_whitespace() {
-                let cleaned = w.trim_matches(|c: char| {
-                    !c.is_alphanumeric() && c != '-' && c != '_'
-                });
+                let cleaned =
+                    w.trim_matches(|c: char| !c.is_alphanumeric() && c != '-' && c != '_');
                 if cleaned.is_empty() {
                     break;
                 }
@@ -401,10 +437,24 @@ pub(crate) fn parse_metalingual_locator(message: &str) -> MetalingualLocator {
                 // Stop on filler / definitional verbs / clause boundaries.
                 if matches!(
                     cleaned_lower.as_str(),
-                    "what" | "how" | "the" | "a" | "an" | "is" | "are"
-                        | "does" | "do" | "did" | "mean" | "means"
-                        | "say" | "says" | "define" | "defines"
-                        | "use" | "uses"
+                    "what"
+                        | "how"
+                        | "the"
+                        | "a"
+                        | "an"
+                        | "is"
+                        | "are"
+                        | "does"
+                        | "do"
+                        | "did"
+                        | "mean"
+                        | "means"
+                        | "say"
+                        | "says"
+                        | "define"
+                        | "defines"
+                        | "use"
+                        | "uses"
                 ) {
                     break;
                 }
@@ -421,11 +471,18 @@ pub(crate) fn parse_metalingual_locator(message: &str) -> MetalingualLocator {
 
     // 2. SystemCode — explicit codebase/system locators.
     const SYSTEM_MARKERS: &[&str] = &[
-        "in this codebase", "in this repo", "in this repository",
-        "in this project", "in this code",
-        "in our codebase", "in our repo", "in our system",
-        "in the codebase", "in the repo",
-        "in sovereign", "in the sovereign",
+        "in this codebase",
+        "in this repo",
+        "in this repository",
+        "in this project",
+        "in this code",
+        "in our codebase",
+        "in our repo",
+        "in our system",
+        "in the codebase",
+        "in the repo",
+        "in sovereign",
+        "in the sovereign",
     ];
     if SYSTEM_MARKERS.iter().any(|m| lower.contains(m)) {
         return MetalingualLocator::SystemCode;
@@ -433,10 +490,15 @@ pub(crate) fn parse_metalingual_locator(message: &str) -> MetalingualLocator {
 
     // 3. Conversation — internal thread references.
     const CONVERSATION_MARKERS: &[&str] = &[
-        "in this conversation", "in our conversation",
-        "earlier you said", "earlier i said",
-        "we mentioned", "we discussed", "we talked about",
-        "you mentioned", "you said",
+        "in this conversation",
+        "in our conversation",
+        "earlier you said",
+        "earlier i said",
+        "we mentioned",
+        "we discussed",
+        "we talked about",
+        "you mentioned",
+        "you said",
     ];
     if CONVERSATION_MARKERS.iter().any(|m| lower.contains(m)) {
         return MetalingualLocator::Conversation;
@@ -492,7 +554,11 @@ pub(crate) fn cap_chunks_per_article(
         // would silently drop entities whose first_appearance evidence
         // happens to live in a shared document — exactly the entities
         // enumeration needs. Tagged in `enumerate_typed_atom_chunks`.
-        if c.metadata.get("source").map(|s| s == "atom-enum").unwrap_or(false) {
+        if c.metadata
+            .get("source")
+            .map(|s| s == "atom-enum")
+            .unwrap_or(false)
+        {
             out.push(c);
             continue;
         }
@@ -544,8 +610,7 @@ pub(crate) fn reserve_chunks_per_entity(
         return chunks;
     }
     use std::collections::HashSet;
-    let entity_lowers: Vec<String> =
-        entities.iter().map(|e| e.to_lowercase()).collect();
+    let entity_lowers: Vec<String> = entities.iter().map(|e| e.to_lowercase()).collect();
     let mut reserved_idx: HashSet<usize> = HashSet::new();
     for entity_lower in &entity_lowers {
         let mut taken = 0usize;

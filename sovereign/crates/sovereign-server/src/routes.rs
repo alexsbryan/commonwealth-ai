@@ -274,10 +274,7 @@ pub async fn approve_task(
     let key = format!("{task_id}:{}", body.step_id);
     let accepted = approval.submit_approval(&key, body.approved).await;
 
-    Ok(Json(ApproveResponse {
-        task_id,
-        accepted,
-    }))
+    Ok(Json(ApproveResponse { task_id, accepted }))
 }
 
 /// GET /v1/tools

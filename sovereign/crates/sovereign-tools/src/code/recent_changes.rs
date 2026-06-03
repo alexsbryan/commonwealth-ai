@@ -95,12 +95,11 @@ impl Tool for RecentChangesTool {
         Ok(())
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
-        let hours = params.get("hours").and_then(|v| v.as_u64()).unwrap_or(DEFAULT_HOURS);
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+        let hours = params
+            .get("hours")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(DEFAULT_HOURS);
         let since = chrono::Utc::now().timestamp() - (hours as i64 * 3600);
 
         // `symbol_name IS NOT NULL` implicitly skips non-code corpora

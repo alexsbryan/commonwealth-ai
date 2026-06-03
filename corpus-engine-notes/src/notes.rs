@@ -192,9 +192,8 @@ pub type GlinerFn = Arc<
 ///
 /// The future is `'static`; the closure copies `&str` internally
 /// rather than borrowing across the await point.
-pub type EmbedFn = Arc<
-    dyn Fn(&str) -> Pin<Box<dyn Future<Output = Result<Vec<f32>>> + Send>> + Send + Sync,
->;
+pub type EmbedFn =
+    Arc<dyn Fn(&str) -> Pin<Box<dyn Future<Output = Result<Vec<f32>>> + Send>> + Send + Sync>;
 
 /// Unit separator (0x1F) used between fields in [`content_hash`]
 /// preimage. Outside the printable-ASCII range, so user content
@@ -486,9 +485,7 @@ fn build_filter_clause(
         where_extra.push(')');
     }
     if !symbols.is_empty() {
-        where_extra.push_str(
-            " AND EXISTS (SELECT 1 FROM json_each(n.symbols) WHERE value IN (",
-        );
+        where_extra.push_str(" AND EXISTS (SELECT 1 FROM json_each(n.symbols) WHERE value IN (");
         for (i, s) in symbols.iter().enumerate() {
             if i > 0 {
                 where_extra.push(',');
@@ -540,7 +537,9 @@ pub(crate) fn embedding_from_le_bytes(bytes: &[u8]) -> Result<Vec<f32>> {
     }
     let mut out = Vec::with_capacity(bytes.len() / 4);
     for chunk in bytes.chunks_exact(4) {
-        let arr: [u8; 4] = chunk.try_into().expect("chunks_exact(4) yields 4-byte chunks");
+        let arr: [u8; 4] = chunk
+            .try_into()
+            .expect("chunks_exact(4) yields 4-byte chunks");
         out.push(f32::from_le_bytes(arr));
     }
     Ok(out)
@@ -1335,13 +1334,8 @@ impl NoteStore {
         // Content hash identifies the note across peers; stable
         // across `origin_node_id` rotation. Computed before
         // locking so the cheap hash doesn't block other writers.
-        let content_hash = compute_content_hash(
-            kind,
-            content,
-            scope.as_str(),
-            feature_id,
-            session_id,
-        );
+        let content_hash =
+            compute_content_hash(kind, content, scope.as_str(), feature_id, session_id);
 
         // T1: compute the embedding outside the connection mutex.
         // The Embed slot can be local (microseconds) or HTTP
@@ -1353,10 +1347,8 @@ impl NoteStore {
         let embedding: Option<(Vec<f32>, String)> = match self.embed_fn.get() {
             Some(embed) => match embed(content).await {
                 Ok(vec) => {
-                    let model_id =
-                        std::env::var("SOVEREIGN_EMBED_MODEL_ID").unwrap_or_else(|_| {
-                            "qwen-embedding-0.6b".to_string()
-                        });
+                    let model_id = std::env::var("SOVEREIGN_EMBED_MODEL_ID")
+                        .unwrap_or_else(|_| "qwen-embedding-0.6b".to_string());
                     Some((vec, model_id))
                 }
                 Err(e) => {
@@ -1720,10 +1712,10 @@ impl NoteStore {
                     None
                 };
 
-                let symbols_json = serde_json::to_string(&ev.note.symbols)
-                    .unwrap_or_else(|_| "[]".to_string());
-                let files_json = serde_json::to_string(&ev.note.files)
-                    .unwrap_or_else(|_| "[]".to_string());
+                let symbols_json =
+                    serde_json::to_string(&ev.note.symbols).unwrap_or_else(|_| "[]".to_string());
+                let files_json =
+                    serde_json::to_string(&ev.note.files).unwrap_or_else(|_| "[]".to_string());
                 conn.execute(
                     "INSERT INTO notes (
                         id, kind, content, symbols, files, session_id,
@@ -2118,7 +2110,11 @@ impl NoteStore {
         // embedding doesn't block an entity backfill on the same row.
         let embed_targets: Vec<(String, String)> = {
             let conn = self.conn.lock().await;
-            let cap = if max_per_run == 0 { i64::MAX } else { max_per_run as i64 };
+            let cap = if max_per_run == 0 {
+                i64::MAX
+            } else {
+                max_per_run as i64
+            };
             let mut stmt = conn
                 .prepare(
                     "SELECT n.id, n.content FROM notes n
@@ -2188,7 +2184,11 @@ impl NoteStore {
         // by author-supplied symbols even when GLiNER is offline.
         let entity_targets: Vec<(String, String, Vec<String>, Vec<String>)> = {
             let conn = self.conn.lock().await;
-            let cap = if max_per_run == 0 { i64::MAX } else { max_per_run as i64 };
+            let cap = if max_per_run == 0 {
+                i64::MAX
+            } else {
+                max_per_run as i64
+            };
             let mut stmt = conn
                 .prepare(
                     "SELECT n.id, n.content, n.symbols, n.files FROM notes n
@@ -2207,7 +2207,12 @@ impl NoteStore {
                     let symbols: Vec<String> =
                         serde_json::from_str(&symbols_json).unwrap_or_default();
                     let files: Vec<String> = serde_json::from_str(&files_json).unwrap_or_default();
-                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, symbols, files))
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        symbols,
+                        files,
+                    ))
                 }) {
                     Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
                     Err(_) => Vec::new(),
@@ -2293,11 +2298,7 @@ impl NoteStore {
     /// is a v2 optimisation that swaps the overlap-count score
     /// for a diffusion score over the bipartite entity↔note
     /// graph. Same input + output shape, deeper signal.
-    pub async fn read_notes_related(
-        &self,
-        seed: &str,
-        k: usize,
-    ) -> Result<Vec<NoteRow>> {
+    pub async fn read_notes_related(&self, seed: &str, k: usize) -> Result<Vec<NoteRow>> {
         let cap = k.min(100);
         let conn = self.conn.lock().await;
 
@@ -2307,9 +2308,7 @@ impl NoteStore {
         // index covers both axes from one column.
         let seed_note_ids: Vec<String> = {
             let mut stmt = conn
-                .prepare(
-                    "SELECT DISTINCT note_id FROM note_entities WHERE entity = ?",
-                )
+                .prepare("SELECT DISTINCT note_id FROM note_entities WHERE entity = ?")
                 .map_err(sqlite_err)?;
             let mapped = stmt
                 .query_map(params![seed], |r| r.get::<_, String>(0))
@@ -2398,9 +2397,7 @@ impl NoteStore {
         bound.push(rusqlite::types::Value::Integer(cap as i64));
         let mut stmt = conn.prepare(&sql).map_err(sqlite_err)?;
         let rows = stmt
-            .query_map(rusqlite::params_from_iter(bound), |row| {
-                map_note_row(row)
-            })
+            .query_map(rusqlite::params_from_iter(bound), |row| map_note_row(row))
             .map_err(sqlite_err)?;
         let mut out = Vec::new();
         for r in rows {
@@ -2503,9 +2500,9 @@ impl NoteStore {
                 },
             )
             .map_err(|e| match e {
-                rusqlite::Error::QueryReturnedNoRows => Error::InvalidInput(format!(
-                    "promote_note: source id not found: {source_id}"
-                )),
+                rusqlite::Error::QueryReturnedNoRows => {
+                    Error::InvalidInput(format!("promote_note: source id not found: {source_id}"))
+                }
                 other => sqlite_err(other),
             })?;
 
@@ -2705,9 +2702,8 @@ impl NoteStore {
         }
 
         if !symbols.is_empty() {
-            where_extra.push_str(
-                " AND EXISTS (SELECT 1 FROM json_each(n.symbols) WHERE value IN (",
-            );
+            where_extra
+                .push_str(" AND EXISTS (SELECT 1 FROM json_each(n.symbols) WHERE value IN (");
             for (i, s) in symbols.iter().enumerate() {
                 if i > 0 {
                     where_extra.push(',');
@@ -2719,8 +2715,7 @@ impl NoteStore {
         }
 
         if !files.is_empty() {
-            where_extra
-                .push_str(" AND EXISTS (SELECT 1 FROM json_each(n.files) WHERE value IN (");
+            where_extra.push_str(" AND EXISTS (SELECT 1 FROM json_each(n.files) WHERE value IN (");
             for (i, f) in files.iter().enumerate() {
                 if i > 0 {
                     where_extra.push(',');
@@ -2839,15 +2834,19 @@ impl NoteStore {
         // assert byte equivalence.
         if weight == 0.0 || semantic_query.is_none() || self.embed_fn.get().is_none() {
             return self
-                .read_notes_scoped(query, symbols, files, kinds, limit, include_retired, scope_filter)
+                .read_notes_scoped(
+                    query,
+                    symbols,
+                    files,
+                    kinds,
+                    limit,
+                    include_retired,
+                    scope_filter,
+                )
                 .await;
         }
         let sem_q = semantic_query.unwrap();
-        let embed_fn = self
-            .embed_fn
-            .get()
-            .cloned()
-            .expect("checked above");
+        let embed_fn = self.embed_fn.get().cloned().expect("checked above");
 
         // Compute query embedding outside the lock; soft-fail on
         // error (drop to baseline).
@@ -2861,7 +2860,13 @@ impl NoteStore {
                 );
                 return self
                     .read_notes_scoped(
-                        query, symbols, files, kinds, limit, include_retired, scope_filter,
+                        query,
+                        symbols,
+                        files,
+                        kinds,
+                        limit,
+                        include_retired,
+                        scope_filter,
                     )
                     .await;
             }
@@ -2881,15 +2886,7 @@ impl NoteStore {
         let (bm25_pool, cosine_pool) = {
             let conn = self.conn.lock().await;
             let bm25 = if let Some(q) = query.filter(|s| !s.is_empty()) {
-                fetch_bm25_pool(
-                    &conn,
-                    q,
-                    symbols,
-                    files,
-                    kinds,
-                    pool_size,
-                    include_retired,
-                )?
+                fetch_bm25_pool(&conn, q, symbols, files, kinds, pool_size, include_retired)?
             } else {
                 Vec::new()
             };
@@ -2911,7 +2908,10 @@ impl NoteStore {
         use std::collections::HashMap;
         let mut blended: HashMap<String, (NoteRow, Option<f64>, Option<f64>)> = HashMap::new();
         for (row, rank) in bm25_pool {
-            blended.entry(row.id.clone()).or_insert((row, Some(rank), None)).1 = Some(rank);
+            blended
+                .entry(row.id.clone())
+                .or_insert((row, Some(rank), None))
+                .1 = Some(rank);
         }
         for (row, cos) in cosine_pool {
             blended
@@ -3382,8 +3382,7 @@ mod tests {
             .read_notes(None, &[], &[], &[], 10, false)
             .await
             .unwrap();
-        let kinds: std::collections::HashSet<_> =
-            notes.iter().map(|n| n.kind.as_str()).collect();
+        let kinds: std::collections::HashSet<_> = notes.iter().map(|n| n.kind.as_str()).collect();
         assert!(kinds.contains("commitment"));
         assert!(kinds.contains("follow_up"));
         assert!(kinds.contains("goal"));
@@ -3418,22 +3417,40 @@ mod tests {
         let store = make_store().await;
         store
             .write_note_with_relation(
-                "commitment", "alpha", vec![], vec![], "s1",
-                NoteScope::Global, None, Some("Sarah Chen"),
+                "commitment",
+                "alpha",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Global,
+                None,
+                Some("Sarah Chen"),
             )
             .await
             .unwrap();
         store
             .write_note_with_relation(
-                "follow_up", "beta", vec![], vec![], "s1",
-                NoteScope::Global, None, Some("Mike Torres"),
+                "follow_up",
+                "beta",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Global,
+                None,
+                Some("Mike Torres"),
             )
             .await
             .unwrap();
         store
             .write_note_with_relation(
-                "goal", "gamma", vec![], vec![], "s1",
-                NoteScope::Global, None, None,
+                "goal",
+                "gamma",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Global,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -3458,29 +3475,44 @@ mod tests {
         let store = make_store().await;
         let sarah_active = store
             .write_note_with_relation(
-                "commitment", "send pricing", vec![], vec![], "s1",
-                NoteScope::Global, None, Some("Sarah Chen"),
+                "commitment",
+                "send pricing",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Global,
+                None,
+                Some("Sarah Chen"),
             )
             .await
             .unwrap();
         let sarah_retired = store
             .write_note_with_relation(
-                "commitment", "old commitment", vec![], vec![], "s1",
-                NoteScope::Global, None, Some("Sarah Chen"),
+                "commitment",
+                "old commitment",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Global,
+                None,
+                Some("Sarah Chen"),
             )
             .await
             .unwrap();
         store
             .write_note_with_relation(
-                "follow_up", "ping mike", vec![], vec![], "s1",
-                NoteScope::Global, None, Some("Mike Torres"),
+                "follow_up",
+                "ping mike",
+                vec![],
+                vec![],
+                "s1",
+                NoteScope::Global,
+                None,
+                Some("Mike Torres"),
             )
             .await
             .unwrap();
-        store
-            .retire_by_id(&sarah_retired, "test")
-            .await
-            .unwrap();
+        store.retire_by_id(&sarah_retired, "test").await.unwrap();
 
         let all_for_sarah = store
             .read_notes_by_related_entity("Sarah Chen", &[])
@@ -3528,7 +3560,13 @@ mod tests {
     async fn read_notes_fts_search() {
         let store = make_store().await;
         store
-            .write_note("decision", "Use BFS for blast radius traversal", vec![], vec![], "s1")
+            .write_note(
+                "decision",
+                "Use BFS for blast radius traversal",
+                vec![],
+                vec![],
+                "s1",
+            )
             .await
             .unwrap();
         store
@@ -3761,7 +3799,10 @@ mod tests {
         let deleted = store.delete_note(&id).await.unwrap();
         assert!(deleted);
 
-        let notes = store.read_notes(None, &[], &[], &[], 10, false).await.unwrap();
+        let notes = store
+            .read_notes(None, &[], &[], &[], 10, false)
+            .await
+            .unwrap();
         assert!(notes.is_empty());
 
         // Deleting again returns false.
@@ -3818,7 +3859,10 @@ mod tests {
             .await
             .unwrap();
 
-        let notes = store.read_notes(None, &[], &[], &[], 10, false).await.unwrap();
+        let notes = store
+            .read_notes(None, &[], &[], &[], 10, false)
+            .await
+            .unwrap();
         let note = notes.iter().find(|n| n.id == id).unwrap();
         assert!(note.retired_at.is_none());
         assert!(note.retired_by.is_none());
@@ -3836,11 +3880,17 @@ mod tests {
         assert!(retired);
 
         // Default read (include_retired=false) should not return it.
-        let notes = store.read_notes(None, &[], &[], &[], 10, false).await.unwrap();
+        let notes = store
+            .read_notes(None, &[], &[], &[], 10, false)
+            .await
+            .unwrap();
         assert!(notes.is_empty());
 
         // But read_notes with include_retired=true should.
-        let all = store.read_notes(None, &[], &[], &[], 10, true).await.unwrap();
+        let all = store
+            .read_notes(None, &[], &[], &[], 10, true)
+            .await
+            .unwrap();
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].retired_by.as_deref(), Some("fixed in PR #1"));
         assert!(all[0].retired_at.is_some());
@@ -3865,17 +3915,28 @@ mod tests {
         let store = make_store().await;
         for _ in 0..3 {
             store
-                .write_reflection(r#"{"task_summary":"blast radius miss"}"#, Some("blast_radius"), "s1")
+                .write_reflection(
+                    r#"{"task_summary":"blast radius miss"}"#,
+                    Some("blast_radius"),
+                    "s1",
+                )
                 .await
                 .unwrap();
         }
         // Unrelated reflection — should not be retired.
         store
-            .write_reflection(r#"{"task_summary":"project context miss"}"#, Some("project_context"), "s1")
+            .write_reflection(
+                r#"{"task_summary":"project context miss"}"#,
+                Some("project_context"),
+                "s1",
+            )
             .await
             .unwrap();
 
-        let retired_ids = store.retire_by_tool("blast_radius", "macro support added").await.unwrap();
+        let retired_ids = store
+            .retire_by_tool("blast_radius", "macro support added")
+            .await
+            .unwrap();
         assert_eq!(retired_ids.len(), 3);
 
         // blast_radius reflections gone from default read.
@@ -3927,8 +3988,14 @@ mod tests {
     #[tokio::test]
     async fn tool_call_log_records_outcome() {
         let store = make_store().await;
-        store.log_tool_call("sess-1", "lint_status", "success").await.unwrap();
-        store.log_tool_call("sess-1", "blast_radius", "error").await.unwrap();
+        store
+            .log_tool_call("sess-1", "lint_status", "success")
+            .await
+            .unwrap();
+        store
+            .log_tool_call("sess-1", "blast_radius", "error")
+            .await
+            .unwrap();
 
         let rows = store.tool_call_log_rows(0, 100).await.unwrap();
         assert_eq!(rows.len(), 2);
@@ -3988,19 +4055,29 @@ mod tests {
         let store = NoteStore::open(&db_path).unwrap();
 
         // Old note is preserved.
-        let notes = store.read_notes(None, &[], &[], &[], 10, false).await.unwrap();
+        let notes = store
+            .read_notes(None, &[], &[], &[], 10, false)
+            .await
+            .unwrap();
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].content, "old note");
 
         // Reflection kind is now accepted.
         let id = store
-            .write_reflection(r#"{"task_summary":"post-migration"}"#, Some("blast_radius"), "s1")
+            .write_reflection(
+                r#"{"task_summary":"post-migration"}"#,
+                Some("blast_radius"),
+                "s1",
+            )
             .await
             .unwrap();
         assert!(!id.is_empty());
 
         // tool_call_log is available.
-        store.log_tool_call("sess", "lint_status", "success").await.unwrap();
+        store
+            .log_tool_call("sess", "lint_status", "success")
+            .await
+            .unwrap();
         let rows = store.tool_call_log_rows(0, 10).await.unwrap();
         assert_eq!(rows.len(), 1);
     }
@@ -4023,7 +4100,10 @@ mod tests {
             .await
             .unwrap();
 
-        let notes = store.read_notes(None, &[], &[], &[], 10, false).await.unwrap();
+        let notes = store
+            .read_notes(None, &[], &[], &[], 10, false)
+            .await
+            .unwrap();
         let note = notes.iter().find(|n| n.id == id).unwrap();
         assert_eq!(note.scope, "feature");
         assert_eq!(note.feature_id.as_deref(), Some("atos-version-flag"));
@@ -4054,7 +4134,10 @@ mod tests {
             .write_note("invariant", "never panic", vec![], vec![], "s1")
             .await
             .unwrap();
-        let notes = store.read_notes(None, &[], &[], &[], 10, false).await.unwrap();
+        let notes = store
+            .read_notes(None, &[], &[], &[], 10, false)
+            .await
+            .unwrap();
         let note = notes.iter().find(|n| n.id == id).unwrap();
         assert_eq!(note.scope, "global");
         assert!(note.feature_id.is_none());
@@ -4173,11 +4256,19 @@ mod tests {
             .unwrap();
 
         let promoted_id = store
-            .promote_note(&src, NoteScope::Global, None, Some("rewritten as global rule"))
+            .promote_note(
+                &src,
+                NoteScope::Global,
+                None,
+                Some("rewritten as global rule"),
+            )
             .await
             .unwrap();
 
-        let notes = store.read_notes(None, &[], &[], &[], 10, false).await.unwrap();
+        let notes = store
+            .read_notes(None, &[], &[], &[], 10, false)
+            .await
+            .unwrap();
         let promoted = notes.iter().find(|n| n.id == promoted_id).unwrap();
         assert_eq!(promoted.scope, "global");
         assert_eq!(promoted.content, "rewritten as global rule");
@@ -4204,7 +4295,10 @@ mod tests {
             )
             .await
             .unwrap();
-        let notes = store.read_notes(None, &[], &[], &[], 10, false).await.unwrap();
+        let notes = store
+            .read_notes(None, &[], &[], &[], 10, false)
+            .await
+            .unwrap();
         let n = notes.iter().find(|n| n.id == id).unwrap();
         assert_eq!(n.kind, "uncertainty");
         assert_eq!(n.feature_id.as_deref(), Some("zotero-acquirer"));
@@ -4226,7 +4320,14 @@ mod tests {
             .await
             .unwrap();
         let notes = store
-            .read_notes(None, &[], &[], &["postmortem_pointer".to_string()], 10, false)
+            .read_notes(
+                None,
+                &[],
+                &[],
+                &["postmortem_pointer".to_string()],
+                10,
+                false,
+            )
             .await
             .unwrap();
         assert_eq!(notes.len(), 1);
@@ -4248,10 +4349,21 @@ mod tests {
             )
             .await
             .unwrap();
-        let notes = store.read_notes_scoped(
-            None, &[], &[], &["redteam_finding".to_string()], 10, false,
-            &ScopeFilter { scopes: vec![NoteScope::Feature], feature_id: Some("zotero-acquirer".into()) },
-        ).await.unwrap();
+        let notes = store
+            .read_notes_scoped(
+                None,
+                &[],
+                &[],
+                &["redteam_finding".to_string()],
+                10,
+                false,
+                &ScopeFilter {
+                    scopes: vec![NoteScope::Feature],
+                    feature_id: Some("zotero-acquirer".into()),
+                },
+            )
+            .await
+            .unwrap();
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].id, id);
     }
@@ -4303,7 +4415,9 @@ mod tests {
                 [],
             )
             .unwrap();
-            let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+            let v: i64 = conn
+                .query_row("PRAGMA user_version", [], |r| r.get(0))
+                .unwrap();
             assert_eq!(v, 3, "baseline should be v3");
         }
 
@@ -4344,8 +4458,10 @@ mod tests {
             .unwrap_err();
         // CHECK constraint violation surfaces via rusqlite → Error::Io.
         let msg = format!("{err}");
-        assert!(msg.to_lowercase().contains("check") || msg.to_lowercase().contains("constraint"),
-                "unexpected error: {msg}");
+        assert!(
+            msg.to_lowercase().contains("check") || msg.to_lowercase().contains("constraint"),
+            "unexpected error: {msg}"
+        );
     }
 
     #[tokio::test]
@@ -4428,7 +4544,11 @@ mod tests {
         // Same scope_hash, different version → miss. The cache is
         // versioned precisely so a post-write read doesn't serve
         // stale content.
-        assert!(store.digest_cache_get("abc", v + 1).await.unwrap().is_none());
+        assert!(store
+            .digest_cache_get("abc", v + 1)
+            .await
+            .unwrap()
+            .is_none());
 
         // Put with replace at same key.
         store
@@ -4464,7 +4584,10 @@ mod tests {
         let store = NoteStore::open(&db_path).unwrap();
 
         // Old row preserved; gains scope='global', feature_id=NULL via column default.
-        let notes = store.read_notes(None, &[], &[], &[], 10, false).await.unwrap();
+        let notes = store
+            .read_notes(None, &[], &[], &[], 10, false)
+            .await
+            .unwrap();
         let old = notes.iter().find(|n| n.id == "old-1").unwrap();
         assert_eq!(old.scope, "global");
         assert!(old.feature_id.is_none());
@@ -4590,7 +4713,10 @@ mod tests {
         let v: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert!(v >= 6, "expected user_version >= 6 after migration, got {v}");
+        assert!(
+            v >= 6,
+            "expected user_version >= 6 after migration, got {v}"
+        );
 
         // The two new indexes exist.
         let has_source_idx: i64 = conn
@@ -4714,7 +4840,10 @@ mod tests {
             .unwrap()
             .expect("row preserved across v6→v7 migration");
         assert_eq!(row.kind, "decision");
-        assert_eq!(row.payload_json, None, "pre-v7 rows default payload to NULL");
+        assert_eq!(
+            row.payload_json, None,
+            "pre-v7 rows default payload to NULL"
+        );
 
         // user_version advances to the latest schema. The migration
         // ladder always runs every pending step, so once V8 lands
@@ -4726,13 +4855,15 @@ mod tests {
         let v: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert!(v >= 7, "user_version must be at least 7 after v6 DB upgrade");
+        assert!(
+            v >= 7,
+            "user_version must be at least 7 after v6 DB upgrade"
+        );
 
         // The new kinds are admitted by the rebuilt CHECK. Round-trip
         // a `research_finding` write through `write_note_full` to
         // confirm both the CHECK and the payload column work.
-        let payload =
-            r#"{"authority":"authoritative","host":"courtlistener.com"}"#;
+        let payload = r#"{"authority":"authoritative","host":"courtlistener.com"}"#;
         let id = store
             .write_note_full(
                 "research_finding",
@@ -5196,7 +5327,15 @@ mod tests {
         assert!(v >= 9, "post-migration user_version should be ≥ 9, got {v}");
 
         // Pre-v9 row still there.
-        let row: (String, String, i64, i64, Option<String>, Option<i64>, Option<String>) = conn
+        let row: (
+            String,
+            String,
+            i64,
+            i64,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+        ) = conn
             .query_row(
                 "SELECT id, content, private, tombstone, origin_node_id, NULL, content_hash
                    FROM notes WHERE id = 'pre-v9'",
@@ -5219,13 +5358,7 @@ mod tests {
         assert_eq!(row.3, 0, "tombstone defaults to 0");
         assert_eq!(row.4, None, "origin_node_id starts NULL");
         let backfilled_hash = row.6.expect("backfill populates content_hash");
-        let expected_hash = compute_content_hash(
-            "decision",
-            "v8 row",
-            "global",
-            None,
-            "sess-old",
-        );
+        let expected_hash = compute_content_hash("decision", "v8 row", "global", None, "sess-old");
         assert_eq!(backfilled_hash, expected_hash);
 
         // New tables exist.
@@ -5246,7 +5379,10 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(watermark_table, 1, "note_propagation_watermark table created");
+        assert_eq!(
+            watermark_table, 1,
+            "note_propagation_watermark table created"
+        );
 
         // Indexes exist.
         let prop_idx: i64 = conn

@@ -32,7 +32,7 @@ impl ActivityLevel {
     #[allow(dead_code)]
     fn availability(self) -> f32 {
         match self {
-            ActivityLevel::Hot  => 0.20,
+            ActivityLevel::Hot => 0.20,
             ActivityLevel::Warm => 0.65,
             ActivityLevel::Cool => 0.85,
             ActivityLevel::Idle => 1.00,
@@ -41,7 +41,7 @@ impl ActivityLevel {
 
     fn as_str(self) -> &'static str {
         match self {
-            ActivityLevel::Hot  => "hot",
+            ActivityLevel::Hot => "hot",
             ActivityLevel::Warm => "warm",
             ActivityLevel::Cool => "cool",
             ActivityLevel::Idle => "idle",
@@ -91,7 +91,7 @@ impl ActivityReporter {
         };
 
         let target = match current_level {
-            ActivityLevel::Hot  if elapsed >= Duration::from_secs(60)  => ActivityLevel::Warm,
+            ActivityLevel::Hot if elapsed >= Duration::from_secs(60) => ActivityLevel::Warm,
             ActivityLevel::Warm if elapsed >= Duration::from_secs(120) => ActivityLevel::Cool,
             ActivityLevel::Cool if elapsed >= Duration::from_secs(300) => ActivityLevel::Idle,
             other => other,
@@ -225,7 +225,11 @@ mod tests {
         r.on_files_changed().await;
 
         let s = r.state.lock().unwrap();
-        assert_eq!(s.level, ActivityLevel::Hot, "on_files_changed must transition to Hot");
+        assert_eq!(
+            s.level,
+            ActivityLevel::Hot,
+            "on_files_changed must transition to Hot"
+        );
     }
 
     #[tokio::test]
@@ -257,7 +261,11 @@ mod tests {
         r.tick_decay().await;
 
         let s = r.state.lock().unwrap();
-        assert_eq!(s.level, ActivityLevel::Warm, "Hot must decay to Warm after 60s");
+        assert_eq!(
+            s.level,
+            ActivityLevel::Warm,
+            "Hot must decay to Warm after 60s"
+        );
     }
 
     #[tokio::test]
@@ -274,6 +282,10 @@ mod tests {
         r.tick_decay().await;
 
         let s = r.state.lock().unwrap();
-        assert_eq!(s.level, ActivityLevel::Hot, "Hot must not decay before 60s threshold");
+        assert_eq!(
+            s.level,
+            ActivityLevel::Hot,
+            "Hot must not decay before 60s threshold"
+        );
     }
 }

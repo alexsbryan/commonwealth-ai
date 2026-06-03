@@ -118,10 +118,7 @@ pub async fn run_scrub(args: &[String]) -> i32 {
                 i += 2;
             }
             "--min-salience" => {
-                min_salience = args
-                    .get(i + 1)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0.0);
+                min_salience = args.get(i + 1).and_then(|s| s.parse().ok()).unwrap_or(0.0);
                 i += 2;
             }
             "--include-concepts" => {
@@ -256,10 +253,7 @@ fn extract_candidates(
             continue;
         }
         let d = &atom.data;
-        let entity_type = d
-            .get("entity_type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let entity_type = d.get("entity_type").and_then(|v| v.as_str()).unwrap_or("");
         let kind_hint = match entity_type {
             "person" | "people" => "person",
             // The conversational + personal domains emit `institution`
@@ -287,10 +281,7 @@ fn extract_candidates(
         if name.is_empty() {
             continue;
         }
-        let salience = d
-            .get("salience")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0) as f32;
+        let salience = d.get("salience").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
         if salience < min_salience {
             continue;
         }
@@ -403,10 +394,18 @@ mod tests {
             mk("Entity", "Acme Corp", "organization", 0.4),
         ];
         let out = extract_candidates(&atoms, 0.0, false);
-        let by_name: std::collections::BTreeMap<_, _> =
-            out.iter().map(|c| (c.surface.clone(), c.kind_hint.clone())).collect();
-        assert_eq!(by_name.get("Federal Reserve").map(String::as_str), Some("org"));
-        assert_eq!(by_name.get("Q3 Enterprise Push").map(String::as_str), Some("initiative"));
+        let by_name: std::collections::BTreeMap<_, _> = out
+            .iter()
+            .map(|c| (c.surface.clone(), c.kind_hint.clone()))
+            .collect();
+        assert_eq!(
+            by_name.get("Federal Reserve").map(String::as_str),
+            Some("org")
+        );
+        assert_eq!(
+            by_name.get("Q3 Enterprise Push").map(String::as_str),
+            Some("initiative")
+        );
         assert_eq!(by_name.get("Acme Corp").map(String::as_str), Some("org"));
     }
 

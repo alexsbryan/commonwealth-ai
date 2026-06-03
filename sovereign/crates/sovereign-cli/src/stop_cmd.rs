@@ -96,7 +96,10 @@ fn try_stop_via_pid_file(path: &std::path::Path) -> StopOutcome {
     };
     let trimmed = contents.trim();
     let Ok(pid) = trimmed.parse::<i32>() else {
-        eprintln!("  malformed pid file at {} (got {trimmed:?})", path.display());
+        eprintln!(
+            "  malformed pid file at {} (got {trimmed:?})",
+            path.display()
+        );
         return StopOutcome::Malformed;
     };
     if signal_term(pid) {
@@ -104,7 +107,10 @@ fn try_stop_via_pid_file(path: &std::path::Path) -> StopOutcome {
         eprintln!("  stopped MCP server (pid {pid}).");
         StopOutcome::Stopped
     } else {
-        eprintln!("  stale pid file at {} — process {pid} not running.", path.display());
+        eprintln!(
+            "  stale pid file at {} — process {pid} not running.",
+            path.display()
+        );
         let _ = std::fs::remove_file(path);
         StopOutcome::Stale
     }

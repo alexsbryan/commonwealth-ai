@@ -261,10 +261,7 @@ pub async fn classify_section(
 /// supplied chapter (same content_hash). The runner uses this before
 /// dispatching a chat call so an unchanged section doesn't burn an
 /// LLM call on every build.
-pub fn cache_hit(
-    cached: &SectionClassification,
-    chapter: &ChapterInput,
-) -> bool {
+pub fn cache_hit(cached: &SectionClassification, chapter: &ChapterInput) -> bool {
     cached.content_hash == content_hash(&chapter.text)
 }
 
@@ -448,9 +445,7 @@ fn parse_temporal_frame(s: &str) -> Result<TemporalFrame> {
 
 fn parse_audience_relation(s: &str) -> Result<AudienceRelation> {
     match s.trim().to_ascii_lowercase().as_str() {
-        "private_first_person" | "private first person" => {
-            Ok(AudienceRelation::PrivateFirstPerson)
-        }
+        "private_first_person" | "private first person" => Ok(AudienceRelation::PrivateFirstPerson),
         "specific_recipient" | "specific recipient" => Ok(AudienceRelation::SpecificRecipient),
         "public_impersonal" | "public impersonal" => Ok(AudienceRelation::PublicImpersonal),
         other => Err(Error::Serialization(format!(
@@ -568,10 +563,7 @@ pub async fn classify_section_axes(
 }
 
 /// v2 cache helper — same role as `cache_hit` but for the vector.
-pub fn cache_hit_axes(
-    cached: &SectionClassificationVector,
-    chapter: &ChapterInput,
-) -> bool {
+pub fn cache_hit_axes(cached: &SectionClassificationVector, chapter: &ChapterInput) -> bool {
     cached.content_hash == content_hash(&chapter.text)
 }
 
@@ -623,7 +615,9 @@ mod tests {
         let prompt = compose_classification_prompt(&ch);
         assert!(prompt.user.contains("[…truncated for classification…]"));
         // The full body should NOT appear in the prompt.
-        assert!(!prompt.user.contains(&"A".repeat(OPENING_BUDGET_CHARS + 100)));
+        assert!(!prompt
+            .user
+            .contains(&"A".repeat(OPENING_BUDGET_CHARS + 100)));
     }
 
     #[test]
@@ -754,8 +748,7 @@ mod tests {
     #[test]
     fn axes_schema_lists_every_discourse_mode() {
         let schema = phase0_axes_schema();
-        let enums = schema["properties"]["discourse_mode"]["properties"]["primary"]
-            ["enum"]
+        let enums = schema["properties"]["discourse_mode"]["properties"]["primary"]["enum"]
             .as_array()
             .expect("primary enum");
         let names: Vec<&str> = enums.iter().filter_map(|v| v.as_str()).collect();
@@ -788,7 +781,10 @@ mod tests {
         assert!(v.discourse_mode.secondaries.is_empty());
         assert_eq!(v.epistemic_posture, EpistemicPosture::Factual);
         assert_eq!(v.temporal_frame, TemporalFrame::Atemporal);
-        assert_eq!(v.audience_relation, Some(AudienceRelation::PublicImpersonal));
+        assert_eq!(
+            v.audience_relation,
+            Some(AudienceRelation::PublicImpersonal)
+        );
         assert_eq!(v.section_id, "sec_1");
     }
 
@@ -807,14 +803,16 @@ mod tests {
             "temporal_frame": "episodic",
             "reasoning": "Wheeler-family vignette opens; sustained argument about industrial seasonality follows."
         }"#;
-        let v = parse_axes_classification_response(resp, "sec_2", "cafef00d", 0)
-            .expect("parses");
+        let v = parse_axes_classification_response(resp, "sec_2", "cafef00d", 0).expect("parses");
         assert_eq!(v.discourse_mode.primary, DiscourseMode::Argumentative);
         assert_eq!(v.discourse_mode.secondaries.len(), 2);
         // Sorted descending by weight.
         assert_eq!(v.discourse_mode.secondaries[0].0, DiscourseMode::Narrative);
         assert!((v.discourse_mode.secondaries[0].1 - 0.30).abs() < 1e-3);
-        assert_eq!(v.discourse_mode.secondaries[1].0, DiscourseMode::Descriptive);
+        assert_eq!(
+            v.discourse_mode.secondaries[1].0,
+            DiscourseMode::Descriptive
+        );
         assert!(v.discourse_mode.weights_sum_to_one());
         assert_eq!(v.audience_relation, None);
     }
@@ -831,15 +829,14 @@ mod tests {
             "temporal_frame": "episodic",
             "reasoning": "Bad weights — sums to 1.1."
         }"#;
-        let err = parse_axes_classification_response(resp, "sec_3", "x", 0)
-            .expect_err("must reject");
+        let err =
+            parse_axes_classification_response(resp, "sec_3", "x", 0).expect_err("must reject");
         let msg = format!("{err}");
         // Two valid failure modes: either the weights-sum check fires
         // first, or the secondary-not-strictly-smaller-than-primary
         // check does. Both indicate the parser is doing its job.
         assert!(
-            msg.contains("weights summing")
-                || msg.contains("must be strictly smaller"),
+            msg.contains("weights summing") || msg.contains("must be strictly smaller"),
             "expected weight-sum or secondary-ordering rejection; got: {msg}"
         );
     }
@@ -856,8 +853,8 @@ mod tests {
             "temporal_frame": "episodic",
             "reasoning": "Tied — secondary cannot match primary by construction."
         }"#;
-        let err = parse_axes_classification_response(resp, "sec_4", "x", 0)
-            .expect_err("must reject");
+        let err =
+            parse_axes_classification_response(resp, "sec_4", "x", 0).expect_err("must reject");
         assert!(format!("{err}").contains("must be strictly smaller"));
     }
 
@@ -873,8 +870,8 @@ mod tests {
             "temporal_frame": "episodic",
             "reasoning": "Duplicate narrative — should reject."
         }"#;
-        let err = parse_axes_classification_response(resp, "sec_5", "x", 0)
-            .expect_err("must reject");
+        let err =
+            parse_axes_classification_response(resp, "sec_5", "x", 0).expect_err("must reject");
         assert!(format!("{err}").contains("duplicate"));
     }
 
@@ -890,8 +887,8 @@ mod tests {
             "temporal_frame": "atemporal",
             "reasoning": "   "
         }"#;
-        let err = parse_axes_classification_response(resp, "sec_6", "x", 0)
-            .expect_err("must reject");
+        let err =
+            parse_axes_classification_response(resp, "sec_6", "x", 0).expect_err("must reject");
         assert!(format!("{err}").contains("empty reasoning"));
     }
 

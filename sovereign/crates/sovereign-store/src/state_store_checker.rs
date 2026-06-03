@@ -8,8 +8,7 @@ use std::sync::Arc;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::health::{
-    Component, HealthCheckable, HealthIssue, HealthReport, RepairKind,
-    RepairOutcome,
+    Component, HealthCheckable, HealthIssue, HealthReport, RepairKind, RepairOutcome,
 };
 
 use crate::sqlite::SqliteStateStore;
@@ -64,7 +63,8 @@ impl HealthCheckable for StateStoreChecker {
 
             // ── 2. WAL size check ──────────────────────────────────────────
             let wal_path = self.db_path.with_extension("").with_file_name({
-                let name = self.db_path
+                let name = self
+                    .db_path
                     .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or("store.db");
@@ -87,9 +87,8 @@ impl HealthCheckable for StateStoreChecker {
     fn repair(
         &self,
         issue: &HealthIssue,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<RepairOutcome>> + Send + '_>,
-    > {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<RepairOutcome>> + Send + '_>>
+    {
         let issue = issue.clone();
         Box::pin(async move {
             match &issue {
@@ -97,19 +96,17 @@ impl HealthCheckable for StateStoreChecker {
                     self.store.wal_checkpoint().await?;
                     Ok(RepairOutcome::Resolved)
                 }
-                HealthIssue::StateStoreCorruption { .. } => {
-                    Ok(RepairOutcome::NeedsUserDecision {
-                        question:
-                            "The state store has integrity errors. Manual intervention is required."
-                                .into(),
-                        options: vec![sovereign_core::health::UserOption {
-                            kind: RepairKind::Dismiss,
-                            label: "Dismiss".into(),
-                            description: "Acknowledge and continue.".into(),
-                        }],
-                        consequence: "Data loss is possible if the database is corrupt.".into(),
-                    })
-                }
+                HealthIssue::StateStoreCorruption { .. } => Ok(RepairOutcome::NeedsUserDecision {
+                    question:
+                        "The state store has integrity errors. Manual intervention is required."
+                            .into(),
+                    options: vec![sovereign_core::health::UserOption {
+                        kind: RepairKind::Dismiss,
+                        label: "Dismiss".into(),
+                        description: "Acknowledge and continue.".into(),
+                    }],
+                    consequence: "Data loss is possible if the database is corrupt.".into(),
+                }),
                 _ => Err(Error::RepairNotSupported),
             }
         })

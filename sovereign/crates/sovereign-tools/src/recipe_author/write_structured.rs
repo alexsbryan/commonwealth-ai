@@ -66,8 +66,7 @@ impl Tool for RecipeWriteStructuredTool {
         ToolDescriptor {
             id: "recipe_write_structured".into(),
             name: "RecipeWriteStructured".into(),
-            description:
-                "Write a recipe from a structured JSON object. The \
+            description: "Write a recipe from a structured JSON object. The \
                  `recipe` argument is a recipe-shaped object — not raw \
                  TOML. The tool serialises it to TOML and writes \
                  atomically to ~/.sovereign/recipes/<path>/recipe.toml. \
@@ -83,7 +82,7 @@ impl Tool for RecipeWriteStructuredTool {
                  \n\nReturns the TOML the tool wrote plus the \
                  validator's report so you can see at a glance \
                  whether the recipe is ready to test."
-                    .into(),
+                .into(),
             parameters: json!({
                 "type": "object",
                 "required": ["path", "recipe"],
@@ -99,11 +98,10 @@ impl Tool for RecipeWriteStructuredTool {
                 }
             }),
             examples: vec![ToolExample {
-                situation:
-                    "Draft a fresh recipe from scratch. The agent emits \
+                situation: "Draft a fresh recipe from scratch. The agent emits \
                      a structured JSON object; the tool produces clean \
                      TOML on disk."
-                        .into(),
+                    .into(),
                 call: json!({
                     "path": "demo-investigation",
                     "recipe": {
@@ -147,19 +145,10 @@ impl Tool for RecipeWriteStructuredTool {
         vec![Permission::RecipeAuthoring]
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
-        let raw_path = params
-            .get("path")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::InvalidInput(
-                    "RecipeWriteStructuredTool requires `path`".into(),
-                )
-            })?;
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+        let raw_path = params.get("path").and_then(|v| v.as_str()).ok_or_else(|| {
+            Error::InvalidInput("RecipeWriteStructuredTool requires `path`".into())
+        })?;
         // Accept either of two arg shapes:
         //
         //   {"path": "...", "recipe": {<recipe>}}     — canonical
@@ -204,38 +193,25 @@ impl Tool for RecipeWriteStructuredTool {
             }
         };
         if !recipe.is_object() {
-            return Err(Error::InvalidInput(
-                "`recipe` must be a JSON object".into(),
-            ));
+            return Err(Error::InvalidInput("`recipe` must be a JSON object".into()));
         }
 
         // 1. JSON → TOML (rejects nulls + bad numbers, with paths).
-        let toml_value = json_to_toml(recipe).map_err(|e| {
-            Error::InvalidInput(format!(
-                "recipe → TOML conversion failed: {e}"
-            ))
-        })?;
-        let toml_text = toml_value_to_string(&toml_value).map_err(|e| {
-            Error::InvalidInput(format!("TOML serialization failed: {e}"))
-        })?;
+        let toml_value = json_to_toml(recipe)
+            .map_err(|e| Error::InvalidInput(format!("recipe → TOML conversion failed: {e}")))?;
+        let toml_text = toml_value_to_string(&toml_value)
+            .map_err(|e| Error::InvalidInput(format!("TOML serialization failed: {e}")))?;
 
         // 2. Atomic write to <recipes>/<path>/recipe.toml.
         let resolved = resolve_recipe_path(raw_path, self.recipes_dir.as_ref())?;
         if let Some(parent) = resolved.parent() {
             fs::create_dir_all(parent).map_err(|e| {
-                Error::InvalidInput(format!(
-                    "failed to create parent {}: {e}",
-                    parent.display()
-                ))
+                Error::InvalidInput(format!("failed to create parent {}: {e}", parent.display()))
             })?;
         }
         let part = resolved.with_extension("toml.part");
-        fs::write(&part, &toml_text).map_err(|e| {
-            Error::InvalidInput(format!(
-                "failed to write {}: {e}",
-                part.display()
-            ))
-        })?;
+        fs::write(&part, &toml_text)
+            .map_err(|e| Error::InvalidInput(format!("failed to write {}: {e}", part.display())))?;
         fs::rename(&part, &resolved).map_err(|e| {
             Error::InvalidInput(format!(
                 "failed to commit {} → {}: {e}",
@@ -318,8 +294,7 @@ async fn run_disk_validation(path: &std::path::Path) -> serde_json::Value {
     match engine.test_recipe(path, &opts).await {
         Ok(report) => {
             let passed = report.passed();
-            let errors: Vec<String> =
-                report.validation.errors.to_vec();
+            let errors: Vec<String> = report.validation.errors.to_vec();
             let warnings: Vec<String> = report.warnings();
             json!({
                 "passed": passed,
@@ -433,10 +408,7 @@ mod tests {
         )
         .await
         .unwrap();
-        let body = std::fs::read_to_string(
-            root.join("investigation-shape/recipe.toml"),
-        )
-        .unwrap();
+        let body = std::fs::read_to_string(root.join("investigation-shape/recipe.toml")).unwrap();
         let count = body.matches("[[enrichment.entity_types]]").count();
         assert_eq!(count, 2, "got: {body}");
         assert!(body.contains("[[enrichment.relationship_types]]"));
@@ -500,8 +472,7 @@ mod tests {
             .unwrap_err();
         let msg = format!("{err}");
         assert!(
-            msg.contains("/acquire/pagination/max_pages")
-                && msg.contains("TOML has no null"),
+            msg.contains("/acquire/pagination/max_pages") && msg.contains("TOML has no null"),
             "got: {msg}"
         );
     }

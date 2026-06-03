@@ -2,8 +2,8 @@ use std::collections::VecDeque;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::error::{Error, Result};
 use super::{slug, strip_html, ExtractedDoc, Extractor};
+use crate::error::{Error, Result};
 
 /// HTML file extractor.
 ///
@@ -123,8 +123,7 @@ fn collect_recursive(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
     let entries = fs::read_dir(dir)
         .map_err(|e| Error::Extraction(format!("Failed to read {}: {e}", dir.display())))?;
     for entry in entries {
-        let entry =
-            entry.map_err(|e| Error::Extraction(format!("Directory entry error: {e}")))?;
+        let entry = entry.map_err(|e| Error::Extraction(format!("Directory entry error: {e}")))?;
         let path = entry.path();
         if path.is_dir() {
             collect_recursive(&path, files)?;

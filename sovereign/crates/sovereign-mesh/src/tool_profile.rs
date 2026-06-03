@@ -152,8 +152,8 @@ impl ToolProfileRegistry {
     /// `permissive` is always available even if the file doesn't
     /// declare it.
     pub fn from_toml(body: &str) -> Result<Self, ToolProfileError> {
-        let parsed: TomlRoot = toml::from_str(body)
-            .map_err(|e| ToolProfileError::Toml(e.to_string()))?;
+        let parsed: TomlRoot =
+            toml::from_str(body).map_err(|e| ToolProfileError::Toml(e.to_string()))?;
         let mut profiles = HashMap::new();
         // Always synthesise a permissive entry first so a
         // misconfigured file still has a safe fallback.
@@ -209,9 +209,7 @@ impl ToolProfileRegistry {
     pub fn from_path(path: &Path) -> Result<Self, ToolProfileError> {
         match std::fs::read_to_string(path) {
             Ok(body) => Self::from_toml(&body),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                Ok(Self::allow_all())
-            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::allow_all()),
             Err(e) => Err(ToolProfileError::Io(e.to_string())),
         }
     }
@@ -313,7 +311,9 @@ pub fn global() -> &'static ToolProfileRegistry {
 /// from_path then silently degrades to allow_all).
 fn default_config_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    PathBuf::from(home).join(".sovereign").join("tool_profiles.toml")
+    PathBuf::from(home)
+        .join(".sovereign")
+        .join("tool_profiles.toml")
 }
 
 /// Apply the requested profile (or registry default) to a request
@@ -381,12 +381,12 @@ mod tests {
             chat_template_kwargs: None,
             think_budget: None,
             tool_profile: profile.map(String::from),
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         }
     }
 
@@ -488,8 +488,13 @@ allow_tools = ["write", "edit", "bash"]
         let r = ToolProfileRegistry::from_toml(body).unwrap();
         let mut req = req(vec!["write", "edit", "bash", "read", "grep", "glob"], None);
         apply(&r, &mut req);
-        let names: Vec<_> = req.tools.as_ref().unwrap()
-            .iter().map(|t| t.function.name.as_str()).collect();
+        let names: Vec<_> = req
+            .tools
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|t| t.function.name.as_str())
+            .collect();
         assert_eq!(names, vec!["write", "edit", "bash"]);
     }
 
@@ -530,8 +535,13 @@ allow_tools = ["write"]
         let mut req = req(vec!["write", "edit"], Some("typo-profile-name"));
         apply(&r, &mut req);
         // Falls back to default which is rust-edit (allow=write).
-        let names: Vec<_> = req.tools.as_ref().unwrap()
-            .iter().map(|t| t.function.name.as_str()).collect();
+        let names: Vec<_> = req
+            .tools
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|t| t.function.name.as_str())
+            .collect();
         assert_eq!(names, vec!["write"]);
     }
 
@@ -555,12 +565,12 @@ allow_tools = ["write"]
             chat_template_kwargs: None,
             think_budget: None,
             tool_profile: Some("rust-edit".into()),
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
         apply(&r, &mut req);
         assert!(req.tools.is_none());

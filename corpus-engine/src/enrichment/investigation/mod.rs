@@ -41,9 +41,8 @@ use crate::recipe::Recipe;
 
 pub use extract::{ChunkInput, ExtractedRelationship};
 pub use graph::{
-    Entity, Evidence, PatternFinding, PatternKind, Relationship,
-    ENTITIES_FILENAME, FINDINGS_FILENAME, INVESTIGATION_DIRNAME,
-    RELATIONSHIPS_FILENAME,
+    Entity, Evidence, PatternFinding, PatternKind, Relationship, ENTITIES_FILENAME,
+    FINDINGS_FILENAME, INVESTIGATION_DIRNAME, RELATIONSHIPS_FILENAME,
 };
 
 /// Result of running the investigation pipeline. The same data
@@ -87,9 +86,7 @@ pub async fn run_investigation<'a>(
     output_dir: &Path,
 ) -> Result<InvestigationOutput> {
     let enrichment = recipe.enrichment.as_ref().ok_or_else(|| {
-        Error::Recipe(
-            "investigation pipeline requires an [enrichment] block".into(),
-        )
+        Error::Recipe("investigation pipeline requires an [enrichment] block".into())
     })?;
     if enrichment.enrichment_type != "investigation" {
         return Err(Error::Recipe(format!(
@@ -131,8 +128,7 @@ pub async fn run_investigation<'a>(
     let mut entities: Vec<Entity> = entities_map.values().cloned().collect();
     entities.sort_by(|a, b| a.id.cmp(&b.id));
 
-    let mut relationships: Vec<Relationship> =
-        Vec::with_capacity(all_extractions.len());
+    let mut relationships: Vec<Relationship> = Vec::with_capacity(all_extractions.len());
     for (i, (chunk_id, ex)) in all_extractions.iter().enumerate() {
         let from_id = extract::entity_id_for(&ex.from_type, &ex.from_entity);
         let to_id = extract::entity_id_for(&ex.to_type, &ex.to_entity);
@@ -166,9 +162,7 @@ pub async fn run_investigation<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::recipe::{
-        EntityTypeDecl, PatternDecl, RelationshipTypeDecl,
-    };
+    use crate::recipe::{EntityTypeDecl, PatternDecl, RelationshipTypeDecl};
     use std::sync::Arc;
 
     /// A scripted chat closure that returns a canned response
@@ -244,7 +238,8 @@ customer = "revenue.to"
             ChunkInput {
                 chunk_id: "chunk-0",
                 source_title: Some("MSFT 10-K"),
-                content: "Microsoft invested $13B in OpenAI; OpenAI's largest customer is Microsoft.",
+                content:
+                    "Microsoft invested $13B in OpenAI; OpenAI's largest customer is Microsoft.",
             },
             ChunkInput {
                 chunk_id: "chunk-1",
@@ -284,8 +279,9 @@ customer = "revenue.to"
 "#;
         let chat = scripted_chat(canned);
         let dir = tempfile::tempdir().unwrap();
-        let out =
-            run_investigation(&recipe, &chunks, chat, dir.path()).await.unwrap();
+        let out = run_investigation(&recipe, &chunks, chat, dir.path())
+            .await
+            .unwrap();
 
         // Two entities (Microsoft, OpenAI), two relationships, one
         // pattern finding.
@@ -305,9 +301,8 @@ customer = "revenue.to"
     async fn refuses_when_enrichment_type_is_not_investigation() {
         let mut recipe = make_recipe();
         recipe.enrichment.as_mut().unwrap().enrichment_type = "atlas".into();
-        let chat: ChatCompletionFn = Arc::new(|_| {
-            Box::pin(async { Ok(r#"{"relationships":[]}"#.to_string()) })
-        });
+        let chat: ChatCompletionFn =
+            Arc::new(|_| Box::pin(async { Ok(r#"{"relationships":[]}"#.to_string()) }));
         let dir = tempfile::tempdir().unwrap();
         let err = run_investigation(&recipe, &[], chat, dir.path())
             .await
@@ -319,9 +314,8 @@ customer = "revenue.to"
     async fn refuses_when_no_entity_types_declared() {
         let mut recipe = make_recipe();
         recipe.enrichment.as_mut().unwrap().entity_types.clear();
-        let chat: ChatCompletionFn = Arc::new(|_| {
-            Box::pin(async { Ok(r#"{"relationships":[]}"#.to_string()) })
-        });
+        let chat: ChatCompletionFn =
+            Arc::new(|_| Box::pin(async { Ok(r#"{"relationships":[]}"#.to_string()) }));
         let dir = tempfile::tempdir().unwrap();
         let err = run_investigation(&recipe, &[], chat, dir.path())
             .await
@@ -332,11 +326,12 @@ customer = "revenue.to"
     #[tokio::test]
     async fn no_chunks_produces_empty_outputs_on_disk() {
         let recipe = make_recipe();
-        let chat: ChatCompletionFn = Arc::new(|_| {
-            Box::pin(async { Ok(r#"{"relationships":[]}"#.to_string()) })
-        });
+        let chat: ChatCompletionFn =
+            Arc::new(|_| Box::pin(async { Ok(r#"{"relationships":[]}"#.to_string()) }));
         let dir = tempfile::tempdir().unwrap();
-        let out = run_investigation(&recipe, &[], chat, dir.path()).await.unwrap();
+        let out = run_investigation(&recipe, &[], chat, dir.path())
+            .await
+            .unwrap();
         assert!(out.entities.is_empty());
         assert!(out.relationships.is_empty());
         assert!(out.findings.is_empty());

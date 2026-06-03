@@ -4,17 +4,12 @@
 //! first-pass claim ranking — which is covered in
 //! `oicp_v03_scenarios.rs`.
 
-use commonwealth_core::capabilities::{
-    AvailableResources, HardwareProfile, NodeCapabilities,
-};
+use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_inference::oicp::{
-    CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass,
-    ModelStatus, NodeLocality, NodeObservations, ProviderManifest,
-    ProviderModel, COLD_START_SAMPLES,
+    CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass, ModelStatus,
+    NodeLocality, NodeObservations, ProviderManifest, ProviderModel, COLD_START_SAMPLES,
 };
-use commonwealth_inference::scheduler::oicp_select::{
-    pick_slot_for_oicp, BackendCandidate,
-};
+use commonwealth_inference::scheduler::oicp_select::{pick_slot_for_oicp, BackendCandidate};
 
 fn idle_capable() -> NodeCapabilities {
     NodeCapabilities {
@@ -488,4 +483,3 @@ fn neutral_throughput_preserves_pre_throughput_routing_behavior() {
         "without benchmark or observations the higher-affinity peer must win"
     );
 }
-

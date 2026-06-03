@@ -104,10 +104,7 @@ pub fn run_suite(opts: SuiteOpts<'_>) -> Result<Report> {
                 outcomes.push(outcome);
             }
             Err(e) => {
-                tracing::error!(
-                    "{progress} {} render failed: {e}",
-                    it.item.id
-                );
+                tracing::error!("{progress} {} render failed: {e}", it.item.id);
                 outcomes.push(Outcome {
                     item_id: it.item.id.clone(),
                     category: it.item.category.as_str().to_string(),
@@ -141,5 +138,8 @@ pub fn run_suite(opts: SuiteOpts<'_>) -> Result<Report> {
 
 /// Default bank root — `<workspace>/sovereign/inquiries/cognitive`.
 pub fn default_bank_root(workspace_root: &Path) -> PathBuf {
-    workspace_root.join("sovereign").join("inquiries").join("cognitive")
+    workspace_root
+        .join("sovereign")
+        .join("inquiries")
+        .join("cognitive")
 }

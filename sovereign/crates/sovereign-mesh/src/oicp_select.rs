@@ -18,10 +18,9 @@
 //! Keeping the primitives in one place means the two sides can't
 //! drift out of agreement about what "best" means.
 use sovereign_core::oicp::{
-    self, cold_start_weight, effective_affinity, load_penalty, locality_bonus,
-    throughput_factor, throughput_factor_source, BenchmarkResult,
-    CapabilityHint, InferenceRequirements, LatencyClass, NodeLocality,
-    NodeObservations, ProviderManifest,
+    self, cold_start_weight, effective_affinity, load_penalty, locality_bonus, throughput_factor,
+    throughput_factor_source, BenchmarkResult, CapabilityHint, InferenceRequirements, LatencyClass,
+    NodeLocality, NodeObservations, ProviderManifest,
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::Speed;
@@ -171,8 +170,7 @@ pub(crate) fn adjust_for_observations(
     let loc = locality_bonus(locality);
     let cold = cold_start_weight(obs.samples);
     let candidate_size = cand.size_gb.unwrap_or(0.0);
-    let throughput =
-        throughput_factor(obs, candidate_size, baseline_benchmark);
+    let throughput = throughput_factor(obs, candidate_size, baseline_benchmark);
     tracing::debug!(
         model_id = %cand.model_id,
         factor = throughput,
@@ -233,10 +231,7 @@ pub(crate) fn pick_slot_for_oicp(
 /// when slots have no manifest entries (BYOM case) — trusting the
 /// operator's slot configuration rather than punishing them with a
 /// blanket Slow.
-fn pick_slot_v03(
-    provider: &dyn InferenceProvider,
-    req: &InferenceRequirements,
-) -> Speed {
+fn pick_slot_v03(provider: &dyn InferenceProvider, req: &InferenceRequirements) -> Speed {
     let hint = req.effective_hint();
     let class = req.effective_latency_class();
     let manifest = &sovereign_core::models_manifest::DEFAULT_MANIFEST;
@@ -262,8 +257,10 @@ fn pick_slot_v03(
         LatencyClass::Fast => Speed::Fast,
         LatencyClass::Normal | LatencyClass::Extended => Speed::Slow,
     };
-    let primary_available =
-        matches!((primary, &fast, &slow), (Speed::Fast, Some(_), _) | (Speed::Slow, _, Some(_)));
+    let primary_available = matches!(
+        (primary, &fast, &slow),
+        (Speed::Fast, Some(_), _) | (Speed::Slow, _, Some(_))
+    );
 
     if primary_available {
         tracing::debug!(
@@ -335,7 +332,6 @@ fn slot_loaded(provider: &dyn InferenceProvider, speed: Speed) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     fn cand(score: f32, size_gb: Option<f32>, id: &str) -> ModelCandidate {
         ModelCandidate {
@@ -386,14 +382,8 @@ mod tests {
         // NEAR_RTT_MS_THRESHOLD itself falls into Far. Document
         // this so future tweaks to the constants can't silently
         // shift which bucket the boundary lands in.
-        assert_eq!(
-            classify_rtt_ms(LOCAL_RTT_MS_THRESHOLD),
-            NodeLocality::Near
-        );
-        assert_eq!(
-            classify_rtt_ms(NEAR_RTT_MS_THRESHOLD),
-            NodeLocality::Far
-        );
+        assert_eq!(classify_rtt_ms(LOCAL_RTT_MS_THRESHOLD), NodeLocality::Near);
+        assert_eq!(classify_rtt_ms(NEAR_RTT_MS_THRESHOLD), NodeLocality::Far);
     }
 
     #[test]
@@ -442,9 +432,7 @@ mod tests {
     use async_trait::async_trait;
     use sovereign_core::error::Result;
     use sovereign_core::oicp::InferenceRequirements;
-    use sovereign_core::types::{
-        CompletionRequest, CompletionResponse, ProviderCapabilities,
-    };
+    use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
 
     /// Stub provider: only `model_id_for` is exercised by
     /// `pick_slot_for_oicp`. The rest is `unimplemented!()` so
@@ -463,9 +451,7 @@ mod tests {
         async fn complete_stream(
             &self,
             _: &CompletionRequest,
-        ) -> Result<
-            std::pin::Pin<Box<dyn futures::Stream<Item = Result<String>> + Send>>,
-        > {
+        ) -> Result<std::pin::Pin<Box<dyn futures::Stream<Item = Result<String>> + Send>>> {
             unimplemented!("pick_slot_for_oicp must not call complete_stream()")
         }
         async fn embed(&self, _: &str) -> Result<Vec<f32>> {
@@ -569,8 +555,7 @@ mod tests {
             fast_model: "Qwen3.5-9B.Q8_0.1".into(),
             slow_model: "Qwen3.5-27B.Q8_0".into(),
         };
-        let envelope = InferenceRequirements::new()
-            .with_hint(CapabilityHint::general());
+        let envelope = InferenceRequirements::new().with_hint(CapabilityHint::general());
         let req = CompletionRequest::new("hint-only").with_oicp(envelope);
         assert_eq!(pick_slot_for_oicp(&provider, &req), Speed::Slow);
     }
@@ -620,8 +605,8 @@ mod tests {
             .with_latency_class(LatencyClass::Normal)
             .with_context_tokens(16_000)
             .with_max_output_tokens(2_000);
-        let cand = score_manifest_for_request(&qwen_coder, &req)
-            .expect("v0.3 claim scores non-None");
+        let cand =
+            score_manifest_for_request(&qwen_coder, &req).expect("v0.3 claim scores non-None");
         assert_eq!(cand.model_id, "qwen-coder-32b");
         // Exact hint + latency match → score equals affinity.
         assert!((cand.score - 0.95).abs() < 1e-4);

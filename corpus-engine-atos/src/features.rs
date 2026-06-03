@@ -622,12 +622,7 @@ impl FeatureStore {
     ///
     /// Back-compat wrapper: does not persist `stop_stdout`. Use
     /// [`close_run_with_stdout`] from the M3.2+ end-milestone path.
-    pub async fn close_run(
-        &self,
-        run_id: &str,
-        exit_code: i64,
-        stop_passed: bool,
-    ) -> Result<bool> {
+    pub async fn close_run(&self, run_id: &str, exit_code: i64, stop_passed: bool) -> Result<bool> {
         self.close_run_with_stdout(run_id, exit_code, stop_passed, None)
             .await
     }
@@ -686,7 +681,9 @@ impl FeatureStore {
                  ORDER BY started_at ASC",
             )
             .map_err(sqlite_err)?;
-        let mapped = stmt.query_map(params![feature_id], map_run_row).map_err(sqlite_err)?;
+        let mapped = stmt
+            .query_map(params![feature_id], map_run_row)
+            .map_err(sqlite_err)?;
         let mut out = Vec::new();
         for r in mapped {
             out.push(r.map_err(sqlite_err)?);
@@ -740,7 +737,17 @@ impl FeatureStore {
             "INSERT INTO atos_tool_events
                 (id, run_id, call_id, tool_name, phase, args_json, outcome, duration_ms, fired_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-            params![id, run_id, call_id, tool_name, phase, args_json, outcome, duration_ms, now],
+            params![
+                id,
+                run_id,
+                call_id,
+                tool_name,
+                phase,
+                args_json,
+                outcome,
+                duration_ms,
+                now
+            ],
         )
         .map_err(sqlite_err)?;
 
@@ -803,12 +810,7 @@ fn map_run_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AtosRunRow> {
 /// not. Used by [`FeatureStore::open`] to land additive schema
 /// changes (M3.2: `atos_runs.mode`, `atos_runs.stop_stdout`) on
 /// pre-existing databases without disturbing fresh ones.
-fn add_column_if_missing(
-    conn: &Connection,
-    table: &str,
-    column: &str,
-    defn: &str,
-) -> Result<()> {
+fn add_column_if_missing(conn: &Connection, table: &str, column: &str, defn: &str) -> Result<()> {
     // Table absent → CREATE TABLE IF NOT EXISTS below will handle it.
     let table_exists: i64 = conn
         .query_row(
@@ -1042,7 +1044,10 @@ mod tests {
     async fn provision_duplicate_fails() {
         let store = make_store().await;
         store.provision("dup", "t", "c", "", "").await.unwrap();
-        let err = store.provision("dup", "t2", "c2", "", "").await.unwrap_err();
+        let err = store
+            .provision("dup", "t2", "c2", "", "")
+            .await
+            .unwrap_err();
         assert!(matches!(err, Error::InvalidInput(_)));
     }
 
@@ -1080,7 +1085,10 @@ mod tests {
     #[tokio::test]
     async fn milestone_lifecycle() {
         let store = make_store().await;
-        store.provision("f1", "t", "c", "", "stop-cmd").await.unwrap();
+        store
+            .provision("f1", "t", "c", "", "stop-cmd")
+            .await
+            .unwrap();
 
         let next = store.next_ordinal("f1").await.unwrap();
         assert_eq!(next, 1);
@@ -1132,7 +1140,10 @@ mod tests {
         assert_eq!(run.driver, "claude");
 
         // Session id filled in after the first event carries it.
-        assert!(store.set_run_session(&run.id, "opencode-sess-abc").await.unwrap());
+        assert!(store
+            .set_run_session(&run.id, "opencode-sess-abc")
+            .await
+            .unwrap());
         let loaded = store.get_run(&run.id).await.unwrap().unwrap();
         assert_eq!(loaded.session_id.as_deref(), Some("opencode-sess-abc"));
 
@@ -1243,12 +1254,10 @@ mod tests {
         let m = store.add_milestone("f1", 1, "brief").await.unwrap();
         let run = store.open_run("f1", &m.id, "claude").await.unwrap();
         let stdout = "test result: ok. 17 passed; 0 failed";
-        assert!(
-            store
-                .close_run_with_stdout(&run.id, 0, true, Some(stdout))
-                .await
-                .unwrap()
-        );
+        assert!(store
+            .close_run_with_stdout(&run.id, 0, true, Some(stdout))
+            .await
+            .unwrap());
         let loaded = store.get_run(&run.id).await.unwrap().unwrap();
         assert_eq!(loaded.stop_stdout.as_deref(), Some(stdout));
         assert_eq!(loaded.stop_passed, Some(true));
@@ -1293,8 +1302,14 @@ mod tests {
         // Reopen — the additive ALTERs should land without data loss.
         let store = FeatureStore::open(&path).unwrap();
         let loaded = store.get_run("r0").await.unwrap().unwrap();
-        assert_eq!(loaded.mode, "normal", "pre-M3.2 row defaults to normal mode");
-        assert!(loaded.stop_stdout.is_none(), "pre-M3.2 rows have NULL stdout");
+        assert_eq!(
+            loaded.mode, "normal",
+            "pre-M3.2 row defaults to normal mode"
+        );
+        assert!(
+            loaded.stop_stdout.is_none(),
+            "pre-M3.2 rows have NULL stdout"
+        );
 
         // Future runs pick up the new column properly.
         let fresh = store

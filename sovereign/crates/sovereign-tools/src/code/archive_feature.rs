@@ -32,12 +32,11 @@ impl Tool for ArchiveFeatureTool {
         ToolDescriptor {
             id: "archive_feature".to_string(),
             name: "Archive Feature".to_string(),
-            description:
-                "Mark an ATOS feature as archived. Notes tagged to the feature remain \
+            description: "Mark an ATOS feature as archived. Notes tagged to the feature remain \
                  queryable via read_notes with scope=['feature'] + feature_id but stop \
                  being injected into fresh sessions. Use after the compliance review \
                  passes and any promotable notes have been promoted to global scope."
-                    .to_string(),
+                .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -97,10 +96,14 @@ impl Tool for ArchiveFeatureTool {
         let id = params.get("id").and_then(|v| v.as_str()).unwrap_or("");
         let reason = params.get("reason").and_then(|v| v.as_str()).unwrap_or("");
 
-        let ok = self.store.archive(id, reason).await.map_err(|e| Error::Tool {
-            tool_id: "archive_feature".to_string(),
-            message: e.to_string(),
-        })?;
+        let ok = self
+            .store
+            .archive(id, reason)
+            .await
+            .map_err(|e| Error::Tool {
+                tool_id: "archive_feature".to_string(),
+                message: e.to_string(),
+            })?;
 
         if !ok {
             return Err(Error::InvalidInput(format!(

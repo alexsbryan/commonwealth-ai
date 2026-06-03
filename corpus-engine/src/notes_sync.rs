@@ -300,13 +300,7 @@ mod tests {
         conn
     }
 
-    fn insert_test_note(
-        conn: &Connection,
-        id: &str,
-        kind: &str,
-        content: &str,
-        updated_at: i64,
-    ) {
+    fn insert_test_note(conn: &Connection, id: &str, kind: &str, content: &str, updated_at: i64) {
         conn.execute(
             "INSERT INTO notes (id, kind, content, symbols, files, session_id,
                                 created_at, updated_at, scope, source)

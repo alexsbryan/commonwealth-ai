@@ -13,8 +13,8 @@ use std::sync::Arc;
 
 use crate::atlas_canonical::lookup_key;
 
-use super::builder::{Anchor, MetaAtom, MetaAtlasFile};
-use super::{read_meta_atlas, default_meta_atlas_path};
+use super::builder::{Anchor, MetaAtlasFile, MetaAtom};
+use super::{default_meta_atlas_path, read_meta_atlas};
 
 /// Read-only lookup wrapper. Keyed by normalised canonical key with
 /// alias fallthrough and Move 5.1 token-index disambiguation.
@@ -263,8 +263,7 @@ impl MetaAtlasIndex {
         atom.anchors
             .iter()
             .filter(|a| {
-                a.articulation.dominant() == axis
-                    && a.articulation.weight(axis) >= min_weight
+                a.articulation.dominant() == axis && a.articulation.weight(axis) >= min_weight
             })
             .max_by(|a, b| {
                 a.salience
@@ -277,8 +276,8 @@ impl MetaAtlasIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::meta_atlas::builder::{Anchor, MetaAtom};
     use crate::enrichment::atlas::{AtomId, ChunkRef};
+    use crate::meta_atlas::builder::{Anchor, MetaAtom};
     use crate::stream_axes::{Articulation, ArticulationVector, Stability};
     use std::collections::BTreeSet;
 
@@ -328,21 +327,14 @@ mod tests {
             anchors: vec![
                 anchor("wiki", ArticulationVector::new(0.8, 0.15, 0.05), 0.5),
                 anchor("sep", ArticulationVector::new(0.1, 0.85, 0.05), 0.9),
-                anchor(
-                    "conv",
-                    ArticulationVector::new(0.1, 0.1, 0.8),
-                    0.7,
-                ),
+                anchor("conv", ArticulationVector::new(0.1, 0.1, 0.8), 0.7),
             ],
         };
-        let inv = MetaAtlasIndex::top_anchor_for_axis(&atom, Articulation::Inventory, 0.4)
-            .unwrap();
+        let inv = MetaAtlasIndex::top_anchor_for_axis(&atom, Articulation::Inventory, 0.4).unwrap();
         assert_eq!(inv.corpus_id, "wiki");
-        let arg = MetaAtlasIndex::top_anchor_for_axis(&atom, Articulation::Argument, 0.4)
-            .unwrap();
+        let arg = MetaAtlasIndex::top_anchor_for_axis(&atom, Articulation::Argument, 0.4).unwrap();
         assert_eq!(arg.corpus_id, "sep");
-        let trc = MetaAtlasIndex::top_anchor_for_axis(&atom, Articulation::Trace, 0.4)
-            .unwrap();
+        let trc = MetaAtlasIndex::top_anchor_for_axis(&atom, Articulation::Trace, 0.4).unwrap();
         assert_eq!(trc.corpus_id, "conv");
     }
 

@@ -57,10 +57,7 @@ fn registry() -> &'static Mutex<EnrichJobRegistry> {
 /// Attempt to reserve a corpus for a build. Returns the
 /// cancellation flag for the new job on success, `Err` if the
 /// corpus already has a build in flight.
-fn reserve_corpus(
-    corpus_id: &str,
-    job_id: &str,
-) -> Result<CancellationFlag, String> {
+fn reserve_corpus(corpus_id: &str, job_id: &str) -> Result<CancellationFlag, String> {
     let mut reg = registry().lock().expect("enrich job registry lock");
     if reg.active_corpora.contains(corpus_id) {
         return Err(format!(
@@ -193,12 +190,7 @@ pub async fn enrich_build_async(
             extra_args,
             cancel: Some(cancel_flag),
         };
-        let result = run_enrich_build(
-            &corpus_id_for_task,
-            config,
-            Some(progress.clone()),
-        )
-        .await;
+        let result = run_enrich_build(&corpus_id_for_task, config, Some(progress.clone())).await;
 
         // Always release the corpus + drop the cancel flag once
         // the subprocess finishes, regardless of how it exited.
@@ -253,7 +245,9 @@ pub async fn enrich_build_async(
 /// follows, carrying the step that was running at kill time.
 #[tauri::command]
 pub async fn enrich_cancel_build(job_id: String) -> Result<bool, String> {
-    let reg = registry().lock().map_err(|e| format!("registry lock: {e}"))?;
+    let reg = registry()
+        .lock()
+        .map_err(|e| format!("registry lock: {e}"))?;
     match reg.cancel_flags.get(&job_id) {
         Some(flag) => {
             fire_cancellation(flag);
@@ -279,9 +273,7 @@ pub async fn enrich_cancel_build(job_id: String) -> Result<bool, String> {
 /// file, I/O stall, etc.) we surface a clear error rather than
 /// blocking the UI panel forever.
 #[tauri::command]
-pub async fn enrich_errors(
-    corpus_id: String,
-) -> Result<serde_json::Value, String> {
+pub async fn enrich_errors(corpus_id: String) -> Result<serde_json::Value, String> {
     use tokio::process::Command;
     use tokio::time::{timeout, Duration};
 
@@ -450,8 +442,8 @@ pub async fn enrich_list_corpora() -> Result<Vec<EnrichedCorpusSummary>, String>
         return Ok(Vec::new());
     }
     let mut out = Vec::new();
-    let entries = std::fs::read_dir(&root)
-        .map_err(|e| format!("reading {}: {e}", root.display()))?;
+    let entries =
+        std::fs::read_dir(&root).map_err(|e| format!("reading {}: {e}", root.display()))?;
     for entry in entries.flatten() {
         if !entry.path().is_dir() {
             continue;
@@ -591,8 +583,8 @@ pub async fn enrich_init_for_local_corpus(
     if config_path.exists() && synthetic_source.exists() {
         if let Ok(raw) = std::fs::read_to_string(&config_path) {
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
-                let pipeline_matches = v.get("pipeline_id").and_then(|p| p.as_str())
-                    == Some(pipeline_id.as_str());
+                let pipeline_matches =
+                    v.get("pipeline_id").and_then(|p| p.as_str()) == Some(pipeline_id.as_str());
                 if pipeline_matches
                     && existing_source_matches_sample(&synthetic_source, sample_size)
                 {
@@ -701,8 +693,7 @@ fn read_sampled_documents(
 ) -> Result<SampledDocuments, String> {
     use std::fs::File;
     use std::io::{BufRead, BufReader};
-    let f =
-        File::open(jsonl_path).map_err(|e| format!("reading {}: {e}", jsonl_path.display()))?;
+    let f = File::open(jsonl_path).map_err(|e| format!("reading {}: {e}", jsonl_path.display()))?;
     let reader = BufReader::new(f);
     let mut titles: Vec<String> = Vec::new();
     let mut total = 0usize;
@@ -778,7 +769,10 @@ fn synthesize_plaintext_from_jsonl(
                 continue;
             }
         };
-        let title = v.get("title").and_then(|s| s.as_str()).unwrap_or("Untitled");
+        let title = v
+            .get("title")
+            .and_then(|s| s.as_str())
+            .unwrap_or("Untitled");
         let content = v.get("content").and_then(|s| s.as_str()).unwrap_or("");
         if content.trim().is_empty() {
             continue;
@@ -847,8 +841,8 @@ pub async fn enrich_estimate(corpus_id: String) -> Result<EnrichEstimate, String
     }
     let raw = std::fs::read_to_string(&chapters_path)
         .map_err(|e| format!("reading {}: {e}", chapters_path.display()))?;
-    let v: serde_json::Value = serde_json::from_str(&raw)
-        .map_err(|e| format!("parsing chapters.json: {e}"))?;
+    let v: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("parsing chapters.json: {e}"))?;
     let chapters = v
         .get("chapters")
         .and_then(|c| c.as_array())
@@ -890,10 +884,10 @@ pub struct ActiveEnrichJob {
 }
 
 #[tauri::command]
-pub async fn enrich_get_active_job(
-    corpus_id: String,
-) -> Result<Option<ActiveEnrichJob>, String> {
-    let reg = registry().lock().map_err(|e| format!("registry lock: {e}"))?;
+pub async fn enrich_get_active_job(corpus_id: String) -> Result<Option<ActiveEnrichJob>, String> {
+    let reg = registry()
+        .lock()
+        .map_err(|e| format!("registry lock: {e}"))?;
     match reg.job_id_by_corpus.get(&corpus_id) {
         Some(job_id) => Ok(Some(ActiveEnrichJob {
             channel: progress_channel(job_id),
@@ -983,9 +977,8 @@ fn rank_starter_questions(atoms: &[AtomEnvelope], limit: usize) -> Vec<StarterQu
                 let cleaned = if text.ends_with('?') {
                     text.to_string()
                 } else {
-                    let stripped = text.trim_end_matches(|c: char| {
-                        matches!(c, '.' | '!' | ',' | ';' | ':')
-                    });
+                    let stripped =
+                        text.trim_end_matches(|c: char| matches!(c, '.' | '!' | ',' | ';' | ':'));
                     format!("{stripped}?")
                 };
                 let source_section = q
@@ -1057,12 +1050,10 @@ pub async fn is_first_run() -> Result<bool, String> {
 pub async fn mark_first_run_complete() -> Result<(), String> {
     let path = first_run_marker_path();
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
     }
     let ts = chrono::Utc::now().to_rfc3339();
-    std::fs::write(&path, &ts)
-        .map_err(|e| format!("writing {}: {e}", path.display()))?;
+    std::fs::write(&path, &ts).map_err(|e| format!("writing {}: {e}", path.display()))?;
     tracing::info!(path = %path.display(), "first_run_complete marker written");
     Ok(())
 }
@@ -1075,10 +1066,7 @@ mod tests {
     fn progress_channel_format_is_stable() {
         // The UI's `listen` call hardcodes this shape; a rename
         // would silently break the subscription.
-        assert_eq!(
-            progress_channel("abc-123"),
-            "enrich://progress/abc-123"
-        );
+        assert_eq!(progress_channel("abc-123"), "enrich://progress/abc-123");
     }
 
     #[test]
@@ -1104,8 +1092,7 @@ mod tests {
         // instance).
         let corpus = "concurrency_guard_test_a";
         let _flag1 = reserve_corpus(corpus, "job-1").expect("first reserve");
-        let err = reserve_corpus(corpus, "job-2")
-            .expect_err("second reserve should fail");
+        let err = reserve_corpus(corpus, "job-2").expect_err("second reserve should fail");
         assert!(
             err.contains("already running"),
             "error message should say `already running`, got: {err}"
@@ -1123,8 +1110,7 @@ mod tests {
         let corpus = "concurrency_guard_test_b";
         let _f1 = reserve_corpus(corpus, "job-1").unwrap();
         release_corpus(corpus, "job-1");
-        let _f2 =
-            reserve_corpus(corpus, "job-2").expect("reserve after release");
+        let _f2 = reserve_corpus(corpus, "job-2").expect("reserve after release");
         release_corpus(corpus, "job-2");
     }
 
@@ -1137,8 +1123,7 @@ mod tests {
         let a = "concurrency_guard_test_c_alpha";
         let b = "concurrency_guard_test_c_beta";
         let _f1 = reserve_corpus(a, "job-a").unwrap();
-        let _f2 =
-            reserve_corpus(b, "job-b").expect("different corpus should pass");
+        let _f2 = reserve_corpus(b, "job-b").expect("different corpus should pass");
         release_corpus(a, "job-a");
         release_corpus(b, "job-b");
     }
@@ -1168,8 +1153,7 @@ mod tests {
         // same flag. Two clones of the `Arc<AtomicBool>` must
         // observe each other's writes.
         let corpus = "concurrency_guard_test_d";
-        let flag_handle =
-            reserve_corpus(corpus, "job-cancel").expect("reserve");
+        let flag_handle = reserve_corpus(corpus, "job-cancel").expect("reserve");
         // Fire via the registry path (what the Tauri command
         // does). Observe through the flag handle returned by
         // reserve.
@@ -1251,14 +1235,32 @@ mod tests {
             })
         };
         let atoms = vec![
-            mk(1, "What is the factual date of the encounter between the brothers?", QuestionType::Factual, "sec_0001"),
-            mk(2, "How does faith change when grief meets doubt across chapters?", QuestionType::Thematic, "sec_0002"),
-            mk(3, "Does the ending dissolve or resolve the central question posed here?", QuestionType::Interpretive, "sec_0003"),
+            mk(
+                1,
+                "What is the factual date of the encounter between the brothers?",
+                QuestionType::Factual,
+                "sec_0001",
+            ),
+            mk(
+                2,
+                "How does faith change when grief meets doubt across chapters?",
+                QuestionType::Thematic,
+                "sec_0002",
+            ),
+            mk(
+                3,
+                "Does the ending dissolve or resolve the central question posed here?",
+                QuestionType::Interpretive,
+                "sec_0003",
+            ),
         ];
         let picks = rank_starter_questions(&atoms, 3);
         assert_eq!(picks.len(), 3, "all three should pass length gate");
         assert_eq!(picks[0].question_type, "thematic", "thematic wins tier 0");
-        assert_eq!(picks[1].question_type, "interpretive", "interpretive wins tier 1");
+        assert_eq!(
+            picks[1].question_type, "interpretive",
+            "interpretive wins tier 1"
+        );
         assert_eq!(picks[2].question_type, "factual", "factual in tier 3");
     }
 
@@ -1283,17 +1285,39 @@ mod tests {
         // sections. Limit=3 should pull at most one from sec_0001
         // before falling back to leftovers.
         let atoms = vec![
-            mk(1, "A first long enough thematic question from section one opening?", "sec_0001"),
-            mk(2, "A second long enough thematic question from section one opening?", "sec_0001"),
-            mk(3, "A third long enough thematic question from section one opening?", "sec_0001"),
-            mk(4, "A long enough thematic question from section two probing meaning?", "sec_0002"),
-            mk(5, "A long enough thematic question from section three probing nuance?", "sec_0003"),
+            mk(
+                1,
+                "A first long enough thematic question from section one opening?",
+                "sec_0001",
+            ),
+            mk(
+                2,
+                "A second long enough thematic question from section one opening?",
+                "sec_0001",
+            ),
+            mk(
+                3,
+                "A third long enough thematic question from section one opening?",
+                "sec_0001",
+            ),
+            mk(
+                4,
+                "A long enough thematic question from section two probing meaning?",
+                "sec_0002",
+            ),
+            mk(
+                5,
+                "A long enough thematic question from section three probing nuance?",
+                "sec_0003",
+            ),
         ];
         let picks = rank_starter_questions(&atoms, 3);
         let sections: Vec<Option<String>> =
             picks.iter().map(|p| p.source_section.clone()).collect();
-        let distinct_sections: HashSet<_> =
-            picks.iter().filter_map(|p| p.source_section.clone()).collect();
+        let distinct_sections: HashSet<_> = picks
+            .iter()
+            .filter_map(|p| p.source_section.clone())
+            .collect();
         assert_eq!(picks.len(), 3);
         assert_eq!(
             distinct_sections.len(),
@@ -1321,9 +1345,12 @@ mod tests {
             })
         };
         let atoms = vec![
-            mk(1, "Why?".into()),                    // too short
-            mk(2, "a".repeat(300)),                  // too long
-            mk(3, "What actually grounds a claim like this in the shipped corpus?".into()),
+            mk(1, "Why?".into()),   // too short
+            mk(2, "a".repeat(300)), // too long
+            mk(
+                3,
+                "What actually grounds a claim like this in the shipped corpus?".into(),
+            ),
         ];
         let picks = rank_starter_questions(&atoms, 5);
         assert_eq!(picks.len(), 1, "only the middle-length question survives");
@@ -1408,7 +1435,10 @@ mod tests {
             .collect();
         std::fs::write(&jsonl, lines.join("\n")).unwrap();
         let result = synthesize_plaintext_from_jsonl(&jsonl, &out, Some(2)).unwrap();
-        assert_eq!(result.titles, vec!["Doc 0".to_string(), "Doc 1".to_string()]);
+        assert_eq!(
+            result.titles,
+            vec!["Doc 0".to_string(), "Doc 1".to_string()]
+        );
         assert_eq!(
             result.total, 5,
             "total should include beyond-sample records"

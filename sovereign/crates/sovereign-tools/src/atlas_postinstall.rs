@@ -235,10 +235,7 @@ pub fn read_triage_config(atlas_dir: &Path) -> ResolvedTriageConfig {
             .expansion_fraction
             .unwrap_or(DEFAULT_EXPANSION_FRACTION)
             .clamp(0.0, 0.9),
-        expansion_hops: cfg
-            .expansion_hops
-            .unwrap_or(DEFAULT_EXPANSION_HOPS)
-            .min(2),
+        expansion_hops: cfg.expansion_hops.unwrap_or(DEFAULT_EXPANSION_HOPS).min(2),
     }
 }
 
@@ -273,8 +270,7 @@ pub fn write_triage_budget(atlas_dir: &Path, budget_articles: usize) -> std::io:
         .unwrap_or_default();
     cfg.schema_version = 1;
     cfg.budget_articles = Some(budget_articles);
-    let value = serde_json::to_value(&cfg)
-        .map_err(std::io::Error::other)?;
+    let value = serde_json::to_value(&cfg).map_err(std::io::Error::other)?;
     write_atomic_json(&path, &value)
 }
 
@@ -303,8 +299,7 @@ pub fn write_triage_config(
     if let Some(h) = expansion_hops {
         cfg.expansion_hops = Some(h);
     }
-    let value = serde_json::to_value(&cfg)
-        .map_err(std::io::Error::other)?;
+    let value = serde_json::to_value(&cfg).map_err(std::io::Error::other)?;
     write_atomic_json(&path, &value)
 }
 
@@ -437,7 +432,9 @@ pub async fn build_triage_candidates(
     let mut inbound: HashMap<String, u32> = HashMap::with_capacity(by_id.len());
     let mut outbound: HashMap<String, u32> = HashMap::with_capacity(by_id.len());
     for edge in &edges.edges {
-        *outbound.entry(edge.source.as_str().to_string()).or_insert(0) += 1;
+        *outbound
+            .entry(edge.source.as_str().to_string())
+            .or_insert(0) += 1;
         *inbound.entry(edge.target.as_str().to_string()).or_insert(0) += 1;
     }
 
@@ -480,8 +477,8 @@ pub async fn build_triage_candidates(
         .iter()
         .filter(|(_, e)| !e.is_placeholder)
         .map(|(id, e)| {
-            let centrality = inbound.get(id).copied().unwrap_or(0)
-                + outbound.get(id).copied().unwrap_or(0);
+            let centrality =
+                inbound.get(id).copied().unwrap_or(0) + outbound.get(id).copied().unwrap_or(0);
             let tier = vital_tier(&e.canonical_name).unwrap_or(6);
             let bumps = bump_count_for(&bumps, &e.canonical_name);
             Ranked {
@@ -505,14 +502,12 @@ pub async fn build_triage_candidates(
     });
 
     // ── PHASE 2: pick seeds (top-K of full ranking) ─────────────
-    let seed_cap =
-        ((budget as f64) * (1.0 - expansion_fraction)).round() as usize;
+    let seed_cap = ((budget as f64) * (1.0 - expansion_fraction)).round() as usize;
     // If expansion is disabled (fraction=0), seed_cap == budget and
     // we recover the legacy pure-centrality behaviour.
     let seed_cap = seed_cap.min(budget);
     let seeds: Vec<Ranked> = ranked.drain(..seed_cap.min(ranked.len())).collect();
-    let seed_ids: std::collections::HashSet<String> =
-        seeds.iter().map(|r| r.id.clone()).collect();
+    let seed_ids: std::collections::HashSet<String> = seeds.iter().map(|r| r.id.clone()).collect();
 
     // ── PHASE 3: 1-hop (or 2-hop) outbound expansion from seeds ─
     // hits_from_seeds[target_id] = how many seeds reference it.
@@ -567,8 +562,8 @@ pub async fn build_triage_candidates(
             if ent.is_placeholder {
                 return None;
             }
-            let centrality = inbound.get(&id).copied().unwrap_or(0)
-                + outbound.get(&id).copied().unwrap_or(0);
+            let centrality =
+                inbound.get(&id).copied().unwrap_or(0) + outbound.get(&id).copied().unwrap_or(0);
             let tier = vital_tier(&ent.canonical_name).unwrap_or(6);
             let bumps = bump_count_for(&bumps, &ent.canonical_name);
             Some(Expansion {
@@ -847,9 +842,7 @@ pub async fn launch_tier2_extraction_with_advice(
                 "--from-corpus",
                 source_corpus_id,
                 "--include-articles",
-                triage_path
-                    .to_str()
-                    .unwrap_or("/dev/null"),
+                triage_path.to_str().unwrap_or("/dev/null"),
                 "--pipeline",
                 "referential_atlas",
             ])
@@ -1038,8 +1031,7 @@ fn write_atomic_json(path: &Path, value: &serde_json::Value) -> std::io::Result<
             .and_then(|n| n.to_str())
             .unwrap_or("atlas-postinstall")
     ));
-    let bytes = serde_json::to_vec_pretty(value)
-        .map_err(std::io::Error::other)?;
+    let bytes = serde_json::to_vec_pretty(value).map_err(std::io::Error::other)?;
     std::fs::write(&tmp, bytes)?;
     std::fs::rename(&tmp, path)
 }
@@ -1076,9 +1068,9 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-};
+            provenance: Default::default(),
+            concept_kind: None,
+        };
         // Off-list noise: 5 entities with massive centrality (each
         // sourcing 100 edges into earth or each other).
         let mut atoms: Vec<AtomEnvelope> = vec![AtomEnvelope::Entity(earth)];
@@ -1096,9 +1088,9 @@ mod tests {
                 role: None,
                 participants: Vec::new(),
                 defining_quote: None,
-                            provenance: Default::default(),
-                            concept_kind: None,
-}));
+                provenance: Default::default(),
+                concept_kind: None,
+            }));
         }
 
         // Edges: Earth gets 5 inbound. Random Pages each get 100
@@ -1167,8 +1159,7 @@ mod tests {
         )
         .unwrap();
 
-        let outcome =
-            build_triage_candidates(corpus, tmp.path().to_path_buf(), 3).await;
+        let outcome = build_triage_candidates(corpus, tmp.path().to_path_buf(), 3).await;
         let path = match outcome {
             TriageOutcome::Built { path, .. } => path,
             other => panic!("triage failed: {other:?}"),
@@ -1223,9 +1214,9 @@ mod tests {
                 role: None,
                 participants: Vec::new(),
                 defining_quote: None,
-                            provenance: Default::default(),
-                            concept_kind: None,
-})
+                provenance: Default::default(),
+                concept_kind: None,
+            })
         };
         atoms.push(mk(1, "Earth")); // L1 seed
         for (i, name) in ["Neighbour A", "Neighbour B", "Neighbour C", "Neighbour D"]
@@ -1290,8 +1281,7 @@ mod tests {
         // which would in turn promote OTHER noise pages via the
         // expansion ranker. That edge case is real (mismatched
         // tier supply vs. seed cap) but tested separately below.
-        let outcome =
-            build_triage_candidates(corpus, tmp.path().to_path_buf(), 2).await;
+        let outcome = build_triage_candidates(corpus, tmp.path().to_path_buf(), 2).await;
         let path = match outcome {
             TriageOutcome::Built { path, .. } => path,
             other => panic!("triage failed: {other:?}"),
@@ -1375,9 +1365,9 @@ mod tests {
                 role: None,
                 participants: Vec::new(),
                 defining_quote: None,
-                            provenance: Default::default(),
-                            concept_kind: None,
-}));
+                provenance: Default::default(),
+                concept_kind: None,
+            }));
         }
         // Equal centrality: each gets one inbound from the other.
         let edges = vec![
@@ -1417,8 +1407,7 @@ mod tests {
 
         // Sanity: pre-bump rank places Alpha first (alphabetical
         // tie-break on equal score).
-        let outcome =
-            build_triage_candidates(corpus, tmp.path().to_path_buf(), 2).await;
+        let outcome = build_triage_candidates(corpus, tmp.path().to_path_buf(), 2).await;
         let path = match outcome {
             TriageOutcome::Built { path, .. } => path,
             other => panic!("pre-bump triage failed: {other:?}"),
@@ -1444,8 +1433,7 @@ mod tests {
 
         // Re-rank: Beta should now win, and bumped_picks should
         // reflect one bumped entry in the kept set.
-        let outcome2 =
-            build_triage_candidates(corpus, tmp.path().to_path_buf(), 2).await;
+        let outcome2 = build_triage_candidates(corpus, tmp.path().to_path_buf(), 2).await;
         let path2 = match outcome2 {
             TriageOutcome::Built { path, .. } => path,
             other => panic!("post-bump triage failed: {other:?}"),

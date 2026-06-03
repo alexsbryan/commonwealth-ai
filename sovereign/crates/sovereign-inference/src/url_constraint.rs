@@ -114,10 +114,7 @@ impl UrlAllowlistConstraint {
     /// the allowlist is empty (no URLs to constrain → no-op constraint
     /// is wasteful to keep around; caller should treat None as "do
     /// not apply").
-    pub fn new(
-        allowed_urls: &[String],
-        vocab_bytes: Arc<Vec<Vec<u8>>>,
-    ) -> Option<Self> {
+    pub fn new(allowed_urls: &[String], vocab_bytes: Arc<Vec<Vec<u8>>>) -> Option<Self> {
         if allowed_urls.is_empty() {
             return None;
         }
@@ -394,7 +391,10 @@ mod tests {
     #[test]
     fn second_url_after_first_completes() {
         let mut c = build(&["https://a.test/x", "https://a.test/y"]);
-        assert!(feed(&mut c, "first https://a.test/x, then https://a.test/y."));
+        assert!(feed(
+            &mut c,
+            "first https://a.test/x, then https://a.test/y."
+        ));
         assert!(!c.in_url_mode());
     }
 
@@ -404,7 +404,11 @@ mod tests {
         // Feed it byte-by-byte (worst case).
         let mut c = build(&["https://a.test/x"]);
         for byte in "https://a.test/x".as_bytes() {
-            assert!(feed_byte(&c.nodes, &mut c.cursor, *byte), "byte {:?} should be accepted", *byte as char);
+            assert!(
+                feed_byte(&c.nodes, &mut c.cursor, *byte),
+                "byte {:?} should be accepted",
+                *byte as char
+            );
         }
     }
 
@@ -425,8 +429,7 @@ mod tests {
         // that would extend `/after-hour` into `/after-hours`).
         let vocab: Vec<Vec<u8>> = vec![Vec::new(), vec![b's']];
         let urls = vec!["https://a.test/after-hours".to_string()];
-        let mut c =
-            UrlAllowlistConstraint::new(&urls, Arc::new(vocab.clone())).expect("non-empty");
+        let mut c = UrlAllowlistConstraint::new(&urls, Arc::new(vocab.clone())).expect("non-empty");
         // Walk cursor up to but NOT including the terminal `s`.
         for byte in "https://a.test/after-hour".as_bytes() {
             assert!(

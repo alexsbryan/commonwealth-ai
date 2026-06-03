@@ -198,8 +198,7 @@ pub fn build_meta_atlas(indexes_dir: &Path) -> std::io::Result<MetaAtlasFile> {
             // lead-sentence shape often enough that the
             // chunk-preview classifier picks up the right markers;
             // see Stage 5 calibration histogram.
-            let articulation =
-                super::classifier::classify_articulation(env, &entity.description);
+            let articulation = super::classifier::classify_articulation(env, &entity.description);
 
             let anchor = Anchor {
                 corpus_id: corpus_id.clone(),
@@ -354,8 +353,7 @@ pub fn rebuild_for_corpus(
             // full builder's pattern, but only for this corpus).
             let mut new_anchors_by_key: HashMap<String, Vec<Anchor>> = HashMap::new();
             let mut new_display_by_key: HashMap<String, String> = HashMap::new();
-            let mut new_aliases_by_key: HashMap<String, BTreeSet<String>> =
-                HashMap::new();
+            let mut new_aliases_by_key: HashMap<String, BTreeSet<String>> = HashMap::new();
 
             for env in &atoms_file.atoms {
                 let entity = match env {
@@ -369,10 +367,8 @@ pub fn rebuild_for_corpus(
                 if key.is_empty() {
                     continue;
                 }
-                let articulation = super::classifier::classify_articulation(
-                    env,
-                    &entity.description,
-                );
+                let articulation =
+                    super::classifier::classify_articulation(env, &entity.description);
                 let anchor = Anchor {
                     corpus_id: target_corpus_id.to_string(),
                     atom_id: entity.id.clone(),
@@ -382,7 +378,10 @@ pub fn rebuild_for_corpus(
                     salience: entity.salience,
                     atlas_content_hash: content_hash.clone(),
                 };
-                new_anchors_by_key.entry(key.clone()).or_default().push(anchor);
+                new_anchors_by_key
+                    .entry(key.clone())
+                    .or_default()
+                    .push(anchor);
                 new_display_by_key
                     .entry(key.clone())
                     .or_insert_with(|| entity.canonical_name.clone());
@@ -408,17 +407,13 @@ pub fn rebuild_for_corpus(
                 if let Some(&idx) = by_key.get(&key) {
                     file.atoms[idx].anchors.extend(anchors);
                     if let Some(aliases) = new_aliases_by_key.get(&key) {
-                        file.atoms[idx]
-                            .aliases
-                            .extend(aliases.iter().cloned());
+                        file.atoms[idx].aliases.extend(aliases.iter().cloned());
                     }
                 } else {
                     let display = new_display_by_key
                         .remove(&key)
                         .unwrap_or_else(|| key.clone());
-                    let aliases = new_aliases_by_key
-                        .remove(&key)
-                        .unwrap_or_default();
+                    let aliases = new_aliases_by_key.remove(&key).unwrap_or_default();
                     file.atoms.push(MetaAtom {
                         canonical_key: key,
                         display,
@@ -443,7 +438,8 @@ pub fn rebuild_for_corpus(
     }
 
     // Re-sort for deterministic output.
-    file.atoms.sort_by(|a, b| a.canonical_key.cmp(&b.canonical_key));
+    file.atoms
+        .sort_by(|a, b| a.canonical_key.cmp(&b.canonical_key));
     file.atlases_seen
         .sort_by(|a, b| a.corpus_id.cmp(&b.corpus_id));
     file.built_at = crate::stream_axes::timestamp_now();
@@ -469,8 +465,7 @@ pub fn write_meta_atlas(file: &MetaAtlasFile, out_path: &Path) -> std::io::Resul
 
 pub fn read_meta_atlas(path: &Path) -> std::io::Result<MetaAtlasFile> {
     let s = std::fs::read_to_string(path)?;
-    serde_json::from_str(&s)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+    serde_json::from_str(&s).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
 }
 
 /// Read the `stream.stability` field from a corpus's
@@ -491,7 +486,7 @@ fn read_corpus_stability(corpus_dir: &Path) -> Option<Stability> {
 mod tests {
     use super::*;
     use crate::enrichment::atlas::{
-        atoms::{Entity, AtomsFile},
+        atoms::{AtomsFile, Entity},
         AtomEnvelope, AtomId, ChunkRef,
     };
     use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
@@ -598,8 +593,16 @@ mod tests {
         // Per-atom articulation differs: wiki Other("article") goes
         // via chunk-preview fallback (Inventory-ish), sep Concept
         // with defining_quote is Argument-dominant.
-        let wiki_anchor = einstein.anchors.iter().find(|a| a.corpus_id == "wikipedia").unwrap();
-        let sep_anchor = einstein.anchors.iter().find(|a| a.corpus_id == "sep").unwrap();
+        let wiki_anchor = einstein
+            .anchors
+            .iter()
+            .find(|a| a.corpus_id == "wikipedia")
+            .unwrap();
+        let sep_anchor = einstein
+            .anchors
+            .iter()
+            .find(|a| a.corpus_id == "sep")
+            .unwrap();
         assert!(wiki_anchor.articulation.inventory >= 0.4);
         assert!(sep_anchor.articulation.argument >= 0.7);
         // Stability flows through.
@@ -635,7 +638,11 @@ mod tests {
             None,
         );
         let file = build_meta_atlas(tmp.path()).unwrap();
-        let foo = file.atoms.iter().find(|a| a.canonical_key == "foo").unwrap();
+        let foo = file
+            .atoms
+            .iter()
+            .find(|a| a.canonical_key == "foo")
+            .unwrap();
         assert_eq!(foo.anchors[0].stability, None);
     }
 
@@ -652,7 +659,11 @@ mod tests {
             None,
         );
         let file = build_meta_atlas(tmp.path()).unwrap();
-        let keys: Vec<&str> = file.atoms.iter().map(|a| a.canonical_key.as_str()).collect();
+        let keys: Vec<&str> = file
+            .atoms
+            .iter()
+            .map(|a| a.canonical_key.as_str())
+            .collect();
         assert_eq!(keys, vec!["alpha", "zebra"]);
     }
 
@@ -665,7 +676,14 @@ mod tests {
         write_atlas_with_meta(
             indexes,
             "wiki",
-            vec![make_entity(1, "Einstein", vec![], EntityType::Person, 0.5, None)],
+            vec![make_entity(
+                1,
+                "Einstein",
+                vec![],
+                EntityType::Person,
+                0.5,
+                None,
+            )],
             Some(Stability::Frozen),
         );
         write_atlas_with_meta(
@@ -751,10 +769,7 @@ mod tests {
         let initial = build_meta_atlas(indexes).unwrap();
         let meta_path = tmp.path().join("meta.json");
         write_meta_atlas(&initial, &meta_path).unwrap();
-        assert!(initial
-            .atoms
-            .iter()
-            .any(|a| a.canonical_key == "onlyhere"));
+        assert!(initial.atoms.iter().any(|a| a.canonical_key == "onlyhere"));
 
         // Replace wiki atlas with one that doesn't contain OnlyHere.
         let new_atoms = AtomsFile::new(vec![]);
@@ -776,7 +791,14 @@ mod tests {
         write_atlas_with_meta(
             tmp.path(),
             "wiki",
-            vec![make_entity(1, "Test", vec![], EntityType::Person, 0.5, None)],
+            vec![make_entity(
+                1,
+                "Test",
+                vec![],
+                EntityType::Person,
+                0.5,
+                None,
+            )],
             Some(Stability::Frozen),
         );
         let built = build_meta_atlas(tmp.path()).unwrap();

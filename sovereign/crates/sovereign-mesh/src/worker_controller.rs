@@ -48,8 +48,8 @@ use thiserror::Error;
 
 use crate::worker_http::{CompletedUnit, JobManifest};
 use crate::worker_pod::{
-    BootstrapBlob, BootstrapInputs, Sha256Digest, WorkerHandle, WorkerPodError, encode_bootstrap,
-    mint_bootstrap, self_signed_cert,
+    encode_bootstrap, mint_bootstrap, self_signed_cert, BootstrapBlob, BootstrapInputs,
+    Sha256Digest, WorkerHandle, WorkerPodError,
 };
 
 // ───── Provider abstraction ─────────────────────────────────────────
@@ -266,7 +266,10 @@ impl WorkerController {
     /// Full lifecycle helper: mint bootstrap, ask provider to create
     /// the pod, wait for it to come up, upload files, dispatch the
     /// job. Returns a [`WorkerHandle`] the owner uses to poll.
-    pub async fn create_and_run(&self, spec: &JobSpec) -> ControllerResult<(WorkerHandle, ProviderInstance)> {
+    pub async fn create_and_run(
+        &self,
+        spec: &JobSpec,
+    ) -> ControllerResult<(WorkerHandle, ProviderInstance)> {
         let (handle, instance, _blob, _client) = self.create_and_run_with_blob(spec).await?;
         Ok((handle, instance))
     }
@@ -293,10 +296,7 @@ impl WorkerController {
         // the operator has to grep `vastai show instances` to find
         // it. Wrap the post-create lifecycle in an inner helper so
         // `?` propagates errors out, then catch and destroy.
-        match self
-            .complete_create_lifecycle(&instance, &blob, spec)
-            .await
-        {
+        match self.complete_create_lifecycle(&instance, &blob, spec).await {
             Ok((handle, client)) => Ok((handle, instance, blob, client)),
             Err(e) => {
                 tracing::error!(
@@ -319,10 +319,7 @@ impl WorkerController {
                         instance.instance_id,
                     );
                 } else {
-                    eprintln!(
-                        "[controller] instance {} destroyed.",
-                        instance.instance_id
-                    );
+                    eprintln!("[controller] instance {} destroyed.", instance.instance_id);
                 }
                 Err(e)
             }
@@ -557,7 +554,10 @@ impl WorkerController {
                 .await?;
             if resp.status().is_success() {
                 let body: serde_json::Value = resp.json().await?;
-                let ready = body.get("uploads_ready").and_then(|v| v.as_u64()).unwrap_or(0);
+                let ready = body
+                    .get("uploads_ready")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
                 let expected = body
                     .get("uploads_expected")
                     .and_then(|v| v.as_u64())

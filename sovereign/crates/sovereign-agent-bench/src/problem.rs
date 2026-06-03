@@ -76,8 +76,7 @@ impl Category {
 /// `FromScratch` (Level 2) — the harness gives the agent an empty
 /// workdir and the agent has to scaffold the cargo project itself.
 /// This exercises the full tool-call + project-scaffolding surface.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum Tier {
     Scaffolded,
     #[default]
@@ -92,7 +91,6 @@ impl Tier {
         }
     }
 }
-
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum WitnessKind {
@@ -268,7 +266,9 @@ pub enum ProblemLoadError {
     PromptMissing(PathBuf),
     #[error("rubric file missing at {0} (required by dim_b/dim_c mode)")]
     RubricMissing(PathBuf),
-    #[error("rubric.md missing anchors for `{rubric_id}` (need ## {rubric_id} with ### 0..3 subheads)")]
+    #[error(
+        "rubric.md missing anchors for `{rubric_id}` (need ## {rubric_id} with ### 0..3 subheads)"
+    )]
     RubricIncomplete { rubric_id: String },
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
@@ -293,8 +293,7 @@ pub fn load_problem(problem_dir: &Path) -> Result<Problem, ProblemLoadError> {
     let mut needed_rubric_ids: Vec<String> = Vec::new();
     for dim in [&raw.scoring.dim_a, &raw.scoring.dim_b, &raw.scoring.dim_c] {
         match &dim.mode {
-            ScoringMode::JudgeRubric { rubric_id }
-            | ScoringMode::HybridAutoFloor { rubric_id } => {
+            ScoringMode::JudgeRubric { rubric_id } | ScoringMode::HybridAutoFloor { rubric_id } => {
                 needed_rubric_ids.push(rubric_id.clone());
             }
             ScoringMode::AutoTestPassFraction => {}

@@ -85,18 +85,14 @@ pub fn compute_stable_key(corpus_id: &str, atom: &AtomEnvelope) -> StableAtomKey
             a.section_position.section_id.as_str(),
         ),
         AtomEnvelope::State(a) => ("State", a.label.as_str(), a.section_range.start.as_str()),
-        AtomEnvelope::Relation(a) => {
-            ("Relation", a.label.as_str(), a.section_range.start.as_str())
-        }
+        AtomEnvelope::Relation(a) => ("Relation", a.label.as_str(), a.section_range.start.as_str()),
         AtomEnvelope::Claim(a) => ("Claim", a.content.as_str(), first_chunk_id(&a.evidence)),
-        AtomEnvelope::Question(a) => (
-            "Question",
-            a.content.as_str(),
-            first_chunk_id(&a.raised_at),
+        AtomEnvelope::Question(a) => ("Question", a.content.as_str(), first_chunk_id(&a.raised_at)),
+        AtomEnvelope::Configuration(a) => (
+            "Configuration",
+            a.label.as_str(),
+            first_chunk_id(&a.evidence),
         ),
-        AtomEnvelope::Configuration(a) => {
-            ("Configuration", a.label.as_str(), first_chunk_id(&a.evidence))
-        }
         AtomEnvelope::ArgumentReconstruction(a) => (
             "ArgumentReconstruction",
             a.name.as_str(),
@@ -158,9 +154,9 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![],
-                    provenance: Default::default(),
-                    concept_kind: None,
-})
+            provenance: Default::default(),
+            concept_kind: None,
+        })
     }
 
     #[test]
@@ -178,7 +174,10 @@ mod tests {
         let atom = sample_entity("Justice", "ch001");
         let k1 = compute_stable_key("wikipedia", &atom);
         let k2 = compute_stable_key("sep-political-philosophy", &atom);
-        assert_ne!(k1, k2, "same atom in different corpora must hash differently");
+        assert_ne!(
+            k1, k2,
+            "same atom in different corpora must hash differently"
+        );
     }
 
     #[test]
@@ -189,7 +188,10 @@ mod tests {
         // sharing a canonical_name within a single corpus.
         let a = sample_entity("Justice", "ch001");
         let b = sample_entity("Justice", "ch042");
-        assert_ne!(compute_stable_key("wikipedia", &a), compute_stable_key("wikipedia", &b));
+        assert_ne!(
+            compute_stable_key("wikipedia", &a),
+            compute_stable_key("wikipedia", &b)
+        );
     }
 
     #[test]
@@ -250,10 +252,10 @@ mod tests {
             confidence: None,
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-                    claim_kind: None,
+            claim_kind: None,
             concession_outcome: None,
             evidence_kind: None,
-});
+        });
         let claim_b = AtomEnvelope::Claim(Claim {
             id: AtomId::claim(2),
             content: "Knowledge is more than justified true belief.".into(),
@@ -266,10 +268,10 @@ mod tests {
             confidence: None,
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-                    claim_kind: None,
+            claim_kind: None,
             concession_outcome: None,
             evidence_kind: None,
-});
+        });
         let k_a = compute_stable_key("sep-epistemology", &claim_a);
         let k_b = compute_stable_key("sep-epistemology", &claim_b);
         assert_eq!(k_a.as_str().len(), 64);
@@ -283,6 +285,9 @@ mod tests {
         // separator does its job.
         let a = sample_entity("Justice", "ch001");
         let b = sample_entity("Justicec", "h001");
-        assert_ne!(compute_stable_key("wikipedia", &a), compute_stable_key("wikipedia", &b));
+        assert_ne!(
+            compute_stable_key("wikipedia", &a),
+            compute_stable_key("wikipedia", &b)
+        );
     }
 }

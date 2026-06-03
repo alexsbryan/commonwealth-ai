@@ -18,18 +18,9 @@ impl MultiDomain {
             "philosophy".into(),
             Arc::new(super::philosophy::PhilosophyDomain),
         );
-        domains.insert(
-            "science".into(),
-            Arc::new(super::science::ScienceDomain),
-        );
-        domains.insert(
-            "policy".into(),
-            Arc::new(super::policy::PolicyDomain),
-        );
-        domains.insert(
-            "legal".into(),
-            Arc::new(super::legal::LegalDomain),
-        );
+        domains.insert("science".into(), Arc::new(super::science::ScienceDomain));
+        domains.insert("policy".into(), Arc::new(super::policy::PolicyDomain));
+        domains.insert("legal".into(), Arc::new(super::legal::LegalDomain));
         domains.insert(
             "community".into(),
             Arc::new(super::community::CommunityKnowledgeDomain),
@@ -39,19 +30,51 @@ impl MultiDomain {
 }
 
 impl Domain for MultiDomain {
-    fn id(&self) -> &str { "multi" }
-    fn name(&self) -> &str { "Multi-domain" }
-    fn position_statuses(&self) -> &PositionStatusVocab { todo!("MultiDomain") }
-    fn question_types(&self) -> &[QuestionType] { todo!("MultiDomain") }
-    fn overview_filter(&self) -> ChunkFilter { todo!("MultiDomain") }
-    fn skeleton_extraction_prompt(&self, _chunks: &[&Chunk]) -> String { todo!("MultiDomain") }
-    fn cluster_labeling_prompt(&self, _chunks: &[&Chunk]) -> String { todo!("MultiDomain") }
-    fn fault_line_detection_prompt(&self, _a: &[&Chunk], _b: &[&Chunk], _pa: &str, _pb: &str) -> String { todo!("MultiDomain") }
-    fn open_question_prompt(&self, _chunks: &[&Chunk]) -> String { todo!("MultiDomain") }
-    fn clustering_config(&self) -> ClusteringConfig { todo!("MultiDomain") }
-    fn alignment_config(&self) -> AlignmentConfig { todo!("MultiDomain") }
-    fn fault_line_config(&self) -> FaultLineConfig { todo!("MultiDomain") }
-    fn skeleton_storage(&self) -> SkeletonStorage { SkeletonStorage::LanceOnly }
+    fn id(&self) -> &str {
+        "multi"
+    }
+    fn name(&self) -> &str {
+        "Multi-domain"
+    }
+    fn position_statuses(&self) -> &PositionStatusVocab {
+        todo!("MultiDomain")
+    }
+    fn question_types(&self) -> &[QuestionType] {
+        todo!("MultiDomain")
+    }
+    fn overview_filter(&self) -> ChunkFilter {
+        todo!("MultiDomain")
+    }
+    fn skeleton_extraction_prompt(&self, _chunks: &[&Chunk]) -> String {
+        todo!("MultiDomain")
+    }
+    fn cluster_labeling_prompt(&self, _chunks: &[&Chunk]) -> String {
+        todo!("MultiDomain")
+    }
+    fn fault_line_detection_prompt(
+        &self,
+        _a: &[&Chunk],
+        _b: &[&Chunk],
+        _pa: &str,
+        _pb: &str,
+    ) -> String {
+        todo!("MultiDomain")
+    }
+    fn open_question_prompt(&self, _chunks: &[&Chunk]) -> String {
+        todo!("MultiDomain")
+    }
+    fn clustering_config(&self) -> ClusteringConfig {
+        todo!("MultiDomain")
+    }
+    fn alignment_config(&self) -> AlignmentConfig {
+        todo!("MultiDomain")
+    }
+    fn fault_line_config(&self) -> FaultLineConfig {
+        todo!("MultiDomain")
+    }
+    fn skeleton_storage(&self) -> SkeletonStorage {
+        SkeletonStorage::LanceOnly
+    }
 }
 
 #[cfg(test)]

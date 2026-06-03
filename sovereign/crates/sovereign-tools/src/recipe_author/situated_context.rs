@@ -65,15 +65,11 @@ fn write_header(out: &mut String, summary: &ProjectSummary, project: &RecipeProj
 }
 
 async fn write_charter(out: &mut String, project: &RecipeProject) -> Result<()> {
-    let row = match super::project::feature_row_for(
-        project.feature_id(),
-        project.features(),
-    )
-    .await?
-    {
-        Some(r) => r,
-        None => return Ok(()),
-    };
+    let row =
+        match super::project::feature_row_for(project.feature_id(), project.features()).await? {
+            Some(r) => r,
+            None => return Ok(()),
+        };
     let charter = row.charter_md.trim();
     if charter.is_empty() {
         return Ok(());
@@ -138,9 +134,7 @@ fn write_recent_decisions(out: &mut String, notes: &[NoteRow]) {
                 super::decision_log::DecisionKind::SourceChoice => "source",
                 super::decision_log::DecisionKind::ExtractionChoice => "extraction",
                 super::decision_log::DecisionKind::SchemaChoice => "schema",
-                super::decision_log::DecisionKind::DomainClarification => {
-                    "clarification"
-                }
+                super::decision_log::DecisionKind::DomainClarification => "clarification",
                 super::decision_log::DecisionKind::DeferredQuestion => "deferred",
             })
             .unwrap_or("?");
@@ -229,10 +223,7 @@ fn truncate_to_budget(s: String) -> Result<String> {
     if s.chars().count() <= MAX_SITUATED_CONTEXT_CHARS {
         return Ok(s);
     }
-    let cut: String = s
-        .chars()
-        .take(MAX_SITUATED_CONTEXT_CHARS - 32)
-        .collect();
+    let cut: String = s.chars().take(MAX_SITUATED_CONTEXT_CHARS - 32).collect();
     Ok(format!("{cut}\n[…context truncated]"))
 }
 
@@ -242,17 +233,12 @@ fn truncate_to_budget(s: String) -> Result<String> {
 /// name; keep this in sync with the wording in
 /// `sovereign/skills/recipe-author/skill.toml`.
 pub fn compose_envelope(situated: &str, partner_message: &str) -> String {
-    format!(
-        "[Project state]\n{situated}\n\n[Partner says]\n{partner_message}",
-    )
+    format!("[Project state]\n{situated}\n\n[Partner says]\n{partner_message}",)
 }
 
 /// One-shot helper for the CLI driver: render + envelope in a
 /// single call. Keeps the driver loop short.
-pub async fn render_envelope(
-    project: &RecipeProject,
-    partner_message: &str,
-) -> Result<String> {
+pub async fn render_envelope(project: &RecipeProject, partner_message: &str) -> Result<String> {
     let block = render(project).await?;
     Ok(compose_envelope(&block, partner_message))
 }
@@ -262,8 +248,8 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
+    use corpus_engine_atos::FeatureStore;
     use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
-use corpus_engine_atos::{FeatureStore};
 
     use super::super::decision_log::{DecisionKind, DecisionPayload};
 
@@ -271,8 +257,7 @@ use corpus_engine_atos::{FeatureStore};
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", dir.path());
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
-        let features =
-            Arc::new(FeatureStore::open(&dir.path().join("features.db")).unwrap());
+        let features = Arc::new(FeatureStore::open(&dir.path().join("features.db")).unwrap());
         let project = RecipeProject::new(
             "Federal case law (CourtListener)",
             "Build a corpus of federal published opinions over CourtListener \

@@ -76,11 +76,7 @@ impl Tool for EmailTool {
         vec![Permission::Network]
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let action = params
             .get("action")
             .and_then(|v| v.as_str())
@@ -114,15 +110,20 @@ impl Tool for EmailTool {
                 // The approval channel will always prompt before sending.
                 #[cfg(feature = "email")]
                 {
-                    use lettre::{Message, SmtpTransport, Transport};
                     use lettre::transport::smtp::authentication::Credentials;
+                    use lettre::{Message, SmtpTransport, Transport};
 
-                    let email = Message::builder()
-                        .from(self.username.parse().map_err(|e| Error::Execution(format!("Invalid from address: {e}")))?)
-                        .to(_to.parse().map_err(|e| Error::Execution(format!("Invalid to address: {e}")))?)
-                        .subject(_subject)
-                        .body(_body.to_string())
-                        .map_err(|e| Error::Execution(format!("Failed to build email: {e}")))?;
+                    let email =
+                        Message::builder()
+                            .from(self.username.parse().map_err(|e| {
+                                Error::Execution(format!("Invalid from address: {e}"))
+                            })?)
+                            .to(_to.parse().map_err(|e| {
+                                Error::Execution(format!("Invalid to address: {e}"))
+                            })?)
+                            .subject(_subject)
+                            .body(_body.to_string())
+                            .map_err(|e| Error::Execution(format!("Failed to build email: {e}")))?;
 
                     let creds = Credentials::new(self.username.clone(), self.password.clone());
                     let mailer = SmtpTransport::relay(&self.smtp_host)
@@ -131,7 +132,8 @@ impl Tool for EmailTool {
                         .port(self.smtp_port)
                         .build();
 
-                    mailer.send(&email)
+                    mailer
+                        .send(&email)
                         .map_err(|e| Error::Execution(format!("Failed to send email: {e}")))?;
 
                     return Ok(StepOutput::Text(format!("Email sent to {_to}: {_subject}")));

@@ -30,12 +30,8 @@ use crate::enrich_cmd::eval::{score_corpus, EvalReport, PhaseFilter};
 use crate::eval_cmd::runner::EvalRun;
 use crate::util::help::{self, Help, HelpSection};
 
-use super::baselines::{
-    read_latest, write_dated_and_update_latest,
-};
-use super::discover::{
-    discover_benches, BenchSurface, CorpusState, DiscoveredBench,
-};
+use super::baselines::{read_latest, write_dated_and_update_latest};
+use super::discover::{discover_benches, BenchSurface, CorpusState, DiscoveredBench};
 
 const HELP: Help = Help {
     command: "sovereign bench all",
@@ -227,10 +223,7 @@ impl Default for Opts {
 /// `-routing`) so the three modes don't overwrite each other's
 /// baselines. Enrichment-lane benches are unaffected (modes have no
 /// meaning there).
-fn baseline_bench(
-    bench: &DiscoveredBench,
-    opts: &Opts,
-) -> DiscoveredBench {
+fn baseline_bench(bench: &DiscoveredBench, opts: &Opts) -> DiscoveredBench {
     if bench.surface != BenchSurface::RetrievalJudge {
         return bench.clone();
     }
@@ -414,7 +407,10 @@ async fn run_routing_only(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome 
         Ok(s) => {
             return outcome_subprocess_fail(
                 bench,
-                format!("`eval run --routing-only` exited {}", s.code().unwrap_or(-1)),
+                format!(
+                    "`eval run --routing-only` exited {}",
+                    s.code().unwrap_or(-1)
+                ),
             )
         }
         Err(e) => return outcome_subprocess_fail(bench, format!("spawn: {e}")),
@@ -446,7 +442,10 @@ async fn run_routing_only(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome 
         .map(|r| {
             let id = r.get("question_id").and_then(|v| v.as_str()).unwrap_or("?");
             let expected = r.get("expected").and_then(|v| v.as_str()).unwrap_or("?");
-            let actual = r.get("actual_intent").and_then(|v| v.as_str()).unwrap_or("?");
+            let actual = r
+                .get("actual_intent")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
             format!("{id}: expected={expected} actual={actual}")
         })
         .collect();
@@ -454,7 +453,8 @@ async fn run_routing_only(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome 
     // Persist as baseline so future runs can diff (under -routing
     // subdir; see `baseline_bench`).
     let baseline_view = baseline_bench(bench, opts);
-    let prior: Option<serde_json::Value> = read_latest(&opts.bench_root, &baseline_view).ok().flatten();
+    let prior: Option<serde_json::Value> =
+        read_latest(&opts.bench_root, &baseline_view).ok().flatten();
     if opts.update_baseline || prior.is_none() {
         if let Err(e) = write_dated_and_update_latest(&opts.bench_root, &baseline_view, &parsed) {
             eprintln!("warn: writing routing baseline: {e}");
@@ -504,13 +504,11 @@ async fn run_routing_only(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome 
 /// because LLM workers are GPU-bound. Captures duration; pipes stdout
 /// to a log file under `target/sov-bench/runs/<ts>/<bench-id>.log`.
 async fn rebuild_corpus(bench: &DiscoveredBench) -> Result<(), String> {
-    let exe = std::env::current_exe()
-        .map_err(|e| format!("current_exe: {e}"))?;
+    let exe = std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
 
     let ts = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
     let log_dir = PathBuf::from("target/sov-bench/runs").join(ts);
-    std::fs::create_dir_all(&log_dir)
-        .map_err(|e| format!("mkdir {}: {e}", log_dir.display()))?;
+    std::fs::create_dir_all(&log_dir).map_err(|e| format!("mkdir {}: {e}", log_dir.display()))?;
     let log_path = log_dir.join(format!("{}-rebuild.log", bench.id));
     let log_file = std::fs::File::create(&log_path)
         .map_err(|e| format!("create log {}: {e}", log_path.display()))?;
@@ -541,19 +539,12 @@ async fn rebuild_corpus(bench: &DiscoveredBench) -> Result<(), String> {
             log_path.display()
         ));
     }
-    eprintln!(
-        "  rebuilt in {:.1}s",
-        elapsed.as_secs_f32()
-    );
+    eprintln!("  rebuilt in {:.1}s", elapsed.as_secs_f32());
     Ok(())
 }
 
 async fn run_enrichment(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
-    let current = match score_corpus(
-        &bench.corpus_id,
-        &bench.bench_path,
-        PhaseFilter::All,
-    ) {
+    let current = match score_corpus(&bench.corpus_id, &bench.bench_path, PhaseFilter::All) {
         Ok(r) => r,
         Err(e) => {
             return BenchOutcome {
@@ -570,14 +561,13 @@ async fn run_enrichment(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
         }
     };
 
-    let baseline: Option<EvalReport> = read_latest(&opts.bench_root, bench)
-        .unwrap_or_else(|e| {
-            eprintln!(
-                "warn: reading {} baseline failed: {e} — treating as first run",
-                bench.id
-            );
-            None
-        });
+    let baseline: Option<EvalReport> = read_latest(&opts.bench_root, bench).unwrap_or_else(|e| {
+        eprintln!(
+            "warn: reading {} baseline failed: {e} — treating as first run",
+            bench.id
+        );
+        None
+    });
 
     if opts.update_baseline || baseline.is_none() {
         if let Err(e) = write_dated_and_update_latest(&opts.bench_root, bench, &current) {
@@ -599,10 +589,7 @@ async fn run_enrichment(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
         corpus_id: bench.corpus_id.clone(),
         surface: bench.surface.label().to_string(),
         status,
-        enrichment: Some(EnrichmentOutcome {
-            current,
-            baseline,
-        }),
+        enrichment: Some(EnrichmentOutcome { current, baseline }),
         retrieval: None,
         levers: bench.levers.clone(),
         note: None,
@@ -662,7 +649,9 @@ async fn run_retrieval(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
 
     let bytes = match std::fs::read(&out_json) {
         Ok(b) => b,
-        Err(e) => return outcome_subprocess_fail(bench, format!("read {}: {e}", out_json.display())),
+        Err(e) => {
+            return outcome_subprocess_fail(bench, format!("read {}: {e}", out_json.display()))
+        }
     };
     let current: EvalRun = match serde_json::from_slice(&bytes) {
         Ok(r) => r,
@@ -670,8 +659,8 @@ async fn run_retrieval(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
     };
 
     let baseline_view = baseline_bench(bench, opts);
-    let baseline: Option<EvalRun> = read_latest(&opts.bench_root, &baseline_view)
-        .unwrap_or_else(|e| {
+    let baseline: Option<EvalRun> =
+        read_latest(&opts.bench_root, &baseline_view).unwrap_or_else(|e| {
             eprintln!(
                 "warn: reading {} baseline failed: {e} — treating as first run",
                 baseline_view.id
@@ -700,15 +689,14 @@ async fn run_retrieval(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
     // operator-set threshold.
     const SYNTH_ANSWER_EQUIV_MIN_THRESHOLD: f32 = 0.05;
     let effective_threshold = if gate_on_answer_equiv {
-        opts.regression_threshold.max(SYNTH_ANSWER_EQUIV_MIN_THRESHOLD)
+        opts.regression_threshold
+            .max(SYNTH_ANSWER_EQUIV_MIN_THRESHOLD)
     } else {
         opts.regression_threshold
     };
     let status = match &baseline {
         None => BenchStatus::FirstRun,
-        Some(prev) => {
-            classify_retrieval(prev, &current, effective_threshold, gate_on_answer_equiv)
-        }
+        Some(prev) => classify_retrieval(prev, &current, effective_threshold, gate_on_answer_equiv),
     };
 
     BenchOutcome {
@@ -718,10 +706,7 @@ async fn run_retrieval(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
         surface: bench.surface.label().to_string(),
         status,
         enrichment: None,
-        retrieval: Some(RetrievalOutcome {
-            current,
-            baseline,
-        }),
+        retrieval: Some(RetrievalOutcome { current, baseline }),
         levers: bench.levers.clone(),
         note: None,
     }
@@ -755,8 +740,16 @@ fn classify_enrichment(prev: &EvalReport, cur: &EvalReport, threshold: f32) -> B
         .into_iter()
         .collect();
     for axis in axes {
-        let cur_f1 = cur.axis_scores.get(axis).and_then(|s| s.f1()).unwrap_or(0.0);
-        let prev_f1 = prev.axis_scores.get(axis).and_then(|s| s.f1()).unwrap_or(0.0);
+        let cur_f1 = cur
+            .axis_scores
+            .get(axis)
+            .and_then(|s| s.f1())
+            .unwrap_or(0.0);
+        let prev_f1 = prev
+            .axis_scores
+            .get(axis)
+            .and_then(|s| s.f1())
+            .unwrap_or(0.0);
         let delta = cur_f1 - prev_f1;
         if delta < -threshold {
             regressed = true;
@@ -911,14 +904,18 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
                 i += 2;
             }
             "--regression-threshold" => {
-                let v = args.get(i + 1).ok_or("--regression-threshold requires a number")?;
+                let v = args
+                    .get(i + 1)
+                    .ok_or("--regression-threshold requires a number")?;
                 opts.regression_threshold = v
                     .parse::<f32>()
                     .map_err(|e| format!("--regression-threshold: {e}"))?;
                 i += 2;
             }
             "--retrieval-limit" => {
-                let v = args.get(i + 1).ok_or("--retrieval-limit requires a number")?;
+                let v = args
+                    .get(i + 1)
+                    .ok_or("--retrieval-limit requires a number")?;
                 opts.retrieval_limit = v
                     .parse::<usize>()
                     .map_err(|e| format!("--retrieval-limit: {e}"))?;

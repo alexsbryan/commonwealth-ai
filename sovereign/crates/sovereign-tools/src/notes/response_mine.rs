@@ -174,7 +174,10 @@ pub fn mine(text: &str) -> Vec<DecisionMatch> {
             continue;
         }
         let lower = trimmed.to_lowercase();
-        if STOPLIST.iter().any(|s| contains_at_word_boundary(&lower, s)) {
+        if STOPLIST
+            .iter()
+            .any(|s| contains_at_word_boundary(&lower, s))
+        {
             continue;
         }
         let Some((kind, _)) = TRIGGERS.iter().find_map(|(needle, kind)| {
@@ -258,9 +261,7 @@ impl<'a> Iterator for SentenceIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         // Skip leading whitespace so the start_offset points at
         // the first non-whitespace character of the sentence.
-        while self.cursor < self.bytes.len()
-            && self.bytes[self.cursor].is_ascii_whitespace()
-        {
+        while self.cursor < self.bytes.len() && self.bytes[self.cursor].is_ascii_whitespace() {
             self.cursor += 1;
         }
         if self.cursor >= self.bytes.len() {
@@ -273,13 +274,12 @@ impl<'a> Iterator for SentenceIter<'a> {
             // Sentence terminator: `.` / `!` / `?` followed by
             // whitespace, OR two consecutive newlines.
             if matches!(c, b'.' | b'!' | b'?')
-                && (end + 1 == self.bytes.len()
-                    || self.bytes[end + 1].is_ascii_whitespace())
-                {
-                    let sentence_end = end; // exclude the terminator
-                    self.cursor = end + 1;
-                    return Some((&self.text[start..sentence_end], start));
-                }
+                && (end + 1 == self.bytes.len() || self.bytes[end + 1].is_ascii_whitespace())
+            {
+                let sentence_end = end; // exclude the terminator
+                self.cursor = end + 1;
+                return Some((&self.text[start..sentence_end], start));
+            }
             if c == b'\n' && end + 1 < self.bytes.len() && self.bytes[end + 1] == b'\n' {
                 let sentence_end = end;
                 self.cursor = end + 2;
@@ -328,7 +328,11 @@ mod tests {
         ] {
             let hits = mine(text);
             assert_eq!(hits.len(), 1, "no match for: {text}");
-            assert_eq!(hits[0].kind, MatchKind::Commitment, "wrong kind for: {text}");
+            assert_eq!(
+                hits[0].kind,
+                MatchKind::Commitment,
+                "wrong kind for: {text}"
+            );
         }
     }
 
@@ -372,10 +376,7 @@ mod tests {
             "Going with the import reorder for clarity.",
         ] {
             let hits = mine(text);
-            assert!(
-                hits.is_empty(),
-                "stoplist should have rejected: {text}"
-            );
+            assert!(hits.is_empty(), "stoplist should have rejected: {text}");
         }
     }
 

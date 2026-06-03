@@ -314,9 +314,8 @@ async fn forward_to_peers(state: &AppState, req: &PipelinePauseRequest) -> Vec<N
         let node = hex::encode(peer.node_id.as_bytes());
         let name = Some(peer.name.clone());
         let addresses = peer.addresses.clone();
-        let handle = tokio::spawn(async move {
-            ask_peer(&client, &body, &node, name, &addresses).await
-        });
+        let handle =
+            tokio::spawn(async move { ask_peer(&client, &body, &node, name, &addresses).await });
         handles.push(handle);
     }
 

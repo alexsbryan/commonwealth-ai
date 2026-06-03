@@ -143,9 +143,8 @@ pub fn restore_snapshot_archive(
 fn patch_meta_corpus_id(index_dir: &Path, target_corpus_id: &str) -> Result<()> {
     let meta_path = index_dir.join("_corpus_meta.json");
     let bytes = std::fs::read(&meta_path)?;
-    let mut value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| {
-        Error::Serialization(format!("parse {}: {e}", meta_path.display()))
-    })?;
+    let mut value: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|e| Error::Serialization(format!("parse {}: {e}", meta_path.display())))?;
     let obj = value.as_object_mut().ok_or_else(|| {
         Error::Serialization(format!("{} is not a JSON object", meta_path.display()))
     })?;
@@ -153,9 +152,8 @@ fn patch_meta_corpus_id(index_dir: &Path, target_corpus_id: &str) -> Result<()> 
         "corpus_id".to_string(),
         serde_json::Value::String(target_corpus_id.to_string()),
     );
-    let serialised = serde_json::to_vec_pretty(&value).map_err(|e| {
-        Error::Serialization(format!("re-serialise {}: {e}", meta_path.display()))
-    })?;
+    let serialised = serde_json::to_vec_pretty(&value)
+        .map_err(|e| Error::Serialization(format!("re-serialise {}: {e}", meta_path.display())))?;
     std::fs::write(&meta_path, serialised)?;
     tracing::info!(
         meta = %meta_path.display(),
@@ -206,7 +204,11 @@ fn extract_snapshot_entries(
         } else {
             original_path.clone()
         };
-        if rewritten.is_absolute() || rewritten.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        if rewritten.is_absolute()
+            || rewritten
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
             tracing::warn!(
                 entry = %original_path.display(),
                 rewritten = %rewritten.display(),

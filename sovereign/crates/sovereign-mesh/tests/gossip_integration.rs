@@ -16,9 +16,7 @@ use std::time::Duration;
 
 use commonwealth_api::server::internal_router;
 use commonwealth_api::state::AppState;
-use commonwealth_core::capabilities::{
-    AvailableResources, HardwareProfile, NodeCapabilities,
-};
+use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use sovereign_mesh::gossip;
@@ -112,10 +110,7 @@ async fn two_peers_converge_via_one_gossip_round() {
             // Peer B already knows about both themselves and A —
             // the shape you'd see right after a successful
             // `/internal/join` handshake.
-            m.insert(
-                a_id,
-                member_at(a_id, "A", 100, addr_a),
-            );
+            m.insert(a_id, member_at(a_id, "A", 100, addr_a));
             m.insert(
                 b_id,
                 member_at(b_id, "B", 150, "127.0.0.1:2222".parse().unwrap()),
@@ -137,10 +132,8 @@ async fn two_peers_converge_via_one_gossip_round() {
     // focused on gossip and independent of the handshake code path.
     {
         let mut mesh = state_a.inner.mesh.write().await;
-        mesh.members.insert(
-            b_id,
-            member_at(b_id, "B", 150, _addr_b),
-        );
+        mesh.members
+            .insert(b_id, member_at(b_id, "B", 150, _addr_b));
     }
     assert_eq!(state_a.inner.mesh.read().await.members.len(), 2);
 
@@ -193,7 +186,10 @@ async fn gossip_decays_stale_peer_to_offline() {
         .unwrap()
         .as_secs()
         .saturating_sub(10_000);
-    members.insert(me, member_at(me, "Me", ancient, "127.0.0.1:9000".parse().unwrap()));
+    members.insert(
+        me,
+        member_at(me, "Me", ancient, "127.0.0.1:9000".parse().unwrap()),
+    );
     members.insert(
         ghost,
         member_at(ghost, "Ghost", ancient, "127.0.0.1:9001".parse().unwrap()),
@@ -221,8 +217,5 @@ async fn gossip_decays_stale_peer_to_offline() {
     );
     // Own record must still be Online — we refresh self's
     // last_seen before the decay scan.
-    assert_eq!(
-        after.members.get(&me).unwrap().status,
-        NodeStatus::Online
-    );
+    assert_eq!(after.members.get(&me).unwrap().status, NodeStatus::Online);
 }

@@ -3,18 +3,18 @@
 //! re-exported flat so `crate::embedded::<Item>` paths are unchanged.
 #![allow(unused_imports)]
 
-mod model_slot;
 mod embed_slot;
-mod rerank_slot;
 mod engine;
-mod prompt_helpers;
-mod sampler;
 mod grammar;
+mod model_slot;
+mod prompt_helpers;
+mod rerank_slot;
+mod sampler;
 
-pub use model_slot::*;
 pub use embed_slot::*;
-pub use rerank_slot::*;
 pub use engine::*;
-pub use prompt_helpers::*;
-pub use sampler::*;
 pub use grammar::*;
+pub use model_slot::*;
+pub use prompt_helpers::*;
+pub use rerank_slot::*;
+pub use sampler::*;

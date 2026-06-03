@@ -52,17 +52,17 @@ pub mod watcher_health;
 
 // Test watcher MCP tools (require treesitter for SQLite types).
 #[cfg(feature = "treesitter")]
-pub mod test_status;
+pub mod get_run_output;
 #[cfg(feature = "treesitter")]
 pub mod run_tests;
 #[cfg(feature = "treesitter")]
-pub mod get_run_output;
+pub mod test_status;
 
 // Lint watcher MCP tools.
 #[cfg(feature = "treesitter")]
-pub mod lint_status;
-#[cfg(feature = "treesitter")]
 pub mod get_lint_output;
+#[cfg(feature = "treesitter")]
+pub mod lint_status;
 
 // Single-call build/lint view. Wraps the same `LintResultStore`
 // as `LintStatusTool` but folds the agent's typical follow-up
@@ -106,13 +106,13 @@ pub mod drift_findings;
 
 // Working notes tools.
 #[cfg(feature = "treesitter")]
-pub mod write_note;
+pub mod delete_note;
 #[cfg(feature = "treesitter")]
 pub mod read_notes;
 #[cfg(feature = "treesitter")]
-pub mod delete_note;
-#[cfg(feature = "treesitter")]
 pub mod suggest_note;
+#[cfg(feature = "treesitter")]
+pub mod write_note;
 
 // Index health reporting — used by all SCIP-dependent tools.
 #[cfg(feature = "treesitter")]
@@ -136,20 +136,20 @@ pub mod check_doc_paths;
 
 // ATOS feature management.
 #[cfg(feature = "treesitter")]
-pub mod provision_feature;
-#[cfg(feature = "treesitter")]
 pub mod archive_feature;
-#[cfg(feature = "treesitter")]
-pub mod read_note_by_id;
+pub mod atos_plan_emit;
+pub mod atos_utils;
+pub mod atos_verify;
 #[cfg(feature = "treesitter")]
 pub mod promote_note;
+#[cfg(feature = "treesitter")]
+pub mod provision_feature;
+#[cfg(feature = "treesitter")]
+pub mod read_note_by_id;
 #[cfg(feature = "treesitter")]
 pub mod read_note_digest;
 #[cfg(feature = "treesitter")]
 pub mod record_atos_event;
-pub mod atos_plan_emit;
-pub mod atos_utils;
-pub mod atos_verify;
 #[cfg(feature = "treesitter")]
 pub mod write_redteam_finding;
 
@@ -171,20 +171,14 @@ pub use callers::FindCallersTool;
 pub use symbol_lookup::SymbolLookupTool;
 
 #[cfg(feature = "treesitter")]
-pub use test_status::TestStatusTool;
+pub use get_run_output::GetRunOutputTool;
 #[cfg(feature = "treesitter")]
 pub use run_tests::RunTestsTool;
 #[cfg(feature = "treesitter")]
-pub use get_run_output::GetRunOutputTool;
+pub use test_status::TestStatusTool;
 
 #[cfg(feature = "treesitter")]
-pub use lint_status::LintStatusTool;
-#[cfg(feature = "treesitter")]
-pub use get_lint_output::GetLintOutputTool;
-#[cfg(feature = "treesitter")]
 pub use build::BuildTool;
-#[cfg(feature = "treesitter")]
-pub use spec::SpecTool;
 #[cfg(feature = "treesitter")]
 pub use drift::DriftTool;
 #[cfg(feature = "treesitter")]
@@ -192,42 +186,48 @@ pub use drift_posture::{
     compute_posture, write_fingerprint, DriftFingerprint, DriftPosture, DriftPostureTool,
     PostureStatus, TopCritical, DEFAULT_NARRATIVES, FINGERPRINT_FILE,
 };
+#[cfg(feature = "treesitter")]
+pub use get_lint_output::GetLintOutputTool;
+#[cfg(feature = "treesitter")]
+pub use lint_status::LintStatusTool;
+#[cfg(feature = "treesitter")]
+pub use spec::SpecTool;
 
 #[cfg(feature = "treesitter")]
-pub use write_note::WriteNoteTool;
-#[cfg(feature = "treesitter")]
-pub use read_notes::ReadNotesTool;
-#[cfg(feature = "treesitter")]
-pub use delete_note::DeleteNoteTool;
-#[cfg(feature = "treesitter")]
-pub use index_health::{IndexHealth, IndexHealthChecker, StalenessLevel};
-#[cfg(feature = "treesitter")]
-pub use blast_radius::BlastRadiusTool;
-#[cfg(feature = "treesitter")]
-pub use project_context::ProjectContextTool;
-#[cfg(feature = "treesitter")]
-pub use session_reflection::SessionReflectionTool;
-#[cfg(feature = "treesitter")]
-pub use check_doc_paths::CheckDocPathsTool;
-#[cfg(feature = "treesitter")]
-pub use provision_feature::ProvisionFeatureTool;
-#[cfg(feature = "treesitter")]
 pub use archive_feature::ArchiveFeatureTool;
-#[cfg(feature = "treesitter")]
-pub use read_note_by_id::ReadNoteByIdTool;
-#[cfg(feature = "treesitter")]
-pub use promote_note::PromoteNoteTool;
-#[cfg(feature = "treesitter")]
-pub use read_note_digest::ReadNoteDigestTool;
-#[cfg(feature = "treesitter")]
-pub use record_atos_event::RecordAtosEventTool;
 #[cfg(feature = "treesitter")]
 pub use atos_plan_emit::AtosPlanEmitTool;
 pub use atos_verify::AtosVerifyTool;
 #[cfg(feature = "treesitter")]
-pub use write_redteam_finding::WriteRedteamFindingTool;
+pub use blast_radius::BlastRadiusTool;
+#[cfg(feature = "treesitter")]
+pub use check_doc_paths::CheckDocPathsTool;
+#[cfg(feature = "treesitter")]
+pub use delete_note::DeleteNoteTool;
 #[cfg(feature = "treesitter")]
 pub use design_signals_extract::DesignSignalsExtractTool;
+#[cfg(feature = "treesitter")]
+pub use index_health::{IndexHealth, IndexHealthChecker, StalenessLevel};
+#[cfg(feature = "treesitter")]
+pub use project_context::ProjectContextTool;
+#[cfg(feature = "treesitter")]
+pub use promote_note::PromoteNoteTool;
+#[cfg(feature = "treesitter")]
+pub use provision_feature::ProvisionFeatureTool;
+#[cfg(feature = "treesitter")]
+pub use read_note_by_id::ReadNoteByIdTool;
+#[cfg(feature = "treesitter")]
+pub use read_note_digest::ReadNoteDigestTool;
+#[cfg(feature = "treesitter")]
+pub use read_notes::ReadNotesTool;
+#[cfg(feature = "treesitter")]
+pub use record_atos_event::RecordAtosEventTool;
+#[cfg(feature = "treesitter")]
+pub use session_reflection::SessionReflectionTool;
+#[cfg(feature = "treesitter")]
+pub use write_note::WriteNoteTool;
+#[cfg(feature = "treesitter")]
+pub use write_redteam_finding::WriteRedteamFindingTool;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -267,7 +267,9 @@ pub(crate) fn escape_sql(s: &str) -> String {
 pub(crate) fn is_valid_symbol_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 256
-        && name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == ':' || c == '$')
+        && name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == ':' || c == '$')
 }
 
 /// Run a filter-pushdown query against every installed *code* corpus and
@@ -326,11 +328,7 @@ async fn run_filter_query(
 /// the result batches into `CodeRow`s. Same logic as the private
 /// helper — renamed so `code_search.rs` can call it without going
 /// through the `query_all_code_indexes` entry point.
-pub(crate) fn extract_code_rows_pub(
-    batch: &RecordBatch,
-    corpus_id: &str,
-    out: &mut Vec<CodeRow>,
-) {
+pub(crate) fn extract_code_rows_pub(batch: &RecordBatch, corpus_id: &str, out: &mut Vec<CodeRow>) {
     extract_code_rows(batch, corpus_id, out);
 }
 
@@ -370,22 +368,58 @@ fn extract_code_rows(batch: &RecordBatch, corpus_id: &str, out: &mut Vec<CodeRow
         out.push(CodeRow {
             symbol_name: name,
             symbol_kind: symbol_kinds
-                .and_then(|a| if a.is_null(row) { None } else { Some(a.value(row).to_string()) })
+                .and_then(|a| {
+                    if a.is_null(row) {
+                        None
+                    } else {
+                        Some(a.value(row).to_string())
+                    }
+                })
                 .unwrap_or_else(|| "unknown".into()),
             file_path: file_paths
-                .and_then(|a| if a.is_null(row) { None } else { Some(a.value(row).to_string()) })
+                .and_then(|a| {
+                    if a.is_null(row) {
+                        None
+                    } else {
+                        Some(a.value(row).to_string())
+                    }
+                })
                 .unwrap_or_default(),
             line_start: line_starts
-                .and_then(|a| if a.is_null(row) { None } else { Some(a.value(row)) })
+                .and_then(|a| {
+                    if a.is_null(row) {
+                        None
+                    } else {
+                        Some(a.value(row))
+                    }
+                })
                 .unwrap_or(0),
             line_end: line_ends
-                .and_then(|a| if a.is_null(row) { None } else { Some(a.value(row)) })
+                .and_then(|a| {
+                    if a.is_null(row) {
+                        None
+                    } else {
+                        Some(a.value(row))
+                    }
+                })
                 .unwrap_or(0),
             language: languages
-                .and_then(|a| if a.is_null(row) { None } else { Some(a.value(row).to_string()) })
+                .and_then(|a| {
+                    if a.is_null(row) {
+                        None
+                    } else {
+                        Some(a.value(row).to_string())
+                    }
+                })
                 .unwrap_or_default(),
             mtime: mtimes
-                .and_then(|a| if a.is_null(row) { None } else { Some(a.value(row)) })
+                .and_then(|a| {
+                    if a.is_null(row) {
+                        None
+                    } else {
+                        Some(a.value(row))
+                    }
+                })
                 .unwrap_or(0),
             content: contents
                 .map(|a| a.value(row).to_string())

@@ -92,16 +92,21 @@ impl Tool for ReleaseScopeTool {
             })?
             .map(|(p, _)| p);
 
-        let released = self.store.release_claim(claim_id).map_err(|e| Error::Tool {
-            tool_id: "release_scope".into(),
-            message: e.to_string(),
-        })?;
+        let released = self
+            .store
+            .release_claim(claim_id)
+            .map_err(|e| Error::Tool {
+                tool_id: "release_scope".into(),
+                message: e.to_string(),
+            })?;
 
         if released {
             tracing::info!(claim_id = %claim_id, "work_atlas:claim_released");
             if matches!(privacy, Some(Privacy::Public)) {
                 let key = format!("claim:{claim_id}");
-                self.broadcaster.broadcast(Privacy::Public.app_id(), &key).await;
+                self.broadcaster
+                    .broadcast(Privacy::Public.app_id(), &key)
+                    .await;
             }
         }
 

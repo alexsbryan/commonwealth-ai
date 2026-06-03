@@ -72,7 +72,12 @@ mod tests {
     fn indexes_nested_under_root() {
         let root = sovereign_root();
         let idx = sovereign_indexes();
-        assert!(idx.starts_with(&root), "{} !startsWith {}", idx.display(), root.display());
+        assert!(
+            idx.starts_with(&root),
+            "{} !startsWith {}",
+            idx.display(),
+            root.display()
+        );
         assert!(idx.ends_with("indexes"));
     }
 

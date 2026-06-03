@@ -60,17 +60,16 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use corpus_engine_atos::FeatureStore;
 use corpus_engine_notes::{NoteScope, NoteStore, ScopeFilter};
-use corpus_engine_atos::{FeatureStore};
 use sovereign_core::traits::{InferenceProvider, Tool};
 use sovereign_core::types::{ConversationId, StepOutput, ToolContext};
 use sovereign_core::ToolRegistry;
 use sovereign_inference::remote::RemoteApiProvider;
 use sovereign_tools::recipe_author::{
-    situated_context, CapabilityRequestTool, CheckpointTool, DecisionLogTool,
-    ProbeUrlTool, RecipeProject, RecipeReadTool, RecipeTestTool, RecipeValidateTool,
-    RecipeWriteStructuredTool, RecipeWriteTool, RegistryBrowseTool,
-    ResearchFindingTool,
+    situated_context, CapabilityRequestTool, CheckpointTool, DecisionLogTool, ProbeUrlTool,
+    RecipeProject, RecipeReadTool, RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool,
+    RecipeWriteTool, RegistryBrowseTool, ResearchFindingTool,
 };
 
 // ─── OpenAI-style wire types ────────────────────────────────────
@@ -248,9 +247,9 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
                 let kv = iter
                     .next()
                     .ok_or_else(|| "--param requires KEY=VALUE".to_string())?;
-                let (k, v) = kv.split_once('=').ok_or_else(|| {
-                    format!("--param expects KEY=VALUE, got `{kv}`")
-                })?;
+                let (k, v) = kv
+                    .split_once('=')
+                    .ok_or_else(|| format!("--param expects KEY=VALUE, got `{kv}`"))?;
                 params.push((k.to_string(), v.to_string()));
             }
             other => return Err(format!("unknown flag `{other}`")),
@@ -419,11 +418,10 @@ fn load_recipe_author_system_prompt(skills_dir: &PathBuf) -> std::result::Result
             path.display()
         ));
     }
-    let raw = std::fs::read_to_string(&path)
-        .map_err(|e| format!("read {}: {e}", path.display()))?;
-    let toml: toml::Value = toml::from_str(&raw).map_err(|e| {
-        format!("parse {}: {e}", path.display())
-    })?;
+    let raw =
+        std::fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let toml: toml::Value =
+        toml::from_str(&raw).map_err(|e| format!("parse {}: {e}", path.display()))?;
     let prompt = toml
         .get("prompts")
         .and_then(|p| p.get("synthesis"))
@@ -512,10 +510,7 @@ async fn execute_tool_call(
     // tool actually returned. Cap at 400 chars to keep the log
     // legible — tool results that matter to debugging (probe_url,
     // recipe_test) fit comfortably under that.
-    let preview: String = content
-        .chars()
-        .take(400)
-        .collect();
+    let preview: String = content.chars().take(400).collect();
     eprintln!(
         "    ← result: {}{}",
         preview.replace('\n', " "),
@@ -621,11 +616,7 @@ fn call_signature(call: &ToolCall) -> String {
         .chars()
         .filter(|c| !c.is_whitespace())
         .collect();
-    format!(
-        "{}::{}",
-        call.function.name,
-        args_compact.to_lowercase()
-    )
+    format!("{}::{}", call.function.name, args_compact.to_lowercase())
 }
 
 /// Build a tool-result message that breaks the model out of a
@@ -634,11 +625,7 @@ fn call_signature(call: &ToolCall) -> String {
 /// - `kind = "same_tool"` — same tool name repeated regardless of
 ///   args. Catches the "barely-permuted query" failure mode where
 ///   the agent burns 7 web_searches changing one word each time.
-fn synthesize_loop_break_message(
-    call: &ToolCall,
-    count: usize,
-    kind: &'static str,
-) -> ChatMessage {
+fn synthesize_loop_break_message(call: &ToolCall, count: usize, kind: &'static str) -> ChatMessage {
     let hint = if call.function.name == "web_search" {
         "You've called web_search many times this turn and it isn't \
          converging — DDG is rate-limiting or the docs aren't where \
@@ -725,27 +712,24 @@ fn salvage_text_tool_calls(content: &str) -> (String, Vec<ToolCall>) {
         // close the last one — or close none at all.
         let next_open_rel = content[inner_start..].find("<tool_call>");
         let close_rel = content[inner_start..].find("</tool_call>");
-        let (inner_end, advance_past_close): (usize, usize) =
-            match (close_rel, next_open_rel) {
-                (Some(c), Some(n)) if c < n => {
-                    (inner_start + c, inner_start + c + "</tool_call>".len())
-                }
-                (Some(c), None) => {
-                    (inner_start + c, inner_start + c + "</tool_call>".len())
-                }
-                (_, Some(n)) => {
-                    // No closer before the next opener — stop the
-                    // blob at the next opener, leaving the next
-                    // iteration to consume it.
-                    (inner_start + n, inner_start + n)
-                }
-                (None, None) => {
-                    // No closer, no next opener — try to parse
-                    // everything to EOF. If parse fails the caller
-                    // sees the block in clean content.
-                    (content.len(), content.len())
-                }
-            };
+        let (inner_end, advance_past_close): (usize, usize) = match (close_rel, next_open_rel) {
+            (Some(c), Some(n)) if c < n => {
+                (inner_start + c, inner_start + c + "</tool_call>".len())
+            }
+            (Some(c), None) => (inner_start + c, inner_start + c + "</tool_call>".len()),
+            (_, Some(n)) => {
+                // No closer before the next opener — stop the
+                // blob at the next opener, leaving the next
+                // iteration to consume it.
+                (inner_start + n, inner_start + n)
+            }
+            (None, None) => {
+                // No closer, no next opener — try to parse
+                // everything to EOF. If parse fails the caller
+                // sees the block in clean content.
+                (content.len(), content.len())
+            }
+        };
         let inner = content[inner_start..inner_end].trim();
         if let Some(call) = parse_tool_call_blob(inner, recovered.len()) {
             recovered.push(call);
@@ -901,10 +885,7 @@ fn recover_unescaped_arguments_object(text: &str) -> Option<String> {
     // Anchor on the exact literal that signals the failure mode.
     // Tolerate optional whitespace between `:` and `"` since some
     // emissions have `"arguments": "{` and others have no space.
-    let anchor_variants = [
-        "\"arguments\":\"{",
-        "\"arguments\": \"{",
-    ];
+    let anchor_variants = ["\"arguments\":\"{", "\"arguments\": \"{"];
     let (anchor_pos, anchor_len) = anchor_variants
         .iter()
         .find_map(|a| text.find(a).map(|p| (p, a.len())))?;
@@ -1070,8 +1051,7 @@ async fn run_one_turn(
             eprintln!(
                 "  → tool: {}({}…)",
                 call.function.name,
-                &call.function.arguments
-                    [..call.function.arguments.len().min(120)]
+                &call.function.arguments[..call.function.arguments.len().min(120)]
                     .replace('\n', " ")
             );
             // Loop-detection: two trip wires per turn.
@@ -1092,12 +1072,10 @@ async fn run_one_turn(
             // recipe_author` and in sovereign-agent-bench's native
             // runner.
             if call.function.name == "done" {
-                let reason = serde_json::from_str::<serde_json::Value>(
-                    &call.function.arguments,
-                )
-                .ok()
-                .and_then(|v| v.get("reason").and_then(|r| r.as_str()).map(String::from))
-                .unwrap_or_default();
+                let reason = serde_json::from_str::<serde_json::Value>(&call.function.arguments)
+                    .ok()
+                    .and_then(|v| v.get("reason").and_then(|r| r.as_str()).map(String::from))
+                    .unwrap_or_default();
                 eprintln!(
                     "  → done: {}",
                     if reason.is_empty() {
@@ -1157,7 +1135,6 @@ async fn run_one_turn(
     }
 }
 
-
 // ─── Trial entry ─────────────────────────────────────────────────
 
 pub async fn run_live_trial(argv: &[String]) -> i32 {
@@ -1211,14 +1188,13 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     }
 
     eprintln!("Daemon: {}", args.daemon_base);
-    let chat_model =
-        match resolve_chat_model(&args.daemon_base, args.chat_model.as_deref()).await {
-            Ok(m) => m,
-            Err(e) => {
-                eprintln!("live-trial: {e}");
-                return 2;
-            }
-        };
+    let chat_model = match resolve_chat_model(&args.daemon_base, args.chat_model.as_deref()).await {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("live-trial: {e}");
+            return 2;
+        }
+    };
     eprintln!("Chat model: {chat_model}");
 
     // Stores. We touch the user's real ~/.sovereign/{notes,features}.db
@@ -1248,19 +1224,15 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     };
 
     let project = match args.feature_id.as_deref() {
-        Some(fid) => match RecipeProject::load(
-            fid,
-            Arc::clone(&notes),
-            Arc::clone(&features),
-        )
-        .await
-        {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("live-trial: load project {fid}: {e}");
-                return 2;
+        Some(fid) => {
+            match RecipeProject::load(fid, Arc::clone(&notes), Arc::clone(&features)).await {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("live-trial: load project {fid}: {e}");
+                    return 2;
+                }
             }
-        },
+        }
         None => {
             let title = args
                 .title
@@ -1272,13 +1244,8 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
                         .map(String::from)
                 })
                 .unwrap_or_else(|| "live-trial project".to_string());
-            match RecipeProject::new(
-                &title,
-                &charter,
-                Arc::clone(&notes),
-                Arc::clone(&features),
-            )
-            .await
+            match RecipeProject::new(&title, &charter, Arc::clone(&notes), Arc::clone(&features))
+                .await
             {
                 Ok(p) => p,
                 Err(e) => {
@@ -1306,7 +1273,10 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     eprintln!(
         "Skill prompt: {} chars from {}",
         system_prompt.len(),
-        args.skills_dir.join("recipe-author").join("skill.toml").display()
+        args.skills_dir
+            .join("recipe-author")
+            .join("skill.toml")
+            .display()
     );
 
     // Tool registry — focused on recipe-author + web research only.
@@ -1339,29 +1309,26 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     // `Authorization: Token {api_token}` without ever pasting the
     // literal token. Same surface as the http_api acquirer's
     // `[acquire].headers` interpolation.
-    let probe_params: std::collections::BTreeMap<String, String> = args
-        .params
-        .iter()
-        .cloned()
-        .collect();
+    let probe_params: std::collections::BTreeMap<String, String> =
+        args.params.iter().cloned().collect();
     registry.register(Box::new(
         ProbeUrlTool::new().with_parameters(Arc::new(probe_params)),
     ));
-    registry.register(Box::new(ResearchFindingTool::with_notes(Arc::clone(&notes))));
+    registry.register(Box::new(ResearchFindingTool::with_notes(Arc::clone(
+        &notes,
+    ))));
     registry.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
     // WebSearchTool runs a query → extract → synthesise pipeline that
     // needs an inference provider for the synthesis step. We back it
     // with a `RemoteApiProvider` pointing at the same daemon we're
     // driving the agent against — keeps the live trial honest about
     // what the production agent loop would see.
-    let inference_for_search: Arc<dyn InferenceProvider> = Arc::new(
-        RemoteApiProvider::new(
-            &format!("{}/v1", args.daemon_base),
-            None,
-            &chat_model,
-            8192,
-        ),
-    );
+    let inference_for_search: Arc<dyn InferenceProvider> = Arc::new(RemoteApiProvider::new(
+        &format!("{}/v1", args.daemon_base),
+        None,
+        &chat_model,
+        8192,
+    ));
     registry.register(Box::new(sovereign_tools::web::WebSearchTool::new(
         inference_for_search,
     )));
@@ -1392,8 +1359,7 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
             return 2;
         }
     };
-    let mut messages: Vec<ChatMessage> =
-        vec![ChatMessage::new("system", system_prompt)];
+    let mut messages: Vec<ChatMessage> = vec![ChatMessage::new("system", system_prompt)];
 
     eprintln!(
         "\nDriving {} partner turn(s) on conversation {}\n",
@@ -1536,71 +1502,69 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
             // wiring smoke tests. Falls through to the trial-summary
             // block below.
         } else {
-        eprintln!(
-            "\nFetching initial sample (sample_size={}, params={}) …",
-            args.sample_size,
-            args.params.len()
-        );
-        let test_tool = RecipeTestTool::with_recipes_dir(recipes_dir.clone());
-        // Forward `--param k=v` flags through to `recipe_test` so
-        // recipes that declare an install-time parameter (auth tokens,
-        // jurisdiction filters, etc.) get the partner's value at fetch
-        // time without ever entering the recipe file.
-        let mut params_json = serde_json::Map::new();
-        for (k, v) in &args.params {
-            params_json.insert(k.clone(), serde_json::Value::String(v.clone()));
-        }
-        let mut test_args = serde_json::Map::new();
-        test_args.insert(
-            "path".into(),
-            serde_json::Value::String(recipe_id.to_string()),
-        );
-        test_args.insert(
-            "sample_size".into(),
-            serde_json::Value::from(args.sample_size),
-        );
-        if !params_json.is_empty() {
-            test_args.insert("params".into(), serde_json::Value::Object(params_json));
-        }
-        match test_tool
-            .execute(&serde_json::Value::Object(test_args), &ctx)
-            .await
-        {
-            Ok(StepOutput::Json(v)) => {
-                let attempted = v
-                    .get("extraction")
-                    .and_then(|e| e.get("records_attempted"))
-                    .and_then(|n| n.as_u64())
-                    .unwrap_or(0);
-                let succeeded = v
-                    .get("extraction")
-                    .and_then(|e| e.get("records_succeeded"))
-                    .and_then(|n| n.as_u64())
-                    .unwrap_or(0);
-                let rate = v
-                    .get("extraction")
-                    .and_then(|e| e.get("extraction_rate"))
-                    .and_then(|n| n.as_f64())
-                    .unwrap_or(0.0);
-                eprintln!(
-                    "  test: attempted={attempted} succeeded={succeeded} rate={rate:.2}"
-                );
-                if succeeded == 0 {
-                    eprintln!("  test: FAIL — zero docs extracted");
+            eprintln!(
+                "\nFetching initial sample (sample_size={}, params={}) …",
+                args.sample_size,
+                args.params.len()
+            );
+            let test_tool = RecipeTestTool::with_recipes_dir(recipes_dir.clone());
+            // Forward `--param k=v` flags through to `recipe_test` so
+            // recipes that declare an install-time parameter (auth tokens,
+            // jurisdiction filters, etc.) get the partner's value at fetch
+            // time without ever entering the recipe file.
+            let mut params_json = serde_json::Map::new();
+            for (k, v) in &args.params {
+                params_json.insert(k.clone(), serde_json::Value::String(v.clone()));
+            }
+            let mut test_args = serde_json::Map::new();
+            test_args.insert(
+                "path".into(),
+                serde_json::Value::String(recipe_id.to_string()),
+            );
+            test_args.insert(
+                "sample_size".into(),
+                serde_json::Value::from(args.sample_size),
+            );
+            if !params_json.is_empty() {
+                test_args.insert("params".into(), serde_json::Value::Object(params_json));
+            }
+            match test_tool
+                .execute(&serde_json::Value::Object(test_args), &ctx)
+                .await
+            {
+                Ok(StepOutput::Json(v)) => {
+                    let attempted = v
+                        .get("extraction")
+                        .and_then(|e| e.get("records_attempted"))
+                        .and_then(|n| n.as_u64())
+                        .unwrap_or(0);
+                    let succeeded = v
+                        .get("extraction")
+                        .and_then(|e| e.get("records_succeeded"))
+                        .and_then(|n| n.as_u64())
+                        .unwrap_or(0);
+                    let rate = v
+                        .get("extraction")
+                        .and_then(|e| e.get("extraction_rate"))
+                        .and_then(|n| n.as_f64())
+                        .unwrap_or(0.0);
+                    eprintln!("  test: attempted={attempted} succeeded={succeeded} rate={rate:.2}");
+                    if succeeded == 0 {
+                        eprintln!("  test: FAIL — zero docs extracted");
+                        overall_pass = false;
+                    } else {
+                        eprintln!("  test: PASS");
+                    }
+                }
+                Ok(other) => {
+                    eprintln!("  test: unexpected output {other:?}");
                     overall_pass = false;
-                } else {
-                    eprintln!("  test: PASS");
+                }
+                Err(e) => {
+                    eprintln!("  test: error {e}");
+                    overall_pass = false;
                 }
             }
-            Ok(other) => {
-                eprintln!("  test: unexpected output {other:?}");
-                overall_pass = false;
-            }
-            Err(e) => {
-                eprintln!("  test: error {e}");
-                overall_pass = false;
-            }
-        }
         } // end --no-fetch else
     } else {
         eprintln!("\n(no recipe drafted — agent didn't reach recipe_write)");
@@ -1635,7 +1599,8 @@ mod tests {
 
     #[test]
     fn parse_script_skips_comments_and_blank_lines() {
-        let text = "# header\n\nFirst message.\n\n# mid comment\nSecond,\nstill second.\n\nThird.\n";
+        let text =
+            "# header\n\nFirst message.\n\n# mid comment\nSecond,\nstill second.\n\nThird.\n";
         let blocks = parse_script(text);
         assert_eq!(blocks.len(), 3);
         assert_eq!(blocks[0], "First message.");
@@ -1733,8 +1698,7 @@ mod tests {
         assert_eq!(calls[0].function.name, "research_finding");
         // Arguments should round-trip back to a valid JSON object
         // string with the original fields intact.
-        let args: serde_json::Value =
-            serde_json::from_str(&calls[0].function.arguments).unwrap();
+        let args: serde_json::Value = serde_json::from_str(&calls[0].function.arguments).unwrap();
         assert_eq!(args["feature_id"], "abc");
         assert_eq!(args["confidence"], "high");
     }

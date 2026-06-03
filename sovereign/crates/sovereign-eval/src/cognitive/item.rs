@@ -10,7 +10,7 @@
 //! No judge call. Same property that makes the existing
 //! `principle_*.toml` inquiry bank fast.
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
@@ -224,8 +224,9 @@ fn resolve_block(b: &ContextBlock, workspace_root: &Path) -> Result<String> {
             } else {
                 workspace_root.join(p)
             };
-            let raw = fs::read_to_string(&abs)
-                .with_context(|| format!("reading file block `{}` from {}", b.name, abs.display()))?;
+            let raw = fs::read_to_string(&abs).with_context(|| {
+                format!("reading file block `{}` from {}", b.name, abs.display())
+            })?;
             match &b.lines {
                 None => Ok(raw),
                 Some(range) => slice_lines(&raw, range)
@@ -297,10 +298,10 @@ fn walk_toml(dir: &Path, out: &mut Vec<Item>) -> Result<()> {
         if path.is_dir() {
             walk_toml(&path, out)?;
         } else if path.extension().and_then(|s| s.to_str()) == Some("toml") {
-            let raw = fs::read_to_string(&path)
-                .with_context(|| format!("reading {}", path.display()))?;
-            let mut item: Item = toml::from_str(&raw)
-                .with_context(|| format!("parsing {}", path.display()))?;
+            let raw =
+                fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+            let mut item: Item =
+                toml::from_str(&raw).with_context(|| format!("parsing {}", path.display()))?;
             item.source_path = path;
             out.push(item);
         }

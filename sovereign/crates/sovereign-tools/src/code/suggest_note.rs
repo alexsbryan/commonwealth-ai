@@ -176,7 +176,9 @@ impl Tool for SuggestNoteTool {
             .get("content")
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
-            .ok_or_else(|| Error::InvalidInput("suggest_note requires non-empty 'content'".into()))?;
+            .ok_or_else(|| {
+                Error::InvalidInput("suggest_note requires non-empty 'content'".into())
+            })?;
         Ok(())
     }
 
@@ -407,7 +409,10 @@ mod tests {
             .unwrap();
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].related_entity.as_deref(), Some("Sarah Chen"));
-        assert_eq!(notes[0].content, "Send revised pricing to Sarah Chen by Friday");
+        assert_eq!(
+            notes[0].content,
+            "Send revised pricing to Sarah Chen by Friday"
+        );
 
         // Result envelope exposes the new id.
         let StepOutput::Json(v) = result else {
@@ -467,8 +472,14 @@ mod tests {
 
         let desc = approval.last_description.lock().await.clone();
         assert!(desc.contains("follow_up"), "preview names the kind: {desc}");
-        assert!(desc.contains("Meridian"), "preview names the entity: {desc}");
-        assert!(desc.contains("Check back"), "preview shows the content: {desc}");
+        assert!(
+            desc.contains("Meridian"),
+            "preview names the entity: {desc}"
+        );
+        assert!(
+            desc.contains("Check back"),
+            "preview shows the content: {desc}"
+        );
     }
 
     #[tokio::test]
@@ -504,11 +515,7 @@ mod tests {
         struct FailingApproval;
         #[async_trait]
         impl ApprovalChannel for FailingApproval {
-            async fn request_approval(
-                &self,
-                _: &Step,
-                _: &ActionPreview,
-            ) -> CoreResult<bool> {
+            async fn request_approval(&self, _: &Step, _: &ActionPreview) -> CoreResult<bool> {
                 Err(Error::Tool {
                     tool_id: "approval".into(),
                     message: "stub failure".into(),

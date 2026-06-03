@@ -14,11 +14,11 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+use super::atlas::{SectionExtraction, SeedEntities, SeedOrigin, SeedStrategy};
 use super::exemplar_bank::{Exemplar, ExemplarBank};
 use super::phase_cache::PhaseCache;
 use super::run_output::RunOutputWriter;
 use super::trait_def::Pipeline;
-use super::atlas::{SectionExtraction, SeedEntities, SeedOrigin, SeedStrategy};
 use super::types::*;
 use super::vector_clustering::cluster_vectors;
 use crate::error::{Error, Result};
@@ -124,11 +124,7 @@ pub fn read_phase1_checkpoint(path: &Path) -> Result<Vec<Phase1CheckpointEntry>>
             continue;
         }
         let entry: Phase1CheckpointEntry = serde_json::from_str(line).map_err(|e| {
-            Error::Serialization(format!(
-                "checkpoint {} line {}: {e}",
-                path.display(),
-                i + 1
-            ))
+            Error::Serialization(format!("checkpoint {} line {}: {e}", path.display(), i + 1))
         })?;
         out.push(entry);
     }
@@ -145,11 +141,17 @@ pub fn collapse_phase1_checkpoint(
     let mut by_id_failure: HashMap<String, Phase1Failure> = HashMap::new();
     for entry in entries {
         match entry {
-            Phase1CheckpointEntry::Success { chapter_id, extracted } => {
+            Phase1CheckpointEntry::Success {
+                chapter_id,
+                extracted,
+            } => {
                 by_id_failure.remove(&chapter_id);
                 by_id_success.insert(chapter_id, extracted);
             }
-            Phase1CheckpointEntry::Failure { chapter_id, failure } => {
+            Phase1CheckpointEntry::Failure {
+                chapter_id,
+                failure,
+            } => {
                 if !by_id_success.contains_key(&chapter_id) {
                     by_id_failure.insert(chapter_id, failure);
                 }
@@ -167,10 +169,7 @@ pub fn collapse_phase1_checkpoint(
 /// (success + failure). Resume callers feed this into the
 /// `ChapterSelection` filter.
 pub fn checkpoint_processed_ids(entries: &[Phase1CheckpointEntry]) -> HashSet<String> {
-    entries
-        .iter()
-        .map(|e| e.chapter_id().to_string())
-        .collect()
+    entries.iter().map(|e| e.chapter_id().to_string()).collect()
 }
 
 /// Append one entry to the checkpoint file. Atomic at the line
@@ -191,12 +190,10 @@ fn append_phase1_checkpoint(path: &Path, entry: &Phase1CheckpointEntry) -> Resul
         .append(true)
         .open(path)
         .map_err(|e| Error::Database(format!("open checkpoint {}: {e}", path.display())))?;
-    let line = serde_json::to_string(entry).map_err(|e| {
-        Error::Serialization(format!("serialise checkpoint entry: {e}"))
-    })?;
-    writeln!(f, "{line}").map_err(|e| {
-        Error::Database(format!("write checkpoint {}: {e}", path.display()))
-    })?;
+    let line = serde_json::to_string(entry)
+        .map_err(|e| Error::Serialization(format!("serialise checkpoint entry: {e}")))?;
+    writeln!(f, "{line}")
+        .map_err(|e| Error::Database(format!("write checkpoint {}: {e}", path.display())))?;
     Ok(())
 }
 
@@ -357,7 +354,10 @@ fn truncate_response_head(text: &str) -> Option<String> {
     } else {
         "<reasoning-only response — no answer after </think>>"
     };
-    let preview = cap_chars(text.trim(), FAILURE_HEAD_CHAR_CAP.saturating_sub(marker.len() + 2));
+    let preview = cap_chars(
+        text.trim(),
+        FAILURE_HEAD_CHAR_CAP.saturating_sub(marker.len() + 2),
+    );
     Some(format!("{marker}\n{preview}"))
 }
 
@@ -379,10 +379,7 @@ fn cap_chars(s: &str, cap: usize) -> String {
 /// is still persisted to the run file.
 fn one_line_excerpt(text: &str) -> String {
     const EXCERPT_CHAR_CAP: usize = 200;
-    let flat: String = text
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
+    let flat: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
     if flat.chars().count() <= EXCERPT_CHAR_CAP {
         flat
     } else {
@@ -472,8 +469,8 @@ impl PhaseRunner {
             runs,
             exemplars_dir: exemplars_dir.as_ref().to_path_buf(),
             checkpoint_path: None,
-            atom_post_processors:
-                super::atom_normalizer::AtomPostProcessorRegistry::default_chain(),
+            atom_post_processors: super::atom_normalizer::AtomPostProcessorRegistry::default_chain(
+            ),
             section_cache: None,
         }
     }
@@ -625,15 +622,11 @@ impl PhaseRunner {
         match self.pipeline.seed_strategy() {
             SeedStrategy::None => Ok(None),
             SeedStrategy::Llm => {
-                let first_chapter = ctx
-                    .chapters
-                    .first()
-                    .ok_or_else(|| {
-                        Error::InvalidInput(
-                            "cannot run Stage 1a seed extraction: corpus has no chapters"
-                                .into(),
-                        )
-                    })?;
+                let first_chapter = ctx.chapters.first().ok_or_else(|| {
+                    Error::InvalidInput(
+                        "cannot run Stage 1a seed extraction: corpus has no chapters".into(),
+                    )
+                })?;
                 let prompt = self
                     .pipeline
                     .compose_seed_prompt(first_chapter)
@@ -653,8 +646,7 @@ impl PhaseRunner {
                     entries,
                     written_at: now_rfc3339(),
                 };
-                self.cache
-                    .write(PipelinePhase::SeedExtraction, &seed)?;
+                self.cache.write(PipelinePhase::SeedExtraction, &seed)?;
                 Ok(Some(seed))
             }
             SeedStrategy::Structural => {
@@ -666,8 +658,7 @@ impl PhaseRunner {
                     entries,
                     written_at: now_rfc3339(),
                 };
-                self.cache
-                    .write(PipelinePhase::SeedExtraction, &seed)?;
+                self.cache.write(PipelinePhase::SeedExtraction, &seed)?;
                 Ok(Some(seed))
             }
         }
@@ -720,9 +711,12 @@ impl PhaseRunner {
             ChapterSelection::Subset(ids) | ChapterSelection::RetryFailed(ids) => {
                 let mut picked = Vec::with_capacity(ids.len());
                 for id in ids {
-                    let found = chapters.iter().find(|c| c.chapter_id == *id).ok_or_else(
-                        || Error::InvalidInput(format!("chapter not found in manifest: {id}")),
-                    )?;
+                    let found = chapters
+                        .iter()
+                        .find(|c| c.chapter_id == *id)
+                        .ok_or_else(|| {
+                            Error::InvalidInput(format!("chapter not found in manifest: {id}"))
+                        })?;
                     picked.push(found);
                 }
                 picked
@@ -738,12 +732,9 @@ impl PhaseRunner {
         // runs with an empty bank (no few-shot context) the first time
         // through.
         let exemplar_path = self.exemplar_path(PipelinePhase::Questions);
-        let bank = ExemplarBank::load_embedded(
-            &exemplar_path,
-            PipelinePhase::Questions,
-            &self.embed,
-        )
-        .await?;
+        let bank =
+            ExemplarBank::load_embedded(&exemplar_path, PipelinePhase::Questions, &self.embed)
+                .await?;
         let k = self.pipeline.top_k_exemplars(PipelinePhase::Questions);
 
         progress(Phase1Progress::Start {
@@ -755,8 +746,7 @@ impl PhaseRunner {
         // miss is non-fatal — the pipeline's compose_phase1_with_seed
         // default falls through to the seedless prompt. Pipelines
         // with `SeedStrategy::None` never write this cache entry.
-        let seed_opt: Option<SeedEntities> =
-            self.cache.read(PipelinePhase::SeedExtraction)?;
+        let seed_opt: Option<SeedEntities> = self.cache.read(PipelinePhase::SeedExtraction)?;
 
         let mut extracted: Vec<ExtractedQuestion> = Vec::with_capacity(targets.len());
         let mut failures: Vec<Phase1Failure> = Vec::new();
@@ -840,18 +830,20 @@ impl PhaseRunner {
             // once per map loop, not once per chapter — all chapters
             // share the same seed.
             let prompt = match retry_mode {
-                Some(RetryMode::Terse { .. }) => match self.pipeline.compose_phase1_terse(chapter) {
-                    Some(p) => p,
-                    None => {
-                        return Err(Error::InvalidInput(format!(
-                            "retry mode `terse` requested, but pipeline `{}` does not \
+                Some(RetryMode::Terse { .. }) => {
+                    match self.pipeline.compose_phase1_terse(chapter) {
+                        Some(p) => p,
+                        None => {
+                            return Err(Error::InvalidInput(format!(
+                                "retry mode `terse` requested, but pipeline `{}` does not \
                              implement `compose_phase1_terse`. Either use a pipeline that \
                              supports a terse variant (e.g. `literary_atlas`) or drop the \
                              --terse flag.",
-                            self.pipeline.id()
-                        )));
+                                self.pipeline.id()
+                            )));
+                        }
                     }
-                },
+                }
                 None => {
                     let seed = seed_opt.as_ref();
                     self.pipeline
@@ -878,10 +870,7 @@ impl PhaseRunner {
             let cached_response: Option<String> =
                 match (&self.section_cache, section_cache_key.as_deref()) {
                     (Some(cfg), Some(key)) => {
-                        match crate::enrichment::atlas::section_cache::lookup(
-                            &cfg.atlas_dir,
-                            key,
-                        ) {
+                        match crate::enrichment::atlas::section_cache::lookup(&cfg.atlas_dir, key) {
                             Ok(Some(bytes)) => match String::from_utf8(bytes) {
                                 Ok(s) => {
                                     tracing::debug!(
@@ -916,44 +905,46 @@ impl PhaseRunner {
 
             let chat_result: Result<String> = if let Some(cached) = cached_response {
                 Ok(cached)
-            } else { match retry_mode {
-                Some(RetryMode::Terse { max_output_tokens }) => match &self.chat_with_tokens {
-                    Some(chat_t) => (chat_t)(&prompt, max_output_tokens).await,
-                    None => (self.chat)(&prompt).await,
-                },
-                None => {
-                    // Seed-threaded default path gets a per-call
-                    // output-budget bump. The seed block adds ~500
-                    // tokens of input, the reasoning trace typically
-                    // grows to match the extra context, and the
-                    // six-facet JSON output then starves on the
-                    // standard 16384 cap — observed as `parse_drift`
-                    // on 3/5 chapters in the Landing 1 smoke test.
-                    // Cap at `PHASE1_SEED_OUTPUT_BUDGET` so a chapter
-                    // that was going to truncate mid-relations now
-                    // has headroom to finish its JSON on first pass.
-                    //
-                    // No-seed default also routes through chat_with_tokens
-                    // when available, at a tight first-pass budget
-                    // (`PHASE1_DEFAULT_OUTPUT_BUDGET`). Sized to fit
-                    // inside the daemon's per-request inference deadline
-                    // on a fast chat slot. Sections that legitimately
-                    // need more tokens get caught by the orchestrator's
-                    // auto-retry pass at a 16384 terse budget. Fallback
-                    // to the un-budgeted closure preserves backwards
-                    // compatibility for callers that didn't install
-                    // `chat_with_tokens` (older tests, embedded callers).
-                    match (seed_opt.as_ref(), &self.chat_with_tokens) {
-                        (Some(_), Some(chat_t)) => {
-                            (chat_t)(&prompt, PHASE1_SEED_OUTPUT_BUDGET).await
+            } else {
+                match retry_mode {
+                    Some(RetryMode::Terse { max_output_tokens }) => match &self.chat_with_tokens {
+                        Some(chat_t) => (chat_t)(&prompt, max_output_tokens).await,
+                        None => (self.chat)(&prompt).await,
+                    },
+                    None => {
+                        // Seed-threaded default path gets a per-call
+                        // output-budget bump. The seed block adds ~500
+                        // tokens of input, the reasoning trace typically
+                        // grows to match the extra context, and the
+                        // six-facet JSON output then starves on the
+                        // standard 16384 cap — observed as `parse_drift`
+                        // on 3/5 chapters in the Landing 1 smoke test.
+                        // Cap at `PHASE1_SEED_OUTPUT_BUDGET` so a chapter
+                        // that was going to truncate mid-relations now
+                        // has headroom to finish its JSON on first pass.
+                        //
+                        // No-seed default also routes through chat_with_tokens
+                        // when available, at a tight first-pass budget
+                        // (`PHASE1_DEFAULT_OUTPUT_BUDGET`). Sized to fit
+                        // inside the daemon's per-request inference deadline
+                        // on a fast chat slot. Sections that legitimately
+                        // need more tokens get caught by the orchestrator's
+                        // auto-retry pass at a 16384 terse budget. Fallback
+                        // to the un-budgeted closure preserves backwards
+                        // compatibility for callers that didn't install
+                        // `chat_with_tokens` (older tests, embedded callers).
+                        match (seed_opt.as_ref(), &self.chat_with_tokens) {
+                            (Some(_), Some(chat_t)) => {
+                                (chat_t)(&prompt, PHASE1_SEED_OUTPUT_BUDGET).await
+                            }
+                            (None, Some(chat_t)) => {
+                                (chat_t)(&prompt, PHASE1_DEFAULT_OUTPUT_BUDGET).await
+                            }
+                            _ => (self.chat)(&prompt).await,
                         }
-                        (None, Some(chat_t)) => {
-                            (chat_t)(&prompt, PHASE1_DEFAULT_OUTPUT_BUDGET).await
-                        }
-                        _ => (self.chat)(&prompt).await,
                     }
                 }
-            } };
+            };
 
             let response = match chat_result {
                 Ok(r) => {
@@ -1056,8 +1047,7 @@ impl PhaseRunner {
                         .as_deref()
                         .map(one_line_excerpt)
                         .unwrap_or_else(|| "<empty response>".into());
-                    let reason =
-                        format!("parse error: {e} | response[head]: {excerpt}");
+                    let reason = format!("parse error: {e} | response[head]: {excerpt}");
                     progress(Phase1Progress::ChapterFailed {
                         chapter_id: &chapter.chapter_id,
                         reason: &reason,
@@ -1141,13 +1131,7 @@ impl PhaseRunner {
                     .filter(|v| !v.trim().is_empty() && v != "0")
                     .is_some();
                 if retry_mode.is_none() && run_1b {
-                    run_phase1b_coverage(
-                        self.pipeline.as_ref(),
-                        chapter,
-                        sx,
-                        &self.chat,
-                    )
-                    .await;
+                    run_phase1b_coverage(self.pipeline.as_ref(), chapter, sx, &self.chat).await;
                 }
             }
             let entry = ExtractedQuestion {
@@ -1199,13 +1183,11 @@ impl PhaseRunner {
             Some(RetryMode::Terse { .. }) => "terse-retry",
             None => selection.mode_label(),
         };
-        let run_path = self.runs.write(
-            PipelinePhase::Questions,
-            mode_label,
-            &output,
-        )?;
-        let should_merge =
-            matches!(retry_mode, Some(RetryMode::Terse { .. })) || selection.should_merge_into_cache();
+        let run_path = self
+            .runs
+            .write(PipelinePhase::Questions, mode_label, &output)?;
+        let should_merge = matches!(retry_mode, Some(RetryMode::Terse { .. }))
+            || selection.should_merge_into_cache();
         let cache_updated = if should_merge {
             merge_phase1_into_cache(&self.cache, &extracted)?
         } else if retry_mode.is_none() && selection.should_update_cache() {
@@ -1356,11 +1338,9 @@ impl PhaseRunner {
             failures: Vec::new(),
             written_at: now_rfc3339(),
         };
-        let run_path = self.runs.write(
-            PipelinePhase::QuestionClusters,
-            "full",
-            &output,
-        )?;
+        let run_path = self
+            .runs
+            .write(PipelinePhase::QuestionClusters, "full", &output)?;
         self.cache.write(PipelinePhase::QuestionClusters, &output)?;
         Ok(PhaseRunResult {
             output,
@@ -1424,11 +1404,9 @@ impl PhaseRunner {
             failures: Vec::new(),
             written_at: now_rfc3339(),
         };
-        let run_path = self.runs.write(
-            PipelinePhase::AtlasClusters,
-            "full",
-            &output,
-        )?;
+        let run_path = self
+            .runs
+            .write(PipelinePhase::AtlasClusters, "full", &output)?;
         self.cache.write(PipelinePhase::AtlasClusters, &output)?;
 
         Ok(Phase2AtlasRunResult {
@@ -1439,10 +1417,7 @@ impl PhaseRunner {
     }
 
     /// Phase 3 — name the canonical concern for each question cluster.
-    pub async fn phase_3_name_concerns(
-        &self,
-        ctx: &CorpusContext,
-    ) -> Result<Phase3RunResult> {
+    pub async fn phase_3_name_concerns(&self, ctx: &CorpusContext) -> Result<Phase3RunResult> {
         let phase1: Phase1Output = self
             .cache
             .read(PipelinePhase::Questions)?
@@ -1544,10 +1519,7 @@ impl PhaseRunner {
     /// Phase 4 — cluster paragraph-level chunk embeddings. Embeds every
     /// chunk on-the-fly (can be slow; admin corpora are in the low
     /// thousands of chunks).
-    pub async fn phase_4_cluster_chunks(
-        &self,
-        ctx: &CorpusContext,
-    ) -> Result<Phase4RunResult> {
+    pub async fn phase_4_cluster_chunks(&self, ctx: &CorpusContext) -> Result<Phase4RunResult> {
         if ctx.chunks.is_empty() {
             return Err(Error::InvalidInput(
                 "phase 4 requires paragraph chunks in the corpus context".into(),
@@ -1568,7 +1540,10 @@ impl PhaseRunner {
         for (label, indices) in &members {
             let chunk_ids: Vec<u64> = indices.iter().map(|&i| ctx.chunks[i].id).collect();
             let centroid = mean_vector(
-                &indices.iter().map(|&i| embeddings[i].clone()).collect::<Vec<_>>(),
+                &indices
+                    .iter()
+                    .map(|&i| embeddings[i].clone())
+                    .collect::<Vec<_>>(),
             );
             clusters.push(ChunkCluster {
                 id: format!("kc_{:04}", label + 1),
@@ -1602,7 +1577,9 @@ impl PhaseRunner {
             failures: Vec::new(),
             written_at: now_rfc3339(),
         };
-        let run_path = self.runs.write(PipelinePhase::ChunkClusters, "full", &output)?;
+        let run_path = self
+            .runs
+            .write(PipelinePhase::ChunkClusters, "full", &output)?;
         self.cache.write(PipelinePhase::ChunkClusters, &output)?;
         Ok(PhaseRunResult {
             output,
@@ -1616,10 +1593,7 @@ impl PhaseRunner {
     /// align to the top-K chunk clusters by centroid cosine similarity
     /// (embedding of the concern text vs cluster centroid), then for
     /// each aligned cluster compose+call+parse.
-    pub async fn phase_5_extract_positions(
-        &self,
-        ctx: &CorpusContext,
-    ) -> Result<Phase5RunResult> {
+    pub async fn phase_5_extract_positions(&self, ctx: &CorpusContext) -> Result<Phase5RunResult> {
         let concerns_out: Phase3Output = self
             .cache
             .read(PipelinePhase::Concerns)?
@@ -1677,9 +1651,7 @@ impl PhaseRunner {
                     .chunk_ids
                     .iter()
                     .take(8)
-                    .filter_map(|id| {
-                        chunk_lookup.get(id).map(|c| (*id, c.text.clone()))
-                    })
+                    .filter_map(|id| chunk_lookup.get(id).map(|c| (*id, c.text.clone())))
                     .collect();
                 if texts.is_empty() {
                     continue;
@@ -1691,9 +1663,9 @@ impl PhaseRunner {
                     bank.select_top_k(&concern_emb, k_exemplars)
                 };
 
-                let prompt =
-                    self.pipeline
-                        .compose_phase5(concern, cluster, &texts, &picked);
+                let prompt = self
+                    .pipeline
+                    .compose_phase5(concern, cluster, &texts, &picked);
                 let response = match (self.chat)(&prompt).await {
                     Ok(r) => r,
                     Err(e) => {
@@ -1791,10 +1763,7 @@ impl PhaseRunner {
         let mut by_concern: std::collections::BTreeMap<String, Vec<&Position>> =
             std::collections::BTreeMap::new();
         for p in &pos_out.positions {
-            by_concern
-                .entry(p.concern_id.clone())
-                .or_default()
-                .push(p);
+            by_concern.entry(p.concern_id.clone()).or_default().push(p);
         }
 
         let mut tensions: Vec<Tension> = Vec::new();
@@ -1886,10 +1855,7 @@ impl PhaseRunner {
 
     /// Phase 7 — gap detection. Single call; model sees concerns,
     /// positions, and chapter titles.
-    pub async fn phase_7_detect_gaps(
-        &self,
-        ctx: &CorpusContext,
-    ) -> Result<Phase7RunResult> {
+    pub async fn phase_7_detect_gaps(&self, ctx: &CorpusContext) -> Result<Phase7RunResult> {
         let concerns_out: Phase3Output = self
             .cache
             .read(PipelinePhase::Concerns)?
@@ -2122,10 +2088,7 @@ fn now_rfc3339() -> String {
 /// deliberately a no-op rather than an error: an operator running
 /// `--retry-failed` before a first full run gets a clean skip
 /// instead of a cryptic failure.
-fn merge_phase1_into_cache(
-    cache: &PhaseCache,
-    extracted: &[ExtractedQuestion],
-) -> Result<bool> {
+fn merge_phase1_into_cache(cache: &PhaseCache, extracted: &[ExtractedQuestion]) -> Result<bool> {
     if extracted.is_empty() {
         return Ok(false);
     }
@@ -2174,8 +2137,14 @@ async fn run_phase1b_coverage(
         .collect();
     let mut new_total: usize = 0;
     let prompts = [
-        ("entity", pipeline.compose_phase1b_entity_coverage(chapter, sx)),
-        ("concept", pipeline.compose_phase1b_concept_coverage(chapter, sx)),
+        (
+            "entity",
+            pipeline.compose_phase1b_entity_coverage(chapter, sx),
+        ),
+        (
+            "concept",
+            pipeline.compose_phase1b_concept_coverage(chapter, sx),
+        ),
     ];
     for (label, maybe_prompt) in prompts {
         let Some(prompt) = maybe_prompt else { continue };
@@ -2247,9 +2216,7 @@ mod tests {
         // string. The classifier maps it to EmptyExtraction so the
         // CLI can route to prompt-fix work, not a plain retry.
         let response = "{\"section_id\":\"sec_0001\"}";
-        let err = Error::Serialization(
-            "phase 1 (atlas) did not extract anything usable".into(),
-        );
+        let err = Error::Serialization("phase 1 (atlas) did not extract anything usable".into());
         assert_eq!(
             classify_phase1_parse_failure(response, &err),
             PhaseFailureKind::EmptyExtraction
@@ -2307,7 +2274,10 @@ mod tests {
 
     #[test]
     fn truncate_response_head_caps_post_think_content() {
-        let raw = format!("<think>short</think>{}", "J".repeat(FAILURE_HEAD_CHAR_CAP * 2));
+        let raw = format!(
+            "<think>short</think>{}",
+            "J".repeat(FAILURE_HEAD_CHAR_CAP * 2)
+        );
         let head = truncate_response_head(&raw).expect("has content");
         // Head is capped and carries the "+N chars" marker.
         assert!(head.contains("+"), "expected drop marker, got: {head}");
@@ -2406,7 +2376,9 @@ mod tests {
             .phase_1_extract_questions_with_retry(
                 &chapters,
                 &ChapterSelection::Subset(vec!["ch_01".into()]),
-                Some(RetryMode::Terse { max_output_tokens: 16384 }),
+                Some(RetryMode::Terse {
+                    max_output_tokens: 16384,
+                }),
                 |_| {},
             )
             .await
@@ -2471,7 +2443,9 @@ mod tests {
             .phase_1_extract_questions_with_retry(
                 &chapters,
                 &ChapterSelection::Subset(vec!["ch_01".into()]),
-                Some(RetryMode::Terse { max_output_tokens: 12345 }),
+                Some(RetryMode::Terse {
+                    max_output_tokens: 12345,
+                }),
                 |_| {},
             )
             .await
@@ -2602,7 +2576,10 @@ mod tests {
             .await
             .expect("retry-failed run");
 
-        assert!(res.cache_updated, "RetryFailed with a success must merge into cache");
+        assert!(
+            res.cache_updated,
+            "RetryFailed with a success must merge into cache"
+        );
         assert_eq!(res.output.questions_by_chapter.len(), 1);
         assert_eq!(res.output.questions_by_chapter[0].chapter_id, "ch_02");
 
@@ -2816,8 +2793,7 @@ mod tests {
         assert!(res.cache_updated);
         assert!(res.run_path.exists());
         // Cache file should exist and round-trip through PhaseCache.
-        let back: Option<Phase1Output> =
-            runner.cache().read(PipelinePhase::Questions).unwrap();
+        let back: Option<Phase1Output> = runner.cache().read(PipelinePhase::Questions).unwrap();
         assert!(back.is_some());
         assert!(progress_count.load(Ordering::Relaxed) >= 4); // Start + 2 chapters + Done at minimum
     }
@@ -3052,7 +3028,11 @@ mod tests {
                 cid += 1;
             }
         }
-        CorpusContext { chapters, chunks, chapter_titles }
+        CorpusContext {
+            chapters,
+            chunks,
+            chapter_titles,
+        }
     }
 
     #[tokio::test]
@@ -3074,9 +3054,13 @@ mod tests {
         // first letter via four_group_embed. Clusters may coalesce
         // depending on HDBSCAN density — we only assert the output
         // shape is coherent, not a specific count.
-        let total: usize =
-            res.output.clusters.iter().map(|c| c.question_refs.len()).sum::<usize>()
-                + res.output.unclustered.len();
+        let total: usize = res
+            .output
+            .clusters
+            .iter()
+            .map(|c| c.question_refs.len())
+            .sum::<usize>()
+            + res.output.unclustered.len();
         assert_eq!(total, 9);
     }
 
@@ -3189,10 +3173,7 @@ mod tests {
         assert_eq!(total, 6);
         // Every produced cluster carries its facet tag.
         for cluster in &res.output.clusters {
-            assert!(matches!(
-                cluster.facet,
-                Facet::Claim | Facet::Question
-            ));
+            assert!(matches!(cluster.facet, Facet::Claim | Facet::Question));
         }
     }
 
@@ -3208,12 +3189,13 @@ mod tests {
             chunks: vec![],
             chapter_titles: vec!["Chapter 1".into()],
         };
-        let seed = runner.phase_1a_extract_seed("test_corpus", &ctx, false).await.unwrap();
-        assert!(seed.is_none());
-        let cached: Option<crate::enrichment::pipeline::atlas::SeedEntities> = runner
-            .cache()
-            .read(PipelinePhase::SeedExtraction)
+        let seed = runner
+            .phase_1a_extract_seed("test_corpus", &ctx, false)
+            .await
             .unwrap();
+        assert!(seed.is_none());
+        let cached: Option<crate::enrichment::pipeline::atlas::SeedEntities> =
+            runner.cache().read(PipelinePhase::SeedExtraction).unwrap();
         assert!(cached.is_none());
     }
 
@@ -3296,7 +3278,9 @@ mod tests {
         let chat_calls_c = chat_calls.clone();
         let chat: ChatCompletionFn = Arc::new(move |_prompt: &ChatPrompt| {
             chat_calls_c.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let body = r#"{"entries":[{"canonical_name":"X","entity_type":"person","description":"x"}]}"#.to_string();
+            let body =
+                r#"{"entries":[{"canonical_name":"X","entity_type":"person","description":"x"}]}"#
+                    .to_string();
             Box::pin(async move { Ok(body) })
         });
 
@@ -3315,8 +3299,14 @@ mod tests {
             chapter_titles: vec!["Chapter 1".into()],
         };
 
-        let _ = runner.phase_1a_extract_seed("c", &ctx, false).await.unwrap();
-        let _ = runner.phase_1a_extract_seed("c", &ctx, false).await.unwrap();
+        let _ = runner
+            .phase_1a_extract_seed("c", &ctx, false)
+            .await
+            .unwrap();
+        let _ = runner
+            .phase_1a_extract_seed("c", &ctx, false)
+            .await
+            .unwrap();
         assert_eq!(chat_calls.load(std::sync::atomic::Ordering::Relaxed), 1);
 
         let _ = runner.phase_1a_extract_seed("c", &ctx, true).await.unwrap();
@@ -3342,7 +3332,11 @@ mod tests {
         // Every non-noise cluster should carry a centroid.
         for c in &res.output.clusters {
             if !c.noise {
-                assert!(!c.centroid.is_empty(), "non-noise cluster {} missing centroid", c.id);
+                assert!(
+                    !c.centroid.is_empty(),
+                    "non-noise cluster {} missing centroid",
+                    c.id
+                );
             }
         }
     }
@@ -3353,11 +3347,7 @@ mod tests {
         let runner = multiphase_runner(dir.path());
         let ctx = synth_context();
         let res = runner
-            .cascade(
-                PipelinePhase::Questions,
-                &ctx,
-                Some(ChapterSelection::Full),
-            )
+            .cascade(PipelinePhase::Questions, &ctx, Some(ChapterSelection::Full))
             .await
             .unwrap();
         // We expect 7 non-Ingest steps.

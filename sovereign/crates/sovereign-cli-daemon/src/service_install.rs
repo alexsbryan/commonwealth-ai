@@ -17,8 +17,7 @@
 use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "macos")]
-const LAUNCHD_TEMPLATE: &str =
-    include_str!("../../../contrib/launchd/com.sovereign.daemon.plist");
+const LAUNCHD_TEMPLATE: &str = include_str!("../../../contrib/launchd/com.sovereign.daemon.plist");
 
 #[cfg(target_os = "linux")]
 const SYSTEMD_TEMPLATE: &str = include_str!("../../../contrib/systemd/sovereign.service");
@@ -161,15 +160,16 @@ fn canonicalize_binary(bin_path: &Path) -> Result<PathBuf, String> {
 
 #[cfg(target_os = "macos")]
 fn launchd_plist_path() -> Result<PathBuf, String> {
-    let home = dirs::home_dir()
-        .ok_or_else(|| "cannot resolve home directory".to_string())?;
-    Ok(home.join("Library").join("LaunchAgents").join("com.sovereign.daemon.plist"))
+    let home = dirs::home_dir().ok_or_else(|| "cannot resolve home directory".to_string())?;
+    Ok(home
+        .join("Library")
+        .join("LaunchAgents")
+        .join("com.sovereign.daemon.plist"))
 }
 
 #[cfg(target_os = "macos")]
 fn install_launchd(bin_path: &Path) -> Result<(), String> {
-    let home = dirs::home_dir()
-        .ok_or_else(|| "cannot resolve home directory".to_string())?;
+    let home = dirs::home_dir().ok_or_else(|| "cannot resolve home directory".to_string())?;
     let plist_path = launchd_plist_path()?;
 
     // Make sure logs directory exists — launchd refuses to start if
@@ -183,8 +183,7 @@ fn install_launchd(bin_path: &Path) -> Result<(), String> {
         .replace("{HOME}", &home.to_string_lossy());
 
     if let Some(parent) = plist_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("create {}: {e}", parent.display()))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
     }
     std::fs::write(&plist_path, content)
         .map_err(|e| format!("write {}: {e}", plist_path.display()))?;
@@ -230,9 +229,12 @@ fn uninstall_launchd() -> Result<(), String> {
 
 #[cfg(target_os = "linux")]
 fn systemd_unit_path() -> Result<PathBuf, String> {
-    let config = dirs::config_dir()
-        .ok_or_else(|| "cannot resolve user config directory".to_string())?;
-    Ok(config.join("systemd").join("user").join("sovereign.service"))
+    let config =
+        dirs::config_dir().ok_or_else(|| "cannot resolve user config directory".to_string())?;
+    Ok(config
+        .join("systemd")
+        .join("user")
+        .join("sovereign.service"))
 }
 
 #[cfg(target_os = "linux")]
@@ -241,8 +243,7 @@ fn install_systemd(bin_path: &Path) -> Result<(), String> {
     let content = SYSTEMD_TEMPLATE.replace("{BINARY}", &bin_path.to_string_lossy());
 
     if let Some(parent) = unit_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("create {}: {e}", parent.display()))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
     }
     std::fs::write(&unit_path, content)
         .map_err(|e| format!("write {}: {e}", unit_path.display()))?;
@@ -281,8 +282,7 @@ fn uninstall_systemd() -> Result<(), String> {
         .args(["--user", "disable", "--now", "sovereign.service"])
         .output();
 
-    std::fs::remove_file(&unit_path)
-        .map_err(|e| format!("remove {}: {e}", unit_path.display()))?;
+    std::fs::remove_file(&unit_path).map_err(|e| format!("remove {}: {e}", unit_path.display()))?;
 
     let _ = std::process::Command::new("systemctl")
         .args(["--user", "daemon-reload"])

@@ -25,9 +25,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use corpus_engine_notes::{NoteScope, NoteStore};
-use sovereign_atos::approval::{
-    current_spec_hash, detect_drift, find_approval, FeatureApproval,
-};
+use sovereign_atos::approval::{current_spec_hash, detect_drift, find_approval, FeatureApproval};
 
 use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext};
 use crate::openai_types::ChatCompletionRequest;
@@ -102,9 +100,7 @@ impl Middleware for ApprovalGate {
 
         // Resolve approval. If the session already validated once,
         // trust the cached verdict — avoids a git walk per request.
-        let approval = if session.approval_validated
-            && session.spec_content_hash.is_some()
-        {
+        let approval = if session.approval_validated && session.spec_content_hash.is_some() {
             Some(FeatureApproval {
                 feature_id: feature_id.clone(),
                 spec_path: format!(".sovereign/features/{feature_id}/spec.md"),
@@ -285,12 +281,12 @@ mod tests {
             chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         }
     }
 
@@ -331,7 +327,10 @@ mod tests {
         }]);
         let mut session = MiddlewareSession::default();
         let ctx = ctx_with(Some("never-approved"), tmp.path().to_path_buf());
-        let err = gate.process(&mut req, &mut session, &ctx).await.unwrap_err();
+        let err = gate
+            .process(&mut req, &mut session, &ctx)
+            .await
+            .unwrap_err();
         assert!(matches!(err, MiddlewareError::ApprovalRequired { .. }));
     }
 
@@ -378,7 +377,10 @@ mod tests {
         });
         let mut session = MiddlewareSession::default();
         let ctx = ctx_with(Some("unapproved-replay"), tmp.path().to_path_buf());
-        let err = gate.process(&mut req, &mut session, &ctx).await.unwrap_err();
+        let err = gate
+            .process(&mut req, &mut session, &ctx)
+            .await
+            .unwrap_err();
         assert!(matches!(err, MiddlewareError::ApprovalRequired { .. }));
     }
 

@@ -235,33 +235,32 @@ macro_rules! require_runtime {
     }};
 }
 
-
 // ─── Concern submodules (PR5 split of the former 6557-line commands.rs) ───
-mod hardware;
-mod chat;
-mod conversation;
-mod config_setup;
-mod models;
-mod corpus;
-mod document_asset;
-mod corpus_install;
 mod budget;
+mod chat;
+mod config_setup;
+mod contribution;
+mod conversation;
+mod corpus;
+mod corpus_install;
+mod document_asset;
+mod hardware;
+mod models;
 mod reading;
 mod recipe_testing;
-mod contribution;
 
-pub use hardware::*;
-pub use chat::*;
-pub use conversation::*;
-pub use config_setup::*;
-pub use models::*;
-pub use corpus::*;
-pub use document_asset::*;
-pub use corpus_install::*;
 pub use budget::*;
+pub use chat::*;
+pub use config_setup::*;
+pub use contribution::*;
+pub use conversation::*;
+pub use corpus::*;
+pub use corpus_install::*;
+pub use document_asset::*;
+pub use hardware::*;
+pub use models::*;
 pub use reading::*;
 pub use recipe_testing::*;
-pub use contribution::*;
 
 // ─── Tests ───────────────────────────────────────────────────
 
@@ -322,8 +321,13 @@ mod tests {
         assert!((payload.percent - 42.5).abs() < 1e-3);
         // The message should describe the download size in MB so the
         // UI can show "5.0 MB" while progress is below 100%.
-        let message = payload.message.expect("downloading payload should have a message");
-        assert!(message.contains("MB"), "expected MB in message, got '{message}'");
+        let message = payload
+            .message
+            .expect("downloading payload should have a message");
+        assert!(
+            message.contains("MB"),
+            "expected MB in message, got '{message}'"
+        );
     }
 
     #[test]
@@ -374,7 +378,7 @@ mod tests {
             "wikipedia",
             &IngestProgress::Embedding {
                 chunks_embedded: 339_200,
-                total: 0, // unknown (streaming) → 0% live-event percent
+                total: 0,                // unknown (streaming) → 0% live-event percent
                 docs_processed: 592_253, // 11× over the title cap
                 chunks_per_sec: 34.0,
                 expected_docs: Some(51_222),
@@ -406,7 +410,10 @@ mod tests {
         let m = format_embed_message(339_200, 25_643, 32.0, Some(51_286));
         assert!(m.contains("/ 51.3k articles"), "{m}");
         assert!(m.contains("339.2k chunks"), "{m}");
-        assert!(!m.contains("docs"), "should swap in 'articles' wording: {m}");
+        assert!(
+            !m.contains("docs"),
+            "should swap in 'articles' wording: {m}"
+        );
     }
 
     #[test]
