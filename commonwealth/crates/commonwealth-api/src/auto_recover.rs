@@ -266,7 +266,7 @@ pub async fn try_recover_stranded_partitions(
     // Cooldown gate. Skip if a recent attempt fired (success or
     // failure — both stamp the cooldown).
     {
-        let table = cooldown_table().lock().expect("cooldown mutex poisoned");
+        let table = cooldown_table().lock().unwrap_or_else(|e| e.into_inner());
         if let Some(last) = table.get(corpus_id) {
             if last.elapsed() < RECOVERY_COOLDOWN {
                 tracing::debug!(
@@ -404,7 +404,7 @@ pub async fn try_recover_stranded_partitions(
     // Stamp the cooldown so a repeated dispatcher WARN doesn't
     // retry the same merge immediately.
     {
-        let mut table = cooldown_table().lock().expect("cooldown mutex poisoned");
+        let mut table = cooldown_table().lock().unwrap_or_else(|e| e.into_inner());
         table.insert(corpus_id.to_string(), Instant::now());
     }
 

@@ -785,10 +785,19 @@ pub async fn corpus_collaborate(
             };
             let node_id = partition.node_id;
             tokio::spawn(async move {
-                let client = reqwest::Client::builder()
+                let client = match reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(10))
                     .build()
-                    .expect("build reqwest client");
+                {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::warn!(
+                            error = %e,
+                            "corpus_collaborate: failed to build reqwest client — skipping partition dispatch"
+                        );
+                        return;
+                    }
+                };
                 let mut attempt_errors: Vec<String> = Vec::new();
                 let mut accepted = false;
                 for addr in &ordered_addrs {

@@ -249,7 +249,7 @@ pub async fn chat_completions(
                          local model on this node or relax the privacy requirement.",
                         "invalid_request_error",
                     ))
-                    .unwrap(),
+                    .unwrap_or_default(),
                 ),
             )
                 .into_response();
@@ -277,7 +277,7 @@ pub async fn chat_completions(
                                 "No loaded model satisfies the OICP requirements",
                                 "model_not_available",
                             ))
-                            .unwrap(),
+                            .unwrap_or_default(),
                         ),
                     )
                         .into_response();
@@ -324,7 +324,7 @@ pub async fn chat_completions(
                     "No models are currently loaded on the mesh",
                     "model_not_available",
                 ))
-                .unwrap(),
+                .unwrap_or_default(),
             ),
         )
             .into_response(),
@@ -423,7 +423,7 @@ async fn forward_to_model(
                         "Model is scheduled but llama-server is not yet ready",
                         "model_not_ready",
                     ))
-                    .unwrap(),
+                    .unwrap_or_default(),
                 ),
             )
                 .into_response();
@@ -442,7 +442,7 @@ async fn forward_to_model(
                         "Invalid response from inference backend",
                         "backend_error",
                     ))
-                    .unwrap(),
+                    .unwrap_or_default(),
                 ),
             )
                 .into_response(),
@@ -460,7 +460,7 @@ async fn forward_to_model(
                         ),
                         "backend_unavailable",
                     ))
-                    .unwrap(),
+                    .unwrap_or_default(),
                 ),
             )
                 .into_response()
@@ -537,7 +537,7 @@ pub async fn embeddings(
                      that advertises embeddings",
                     "no_local_embedding_backend",
                 ))
-                .unwrap(),
+                .unwrap_or_default(),
             ),
         )
             .into_response();
@@ -558,7 +558,7 @@ pub async fn embeddings(
                     "embeddings request: `input` must be a non-empty string or array",
                     "invalid_request_error",
                 ))
-                .unwrap(),
+                .unwrap_or_default(),
             ),
         )
             .into_response();
@@ -584,7 +584,7 @@ pub async fn embeddings(
                             format!("embedding[{i}] failed: {e}"),
                             "backend_error",
                         ))
-                        .unwrap(),
+                        .unwrap_or_default(),
                     ),
                 )
                     .into_response();
@@ -683,7 +683,7 @@ pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
                 object: "model".into(),
                 created: 0,
                 owned_by: "mesh".into(),
-                capabilities: Some(serde_json::to_value(&model.oicp_capabilities).unwrap()),
+                capabilities: Some(serde_json::to_value(&model.oicp_capabilities).unwrap_or_default()),
                 performance: shard_plan.map(|p| ModelPerformance {
                     estimated_tokens_per_sec: p.estimated_tokens_per_sec,
                     estimated_ttft_ms: p.estimated_ttft_ms,
@@ -845,7 +845,7 @@ async fn serve_local_non_stream(
                         format!("local inference failed: {e}"),
                         "backend_error",
                     ))
-                    .unwrap(),
+                    .unwrap_or_default(),
                 ),
             )
                 .into_response()
@@ -888,7 +888,7 @@ async fn serve_local_stream(
                         format!("local stream failed: {e}"),
                         "backend_error",
                     ))
-                    .unwrap(),
+                    .unwrap_or_default(),
                 ),
             )
                 .into_response();
