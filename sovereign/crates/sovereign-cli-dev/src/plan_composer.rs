@@ -283,12 +283,12 @@ fn render_markdown(
     );
 
     for item in items {
-        out.push_str("\n");
+        out.push('\n');
         out.push_str(&format!("## Phase {} · {}\n", item.phase, item.title));
         if let Some(r) = &item.realizes {
             out.push_str(&format!("_Realizes: {r}_\n"));
         }
-        out.push_str("\n");
+        out.push('\n');
         if !item.body.is_empty() {
             out.push_str(&item.body);
             out.push_str("\n\n");
@@ -303,7 +303,7 @@ fn render_markdown(
                     truncate(&risk.question, 160)
                 ));
             }
-            out.push_str("\n");
+            out.push('\n');
         }
         if !item.resolved_risks.is_empty() {
             out.push_str("**Resolved (for the record):**\n");
@@ -315,7 +315,7 @@ fn render_markdown(
                     truncate(&risk.answer, 120)
                 ));
             }
-            out.push_str("\n");
+            out.push('\n');
         }
 
         if let Some(stop) = &item.stop_hint {

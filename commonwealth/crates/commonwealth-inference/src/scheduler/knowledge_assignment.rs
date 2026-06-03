@@ -736,7 +736,7 @@ mod tests {
             0,
             1000,
             &local,
-            &[peer_bootstrapping.clone()],
+            std::slice::from_ref(&peer_bootstrapping),
             &qwen_embed(),
         )
         .unwrap();
@@ -760,7 +760,7 @@ mod tests {
             "wikipedia",
             remaining,
             &local,
-            &[peer.clone()],
+            std::slice::from_ref(&peer),
             &qwen_embed(),
         )
         .unwrap();
@@ -855,7 +855,7 @@ mod tests {
             "wikipedia",
             remaining.clone(),
             &local,
-            &[peer.clone()],
+            std::slice::from_ref(&peer),
             &qwen_embed(),
         )
         .unwrap();
@@ -923,7 +923,7 @@ mod tests {
             0,
             1000,
             &local,
-            &[peer.clone()],
+            std::slice::from_ref(&peer),
             &qwen_embed(),
         )
         .unwrap();
