@@ -3007,9 +3007,7 @@ const PATTERN_FIXES: &[PatternFix] = &[
 ];
 
 fn pattern_fix_guidance(last_failure: Option<&str>) -> Option<String> {
-    let Some(text) = last_failure else {
-        return None;
-    };
+    let text = last_failure?;
     let lower = text.to_lowercase();
     let mut hits: Vec<&PatternFix> = PATTERN_FIXES
         .iter()

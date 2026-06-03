@@ -231,11 +231,10 @@ fn path_is_spec_signal(root: &Path, path: &Path) -> bool {
         .components()
         .filter_map(|c| c.as_os_str().to_str())
         .collect();
-    match comps.as_slice() {
-        ["ARCHITECTURE.md"] => true,
-        [".sovereign", "features", _id, "spec.md"] => true,
-        _ => false,
-    }
+    matches!(
+        comps.as_slice(),
+        ["ARCHITECTURE.md"] | [".sovereign", "features", _, "spec.md"]
+    )
 }
 
 #[cfg(test)]

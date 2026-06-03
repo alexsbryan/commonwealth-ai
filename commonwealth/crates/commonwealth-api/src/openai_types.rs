@@ -205,10 +205,7 @@ where
         StringOrParts::Parts(parts) => {
             let texts: Vec<String> = parts
                 .into_iter()
-                .filter(|p| match p.kind.as_deref() {
-                    None | Some("text") => true,
-                    _ => false,
-                })
+                .filter(|p| matches!(p.kind.as_deref(), None | Some("text")))
                 .filter_map(|p| p.text)
                 .collect();
             Ok(texts.join("\n"))

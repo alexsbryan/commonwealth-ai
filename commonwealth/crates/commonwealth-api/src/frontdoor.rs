@@ -2307,9 +2307,7 @@ pub fn find_canonical_component<'a>(
             }
         }
     }
-    let Some((canonical, canonical_freq, _)) = best else {
-        return None;
-    };
+    let (canonical, canonical_freq, _) = best?;
     // If the emitted component is well-attested in context (high
     // frequency itself), don't rewrite — it's intentional.
     if own_freq > 0 && canonical_freq < own_freq.saturating_mul(FREQ_RATIO_FOR_REWRITE) {

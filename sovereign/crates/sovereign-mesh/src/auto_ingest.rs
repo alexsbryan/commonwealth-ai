@@ -410,7 +410,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                 tracing::info!(
                     corpus = %corpus_id,
                     new_peer = new_peer_appeared,
-                    is_restart = triggered.get(corpus_id).is_none(),
+                    is_restart = !triggered.contains_key(corpus_id),
                     "auto_ingest: triggering collaboration"
                 );
 

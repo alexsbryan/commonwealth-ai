@@ -271,7 +271,7 @@ fn find(parent: &mut [usize], mut x: usize) -> usize {
     x
 }
 
-fn union(parent: &mut Vec<usize>, a: usize, b: usize) {
+fn union(parent: &mut [usize], a: usize, b: usize) {
     let ra = find(parent, a);
     let rb = find(parent, b);
     if ra != rb {

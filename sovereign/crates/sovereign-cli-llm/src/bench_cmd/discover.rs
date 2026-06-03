@@ -60,11 +60,10 @@ pub enum CorpusState {
 
 impl CorpusState {
     pub fn is_ready_for(self, surface: BenchSurface) -> bool {
-        match (self, surface) {
-            (CorpusState::Ready, _) => true,
-            (CorpusState::IndexedNoAtlas, BenchSurface::RetrievalJudge) => true,
-            _ => false,
-        }
+        matches!(
+            (self, surface),
+            (CorpusState::Ready, _) | (CorpusState::IndexedNoAtlas, BenchSurface::RetrievalJudge)
+        )
     }
 }
 

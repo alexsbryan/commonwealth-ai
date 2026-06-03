@@ -398,7 +398,7 @@ mod tests {
         assert_eq!(s.atom_counts.get(&AtomType::Claim).copied(), Some(1));
         // Untouched types are absent from the map (not zero) —
         // BTreeMap deserialises cleanly either way.
-        assert!(s.atom_counts.get(&AtomType::Question).is_none());
+        assert!(!s.atom_counts.contains_key(&AtomType::Question));
     }
 
     #[tokio::test]
