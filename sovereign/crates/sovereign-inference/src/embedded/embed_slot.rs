@@ -193,7 +193,7 @@ impl EmbedSlot {
         // `new_context` returns we just see `Err` here and retry.
         let (ctx, used_gpu) = match if wants_gpu {
             unsafe {
-                let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model) as *const LlamaModel);
+                let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model));
                 model_ref
                     .new_context(backend, build_params(true))
                     .map(|c| (c, true))
@@ -211,7 +211,7 @@ impl EmbedSlot {
                 }
                 let ctx = unsafe {
                     let model_ref: &'static LlamaModel =
-                        &*(Arc::as_ptr(&model) as *const LlamaModel);
+                        &*(Arc::as_ptr(&model));
                     model_ref
                         .new_context(backend, build_params(false))
                         .map_err(|e| {
@@ -514,8 +514,8 @@ impl EmbedSlot {
             // zero vectors of the right length. Non-empty inputs
             // read the libllama-pooled vector via `embeddings_seq_ith`.
             let mut local_seq: i32 = 0;
-            for local_idx in sub_start..cursor {
-                if prepared[local_idx].is_empty() {
+            for prepared_item in &prepared[sub_start..cursor] {
+                if prepared_item.is_empty() {
                     results.push(vec![0.0; slot.n_embd]);
                 } else {
                     let raw = ctx_lock

@@ -571,21 +571,6 @@ fn plain_text_prompt(system: &str, user: &str) -> String {
     }
 }
 
-/// Serialize a (system, user) pair into the OpenAI-compatible
-/// messages JSON shape that `apply_chat_template_oaicompat`
-/// expects. System is omitted when empty so templates that don't
-/// support a system role (e.g. Gemma) don't get a stray empty
-/// turn.
-fn build_oai_messages_json(system: &str, user: &str) -> Result<String> {
-    let mut messages: Vec<serde_json::Value> = Vec::with_capacity(2);
-    if !system.is_empty() {
-        messages.push(serde_json::json!({"role": "system", "content": system}));
-    }
-    messages.push(serde_json::json!({"role": "user", "content": user}));
-    serde_json::to_string(&messages)
-        .map_err(|e| Error::Inference(format!("Failed to serialize chat messages: {e}")))
-}
-
 /// First ~80 chars of a chat template, with newlines escaped, for
 /// log output. Lets operators identify which template format is
 /// hitting the fallback path without dumping a full multi-KB
