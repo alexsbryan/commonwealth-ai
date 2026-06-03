@@ -1528,8 +1528,11 @@ pub fn apply_failure_nudge_chat(req: &mut crate::openai_types::ChatCompletionReq
     if has_recent_runtime_nudge(messages) {
         return;
     }
-    // Tail must be a tool result.
-    let last = messages.last().expect("len >= 2");
+    // Tail must be a tool result. (`messages.len() >= 2` checked above,
+    // so `last()` is always `Some`; bail gracefully if that ever breaks.)
+    let Some(last) = messages.last() else {
+        return;
+    };
     if last.role != "tool" {
         return;
     }

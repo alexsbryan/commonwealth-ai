@@ -1068,7 +1068,13 @@ impl ResponsesStreamState {
                 // calling `self.seq()` — the borrow checker treats
                 // `as_mut` + `seq()` as overlapping `&mut self` calls.
                 let (msg_item_id, msg_output_index) = {
-                    let msg = self.message.as_mut().expect("just initialised");
+                    // `self.message` was just set to `Some` above when it
+                    // was `None`, so this is always `Some`. Bail out of the
+                    // chunk gracefully (emit what we have) rather than
+                    // panicking mid-stream if that invariant ever breaks.
+                    let Some(msg) = self.message.as_mut() else {
+                        return out;
+                    };
                     msg.text_buffer.push_str(content);
                     (msg.item_id.clone(), msg.output_index)
                 };

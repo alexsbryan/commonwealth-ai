@@ -473,6 +473,9 @@ impl AppState {
 
 
     pub fn new(self_node_id: NodeId, mesh: Mesh) -> Self {
+        // Test-support constructor (callers in tests/ + the test-harness);
+        // in-memory MeshStore creation is infallible — fail-fast is correct.
+        #[allow(clippy::expect_used)]
         let mesh_store = Arc::new(
             MeshStore::in_memory().expect("in-memory MeshStore failed"),
         );

@@ -97,7 +97,7 @@ fn read_file_meta(path: &Path) -> std::io::Result<(u64, i64)> {
 
 fn cached_or_compute_sha(path: &Path, size: u64, mtime: i64) -> std::io::Result<String> {
     {
-        let cache = SHA_CACHE.lock().unwrap();
+        let cache = SHA_CACHE.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(hit) = cache
             .iter()
             .find(|e| e.path == path && e.mtime_unix == mtime && e.size_bytes == size)
@@ -119,7 +119,7 @@ fn cached_or_compute_sha(path: &Path, size: u64, mtime: i64) -> std::io::Result<
         hasher.update(&buf[..n]);
     }
     let hex = format!("{:x}", hasher.finalize());
-    let mut cache = SHA_CACHE.lock().unwrap();
+    let mut cache = SHA_CACHE.lock().unwrap_or_else(|e| e.into_inner());
     // Evict any stale entry for the same path before inserting the
     // fresh one (mtime/size differ → stale).
     cache.retain(|e| e.path != path);
@@ -282,7 +282,7 @@ pub async fn serve_model_file(
     );
     headers.insert(
         axum::http::header::CONTENT_LENGTH,
-        HeaderValue::from_str(&size_bytes.to_string()).unwrap(),
+        HeaderValue::from(size_bytes),
     );
     headers.insert(
         "X-Sha256",

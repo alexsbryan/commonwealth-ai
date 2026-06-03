@@ -297,9 +297,7 @@ pub async fn corpus_canonical_stream(
     let headers = resp.headers_mut();
     headers.insert(
         header::CONTENT_TYPE,
-        "application/x-tar+zstd"
-            .parse()
-            .expect("static content type"),
+        axum::http::HeaderValue::from_static("application/x-tar+zstd"),
     );
     if !fp_header_value.is_empty() {
         if let Ok(v) = fp_header_value.parse() {
