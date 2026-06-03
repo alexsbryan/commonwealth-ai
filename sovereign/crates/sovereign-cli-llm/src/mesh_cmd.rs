@@ -1678,16 +1678,18 @@ async fn cmd_corpus_stream_axes(args: &[String]) -> i32 {
             }
         }
         let existing = info.stream.clone();
-        if existing.is_some() && !force {
-            println!(
-                "{:<32} {:<10} {:<10} {}",
-                info.corpus_id,
-                existing.as_ref().unwrap().stability.as_str(),
-                "(existing)",
-                existing.as_ref().unwrap().from_signal,
-            );
-            skipped += 1;
-            continue;
+        if let Some(ex) = existing.as_ref() {
+            if !force {
+                println!(
+                    "{:<32} {:<10} {:<10} {}",
+                    info.corpus_id,
+                    ex.stability.as_str(),
+                    "(existing)",
+                    ex.from_signal,
+                );
+                skipped += 1;
+                continue;
+            }
         }
         let (stability, from_signal) =
             corpus_engine::stream_axes::derive_stability_from_info(&info);

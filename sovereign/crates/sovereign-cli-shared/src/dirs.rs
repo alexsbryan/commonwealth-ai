@@ -9,7 +9,7 @@
 //! in one place.
 //!
 //! All functions fall back to `.` if the home directory can't be
-//! resolved — that matches the prior `unwrap_or_else(|| PathBuf::from("."))`
+//! resolved — that matches the prior `unwrap_or_else(|| std::path::Path::new("."))`
 //! pattern callers relied on.
 
 use std::path::PathBuf;
@@ -47,7 +47,7 @@ pub fn mesh_data_dir() -> PathBuf {
 /// `.or_else(default_data_dir)` callers don't need to change.
 pub fn default_data_dir() -> Option<PathBuf> {
     let p = sovereign_indexes();
-    if p == PathBuf::from(".") {
+    if p == std::path::Path::new(".") {
         None
     } else {
         Some(p)
@@ -62,7 +62,7 @@ mod tests {
     fn sovereign_root_ends_in_sovereign() {
         let p = sovereign_root();
         assert!(
-            p.ends_with(".sovereign") || p == PathBuf::from("."),
+            p.ends_with(".sovereign") || p == std::path::Path::new("."),
             "unexpected root: {}",
             p.display()
         );

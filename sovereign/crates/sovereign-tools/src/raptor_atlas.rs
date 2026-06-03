@@ -928,8 +928,8 @@ fn mean_vector(vecs: &[&Vec<f32>]) -> Vec<f32> {
         }
     }
     let n = vecs.len() as f32;
-    for d in 0..dim {
-        out[d] /= n;
+    for slot in out.iter_mut() {
+        *slot /= n;
     }
     out
 }

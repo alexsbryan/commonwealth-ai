@@ -249,9 +249,9 @@ fn build_sheet_record_batch(
 
     for r in (header_row + 1)..rows {
         row_ids.push(format!("r{r}"));
-        for c in 0..cols {
+        for (c, col) in columns.iter_mut().enumerate() {
             let v = cell_as_string(range, r, c);
-            columns[c].push(if v.is_empty() { None } else { Some(v) });
+            col.push(if v.is_empty() { None } else { Some(v) });
         }
     }
 

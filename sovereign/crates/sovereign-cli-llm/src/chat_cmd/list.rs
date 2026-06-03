@@ -83,7 +83,7 @@ pub async fn cmd_list(args: &[String]) -> i32 {
 fn format_ts(epoch_secs: i64) -> String {
     use std::time::{Duration, UNIX_EPOCH};
     let dt = UNIX_EPOCH + Duration::from_secs(epoch_secs.max(0) as u64);
-    match chrono::DateTime::<chrono::Utc>::from(dt).format("%Y-%m-%d %H:%M") {
-        f => f.to_string(),
-    }
+    chrono::DateTime::<chrono::Utc>::from(dt)
+        .format("%Y-%m-%d %H:%M")
+        .to_string()
 }

@@ -1882,12 +1882,9 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
 
     let mut i = 0;
     while i < args.len() {
-        match args[i].as_str() {
-            "--data-dir" => {
-                i += 1;
-                data_dir = args.get(i).map(PathBuf::from);
-            }
-            _ => {}
+        if args[i].as_str() == "--data-dir" {
+            i += 1;
+            data_dir = args.get(i).map(PathBuf::from);
         }
         i += 1;
     }
@@ -5098,10 +5095,12 @@ fn has_ext_inner(dir: &Path, ext: &str, depth: usize, max_depth: usize) -> bool 
         } else if path.is_dir() {
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             // Skip hidden dirs, node_modules, target, etc.
-            if !name.starts_with('.') && name != "node_modules" && name != "target" {
-                if has_ext_inner(&path, ext, depth + 1, max_depth) {
-                    return true;
-                }
+            if !name.starts_with('.')
+                && name != "node_modules"
+                && name != "target"
+                && has_ext_inner(&path, ext, depth + 1, max_depth)
+            {
+                return true;
             }
         }
     }

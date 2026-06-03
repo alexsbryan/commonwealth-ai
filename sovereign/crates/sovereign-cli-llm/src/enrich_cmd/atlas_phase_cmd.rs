@@ -282,10 +282,7 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
         let picked: Vec<&_> = if bank.is_empty() {
             Vec::new()
         } else {
-            let q = match (embed)(&query_text).await {
-                Ok(v) => v,
-                Err(_) => Vec::new(),
-            };
+            let q: Vec<f32> = (embed)(&query_text).await.unwrap_or_default();
             if q.is_empty() {
                 Vec::new()
             } else {

@@ -575,7 +575,7 @@ async fn execute_calibrate(opts: CalibrateOpts) -> i32 {
     // structural-only predicates retire). For now, a passing
     // calibration is signalled by exit code 0; future code wanting
     // a receipt re-runs calibration and uses the proof immediately.
-    drop(proof);
+    let _ = proof;
 
     if result.overall_pass {
         0

@@ -67,11 +67,7 @@ pub fn split_document(raw: &str) -> SplitDocument<'_> {
             let fm = &after_open[..abs];
             // Strip a trailing CR from the frontmatter body if we
             // were mid-CRLF before the `---` line.
-            let fm = if fm.ends_with('\r') {
-                &fm[..fm.len() - 1]
-            } else {
-                fm
-            };
+            let fm = fm.strip_suffix('\r').unwrap_or(fm);
             let body_start = abs
                 + 3
                 + if tail.starts_with("\r\n") {
