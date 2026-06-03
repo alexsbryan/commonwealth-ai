@@ -410,7 +410,7 @@ async fn resolve_chat_model(
 
 // ─── Skill manifest loader (system prompt) ──────────────────────
 
-fn load_recipe_author_system_prompt(skills_dir: &PathBuf) -> std::result::Result<String, String> {
+fn load_recipe_author_system_prompt(skills_dir: &std::path::Path) -> std::result::Result<String, String> {
     let path = skills_dir.join("recipe-author").join("skill.toml");
     if !path.exists() {
         return Err(format!(

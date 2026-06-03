@@ -229,7 +229,7 @@ fn new_causal_context(
     // and bench_decode.rs:108-114 — the context borrows the model and we
     // promise to keep the Arc alive at least as long.
     unsafe {
-        let model_ref: &'static LlamaModel = &*(Arc::as_ptr(model) as *const LlamaModel);
+        let model_ref: &'static LlamaModel = &*(Arc::as_ptr(model));
         model_ref
             .new_context(backend, params)
             .expect("new_context (causal)")

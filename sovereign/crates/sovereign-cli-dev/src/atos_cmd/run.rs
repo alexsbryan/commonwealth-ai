@@ -418,14 +418,14 @@ impl Plan {
             // Chinese characters leak into --test names (硬, 测试),
             // producing shell commands that can't resolve to real files.
             // Shell commands and filesystem paths MUST be ASCII.
-            if step.verify_cmd.chars().any(|c| !c.is_ascii()) {
+            if !step.verify_cmd.is_ascii() {
                 return Err(format!(
                     "step {} verify_cmd contains non-ASCII characters: `{}`. Shell commands must be ASCII-only — use English identifiers for test names, file paths, and flags.",
                     step.id, step.verify_cmd
                 ));
             }
             for f in &step.files_touched {
-                if f.chars().any(|c| !c.is_ascii()) {
+                if !f.is_ascii() {
                     return Err(format!(
                         "step {} files_touched contains non-ASCII path: `{f}`. File paths must be ASCII-only.",
                         step.id

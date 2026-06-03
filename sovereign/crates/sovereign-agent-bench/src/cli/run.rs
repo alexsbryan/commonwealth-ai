@@ -660,7 +660,7 @@ pub fn show_problem(argv: &[String]) -> Result<(), RunError> {
     let args = RunArgs::parse(other)?;
     // Resolve `3.2` → `3.2-lights-out` etc. via the same prefix
     // matcher used by `--problems`.
-    let problems = discover_problems(&args.bench_root, Some(&[problem_id.clone()]))?;
+    let problems = discover_problems(&args.bench_root, Some(std::slice::from_ref(&problem_id)))?;
     let problem = problems.into_iter().next().ok_or_else(|| {
         RunError::NoProblems(format!(
             "no problem under {} matched `{problem_id}`",

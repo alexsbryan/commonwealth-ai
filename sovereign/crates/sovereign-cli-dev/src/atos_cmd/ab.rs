@@ -304,7 +304,7 @@ pub(crate) async fn cmd_run_ab(args: &[String]) -> i32 {
             eprintln!("run-ab: driver '{d}' exited non-zero ({rc})");
             all_passed = false;
         }
-        let end_rc = super::milestone::cmd_end_milestone(&[feature_id.clone()]).await;
+        let end_rc = super::milestone::cmd_end_milestone(std::slice::from_ref(&feature_id)).await;
         if end_rc != 0 {
             all_passed = false;
         }

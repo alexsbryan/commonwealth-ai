@@ -159,7 +159,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         info!(project_id = %project_id, "drift_orchestrator:step_code_index_start");
         println!();
         println!("  → indexing code corpus '{project_id}'…");
-        if !run_code_index_with_retry(&sovereign_bin_str, &code_path, &project_id) {
+        if !run_code_index_with_retry(&sovereign_bin_str, code_path, &project_id) {
             warn!(project_id = %project_id, "drift_orchestrator:step_code_index_failed");
             eprintln!("✗ `sovereign code index` failed after retry.");
             eprintln!("  Remediation: re-run manually:");
