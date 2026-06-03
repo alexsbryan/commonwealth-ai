@@ -977,8 +977,7 @@ fn rank_starter_questions(atoms: &[AtomEnvelope], limit: usize) -> Vec<StarterQu
                 let cleaned = if text.ends_with('?') {
                     text.to_string()
                 } else {
-                    let stripped =
-                        text.trim_end_matches(['.', '!', ',', ';', ':']);
+                    let stripped = text.trim_end_matches(['.', '!', ',', ';', ':']);
                     format!("{stripped}?")
                 };
                 let source_section = q

@@ -152,8 +152,6 @@ pub async fn cleanup_page(raw: &str, ctx: &OcrCtx) -> Result<String, CleanupErro
         .map_err(|e| {
             if e.is_timeout() {
                 CleanupError::Timeout
-            } else if e.is_connect() {
-                CleanupError::Unreachable(e.to_string())
             } else {
                 CleanupError::Unreachable(e.to_string())
             }
