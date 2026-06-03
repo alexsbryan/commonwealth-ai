@@ -1824,9 +1824,9 @@ const MAX_TOTAL_ANCHOR_LINES: usize = 1200;
 /// - ≤ `MAX_FILE_LINES_INLINE` lines: full line-numbered content
 ///   inside a fenced block.
 /// - > `MAX_FILE_LINES_INLINE` lines: function/class signatures
-///   only, each prefixed with its line number. Lets the model
-///   address regions by signature line without paying for every
-///   line of body.
+///   > only, each prefixed with its line number. Lets the model
+///   > address regions by signature line without paying for every
+///   > line of body.
 ///
 /// Returns an empty string when no source files are present (e.g.
 /// FromScratch tier before the first write).

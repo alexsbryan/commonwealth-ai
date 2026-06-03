@@ -73,7 +73,7 @@ pub const TIERED_DISPLAY_CATEGORIES: &[&str] = &["conversation", "watched_folder
 /// `rerank_conv_chunks_via_ppr` to decide which chunks participate
 /// in the tiered retrieval surface.
 pub fn is_tiered_category(cat: &str) -> bool {
-    TIERED_DISPLAY_CATEGORIES.iter().any(|c| *c == cat)
+    TIERED_DISPLAY_CATEGORIES.contains(&cat)
 }
 
 /// For a tiered category, return the conv_uuid key used to bucket

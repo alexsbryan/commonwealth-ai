@@ -616,7 +616,7 @@ pub fn canonicalize_apply_patch_heredoc(cmd: &str) -> Option<String> {
     // `EOF` with no End Patch marker), treat the heredoc closer
     // (`\nTAG\n` or `\nTAG` at end-of-string) as the body boundary.
     // Both repairs land in the canonical re-emission.
-    let body_input = after_tag.trim_start_matches(|c: char| c == '\n' || c == '\r');
+    let body_input = after_tag.trim_start_matches(['\n', '\r']);
     let pre_end: &str = match find_end_patch_marker(body_input) {
         Some(end_idx) => &body_input[..end_idx],
         None => {
@@ -1068,7 +1068,7 @@ enum CmdMode {
 fn classify_cmd(cmd: &str) -> CmdMode {
     let mut head: String = String::new();
     for token in cmd
-        .split(|c: char| c == ';' || c == '|' || c == '&' || c == '\n')
+        .split([';', '|', '&', '\n'])
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
@@ -1087,7 +1087,7 @@ fn classify_cmd(cmd: &str) -> CmdMode {
                     && var
                         .chars()
                         .next()
-                        .map_or(false, |c| c.is_ascii_uppercase() || c == '_')
+                        .is_some_and(|c| c.is_ascii_uppercase() || c == '_')
                 {
                     i += 1;
                     continue;
@@ -1155,7 +1155,7 @@ pub fn apply_read_attractor_nudge_chat(
                         None
                     }
                 })
-                .and_then(|args| extract_exec_command_cmd(args))
+                .and_then(extract_exec_command_cmd)
         } else {
             let trimmed = msg.content.trim_start();
             if trimmed.starts_with('{') && trimmed.contains("\"name\"") {
@@ -1373,7 +1373,7 @@ fn extract_first_path_hint(
             continue;
         }
         for token in msg.content.split(|c: char| c.is_whitespace() || matches!(c, ',' | ';' | '(' | ')' | '`' | '"' | '\'')) {
-            let candidate = token.trim_end_matches(|c: char| matches!(c, '.' | ',' | ':' | '!' | '?' | ';'));
+            let candidate = token.trim_end_matches(['.', ',', ':', '!', '?', ';']);
             if candidate.len() < 3 || candidate.len() > 120 {
                 continue;
             }
@@ -2259,7 +2259,7 @@ fn context_path_components(
 ) -> std::collections::HashMap<String, usize> {
     let mut counts: std::collections::HashMap<String, usize> =
         std::collections::HashMap::new();
-    let mut add_from = |s: &str, counts: &mut std::collections::HashMap<String, usize>| {
+    let add_from = |s: &str, counts: &mut std::collections::HashMap<String, usize>| {
         for p in extract_absolute_paths(s) {
             for c in path_components(&p) {
                 *counts.entry(c.to_string()).or_insert(0) += 1;

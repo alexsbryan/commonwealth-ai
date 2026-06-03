@@ -613,10 +613,8 @@ async fn mesh_pause_via_daemon(
 
     let status = resp.status();
     if status == reqwest::StatusCode::NOT_FOUND {
-        return Err(MeshPauseError::Other(format!(
-            "local daemon doesn't expose /internal/pipeline/pause — rebuild + restart it to \
-             enable mesh-aware pause, or pass --local-only to use the legacy path"
-        )));
+        return Err(MeshPauseError::Other("local daemon doesn't expose /internal/pipeline/pause — rebuild + restart it to \
+             enable mesh-aware pause, or pass --local-only to use the legacy path".to_string()));
     }
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
@@ -1063,8 +1061,8 @@ fn cmd_pod_list(_args: &[String]) -> i32 {
         return 0;
     }
     println!(
-        "{:<10} {:<6} {:<22} {:<12} {:>8} {:>10}  {}",
-        "vast_id", "state", "label", "gpu", "$/hr", "accrued", "started_at"
+        "{:<10} {:<6} {:<22} {:<12} {:>8} {:>10}  started_at",
+        "vast_id", "state", "label", "gpu", "$/hr", "accrued"
     );
     let mut running_total = 0.0;
     for p in &pods {

@@ -821,7 +821,7 @@ exit 0
             // carries the full step list. StepStart should fire
             // twice; Complete once at the end.
             assert!(
-                kinds.iter().any(|k| *k == "build_start"),
+                kinds.contains(&"build_start"),
                 "missing build_start: {kinds:?}"
             );
             assert_eq!(

@@ -84,8 +84,8 @@ pub async fn run(args: &[String]) -> i32 {
     let action = if disable { "disabled" } else { "enabled" };
 
     println!(
-        "{:<36} {:>10} {}",
-        "corpus", "atoms", "result"
+        "{:<36} {:>10} result",
+        "corpus", "atoms"
     );
     println!("{}", "─".repeat(72));
 

@@ -283,7 +283,7 @@ impl TestReport {
                 md.push_str("> ");
                 md.push_str(&sc.preview.replace('\n', "\n> "));
                 if sc.preview.chars().count() == 400 {
-                    md.push_str("…");
+                    md.push('…');
                 }
                 md.push_str("\n\n");
             }
@@ -1082,7 +1082,7 @@ async fn acquire_for_test(
             let client = reqwest::Client::builder()
                 .user_agent(HF_USER_AGENT)
                 .build()
-                .map_err(|e| Error::Http(e))?;
+                .map_err(Error::Http)?;
 
             let shards = acq.list_shards(&client).await?;
             if shards.is_empty() {
@@ -1271,7 +1271,7 @@ fn unix_to_date_parts(secs: u64) -> (u64, u64, u64, u64, u64, u64) {
 }
 
 fn is_leap(year: u64) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
 }
 
 #[cfg(test)]

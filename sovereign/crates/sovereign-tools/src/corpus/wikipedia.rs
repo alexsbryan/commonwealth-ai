@@ -34,8 +34,7 @@ impl CorpusParser for WikimediaDumpParser {
 
         let is_bz2 = source_path
             .extension()
-            .and_then(|e| e.to_str())
-            .map_or(false, |e| e == "bz2");
+            .and_then(|e| e.to_str()) == Some("bz2");
 
         let reader: Box<dyn std::io::Read> = if is_bz2 {
             Box::new(BzDecoder::new(BufReader::new(file)))

@@ -416,18 +416,12 @@ impl Tool for LintStatusTool {
         // for it. Reuses the same raw_* diagnostics so the per-file
         // counts agree with the (possibly filtered) top-level
         // arrays.
-        let files_block: Option<Vec<serde_json::Value>> = if let Some(paths) = &query_paths {
-            Some(
-                paths
+        let files_block: Option<Vec<serde_json::Value>> = query_paths.as_ref().map(|paths| paths
                     .iter()
                     .map(|p| {
                         self.freshness_entry(p, &run, &stale, &raw_failures, &raw_warnings)
                     })
-                    .collect(),
-            )
-        } else {
-            None
-        };
+                    .collect());
 
         Ok(StepOutput::Json(json!({
             "status": status,

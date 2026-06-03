@@ -106,7 +106,7 @@ mod tests {
     /// rather than spawning the full handler stack.
     #[test]
     fn dispatch_recognises_flag_layouts() {
-        let args = vec!["foo".to_string(), "--archive".to_string()];
+        let args = ["foo".to_string(), "--archive".to_string()];
         let archive = args.iter().any(|a| a == "--archive");
         let positional: Vec<&String> = args.iter().filter(|a| !a.starts_with('-')).collect();
         assert!(archive);

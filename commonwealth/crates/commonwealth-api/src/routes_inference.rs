@@ -595,7 +595,7 @@ pub async fn embeddings(
     // The OpenAI spec counts token usage; we only have char count, so
     // we produce a conservative ~4 chars/token estimate rather than
     // leaving the field out (some clients require it to be present).
-    let approx_tokens = ((total_chars + 3) / 4) as u32;
+    let approx_tokens = total_chars.div_ceil(4) as u32;
     let resp = EmbeddingResponse {
         object: "list".into(),
         data,
@@ -1089,7 +1089,7 @@ async fn run_atos_pipeline(
         .and_then(|v| v.to_str().ok())
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| uuid_like_for_sessionless());
+        .unwrap_or_else(uuid_like_for_sessionless);
 
     // Build the pipeline from the alias config + middleware
     // registry. Unknown middleware ids become 500s so a typo

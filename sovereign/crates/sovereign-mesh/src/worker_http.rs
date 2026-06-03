@@ -1013,7 +1013,7 @@ async fn dispatch_handler(
         .blob
         .expected_uploads
         .keys()
-        .filter(|name| !uploads.get(*name).is_some_and(|p| p.digest.is_some()))
+        .filter(|name| uploads.get(*name).is_none_or(|p| p.digest.is_none()))
         .collect();
     if !missing.is_empty() {
         return Err((

@@ -31,7 +31,7 @@ use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use crate::catalog_ingest::{
-    run_catalog_ingest, CatalogIngestEvent, CatalogIngestRequest,
+    run_catalog_ingest, CatalogIngestRequest,
 };
 
 /// Default catalog corpus id paired with this tool. Operators with a

@@ -130,7 +130,7 @@ impl PeerPreferenceStore {
             PEER_PREFERENCES_APP_ID,
             &key,
             Bytes::from(bytes),
-            self.self_node_id.clone(),
+            self.self_node_id,
         )?;
         Ok(())
     }
@@ -218,7 +218,7 @@ pub const GOSSIP_EXCLUDED_APP_IDS: &[&str] = &[
 /// replication. Centralized helper so the gossip path doesn't have
 /// to hard-code the list — every caller goes through here.
 pub fn is_gossip_excluded(app_id: &str) -> bool {
-    GOSSIP_EXCLUDED_APP_IDS.iter().any(|excluded| *excluded == app_id)
+    GOSSIP_EXCLUDED_APP_IDS.contains(&app_id)
 }
 
 fn node_key(peer: &NodeId) -> String {

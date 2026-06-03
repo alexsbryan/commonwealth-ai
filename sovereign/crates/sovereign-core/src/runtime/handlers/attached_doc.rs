@@ -3,15 +3,10 @@
 //! against the DocumentAsset until the model issues a `final` or hits
 //! the iteration cap.
 
-use std::collections::HashMap;
-use std::pin::Pin;
-use std::sync::Arc;
 
-use futures::Stream;
 
 use crate::error::Result;
 use crate::traits::*;
-use crate::types::*;
 
 use super::super::*;
 
@@ -51,7 +46,7 @@ impl Runtime {
         // ── Build tool descriptions for the system prompt ────────
         let mut tool_descs: Vec<String> = Vec::with_capacity(available_tools.len());
         for id in available_tools {
-            if let Ok(t) = self.tools.get(*id) {
+            if let Ok(t) = self.tools.get(id) {
                 let d = t.descriptor();
                 tool_descs.push(format!("- {} (id: {}): {}", d.name, d.id, d.description));
             }

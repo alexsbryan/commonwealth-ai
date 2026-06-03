@@ -199,7 +199,7 @@ mod tests {
 
     #[test]
     fn truncate_handles_long_input() {
-        let s: String = std::iter::repeat('x').take(200).collect();
+        let s: String = std::iter::repeat_n('x', 200).collect();
         let t = truncate(&s, 50);
         assert!(t.len() < 200);
         assert!(t.contains("(truncated)"));

@@ -53,7 +53,7 @@ impl BenchReport {
             "Started {} → Finished {}\n",
             self.started_at, self.finished_at
         ));
-        out.push_str("\n");
+        out.push('\n');
         for p in &self.per_problem {
             out.push_str(&format!(
                 "  {id:<32} {a}/{b}/{c} = {total}/9   exit={exit:<16} tokens(out)={tok:>6} wall={wall}ms{partial}\n",
@@ -97,7 +97,7 @@ impl BenchReport {
                 ));
             }
         }
-        out.push_str("\n");
+        out.push('\n');
         out.push_str(&format!(
             "Grand total: {} / {}\n",
             self.grand_total, self.max_total

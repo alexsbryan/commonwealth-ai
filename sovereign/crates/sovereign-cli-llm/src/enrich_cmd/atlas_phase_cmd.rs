@@ -400,7 +400,7 @@ fn build_runner(cfg: &EnrichConfig) -> Result<PhaseRunner, i32> {
         return Err(1);
     };
 
-    let client = match DaemonInferenceClient::from_enrich_config(&cfg) {
+    let client = match DaemonInferenceClient::from_enrich_config(cfg) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("error: building daemon client: {e}");

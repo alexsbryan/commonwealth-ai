@@ -493,7 +493,7 @@ fn strip_wikitext(input: &str) -> String {
         let cleaned = strip_apostrophe_emphasis(&cleaned);
         // Drop leading wikitext list / table / quote markers.
         let stripped = cleaned
-            .trim_start_matches(|c: char| matches!(c, '*' | '#' | ':' | ';' | '|'))
+            .trim_start_matches(['*', '#', ':', ';', '|'])
             .trim();
         if !stripped.is_empty() {
             out.push_str(stripped);
@@ -689,7 +689,7 @@ mod tests {
             .collect::<std::result::Result<Vec<_>, _>>()
             .unwrap();
         // Lead + 2 sections.
-        assert!(docs.len() >= 1);
+        assert!(!docs.is_empty());
         // First doc: lead.
         let lead_meta: WikipediaChunkMetadata =
             serde_json::from_value(docs[0].metadata.clone().unwrap()).unwrap();

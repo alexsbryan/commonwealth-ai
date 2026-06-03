@@ -52,7 +52,7 @@ pub fn wiki_title_from_url(url: &str) -> Option<String> {
 
     // Strip query strings and fragments.
     let end = after_wiki
-        .find(|c| c == '?' || c == '#')
+        .find(['?', '#'])
         .unwrap_or(after_wiki.len());
     let raw_title = &after_wiki[..end];
 

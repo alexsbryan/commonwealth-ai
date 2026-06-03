@@ -310,11 +310,10 @@ fn sweep_stale_incoming(claude_dir: &Path) -> usize {
                 // file at the top level.
                 walk(&path, count);
             } else if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                if name.ends_with(".alignment-incoming") {
-                    if fs::remove_file(&path).is_ok() {
+                if name.ends_with(".alignment-incoming")
+                    && fs::remove_file(&path).is_ok() {
                         *count += 1;
                     }
-                }
             }
         }
     }

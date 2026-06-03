@@ -2,15 +2,9 @@
 //! `maybe_collaborate`, `apply_post_stream_refinement`) and tool-narrowing
 //! that the dispatch path consults before invoking inference.
 
-use std::collections::HashMap;
-use std::pin::Pin;
-use std::sync::Arc;
 
-use futures::Stream;
 
-use crate::error::Result;
 use crate::traits::*;
-use crate::types::*;
 
 use super::*;
 

@@ -144,7 +144,7 @@ mod tests {
         let chunker = SentenceChunker::new(50);
         let text = "What is this? It is great! Another sentence. And more.";
         let chunks = chunker.chunk(text);
-        assert!(chunks.len() >= 1);
+        assert!(!chunks.is_empty());
         let all: String = chunks.iter().map(|c| c.content.clone()).collect::<Vec<_>>().join(" ");
         assert!(all.contains("What is this?"));
         assert!(all.contains("It is great!"));

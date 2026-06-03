@@ -498,7 +498,7 @@ fn cmd_peer_preference_list() -> Result<()> {
         println!("(no peer preferences set)");
         return Ok(());
     }
-    println!("{:<32} {:>10}  {}", "Peer node id", "Multiplier", "Reason");
+    println!("{:<32} {:>10}  Reason", "Peer node id", "Multiplier");
     println!("{}", "─".repeat(64));
     for (id, pref) in entries {
         let id_hex: String =

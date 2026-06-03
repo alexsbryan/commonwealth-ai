@@ -70,7 +70,7 @@ pub async fn search_web(
         sovereign_core::types::StepOutput::Json(ref v) => v
             .get("answer")
             .and_then(|a| a.as_str())
-            .unwrap_or_else(|| "No results found.")
+            .unwrap_or("No results found.")
             .to_string(),
         sovereign_core::types::StepOutput::ReasonWithToolsResult { text, .. } => text,
         _ => "No results found.".to_string(),

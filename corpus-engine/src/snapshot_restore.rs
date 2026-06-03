@@ -187,7 +187,7 @@ fn extract_snapshot_entries(
 ) -> Result<u64> {
     let file = File::open(archive_path)?;
     let zstd_reader = zstd::stream::Decoder::new(file)
-        .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, format!("zstd open: {e}"))))?;
+        .map_err(|e| Error::Io(io::Error::other(format!("zstd open: {e}"))))?;
     let mut archive = tar::Archive::new(zstd_reader);
     archive.set_preserve_permissions(true);
     archive.set_preserve_mtime(true);

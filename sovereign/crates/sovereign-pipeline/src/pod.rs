@@ -231,7 +231,7 @@ fn run_vastai(mut cmd: Command) -> Result<Output> {
 /// often surfaces unverified or low-reliability hosts; this overlay
 /// keeps us off them by default. Override by passing `--raw` flag
 /// straight through if you know what you're doing.
-pub fn pick_offer<'a>(offers: &'a [Offer]) -> Option<&'a Offer> {
+pub fn pick_offer(offers: &[Offer]) -> Option<&Offer> {
     let mut ranked: Vec<&Offer> = offers.iter().collect();
     ranked.sort_by(|a, b| {
         b.verified

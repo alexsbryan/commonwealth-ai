@@ -358,9 +358,7 @@ fn candidate_pairs(entities: &[Entity]) -> Vec<(usize, usize)> {
             buckets.entry(format!("e:{em}")).or_default().push(i);
             if let Some(local) = em.split('@').next() {
                 if let Some(last) = local
-                    .split(|c| c == '.' || c == '_' || c == '-')
-                    .filter(|t| !t.is_empty())
-                    .last()
+                    .split(['.', '_', '-']).rfind(|t| !t.is_empty())
                 {
                     buckets.entry(format!("s:{last}")).or_default().push(i);
                 }

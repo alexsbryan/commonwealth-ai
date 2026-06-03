@@ -46,7 +46,7 @@ pub async fn run_setup(args: &[String]) -> i32 {
     // invocations get a one-time banner so the user knows where
     // service registration moved.
     let invoked_via_daemon_path = args.iter().any(|a| a == "--wizard-only");
-    let mut effective_args: Vec<String> = args.iter().cloned().collect();
+    let mut effective_args: Vec<String> = args.to_vec();
     if !invoked_via_daemon_path {
         crate::util::deprecation::announce(
             "sovereign setup",
@@ -616,11 +616,9 @@ fn lookup_slot_size_gb(
 ) -> Option<f64> {
     let file_name = path.file_name()?.to_str()?;
     for profile in manifest.profiles.values() {
-        for slot in [&profile.thoughtful, &profile.fast, &profile.embed] {
-            if let Some(s) = slot {
-                if s.file == file_name {
-                    return Some(s.size_gb);
-                }
+        for s in [&profile.thoughtful, &profile.fast, &profile.embed].into_iter().flatten() {
+            if s.file == file_name {
+                return Some(s.size_gb);
             }
         }
     }
@@ -1343,7 +1341,7 @@ mod tests {
         // guarantee) and match the number of profiles that define thoughtful
         // and have non-duplicate base_names.
         let cat = build_primary_catalog(&ProfileName::VeryHigh);
-        assert!(cat.len() >= 1);
+        assert!(!cat.is_empty());
         // First row (recommended) should be the VeryHigh slot.
         let first = &cat[0];
         assert!(first.recommended);

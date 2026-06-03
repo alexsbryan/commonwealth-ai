@@ -116,10 +116,9 @@ pub(crate) fn is_harvest_worthy(message: &str) -> bool {
         "wip", "fix typo", "save", "merge", "bump", "format", "rename",
     ];
     for prefix in NOISE {
-        if lower.starts_with(prefix) {
+        if let Some(after) = lower.strip_prefix(prefix) {
             // Require a word boundary after the prefix: next char
             // (if any) must be whitespace or a punctuation mark.
-            let after = &lower[prefix.len()..];
             let boundary_ok = after.is_empty()
                 || after
                     .chars()
@@ -144,7 +143,7 @@ pub(crate) fn infer_kind(message: &str) -> &'static str {
     // We only inspect the type; scope-and-subject aren't relevant
     // for kind inference.
     let prefix = trimmed
-        .split(|c: char| matches!(c, ':' | '(' | ' '))
+        .split([':', '(', ' '])
         .next()
         .unwrap_or("");
     match prefix {

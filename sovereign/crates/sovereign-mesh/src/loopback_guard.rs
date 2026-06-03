@@ -269,7 +269,7 @@ mod tests {
         );
         // We don't assert the exact body text to keep the test
         // robust to message rewording — the status is the contract.
-        let _ = ignore(&Ipv4Addr::LOCALHOST);
+        ignore(&Ipv4Addr::LOCALHOST);
     }
 
     fn ignore<T>(_: &T) {}

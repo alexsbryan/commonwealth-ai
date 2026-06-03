@@ -230,7 +230,7 @@ impl ToolPatternMatcher {
                 .collect();
             if !investigative.is_empty() {
                 let mut tools: Vec<String> =
-                    investigative.iter().cloned().collect::<Vec<_>>();
+                    investigative.to_vec();
                 tools.push("build".into());
                 tools.dedup();
                 hits.push(ObservedPattern {
@@ -241,7 +241,7 @@ impl ToolPatternMatcher {
                     ),
                     tools,
                 });
-            } else if before_build.len() >= 1 {
+            } else if !before_build.is_empty() {
                 // BuildFollowsAction: there was *some* prior call,
                 // just not an investigative one. Quieter signal.
                 hits.push(ObservedPattern {

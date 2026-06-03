@@ -601,7 +601,7 @@ mod tests {
         let (dir, ext) = tmp_dispatcher();
         let docs_dir = dir.path().join("docs");
         std::fs::create_dir_all(&docs_dir).unwrap();
-        std::fs::write(docs_dir.join("mystery.bin"), &[0u8, 1, 2, 3, 4, 0xff, 0xfe])
+        std::fs::write(docs_dir.join("mystery.bin"), [0u8, 1, 2, 3, 4, 0xff, 0xfe])
             .unwrap();
 
         let docs: Vec<_> = ext

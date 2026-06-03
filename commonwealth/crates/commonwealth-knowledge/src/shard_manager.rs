@@ -297,12 +297,11 @@ impl ShardManager {
 
         let mut updated = false;
         for p in &mut handoff.partitions {
-            if p.node_id == local_node_id {
-                if !matches!(p.status, PartitionStatus::Complete { .. }) {
+            if p.node_id == local_node_id
+                && !matches!(p.status, PartitionStatus::Complete { .. }) {
                     p.status = PartitionStatus::Complete { completed_at: now_ms };
                     updated = true;
                 }
-            }
         }
         if updated {
             handoff.updated_at = now_ms;

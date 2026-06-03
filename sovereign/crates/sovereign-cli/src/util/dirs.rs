@@ -6,4 +6,4 @@
 //! re-export shim so existing `crate::util::dirs::*` call sites
 //! keep compiling.
 
-pub use sovereign_cli_shared::dirs::{mesh_data_dir, sovereign_indexes, sovereign_root};
+pub use sovereign_cli_shared::dirs::sovereign_root;

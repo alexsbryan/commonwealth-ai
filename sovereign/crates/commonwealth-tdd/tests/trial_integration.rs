@@ -157,7 +157,7 @@ async fn maximize_passing_stalls_when_no_candidate_improves() {
 def add(a, b):
     return 1
 ```"#;
-    let script = std::iter::repeat(noop.to_string()).take(50).collect::<Vec<_>>();
+    let script = std::iter::repeat_n(noop.to_string(), 50).collect::<Vec<_>>();
     let backend = Arc::new(DeterministicChatBackend::from_strs(script));
     let trial = Trial {
         workdir,
@@ -282,7 +282,7 @@ async fn generate_one_failing_rejects_tautology() {
 def value():
     return 42
 "#;
-    let script: Vec<String> = std::iter::repeat(noop.to_string()).take(10).collect();
+    let script: Vec<String> = std::iter::repeat_n(noop.to_string(), 10).collect();
     let backend = Arc::new(DeterministicChatBackend::from_strs(script));
     let trial = Trial {
         workdir,

@@ -131,9 +131,11 @@ pub struct ProviderConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
+#[derive(Default)]
 pub enum ProviderKind {
     /// `/v1/chat/completions` JSON shape. Local daemon speaks this;
     /// so does OpenAI, OpenRouter, Together, vLLM.
+    #[default]
     OpenaiCompatible,
     /// `/v1/messages` JSON shape (Anthropic). Different request body
     /// layout (`system` is top-level, `tools` for structured output).
@@ -161,11 +163,6 @@ pub enum StructuredOutputMode {
     ToolUseForced,
 }
 
-impl Default for ProviderKind {
-    fn default() -> Self {
-        Self::OpenaiCompatible
-    }
-}
 
 /// Parse a model spec of the form `provider:model_id` or bare
 /// `model_id`. Bare resolves to provider=`local`. Empty model id is

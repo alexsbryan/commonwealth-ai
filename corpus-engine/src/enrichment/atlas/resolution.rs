@@ -2566,7 +2566,7 @@ pub fn resolve_type_extensions(
     };
     use super::atoms::{AtomId, ChunkRef, Claim, Entity, Opposition, Position};
     use super::edges::{EdgeId, EdgeProvenance, EdgeType};
-    use crate::enrichment::pipeline::atlas::EnrichmentDepth;
+    
 
     let mut out = TypeExtensionResolveOutput::default();
     let mut entity_idx = next_entity_idx;

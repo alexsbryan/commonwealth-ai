@@ -211,7 +211,7 @@ impl TestEnv {
 
         let host = Arc::new(StubHost::new(label));
         let host_dyn: Arc<dyn NewsworthyHost> = host.clone();
-        let mw: Arc<dyn MediaWikiClient> = Arc::new(StubMediaWiki::default());
+        let mw: Arc<dyn MediaWikiClient> = Arc::new(StubMediaWiki);
         let watcher = Arc::new(WikipediaNewsworthyWatcher::new(
             host_dyn,
             engine,

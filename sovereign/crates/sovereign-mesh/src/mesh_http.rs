@@ -534,8 +534,8 @@ mod tests {
             .json()
             .await
             .unwrap();
-        assert!(status.get("join_key").map_or(true, |v| v.is_null()));
-        assert!(status.get("join_link").map_or(true, |v| v.is_null()));
+        assert!(status.get("join_key").is_none_or(|v| v.is_null()));
+        assert!(status.get("join_link").is_none_or(|v| v.is_null()));
     }
 
     #[tokio::test]

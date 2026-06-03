@@ -182,7 +182,7 @@ fn rfc3339_to_unix(s: &str) -> Option<i64> {
     let year: i64 = parts.next()?.parse().ok()?;
     let month: i64 = parts.next()?.parse().ok()?;
     let day: i64 = parts.next()?.parse().ok()?;
-    let time_end = rest.find(|c: char| c == 'Z' || c == '+' || c == '-').unwrap_or(rest.len());
+    let time_end = rest.find(['Z', '+', '-']).unwrap_or(rest.len());
     let time = &rest[..time_end];
     let mut tparts = time.split(':');
     let hh: i64 = tparts.next()?.parse().ok()?;

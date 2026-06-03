@@ -65,12 +65,11 @@ pub async fn index_serve(
             ));
         }
     };
-    let self_node_id = state
+    let self_node_id = *state
         .inner
         .self_node_id_swap
         .load_full()
-        .as_ref()
-        .clone();
+        .as_ref();
     let partition_path = engine
         .index_dir()
         .join(format!("{corpus_id}-partition-{self_node_id}"));

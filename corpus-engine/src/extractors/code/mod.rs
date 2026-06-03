@@ -762,7 +762,7 @@ fn python_docstring(def_node: Node, source: &[u8]) -> Option<String> {
 }
 
 fn strip_python_string_quotes(raw: &str) -> String {
-    let trimmed = raw.trim_start_matches(|c: char| matches!(c, 'r' | 'b' | 'u' | 'f' | 'R' | 'B' | 'U' | 'F'));
+    let trimmed = raw.trim_start_matches(['r', 'b', 'u', 'f', 'R', 'B', 'U', 'F']);
     for delim in ["\"\"\"", "'''", "\"", "'"] {
         if let Some(rest) = trimmed.strip_prefix(delim) {
             if let Some(body) = rest.strip_suffix(delim) {

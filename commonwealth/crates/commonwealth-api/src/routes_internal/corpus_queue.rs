@@ -82,7 +82,7 @@ pub async fn corpus_ingest_partition(
     let file_indices = req.file_indices.clone();
     let article_range = req.article_range;
     let handoff_id = req.handoff_id;
-    let local_node_id = state.inner.self_node_id_swap.load_full().as_ref().clone();
+    let local_node_id = *state.inner.self_node_id_swap.load_full().as_ref();
     let engine = _engine.clone();
     let mesh_store = Arc::clone(&state.inner.mesh_store);
     let state_clone = state.clone();
@@ -495,12 +495,11 @@ pub fn spawn_queue_merge(
             }
         };
         let mesh_store = Arc::clone(&state.inner.mesh_store);
-        let local_node_id = state
+        let local_node_id = *state
             .inner
             .self_node_id_swap
             .load_full()
-            .as_ref()
-            .clone();
+            .as_ref();
         let peer_urls: Vec<(NodeId, String)> = {
             let mesh = state.inner.mesh.read().await;
             mesh.members

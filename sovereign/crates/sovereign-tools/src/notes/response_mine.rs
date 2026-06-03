@@ -272,15 +272,14 @@ impl<'a> Iterator for SentenceIter<'a> {
             let c = self.bytes[end];
             // Sentence terminator: `.` / `!` / `?` followed by
             // whitespace, OR two consecutive newlines.
-            if matches!(c, b'.' | b'!' | b'?') {
-                if end + 1 == self.bytes.len()
-                    || self.bytes[end + 1].is_ascii_whitespace()
+            if matches!(c, b'.' | b'!' | b'?')
+                && (end + 1 == self.bytes.len()
+                    || self.bytes[end + 1].is_ascii_whitespace())
                 {
                     let sentence_end = end; // exclude the terminator
                     self.cursor = end + 1;
                     return Some((&self.text[start..sentence_end], start));
                 }
-            }
             if c == b'\n' && end + 1 < self.bytes.len() && self.bytes[end + 1] == b'\n' {
                 let sentence_end = end;
                 self.cursor = end + 2;

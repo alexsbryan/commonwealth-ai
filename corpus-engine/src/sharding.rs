@@ -222,7 +222,7 @@ pub async fn extract_shard(
         &source_info.embedding_model,
         source_info.embedding_dimensions,
         source_info.mesh_sharing,
-        &"",
+        "",
     )
     .await?;
 

@@ -367,7 +367,7 @@ fn write_atomic<T: Serialize>(path: &Path, value: &T) -> io::Result<()> {
             .unwrap_or("atlas")
     ));
     let data = serde_json::to_vec_pretty(value)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("serialise: {e}")))?;
+        .map_err(|e| io::Error::other(format!("serialise: {e}")))?;
     fs::write(&tmp, data)?;
     fs::rename(&tmp, path)?;
     Ok(())

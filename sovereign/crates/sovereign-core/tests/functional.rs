@@ -78,7 +78,7 @@ async fn corpus_installed_but_no_match_reports_zero_count() {
     // Wiki corpus was searched but found nothing relevant
     let wiki_source = prov.sources.iter().find(|s| s.origin == "wiki");
     assert!(
-        wiki_source.map_or(true, |s| s.count == 0),
+        wiki_source.is_none_or(|s| s.count == 0),
         "Wiki should have 0 matches for unrelated query"
     );
 }

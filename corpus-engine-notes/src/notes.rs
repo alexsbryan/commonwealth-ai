@@ -385,7 +385,7 @@ fn fetch_bm25_pool(
     );
     let mut params_owned: Vec<rusqlite::types::Value> = Vec::new();
     params_owned.push(rusqlite::types::Value::Text(query.to_string()));
-    params_owned.extend(bound.into_iter());
+    params_owned.extend(bound);
     params_owned.push(rusqlite::types::Value::Integer(pool_size as i64));
     let mut stmt = conn.prepare(&sql).map_err(sqlite_err)?;
     let mapped = stmt
@@ -532,7 +532,7 @@ pub(crate) fn embedding_to_le_bytes(vec: &[f32]) -> Vec<u8> {
 /// [`Error::Io`] on length mismatch (blob length not a multiple
 /// of 4).
 pub(crate) fn embedding_from_le_bytes(bytes: &[u8]) -> Result<Vec<f32>> {
-    if bytes.len() % 4 != 0 {
+    if !bytes.len().is_multiple_of(4) {
         return Err(Error::Io(std::io::Error::other(format!(
             "embedding_from_le_bytes: blob length {} is not a multiple of 4",
             bytes.len()

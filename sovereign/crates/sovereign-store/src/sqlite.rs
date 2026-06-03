@@ -2067,7 +2067,7 @@ impl DocumentAssetStore for SqliteStateStore {
         let skeleton_json = asset
             .skeleton
             .as_ref()
-            .map(|s| serde_json::to_string(s))
+            .map(serde_json::to_string)
             .transpose()
             .map_err(|e| Error::Storage(e.to_string()))?;
         let ingested_ts = asset.ingested_at.timestamp();
@@ -2452,7 +2452,7 @@ fn row_to_document_asset(row: &rusqlite::Row) -> DocumentAsset {
         chunk_count: row.get::<_, i64>(5).unwrap_or(0) as usize,
         document_type: serde_json::from_str(&doc_type_str).unwrap_or(DocumentTypeTag::Unknown),
         ingested_at: chrono::DateTime::from_timestamp(ingested_ts, 0)
-            .unwrap_or_else(|| chrono::Utc::now()),
+            .unwrap_or_else(chrono::Utc::now),
         index_id: row.get(8).unwrap_or_default(),
         skeleton: skeleton_json
             .as_deref()

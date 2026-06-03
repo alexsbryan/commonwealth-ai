@@ -251,10 +251,10 @@ impl AlignmentScope {
         let mut file_count = 0usize;
         let mut note_count = 0usize;
         let mut by_section: HashMap<&'static str, usize> = HashMap::new();
-        let mut iter = extractor
+        let iter = extractor
             .extract(&claude_dir)
             .map_err(|e| format!("alignment extractor: {e}"))?;
-        while let Some(doc) = iter.next() {
+        for doc in iter {
             let doc = doc.map_err(|e| format!("alignment extractor: {e}"))?;
             if doc.source_id.starts_with("notes://") {
                 note_count += 1;

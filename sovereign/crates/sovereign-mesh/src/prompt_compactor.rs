@@ -461,7 +461,7 @@ mod tests {
     fn compactor_truncate_middle_handles_multibyte_safely() {
         // A string of 2-byte UTF-8 chars where the cut point lands
         // mid-codepoint. Must not panic.
-        let s: String = std::iter::repeat('é').take(2_000).collect(); // 4_000 bytes
+        let s: String = std::iter::repeat_n('é', 2_000).collect(); // 4_000 bytes
         let out = truncate_middle(&s, 101); // odd cap, mid-codepoint cuts
         assert!(out.len() < s.len());
         // Round-trip parse: the result must still be valid UTF-8.

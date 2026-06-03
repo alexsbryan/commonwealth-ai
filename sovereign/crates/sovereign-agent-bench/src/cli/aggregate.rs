@@ -341,8 +341,8 @@ fn print_table(report: &AggregateReport, list_paths: bool) {
     );
     println!();
     println!(
-        "  {:<24} {:>6}  {:<8}  {}",
-        "class", "count", "kind", "description"
+        "  {:<24} {:>6}  {:<8}  description",
+        "class", "count", "kind"
     );
     println!("  {}", "-".repeat(80));
     for bucket in &report.histogram {

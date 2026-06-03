@@ -26,8 +26,8 @@ fn dispatcher_walks_mixed_folder_end_to_end() {
     std::fs::write(docs_dir.join("note2.txt"), b"second note text").unwrap();
     // Two duplicate binaries — one ledger entry, two Asset atoms
     // (same content-hash id, so atoms.json dedup later collapses).
-    std::fs::write(docs_dir.join("a.bin"), &[0u8, 1, 2, 3, 4]).unwrap();
-    std::fs::write(docs_dir.join("b.bin"), &[0u8, 1, 2, 3, 4]).unwrap();
+    std::fs::write(docs_dir.join("a.bin"), [0u8, 1, 2, 3, 4]).unwrap();
+    std::fs::write(docs_dir.join("b.bin"), [0u8, 1, 2, 3, 4]).unwrap();
     // Hidden + macOS junk are silently skipped.
     std::fs::write(docs_dir.join(".DS_Store"), b"junk").unwrap();
 

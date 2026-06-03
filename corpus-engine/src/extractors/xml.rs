@@ -53,10 +53,9 @@ impl Extractor for MediawikiExtractor {
             .map_err(|e| Error::Extraction(format!("Failed to open {}: {e}", source_path.display())))?;
 
         let is_bz2 = self.decompress.as_deref() == Some("bzip2")
-            || source_path
+            || (source_path
                 .extension()
-                .and_then(|e| e.to_str())
-                .map_or(false, |e| e == "bz2");
+                .and_then(|e| e.to_str()) == Some("bz2"));
 
         let reader: Box<dyn std::io::Read + Send> = if is_bz2 {
             Box::new(bzip2::read::BzDecoder::new(BufReader::new(file)))
@@ -346,7 +345,7 @@ fn find_posts_files(path: &Path) -> Result<Vec<PathBuf>> {
         } else if p.is_file()
             && p.file_name()
                 .and_then(|n| n.to_str())
-                .map_or(false, |n| n.eq_ignore_ascii_case("Posts.xml"))
+                .is_some_and(|n| n.eq_ignore_ascii_case("Posts.xml"))
         {
             files.push(p);
         }

@@ -59,10 +59,9 @@ impl Extractor for JsonlExtractor {
             .map_err(|e| Error::Extraction(format!("Failed to open {}: {e}", source_path.display())))?;
 
         let is_gz = self.decompress.as_deref() == Some("gzip")
-            || source_path
+            || (source_path
                 .extension()
-                .and_then(|e| e.to_str())
-                .map_or(false, |e| e == "gz");
+                .and_then(|e| e.to_str()) == Some("gz"));
 
         let reader: Box<dyn BufRead + Send> = if is_gz {
             Box::new(BufReader::new(flate2::read::GzDecoder::new(file)))

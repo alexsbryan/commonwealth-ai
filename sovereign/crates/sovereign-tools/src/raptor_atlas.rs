@@ -807,7 +807,7 @@ fn extract_quote_spans_for_cluster(
         // QuoteSpan accuracy.
         let mut best: Option<(usize, usize, String)> = None;
         let mut cursor = 0usize;
-        for piece in chunk.content.split_terminator(|c| c == '.' || c == '!' || c == '?') {
+        for piece in chunk.content.split_terminator(['.', '!', '?']) {
             let len = piece.len();
             let start = cursor;
             let end = cursor + len;
@@ -1022,17 +1022,15 @@ mod tests {
 
     #[test]
     fn extract_quote_spans_pulls_longest_sentence_per_chunk() {
-        let chunks = vec![
-            ChunkInput {
+        let chunks = [ChunkInput {
                 chunk_id: 1,
                 content: "Short. This is the load-bearing sentence with quite a few words. Tiny.".to_string(),
             },
             ChunkInput {
                 chunk_id: 2,
                 content: "Another chunk where this longer sentence is the one to anchor on. End.".to_string(),
-            },
-        ];
-        let embs = vec![vec![1.0, 0.0], vec![0.0, 1.0]];
+            }];
+        let embs = [vec![1.0, 0.0], vec![0.0, 1.0]];
         let refs: Vec<&Vec<f32>> = embs.iter().collect();
         let chunk_refs: Vec<&ChunkInput> = chunks.iter().collect();
         let centroid = vec![0.5, 0.5];
@@ -1047,17 +1045,15 @@ mod tests {
 
     #[test]
     fn extract_quote_spans_dedupes_by_prefix() {
-        let chunks = vec![
-            ChunkInput {
+        let chunks = [ChunkInput {
                 chunk_id: 1,
                 content: "The professor walked through London streets alone and unsuspected by men.".to_string(),
             },
             ChunkInput {
                 chunk_id: 2,
                 content: "The professor walked through London streets alone and unsuspected by men.".to_string(),
-            },
-        ];
-        let embs = vec![vec![1.0, 0.0], vec![1.0, 0.0]];
+            }];
+        let embs = [vec![1.0, 0.0], vec![1.0, 0.0]];
         let refs: Vec<&Vec<f32>> = embs.iter().collect();
         let chunk_refs: Vec<&ChunkInput> = chunks.iter().collect();
         let centroid = vec![1.0, 0.0];

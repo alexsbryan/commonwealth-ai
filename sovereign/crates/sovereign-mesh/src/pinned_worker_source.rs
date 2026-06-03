@@ -199,7 +199,7 @@ impl PinnedWorkerEndpointSource {
             .read()
             .await
             .iter()
-            .map(|p| p.node_id.clone())
+            .map(|p| p.node_id)
             .collect()
     }
 
@@ -209,7 +209,7 @@ impl PinnedWorkerEndpointSource {
             .await
             .iter()
             .map(|p| PeerInferenceEndpoint {
-                node_id: p.node_id.clone(),
+                node_id: p.node_id,
                 name: p.name.clone(),
                 base_urls: vec![p.base_url.clone()],
                 system_ram_gb: p.capabilities.system_ram_gb,
@@ -339,7 +339,7 @@ mod tests {
         let blob = mint([1u8; 32], "abc12345-job");
         let pod = PinnedPod::from_blob(&blob, "203.0.113.10", 9742, PodCapabilities::default())
             .expect("pod from blob");
-        let expected_id = pod.node_id.clone();
+        let expected_id = pod.node_id;
         let source = PinnedWorkerEndpointSource::from_pods(vec![pod]);
         let endpoints = source.peer_inference_endpoints().await;
         assert_eq!(endpoints.len(), 1);
@@ -373,7 +373,7 @@ mod tests {
         let blob = mint([3u8; 32], "gone");
         let source = PinnedWorkerEndpointSource::new();
         let pod = PinnedPod::from_blob(&blob, "h", 9742, PodCapabilities::default()).unwrap();
-        let id = pod.node_id.clone();
+        let id = pod.node_id;
         source.register(pod).await;
         assert_eq!(source.count().await, 1);
         assert!(source.deregister(&id).await);
@@ -415,7 +415,7 @@ mod tests {
             _peer_name: &str,
         ) -> Option<LedgerEmission> {
             Some(LedgerEmission::new(
-                peer_node_id.clone(),
+                *peer_node_id,
                 model_id,
                 self.emitter.clone(),
             ))
@@ -473,7 +473,7 @@ mod tests {
             PodCapabilities::default(),
         )
         .unwrap();
-        let pinned_id = pod.node_id.clone();
+        let pinned_id = pod.node_id;
         let pinned = Arc::new(PinnedWorkerEndpointSource::from_pods(vec![pod]));
         let composite = CompositeEndpointSource::new(mesh, pinned);
 

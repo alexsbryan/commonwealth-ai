@@ -488,7 +488,7 @@ async fn sensitive_oracle_only_returns_sensitive_corpora() {
 
     let normal_id = register(&fx, WatchedFolderConfig::default()).await;
 
-    let sensitive_set: std::collections::HashSet<String> = (&*fx.manager)
+    let sensitive_set: std::collections::HashSet<String> = (*fx.manager)
         .sensitive_corpus_ids()
         .await
         .into_iter()
@@ -518,7 +518,7 @@ async fn sensitive_oracle_only_returns_sensitive_corpora() {
 async fn sensitive_oracle_empty_when_no_sensitive_corpora() {
     let fx = boot().await;
     let _id = register(&fx, WatchedFolderConfig::default()).await;
-    let set = (&*fx.manager).sensitive_corpus_ids().await;
+    let set = (*fx.manager).sensitive_corpus_ids().await;
     assert!(
         set.is_empty(),
         "default-defaults oracle must report no sensitive corpora; got {set:?}"

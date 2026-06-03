@@ -335,7 +335,7 @@ fn slot_loaded(provider: &dyn InferenceProvider, speed: Speed) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::oicp::Capability;
+    
 
     fn cand(score: f32, size_gb: Option<f32>, id: &str) -> ModelCandidate {
         ModelCandidate {

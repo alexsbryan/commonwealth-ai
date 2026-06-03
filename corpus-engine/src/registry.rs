@@ -467,6 +467,15 @@ fn verify_sha256(data: &[u8], expected_hex: &str) -> std::result::Result<(), Str
     Ok(())
 }
 
+// ── Path helper (used by engine and xtask) ───────────────────────────────────
+
+/// Resolve the path to the bundled snapshot file within the corpus-engine crate.
+/// Returns `None` outside a cargo workspace (e.g. when installed as a binary).
+pub fn snapshot_path_in_workspace() -> Option<PathBuf> {
+    // CARGO_MANIFEST_DIR is set at build time; use it at runtime via env! fallback.
+    option_env!("CARGO_MANIFEST_DIR").map(|d| Path::new(d).join("registry_snapshot.toml"))
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -549,7 +558,7 @@ sha256 = ""
         let registry =
             RecipeRegistry::from_bundled(None).with_local_registry(&nonexistent);
         // Same number of entries as the bundled-only registry.
-        assert!(registry.list_entries().len() >= 1);
+        assert!(!registry.list_entries().is_empty());
         assert!(!registry.is_local_entry("wikipedia"));
     }
 
@@ -628,13 +637,4 @@ sha256 = ""
         );
         assert_eq!(r.corpus.id, "wikipedia-simple");
     }
-}
-
-// ── Path helper (used by engine and xtask) ───────────────────────────────────
-
-/// Resolve the path to the bundled snapshot file within the corpus-engine crate.
-/// Returns `None` outside a cargo workspace (e.g. when installed as a binary).
-pub fn snapshot_path_in_workspace() -> Option<PathBuf> {
-    // CARGO_MANIFEST_DIR is set at build time; use it at runtime via env! fallback.
-    option_env!("CARGO_MANIFEST_DIR").map(|d| Path::new(d).join("registry_snapshot.toml"))
 }

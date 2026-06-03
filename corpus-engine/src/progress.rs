@@ -39,7 +39,7 @@ impl SourceFileManifest {
             return Ok(None);
         }
         let raw = std::fs::read_to_string(&manifest_path)
-            .map_err(|e| crate::error::Error::Io(e))?;
+            .map_err(crate::error::Error::Io)?;
         let manifest = serde_json::from_str::<Self>(&raw)
             .map_err(|e| crate::error::Error::Serialization(e.to_string()))?;
         Ok(Some(manifest))
@@ -51,7 +51,7 @@ impl SourceFileManifest {
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| crate::error::Error::Serialization(e.to_string()))?;
         std::fs::write(&manifest_path, json)
-            .map_err(|e| crate::error::Error::Io(e))?;
+            .map_err(crate::error::Error::Io)?;
         Ok(())
     }
 }

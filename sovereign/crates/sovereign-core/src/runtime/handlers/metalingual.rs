@@ -100,20 +100,16 @@ impl Runtime {
             // honestly — the alternative (parametric fallback) is
             // exactly the failure mode that motivated this carve-out.
             let empty_message = match &locator {
-                MetalingualLocator::SystemCode => format!(
-                    "I read this as a question about *this codebase*, but I don't \
+                MetalingualLocator::SystemCode => "I read this as a question about *this codebase*, but I don't \
                      have a code corpus indexed locally. Run `sovereign code \
                      index <path>` against the relevant repo to enable in-system \
                      vocabulary lookups, then ask again.\n\n\
                      If you meant something else by \"in this codebase\", let me \
-                     know — I can re-route to general knowledge retrieval."
-                ),
-                MetalingualLocator::Conversation => format!(
-                    "I read this as a question about something we discussed \
+                     know — I can re-route to general knowledge retrieval.".to_string(),
+                MetalingualLocator::Conversation => "I read this as a question about something we discussed \
                      earlier in this conversation, but I couldn't find that \
                      reference. Could you quote or paraphrase the part you're \
-                     asking about?"
-                ),
+                     asking about?".to_string(),
                 MetalingualLocator::NamedSource(n) => format!(
                     "I read this as a question about how `{n}` uses the term, \
                      but I don't have a corpus matching `{n}` indexed locally. \
@@ -122,12 +118,10 @@ impl Runtime {
                      {corpora}.",
                     corpora = context.installed_corpora_display()
                 ),
-                MetalingualLocator::Ambient | MetalingualLocator::Unknown => format!(
-                    "I read this as a question about how *this system* uses \
+                MetalingualLocator::Ambient | MetalingualLocator::Unknown => "I read this as a question about how *this system* uses \
                      the term, but I couldn't find a matching internal source. \
                      Could you tell me which source you meant — the codebase, \
-                     a specific corpus, our notes?"
-                ),
+                     a specific corpus, our notes?".to_string(),
             };
             let response_msg = Message {
                 id: uuid::Uuid::new_v4().to_string(),

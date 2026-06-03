@@ -139,8 +139,8 @@ pub fn detect_circular_flow(
     let allowed: BTreeSet<&str> = edge_types.iter().map(String::as_str).collect();
     let entity_index: HashMap<&str, NodeIndex> = entities
         .iter()
-        .enumerate()
-        .map(|(_, e)| (e.id.as_str(), NodeIndex::new(0))) // placeholder
+        
+        .map(|e| (e.id.as_str(), NodeIndex::new(0))) // placeholder
         .collect::<HashMap<_, _>>();
 
     // Build the petgraph DiGraph<&str entity_id, &str relationship_id>.

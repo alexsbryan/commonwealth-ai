@@ -270,7 +270,7 @@ fn build_insert_pairs(
     }
     Ok(chunks
         .into_iter()
-        .zip(embeddings.into_iter())
+        .zip(embeddings)
         .map(|(chunk, emb)| {
             let metadata_json = chunk.metadata_json();
             let insert = InsertChunk {
@@ -345,7 +345,7 @@ impl CorpusEngine {
             .await
             .map_err(Error::Io)?;
 
-        let extractor = self.make_extractor(extractor_config, &corpus_id);
+        let extractor = self.make_extractor(extractor_config, corpus_id);
         let docs: Vec<crate::extractors::ExtractedDoc> = extractor
             .extract(tmp.path())?
             .collect::<Result<Vec<_>>>()?;

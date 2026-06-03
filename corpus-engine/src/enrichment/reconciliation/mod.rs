@@ -96,7 +96,7 @@ mod tests {
             .expect("lay reconciled entity");
         assert_eq!(lay.surface_forms.len(), 2);
         let signals = lay.signals_fired.iter().map(|s| s.as_str()).collect::<Vec<_>>();
-        assert!(signals.iter().any(|s| *s == "name_similarity"));
+        assert!(signals.contains(&"name_similarity"));
     }
 
     #[test]

@@ -434,11 +434,10 @@ fn walk_source_files(
             }
         } else if path.is_file() {
             let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-            if SOURCE_EXTS.contains(&ext) {
-                if !visitor(&path) {
+            if SOURCE_EXTS.contains(&ext)
+                && !visitor(&path) {
                     return false;
                 }
-            }
         }
     }
     true

@@ -275,7 +275,7 @@ fn split_ordinal_from_title(raw: &str, fallback: i64) -> (i64, String) {
         return (fallback, trimmed.to_string());
     };
     let rest = trimmed[end_of_digits..]
-        .trim_start_matches(|c: char| matches!(c, '.' | ')' | ':' | ' ' | '\t' | '—' | '-'))
+        .trim_start_matches(['.', ')', ':', ' ', '\t', '—', '-'])
         .trim();
     if rest.is_empty() {
         // `### 1.` with nothing else — keep the number as the title so

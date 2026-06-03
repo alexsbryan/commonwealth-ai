@@ -175,7 +175,7 @@ impl CapabilityHint {
         if tag.chars().any(|c| c.is_whitespace()) {
             return Err(InvalidCapabilityHint::Whitespace);
         }
-        if Self::STANDARDIZED.iter().any(|s| *s == tag) {
+        if Self::STANDARDIZED.contains(&tag) {
             return Err(InvalidCapabilityHint::CollidesWithStandardized);
         }
         Ok(Self(format!("{}{}", Self::EXTENSION_PREFIX, tag)))
@@ -1221,9 +1221,9 @@ pub fn throughput_factor(
         (None, None) => return 1.0,
     };
 
-    let factor = (estimated_tg_tok_s / THROUGHPUT_REFERENCE_TG_TOK_S)
-        .clamp(THROUGHPUT_FLOOR, 1.0);
-    factor
+    
+    (estimated_tg_tok_s / THROUGHPUT_REFERENCE_TG_TOK_S)
+        .clamp(THROUGHPUT_FLOOR, 1.0)
 }
 
 /// String label for a [`throughput_factor`] decision — `"observed"`,

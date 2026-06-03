@@ -191,11 +191,7 @@ pub fn strip_presenter_artifacts(raw: &str) -> String {
         if PREAMBLE_PREFIXES.iter().any(|p| trimmed.starts_with(p)) {
             if let Some(idx) = trimmed.find("\n\n") {
                 Some(trimmed[idx + 2..].to_string())
-            } else if let Some(idx) = trimmed.find('\n') {
-                Some(trimmed[idx + 1..].to_string())
-            } else {
-                None
-            }
+            } else { trimmed.find('\n').map(|idx| trimmed[idx + 1..].to_string()) }
         } else {
             None
         }

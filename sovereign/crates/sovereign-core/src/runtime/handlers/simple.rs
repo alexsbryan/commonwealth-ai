@@ -2,15 +2,10 @@
 //! entry. Builds the (relational or factual) system message, splices
 //! recalled memories, and emits a single non-streaming synthesis call.
 
-use std::collections::HashMap;
-use std::pin::Pin;
-use std::sync::Arc;
 
-use futures::Stream;
 
 use crate::error::Result;
 use crate::traits::*;
-use crate::types::*;
 
 use super::super::*;
 
@@ -129,7 +124,7 @@ impl Runtime {
         let oicp = if matches!(intent, Intent::SimpleQuery) {
             None
         } else {
-            self.build_oicp(&intent)
+            self.build_oicp(intent)
         };
 
         // Tier 2: same evidence_id_allowlist gather as the

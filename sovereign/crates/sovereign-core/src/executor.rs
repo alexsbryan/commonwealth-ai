@@ -291,9 +291,7 @@ fn propagate_skips(plan: &Plan, completed: &mut HashMap<usize, StepOutput>) {
             _ => continue,
         };
 
-        if !completed.contains_key(&skipped_target) {
-            completed.insert(skipped_target, StepOutput::Skipped);
-        }
+        completed.entry(skipped_target).or_insert(StepOutput::Skipped);
 
         let mut queue = vec![skipped_target];
         while let Some(current) = queue.pop() {

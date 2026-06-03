@@ -158,6 +158,7 @@ impl AssetState {
 /// which skeleton extraction prompts are used and which starter
 /// chips are shown in the conversation view.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Default)]
 pub enum DocumentTypeTag {
     /// Novels, memoirs, literary non-fiction.
     Narrative,
@@ -170,6 +171,7 @@ pub enum DocumentTypeTag {
     /// Manuals, specifications, documentation.
     Technical,
     /// Not yet classified or doesn't fit a category.
+    #[default]
     Unknown,
 }
 
@@ -186,11 +188,6 @@ impl DocumentTypeTag {
     }
 }
 
-impl Default for DocumentTypeTag {
-    fn default() -> Self {
-        Self::Unknown
-    }
-}
 
 // ─── Document Skeleton ────────────────────────────────────────
 //

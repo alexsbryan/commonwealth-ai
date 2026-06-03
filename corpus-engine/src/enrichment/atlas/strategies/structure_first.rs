@@ -215,7 +215,7 @@ impl AtlasIngestion for StructureFirstIngestion {
             if let Some(cap) = cfg.limit_articles {
                 article_titles.truncate(cap);
             }
-            let kept_article_set: HashSet<String> =
+            let _kept_article_set: HashSet<String> =
                 article_titles.iter().cloned().collect();
 
             // ── Build Entity atoms ──────────────────────────────

@@ -586,7 +586,7 @@ fn write_snapshot_archive(
     }
     let file = File::create(&part_path)?;
     let zstd_writer = zstd::stream::Encoder::new(file, opts.zstd_level)
-        .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, format!("zstd init: {e}"))))?
+        .map_err(|e| Error::Io(io::Error::other(format!("zstd init: {e}"))))?
         .auto_finish();
     let mut tar = tar::Builder::new(zstd_writer);
     tar.follow_symlinks(false);
@@ -797,7 +797,7 @@ pub fn prebuilt_toml_snippet(outcome: &PublishOutcome, hf_repo: &str) -> String 
 pub fn read_manifest_from_archive(archive_path: &Path) -> Result<SnapshotManifest> {
     let file = File::open(archive_path)?;
     let zstd_reader = zstd::stream::Decoder::new(file)
-        .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, format!("zstd open: {e}"))))?;
+        .map_err(|e| Error::Io(io::Error::other(format!("zstd open: {e}"))))?;
     let mut archive = tar::Archive::new(zstd_reader);
     for entry in archive.entries()? {
         let mut entry = entry?;

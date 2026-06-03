@@ -76,7 +76,7 @@ pub fn schema_to_gbnf(schema: &Value) -> Result<String, SchemaError> {
     // BEFORE compiling the root so a property whose value is a
     // `$ref` to a def we haven't visited yet still resolves cleanly.
     if let Some(defs) = collect_defs(root_obj) {
-        for (name, _) in &defs {
+        for name in defs.keys() {
             emitter.reserve_def_rule(name);
         }
         emitter.defs = defs;
@@ -95,7 +95,7 @@ pub fn schema_to_gbnf(schema: &Value) -> Result<String, SchemaError> {
 
     // Compile each $def so its named rule body is populated. Order
     // doesn't matter for grammar — GBNF allows forward references.
-    let names: Vec<String> = emitter.defs.iter().map(|(k, _)| k.clone()).collect();
+    let names: Vec<String> = emitter.defs.keys().cloned().collect();
     for name in names {
         let def_schema = emitter.defs.get(&name).cloned().unwrap();
         let body = emitter.compile_schema(&def_schema, &format!("/$defs/{name}"))?;

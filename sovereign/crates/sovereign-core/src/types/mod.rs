@@ -334,16 +334,13 @@ pub enum TaskStatus {
 /// can see when a recall is mechanical distillation vs verbatim.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum MemoryKind {
+    #[default]
     Raw,
     Summary,
 }
 
-impl Default for MemoryKind {
-    fn default() -> Self {
-        Self::Raw
-    }
-}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Memory {
@@ -416,17 +413,14 @@ pub struct RoutingCorrection {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Default)]
 pub enum SourceType {
+    #[default]
     UserDocument,
     Corpus { corpus_id: String },
     WebSearch { url: String },
 }
 
-impl Default for SourceType {
-    fn default() -> Self {
-        SourceType::UserDocument
-    }
-}
 
 impl SourceType {
     pub fn to_db_columns(&self) -> (&'static str, Option<&str>) {

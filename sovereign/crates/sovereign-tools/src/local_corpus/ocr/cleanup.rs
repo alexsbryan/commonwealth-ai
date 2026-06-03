@@ -221,8 +221,7 @@ mod tests {
                         .find_map(|l| {
                             let l = l.to_ascii_lowercase();
                             l.strip_prefix("content-length: ")
-                                .map(|v| v.trim().parse::<usize>().ok())
-                                .flatten()
+                                .and_then(|v| v.trim().parse::<usize>().ok())
                         })
                         .unwrap_or(0);
                     if total.len() >= body_start + cl {

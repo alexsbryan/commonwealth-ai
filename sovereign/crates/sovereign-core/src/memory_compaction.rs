@@ -50,6 +50,7 @@ use crate::types::{CompletionRequest, Memory, MemoryKind, Speed};
 /// How the worker decides when (and whether) to run compaction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum CompactionMode {
     /// Save-time hook is a no-op. Existing memories never collapse.
     /// For operators who want the schema migration applied without
@@ -65,14 +66,10 @@ pub enum CompactionMode {
     /// next turn (worst case: one extra raw memory in the next
     /// prompt before the worker catches up). This is the default
     /// production shape.
+    #[default]
     Async,
 }
 
-impl Default for CompactionMode {
-    fn default() -> Self {
-        Self::Async
-    }
-}
 
 /// Operator-tunable knobs for [`CompactionWorker`]. Persisted under
 /// `[memory.compaction]` in the daemon's `config.toml`.
@@ -315,7 +312,7 @@ async fn run_pass(
         prompt,
         system_message: None,
         preferred_speed: Speed::Fast,
-        max_tokens: Some(config.max_summary_chars.div_ceil(2) as usize),
+        max_tokens: Some(config.max_summary_chars.div_ceil(2)),
         temperature: Some(0.3),
         think_budget: Some(0),
         structured_output: None,

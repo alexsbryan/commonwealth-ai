@@ -313,8 +313,7 @@ mod tests {
 
     #[test]
     fn skeleton_extraction_prompt_handles_multiple_chunks() {
-        let chunks = vec![
-            Chunk {
+        let chunks = [Chunk {
                 id: 1,
                 content: "First passage about free will.".into(),
                 title: Some("Free Will".into()),
@@ -328,8 +327,7 @@ mod tests {
                 id: 3,
                 content: "Third passage about moral responsibility.".into(),
                 title: None,
-            },
-        ];
+            }];
         let refs: Vec<&Chunk> = chunks.iter().collect();
         let prompt = PhilosophyDomain.skeleton_extraction_prompt(&refs);
         assert!(prompt.contains("[Passage 1 — Free Will]"));

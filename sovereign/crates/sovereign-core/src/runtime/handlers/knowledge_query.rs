@@ -10,14 +10,10 @@
 //! card instead of letting the model fabricate against noise.
 
 use std::collections::HashMap;
-use std::pin::Pin;
-use std::sync::Arc;
 
-use futures::Stream;
 
 use crate::error::Result;
 use crate::traits::*;
-use crate::types::*;
 
 use super::super::*;
 
@@ -88,11 +84,9 @@ impl Runtime {
             options: options.clone(),
         };
 
-        let placeholder_body = format!(
-            "I didn't find anything relevant in your installed knowledge bases \
+        let placeholder_body = "I didn't find anything relevant in your installed knowledge bases \
              for that question. Rather than guess, I'd like to check how you'd \
-             like me to proceed."
-        );
+             like me to proceed.".to_string();
         let metadata = serde_json::json!({
             "move_kind": "ask",
             "retrieval_missed": true,

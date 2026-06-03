@@ -191,7 +191,7 @@ impl CorpusIndex {
         let batches: Vec<RecordBatch> = self
             .table
             .query()
-            .only_if(predicate.to_string())
+            .only_if(predicate)
             .select(Select::Columns(vec![
                 "id".to_string(),
                 "content".to_string(),
@@ -380,7 +380,7 @@ impl CorpusIndex {
             };
             for i in 0..batch.num_rows() {
                 let id = ids.value(i);
-                if min_id.map_or(true, |m| id < m) {
+                if min_id.is_none_or(|m| id < m) {
                     min_id = Some(id);
                     let content = if contents.is_null(i) {
                         String::new()

@@ -880,7 +880,7 @@ fn write_bump_state(atlas_dir: &Path, counts: &HashMap<String, u64>) -> std::io:
         bumps: counts.clone(),
     };
     let bytes = serde_json::to_vec_pretty(&body)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        .map_err(std::io::Error::other)?;
     std::fs::write(&tmp, bytes)?;
     std::fs::rename(&tmp, &path)
 }

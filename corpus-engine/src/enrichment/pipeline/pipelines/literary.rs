@@ -121,7 +121,7 @@ impl Pipeline for LiteraryPipeline {
             user.push_str("---\n\n");
         }
 
-        user.push_str(&format!("# Chapter to analyze\n\n"));
+        user.push_str("# Chapter to analyze\n\n");
         user.push_str(&format!("**Title:** {}\n", chapter.title));
         if !chapter.metadata.is_empty() {
             // Only surface detector metadata that's meaningful to a

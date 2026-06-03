@@ -49,7 +49,7 @@ async fn gather_peer_atlas_advice(
     let local_tier2_count = local_summary.as_ref().map(|s| s.tier2_count).unwrap_or(0);
     let local_fingerprint = local_summary.as_ref().map(|s| s.fingerprint.as_str());
 
-    let self_node_id = state.inner.self_node_id_swap.load_full().as_ref().clone();
+    let self_node_id = *state.inner.self_node_id_swap.load_full().as_ref();
     let mesh = state.inner.mesh.read().await;
     let my_embed_model = mesh
         .members

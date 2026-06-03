@@ -306,10 +306,10 @@ impl CorpusEngine {
                 );
             }
             ExtractorConfig::AlignmentWorkspace {} => {
-                Box::new(extractors::alignment_workspace::AlignmentWorkspaceExtractor::default())
+                Box::new(extractors::alignment_workspace::AlignmentWorkspaceExtractor)
             }
             ExtractorConfig::AnthropicExport {} => {
-                Box::new(extractors::anthropic_export::AnthropicExportExtractor::default())
+                Box::new(extractors::anthropic_export::AnthropicExportExtractor)
             }
             ExtractorConfig::XmlSections {
                 element,

@@ -100,7 +100,7 @@ impl Middleware for ContextInjector {
         if let Some(delta) = session.pending_artifact_delta.take() {
             let block = render_artifact_delta(&delta);
             if !block.trim().is_empty() {
-                preamble.push_str("\n");
+                preamble.push('\n');
                 preamble.push_str(&block);
             }
         }
@@ -110,7 +110,7 @@ impl Middleware for ContextInjector {
         // every turn. When the project hasn't been founded, we
         // silently skip — feature work on pre-M6 repos still works.
         if let Some(block) = compose_charter_frame(&ctx.repo_root) {
-            preamble.push_str("\n");
+            preamble.push('\n');
             preamble.push_str(&block);
         }
 
@@ -358,11 +358,9 @@ fn detect_charter_drift(sovereign_dir: &Path, charter: &str) -> Option<String> {
     if recorded == current {
         None
     } else {
-        Some(format!(
-            "⚠ **Charter drift** — CHARTER.md on disk differs from the recorded hash. \
+        Some("⚠ **Charter drift** — CHARTER.md on disk differs from the recorded hash. \
              Run `sovereign project amend` to reconcile, or `git checkout --` \
-             the file."
-        ))
+             the file.".to_string())
     }
 }
 

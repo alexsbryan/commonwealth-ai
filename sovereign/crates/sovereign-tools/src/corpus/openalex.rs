@@ -32,8 +32,7 @@ impl CorpusParser for OpenAlexParser {
 
         let reader: Box<dyn BufRead> = if source_path
             .extension()
-            .and_then(|e| e.to_str())
-            .map_or(false, |e| e == "gz")
+            .and_then(|e| e.to_str()) == Some("gz")
         {
             Box::new(BufReader::new(flate2::read::GzDecoder::new(file)))
         } else {

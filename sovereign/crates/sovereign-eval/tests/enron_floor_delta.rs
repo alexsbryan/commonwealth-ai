@@ -19,12 +19,10 @@ use sovereign_eval::entity_resolution_score::{score, Clustering};
 
 #[test]
 fn pre_reconciliation_floor_vs_tuned_delta_is_positive() {
-    let surface_forms = vec![
-        ("Ken Lay", "person-ken-lay"),
+    let surface_forms = [("Ken Lay", "person-ken-lay"),
         ("Kenneth Lay", "person-ken-lay"),
         ("Kenneth L. Lay", "person-ken-lay"),
-        ("Jeff Skilling", "person-jeff-skilling"),
-    ];
+        ("Jeff Skilling", "person-jeff-skilling")];
     let gold: Clustering = surface_forms
         .iter()
         .map(|(s, c)| (s.to_string(), c.to_string()))

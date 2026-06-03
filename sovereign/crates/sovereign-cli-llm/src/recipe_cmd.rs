@@ -398,8 +398,8 @@ async fn cmd_publish(args: &[String]) -> i32 {
     let mut submit_pr = false;
     let mut force = false;
 
-    let mut iter = args.iter();
-    while let Some(a) = iter.next() {
+    let iter = args.iter();
+    for a in iter {
         match a.as_str() {
             "--submit-pr" => submit_pr = true,
             "--force" | "-f" => force = true,

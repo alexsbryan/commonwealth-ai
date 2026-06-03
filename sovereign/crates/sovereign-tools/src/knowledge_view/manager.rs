@@ -629,9 +629,9 @@ impl KnowledgeViewManager {
                     let r = relational_notes_for_entity(notes, &tl.entity_name).await;
                     relational_index.insert(key.clone(), r);
                 }
-                if !strategic_index.contains_key(&key) {
+                if let std::collections::hash_map::Entry::Vacant(e) = strategic_index.entry(key) {
                     let g = strategic_goals_for_entity(notes, &tl.entity_name).await;
-                    strategic_index.insert(key, g);
+                    e.insert(g);
                 }
             }
         }

@@ -424,7 +424,6 @@ impl Tool for AttachedDocumentSearchTool {
             let cosine_by_chunk: std::collections::HashMap<usize, f32> = pool
                 .iter()
                 .copied()
-                .map(|(i, s)| (i, s))
                 .collect();
             scored = ranked
                 .into_iter()

@@ -186,9 +186,7 @@ async fn build_hosted_corpora(
 ) -> Vec<CorpusShardInfo> {
     let indexes_dir = engine.index_dir().to_path_buf();
     indexes
-            .iter()
-            .cloned()
-            .filter(|idx| idx.query_sharing)
+            .iter().filter(|&idx| idx.query_sharing).cloned()
             .map(|idx| {
                 // Phase C1: read the atlas summary if the corpus
                 // has one. The summary helper caches by atoms.json

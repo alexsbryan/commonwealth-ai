@@ -673,7 +673,7 @@ pub async fn join(
     State(state): State<AppState>,
     Json(req): Json<JoinRequest>,
 ) -> Result<Json<JoinResponse>, (StatusCode, Json<JoinRejection>)> {
-    let self_node_id = state.inner.self_node_id_swap.load_full().as_ref().clone();
+    let self_node_id = *state.inner.self_node_id_swap.load_full().as_ref();
     let mut mesh = state.inner.mesh.write().await;
 
     match membership::accept_join_with_proposed_id(
@@ -696,7 +696,7 @@ pub async fn join(
             // tests and the standalone daemon, so this is a no-op
             // where persistence is managed elsewhere.
             if let Some(hook) = state.inner.on_mesh_mutation.as_ref() {
-                hook(&*mesh, self_node_id);
+                hook(&mesh, self_node_id);
             }
             Ok(Json(JoinResponse {
                 assigned_node_id: new_id,
@@ -1391,7 +1391,7 @@ pub async fn contribution_view(
         mesh_view
             .members
             .iter()
-            .map(|(id, member)| (id.clone(), member.capabilities.clone()))
+            .map(|(id, member)| (*id, member.capabilities.clone()))
             .collect()
     };
     let map = commonwealth_state::current_contributions(
@@ -1499,7 +1499,7 @@ pub async fn activity_summary(
         mesh_view
             .members
             .iter()
-            .map(|(id, member)| (id.clone(), member.capabilities.clone()))
+            .map(|(id, member)| (*id, member.capabilities.clone()))
             .collect()
     };
     let contrib = commonwealth_state::current_contributions(

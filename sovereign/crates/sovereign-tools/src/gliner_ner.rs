@@ -240,7 +240,7 @@ impl GlinerExtractor {
         let texts = vec![processed.as_str()];
         let input = TextInput::from_str(&texts, &labels_ref)
             .map_err(|e| Error::Storage(format!("TextInput::from_str: {e}")))?;
-        let mut guard = self
+        let guard = self
             .model
             .lock()
             .map_err(|_| Error::Storage("gliner mutex poisoned".into()))?;
@@ -300,7 +300,7 @@ impl GlinerExtractor {
         let labels_ref: Vec<&str> = self.labels.iter().map(|s| s.as_str()).collect();
         let input = TextInput::from_str(&processed_refs, &labels_ref)
             .map_err(|e| Error::Storage(format!("TextInput::from_str: {e}")))?;
-        let mut guard = self
+        let guard = self
             .model
             .lock()
             .map_err(|_| Error::Storage("gliner mutex poisoned".into()))?;

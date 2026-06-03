@@ -316,11 +316,11 @@ pub async fn run_list(args: &[String]) -> i32 {
 }
 
 pub async fn run_status(args: &[String]) -> i32 {
-    let mut iter = args.iter();
+    let iter = args.iter();
     let mut corpus_id: Option<String> = None;
     let mut want_skipped = false;
     let mut want_failures = false;
-    while let Some(a) = iter.next() {
+    for a in iter {
         match a.as_str() {
             "--skipped" => want_skipped = true,
             "--failures" => want_failures = true,

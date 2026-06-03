@@ -102,7 +102,7 @@ pub async fn run(args: &[String]) -> i32 {
 
     let data_dir = parsed
         .data_dir
-        .unwrap_or_else(|| default_data_dir());
+        .unwrap_or_else(default_data_dir);
     let atlas_dir = data_dir
         .join("indexes")
         .join(&parsed.corpus_id)

@@ -320,7 +320,7 @@ fn write_atomic<T: serde::Serialize>(path: &Path, value: &T) -> std::io::Result<
         path.file_name().and_then(|n| n.to_str()).unwrap_or("report")
     ));
     let data = serde_json::to_vec_pretty(value)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("ser: {e}")))?;
+        .map_err(|e| std::io::Error::other(format!("ser: {e}")))?;
     fs::write(&tmp, data)?;
     fs::rename(&tmp, path)?;
     Ok(())

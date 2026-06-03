@@ -125,7 +125,7 @@ pub fn ctc_decode(logits: &[f32], t: usize, c: usize, dict: &[String]) -> (Strin
 /// Map a CTC class index to its string. Indices within the dict use it
 /// directly; a single class beyond the dict is PaddleOCR's trailing
 /// space; anything further is out-of-range (empty, already warned).
-fn class_to_str<'a>(k: usize, dict: &'a [String]) -> &'a str {
+fn class_to_str(k: usize, dict: &[String]) -> &str {
     if k < dict.len() {
         &dict[k]
     } else if k == dict.len() {

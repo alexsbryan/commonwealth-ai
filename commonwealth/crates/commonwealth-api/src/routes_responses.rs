@@ -524,7 +524,7 @@ fn translate_request(
     // Other Qwen-recommended sampling params (top_p, top_k, min_p,
     // presence_penalty) live in `ModelQuirks` and are applied by the
     // sampler — no per-route pinning needed.
-    let temperature = req.temperature.or_else(|| {
+    let temperature = req.temperature.or({
         if matches!(harness, frontdoor::Harness::Codex) {
             Some(0.7)
         } else {
@@ -2580,7 +2580,7 @@ mod tests {
         format!("{ev:?}")
     }
 
-    fn body_field<'a>(ev: &'a Event, field: &str) -> Option<String> {
+    fn body_field(ev: &Event, field: &str) -> Option<String> {
         // Same trick — the Debug impl exposes everything we need for tests.
         let s = format!("{ev:?}");
         let needle = format!("{field}: ");

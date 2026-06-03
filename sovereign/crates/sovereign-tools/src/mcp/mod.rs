@@ -181,6 +181,60 @@ fn infer_behaviour(name: &str, _description: &str) -> (Effect, Idempotency) {
     (Effect::Write, Idempotency::NonIdempotent)
 }
 
+// ─── Public helpers ───────────────────────────────────────────
+
+/// Connect to a stdio MCP server and return Tool implementations.
+/// Preserved API for backward compatibility.
+pub async fn connect_mcp_server(
+    command: &str,
+    args: &[&str],
+    prefix: &str,
+) -> Result<Vec<Box<dyn Tool>>> {
+    let transport = stdio::StdioTransport::spawn(command, args)
+        .await
+        .map_err(|e| Error::Execution(format!("MCP spawn failed: {e}")))?;
+    connect_and_wrap(transport, prefix).await
+}
+
+/// Connect to an HTTP MCP server and return Tool implementations.
+pub async fn connect_http_mcp_server(
+    url: &str,
+    auth: auth::McpAuth,
+    prefix: &str,
+) -> Result<Vec<Box<dyn Tool>>> {
+    let transport = http::HttpSseTransport::connect(url, auth)
+        .await
+        .map_err(|e| Error::Execution(format!("MCP HTTP connect failed: {e}")))?;
+    connect_and_wrap(transport, prefix).await
+}
+
+/// Generic: connect via any transport, discover tools, wrap as Tool objects.
+async fn connect_and_wrap<T: transport::McpTransport>(
+    transport: T,
+    prefix: &str,
+) -> Result<Vec<Box<dyn Tool>>> {
+    let mcp_client = client::McpClient::connect(transport, prefix)
+        .await
+        .map_err(|e| Error::Execution(format!("MCP connect failed: {e}")))?;
+
+    let tools = mcp_client
+        .list_tools()
+        .await
+        .map_err(|e| Error::Execution(format!("MCP list_tools failed: {e}")))?;
+
+    eprintln!("[mcp] {} tools from {prefix}", tools.len());
+
+    let caller: Arc<dyn McpToolCaller> = Arc::new(mcp_client);
+    let adapters: Vec<Box<dyn Tool>> = tools
+        .iter()
+        .map(|info| {
+            Box::new(McpToolAdapter::new(info, Arc::clone(&caller), prefix)) as Box<dyn Tool>
+        })
+        .collect();
+
+    Ok(adapters)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,58 +293,4 @@ mod tests {
         let (e, _) = infer_behaviour("READ_FILE", "");
         assert_eq!(e, Effect::Read);
     }
-}
-
-// ─── Public helpers ───────────────────────────────────────────
-
-/// Connect to a stdio MCP server and return Tool implementations.
-/// Preserved API for backward compatibility.
-pub async fn connect_mcp_server(
-    command: &str,
-    args: &[&str],
-    prefix: &str,
-) -> Result<Vec<Box<dyn Tool>>> {
-    let transport = stdio::StdioTransport::spawn(command, args)
-        .await
-        .map_err(|e| Error::Execution(format!("MCP spawn failed: {e}")))?;
-    connect_and_wrap(transport, prefix).await
-}
-
-/// Connect to an HTTP MCP server and return Tool implementations.
-pub async fn connect_http_mcp_server(
-    url: &str,
-    auth: auth::McpAuth,
-    prefix: &str,
-) -> Result<Vec<Box<dyn Tool>>> {
-    let transport = http::HttpSseTransport::connect(url, auth)
-        .await
-        .map_err(|e| Error::Execution(format!("MCP HTTP connect failed: {e}")))?;
-    connect_and_wrap(transport, prefix).await
-}
-
-/// Generic: connect via any transport, discover tools, wrap as Tool objects.
-async fn connect_and_wrap<T: transport::McpTransport>(
-    transport: T,
-    prefix: &str,
-) -> Result<Vec<Box<dyn Tool>>> {
-    let mcp_client = client::McpClient::connect(transport, prefix)
-        .await
-        .map_err(|e| Error::Execution(format!("MCP connect failed: {e}")))?;
-
-    let tools = mcp_client
-        .list_tools()
-        .await
-        .map_err(|e| Error::Execution(format!("MCP list_tools failed: {e}")))?;
-
-    eprintln!("[mcp] {} tools from {prefix}", tools.len());
-
-    let caller: Arc<dyn McpToolCaller> = Arc::new(mcp_client);
-    let adapters: Vec<Box<dyn Tool>> = tools
-        .iter()
-        .map(|info| {
-            Box::new(McpToolAdapter::new(info, Arc::clone(&caller), prefix)) as Box<dyn Tool>
-        })
-        .collect();
-
-    Ok(adapters)
 }

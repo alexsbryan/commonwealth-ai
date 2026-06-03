@@ -15,6 +15,7 @@ pub use oicp_types::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
 /// sampling, server-side normalisation assumed for embedding.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
+#[derive(Default)]
 pub enum ModelFamily {
     Qwen3,
     Qwen35,
@@ -39,14 +40,10 @@ pub enum ModelFamily {
     /// Neither chat-capable nor embedding-capable — the scalar is
     /// the only output, consumed by `CorpusIndex::search_with_rerank`.
     Reranker,
+    #[default]
     Unknown,
 }
 
-impl Default for ModelFamily {
-    fn default() -> Self {
-        ModelFamily::Unknown
-    }
-}
 
 /// All family-specific runtime behaviour in one place.
 ///

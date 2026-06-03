@@ -319,7 +319,7 @@ async fn run_disk_validation(path: &std::path::Path) -> serde_json::Value {
         Ok(report) => {
             let passed = report.passed();
             let errors: Vec<String> =
-                report.validation.errors.iter().cloned().collect();
+                report.validation.errors.to_vec();
             let warnings: Vec<String> = report.warnings();
             json!({
                 "passed": passed,

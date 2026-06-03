@@ -528,6 +528,7 @@ impl SeedEntities {
 /// names the concrete source for an already-produced record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum SeedOrigin {
     /// Produced by a one-shot LLM call over the corpus's first
     /// section (e.g. `LiteraryAtlasPipeline::compose_seed_prompt`).
@@ -541,14 +542,10 @@ pub enum SeedOrigin {
     /// included so a `SeedEntities::empty_for(corpus_id)` can be
     /// written to disk even for no-seed pipelines, keeping the
     /// cache-file contract uniform.
+    #[default]
     None,
 }
 
-impl Default for SeedOrigin {
-    fn default() -> Self {
-        SeedOrigin::None
-    }
-}
 
 /// How a pipeline produces its seed entity list. The runner
 /// dispatches on this enum to decide whether to call

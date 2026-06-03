@@ -58,8 +58,8 @@ impl WorkAtlasGc {
         // 1. Drop expired claims, both namespaces.
         for privacy in [Privacy::Public, Privacy::Private] {
             for claim in self.store.scan_claims(privacy)? {
-                if claim.ttl_expires_at < now {
-                    if self.store.release_claim(claim.claim_id)? {
+                if claim.ttl_expires_at < now
+                    && self.store.release_claim(claim.claim_id)? {
                         tracing::info!(
                             claim_id = %claim.claim_id,
                             session_id = %claim.session_id,
@@ -67,7 +67,6 @@ impl WorkAtlasGc {
                         );
                         report.claims_evicted += 1;
                     }
-                }
             }
         }
 

@@ -77,8 +77,10 @@ impl Category {
 /// workdir and the agent has to scaffold the cargo project itself.
 /// This exercises the full tool-call + project-scaffolding surface.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Default)]
 pub enum Tier {
     Scaffolded,
+    #[default]
     FromScratch,
 }
 
@@ -91,14 +93,6 @@ impl Tier {
     }
 }
 
-impl Default for Tier {
-    fn default() -> Self {
-        // Default to from-scratch so problems that don't declare a
-        // tier explicitly behave like the pre-tier MVS — no implicit
-        // scaffold copy.
-        Tier::FromScratch
-    }
-}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum WitnessKind {
@@ -372,7 +366,7 @@ pub fn parse_rubric_markdown(src: &str) -> HashMap<String, [String; 4]> {
                  acc: &mut Vec<String>| {
         if let (Some(dim), Some(idx)) = (current_dim, current_anchor) {
             let text = acc.join("\n").trim().to_string();
-            let entry = out.entry(dim.clone()).or_insert_with(Default::default);
+            let entry = out.entry(dim.clone()).or_default();
             if idx < 4 {
                 entry[idx] = text;
             }

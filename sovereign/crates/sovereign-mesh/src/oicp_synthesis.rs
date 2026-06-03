@@ -636,12 +636,12 @@ mod self_manifest_tests {
             .map(|m| m.id.as_str())
             .collect();
         assert!(
-            alias_ids.iter().any(|id| *id == "commonwealth/primary"),
+            alias_ids.contains(&"commonwealth/primary"),
             "manifest must advertise `commonwealth/primary`: {:#?}",
             manifest.models
         );
         assert!(
-            alias_ids.iter().any(|id| *id == "primary"),
+            alias_ids.contains(&"primary"),
             "manifest must advertise the short `primary` alias: {:#?}",
             manifest.models
         );

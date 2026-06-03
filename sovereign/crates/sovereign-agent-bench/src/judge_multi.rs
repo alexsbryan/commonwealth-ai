@@ -62,7 +62,7 @@ pub fn aggregate(trials: Vec<JudgeTrialOutcome>, total: u8) -> MultiTrialOutcome
     let denom = trials.len().max(1) as f64;
     let coverage_mean = sum_f / denom;
 
-    let needed = (total as u32 + 1) / 2; // ⌈N/2⌉
+    let needed = (total as u32).div_ceil(2); // ⌈N/2⌉
     let majority_anchor = pick_majority(&counts, needed).unwrap_or_else(|| {
         // Fallback: highest-count anchor with low-index tiebreak.
         let mut best: (u32, u8) = (0, 0);

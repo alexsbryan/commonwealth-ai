@@ -265,42 +265,38 @@ impl MdnsDiscovery {
 
         let handle = tokio::spawn(async move {
             loop {
-                match tokio::time::timeout(
+                if let Ok(Ok(Ok(event))) = tokio::time::timeout(
                     std::time::Duration::from_secs(5),
                     tokio::task::spawn_blocking({
                         let receiver = receiver.clone();
                         move || receiver.recv_timeout(std::time::Duration::from_secs(5))
                     }),
                 )
-                .await
-                {
-                    Ok(Ok(Ok(event))) => {
-                        if let mdns_sd::ServiceEvent::ServiceResolved(info) = event {
-                            let full_name = info.get_fullname().to_string();
-                            if full_name.contains(&own_instance) {
-                                continue;
-                            }
+                .await {
+                    if let mdns_sd::ServiceEvent::ServiceResolved(info) = event {
+                        let full_name = info.get_fullname().to_string();
+                        if full_name.contains(&own_instance) {
+                            continue;
+                        }
 
-                            let props = info.get_properties();
-                            let node_id_str =
-                                props.get_property_val_str("node_id").unwrap_or_default();
-                            let _ = node_id_str; // node_id comes from gossip handshake
+                        let props = info.get_properties();
+                        let node_id_str =
+                            props.get_property_val_str("node_id").unwrap_or_default();
+                        let _ = node_id_str; // node_id comes from gossip handshake
 
-                            let port = info.get_port();
-                            if let Some(ip) = info.get_addresses().iter().next().copied() {
-                                let app = DiscoveredApp {
-                                    app_id: app_id_owned.clone(),
-                                    node_id: commonwealth_core::ids::NodeId::generate(),
-                                    address: std::net::SocketAddr::new(ip, port),
-                                    port,
-                                };
-                                if tx.send(app).await.is_err() {
-                                    break;
-                                }
+                        let port = info.get_port();
+                        if let Some(ip) = info.get_addresses().iter().next().copied() {
+                            let app = DiscoveredApp {
+                                app_id: app_id_owned.clone(),
+                                node_id: commonwealth_core::ids::NodeId::generate(),
+                                address: std::net::SocketAddr::new(ip, port),
+                                port,
+                            };
+                            if tx.send(app).await.is_err() {
+                                break;
                             }
                         }
                     }
-                    Ok(Ok(Err(_))) | Ok(Err(_)) | Err(_) => {}
                 }
             }
         });

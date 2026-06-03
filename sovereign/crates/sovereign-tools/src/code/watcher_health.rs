@@ -242,7 +242,7 @@ pub fn watcher_json(
 /// [`WATCHER_DOWN`] so the caller falls back instead of trusting a
 /// possibly-ancient result. `running` and `never_run` are passed through
 /// unchanged (their meaning is already liveness-independent).
-pub fn apply_liveness<'a>(raw_status: &'a str, reason: WatcherReason) -> &'a str {
+pub fn apply_liveness(raw_status: &str, reason: WatcherReason) -> &str {
     if reason.is_live() {
         return raw_status;
     }

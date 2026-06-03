@@ -45,21 +45,13 @@ use corpus_engine_scip::ScipGraph;
 /// Tunables for the code-walk pass. Surfaces on the CLI as
 /// `--include-functions` / `--include-private` flags.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct CodeWalkConfig {
     pub source_corpus_id: String,
     pub include_functions: bool,
     pub include_private: bool,
 }
 
-impl Default for CodeWalkConfig {
-    fn default() -> Self {
-        Self {
-            source_corpus_id: String::new(),
-            include_functions: false,
-            include_private: false,
-        }
-    }
-}
 
 // ── Chunk metadata shape ────────────────────────────────────
 
@@ -768,7 +760,7 @@ async fn emit_edges(
     let mut stats = EdgeStats::default();
 
     // Containment edges: Crate → Module (BTreeMap iteration is sorted).
-    for ((crate_name, module_path), _) in &groups.by_module {
+    for (crate_name, module_path) in groups.by_module.keys() {
         let (Some(crate_atom), Some(module_atom)) = (
             atom_index.crates.get(crate_name),
             atom_index.modules.get(&(crate_name.clone(), module_path.clone())),
@@ -791,7 +783,7 @@ async fn emit_edges(
     }
 
     // Containment edges: Module → Item.
-    for (key, _) in &groups.by_item {
+    for key in groups.by_item.keys() {
         let (Some(module_atom), Some(item_atom)) = (
             atom_index
                 .modules
@@ -854,7 +846,7 @@ async fn emit_edges(
                     if let Some(a) = qualified_to_atom.get(&callee.callee_qualified) {
                         a.clone()
                     } else if let Some(ext_atom) =
-                        scip_descriptor_to_external(atom_index, &workspace, &callee.callee_qualified)
+                        scip_descriptor_to_external(atom_index, workspace, &callee.callee_qualified)
                     {
                         // Callee resolves to an external crate
                         // (stdlib, third-party). Wire to the
@@ -1005,7 +997,7 @@ async fn collect_externals_from_scip(
     groups: &ChunkGroups,
     out: &mut BTreeSet<String>,
 ) -> Result<()> {
-    for (_, item) in &groups.by_item {
+    for item in groups.by_item.values() {
         let Some(caller_q) = &item.qualified_name else {
             continue;
         };

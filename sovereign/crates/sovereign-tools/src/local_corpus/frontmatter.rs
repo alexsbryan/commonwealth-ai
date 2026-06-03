@@ -551,7 +551,7 @@ mod tests {
         if let Value::Sequence(s) = map.get(Value::String("tags".into())).unwrap() {
             assert!(s
                 .iter()
-                .any(|v| v.as_str().map_or(false, |x| x.contains("épistémologie"))));
+                .any(|v| v.as_str().is_some_and(|x| x.contains("épistémologie"))));
         }
     }
 
