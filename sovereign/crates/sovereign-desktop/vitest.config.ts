@@ -33,6 +33,15 @@ export default defineConfig({
     // renders into a jsdom window, matching real browser behaviour.
     conditions: ["browser"],
     alias: [
+      // Shared chat render surface, consumed as source. Mirrors
+      // vite.config.ts + tsconfig.json so tests resolve it identically.
+      {
+        find: /^@sovereign\/chat-ui$/,
+        replacement: resolve(
+          fileURLToPath(new URL(".", import.meta.url)),
+          "../../../packages/chat-ui/src/index.ts",
+        ),
+      },
       // `@xstate/svelte` v5.0.0's package.json `exports.import`
       // routes to a `.cjs.mjs` wrapper around its CJS bundle, which
       // `require()`s `svelte/store`. Svelte 5 exports that subpath

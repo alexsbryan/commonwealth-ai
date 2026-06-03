@@ -23,7 +23,9 @@ commonwealth-ai/
 ├── corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance (carved out)
 ├── sovereign-recipes/         # Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build)
 ├── sovereign/                 # Local AI assistant (CLI / desktop / server)
-└── commonwealth/              # Mesh coordination daemon
+├── commonwealth/              # Mesh coordination daemon
+├── packages/chat-ui/          # Shared Svelte chat render surface (desktop + mobile)
+└── sovereign-mobile/          # Thin Tauri 2 mobile client (iOS + Android), tailnet-only
 ```
 
 | Project              | Role                                          | Depends on                                            |
@@ -571,8 +573,9 @@ capture.
 | Frontend            | Purpose                                                                              |
 |---------------------|--------------------------------------------------------------------------------------|
 | `sovereign-cli` (+ siblings) | User-facing dispatcher. `sovereign <verb>` execs into one of three siblings — `sovereign-cli-daemon`, `sovereign-cli-dev`, `sovereign-cli-llm` — based on the verb. Same UX as one binary; faster builds. Discovery: each sibling at `current_exe()`'s parent dir; override via `SOVEREIGN_CLI_{DAEMON,DEV,LLM}_BIN`. Unix execs into the sibling (same PID); other platforms spawn-and-wait. |
-| `sovereign-server`  | Axum REST + WebSocket on configurable port; multi-tenant via `tenant.rs`; SSE + WS streaming; server-side `ApprovalChannel` w/ `/v1/tasks/{id}/approve`. |
-| `sovereign-desktop` | Tauri 2 + Svelte 5; setup wizard, chat w/ streaming + provenance, knowledge management (`KnowledgeStatus`, `CorpusProgressBanner`), skill manager, mesh UI, `sovereign://` deep-link handler, system tray. |
+| `sovereign-server`  | Axum REST + WebSocket on configurable port; multi-tenant via `tenant.rs`; server-side `ApprovalChannel` w/ `/v1/tasks/{id}/approve`. **Mobile-facing surface** (`docs/specs/MOBILE.md`): WS `/v1/conversations/{id}/stream` streams `ServerEvent::Token`→`Complete` token-by-token down the requesting socket (not the shared broadcast — avoids cross-tenant leak); `projection.rs` surfaces typed `provenance` + `citations` on REST message responses; `GET /v1/corpora` lists `CORPUS_REF`s (Knowledge-only, with `scope`/`mesh_shared` privacy posture derived from `IndexInfo.mesh_sharing`); a `busy.rs` concurrency guard returns `503 + Retry-After` when saturated. |
+| `sovereign-desktop` | Tauri 2 + Svelte 5; setup wizard, chat w/ streaming + provenance, knowledge management (`KnowledgeStatus`, `CorpusProgressBanner`), skill manager, mesh UI, `sovereign://` deep-link handler, system tray. Reuses the shared `@sovereign/chat-ui` package (`packages/chat-ui`). |
+| `sovereign-mobile` (`/sovereign-mobile`) | Thin Tauri 2 client (iOS + Android) — **no local inference/Runtime/corpus**. Reaches a host's `sovereign-server` over the tailnet, authenticates as a tenant (token in keychain), renders streamed chat. Rust core owns transport (HTTP + WS), SQLite cache of the spec's cached projections, and a fail-closed connectivity monitor; re-emits the SAME `message-chunk`/`message-complete` events the shared chat FSM consumes. Conversations are cached for display and referenced as a conversation `CORPUS_REF` once host-indexed (`indexed_in_corpus`); long-context is host-side (phone sends only the new turn + conversation id, never re-uploads history or embeds); local-only sources are privacy-badged (`scope`/`mesh_shared`). Detached from the Cargo workspace (own `[workspace]`); scaffold pending a Tauri-mobile-toolchain build. See `docs/specs/MOBILE.md`. |
 
 Verbs by sibling binary:
 

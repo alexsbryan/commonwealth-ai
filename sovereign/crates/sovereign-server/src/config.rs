@@ -27,6 +27,14 @@ pub struct ServerConfig {
 pub struct ServerSection {
     #[serde(default = "default_bind")]
     pub bind: String,
+    /// Max concurrent inference turns before the host returns
+    /// `503 + Retry-After` (REST) / a busy stream frame (WS). See
+    /// `crate::busy::BusyGuard`. Clamped to >= 1.
+    #[serde(default = "default_max_concurrent_turns")]
+    pub max_concurrent_turns: usize,
+    /// Seconds advertised in `Retry-After` when busy.
+    #[serde(default = "default_retry_after_secs")]
+    pub retry_after_secs: u64,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -132,6 +140,12 @@ fn default_knowledge_view_enabled() -> bool {
 fn default_bind() -> String {
     "0.0.0.0:8080".to_string()
 }
+fn default_max_concurrent_turns() -> usize {
+    4
+}
+fn default_retry_after_secs() -> u64 {
+    2
+}
 fn default_auth_mode() -> String {
     "none".to_string()
 }
@@ -144,6 +158,8 @@ fn default_store_path() -> PathBuf {
 fn default_server() -> ServerSection {
     ServerSection {
         bind: default_bind(),
+        max_concurrent_turns: default_max_concurrent_turns(),
+        retry_after_secs: default_retry_after_secs(),
     }
 }
 fn default_store() -> StoreSection {

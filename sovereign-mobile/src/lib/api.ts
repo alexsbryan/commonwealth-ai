@@ -1,0 +1,60 @@
+// Mobile invoke() bridge. Command names mirror the desktop `api.ts`
+// contract; the Rust core implements them over the tailnet. Arg keys
+// are camelCase — Tauri maps them to the snake_case Rust params.
+
+import { invoke } from "@tauri-apps/api/core";
+import type {
+  ConversationSummary,
+  ConversationView,
+  CorpusRef,
+  HostConnection,
+} from "./types";
+
+// ─── Host / connection ────────────────────────────────────────
+
+export const addHostConnection = (
+  displayName: string,
+  tailnetAddress: string,
+  tenantId: string,
+  token: string,
+): Promise<HostConnection> =>
+  invoke("add_host_connection", { displayName, tailnetAddress, tenantId, token });
+
+export const listHostConnections = (): Promise<HostConnection[]> =>
+  invoke("list_host_connections");
+
+export const setDefaultHost = (id: string): Promise<void> =>
+  invoke("set_default_host", { id });
+
+export const getConnectivity = (): Promise<string> => invoke("get_connectivity");
+
+// ─── Conversations ─────────────────────────────────────────────
+
+export const createConversation = (): Promise<string> => invoke("create_conversation");
+
+export const listConversations = (): Promise<ConversationSummary[]> =>
+  invoke("list_conversations");
+
+export const getConversation = (conversationId: string): Promise<ConversationView | null> =>
+  invoke("get_conversation", { conversationId });
+
+export const deleteConversation = (conversationId: string): Promise<void> =>
+  invoke("delete_conversation", { conversationId });
+
+/** Kick off a streamed turn. Resolves once the stream task is launched;
+ *  tokens arrive via the `message-chunk` / `message-complete` events
+ *  (see `events.ts`). */
+export const sendMessageStream = (
+  conversationId: string,
+  message: string,
+): Promise<{ conversation_id: string }> =>
+  invoke("send_message_stream", { conversationId, message });
+
+// ─── Corpora / citations ──────────────────────────────────────
+
+export const listCorpora = (): Promise<CorpusRef[]> => invoke("list_corpora");
+
+export const resolveCitation = (
+  corpusId: string,
+  chunkId: string,
+): Promise<string | null> => invoke("resolve_citation", { corpusId, chunkId });

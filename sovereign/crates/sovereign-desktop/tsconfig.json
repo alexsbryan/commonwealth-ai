@@ -12,6 +12,12 @@
     "noEmit": true,
     "moduleResolution": "bundler",
     "verbatimModuleSyntax": true,
+    // Shared chat render surface, consumed as source via this path
+    // alias. Mirrored in vite.config.ts + vitest.config.ts.
+    "baseUrl": ".",
+    "paths": {
+      "@sovereign/chat-ui": ["../../../packages/chat-ui/src/index.ts"]
+    },
     // `skipLibCheck` skips type checking of declaration files under
     // node_modules. Without it, Vitest's transitive `.d.ts` files
     // reference Node globals (`NodeJS.*`, `node:worker_threads`) that

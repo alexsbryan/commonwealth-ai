@@ -2,12 +2,14 @@ use std::sync::Arc;
 
 use axum::extract::{Extension, Path, Query};
 use axum::http::StatusCode;
-use axum::response::Json;
+use axum::response::{IntoResponse, Json, Response};
 
 use sovereign_core::runtime::Runtime;
 
 use crate::approval::ServerApprovalChannel;
 use crate::auth::TenantId;
+use crate::busy::{busy_response, BusyGuard};
+use crate::projection::{project_message_metadata, Citation, Provenance};
 use crate::tenant::TenantRuntime;
 
 // ─── Request/Response Types ───────────────────────────────────
@@ -30,6 +32,17 @@ pub struct MessageResponse {
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub task: Option<TaskSummary>,
+    /// Host-side provenance (model + serving node, routing tier,
+    /// latency). `None` on turns whose handler doesn't persist
+    /// provenance. Projected from `Message.metadata` — see
+    /// `crate::projection`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<Provenance>,
+    /// Corpus-grounded citations carrying the host's
+    /// `(corpus_id, chunk_id)` handle. Empty when the answer wasn't
+    /// grounded in an installed corpus.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub citations: Vec<Citation>,
 }
 
 #[derive(serde::Serialize)]
@@ -55,6 +68,10 @@ pub struct MessageEntry {
     pub role: String,
     pub content: String,
     pub created_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<Provenance>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub citations: Vec<Citation>,
 }
 
 #[derive(serde::Serialize)]
@@ -159,13 +176,28 @@ pub async fn create_conversation(
 }
 
 /// POST /v1/conversations/:id/messages
+///
+/// Returns an `axum::response::Response` (not `ApiResult`) so the busy
+/// path can attach a `Retry-After` header to its `503` — the host-busy
+/// acceptance criterion.
 pub async fn send_message(
     Extension(runtime): Extension<Arc<Runtime>>,
     Extension(tenant): Extension<TenantId>,
     Extension(approval): Extension<Arc<ServerApprovalChannel>>,
+    Extension(busy): Extension<BusyGuard>,
     Path(conversation_id): Path<String>,
     Json(body): Json<SendMessageRequest>,
-) -> ApiResult<MessageResponse> {
+) -> Response {
+    // Busy guard — held for the turn, dropped when this fn returns.
+    let Some(_permit) = busy.try_enter() else {
+        tracing::warn!(
+            conversation_id = %conversation_id,
+            available = busy.available(),
+            "host_busy: rejecting send_message"
+        );
+        return busy_response(busy.retry_after_secs());
+    };
+
     let tr = tenant_runtime(&runtime, &tenant);
 
     // Set task_id context for approval channel (will be updated by executor if needed).
@@ -180,14 +212,18 @@ pub async fn send_message(
             });
 
             let role = response.message.role_str().to_string();
-            Ok(Json(MessageResponse {
+            let (provenance, citations) = project_message_metadata(&response.message.metadata);
+            Json(MessageResponse {
                 message_id: response.message.id,
                 role,
                 content: response.message.content,
                 task: task_summary,
-            }))
+                provenance,
+                citations,
+            })
+            .into_response()
         }
-        Err(e) => Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())),
+        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()).into_response(),
     }
 }
 
@@ -208,11 +244,14 @@ pub async fn get_conversation(
                 .into_iter()
                 .map(|m| {
                     let role = m.role_str().to_string();
+                    let (provenance, citations) = project_message_metadata(&m.metadata);
                     MessageEntry {
                         id: m.id,
                         role,
                         content: m.content,
                         created_at: m.created_at,
+                        provenance,
+                        citations,
                     }
                 })
                 .collect(),
@@ -312,6 +351,85 @@ pub async fn search(
                 })
                 .collect(),
         })),
+        Err(e) => Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())),
+    }
+}
+
+// ─── Corpora (CORPUS_REF) ─────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct CorpusListResponse {
+    pub corpora: Vec<CorpusRefEntry>,
+}
+
+/// One installed knowledge corpus — the spec's `CORPUS_REF`. Metadata
+/// only; the corpus chunks/vectors never leave the host.
+#[derive(serde::Serialize)]
+pub struct CorpusRefEntry {
+    pub corpus_id: String,
+    pub display_name: String,
+    /// `[display] category` (e.g. `"conversation"`, `"reference"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    /// `[display] icon` hint; the client maps known values to its glyphs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    pub chunk_count: u64,
+    /// Privacy posture (`MOBILE.md`): `"local"` (never leaves this host)
+    /// vs `"mesh"` (eligible for shard distribution / knowledge
+    /// fan-out). Derived from `IndexInfo.mesh_sharing`. The phone badges
+    /// `local` sources as private-to-this-host (acceptance §7); the
+    /// per-identity conversation corpus is always `local`.
+    pub scope: String,
+    /// `false` = never sharded or gossiped to peers. Mirrors
+    /// `IndexInfo.mesh_sharing`; pairs with `scope`.
+    pub mesh_shared: bool,
+}
+
+/// GET /v1/corpora
+///
+/// Surfaces the host's installed **knowledge** corpora as `CORPUS_REF`
+/// records so the thin client can render the corpus list and resolve
+/// `(corpus_id, chunk_id)` citations against it. Code-intelligence
+/// corpora (`CorpusKind::Code`) are filtered out — they aren't chat
+/// knowledge sources. Returns an empty list (not an error) when no
+/// corpus engine is wired or none are installed.
+pub async fn list_corpora(
+    Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(_tenant): Extension<TenantId>,
+) -> ApiResult<CorpusListResponse> {
+    let Some(engine) = runtime.corpus_engine.as_ref() else {
+        return Ok(Json(CorpusListResponse {
+            corpora: Vec::new(),
+        }));
+    };
+
+    match engine.installed_indexes().await {
+        Ok(indexes) => {
+            let corpora = indexes
+                .into_iter()
+                .filter(|i| matches!(i.kind, corpus_engine::CorpusKind::Knowledge))
+                .map(|i| {
+                    let (category, icon) = i
+                        .display
+                        .as_ref()
+                        .map(|d| (d.category.clone(), d.icon.clone()))
+                        .unwrap_or((None, None));
+                    let mesh_shared = i.mesh_sharing;
+                    let scope = if mesh_shared { "mesh" } else { "local" }.to_string();
+                    CorpusRefEntry {
+                        corpus_id: i.corpus_id,
+                        display_name: i.corpus_name,
+                        category,
+                        icon,
+                        chunk_count: i.chunk_count,
+                        scope,
+                        mesh_shared,
+                    }
+                })
+                .collect();
+            Ok(Json(CorpusListResponse { corpora }))
+        }
         Err(e) => Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())),
     }
 }

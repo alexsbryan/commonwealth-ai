@@ -8,11 +8,20 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::ApprovalChannel;
 use sovereign_core::types::*;
 
+use crate::projection::{Citation, Provenance};
+
 /// Event emitted by the server for WebSocket/SSE consumers.
 ///
 /// Variants are added when a corresponding emit site exists. Don't add
 /// speculative variants — they break exhaustiveness for downstream consumers
 /// without ever firing.
+///
+/// Note on transport: `StepDone` / `ApprovalReq` / `UserInput` are
+/// genuinely fan-out (broadcast across connections by
+/// [`ServerApprovalChannel`]). The streaming variants `Token` /
+/// `Complete` / `StreamError` are NOT broadcast — `ws.rs` sends them
+/// down the single requesting socket, because tokens are per-turn and
+/// per-tenant and must never fan to another client's connection.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "type", content = "data")]
 #[serde(rename_all = "snake_case")]
@@ -31,6 +40,31 @@ pub enum ServerEvent {
         task_id: String,
         step_id: usize,
         question: String,
+    },
+    /// One streamed token delta for an assistant message. Emitted once
+    /// per chunk as the host synthesizes the response.
+    Token {
+        message_id: String,
+        chunk: String,
+    },
+    /// Terminal frame, sent after the stream is exhausted and the
+    /// runtime has persisted the assistant message. Carries the
+    /// projected provenance + corpus-grounded citations for the
+    /// completed message (see `crate::projection`).
+    Complete {
+        message_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        provenance: Option<Provenance>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        citations: Vec<Citation>,
+    },
+    /// A streaming turn failed, or the host was busy. `retry_after_secs`
+    /// is set on the busy case so the client mirrors REST `503` behaviour
+    /// (the "host busy" connectivity state) rather than a generic error.
+    StreamError {
+        message: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        retry_after_secs: Option<u64>,
     },
 }
 

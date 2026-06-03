@@ -1,5 +1,12 @@
 <script lang="ts">
-  import { parseAssistantContent } from "../parse-message";
+  import {
+    parseAssistantContent,
+    ThinkBlock,
+    RoutingMeta,
+    SourceAttribution,
+    SourcePopover,
+    NextStepButtons,
+  } from "@sovereign/chat-ui";
   import { renderMarkdown } from "../utils/markdown";
   import { insightStore } from "../stores/insights.svelte";
   import { clipInsight } from "../api";
@@ -9,11 +16,6 @@
     NextStepOffer,
     SearchAugmentation,
   } from "../types";
-  import ThinkBlock from "./ThinkBlock.svelte";
-  import RoutingMeta from "./RoutingMeta.svelte";
-  import SourceAttribution from "./SourceAttribution.svelte";
-  import SourcePopover from "./SourcePopover.svelte";
-  import NextStepButtons from "./NextStepButtons.svelte";
 
   interface Props {
     content: string;

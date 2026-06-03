@@ -1,7 +1,9 @@
 mod activity;
 mod approval;
 mod auth;
+mod busy;
 mod config;
+mod projection;
 mod routes;
 mod routes_documents;
 mod routes_mcp;
@@ -9,6 +11,9 @@ mod routes_tdd;
 mod startup;
 mod tenant;
 mod ws;
+
+#[cfg(test)]
+mod http_tests;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -530,6 +535,18 @@ async fn main() {
         AuthState::disabled()
     };
 
+    // Busy guard — bounds concurrent inference turns; saturation surfaces
+    // as `503 + Retry-After` (REST) / a busy stream frame (WS).
+    let busy_guard = busy::BusyGuard::new(
+        config.server.max_concurrent_turns,
+        config.server.retry_after_secs,
+    );
+    tracing::info!(
+        max_concurrent_turns = config.server.max_concurrent_turns,
+        retry_after_secs = config.server.retry_after_secs,
+        "Busy guard configured"
+    );
+
     // Build Axum router. The `/v1/*` API goes through the auth
     // middleware; the MCP routes do not — MCP is local-only and
     // enforced via `ConnectInfo<SocketAddr>` inside the handlers.
@@ -547,6 +564,7 @@ async fn main() {
         )
         .route("/v1/tasks/{id}/approve", post(routes::approve_task))
         .route("/v1/tools", get(routes::list_tools))
+        .route("/v1/corpora", get(routes::list_corpora))
         .route("/v1/search", post(routes::search))
         .route("/v1/conversations/{id}/stream", get(ws::ws_handler))
         .merge(routes_documents::document_router())
@@ -572,6 +590,7 @@ async fn main() {
         .layer(Extension(Arc::clone(&runtime)))
         .layer(Extension(approval))
         .layer(Extension(tdd_state))
+        .layer(Extension(busy_guard))
         .layer(CorsLayer::permissive());
 
     // Startup UX — mesh peer count from Commonwealth (non-fatal if daemon

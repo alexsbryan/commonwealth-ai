@@ -35,6 +35,9 @@ chrono = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 tower = { workspace = true, features = ["util"] }
+# WebSocket client for the streaming end-to-end test. Pinned to the
+# version already in the tree (axum 0.8 pulls tokio-tungstenite 0.29).
+tokio-tungstenite = "0.29"
 
 [lints]
 workspace = true
