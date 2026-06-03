@@ -39,3 +39,6 @@ tokio = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true }
 tempfile = "3"
+
+[lints]
+workspace = true

@@ -228,3 +228,6 @@ required-features = ["treesitter"]
 [[example]]
 name = "paddle_bakeoff"
 required-features = ["paddle-ocr"]
+
+[lints]
+workspace = true

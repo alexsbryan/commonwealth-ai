@@ -49,3 +49,6 @@ serde_json = { workspace = true }
 [[example]]
 name = "notes_tiered_bench"
 path = "examples/notes_tiered_bench.rs"
+
+[lints]
+workspace = true

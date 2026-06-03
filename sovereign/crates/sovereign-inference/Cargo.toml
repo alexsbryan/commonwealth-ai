@@ -96,3 +96,6 @@ name = "sd_smoke"
 # yield. Drop-in path for the D-full migration perf gate.
 [[example]]
 name = "bench_constraint"
+
+[lints]
+workspace = true

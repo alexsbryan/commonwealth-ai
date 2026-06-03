@@ -208,3 +208,6 @@ sevenz-rust2 = { version = "0.21", default-features = false, features = ["bzip2"
 # writer is dev-only so the production binary stays lean.
 rust_xlsxwriter = "0.83"
 
+
+[lints]
+workspace = true

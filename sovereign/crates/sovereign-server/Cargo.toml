@@ -35,3 +35,6 @@ chrono = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true

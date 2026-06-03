@@ -6,3 +6,6 @@ edition = "2021"
 [lib]
 name = "group_anagrams"
 path = "src/lib.rs"
+
+[lints]
+workspace = true

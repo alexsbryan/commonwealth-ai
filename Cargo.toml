@@ -65,6 +65,31 @@ edition = "2021"
 # foundational shared crate) used.
 license = "Apache-2.0"
 
+# Workspace lint policy (tech-debt clean-start, 2026-06-03). Members opt in
+# with `[lints]\nworkspace = true`. These clippy lints flag subjective
+# design/shape choices and cosmetic doc formatting — NOT bugs — and are
+# allowed as deliberate policy: the codebase has many-arg constructors and
+# complex closure types by design. Substantive lints (dead_code, unused,
+# correctness) are intentionally left at warn/deny and fixed, not allowed.
+[workspace.lints.clippy]
+too_many_arguments = "allow"
+type_complexity = "allow"
+large_enum_variant = "allow"
+result_large_err = "allow"
+module_inception = "allow"
+enum_variant_names = "allow"
+should_implement_trait = "allow"
+new_without_default = "allow"
+len_without_is_empty = "allow"
+doc_lazy_continuation = "allow"
+doc_overindented_list_items = "allow"
+empty_line_after_doc_comments = "allow"
+items_after_test_module = "allow"
+# `let mut x = T::default(); x.a = ..;` then accumulate `x` across the fn —
+# clippy itself marks the struct-literal rewrite MaybeIncorrect here because
+# the value is mutated downstream; the sequential form is clearer.
+field_reassign_with_default = "allow"
+
 [workspace.dependencies]
 # ── Internal crates (paths are relative to the workspace root) ──────────
 oicp-types = { path = "oicp-types" }

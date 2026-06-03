@@ -25,3 +25,6 @@ default = []
 # Enables `sovereign_cli_shared::scip` (merged SCIP graph loader).
 # Points at `corpus-engine-scip` directly post-carve-out (2026-05-23).
 scip = ["dep:corpus-engine-scip"]
+
+[lints]
+workspace = true

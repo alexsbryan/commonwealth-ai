@@ -6,3 +6,6 @@ edition = "2021"
 [lib]
 name = "reverse_string"
 path = "src/lib.rs"
+
+[lints]
+workspace = true

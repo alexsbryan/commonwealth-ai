@@ -25,3 +25,6 @@ http-body-util = "0.1"
 [[test]]
 name = "integration"
 path = "tests/integration.rs"
+
+[lints]
+workspace = true

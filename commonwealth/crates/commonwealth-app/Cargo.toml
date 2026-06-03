@@ -13,3 +13,6 @@ tracing = { workspace = true }
 thiserror = { workspace = true }
 reqwest = { workspace = true }
 bytes = { workspace = true }
+
+[lints]
+workspace = true

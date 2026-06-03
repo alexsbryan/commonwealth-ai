@@ -66,3 +66,6 @@ rusqlite = { version = "0.35", features = ["bundled"] }
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+
+[lints]
+workspace = true
