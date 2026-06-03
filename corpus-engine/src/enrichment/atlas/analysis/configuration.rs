@@ -405,9 +405,7 @@ fn normalise_and_validate_atom_id(
     raw: &str,
     known_atom_ids: &std::collections::HashSet<String>,
 ) -> Option<String> {
-    let Some((kind, rest)) = raw.split_once('-') else {
-        return None;
-    };
+    let (kind, rest) = raw.split_once('-')?;
     if !matches!(
         kind,
         "entity" | "event" | "state" | "relation" | "claim" | "question" | "config"

@@ -109,10 +109,8 @@ impl Extractor for WikipediaCatalogExtractor {
         // real parse errors. Empty lines at the tail of a writer's
         // output are common; treating them as fatal would break a
         // legitimate file.
-        let iter = iter.filter(|r| match r {
-            Err(Error::Extraction(msg)) if msg.contains("empty line") => false,
-            _ => true,
-        });
+        let iter =
+            iter.filter(|r| !matches!(r, Err(Error::Extraction(msg)) if msg.contains("empty line")));
         Ok(Box::new(iter))
     }
 }

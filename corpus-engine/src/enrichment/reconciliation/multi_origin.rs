@@ -263,7 +263,7 @@ pub fn split_atom(
 
 // ── Union-find helpers ───────────────────────────────────────
 
-fn find(parent: &mut Vec<usize>, mut x: usize) -> usize {
+fn find(parent: &mut [usize], mut x: usize) -> usize {
     while parent[x] != x {
         parent[x] = parent[parent[x]];
         x = parent[x];

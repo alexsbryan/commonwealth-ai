@@ -2959,7 +2959,7 @@ mod tests {
           "metadata": {"scope": null, "entity_name": "Alyosha"}
         }"#;
         let parsed = p.parse_phase3_facet(Facet::EntityState, response).unwrap();
-        assert!(parsed.metadata.get("scope").is_none());
+        assert!(!parsed.metadata.contains_key("scope"));
         assert_eq!(parsed.metadata.get("entity_name").unwrap(), "Alyosha");
     }
 

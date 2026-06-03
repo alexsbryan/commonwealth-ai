@@ -1495,7 +1495,7 @@ impl CorpusEngine {
             let dims = recipe.index.embedding_dimensions;
             // Estimate IVF-PQ partition count: LanceDB Auto ≈ sqrt(N), capped 2–512.
             let est_partitions = (total_chunks as f64).sqrt().round() as u64;
-            let est_partitions = est_partitions.max(2).min(512);
+            let est_partitions = est_partitions.clamp(2, 512);
             eprintln!(
                 "[{id}] Index build starting — model: {model} ({dims}d), \
                  chunks: {total_chunks}, \

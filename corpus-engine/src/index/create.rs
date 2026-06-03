@@ -9,7 +9,7 @@ use super::*;
 /// Compute IVF partition count: sqrt(n), clamped 8–4096.
 /// LanceDB Auto uses the same heuristic; making it explicit lets us log it.
 fn optimal_partitions(num_chunks: u64) -> u32 {
-    ((num_chunks as f64).sqrt() as u32).max(8).min(4096)
+    ((num_chunks as f64).sqrt() as u32).clamp(8, 4096)
 }
 
 /// Read the embedding column's fixed-list dimension from the table schema.

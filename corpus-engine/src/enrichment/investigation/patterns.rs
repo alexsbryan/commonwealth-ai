@@ -263,7 +263,7 @@ fn dfs_cycles(
     }
 }
 
-fn rotate_to_min(path: &mut Vec<NodeIndex>) {
+fn rotate_to_min(path: &mut [NodeIndex]) {
     if path.is_empty() {
         return;
     }
