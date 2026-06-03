@@ -386,7 +386,7 @@ impl FieldModelEngine {
         );
 
         // Count how many chunks have non-empty titles.
-        let titled_count = all.iter().filter(|c| c.title.as_ref().map_or(false, |t| !t.is_empty())).count();
+        let titled_count = all.iter().filter(|c| c.title.as_ref().is_some_and(|t| !t.is_empty())).count();
 
         let filtered: Vec<_> = if filter.is_first_in_entry == Some(true) && titled_count > 10 {
             // Titles are available — keep the first chunk per distinct title.
@@ -576,7 +576,7 @@ impl FieldModelEngine {
             }
 
             // Progress every 10 batches or at the end.
-            if batches_done % 10 == 0 || batches_done == total_batches {
+            if batches_done.is_multiple_of(10) || batches_done == total_batches {
                 progress(EnrichmentProgress::Phase1Progress {
                     batches_done,
                     batches_total: total_batches,
@@ -584,7 +584,7 @@ impl FieldModelEngine {
             }
 
             // Flush skeleton + checkpoint every 50 batches for resume support.
-            if batches_done % 50 == 0 {
+            if batches_done.is_multiple_of(50) {
                 if let Err(e) = self.write_partial_skeleton(index, &skeleton) {
                     tracing::warn!(error = %e, "Failed to flush partial skeleton");
                 }

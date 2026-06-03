@@ -464,13 +464,13 @@ impl Tool for KnowledgeLookupTool {
             });
         let want_corpus = requested_kinds
             .as_ref()
-            .map_or(true, |ks| ks.iter().any(|k| k == "corpus"));
+            .is_none_or(|ks| ks.iter().any(|k| k == "corpus"));
         let want_memory = requested_kinds
             .as_ref()
-            .map_or(true, |ks| ks.iter().any(|k| k == "memory"));
+            .is_none_or(|ks| ks.iter().any(|k| k == "memory"));
         let want_note = requested_kinds
             .as_ref()
-            .map_or(true, |ks| ks.iter().any(|k| k == "note"));
+            .is_none_or(|ks| ks.iter().any(|k| k == "note"));
 
         // Fan-out in parallel — three reads against independent
         // SQLite tables / Lance indexes, no cross-channel data
@@ -701,8 +701,7 @@ mod tests {
         let tool = mock_tool();
         let err = tool
             .validate(&serde_json::json!({ "query": "" }))
-            .err()
-            .expect("should reject empty query");
+            .expect_err("should reject empty query");
         let msg = format!("{err}");
         assert!(msg.contains("empty"));
     }
@@ -712,8 +711,7 @@ mod tests {
         let tool = mock_tool();
         let err = tool
             .validate(&serde_json::json!({ }))
-            .err()
-            .expect("should reject missing query");
+            .expect_err("should reject missing query");
         let msg = format!("{err}");
         assert!(msg.contains("requires"));
     }

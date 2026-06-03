@@ -1152,7 +1152,7 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
     // Source path is `None` in template / corpus modes; cmd_init resolves
     // it to the materialised file (template mode) or to a placeholder
     // (corpus mode — there's no source file at all).
-    let source_path = source.unwrap_or_else(|| PathBuf::new());
+    let source_path = source.unwrap_or_default();
     let toc_markers = if toc {
         Some(TocMarkers {
             start: toc_start.unwrap_or_else(|| {

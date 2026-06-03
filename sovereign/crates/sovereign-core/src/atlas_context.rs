@@ -233,12 +233,12 @@ fn contains_whole_word(haystack: &str, needle: &str) -> bool {
             || !haystack[..abs]
                 .chars()
                 .last()
-                .map_or(false, |c| c.is_alphanumeric());
+                .is_some_and(|c| c.is_alphanumeric());
         let right_ok = end == haystack.len()
             || !haystack[end..]
                 .chars()
                 .next()
-                .map_or(false, |c| c.is_alphanumeric());
+                .is_some_and(|c| c.is_alphanumeric());
         if left_ok && right_ok {
             return true;
         }

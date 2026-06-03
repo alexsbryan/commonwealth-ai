@@ -178,14 +178,14 @@ fn test_state(tmp: &TempDir, embed_fn: corpus_engine::types::EmbedFn) -> AppStat
         members: HashMap::new(),
         peers: vec![],
     };
-    let state = AppState::new_with_platform_and_engine(
+    
+    AppState::new_with_platform_and_engine(
         NodeId::from_u128(1),
         mesh,
         Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
         Arc::new(commonwealth_app::registry::AppRegistry::new()),
         Some(Arc::new(engine)),
-    );
-    state
+    )
 }
 
 async fn post_json<T: serde::Serialize>(

@@ -59,7 +59,7 @@ pub async fn corpus_collaborate(
 
     // Build local node view.
     let mesh = state.inner.mesh.read().await;
-    let self_id = state.inner.self_node_id_swap.load_full().as_ref().clone();
+    let self_id = *state.inner.self_node_id_swap.load_full().as_ref();
     let local_member = mesh.members.get(&self_id).cloned().ok_or_else(|| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -473,7 +473,7 @@ pub async fn corpus_collaborate(
         let corpus_id_for_log = handoff.corpus_id.clone();
         for peer in &candidates {
             let mut ordered_addrs: Vec<std::net::SocketAddr> =
-                peer.addresses.iter().copied().collect();
+                peer.addresses.to_vec();
             if ordered_addrs.is_empty() {
                 tracing::warn!(
                     node = %peer.node_id,
@@ -762,7 +762,7 @@ pub async fn corpus_collaborate(
             // even though both machines had routable Tailscale addresses
             // advertised in `MemberRecord.addresses`.
             let mut ordered_addrs: Vec<std::net::SocketAddr> =
-                peer.addresses.iter().copied().collect();
+                peer.addresses.to_vec();
             ordered_addrs.sort_by_key(|addr| match addr.ip() {
                 std::net::IpAddr::V4(v4) => {
                     let o = v4.octets();

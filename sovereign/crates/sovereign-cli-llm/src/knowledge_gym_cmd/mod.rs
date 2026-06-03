@@ -66,8 +66,7 @@ async fn run_cmd(args: &[String]) -> i32 {
         match a.as_str() {
             "--base-url" => {
                 base_url = iter
-                    .next()
-                    .map(String::clone)
+                    .next().cloned()
                     .unwrap_or_else(|| {
                         eprintln!("--base-url requires a value");
                         std::process::exit(2)

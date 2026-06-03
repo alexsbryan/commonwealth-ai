@@ -222,11 +222,10 @@ pub(crate) fn strip_html(html: &str) -> String {
                         in_style = false;
                     } else if lower == "br" || lower == "br/" {
                         result.push('\n');
-                    } else if lower == "p" || lower == "/p" || lower == "div" || lower == "/div" {
-                        if !result.ends_with('\n') {
+                    } else if (lower == "p" || lower == "/p" || lower == "div" || lower == "/div")
+                        && !result.ends_with('\n') {
                             result.push('\n');
                         }
-                    }
                 } else {
                     tag_name.push(ch);
                 }

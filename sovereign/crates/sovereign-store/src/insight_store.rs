@@ -112,7 +112,7 @@ impl InsightStore for SqliteInsightStore {
         let position_json = node
             .position
             .as_ref()
-            .map(|p| serde_json::to_string(p))
+            .map(serde_json::to_string)
             .transpose()
             .map_err(map_json)?;
         let adjacent_json = serde_json::to_string(&node.adjacent).map_err(map_json)?;

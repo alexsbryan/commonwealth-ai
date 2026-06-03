@@ -318,8 +318,8 @@ pub async fn cmd_classify(args: &[String]) -> i32 {
                 .unwrap_or(true);
         if !want_chat {
             cache_hits += 1;
-            print!(
-                "    [{}/{}] {} (cache hit, skipping)\n",
+            println!(
+                "    [{}/{}] {} (cache hit, skipping)",
                 idx + 1,
                 total,
                 chapter.chapter_id

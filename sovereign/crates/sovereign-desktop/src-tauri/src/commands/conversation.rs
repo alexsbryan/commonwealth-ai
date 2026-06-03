@@ -672,7 +672,7 @@ pub async fn list_skills(state: State<'_, Arc<AppState>>) -> Result<Vec<SkillEnt
         .collect();
 
     Ok(all_skills
-        .into_iter()
+        .iter()
         .map(|s| SkillEntry {
             active: active_ids.contains(&s.id),
             id: s.id.clone(),

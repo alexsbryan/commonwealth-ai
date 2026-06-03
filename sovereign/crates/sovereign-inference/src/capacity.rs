@@ -24,7 +24,7 @@
 //! letting a thrashing config load is what we lived through above.
 
 use crate::hardware::HardwareProfile;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// One configured slot the daemon would eagerly load at boot.
 /// Built from `SetupConfig` (or a synthetic test config) — this

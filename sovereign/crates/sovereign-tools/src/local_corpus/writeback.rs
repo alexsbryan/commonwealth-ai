@@ -239,7 +239,7 @@ impl WriteBack {
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
-        let size_bytes = merged.as_bytes().len() as u64;
+        let size_bytes = merged.len() as u64;
         let content_hash = short_sha256_hex(merged.as_bytes());
 
         Ok(Some(TouchedNote {
@@ -434,11 +434,10 @@ impl WriteBack {
                 continue;
             };
             let stripped = frontmatter::strip_sovereign(&raw, namespace);
-            if stripped != raw {
-                if atomic_write_string(abs, &stripped).is_ok() {
+            if stripped != raw
+                && atomic_write_string(abs, &stripped).is_ok() {
                     tags_removed_from += 1;
                 }
-            }
         }
 
         let index_dir = self.vault_path.join(&self.config.index_dir);

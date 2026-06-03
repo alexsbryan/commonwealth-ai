@@ -274,7 +274,7 @@ pub fn write_triage_budget(atlas_dir: &Path, budget_articles: usize) -> std::io:
     cfg.schema_version = 1;
     cfg.budget_articles = Some(budget_articles);
     let value = serde_json::to_value(&cfg)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        .map_err(std::io::Error::other)?;
     write_atomic_json(&path, &value)
 }
 
@@ -304,7 +304,7 @@ pub fn write_triage_config(
         cfg.expansion_hops = Some(h);
     }
     let value = serde_json::to_value(&cfg)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        .map_err(std::io::Error::other)?;
     write_atomic_json(&path, &value)
 }
 
@@ -849,7 +849,7 @@ pub async fn launch_tier2_extraction_with_advice(
                 "--include-articles",
                 triage_path
                     .to_str()
-                    .unwrap_or_else(|| "/dev/null"),
+                    .unwrap_or("/dev/null"),
                 "--pipeline",
                 "referential_atlas",
             ])
@@ -1024,6 +1024,26 @@ pub async fn resume_inflight_tier2(
     outcomes
 }
 
+fn write_atomic_json(path: &Path, value: &serde_json::Value) -> std::io::Result<()> {
+    let parent = path.parent().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("path has no parent: {}", path.display()),
+        )
+    })?;
+    std::fs::create_dir_all(parent)?;
+    let tmp = parent.join(format!(
+        ".{}.tmp",
+        path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("atlas-postinstall")
+    ));
+    let bytes = serde_json::to_vec_pretty(value)
+        .map_err(std::io::Error::other)?;
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1102,7 +1122,7 @@ mod tests {
         }
         for i in 2..=6 {
             for _ in 0..100 {
-                let target = ((i % 5) + 2) as usize;
+                let target = ((i % 5) + 2);
                 edges.push(Edge {
                     id: EdgeId::new(next_edge as usize),
                     edge_type: EdgeType::Involves,
@@ -1436,24 +1456,4 @@ mod tests {
         assert_eq!(picks2[0].as_str(), Some("Beta thing"));
         assert_eq!(v2["bumped_picks"].as_u64(), Some(1));
     }
-}
-
-fn write_atomic_json(path: &Path, value: &serde_json::Value) -> std::io::Result<()> {
-    let parent = path.parent().ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("path has no parent: {}", path.display()),
-        )
-    })?;
-    std::fs::create_dir_all(parent)?;
-    let tmp = parent.join(format!(
-        ".{}.tmp",
-        path.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("atlas-postinstall")
-    ));
-    let bytes = serde_json::to_vec_pretty(value)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-    std::fs::write(&tmp, bytes)?;
-    std::fs::rename(&tmp, path)
 }

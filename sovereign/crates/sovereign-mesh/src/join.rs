@@ -277,7 +277,7 @@ pub async fn perform_join(
     if let Some(raw) = direct_peer_hint {
         if let Some(authority) = normalise_peer_hint(raw) {
             info!(peer = %authority, "handshake_sent: direct-peer hint, POST /internal/join");
-            match http.post(&format!("http://{authority}/internal/join"))
+            match http.post(format!("http://{authority}/internal/join"))
                 .json(&body)
                 .send()
                 .await

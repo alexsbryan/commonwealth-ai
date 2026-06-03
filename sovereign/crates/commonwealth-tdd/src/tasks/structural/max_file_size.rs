@@ -282,7 +282,7 @@ mod tests {
 
     #[test]
     fn jest_template_uses_node_imports() {
-        let (path, content) = render(Framework::Jest, 80);
+        let (_path, content) = render(Framework::Jest, 80);
         assert!(content.contains("from 'fs'"));
         assert!(!content.contains("from 'node:fs'"));
         assert!(content.contains("MAX_LINES = 80"));

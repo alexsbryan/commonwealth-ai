@@ -392,7 +392,7 @@ async fn run_diag(session: &ChatSession, args: &CmdArgs) -> DiagResult<DiagRepor
     let mut all_hits: Vec<(String, ScoredChunk)> = Vec::new();
     for info in indexes
         .iter()
-        .filter(|i| args.corpus_filter.as_deref().map_or(true, |f| i.corpus_id == f))
+        .filter(|i| args.corpus_filter.as_deref().is_none_or(|f| i.corpus_id == f))
     {
         let dim_match = info.embedding_dimensions == embedding.len();
         // Mirror Runtime::search_corpus_indexes: drop Code-kind
@@ -689,11 +689,10 @@ async fn compute_atom_spans(
         .iter()
         .take(args.max_spans)
         .map(|s| sample_from_span(&chunk.content, s))
-        .map(|s| {
+        .inspect(|s| {
             if s.actual_slice != s.surface_form {
                 invalid_offsets += 1;
             }
-            s
         })
         .collect();
 

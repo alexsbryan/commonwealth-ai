@@ -290,7 +290,7 @@ fn select_concept_overlap_cross_position(
         "there", "their", "these", "those", "where", "which", "would", "could",
         "about", "other", "after", "first", "every", "still", "ought",
     ];
-    let is_stop = |t: &str| STOP_TOKENS.iter().any(|s| *s == t);
+    let is_stop = |t: &str| STOP_TOKENS.contains(&t);
     let matchable: Vec<MatchableEntity<'_>> = entities
         .iter()
         .filter(|e| e.canonical_name.trim().len() >= 4)

@@ -32,7 +32,7 @@ pub async fn gossip(
     Json(req): Json<GossipRequest>,
 ) -> Result<Json<GossipResponse>, (StatusCode, Json<GossipRejection>)> {
     let incoming = req.mesh.into_mesh();
-    let self_node_id = state.inner.self_node_id_swap.load_full().as_ref().clone();
+    let self_node_id = *state.inner.self_node_id_swap.load_full().as_ref();
     let mut mesh = state.inner.mesh.write().await;
     let report = mesh.merge_from(self_node_id, &incoming);
 
@@ -72,7 +72,7 @@ pub async fn gossip(
         // deltas — no point re-writing mesh.json for a last_seen
         // bump that changed nothing structural.
         if let Some(hook) = state.inner.on_mesh_mutation.as_ref() {
-            hook(&*mesh, self_node_id);
+            hook(&mesh, self_node_id);
         }
     }
 

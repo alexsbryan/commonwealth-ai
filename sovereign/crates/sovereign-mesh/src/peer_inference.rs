@@ -289,7 +289,7 @@ impl PeerEndpointSource for EmbeddedDaemon {
     ) -> Option<LedgerEmission> {
         let app_state = self.app_state().await?;
         Some(LedgerEmission {
-            from_node: peer_node_id.clone(),
+            from_node: *peer_node_id,
             model_id: model_id.to_string(),
             emitter: app_state.inner.contribution_emitter.clone(),
         })

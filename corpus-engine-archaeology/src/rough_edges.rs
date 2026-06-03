@@ -183,7 +183,7 @@ pub fn scan_markers(source_root: &Path) -> Vec<RoughEdgeFinding> {
             // chars so the renderer's column shape stays consistent.
             let snippet = if snippet.len() > 160 {
                 let mut s = snippet[..160].to_string();
-                s.push_str("…");
+                s.push('…');
                 s
             } else {
                 snippet
@@ -449,7 +449,7 @@ pub fn scan_absolute_user_paths(source_root: &Path) -> Vec<RoughEdgeFinding> {
             let snippet = line.trim().to_string();
             let snippet = if snippet.len() > 160 {
                 let mut s = snippet[..160].to_string();
-                s.push_str("…");
+                s.push('…');
                 s
             } else {
                 snippet
@@ -471,9 +471,9 @@ pub fn scan_absolute_user_paths(source_root: &Path) -> Vec<RoughEdgeFinding> {
 
 /// Walk `source_root` and emit a finding for every `.rs` file
 /// >300 lines that contains a `fn`/`impl` declaration but no
-/// `tracing::` calls. Pure-data files (no `fn`/`impl`) are exempt.
-/// Test files (`tests/`, `examples/`, `#[cfg(test)]` modules) are
-/// exempt by convention — they don't need glassbox tracing.
+/// > `tracing::` calls. Pure-data files (no `fn`/`impl`) are exempt.
+/// > Test files (`tests/`, `examples/`, `#[cfg(test)]` modules) are
+/// > exempt by convention — they don't need glassbox tracing.
 pub fn scan_zero_tracing(source_root: &Path) -> Vec<RoughEdgeFinding> {
     const MIN_LINES: usize = 300;
     let mut out: Vec<RoughEdgeFinding> = Vec::new();

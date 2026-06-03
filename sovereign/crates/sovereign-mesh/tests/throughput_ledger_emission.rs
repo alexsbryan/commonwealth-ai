@@ -74,7 +74,7 @@ impl PeerEndpointSource for StubPeerSource {
         _peer_name: &str,
     ) -> Option<LedgerEmission> {
         Some(LedgerEmission::new(
-            peer_node_id.clone(),
+            *peer_node_id,
             model_id,
             self.emitter.clone(),
         ))
@@ -177,7 +177,7 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
     // 1. Set up the contribution ledger backed by an in-memory MeshStore.
     let self_node = NodeId::from_u128(0xAAAA_AAAA_AAAA_AAAA);
     let store = MeshStore::in_memory().unwrap();
-    let emitter = ContributionEmitter::new(store.clone(), self_node.clone());
+    let emitter = ContributionEmitter::new(store.clone(), self_node);
 
     // Sanity: ledger starts empty.
     assert!(
@@ -194,7 +194,7 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
     //    attaches a `LedgerEmission` to the returned stream.
     let peer_node_id = NodeId::from_u128(0xF0F0_F0F0_F0F0_F0F0);
     let peers = vec![PeerInferenceEndpoint {
-        node_id: peer_node_id.clone(),
+        node_id: peer_node_id,
         name: "Founder".into(),
         base_urls: vec![base_url],
         system_ram_gb: 64,
@@ -270,7 +270,7 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
                 from_node,
                 model_id,
                 tokens_generated,
-            } => Some((from_node.clone(), model_id.clone(), *tokens_generated)),
+            } => Some((*from_node, model_id.clone(), *tokens_generated)),
             _ => None,
         })
         .collect();

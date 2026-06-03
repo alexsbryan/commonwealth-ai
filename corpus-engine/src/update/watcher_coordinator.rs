@@ -719,7 +719,7 @@ mod tests {
         });
 
         // Call flush_coordinator directly, bypassing the notify watcher.
-        let paths = vec![PathBuf::from("/tmp/foo.rs")];
+        let paths = [PathBuf::from("/tmp/foo.rs")];
         let watchers = vec![Arc::clone(&wa), Arc::clone(&wb)];
         let mut pending: std::collections::HashMap<PathBuf, (Instant, bool)> =
             [(paths[0].clone(), (Instant::now() - Duration::from_secs(10), false))]

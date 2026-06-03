@@ -188,7 +188,7 @@ async fn run_inspect(
 
     for info in indexes
         .iter()
-        .filter(|i| corpus_filter.map_or(true, |f| i.corpus_id == f))
+        .filter(|i| corpus_filter.is_none_or(|f| i.corpus_id == f))
     {
         let dim_match = info.embedding_dimensions == embedding.len();
         let is_code = matches!(info.kind, corpus_engine::CorpusKind::Code);

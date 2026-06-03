@@ -95,7 +95,7 @@ pub fn stage_blocking(
                     source_path: &relative,
                 };
                 let json = serde_json::to_string(&line).map_err(|e| {
-                    std::io::Error::new(std::io::ErrorKind::Other, format!("serialize: {e}"))
+                    std::io::Error::other(format!("serialize: {e}"))
                 })?;
                 writeln!(writer, "{json}")?;
                 result.staged += 1;
@@ -751,7 +751,7 @@ pub async fn append_ocr_to_staging(
                     source_path: &relative,
                 };
                 let json = serde_json::to_string(&line).map_err(|e| {
-                    std::io::Error::new(std::io::ErrorKind::Other, format!("serialize: {e}"))
+                    std::io::Error::other(format!("serialize: {e}"))
                 })?;
                 writeln!(file_handle, "{json}")?;
                 result.staged += 1;
@@ -969,7 +969,7 @@ mod tests {
         // we never panic past the wrapper, regardless of input.
         let dir = tempdir().unwrap();
         let path = dir.path().join("garbage.html");
-        fs::write(&path, &[0xff, 0xfe, 0x00, 0x01, 0x02, 0xc3, 0x28]).unwrap();
+        fs::write(&path, [0xff, 0xfe, 0x00, 0x01, 0x02, 0xc3, 0x28]).unwrap();
         // Bytes that aren't valid UTF-8 → read_to_string fails →
         // Parse error. Either way: not a panic.
         let _ = safe_extract_html_text(&path);

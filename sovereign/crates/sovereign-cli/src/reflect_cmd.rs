@@ -682,7 +682,7 @@ fn infer_patterns(rows: &[ToolCallLogRow]) -> HashMap<String, Vec<(String, usize
             session_groups.entry(&r.session_id).or_default().push(r);
         }
         let mut count = 0usize;
-        for (_, calls) in &session_groups {
+        for calls in session_groups.values() {
             let has_blast = calls.iter().any(|r| r.tool_name == "blast_radius");
             if has_blast {
                 let symbol_lookups = calls.iter().filter(|r| r.tool_name == "symbol_lookup").count();

@@ -325,7 +325,7 @@ pub async fn export_all(
     graph.clear().await?;
 
     std::fs::create_dir_all(output_dir)
-        .map_err(|e| Error::Io(e))?;
+        .map_err(Error::Io)?;
 
     for exporter in exporters {
         // workspace_level exporters run once per Cargo workspace root so that
@@ -368,9 +368,9 @@ pub async fn export_all(
             // appear in the SCIP output).
             let config_file: Option<tempfile::NamedTempFile> = if let Some(json) = exporter.config_json {
                 let mut f = tempfile::NamedTempFile::new()
-                    .map_err(|e| Error::Io(e))?;
+                    .map_err(Error::Io)?;
                 std::io::Write::write_all(&mut f, json.as_bytes())
-                    .map_err(|e| Error::Io(e))?;
+                    .map_err(Error::Io)?;
                 Some(f)
             } else {
                 None
@@ -396,7 +396,7 @@ pub async fn export_all(
                 .stderr(std::process::Stdio::piped())
                 .output()
                 .await
-                .map_err(|e| Error::Io(e))?;
+                .map_err(Error::Io)?;
 
             // Config file is deleted when `config_file` drops at end of loop iteration.
             let status = output.status;
@@ -492,7 +492,7 @@ pub fn parse_scip_file(
     language_id: &str,
 ) -> Result<(Vec<ScipSymbolRecord>, Vec<ScipRefRecord>)> {
     let data = std::fs::read(path)
-        .map_err(|e| Error::Io(e))?;
+        .map_err(Error::Io)?;
 
     let index = scip_proto::Index::decode(&*data)
         .map_err(|e| Error::Database(format!("SCIP decode: {e}")))?;

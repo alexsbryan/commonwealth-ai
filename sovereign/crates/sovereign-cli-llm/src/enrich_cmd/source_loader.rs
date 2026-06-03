@@ -150,9 +150,7 @@ fn strip_rtf(input: &str) -> String {
                                 // for the bytes we can.
                                 out.push(cp1252_to_char(byte));
                             }
-                            if skip_bytes_after_unicode > 0 {
-                                skip_bytes_after_unicode -= 1;
-                            }
+                            skip_bytes_after_unicode = skip_bytes_after_unicode.saturating_sub(1);
                         }
                     }
                 } else if next == '\n' || next == '\r' {
@@ -257,7 +255,7 @@ fn handle_control_word(
     // If this control word names a skip-destination, flip the group
     // to skip mode. Works whether the word opens the group or appears
     // mid-stream (some generators emit `\*\pict` style openers).
-    if SKIP_DESTINATIONS.iter().any(|d| *d == word) {
+    if SKIP_DESTINATIONS.contains(&word) {
         if let Some(g) = groups.last_mut() {
             g.skip = true;
         }

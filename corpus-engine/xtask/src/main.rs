@@ -264,7 +264,7 @@ fn doc_contract_failures(root: &Path) -> Vec<String> {
         }
         if in_sec1 && fences_seen == 1 {
             let trimmed =
-                line.trim_start_matches(|c| c == '│' || c == ' ' || c == '├' || c == '└' || c == '─');
+                line.trim_start_matches(['│', ' ', '├', '└', '─']);
             if let Some(tok) = trimmed.split_whitespace().next() {
                 let dir = tok.trim_end_matches('/');
                 if dir.is_empty() || dir == "commonwealth-ai" {

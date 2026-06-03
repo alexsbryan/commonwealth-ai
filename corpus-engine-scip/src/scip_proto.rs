@@ -377,7 +377,7 @@ pub fn extract_symbol_name(scip_symbol: &str) -> String {
         .trim_end_matches('#');
 
     // Take the last path segment
-    if let Some(pos) = trimmed.rfind(|c: char| c == '/' || c == '#' || c == '.') {
+    if let Some(pos) = trimmed.rfind(['/', '#', '.']) {
         trimmed[pos + 1..].to_string()
     } else {
         trimmed.to_string()

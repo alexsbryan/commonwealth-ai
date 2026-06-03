@@ -92,7 +92,7 @@ fn process_html_file(label: &str, path: &Path) -> Result<Option<ExtractedDoc>> {
     let source_id = path
         .file_stem()
         .and_then(|s| s.to_str())
-        .map(|s| slug(s))
+        .map(slug)
         .unwrap_or_else(|| "unknown".to_string());
 
     Ok(Some(ExtractedDoc {

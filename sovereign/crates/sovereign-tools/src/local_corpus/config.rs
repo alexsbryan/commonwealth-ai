@@ -214,9 +214,11 @@ pub struct WatchedFolderConfig {
 /// enrichment lifecycles, so this enum lives next to it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[derive(Default)]
 pub enum WatchedEnrichmentConfig {
     /// No atlas. Folder is searchable via standard retrieval
     /// only.
+    #[default]
     Off,
     /// Atlas enrichment is enabled with `pipeline_id` chosen at
     /// enable time (one of `"philosophy_atlas"`,
@@ -233,11 +235,6 @@ pub enum WatchedEnrichmentConfig {
     },
 }
 
-impl Default for WatchedEnrichmentConfig {
-    fn default() -> Self {
-        WatchedEnrichmentConfig::Off
-    }
-}
 
 /// One additional root attached to a watched-folder corpus.
 /// Folder-ingest v1 §3.1.
@@ -256,9 +253,11 @@ pub struct RootSpec {
 /// Per-folder sync cadence policy. See `WatchedFolderConfig.sync_mode`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum SyncMode {
     /// Sweep periodically per `sweep_interval_secs`. Default for
     /// folders the user actively maintains.
+    #[default]
     Continuous,
     /// Sweep only on explicit `sync-now`. The scheduler skips this
     /// corpus on its periodic tick. For inbox-style folders the user
@@ -266,11 +265,6 @@ pub enum SyncMode {
     Manual,
 }
 
-impl Default for SyncMode {
-    fn default() -> Self {
-        SyncMode::Continuous
-    }
-}
 
 impl Default for WatchedFolderConfig {
     fn default() -> Self {

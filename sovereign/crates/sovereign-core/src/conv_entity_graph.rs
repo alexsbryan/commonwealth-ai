@@ -241,7 +241,7 @@ impl ConvEntityGraph {
             graph.intern_entity(text);
             let entry = by_chunk.entry(row.chunk_id).or_default();
             let key = text.to_lowercase();
-            if !entry.iter().any(|s| *s == key) {
+            if !entry.contains(&key) {
                 entry.push(key);
             }
         }
@@ -366,7 +366,7 @@ impl ConvEntityGraph {
             graph.intern_entity(text);
             let entry = by_chunk.entry(row.chunk_id).or_default();
             let key = text.to_lowercase();
-            if !entry.iter().any(|s| *s == key) {
+            if !entry.contains(&key) {
                 entry.push(key);
             }
         }

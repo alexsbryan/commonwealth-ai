@@ -244,7 +244,7 @@ impl PeerHealthTracker {
         // instantly: the cache still had the right manifest, but
         // `is_quarantined` rejected the peer for ~4 min instead of
         // the expected 60 s.
-        if entry.quarantined_until.map_or(false, |d| d > now) {
+        if entry.quarantined_until.is_some_and(|d| d > now) {
             return false;
         }
 
@@ -440,7 +440,7 @@ mod tests {
         // Recent success rate is 0/20 = 0%, but the floor lifts it.
         let w = h.health_weight("pod");
         assert!(
-            w >= HEALTH_WEIGHT_FLOOR && w < 0.10,
+            (HEALTH_WEIGHT_FLOOR..0.10).contains(&w),
             "expected floor (~5%), got {w}"
         );
     }

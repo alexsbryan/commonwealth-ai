@@ -43,8 +43,7 @@ pub(crate) const OVERSIZE_MESSAGE_HINT: &str =
      inputs. Or summarise your question into a paragraph or two.";
 
 pub(crate) use self::voice_prompts::{
-    build_witness_grounding, epistemic_contract_for, render_temporal_tensions,
-    PRIMARY_BASE_SYSTEM_PROMPT, RELATIONAL_BASE_SYSTEM_PROMPT, RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT,
+    build_witness_grounding, epistemic_contract_for, render_temporal_tensions, RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT,
 };
 pub use self::voice_prompts::{
     __voice_test_epistemic_contract_for, __voice_test_factual_base_prompt,
@@ -229,8 +228,7 @@ an essay. Use exact source terminology for technical terms, dates, \
 and proper nouns — paraphrase only the connective prose.";
 
 pub(crate) use self::text_utils::{
-    audit_pipeline_stage, format_conversation_history, now, today_anchor_block, truncate_chars,
-    truncate_chunk_content, truncate_with_ellipsis, MAX_CHUNK_CHARS,
+    audit_pipeline_stage, format_conversation_history, now, today_anchor_block, truncate_chars, truncate_with_ellipsis,
 };
 
 mod text_utils;
@@ -527,11 +525,9 @@ pub(crate) use self::collaboration::{
     ASK_MOVE_DELIBERATION_LINGER_MS,
 };
 pub(crate) use self::evidence::{
-    chunk_source_key, compute_evidence_shape, decide_expansion_strategy, extract_tokens,
-    is_grounding_candidate, median_f32, route_from_evidence, strip_leading_title_duplicate,
-    EvidenceShape, ExpansionStrategy, SynthesisRoute, EVIDENCE_DECISIVE_TOP_SOURCE_REPEAT,
-    EVIDENCE_MEDIAN_RATIO_THRESHOLD, EVIDENCE_MIN_TOKEN_COVERAGE, EVIDENCE_MIN_TOP_SOURCE_REPEAT,
-    EVIDENCE_TITLE_MIN_TOKEN_LEN,
+    compute_evidence_shape, decide_expansion_strategy,
+    is_grounding_candidate, route_from_evidence,
+    EvidenceShape, ExpansionStrategy, SynthesisRoute, EVIDENCE_MIN_TOKEN_COVERAGE,
 };
 pub use self::evidence::build_test_evidence_shape;
 pub(crate) use self::intent_helpers::{
@@ -546,8 +542,7 @@ pub(crate) use self::question_analysis::{
 pub(crate) use self::retrieval_helpers::{
     atlas_grounding_enabled, build_per_corpus_k_overrides, build_retrieval_query,
     collect_hot_corpora, cross_corpus_sort_cmp, drop_no_overlap_chunks, inject_meta_atlas_hits,
-    reweight_by_query_relevance, HOT_CORPUS_K_RANGE, HOT_CORPUS_MAX_BOOSTED, HOT_CORPUS_MIN_SHARE,
-    RETRIEVAL_QUERY_TOPIC_CHARS,
+    reweight_by_query_relevance,
 };
 pub(crate) use self::types::{KnowledgeContext, KnowledgeQueryPlan};
 pub use self::types::{
@@ -1875,7 +1870,7 @@ impl Runtime {
             // can tell them after retrieval finishes is "we read N
             // chunks across these sources." When the top source
             // dominates we say so; otherwise we report the spread.
-            if plan.chunks.len() > 0 {
+            if !plan.chunks.is_empty() {
                 let txt = if plan.shape.top_source_repeat_count >= 2 {
                     format!(
                         "Read {} chunks — {} from one source, so I'll keep the answer focused.",

@@ -379,8 +379,7 @@ impl DocumentAssetManager {
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or(&filename)
-            .replace('_', " ")
-            .replace('-', " ");
+            .replace(['_', '-'], " ");
 
         let asset = DocumentAsset {
             id: asset_id,
@@ -1302,13 +1301,13 @@ impl DocumentAssetManager {
             indices.dedup();
             if indices.is_empty() {
                 // Fallback: sample evenly across the document.
-                (0..all_chunks.len()).step_by(all_chunks.len().max(1) / 20.max(1)).collect()
+                (0..all_chunks.len()).step_by(all_chunks.len().max(1) / 20).collect()
             } else {
                 indices
             }
         } else {
             // No skeleton — degrade to sampling.
-            (0..all_chunks.len()).step_by(all_chunks.len().max(1) / 20.max(1)).collect()
+            (0..all_chunks.len()).step_by(all_chunks.len().max(1) / 20).collect()
         };
 
         let selected: Vec<&DocumentChunk> = relevant_indices
@@ -3075,12 +3074,7 @@ fn parse_skeleton_batch(response: &str, batch_start: usize) -> Option<Vec<Skelet
                                 .map(parse_entity_kind)
                                 .unwrap_or(EntityKind::Concept);
                             Some((name, kind))
-                        } else if let Some(s) = v.as_str() {
-                            // Plain string fallback.
-                            Some((s.to_string(), EntityKind::Concept))
-                        } else {
-                            None
-                        }
+                        } else { v.as_str().map(|s| (s.to_string(), EntityKind::Concept)) }
                     })
                     .collect()
             })

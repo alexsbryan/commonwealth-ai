@@ -89,7 +89,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             continue;
         }
 
-        let self_id = state.inner.self_node_id_swap.load_full().as_ref().clone();
+        let self_id = *state.inner.self_node_id_swap.load_full().as_ref();
 
         let current_peers: HashSet<NodeId> = {
             let mesh = state.inner.mesh.read().await;
@@ -408,7 +408,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             let should_collab = !(active_ingests.contains(corpus_id)
                 && !new_peer_appeared
                 && !new_ingest_appeared)
-                && !(triggered.get(corpus_id).map_or(false, |t| t.elapsed() < COOLDOWN)
+                && !(triggered.get(corpus_id).is_some_and(|t| t.elapsed() < COOLDOWN)
                     && !new_peer_appeared
                     && !new_ingest_appeared);
 
@@ -723,7 +723,7 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
             let mesh = state.inner.mesh.read().await;
             mesh.members
                 .get(&coordinator_id)
-                .and_then(|m| best_peer_url(&m.addresses.iter().copied().collect::<Vec<_>>()))
+                .and_then(|m| best_peer_url(&m.addresses.to_vec()))
         };
         let Some(coordinator_url) = coordinator_url else {
             tracing::warn!(

@@ -2301,7 +2301,7 @@ type = "paragraph"
 "#;
         let recipe = Recipe::from_toml(toml_str).expect("should parse wikipedia recipe");
         assert_eq!(recipe.corpus.id, "wikipedia");
-        assert_eq!(recipe.corpus.mesh_sharing, true);
+        assert!(recipe.corpus.mesh_sharing);
 
         match &recipe.acquire {
             AcquirerConfig::BulkDownload { url, urls, resume } => {

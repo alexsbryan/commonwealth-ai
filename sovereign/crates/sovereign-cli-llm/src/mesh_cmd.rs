@@ -1634,8 +1634,8 @@ async fn cmd_corpus_stream_axes(args: &[String]) -> i32 {
     let mut errors = 0usize;
 
     println!(
-        "{:<32} {:<10} {:<10} {}",
-        "corpus", "stability", "source", "from"
+        "{:<32} {:<10} {:<10} from",
+        "corpus", "stability", "source"
     );
     println!("{}", "─".repeat(96));
 
@@ -2000,7 +2000,7 @@ async fn cmd_corpus_diag(args: &[String]) -> i32 {
 
     if sample_size > 0 && !missing.is_empty() {
         println!("\nSample of missing titles (up to {sample_size}):");
-        let mut sorted_missing: Vec<&String> = missing.iter().copied().collect();
+        let mut sorted_missing: Vec<&String> = missing.to_vec();
         sorted_missing.sort();
         for t in sorted_missing.iter().take(sample_size) {
             println!("  • {t}");
@@ -2008,7 +2008,7 @@ async fn cmd_corpus_diag(args: &[String]) -> i32 {
     }
     if sample_size > 0 && !unexpected.is_empty() {
         println!("\nSample of unexpected titles (up to {sample_size}):");
-        let mut sorted_unexpected: Vec<&String> = unexpected.iter().copied().collect();
+        let mut sorted_unexpected: Vec<&String> = unexpected.to_vec();
         sorted_unexpected.sort();
         for t in sorted_unexpected.iter().take(sample_size) {
             println!("  • {t}");
@@ -2073,8 +2073,8 @@ async fn cmd_corpus_dedupe(args: &[String]) -> i32 {
     let mut corpus_id: Option<String> = None;
     let mut yes = false;
 
-    let mut iter = args.iter();
-    while let Some(arg) = iter.next() {
+    let iter = args.iter();
+    for arg in iter {
         match arg.as_str() {
             "--yes" | "-y" => yes = true,
             "--help" | "-h" => {
@@ -2684,8 +2684,8 @@ async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
     let mut yes = false;
     let mut remove_partitions = false;
 
-    let mut iter = args.iter();
-    while let Some(arg) = iter.next() {
+    let iter = args.iter();
+    for arg in iter {
         match arg.as_str() {
             "--yes" | "-y" => yes = true,
             "--remove-partitions" => remove_partitions = true,
@@ -3262,8 +3262,8 @@ async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
     let mut corpus_id: Option<String> = None;
     let mut dry_run = false;
 
-    let mut iter = args.iter();
-    while let Some(arg) = iter.next() {
+    let iter = args.iter();
+    for arg in iter {
         match arg.as_str() {
             "--dry-run" => dry_run = true,
             "--help" | "-h" => {

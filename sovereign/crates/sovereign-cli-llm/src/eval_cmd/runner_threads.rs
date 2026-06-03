@@ -619,7 +619,7 @@ async fn score_thread_coverage_multi(
     // from the first trial that marked it present (so the snippet is
     // a real quote, not a synthesised average).
     let facts = thread.aggregated_expected_facts();
-    let majority_floor = (trials + 1) / 2; // ⌈N/2⌉
+    let majority_floor = trials.div_ceil(2); // ⌈N/2⌉
     let mut per_fact: Vec<ThreadFactEvidence> = Vec::with_capacity(facts.len());
     let mut matched: Vec<String> = Vec::new();
     let mut missing: Vec<String> = Vec::new();

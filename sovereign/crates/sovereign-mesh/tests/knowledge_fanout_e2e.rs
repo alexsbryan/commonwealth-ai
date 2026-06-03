@@ -561,7 +561,7 @@ async fn fan_out_stamps_x_node_id_so_peer_emits_ledger() {
                 for_node,
                 corpus_id,
                 chunks_returned,
-            } => Some((for_node.clone(), corpus_id.clone(), *chunks_returned)),
+            } => Some((*for_node, corpus_id.clone(), *chunks_returned)),
             _ => None,
         })
         .collect();

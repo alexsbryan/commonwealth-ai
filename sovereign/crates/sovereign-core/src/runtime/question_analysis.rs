@@ -212,7 +212,7 @@ pub(crate) fn comparison_axis(text: &str, entities: &[String]) -> Option<String>
 
     // Tail ends at the first terminal punctuation.
     let tail_end = tail
-        .find(|c: char| matches!(c, '?' | '.' | ',' | ';' | '!'))
+        .find(['?', '.', ',', ';', '!'])
         .unwrap_or(tail.len());
     let span = &tail[..tail_end];
 
@@ -335,7 +335,7 @@ pub(crate) fn extract_commitment_phrase(message: &str) -> Option<String> {
             let after = &message[pos + marker.len()..];
             // Cap at sentence boundary to avoid dragging in unrelated trailing context.
             let end = after
-                .find(|c: char| matches!(c, '.' | '!' | '?' | '\n'))
+                .find(['.', '!', '?', '\n'])
                 .unwrap_or(after.len());
             let phrase = after[..end].trim();
             if !phrase.is_empty() {

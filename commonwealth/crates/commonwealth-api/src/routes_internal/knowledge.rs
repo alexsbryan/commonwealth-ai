@@ -152,7 +152,7 @@ pub async fn knowledge_search(
         for (corpus_id, chunks) in per_corpus_chunks {
             state.inner.contribution_emitter.record(
                 commonwealth_core::contributions::LedgerEventKind::KnowledgeQueryServed {
-                    for_node: for_node.clone(),
+                    for_node,
                     corpus_id,
                     chunks_returned: chunks,
                 },

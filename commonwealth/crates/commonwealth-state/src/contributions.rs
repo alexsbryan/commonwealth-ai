@@ -61,7 +61,7 @@ impl ContributionEmitter {
     /// with the emitter's identity (the legacy push path) without
     /// threading the id through separately.
     pub fn self_node_id(&self) -> NodeId {
-        self.self_node_id.clone()
+        self.self_node_id
     }
 
     /// Emit a single event. Persists to the local store with the
@@ -73,7 +73,7 @@ impl ContributionEmitter {
     pub fn record(&self, kind: LedgerEventKind) {
         let now = now_secs();
         let event = LedgerEvent {
-            node_id: self.self_node_id.clone(),
+            node_id: self.self_node_id,
             timestamp: now,
             kind: kind.clone(),
         };
@@ -94,7 +94,7 @@ impl ContributionEmitter {
             CONTRIBUTIONS_APP_ID,
             &key,
             payload,
-            self.self_node_id.clone(),
+            self.self_node_id,
         ) {
             tracing::warn!(
                 error = %e,

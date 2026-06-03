@@ -491,11 +491,10 @@ impl InferenceProvider for RemoteApiProvider {
                     }
                     for choice in parsed.choices {
                         if let Some(text) = choice.delta.content {
-                            if !text.is_empty() {
-                                if tx.send(StreamFrame::Token(text)).await.is_err() {
+                            if !text.is_empty()
+                                && tx.send(StreamFrame::Token(text)).await.is_err() {
                                     return;
                                 }
-                            }
                         }
                         if let Some(reason_str) = choice.finish_reason {
                             finish_reason = FinishReason::from_openai_str(&reason_str);

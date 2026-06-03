@@ -302,7 +302,7 @@ fn softmax(logits: &[f32]) -> Vec<f32> {
 
 fn top_k_stats(probs: &[f32], k: usize) -> (f32, usize, f32) {
     let mut indexed: Vec<(usize, f32)> =
-        probs.iter().copied().enumerate().map(|(i, p)| (i, p)).collect();
+        probs.iter().copied().enumerate().collect();
     indexed.sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
     let top1 = indexed.first().copied().unwrap_or((0, 0.0));
     let top_k_mass: f32 = indexed.iter().take(k).map(|(_, p)| *p).sum();

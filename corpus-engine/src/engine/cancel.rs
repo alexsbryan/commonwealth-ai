@@ -85,7 +85,7 @@ impl CancellationRegistry {
     pub fn register(&self, corpus_id: &str) -> CancellationFlag {
         let mut map = self.inner.write().expect("cancel registry poisoned");
         map.entry(corpus_id.to_string())
-            .or_insert_with(CancellationFlag::new)
+            .or_default()
             .clone()
     }
 

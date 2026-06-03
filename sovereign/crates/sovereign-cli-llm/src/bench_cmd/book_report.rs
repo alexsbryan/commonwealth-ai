@@ -1361,8 +1361,8 @@ fn stub_report(
 
 /// Filter the bench's question list by tier and/or explicit id list.
 /// Both filters compose AND; passing neither returns the full bank.
-fn filter_questions<'a>(
-    all: &'a [Question],
+fn filter_questions(
+    all: &[Question],
     tier: Option<u8>,
     ids: Option<&[String]>,
 ) -> Vec<Question> {

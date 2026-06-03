@@ -33,7 +33,7 @@ use corpus_engine::update::newsworthy_watcher::{
 pub async fn run(args: &[String]) -> i32 {
     let subcommand = args.first().map(String::as_str).unwrap_or("");
     match subcommand {
-        "status" | "" => run_status(&args.get(1..).unwrap_or(&[])).await,
+        "status" | "" => run_status(args.get(1..).unwrap_or(&[])).await,
         "help" | "--help" | "-h" => {
             print_help();
             0

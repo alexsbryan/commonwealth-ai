@@ -94,7 +94,7 @@ async fn install_one_chunk_corpus(
     // search with a zero vector returns rows ordered by relevance
     // and surfaces their ids.)
     let results = index
-        .search(&vec![0.0_f32; EMBED_DIM], "", 1)
+        .search(&[0.0_f32; EMBED_DIM], "", 1)
         .await
         .unwrap();
     results[0].chunk_id.unwrap_or(0)

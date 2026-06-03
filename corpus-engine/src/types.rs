@@ -177,11 +177,13 @@ pub struct RerankConfig {
 /// Which signal the per-article dedup pass uses to pick the
 /// best chunk within each source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum DedupPicker {
     /// Use the fused score (RRF or rerank-blended) — the simplest
     /// rule: keep the first chunk we encounter per source in the
     /// already-sorted candidate list. Vulnerable to RRF noise
     /// inside an article.
+    #[default]
     FusedScore,
     /// Use the raw `vector_distance` (cosine to query embedding) —
     /// re-orders by closest-to-query before the dedup walk so the
@@ -191,11 +193,6 @@ pub enum DedupPicker {
     VectorDistance,
 }
 
-impl Default for DedupPicker {
-    fn default() -> Self {
-        DedupPicker::FusedScore
-    }
-}
 
 impl Default for RerankConfig {
     fn default() -> Self {

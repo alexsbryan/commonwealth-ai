@@ -311,7 +311,7 @@ fn render_drift_posture(drift_dir: &Path, repo_root: &Path) -> String {
         let doc = if c.doc.is_empty() {
             String::new()
         } else {
-            format!("{}", c.doc)
+            c.doc.to_string()
         };
         out.push_str(&format!(
             "- {doc}{section} — {}\n",
@@ -519,7 +519,7 @@ fn render_recent_activity(
     remaining: usize,
 ) -> Result<String, BriefError> {
     let history = batch_harvest_all_commits(repo_root)
-        .map_err(|e| BriefError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+        .map_err(|e| BriefError::Io(std::io::Error::other(e.to_string())))?;
     let cutoff = chrono::Utc::now().timestamp() - days * 86_400;
 
     // Collect (timestamp, hash, subject, file) triples for working-set

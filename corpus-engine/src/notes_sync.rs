@@ -402,7 +402,7 @@ mod tests {
             payload_json: None,
         })
         .unwrap();
-        let pairs = vec![("notes://expected", payload.as_str())];
+        let pairs = [("notes://expected", payload.as_str())];
         let report = import_notes_from_chunks(&db, pairs.iter().copied()).unwrap();
         assert_eq!(report.upserted, 0);
         assert_eq!(report.deserialize_errors, 1);
@@ -412,7 +412,7 @@ mod tests {
     fn import_skips_non_notes_chunks() {
         let dir = tempfile::tempdir().unwrap();
         let db = dir.path().join("notes.db");
-        let pairs = vec![("plans/foo.md", "# heading"), ("memory/x.md", "body")];
+        let pairs = [("plans/foo.md", "# heading"), ("memory/x.md", "body")];
         let report = import_notes_from_chunks(&db, pairs.iter().copied()).unwrap();
         assert_eq!(report.upserted, 0);
         assert_eq!(report.deserialize_errors, 0);
@@ -449,7 +449,7 @@ mod tests {
             payload_json: None,
         };
         let payload = serde_json::to_string(&newer).unwrap();
-        let pairs = vec![("notes://n1", payload.as_str())];
+        let pairs = [("notes://n1", payload.as_str())];
         let report = import_notes_from_chunks(&db, pairs.iter().copied()).unwrap();
         assert_eq!(report.upserted, 1);
 

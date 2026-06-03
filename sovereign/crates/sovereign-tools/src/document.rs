@@ -79,7 +79,7 @@ impl DocumentTool {
             eprintln!(
                 "  [document] Processed batch {}/{} ({} chunks)",
                 batch_idx + 1,
-                (chunks.len() + CHUNKS_PER_BATCH - 1) / CHUNKS_PER_BATCH,
+                chunks.len().div_ceil(CHUNKS_PER_BATCH),
                 batch.len(),
             );
         }

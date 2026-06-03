@@ -3,15 +3,10 @@
 //! clarification" path. Fires when classification confidence is too
 //! low to commit silently. Cost is one saved message + one event.
 
-use std::collections::HashMap;
-use std::pin::Pin;
-use std::sync::Arc;
 
-use futures::Stream;
 
 use crate::error::Result;
 use crate::traits::*;
-use crate::types::*;
 
 use super::super::*;
 

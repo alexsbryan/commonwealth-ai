@@ -124,7 +124,7 @@ fn render_red_team(feature: &FeatureRow, runs: &[AtosRunRow], notes: &[NoteRow])
             when
         ));
     }
-    out.push_str("\n");
+    out.push('\n');
 
     let findings: Vec<&NoteRow> = notes
         .iter()
@@ -168,7 +168,7 @@ fn render_full(
                 derive_title(&m.brief_md)
             ));
         }
-        out.push_str("\n");
+        out.push('\n');
     }
 
     // 2. Tests.
@@ -261,7 +261,7 @@ fn render_uncertainty(out: &mut String, notes: &[&NoteRow]) {
                 }
             }
         }
-        out.push_str("\n");
+        out.push('\n');
     }
 }
 
@@ -278,7 +278,7 @@ fn render_postmortem(out: &mut String, notes: &[&NoteRow]) {
         let first = n.content.lines().next().unwrap_or("").trim();
         out.push_str(&format!("{}. `[note:{}]` {}\n", i + 1, n.id, first));
     }
-    out.push_str("\n");
+    out.push('\n');
 }
 
 /// Output shape for the red-team findings block. Both the stand-alone
@@ -341,7 +341,7 @@ fn render_redteam_findings_by_confidence(
                 }
             }
         }
-        out.push_str("\n");
+        out.push('\n');
     }
 }
 

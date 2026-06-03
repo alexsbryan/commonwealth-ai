@@ -471,7 +471,7 @@ fn part_filename(part: &ParsedMail) -> Option<String> {
         rest.find('"').map(|end| rest[..end].to_string())
     } else {
         trimmed
-            .split(|c: char| c == ';' || c == ' ' || c == '\t')
+            .split([';', ' ', '\t'])
             .next()
             .map(|s| s.to_string())
     };

@@ -60,7 +60,7 @@ impl ActivityEmitter {
     pub fn record(&self, kind: ActivityEventKind) {
         let now = now_secs();
         let event = ActivityEvent {
-            node_id: self.self_node_id.clone(),
+            node_id: self.self_node_id,
             timestamp: now,
             kind: kind.clone(),
         };
@@ -77,7 +77,7 @@ impl ActivityEmitter {
         let key = self.unique_key(now);
         if let Err(e) =
             self.store
-                .set(ACTIVITY_APP_ID, &key, payload, self.self_node_id.clone())
+                .set(ACTIVITY_APP_ID, &key, payload, self.self_node_id)
         {
             tracing::warn!(
                 error = %e,

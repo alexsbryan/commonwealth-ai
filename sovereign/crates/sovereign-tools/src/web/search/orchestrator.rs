@@ -33,7 +33,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use sovereign_core::error::Error;
 
 use super::backend_trait::{
     SearchPrivacy, WebSearchBackend, WebSearchRegistry,
@@ -238,11 +237,12 @@ fn budget_allows(backend: &dyn WebSearchBackend, budget: &BudgetView) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sovereign_core::error::Error;
     use crate::web::search::backend_trait::{
         MockBackendImpl, SearchCost,
     };
     use async_trait::async_trait;
-    use std::path::PathBuf;
+    
 
     /// Test stub: a configurable backend. Returns a fixed result
     /// set on success, or a tagged error string. Doesn't hit the

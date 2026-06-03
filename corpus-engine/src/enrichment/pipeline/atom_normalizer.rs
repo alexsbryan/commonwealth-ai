@@ -407,7 +407,7 @@ fn source_anchor_candidates(source: &str) -> Vec<String> {
         // typo on a basename can snap to the basename rather than
         // missing the 47-char full path's edit-distance cutoff.
         if trimmed.contains('/') || trimmed.contains("::") {
-            for segment in trimmed.split(|c: char| c == '/' || c == ':') {
+            for segment in trimmed.split(['/', ':']) {
                 let seg = segment.trim().trim_matches(|c: char| {
                     matches!(c, '.' | ',' | ';' | '(' | ')' | '[' | ']' | '"' | '*')
                 });

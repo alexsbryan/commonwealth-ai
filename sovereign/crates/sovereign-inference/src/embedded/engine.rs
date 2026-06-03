@@ -1737,7 +1737,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
                 let mut ctx_lock = slot.context.blocking_lock();
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut *ctx_lock, &request, &quirks)
+                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock, &request, &quirks)
                 }));
                 let outcome: GenerationOutcome = match result {
                     Ok(Ok(r)) => r,
@@ -1850,7 +1850,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         ModelSlot::generate_sync(
                             &slot.model,
                             &slot.model_id,
-                            &mut *ctx_lock,
+                            &mut ctx_lock,
                             &request,
                             &quirks,
                         )
@@ -1983,7 +1983,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 // Catch panics from llama.cpp (e.g., context overflow assertions).
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut *ctx_lock, &request, &quirks)
+                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock, &request, &quirks)
                 }));
 
                 let outcome: GenerationOutcome = match result {
@@ -2060,7 +2060,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 // Catch panics from llama.cpp (e.g., context overflow assertions).
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut *ctx_lock, &request, &quirks)
+                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock, &request, &quirks)
                 }));
 
                 let outcome: GenerationOutcome = match result {

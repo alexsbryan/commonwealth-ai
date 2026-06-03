@@ -87,7 +87,7 @@ pub fn transition_after(
         // the run alive but stay in current role. The adapter's
         // `Unrecognized` outcome surfaces in telemetry; the
         // transition rule shouldn't terminate on tool-misuse.
-        (role, _) => NextRole::Stay,
+        (_role, _) => NextRole::Stay,
     }
 }
 

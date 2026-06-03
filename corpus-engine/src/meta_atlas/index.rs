@@ -255,11 +255,11 @@ impl MetaAtlasIndex {
     /// Used at retrieval time: meta-atlas-boost asks the index for
     /// "best Inventory anchor for Einstein", "best Argument anchor",
     /// "best Trace anchor", and injects up to three chunks.
-    pub fn top_anchor_for_axis<'a>(
-        atom: &'a MetaAtom,
+    pub fn top_anchor_for_axis(
+        atom: &MetaAtom,
         axis: crate::stream_axes::Articulation,
         min_weight: f32,
-    ) -> Option<&'a Anchor> {
+    ) -> Option<&Anchor> {
         atom.anchors
             .iter()
             .filter(|a| {

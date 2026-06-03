@@ -402,12 +402,12 @@ fn apply_chat_template_minijinja(
     // Build the messages list the template iterates over.
     let mut messages: Vec<Value> = Vec::with_capacity(2);
     if !system.is_empty() {
-        messages.push(Value::from_serialize(&serde_json::json!({
+        messages.push(Value::from_serialize(serde_json::json!({
             "role": "system",
             "content": system,
         })));
     }
-    messages.push(Value::from_serialize(&serde_json::json!({
+    messages.push(Value::from_serialize(serde_json::json!({
         "role": "user",
         "content": user,
     })));

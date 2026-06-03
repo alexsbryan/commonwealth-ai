@@ -271,18 +271,15 @@ impl Iterator for JsonApiIter {
                 let mut filtered = serde_json::Map::new();
                 for (k, v) in obj {
                     let drop = k == &self.content_field
-                        || self
+                        || (self
                             .title_field
-                            .as_deref()
-                            .map_or(false, |t| t == k.as_str())
-                        || self
+                            .as_deref() == Some(k.as_str()))
+                        || (self
                             .url_field
-                            .as_deref()
-                            .map_or(false, |u| u == k.as_str())
-                        || self
+                            .as_deref() == Some(k.as_str()))
+                        || (self
                             .id_field
-                            .as_deref()
-                            .map_or(false, |i| i == k.as_str());
+                            .as_deref() == Some(k.as_str()));
                     if !drop {
                         filtered.insert(k.clone(), v.clone());
                     }

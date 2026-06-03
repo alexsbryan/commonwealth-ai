@@ -268,7 +268,7 @@ fn recipe_toml_id(text: &str) -> Option<String> {
 /// known to the local daemon's mesh state and collect the results.
 async fn forward_to_peers(state: &AppState, req: &PipelinePauseRequest) -> Vec<NodePauseResult> {
     let mesh = state.inner.mesh.read().await;
-    let self_id = state.inner.self_node_id_swap.load_full().as_ref().clone();
+    let self_id = *state.inner.self_node_id_swap.load_full().as_ref();
     let peers: Vec<_> = mesh
         .members
         .values()

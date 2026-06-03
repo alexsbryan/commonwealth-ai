@@ -306,7 +306,7 @@ impl HuggingFaceDatasetAcquirer {
                 // back to a zero-padded index if the URL has no clean basename.
                 let local = url
                     .split('/')
-                    .last()
+                    .next_back()
                     .and_then(|s| {
                         // Strip query strings and decode %2F etc.
                         let s = s.split('?').next().unwrap_or(s);

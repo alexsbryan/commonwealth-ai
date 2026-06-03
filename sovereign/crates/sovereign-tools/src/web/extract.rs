@@ -58,20 +58,18 @@ pub fn extract_text_from_html(html: &str) -> String {
             if remaining > 3 {
                 let end = (i + 10).min(len);
                 let tag_start = &bytes[i..end];
-                if tag_start.starts_with(b"<br")
+                if (tag_start.starts_with(b"<br")
                     || tag_start.starts_with(b"<p")
                     || tag_start.starts_with(b"</p")
                     || tag_start.starts_with(b"<div")
                     || tag_start.starts_with(b"</div")
                     || tag_start.starts_with(b"<h")
                     || tag_start.starts_with(b"</h")
-                    || tag_start.starts_with(b"<li")
-                {
-                    if !last_was_space {
+                    || tag_start.starts_with(b"<li"))
+                    && !last_was_space {
                         result.push('\n');
                         last_was_space = true;
                     }
-                }
             }
             i += 1;
             continue;

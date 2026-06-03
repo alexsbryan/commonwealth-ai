@@ -2145,11 +2145,11 @@ fn score_fault_lines(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
         let hit = tension_edges.iter().find(|e| {
             let a = lookup_name(&e.source);
             let b = lookup_name(&e.target);
-            let pair_a_ok = (matches_any_with_morphology(&a, &ef.position_a_contains_any)
+            
+            (matches_any_with_morphology(&a, &ef.position_a_contains_any)
                 && matches_any_with_morphology(&b, &ef.position_b_contains_any))
                 || (matches_any_with_morphology(&a, &ef.position_b_contains_any)
-                    && matches_any_with_morphology(&b, &ef.position_a_contains_any));
-            pair_a_ok
+                    && matches_any_with_morphology(&b, &ef.position_a_contains_any))
         });
         match hit {
             Some(edge) => {
@@ -2178,11 +2178,11 @@ fn score_fault_lines(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
         if tension_edges.iter().any(|e| {
             let a = lookup_name(&e.source);
             let b = lookup_name(&e.target);
-            let pair_match = (matches_any_with_morphology(&a, &fb.position_a_contains_any)
+            
+            (matches_any_with_morphology(&a, &fb.position_a_contains_any)
                 && matches_any_with_morphology(&b, &fb.position_b_contains_any))
                 || (matches_any_with_morphology(&a, &fb.position_b_contains_any)
-                    && matches_any_with_morphology(&b, &fb.position_a_contains_any));
-            pair_match
+                    && matches_any_with_morphology(&b, &fb.position_a_contains_any))
         }) {
             s.forbidden_hit += 1;
             let pa = fb.position_a_contains_any.first().cloned().unwrap_or_default();

@@ -106,7 +106,7 @@ pub fn spawn_gossip_loop(
             }
             if let Some(dir) = persist_dir.as_deref() {
                 let mesh = app_state.inner.mesh.read().await.clone();
-                let self_id = app_state.inner.self_node_id_swap.load_full().as_ref().clone();
+                let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
                 if let Err(e) = crate::persist::save(dir, &mesh, self_id) {
                     // Don't spam — persistence failure is rarely
                     // fatal to the running session, but the operator
@@ -152,7 +152,7 @@ pub async fn run_one_round(
     app_state: &AppState,
     offline_threshold: Duration,
 ) -> Result<(), GossipError> {
-    let self_id = app_state.inner.self_node_id_swap.load_full().as_ref().clone();
+    let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
     let now = now_secs();
     let threshold = offline_threshold.as_secs();
 
@@ -264,7 +264,7 @@ pub async fn run_one_round(
                 // before falling through to IPv6. Subsequent rounds
                 // are reordered by the cache regardless.
                 let addrs = commonwealth_core::peer_addr::sorted_addresses(
-                    &m.addresses.iter().copied().collect::<Vec<_>>(),
+                    &m.addresses.to_vec(),
                 );
                 (m.node_id, addrs)
             })
@@ -461,7 +461,7 @@ pub async fn run_one_round(
                         // ranker so mesh-store push retries match
                         // the order used by inference routing.
                         let addrs = commonwealth_core::peer_addr::sorted_addresses(
-                            &m.addresses.iter().copied().collect::<Vec<_>>(),
+                            &m.addresses.to_vec(),
                         );
                         (m.node_id, addrs)
                     })
@@ -561,12 +561,11 @@ pub async fn broadcast_now(
         }
     };
 
-    let self_id = app_state
+    let self_id = *app_state
         .inner
         .self_node_id_swap
         .load_full()
-        .as_ref()
-        .clone();
+        .as_ref();
     let wire = serde_json::json!({
         "entries": [{
             "app_id": entry.app_id,
@@ -584,7 +583,7 @@ pub async fn broadcast_now(
             .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
             .map(|m| {
                 let addrs = commonwealth_core::peer_addr::sorted_addresses(
-                    &m.addresses.iter().copied().collect::<Vec<_>>(),
+                    &m.addresses.to_vec(),
                 );
                 (m.node_id, addrs)
             })

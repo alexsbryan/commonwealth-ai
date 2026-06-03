@@ -672,8 +672,7 @@ pub async fn promote_legacy_document(
         .rsplit_once('.')
         .map(|(name, _)| name)
         .unwrap_or(&filename)
-        .replace('_', " ")
-        .replace('-', " ");
+        .replace(['_', '-'], " ");
 
     let asset = sovereign_core::types::DocumentAsset {
         id: uuid::Uuid::new_v4().to_string(),

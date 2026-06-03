@@ -1801,7 +1801,7 @@ impl PhaseRunner {
         let mut failures: Vec<PhaseFailure> = Vec::new();
         let mut t_ordinal = 0usize;
 
-        for (_concern_id, positions) in &by_concern {
+        for positions in by_concern.values() {
             if positions.len() < 2 {
                 continue;
             }

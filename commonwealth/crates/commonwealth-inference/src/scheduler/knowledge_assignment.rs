@@ -377,7 +377,7 @@ pub fn build_work_units_jsonl_single(
     }
     let total = end - start;
     let target = target_units.max(1) as u64;
-    let chunk_size = (total + target - 1) / target; // ceil(total / target)
+    let chunk_size = total.div_ceil(target); // ceil(total / target)
     let mut units = Vec::new();
     let mut cursor = start;
     while cursor < end {

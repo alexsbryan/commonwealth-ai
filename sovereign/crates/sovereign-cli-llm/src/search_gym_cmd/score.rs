@@ -677,7 +677,7 @@ fn extract_urls(text: &str) -> Vec<String> {
             // Trim trailing common-punctuation that gets picked up by
             // citation patterns: a period at the end of a sentence,
             // a closing parenthesis the URL was wrapped in, etc.
-            let mut url = text[abs..end].trim_end_matches(|c: char| matches!(c, '.' | ',' | ')' | ']'));
+            let mut url = text[abs..end].trim_end_matches(['.', ',', ')', ']']);
             // Defensive: bail if the trim ate the scheme.
             if !url.starts_with("http") {
                 url = &text[abs..end];

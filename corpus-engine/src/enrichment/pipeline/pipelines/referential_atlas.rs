@@ -18,7 +18,7 @@
 //! atom rendering, clustering tuning) delegates unchanged.
 
 use super::super::atlas::{
-    EntitySketch, SectionExtraction, SeedEntities, SeedStrategy,
+    EntitySketch, SectionExtraction, SeedEntities,
 };
 use super::super::exemplar_bank::Exemplar;
 use super::super::trait_def::Pipeline;
@@ -30,7 +30,7 @@ use super::literary_atlas::{
     render_phase1b_user_body, LiteraryAtlasPipeline,
 };
 use crate::enrichment::domain::ClusteringConfig;
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 // ── Referential-specific prompt assets ───────────────────────
 
@@ -629,6 +629,7 @@ fn parse_referential_phase3_facet(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::enrichment::pipeline::atlas::SeedStrategy;
 
     fn sample_section() -> ChapterInput {
         let mut metadata = std::collections::HashMap::new();

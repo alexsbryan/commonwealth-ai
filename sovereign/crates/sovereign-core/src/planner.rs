@@ -622,11 +622,10 @@ fn find_matching_template(
             .filter(|w| trigger_lower.contains(**w))
             .count();
 
-        if overlap > 0 {
-            if best_match.is_none() || overlap > best_match.unwrap().0 {
+        if overlap > 0
+            && (best_match.is_none() || overlap > best_match.unwrap().0) {
                 best_match = Some((overlap, &template.steps));
             }
-        }
     }
 
     best_match.map(|(_, steps)| steps.to_string())

@@ -1606,7 +1606,7 @@ impl CorpusEngine {
                                 .await?;
                             } else {
                                 crate::enrichment::tiered::run_tiered_enrichment(
-                                    &recipe,
+                                    recipe,
                                     index_path,
                                     self.tiered_provider(),
                                     self.chunk_entity_extractor(),
@@ -1618,7 +1618,7 @@ impl CorpusEngine {
 
                         let field_engine =
                             crate::enrichment::field_engine::FieldModelEngine::from_recipe(
-                                &recipe,
+                                recipe,
                                 self.embed.clone(),
                                 inference.clone(),
                             )?;

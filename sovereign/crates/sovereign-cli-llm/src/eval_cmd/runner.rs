@@ -24,7 +24,7 @@ use std::time::Instant;
 
 use corpus_engine::enrichment::atlas::{
     atoms_content_hash, read_atlas_atoms, read_atlas_edges, read_atlas_embeddings,
-    write_atlas_embeddings, AtomEnvelope, CachedAtlasEntry, ChunkRef, Edge, EdgeType,
+    write_atlas_embeddings, AtomEnvelope, CachedAtlasEntry, EdgeType,
     ATLAS_DIRNAME,
 };
 use corpus_engine::ScoredChunk;
@@ -302,7 +302,7 @@ pub async fn run_bank_routing(
 
 async fn run_question_routing(session: &ChatSession, q: &Question) -> RoutingResult {
     use sovereign_core::types::{
-        ConversationContext, Effect, Idempotency, Intent, Latency, Scope, ToolDescriptor,
+        ConversationContext, Effect, Idempotency, Latency, Scope, ToolDescriptor,
     };
 
     let expected = match &q.expected_intent {
@@ -552,7 +552,7 @@ pub(crate) fn endpoint_text(atom: Option<&AtomEnvelope>, atom_id: &str) -> Strin
 // `sovereign_core::atlas_context` — single canonical implementation
 // shared by the eval CLI and the production daemon
 // (`AtlasContextManager`).
-pub use sovereign_core::atlas_context::{AtlasGraph, ChunkRequest};
+pub use sovereign_core::atlas_context::AtlasGraph;
 pub use sovereign_core::atlas_context::atlas_navigate;
 
 
@@ -925,7 +925,7 @@ pub async fn load_atlas_context(
                         .as_deref()
                         .unwrap_or("(no sub_question recorded)");
                     let mut text = format!("[Tension] {sub}");
-                    text.push_str("\n");
+                    text.push('\n');
                     text.push_str(&endpoint_text(src, edge.source.as_str()));
                     text.push_str("\n↔\n");
                     text.push_str(&endpoint_text(tgt, edge.target.as_str()));

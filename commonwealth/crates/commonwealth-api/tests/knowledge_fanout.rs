@@ -288,13 +288,12 @@ async fn fanout_fetches_sep_chunk_from_peer_with_attribution() {
         "BeefyMac",
         "peer attribution must survive fan-out: {first:?}"
     );
-    assert_eq!(
+    assert!(
         body["corpora_searched"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|c| c == "sep"),
-        true
+            .any(|c| c == "sep")
     );
 }
 

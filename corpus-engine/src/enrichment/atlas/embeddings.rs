@@ -196,7 +196,7 @@ pub fn write_atlas_embeddings(
             .collect(),
     };
     let header_bytes = serde_json::to_vec(&header)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("header serialise: {e}")))?;
+        .map_err(|e| io::Error::other(format!("header serialise: {e}")))?;
     if header_bytes.len() > u32::MAX as usize {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,

@@ -683,7 +683,7 @@ pub async fn run_and_write_entity_extraction(
 
     let atlas_dir = index_dir.join(super::atlas::writer::ATLAS_DIRNAME);
     write_atlas(&atlas_dir, &result.entities, &[], &result.edges)
-        .map_err(|e| crate::error::Error::Io(e))?;
+        .map_err(crate::error::Error::Io)?;
     tracing::info!(
         entities = result.entities.len(),
         edges = result.edges.len(),
@@ -709,7 +709,7 @@ pub async fn run_and_write_entity_extraction(
 /// schema is object-shaped, so we run our own scan that strips the
 /// same conventional wrappers (think-tags, ```json fences, ``` fences)
 /// and then locks onto the first `{` / last `}` boundary.
-fn extract_json_object<'a>(raw: &'a str) -> &'a str {
+fn extract_json_object(raw: &str) -> &str {
     let mut text = raw.trim();
 
     if let Some(end) = text.find("</think>") {
@@ -2841,8 +2841,7 @@ mod tests {
                 if prompt == "BATCH:1,2,3,4" {
                     Ok(mock_response_for_batch(0))
                 } else {
-                    Err(crate::error::Error::from(std::io::Error::new(
-                        std::io::ErrorKind::Other,
+                    Err(crate::error::Error::from(std::io::Error::other(
                         "simulated",
                     )))
                 }

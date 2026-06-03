@@ -244,7 +244,7 @@ impl SovereignInferenceAdapter {
                             convo.push_str("</tool_call>\n");
                         }
                     }
-                    convo.push_str("\n");
+                    convo.push('\n');
                 }
                 Role::Tool => {
                     // Tool-result turn. Tag the content with the
@@ -726,7 +726,7 @@ pub(crate) fn tool_envelope_schema_for_with_env_and_cmd_prefix(
         // `tool_choice="none"` opts out of both paths — caller
         // explicitly asked for no tool calls, honour it.
         if force_tool_calls_env() || alternation_grammar_enabled() {
-            let tc = request.tool_choice.as_ref().map(|v| v.as_str()).flatten();
+            let tc = request.tool_choice.as_ref().and_then(|v| v.as_str());
             if tc == Some("none") {
                 return None;
             }

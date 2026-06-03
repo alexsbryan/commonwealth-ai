@@ -2,15 +2,9 @@
 //! anchored to the working-memory current_goal (or honestly anchorless
 //! when none is loaded). Fast-slot acknowledgement only; no synthesis.
 
-use std::collections::HashMap;
-use std::pin::Pin;
-use std::sync::Arc;
 
-use futures::Stream;
 
 use crate::error::Result;
-use crate::traits::*;
-use crate::types::*;
 
 use super::super::*;
 

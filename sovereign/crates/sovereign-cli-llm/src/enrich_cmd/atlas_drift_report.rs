@@ -1400,7 +1400,7 @@ fn bucket_for(name: &str) -> &'static str {
         "Tailscale", "WireGuard", "mDNS", "DNS-SD", "IVF-PQ",
         "SOLID", "SICP", "OpenAlex",
     ];
-    if externals.iter().any(|e| name == *e) {
+    if externals.contains(&name) {
         return "external library";
     }
 

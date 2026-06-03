@@ -114,7 +114,7 @@ impl DocumentOperationTool {
     ) -> Result<Vec<String>> {
         let batches: Vec<&[DocumentChunk]> = chunks.chunks(CHUNKS_PER_BATCH).collect();
         let total_batches = batches.len();
-        let total_groups = (total_batches + N_PARALLEL - 1) / N_PARALLEL;
+        let total_groups = total_batches.div_ceil(N_PARALLEL);
         let mut fragments = Vec::with_capacity(total_batches);
         let map_start = std::time::Instant::now();
         let mut batches_done = 0usize;

@@ -254,7 +254,7 @@ pub async fn pull_canonical_from_peer(
     // Stream body → SyncIoBridge → unpack on a blocking task.
     let stream = resp
         .bytes_stream()
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e));
+        .map_err(std::io::Error::other);
     use futures::TryStreamExt;
     let async_reader = tokio_util::io::StreamReader::new(stream);
     let sync_reader = tokio_util::io::SyncIoBridge::new(async_reader);

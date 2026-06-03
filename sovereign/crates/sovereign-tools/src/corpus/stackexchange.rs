@@ -62,7 +62,7 @@ fn find_posts_files(path: &Path) -> Result<Vec<PathBuf>> {
         } else if p.is_file()
             && p.file_name()
                 .and_then(|n| n.to_str())
-                .map_or(false, |n| n.eq_ignore_ascii_case("Posts.xml"))
+                .is_some_and(|n| n.eq_ignore_ascii_case("Posts.xml"))
         {
             files.push(p);
         }

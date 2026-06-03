@@ -84,34 +84,6 @@ pub fn select_profile(hw: &HardwareProfile) -> ProfileName {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn hw(effective_gb: f32) -> HardwareProfile {
-        HardwareProfile {
-            system_ram_bytes: (effective_gb * 1_073_741_824.0) as u64,
-            gpu_available: effective_gb > 0.0,
-            gpu_name: None,
-            gpu_memory_bytes: None,
-            recommended_gpu_layers: if effective_gb > 0.0 { 999 } else { 0 },
-            is_unified_memory: true, // simplest test: use unified
-        }
-    }
-
-    #[test]
-    fn profile_selection() {
-        assert_eq!(select_profile(&hw(0.0)),  ProfileName::CpuOnly);
-        assert_eq!(select_profile(&hw(4.0)),  ProfileName::LowMem);
-        assert_eq!(select_profile(&hw(12.0)), ProfileName::Default);
-        assert_eq!(select_profile(&hw(19.0)), ProfileName::Default);
-        assert_eq!(select_profile(&hw(20.0)), ProfileName::High);
-        assert_eq!(select_profile(&hw(23.0)), ProfileName::High);
-        assert_eq!(select_profile(&hw(24.0)), ProfileName::VeryHigh);
-        assert_eq!(select_profile(&hw(64.0)), ProfileName::VeryHigh);
-    }
-}
-
 /// Returns `(gpu_available, gpu_name, gpu_memory_bytes, is_unified_memory)`.
 fn detect_gpu() -> (bool, Option<String>, Option<u64>, bool) {
     // On macOS Intel, Metal + llama.cpp on discrete AMD GPUs produces
@@ -150,5 +122,33 @@ fn detect_gpu() -> (bool, Option<String>, Option<u64>, bool) {
             }
             (false, None, None, false)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hw(effective_gb: f32) -> HardwareProfile {
+        HardwareProfile {
+            system_ram_bytes: (effective_gb * 1_073_741_824.0) as u64,
+            gpu_available: effective_gb > 0.0,
+            gpu_name: None,
+            gpu_memory_bytes: None,
+            recommended_gpu_layers: if effective_gb > 0.0 { 999 } else { 0 },
+            is_unified_memory: true, // simplest test: use unified
+        }
+    }
+
+    #[test]
+    fn profile_selection() {
+        assert_eq!(select_profile(&hw(0.0)),  ProfileName::CpuOnly);
+        assert_eq!(select_profile(&hw(4.0)),  ProfileName::LowMem);
+        assert_eq!(select_profile(&hw(12.0)), ProfileName::Default);
+        assert_eq!(select_profile(&hw(19.0)), ProfileName::Default);
+        assert_eq!(select_profile(&hw(20.0)), ProfileName::High);
+        assert_eq!(select_profile(&hw(23.0)), ProfileName::High);
+        assert_eq!(select_profile(&hw(24.0)), ProfileName::VeryHigh);
+        assert_eq!(select_profile(&hw(64.0)), ProfileName::VeryHigh);
     }
 }

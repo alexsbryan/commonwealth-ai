@@ -1156,7 +1156,7 @@ impl EmbeddedDaemon {
         };
         drop(state);
         let mesh = app_state.inner.mesh.read().await;
-        let self_id = app_state.inner.self_node_id_swap.load_full().as_ref().clone();
+        let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
         mesh.members
             .values()
             .filter(|m| m.node_id != self_id)
@@ -1185,7 +1185,7 @@ impl EmbeddedDaemon {
                 // toolbox/container environments that lack an IPv6
                 // route to the tailnet.
                 base_urls: commonwealth_core::peer_addr::sorted_addresses(
-                    &m.addresses.iter().copied().collect::<Vec<_>>(),
+                    &m.addresses.to_vec(),
                 )
                 .iter()
                 .map(|addr| {

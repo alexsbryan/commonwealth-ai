@@ -169,7 +169,7 @@ async fn with_mesh_mutation_hook_fires_on_gossip_delta() {
     // one new member with a distinct NodeId guarantees `added > 0`
     // on merge, which is what makes the hook fire (it skips
     // last_seen-only refreshes).
-    let self_id = state.inner.self_node_id_swap.load_full().as_ref().clone();
+    let self_id = *state.inner.self_node_id_swap.load_full().as_ref();
     let other_id = NodeId::from_u128(0x2222_2222_2222_2222);
     let other_addr: SocketAddr = "127.0.0.1:9999".parse().unwrap();
 

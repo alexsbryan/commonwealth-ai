@@ -60,7 +60,7 @@ fn print_enrichment_scoreboard(rows: &[&BenchOutcome]) {
 fn enrichment_summary(o: &BenchOutcome) -> String {
     let status_tag = status_glyph(o.status);
     let Some(enr) = &o.enrichment else {
-        return format!("{status_tag}");
+        return status_tag.to_string();
     };
 
     let cur = &enr.current;
@@ -118,7 +118,7 @@ fn print_retrieval_scoreboard(rows: &[&BenchOutcome]) {
 fn retrieval_summary(o: &BenchOutcome) -> String {
     let status_tag = status_glyph(o.status);
     let Some(ret) = &o.retrieval else {
-        return format!("{status_tag}");
+        return status_tag.to_string();
     };
     let cur = &ret.current;
     let q = cur.results.len();
@@ -141,7 +141,7 @@ fn retrieval_summary(o: &BenchOutcome) -> String {
     let fact = mean(&cur.results, |r| r.fact_score.ratio);
     let src = mean(&cur.results, |r| r.source_score.ratio);
     let essay = mean(&cur.results, |r| {
-        r.essay_readiness.as_ref().and_then(|e| Some(e.ratio()))
+        r.essay_readiness.as_ref().map(|e| e.ratio())
     });
 
     let mut parts = vec![format!("{q}Q")];
@@ -186,7 +186,7 @@ fn mean_run_src(run: &crate::eval_cmd::runner::EvalRun) -> f32 {
     mean(&run.results, |r| r.source_score.ratio).unwrap_or(0.0)
 }
 fn mean_run_essay(run: &crate::eval_cmd::runner::EvalRun) -> Option<f32> {
-    mean(&run.results, |r| r.essay_readiness.as_ref().and_then(|e| Some(e.ratio())))
+    mean(&run.results, |r| r.essay_readiness.as_ref().map(|e| e.ratio()))
 }
 fn mean_run_judge(run: &crate::eval_cmd::runner::EvalRun) -> Option<f32> {
     mean(&run.results, |r| {

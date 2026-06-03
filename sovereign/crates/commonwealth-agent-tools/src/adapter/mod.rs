@@ -94,7 +94,7 @@ mod tests {
     #[test]
     fn pi_and_native_expose_the_same_canonical_set() {
         let native_set: HashSet<PrimitiveKind> =
-            native::Adapter::default().canonical_coverage().into_iter().collect();
+            native::Adapter.canonical_coverage().into_iter().collect();
         let pi_set: HashSet<PrimitiveKind> =
             pi::Adapter::default().canonical_coverage().into_iter().collect();
         assert_eq!(

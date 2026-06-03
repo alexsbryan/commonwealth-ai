@@ -110,8 +110,10 @@ pub struct WatchedFolderState {
 /// process).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[derive(Default)]
 pub enum EnrichmentRuntimeStatus {
     /// Default — no atlas, no in-flight build.
+    #[default]
     Off,
     /// Build is in flight. `phase` is a free-form label from the
     /// orchestrator (e.g. `"phase1:extract"`); `current` /
@@ -159,11 +161,6 @@ pub enum EnrichmentRuntimeStatus {
     },
 }
 
-impl Default for EnrichmentRuntimeStatus {
-    fn default() -> Self {
-        EnrichmentRuntimeStatus::Off
-    }
-}
 
 impl WatchedFolderState {
     /// New, empty state for a freshly-registered corpus.

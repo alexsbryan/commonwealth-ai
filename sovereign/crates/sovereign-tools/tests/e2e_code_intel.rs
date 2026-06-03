@@ -23,7 +23,7 @@
 //! Run with:
 //!     cargo test -p sovereign-tools --test e2e_code_intel
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 

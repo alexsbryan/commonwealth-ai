@@ -269,7 +269,7 @@ mod tests {
             .unwrap(),
         );
         assert!(v["passed"].as_bool().unwrap());
-        assert_eq!(v["untouched_checked"].as_bool().unwrap(), false);
+        assert!(!v["untouched_checked"].as_bool().unwrap());
     }
 
     #[tokio::test]
@@ -289,7 +289,7 @@ mod tests {
             .await
             .unwrap(),
         );
-        assert_eq!(v["passed"].as_bool().unwrap(), false);
+        assert!(!v["passed"].as_bool().unwrap());
         assert!(!v["hollow_files"].as_array().unwrap().is_empty());
     }
 
@@ -320,9 +320,9 @@ mod tests {
             .await
             .unwrap(),
         );
-        assert_eq!(v["untouched_checked"].as_bool().unwrap(), true);
-        assert_eq!(v["untouched"].as_bool().unwrap(), true);
-        assert_eq!(v["passed"].as_bool().unwrap(), false);
+        assert!(v["untouched_checked"].as_bool().unwrap());
+        assert!(v["untouched"].as_bool().unwrap());
+        assert!(!v["passed"].as_bool().unwrap());
     }
 
     #[tokio::test]
@@ -350,8 +350,8 @@ mod tests {
             .await
             .unwrap(),
         );
-        assert_eq!(v["untouched_checked"].as_bool().unwrap(), true);
-        assert_eq!(v["untouched"].as_bool().unwrap(), false);
+        assert!(v["untouched_checked"].as_bool().unwrap());
+        assert!(!v["untouched"].as_bool().unwrap());
         assert!(v["passed"].as_bool().unwrap());
     }
 }

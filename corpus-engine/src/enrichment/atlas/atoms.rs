@@ -320,11 +320,13 @@ impl SectionPosition {
 /// a schema migration — same extensibility convention as `EntityType`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum SignalKind {
     /// Span produced by the GLiNER chunk-level NER pass.
     GlinerSpan,
     /// Atom produced by an LLM-batch entity-extraction call (the
     /// pre-2026 path; `corpus-engine::enrichment::entity_extraction`).
+    #[default]
     LlmBatch,
     /// Atom produced by the column-aware extractor reading a tabular
     /// parsed-form parquet cache. Column header value is the surface
@@ -344,11 +346,6 @@ pub enum SignalKind {
     Other(String),
 }
 
-impl Default for SignalKind {
-    fn default() -> Self {
-        SignalKind::LlmBatch
-    }
-}
 
 /// Atom origin record (AD-4).
 ///

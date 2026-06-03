@@ -3,14 +3,11 @@
 //! through each step until completion or yield.
 
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::Arc;
 
-use futures::Stream;
 
 use crate::error::Result;
 use crate::traits::*;
-use crate::types::*;
 
 use super::super::*;
 
@@ -123,7 +120,7 @@ impl Runtime {
                     let text = v
                         .get("answer")
                         .and_then(|a| a.as_str())
-                        .unwrap_or_else(|| {
+                        .unwrap_or({
                             // Fallback: serialize the whole JSON.
                             ""
                         });

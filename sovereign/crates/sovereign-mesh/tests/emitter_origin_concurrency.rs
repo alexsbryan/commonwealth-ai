@@ -179,7 +179,7 @@ async fn concurrent_serves_stamp_origin_as_self_for_every_event() {
                 for_node,
                 corpus_id,
                 ..
-            } => Some((e.node_id.clone(), for_node.clone(), corpus_id.clone())),
+            } => Some((e.node_id, *for_node, corpus_id.clone())),
             _ => None,
         })
         .collect();
@@ -213,7 +213,7 @@ async fn concurrent_serves_stamp_origin_as_self_for_every_event() {
     // Assertion 3: every requester appears exactly once as for_node.
     // If two events shared a for_node, one request would have been
     // double-counted or another lost — either way, accounting drift.
-    let mut for_nodes: Vec<NodeId> = served.iter().map(|(_, fn_, _)| fn_.clone()).collect();
+    let mut for_nodes: Vec<NodeId> = served.iter().map(|(_, fn_, _)| *fn_).collect();
     for_nodes.sort_by_key(|n| n.as_bytes().to_vec());
     let mut expected: Vec<NodeId> = requesters.clone();
     expected.sort_by_key(|n| n.as_bytes().to_vec());

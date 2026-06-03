@@ -242,9 +242,7 @@ fn sanitize_title(raw: &str) -> String {
                 // actual answer after the planning dump.
                 after_think
                     .lines()
-                    .map(str::trim)
-                    .filter(|l| !l.is_empty())
-                    .last()
+                    .map(str::trim).rfind(|l| !l.is_empty())
                     .unwrap_or("")
                     .to_string()
             }

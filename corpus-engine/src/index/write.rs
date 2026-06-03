@@ -635,7 +635,7 @@ impl CorpusIndex {
     }
 
     /// Re-embed the specified chunks with a fresh embedding call and update them in place.
-    pub async fn re_embed_chunks(&self, chunk_ids: &[u64], embed_fn: &crate::types::EmbedFn) -> Result<()> {
+    pub async fn re_embed_chunks(&self, chunk_ids: &[u64], _embed_fn: &crate::types::EmbedFn) -> Result<()> {
         if chunk_ids.is_empty() {
             return Ok(());
         }
@@ -662,45 +662,14 @@ impl CorpusIndex {
             .map_err(|e| Error::Database(format!("re_embed collect: {e}")))?;
 
         for batch in &batches {
-            let ids = match batch
-                .column_by_name("id")
-                .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
-            {
-                Some(a) => a,
-                None => continue,
-            };
-            let contents = match batch
-                .column_by_name("content")
-                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
-            {
-                Some(a) => a,
-                None => continue,
-            };
-            for i in 0..batch.num_rows() {
-                let id = ids.value(i) as i64;
-                let content = contents.value(i);
-                let new_embedding = embed_fn(content).await
-                    .map_err(|e| Error::Embed(format!("re-embed chunk {id}: {e}")))?;
-
-                // Update the row — delete + insert.
-                self.table
-                    .delete(&format!("id = {id}"))
-                    .await
-                    .map_err(|e| Error::Database(format!("re_embed delete {id}: {e}")))?;
-
-                let schema = self.table.schema().await
-                    .map_err(|e| Error::Database(format!("re_embed schema: {e}")))?;
-                let dim = new_embedding.len() as i32;
-                let embedding_flat = arrow_array::Float32Array::from(new_embedding.clone());
-                let embedding_list: Vec<Option<Vec<Option<f32>>>> = vec![
-                    Some(new_embedding.iter().map(|&x| Some(x)).collect()),
-                ];
-                let _ = (schema, dim, embedding_flat, embedding_list);
-                // NOTE: Full row re-insert requires all columns — complex without the full
-                // original row. Defer to a full-corpus re-embed job for now.
-                // This is a best-effort attempt; mark as partial progress.
+            // Per-chunk re-embed is unsupported: re-inserting a row needs every
+            // column, which a content-only fetch doesn't carry. Error cleanly if
+            // any target rows exist — WITHOUT the previous impl's destructive
+            // delete-then-bail (it dropped the first matched row before erroring,
+            // which clippy flagged via `never_loop`).
+            if batch.num_rows() > 0 {
                 return Err(Error::Extraction(
-                    "Per-chunk re-embed requires full row data; use schedule_enrichment_full instead".into()
+                    "Per-chunk re-embed requires full row data; use schedule_enrichment_full instead".into(),
                 ));
             }
         }

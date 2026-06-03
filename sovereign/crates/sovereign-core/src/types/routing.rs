@@ -248,17 +248,14 @@ pub enum Permission {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum TrustLevel {
     CommunityReviewed,
     AuthorSigned,
+    #[default]
     Unsigned,
 }
 
-impl Default for TrustLevel {
-    fn default() -> Self {
-        TrustLevel::Unsigned
-    }
-}
 
 /// Compute trust level from signature fields.
 pub fn compute_trust_level(

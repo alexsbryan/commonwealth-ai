@@ -374,12 +374,9 @@ impl WikipediaGraph {
         if terms.is_empty() {
             return Vec::new();
         }
-        let axis_clause = std::iter::repeat(
-            "(LOWER(e.target_title) LIKE ?1 \
+        let axis_clause = std::iter::repeat_n("(LOWER(e.target_title) LIKE ?1 \
               OR LOWER(e.link_text) LIKE ?1 \
-              OR LOWER(e.source_section_path) LIKE ?1)",
-        )
-        .take(terms.len())
+              OR LOWER(e.source_section_path) LIKE ?1)", terms.len())
         .enumerate()
         .map(|(i, _)| {
             format!(
@@ -1330,32 +1327,32 @@ mod tests {
     async fn relationship_classifier_picks_contested_via_section() {
         assert_eq!(
             classify_relationship(
-                &vec!["Criticism".to_string()],
+                &["Criticism".to_string()],
                 "John Smith",
             ),
             "contested",
         );
         assert_eq!(
             classify_relationship(
-                &vec!["Origins".to_string()],
+                &["Origins".to_string()],
                 "Industrial Revolution",
             ),
             "causal",
         );
         assert_eq!(
-            classify_relationship(&vec!["See also".to_string()], "anything"),
+            classify_relationship(&["See also".to_string()], "anything"),
             "see-also",
         );
         assert_eq!(
-            classify_relationship(&vec![], "led to widespread famine"),
+            classify_relationship(&[], "led to widespread famine"),
             "causal",
         );
         assert_eq!(
-            classify_relationship(&vec![], "is a type of physicist"),
+            classify_relationship(&[], "is a type of physicist"),
             "defines",
         );
         assert_eq!(
-            classify_relationship(&vec!["History".to_string()], "Albert Einstein"),
+            classify_relationship(&["History".to_string()], "Albert Einstein"),
             "topical",
         );
     }

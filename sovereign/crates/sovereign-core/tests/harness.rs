@@ -49,8 +49,7 @@ impl InferenceProvider for DeterministicInference {
             } else {
                 1
             };
-            std::iter::repeat("Test Entity")
-                .take(batch_size)
+            std::iter::repeat_n("Test Entity", batch_size)
                 .collect::<Vec<_>>()
                 .join("\n")
         } else if prompt_lower.contains("write a single paragraph") && prompt_lower.contains("overview") {

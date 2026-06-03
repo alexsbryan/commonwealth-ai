@@ -313,7 +313,7 @@ impl ScipGraph {
     pub fn open(db_path: &Path, corpus_id: &str) -> Result<Self> {
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent)
-                .map_err(|e| Error::Io(e))?;
+                .map_err(Error::Io)?;
         }
 
         let conn = Connection::open(db_path)

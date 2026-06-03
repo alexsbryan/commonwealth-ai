@@ -204,7 +204,7 @@ fn write_summary_file(atlas_dir: &Path, summary: &AtlasSummary) -> io::Result<()
     let path = atlas_dir.join(SUMMARY_FILE);
     let tmp = atlas_dir.join(format!(".{SUMMARY_FILE}.tmp"));
     let bytes = serde_json::to_vec_pretty(summary)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        .map_err(io::Error::other)?;
     fs::write(&tmp, bytes)?;
     fs::rename(&tmp, &path)
 }

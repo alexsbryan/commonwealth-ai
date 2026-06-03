@@ -1271,7 +1271,7 @@ impl WikipediaNewsworthyWatcher {
 /// MeshStore key + rendezvous partition input + reindex source_doc_id
 /// so the three never drift.
 pub fn normalise_title(raw: &str) -> String {
-    raw.trim().split_whitespace().collect::<Vec<_>>().join("_")
+    raw.split_whitespace().collect::<Vec<_>>().join("_")
 }
 
 /// Format a date as `YYYY_Month_DD` (e.g. `2026_May_08`) — the

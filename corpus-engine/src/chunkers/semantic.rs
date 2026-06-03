@@ -156,12 +156,11 @@ fn split_at_headings(text: &str) -> Vec<String> {
             continue;
         }
 
-        if is_heading_line(line) {
-            if !current.is_empty() {
+        if is_heading_line(line)
+            && !current.is_empty() {
                 sections.push(current);
                 current = String::new();
             }
-        }
 
         current.push_str(line);
         current.push('\n');

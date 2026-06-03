@@ -343,7 +343,7 @@ async fn bootstrap_join_via_content_hashes_pull() {
 
     // For each bucket A has, C requests the hash list and pulls
     // missing events.
-    for (bucket, _digest) in &a_digest {
+    for bucket in a_digest.keys() {
         let hashes = a.store.content_hashes_in_bucket(*bucket).await.unwrap();
         let events = a.store.events_for_content_hashes(&hashes).await.unwrap();
         c.store.ingest_remote_notes(events).await.unwrap();

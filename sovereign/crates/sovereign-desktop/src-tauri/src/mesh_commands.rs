@@ -594,7 +594,7 @@ pub async fn mesh_get_contributions(
     let caps_map: std::collections::HashMap<_, _> = mesh_view
         .members
         .iter()
-        .map(|(id, member)| (id.clone(), member.capabilities.clone()))
+        .map(|(id, member)| (*id, member.capabilities.clone()))
         .collect();
     drop(mesh_view);
     let map = commonwealth_state::current_contributions(

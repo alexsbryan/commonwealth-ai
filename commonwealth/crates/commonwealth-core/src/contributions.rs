@@ -193,7 +193,7 @@ pub fn aggregate(
     // emission.
     let window_days = (window_secs / 86_400).max(1) as u32;
     for ev in events.iter().filter(|e| e.timestamp >= cutoff) {
-        let entry = by_node.entry(ev.node_id.clone()).or_insert_with(|| {
+        let entry = by_node.entry(ev.node_id).or_insert_with(|| {
             NodeContributions {
                 window_days,
                 ..Default::default()
@@ -254,7 +254,7 @@ pub fn aggregate(
                 // explicit nodes from `kind`.
                 let _ = entry; // see comment above — emitter bucket unused
                 let sender_entry =
-                    by_node.entry(from_node.clone()).or_insert_with(|| {
+                    by_node.entry(*from_node).or_insert_with(|| {
                         NodeContributions {
                             window_days,
                             ..Default::default()
@@ -262,7 +262,7 @@ pub fn aggregate(
                     });
                 sender_entry.bytes_served += bytes;
                 let recipient_entry =
-                    by_node.entry(to_node.clone()).or_insert_with(|| {
+                    by_node.entry(*to_node).or_insert_with(|| {
                         NodeContributions {
                             window_days,
                             ..Default::default()
@@ -359,10 +359,10 @@ mod tests {
         let b = nid(2);
         let now = 1_000_000;
         let events = vec![ev(
-            a.clone(),
+            a,
             now - 10,
             LedgerEventKind::InferenceServed {
-                for_node: b.clone(),
+                for_node: b,
                 model_id: "qwen-9b".into(),
                 tokens_generated: 100,
                 wall_seconds: 2.5,
@@ -386,10 +386,10 @@ mod tests {
         let b = nid(2);
         let now = 1_000_000;
         let events = vec![ev(
-            a.clone(),
+            a,
             now - 10,
             LedgerEventKind::InferenceReceived {
-                from_node: b.clone(),
+                from_node: b,
                 model_id: "qwen-9b".into(),
                 tokens_generated: 100,
             },
@@ -415,11 +415,11 @@ mod tests {
         // own behalf. The merge-leader pull case is exercised by
         // `pull_emitted_shard_transfer_credits_actual_sender` below.
         let events = vec![ev(
-            a.clone(),
+            a,
             now - 10,
             LedgerEventKind::ShardTransferred {
-                from_node: a.clone(),
-                to_node: b.clone(),
+                from_node: a,
+                to_node: b,
                 corpus_id: "wikipedia".into(),
                 bytes: 5_000_000_000,
             },
@@ -439,11 +439,11 @@ mod tests {
         let puller = nid(2);
         let now = 1_000_000;
         let events = vec![ev(
-            puller.clone(),
+            puller,
             now - 10,
             LedgerEventKind::ShardTransferred {
-                from_node: peer.clone(),
-                to_node: puller.clone(),
+                from_node: peer,
+                to_node: puller,
                 corpus_id: "wikipedia".into(),
                 bytes: 1_500_000_000,
             },
@@ -465,20 +465,20 @@ mod tests {
         let window = 86_400; // one day
         let events = vec![
             ev(
-                a.clone(),
+                a,
                 now - window - 1, // just past cutoff
                 LedgerEventKind::InferenceServed {
-                    for_node: b.clone(),
+                    for_node: b,
                     model_id: "qwen-9b".into(),
                     tokens_generated: 9_999,
                     wall_seconds: 999.0,
                 },
             ),
             ev(
-                a.clone(),
+                a,
                 now - 1,
                 LedgerEventKind::InferenceServed {
-                    for_node: b.clone(),
+                    for_node: b,
                     model_id: "qwen-9b".into(),
                     tokens_generated: 100,
                     wall_seconds: 1.0,
@@ -502,19 +502,19 @@ mod tests {
         let now = 1_000_000;
         let events = vec![
             ev(
-                a.clone(),
+                a,
                 now - 10,
                 LedgerEventKind::KnowledgeQueryServed {
-                    for_node: b.clone(),
+                    for_node: b,
                     corpus_id: "sep".into(),
                     chunks_returned: 8,
                 },
             ),
             ev(
-                a.clone(),
+                a,
                 now - 5,
                 LedgerEventKind::KnowledgeQueryServed {
-                    for_node: b.clone(),
+                    for_node: b,
                     corpus_id: "sep".into(),
                     chunks_returned: 3,
                 },
@@ -533,16 +533,16 @@ mod tests {
         let now = 1_000_000;
         let events = vec![
             ev(
-                a.clone(),
+                a,
                 now - 100,
                 LedgerEventKind::KnowledgeQueryServed {
-                    for_node: b.clone(),
+                    for_node: b,
                     corpus_id: "sep".into(),
                     chunks_returned: 5,
                 },
             ),
             ev(
-                a.clone(),
+                a,
                 now - 50,
                 LedgerEventKind::StorageSnapshot {
                     corpora: vec![("sep".into(), 12.5)],
@@ -568,30 +568,30 @@ mod tests {
         let now = 1_000_000;
         let events_in_order = vec![
             ev(
-                a.clone(),
+                a,
                 now - 30,
                 LedgerEventKind::InferenceServed {
-                    for_node: b.clone(),
+                    for_node: b,
                     model_id: "qwen-9b".into(),
                     tokens_generated: 100,
                     wall_seconds: 2.0,
                 },
             ),
             ev(
-                a.clone(),
+                a,
                 now - 20,
                 LedgerEventKind::ShardTransferred {
-                    from_node: a.clone(),
-                    to_node: b.clone(),
+                    from_node: a,
+                    to_node: b,
                     corpus_id: "wikipedia".into(),
                     bytes: 1_000_000,
                 },
             ),
             ev(
-                a.clone(),
+                a,
                 now - 10,
                 LedgerEventKind::KnowledgeQueryServed {
-                    for_node: b.clone(),
+                    for_node: b,
                     corpus_id: "sep".into(),
                     chunks_returned: 5,
                 },

@@ -16,8 +16,10 @@ use crate::problem::Problem;
 /// Why the agent stopped emitting work. Closed enum per ARCH §2.1.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "kind", content = "detail")]
+#[derive(Default)]
 pub enum ExitReason {
     /// Agent exited cleanly with a zero status.
+    #[default]
     Completed,
     /// Cumulative output tokens crossed `token_budget`; harness sent SIGTERM.
     TokensExceeded { cap: u64, observed: u64 },
@@ -108,11 +110,6 @@ pub enum ExitReason {
     },
 }
 
-impl Default for ExitReason {
-    fn default() -> Self {
-        ExitReason::Completed
-    }
-}
 
 impl ExitReason {
     pub fn id(&self) -> &'static str {

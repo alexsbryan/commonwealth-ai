@@ -1038,7 +1038,7 @@ mod tests {
             source: AtomId::from_raw(format!("state-{src:04}")),
             target: AtomId::from_raw(format!("state-{tgt:04}")),
             evidence: vec![],
-            trigger_event: trig.map(|t| AtomId::event(t)),
+            trigger_event: trig.map(AtomId::event),
             sub_question: None,
             confidence: 1.0,
             provenance: EdgeProvenance::Derived,

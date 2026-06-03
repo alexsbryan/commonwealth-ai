@@ -441,7 +441,7 @@ fn parse_ddg_lite_results(html: &str, max_results: usize) -> Vec<SearchResult> {
         };
 
         // Find the href before the marker.
-        let search_region_start = if marker_pos > 200 { marker_pos - 200 } else { 0 };
+        let search_region_start = marker_pos.saturating_sub(200);
         let href_start = match html[search_region_start..marker_pos].rfind("href=\"") {
             Some(i) => search_region_start + i + 6,
             None => {
@@ -564,7 +564,7 @@ fn parse_google_results(html: &str, max_results: usize) -> Vec<SearchResult> {
         // Extract the actual URL (up to & or ").
         let url_start = marker_pos + marker.len();
         let url_end = html[url_start..]
-            .find(|c: char| c == '&' || c == '"')
+            .find(['&', '"'])
             .map(|i| url_start + i)
             .unwrap_or(url_start);
 
@@ -578,7 +578,7 @@ fn parse_google_results(html: &str, max_results: usize) -> Vec<SearchResult> {
 
         // Find an <h3> tag near this link for the title.
         let search_end = (marker_pos + 500).min(html.len());
-        let search_start = if marker_pos > 500 { marker_pos - 500 } else { 0 };
+        let search_start = marker_pos.saturating_sub(500);
         let region = &html[search_start..search_end];
 
         let title = if let Some(h3_start) = region.find("<h3") {

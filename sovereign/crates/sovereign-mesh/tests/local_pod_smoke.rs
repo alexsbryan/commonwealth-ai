@@ -80,7 +80,7 @@ fn skip_reason() -> Option<String> {
             pod_wrapper().display()
         ));
     }
-    let out = Command::new(&pod_wrapper()).arg("info").output();
+    let out = Command::new(pod_wrapper()).arg("info").output();
     match out {
         Ok(o) if o.status.success() => None,
         Ok(o) => Some(format!(
@@ -94,7 +94,7 @@ fn skip_reason() -> Option<String> {
 /// Ensure the image exists. If not, build it. Returns `Err` if the
 /// build fails (caller will skip the test with a clear message).
 fn ensure_image() -> Result<(), String> {
-    let inspect = Command::new(&pod_wrapper())
+    let inspect = Command::new(pod_wrapper())
         .args(["image", "exists", IMAGE_TAG])
         .status()
         .map_err(|e| format!("podman image exists: {e}"))?;
@@ -102,7 +102,7 @@ fn ensure_image() -> Result<(), String> {
         return Ok(());
     }
     eprintln!("[local-pod-smoke] image {IMAGE_TAG} not present — building…");
-    let build = Command::new(&pod_wrapper())
+    let build = Command::new(pod_wrapper())
         .args([
             "build",
             "-t",
@@ -125,7 +125,7 @@ fn ensure_image() -> Result<(), String> {
 
 /// Force-remove any lingering container from a prior run.
 fn force_rm(name: &str) {
-    let _ = Command::new(&pod_wrapper())
+    let _ = Command::new(pod_wrapper())
         .args(["rm", "-f", name])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -211,7 +211,7 @@ fn pick_free_port() -> u16 {
 /// can debug entrypoint.sh issues without re-running with --nocapture.
 fn dump_container_logs(name: &str, label: &str) {
     eprintln!("\n=== {label}: container logs for {name} ===");
-    let _ = Command::new(&pod_wrapper())
+    let _ = Command::new(pod_wrapper())
         .args(["logs", name])
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
@@ -295,7 +295,7 @@ async fn local_pod_smoke_full_lifecycle() {
         "[local-pod-smoke] starting container {CONTAINER_NAME} \
          (host port {host_port} → :9742); echo-runner mode"
     );
-    let run = Command::new(&pod_wrapper())
+    let run = Command::new(pod_wrapper())
         .args(run_args(CONTAINER_NAME, host_port, &encoded))
         .output()
         .expect("podman run");
@@ -443,7 +443,7 @@ async fn local_pod_rejects_impostor_owner() {
     let encoded = encode_bootstrap(&blob).unwrap();
 
     let host_port = pick_free_port();
-    let run = Command::new(&pod_wrapper())
+    let run = Command::new(pod_wrapper())
         .args(run_args(container_name, host_port, &encoded))
         .output()
         .expect("podman run");
@@ -577,7 +577,7 @@ async fn local_pod_pool_three_containers_drain() {
         let encoded = encode_bootstrap(&blob).unwrap();
         let host_port = pick_free_port();
         eprintln!("[local-pod-pool] starting pod {i}: {} → :9742 ({})", host_port, names[i]);
-        let run = Command::new(&pod_wrapper())
+        let run = Command::new(pod_wrapper())
             .args(run_args(&names[i], host_port, &encoded))
             .output()
             .expect("podman run");
