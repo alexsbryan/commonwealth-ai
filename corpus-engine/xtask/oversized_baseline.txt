@@ -7,7 +7,7 @@
 1278	commonwealth/crates/commonwealth-api/src/routes_inference.rs
 1305	commonwealth/crates/commonwealth-api/src/routes_internal/corpus_ingest.rs
 1571	commonwealth/crates/commonwealth-api/src/routes_internal/mesh_admin.rs
-3146	commonwealth/crates/commonwealth-api/src/routes_responses.rs
+2738	commonwealth/crates/commonwealth-api/src/routes_responses.rs
 1434	commonwealth/crates/commonwealth-test-harness/tests/integration.rs
 1474	corpus-engine-atos/src/features.rs
 5634	corpus-engine-notes/src/notes.rs
@@ -68,7 +68,8 @@
 1658	sovereign/crates/sovereign-core/tests/functional.rs
 1435	sovereign/crates/sovereign-desktop/src-tauri/src/enrich_commands.rs
 2321	sovereign/crates/sovereign-desktop/src-tauri/src/state.rs
-9669	sovereign/crates/sovereign-inference/src/embedded.rs
+2860	sovereign/crates/sovereign-inference/src/embedded/engine.rs
+3411	sovereign/crates/sovereign-inference/src/embedded/model_slot.rs
 1258	sovereign/crates/sovereign-mesh/src/auto_ingest.rs
 2286	sovereign/crates/sovereign-mesh/src/daemon.rs
 1933	sovereign/crates/sovereign-mesh/src/inference_adapter.rs
