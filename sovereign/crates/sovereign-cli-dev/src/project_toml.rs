@@ -289,7 +289,7 @@ mod tests {
         file.write(&path).unwrap();
         let reloaded = ProjectTomlFile::read(&path).unwrap();
         assert_eq!(reloaded.schema_version, SCHEMA_VERSION);
-        assert_eq!(reloaded.lifecycle.founded, true);
+        assert!(reloaded.lifecycle.founded);
         assert_eq!(reloaded.lifecycle.charter_version, 2);
         assert_eq!(reloaded.lifecycle.current_phase, 1);
         assert_eq!(reloaded.observation.languages.len(), 1);

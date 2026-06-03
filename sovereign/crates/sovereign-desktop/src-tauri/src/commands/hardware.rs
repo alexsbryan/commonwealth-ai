@@ -36,7 +36,7 @@ pub struct HardwareInfo {
 #[tauri::command]
 pub async fn detect_hardware() -> Result<HardwareInfo, String> {
     let profile =
-        tokio::task::spawn_blocking(|| sovereign_inference::hardware::HardwareProfile::detect())
+        tokio::task::spawn_blocking(sovereign_inference::hardware::HardwareProfile::detect)
             .await
             .map_err(|e| format!("Hardware detection failed: {e}"))?;
 
@@ -155,7 +155,7 @@ impl From<&sovereign_core::models_manifest::SlotConfig> for SlotConfigDto {
 #[tauri::command]
 pub async fn recommended_profile() -> Result<RecommendedProfileDto, String> {
     let profile =
-        tokio::task::spawn_blocking(|| sovereign_inference::hardware::HardwareProfile::detect())
+        tokio::task::spawn_blocking(sovereign_inference::hardware::HardwareProfile::detect)
             .await
             .map_err(|e| format!("Hardware detection failed: {e}"))?;
 

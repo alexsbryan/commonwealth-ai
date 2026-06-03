@@ -153,7 +153,7 @@ mod tests {
     fn parse_ignores_version_line_past_the_header_window() {
         // Marker only honored in the first 5 lines — prevents a
         // rogue comment deep in the file from faking a version.
-        let body = format!("line1\nline2\nline3\nline4\nline5\n// sovereign-atos-version: 9.9.9\n");
+        let body = "line1\nline2\nline3\nline4\nline5\n// sovereign-atos-version: 9.9.9\n".to_string();
         assert!(parse_installed_version(&body).is_none());
     }
 

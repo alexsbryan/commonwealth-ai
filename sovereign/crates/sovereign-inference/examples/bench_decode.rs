@@ -104,7 +104,7 @@ fn main() {
             .with_offload_kqv(offload_kqv);
 
         let mut ctx = unsafe {
-            let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model) as *const LlamaModel);
+            let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model));
             model_ref
                 .new_context(&backend, ctx_params)
                 .expect("new_context")

@@ -673,7 +673,7 @@ fn existing_source_matches_sample(source_path: &Path, sample_size: Option<usize>
     };
     let header_count = BufReader::new(f)
         .lines()
-        .filter_map(|l| l.ok())
+        .map_while(Result::ok)
         .filter(|line| {
             let t = line.trim();
             t.starts_with("===== ") && t.ends_with(" =====")
@@ -978,7 +978,7 @@ fn rank_starter_questions(atoms: &[AtomEnvelope], limit: usize) -> Vec<StarterQu
                     text.to_string()
                 } else {
                     let stripped =
-                        text.trim_end_matches(|c: char| matches!(c, '.' | '!' | ',' | ';' | ':'));
+                        text.trim_end_matches(['.', '!', ',', ';', ':']);
                     format!("{stripped}?")
                 };
                 let source_section = q

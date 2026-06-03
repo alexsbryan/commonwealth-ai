@@ -771,7 +771,7 @@ async fn cmd_index(args: &[String]) -> i32 {
     });
 
     let data_dir = data_dir
-        .or_else(|| default_data_dir())
+        .or_else(default_data_dir)
         .unwrap_or_else(|| PathBuf::from("./sovereign-indexes"));
 
     match rebuild_code_corpus(&abs_path, &corpus_id, &data_dir).await {

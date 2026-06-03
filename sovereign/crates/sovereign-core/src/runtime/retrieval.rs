@@ -1186,7 +1186,7 @@ impl Runtime {
     pub(crate) async fn rerank_conv_chunks_via_ppr(
         &self,
         query: &str,
-        chunks: &mut Vec<corpus_engine::ScoredChunk>,
+        chunks: &mut [corpus_engine::ScoredChunk],
         display_categories: &std::collections::HashMap<String, String>,
     ) {
         let weight = std::env::var("SOVEREIGN_CONV_PPR_WEIGHT")

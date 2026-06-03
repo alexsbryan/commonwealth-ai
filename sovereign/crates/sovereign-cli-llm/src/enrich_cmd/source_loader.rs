@@ -253,7 +253,7 @@ fn read_control_word(
 fn handle_control_word(
     word: &str,
     param: Option<i32>,
-    groups: &mut Vec<Group>,
+    groups: &mut [Group],
     out: &mut String,
     skip_bytes_after_unicode: &mut usize,
 ) {
