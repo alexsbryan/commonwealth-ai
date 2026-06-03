@@ -22,11 +22,7 @@ pub struct ReconnectingTransport {
 
 impl ReconnectingTransport {
     /// Create a reconnecting transport. Performs the initial connection.
-    pub async fn connect(
-        url: &str,
-        auth: McpAuth,
-        max_retries: usize,
-    ) -> Result<Self, McpError> {
+    pub async fn connect(url: &str, auth: McpAuth, max_retries: usize) -> Result<Self, McpError> {
         let transport = HttpSseTransport::connect(url, auth.clone()).await?;
         Ok(Self {
             url: url.to_string(),
@@ -67,7 +63,11 @@ impl McpTransport for ReconnectingTransport {
 
         let result = {
             let inner = self.inner.read().await;
-            inner.as_ref().unwrap().request(method, params.clone()).await
+            inner
+                .as_ref()
+                .unwrap()
+                .request(method, params.clone())
+                .await
         };
 
         match result {

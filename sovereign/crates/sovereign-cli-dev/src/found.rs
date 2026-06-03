@@ -54,8 +54,8 @@
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use corpus_engine_atos::design_signals::DesignSignals;
 use crate::observation::{DepKind, DetectedDependency, ProjectObservation};
+use corpus_engine_atos::design_signals::DesignSignals;
 
 // ─── Stage 1 data ────────────────────────────────────────────────────────────
 
@@ -676,30 +676,73 @@ fn has_time_signal(
     if signals.map(|s| s.keywords.time).unwrap_or(false) {
         return true;
     }
-    let time_deps = ["chrono", "time", "moment", "dayjs", "luxon", "pytz", "arrow"];
+    let time_deps = [
+        "chrono", "time", "moment", "dayjs", "luxon", "pytz", "arrow",
+    ];
     if has_any_dep_matching(obs, &time_deps) {
         return true;
     }
-    answers_mention_any(answers, &["time", "timestamp", "schedule", "utc", "local time"])
+    answers_mention_any(
+        answers,
+        &["time", "timestamp", "schedule", "utc", "local time"],
+    )
 }
 
 fn has_persistence_signal(obs: &ProjectObservation, answers: &[String]) -> bool {
     let persistence_deps = [
-        "sqlite", "rusqlite", "sqlx", "diesel", "sea-orm", "postgres", "pg",
-        "tokio-postgres", "mysql", "mongodb", "redis", "rocksdb", "sled", "lmdb",
-        "pymongo", "psycopg", "psycopg2", "sqlalchemy", "prisma", "typeorm",
-        "gorm", "pgx", "mongoose", "sequelize",
+        "sqlite",
+        "rusqlite",
+        "sqlx",
+        "diesel",
+        "sea-orm",
+        "postgres",
+        "pg",
+        "tokio-postgres",
+        "mysql",
+        "mongodb",
+        "redis",
+        "rocksdb",
+        "sled",
+        "lmdb",
+        "pymongo",
+        "psycopg",
+        "psycopg2",
+        "sqlalchemy",
+        "prisma",
+        "typeorm",
+        "gorm",
+        "pgx",
+        "mongoose",
+        "sequelize",
     ];
     has_any_dep_matching(obs, &persistence_deps)
-        || answers_mention_any(answers, &["database", "persist", "store", "migration", "schema"])
+        || answers_mention_any(
+            answers,
+            &["database", "persist", "store", "migration", "schema"],
+        )
 }
 
 fn has_web_framework_signal(obs: &ProjectObservation, answers: &[String]) -> bool {
     let web_deps = [
-        "axum", "actix-web", "rocket", "warp", "hyper", "tower",
-        "express", "fastify", "koa", "hono", "next",
-        "fastapi", "flask", "django", "starlette",
-        "gin", "echo", "fiber", "chi",
+        "axum",
+        "actix-web",
+        "rocket",
+        "warp",
+        "hyper",
+        "tower",
+        "express",
+        "fastify",
+        "koa",
+        "hono",
+        "next",
+        "fastapi",
+        "flask",
+        "django",
+        "starlette",
+        "gin",
+        "echo",
+        "fiber",
+        "chi",
     ];
     has_any_dep_matching(obs, &web_deps)
         || answers_mention_any(answers, &["api", "endpoint", "http", "rest", "grpc"])
@@ -722,23 +765,44 @@ fn has_concurrency_signal(obs: &ProjectObservation, answers: &[String]) -> bool 
         .any(|l| matches!(l.id.as_str(), "javascript" | "typescript" | "go"));
     has_any_dep_matching(obs, &async_deps)
         || lang_signal
-        || answers_mention_any(answers, &["concurrent", "parallel", "throughput", "latency"])
+        || answers_mention_any(
+            answers,
+            &["concurrent", "parallel", "throughput", "latency"],
+        )
 }
 
 fn has_external_api_signal(obs: &ProjectObservation, answers: &[String]) -> bool {
     let api_client_deps = [
-        "reqwest", "ureq", "hyper", "http", "requests", "httpx", "aiohttp",
-        "axios", "fetch", "got", "undici", "polygon", "alpaca", "stripe",
-        "twilio", "aws-sdk", "google-cloud", "firebase",
+        "reqwest",
+        "ureq",
+        "hyper",
+        "http",
+        "requests",
+        "httpx",
+        "aiohttp",
+        "axios",
+        "fetch",
+        "got",
+        "undici",
+        "polygon",
+        "alpaca",
+        "stripe",
+        "twilio",
+        "aws-sdk",
+        "google-cloud",
+        "firebase",
     ];
     has_any_dep_matching(obs, &api_client_deps)
-        || answers_mention_any(answers, &["api key", "oauth", "token", "secret", "credential"])
+        || answers_mention_any(
+            answers,
+            &["api key", "oauth", "token", "secret", "credential"],
+        )
 }
 
 fn has_queue_signal(obs: &ProjectObservation, answers: &[String]) -> bool {
     let queue_deps = [
-        "kafka", "rdkafka", "nats", "rabbitmq", "amqp", "lapin", "sqs",
-        "pubsub", "redpanda", "pulsar", "nsq", "celery", "sidekiq", "bull",
+        "kafka", "rdkafka", "nats", "rabbitmq", "amqp", "lapin", "sqs", "pubsub", "redpanda",
+        "pulsar", "nsq", "celery", "sidekiq", "bull",
     ];
     has_any_dep_matching(obs, &queue_deps)
         || answers_mention_any(answers, &["queue", "stream", "event bus", "pipeline"])
@@ -823,12 +887,7 @@ fn prompt_field(label: &str) -> String {
 }
 
 impl FaultLineInterlocutor for StdinFaultLineInterlocutor {
-    fn present(
-        &mut self,
-        fault: &FaultLine,
-        index: usize,
-        total: usize,
-    ) -> FaultLineOutcome {
+    fn present(&mut self, fault: &FaultLine, index: usize, total: usize) -> FaultLineOutcome {
         let mut stderr = io::stderr();
         let _ = writeln!(stderr);
         let _ = writeln!(
@@ -1095,7 +1154,10 @@ impl DocsInterlocutor for StdinDocsInterlocutor {
             stderr,
             "  Paste one or more URLs (space-separated or on one line).",
         );
-        let _ = write!(stderr, "  (Enter to skip; the runtime fallback covers gaps later.) > ");
+        let _ = write!(
+            stderr,
+            "  (Enter to skip; the runtime fallback covers gaps later.) > "
+        );
         let _ = stderr.flush();
         stdin_read_line()
     }
@@ -1260,9 +1322,7 @@ pub fn compose_charter(inputs: &FoundingInputs) -> String {
         }
     }
     if !any_open {
-        out.push_str(
-            "_(No open questions. Everything at founding was answered or skipped.)_\n",
-        );
+        out.push_str("_(No open questions. Everything at founding was answered or skipped.)_\n");
     }
     out.push('\n');
 
@@ -1451,14 +1511,7 @@ fn phase2_degraded_condition(obs: &ProjectObservation) -> String {
     // refine; the point is that Phase 2's stop is never generic
     // "things handle errors."
     let external_client_hints = [
-        "reqwest",
-        "hyper",
-        "requests",
-        "httpx",
-        "axios",
-        "polygon",
-        "alpaca",
-        "stripe",
+        "reqwest", "hyper", "requests", "httpx", "axios", "polygon", "alpaca", "stripe",
     ];
     let sample = obs.deps.iter().find(|d| {
         let n = d.name.to_lowercase();
@@ -1495,11 +1548,7 @@ pub trait ApprovalInterlocutor {
     /// (editor missing, non-zero exit, read failure) returns the
     /// inputs unchanged — we trust the user to cancel if that
     /// happened.
-    fn edit_in_editor(
-        &mut self,
-        charter_path: &Path,
-        phases_path: &Path,
-    ) -> (String, String);
+    fn edit_in_editor(&mut self, charter_path: &Path, phases_path: &Path) -> (String, String);
 }
 
 pub struct StdinApprovalInterlocutor;
@@ -1552,10 +1601,7 @@ impl ApprovalInterlocutor for StdinApprovalInterlocutor {
     fn ask_approval(&mut self) -> ApprovalAnswer {
         let mut stderr = io::stderr();
         let _ = writeln!(stderr);
-        let _ = write!(
-            stderr,
-            "  [A]pprove both, [E]dit in $EDITOR, or [C]ancel? "
-        );
+        let _ = write!(stderr, "  [A]pprove both, [E]dit in $EDITOR, or [C]ancel? ");
         let _ = stderr.flush();
         let line = stdin_read_line().to_lowercase();
         match line.chars().next() {
@@ -1565,11 +1611,7 @@ impl ApprovalInterlocutor for StdinApprovalInterlocutor {
         }
     }
 
-    fn edit_in_editor(
-        &mut self,
-        charter_path: &Path,
-        phases_path: &Path,
-    ) -> (String, String) {
+    fn edit_in_editor(&mut self, charter_path: &Path, phases_path: &Path) -> (String, String) {
         let editor = std::env::var("EDITOR").unwrap_or_default();
         if editor.is_empty() {
             eprintln!(
@@ -1670,9 +1712,7 @@ pub fn run_stage34<I: ApprovalInterlocutor>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::observation::{
-        DepKind, DetectedDependency, LanguageObservation, ScipTooling,
-    };
+    use crate::observation::{DepKind, DetectedDependency, LanguageObservation, ScipTooling};
     use std::cell::RefCell;
 
     // ── Fixture helpers ─────────────────────────────────────────
@@ -1814,8 +1854,7 @@ mod tests {
             .iter()
             .any(|q| q.id == "found.stage1.project-purpose"));
         assert!(
-            with.iter()
-                .all(|q| q.id != "found.stage1.project-purpose"),
+            with.iter().all(|q| q.id != "found.stage1.project-purpose"),
             "with a design doc, purpose comes from the doc, not a question"
         );
     }
@@ -1846,9 +1885,7 @@ mod tests {
 
         // Polyglot project: convention question fires.
         let poly = select_questions(&obs_polyglot(), true, None);
-        assert!(poly
-            .iter()
-            .any(|q| q.id == "found.stage1.convention-risk"));
+        assert!(poly.iter().any(|q| q.id == "found.stage1.convention-risk"));
     }
 
     #[test]
@@ -1882,7 +1919,9 @@ mod tests {
         let obs = obs_with_deps();
         let selected = select_questions(&obs, false, None);
         let mut interlocutor = ScriptedInterlocutor::new(
-            (0..selected.len()).map(|i| free_text(&format!("answer{i}"))).collect(),
+            (0..selected.len())
+                .map(|i| free_text(&format!("answer{i}")))
+                .collect(),
         );
         let mut recorder = RecordingWriter::default();
         let answers = run_stage1(&obs, None, None, &mut interlocutor, &mut recorder);
@@ -1898,11 +1937,13 @@ mod tests {
     fn skipped_answer_still_recorded_with_skipped_marker() {
         let obs = minimal_obs();
         let selected = select_questions(&obs, true, None); // design-doc mode → short list
-        assert!(!selected.is_empty(), "selection must produce at least one question");
+        assert!(
+            !selected.is_empty(),
+            "selection must produce at least one question"
+        );
         let n = selected.len();
         // Script ALL skipped.
-        let mut interlocutor =
-            ScriptedInterlocutor::new((0..n).map(|_| skipped()).collect());
+        let mut interlocutor = ScriptedInterlocutor::new((0..n).map(|_| skipped()).collect());
         let mut recorder = RecordingWriter::default();
         let answers = run_stage1(&obs, Some("design"), None, &mut interlocutor, &mut recorder);
         assert_eq!(answers.len(), n);
@@ -2000,12 +2041,7 @@ mod tests {
         }
     }
     impl FaultLineInterlocutor for ScriptedFaultLineInterlocutor {
-        fn present(
-            &mut self,
-            fault: &FaultLine,
-            _index: usize,
-            _total: usize,
-        ) -> FaultLineOutcome {
+        fn present(&mut self, fault: &FaultLine, _index: usize, _total: usize) -> FaultLineOutcome {
             self.presented.borrow_mut().push(fault.id.clone());
             self.outcomes.remove(0)
         }
@@ -2024,9 +2060,17 @@ mod tests {
     #[test]
     fn every_fault_line_entry_has_at_least_two_sides_and_non_empty_fields() {
         for entry in fault_line_catalog() {
-            assert!(entry.id.starts_with("fault."), "id must be in the fault.* namespace: {}", entry.id);
+            assert!(
+                entry.id.starts_with("fault."),
+                "id must be in the fault.* namespace: {}",
+                entry.id
+            );
             assert!(!entry.title.trim().is_empty(), "title empty: {}", entry.id);
-            assert!(!entry.summary.trim().is_empty(), "summary empty: {}", entry.id);
+            assert!(
+                !entry.summary.trim().is_empty(),
+                "summary empty: {}",
+                entry.id
+            );
             assert!(
                 entry.sides.len() >= 2,
                 "fault line {} needs at least 2 sides (otherwise it isn't a disagreement)",
@@ -2166,7 +2210,11 @@ mod tests {
     fn runner_records_resolved_open_skipped_according_to_outcome() {
         let obs = obs_with_everything();
         let faults = select_fault_lines(&obs, &[], None);
-        assert!(faults.len() >= 3, "need enough faults to sample all outcomes, got {}", faults.len());
+        assert!(
+            faults.len() >= 3,
+            "need enough faults to sample all outcomes, got {}",
+            faults.len()
+        );
         let outcomes: Vec<FaultLineOutcome> = (0..faults.len())
             .map(|i| match i % 3 {
                 0 => FaultLineOutcome::Resolved {
@@ -2195,14 +2243,13 @@ mod tests {
         assert_eq!(recorder.records.len(), faults.len());
 
         // Summary tallies match outcome distribution.
-        let (r, o, s) =
-            outcomes
-                .iter()
-                .fold((0usize, 0usize, 0usize), |(r, o, s), oc| match oc {
-                    FaultLineOutcome::Resolved { .. } => (r + 1, o, s),
-                    FaultLineOutcome::Open { .. } => (r, o + 1, s),
-                    FaultLineOutcome::Skipped => (r, o, s + 1),
-                });
+        let (r, o, s) = outcomes
+            .iter()
+            .fold((0usize, 0usize, 0usize), |(r, o, s), oc| match oc {
+                FaultLineOutcome::Resolved { .. } => (r + 1, o, s),
+                FaultLineOutcome::Open { .. } => (r, o + 1, s),
+                FaultLineOutcome::Skipped => (r, o, s + 1),
+            });
         assert_eq!((summary.resolved, summary.open, summary.skipped), (r, o, s));
     }
 
@@ -2409,7 +2456,8 @@ mod tests {
         let obs = sample_obs_rust();
         let answers = sample_stage1_answers();
         let outcomes = sample_stage2_outcomes();
-        let design = "# Architectural outline\n\nMarket-data pipeline: Polygon -> normalize -> Postgres.";
+        let design =
+            "# Architectural outline\n\nMarket-data pipeline: Polygon -> normalize -> Postgres.";
         let inputs = sample_inputs(&obs, &answers, &outcomes, Some(design));
         let charter = compose_charter(&inputs);
         assert!(charter.contains("Market-data pipeline: Polygon -> normalize -> Postgres."));
@@ -2626,12 +2674,7 @@ mod tests {
     fn approval_loop_cancel_returns_without_writing() {
         let tmp = tempfile::tempdir().unwrap();
         let mut interloc = ScriptedApproval::new(vec![ApprovalAnswer::Cancel], "stop");
-        let out = run_stage34(
-            "c".into(),
-            "p".into(),
-            tmp.path(),
-            &mut interloc,
-        );
+        let out = run_stage34("c".into(), "p".into(), tmp.path(), &mut interloc);
         assert_eq!(out, FoundingApproval::Cancelled);
     }
 

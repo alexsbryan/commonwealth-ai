@@ -342,11 +342,7 @@ async fn run_one_session(
     }
 }
 
-async fn handle_event(
-    host: &Arc<dyn EventStreamHost>,
-    rc: &RecentChange,
-    stats: &mut StreamStats,
-) {
+async fn handle_event(host: &Arc<dyn EventStreamHost>, rc: &RecentChange, stats: &mut StreamStats) {
     // Filter: en.wikipedia, main namespace, edit-shaped event.
     if rc.meta.domain != "en.wikipedia.org"
         || rc.wiki != "enwiki"

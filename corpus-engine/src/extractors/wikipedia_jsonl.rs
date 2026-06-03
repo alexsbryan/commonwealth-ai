@@ -32,13 +32,12 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use super::wikipedia_types::{WikiLink, WikipediaChunkMetadata, wiki_title_from_url};
-use crate::error::{Error, Result};
-use super::{ExtractedDoc, Extractor, slug};
 use super::wikipedia_structured::{
-    MAX_SECTION_DEPTH, MIN_SECTION_TEXT,
-    should_skip_section, classify_section,
+    classify_section, should_skip_section, MAX_SECTION_DEPTH, MIN_SECTION_TEXT,
 };
+use super::wikipedia_types::{wiki_title_from_url, WikiLink, WikipediaChunkMetadata};
+use super::{slug, ExtractedDoc, Extractor};
+use crate::error::{Error, Result};
 
 /// Extractor for `wikimedia/structured-wikipedia` ZIP+JSONL files.
 pub struct WikipediaJsonlExtractor {
@@ -63,14 +62,16 @@ pub struct WikipediaJsonlExtractor {
 
 impl Default for WikipediaJsonlExtractor {
     fn default() -> Self {
-        use super::wikipedia_structured::{
-            DEFAULT_CONTROVERSY_PATTERNS, DEFAULT_FACTUAL_PATTERNS,
-        };
+        use super::wikipedia_structured::{DEFAULT_CONTROVERSY_PATTERNS, DEFAULT_FACTUAL_PATTERNS};
         Self {
             controversy_patterns: DEFAULT_CONTROVERSY_PATTERNS
-                .iter().map(|s| s.to_string()).collect(),
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             factual_patterns: DEFAULT_FACTUAL_PATTERNS
-                .iter().map(|s| s.to_string()).collect(),
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             article_range: None,
             shard_indices: None,
         }
@@ -156,9 +157,12 @@ fn collect_zip_paths(source_path: &Path) -> Result<Vec<PathBuf>> {
         return Ok(vec![source_path.to_path_buf()]);
     }
     let mut paths: Vec<PathBuf> = std::fs::read_dir(source_path)
-        .map_err(|e| Error::Extraction(format!(
-            "Failed to read directory {}: {e}", source_path.display()
-        )))?
+        .map_err(|e| {
+            Error::Extraction(format!(
+                "Failed to read directory {}: {e}",
+                source_path.display()
+            ))
+        })?
         .filter_map(|e| e.ok())
         .map(|e| e.path())
         .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("zip"))
@@ -351,10 +355,8 @@ impl WikipediaJsonlShardedZipIterator {
                 ))));
             }
         };
-        let reader: Box<dyn BufRead + Send> = Box::new(BufReader::with_capacity(
-            256 * 1024,
-            read_file,
-        ));
+        let reader: Box<dyn BufRead + Send> =
+            Box::new(BufReader::with_capacity(256 * 1024, read_file));
         eprintln!(
             "[corpus-engine] Sharded extraction → logical shard {logical_index} \
              (raw ZIP index {raw_index}, {entry_name})"
@@ -409,11 +411,7 @@ impl Iterator for WikipediaJsonlShardedZipIterator {
             }
 
             let shard_tag = format!("{SHARD_SOURCE_FILE_PREFIX}{}", state.shard_index);
-            match process_article_line(
-                line,
-                &self.controversy_patterns,
-                &self.factual_patterns,
-            ) {
+            match process_article_line(line, &self.controversy_patterns, &self.factual_patterns) {
                 Ok(docs) => {
                     for mut doc in docs {
                         doc.source_file = Some(shard_tag.clone());
@@ -502,9 +500,8 @@ impl WikipediaJsonlLineIterator {
         article_range: Option<(u64, u64)>,
         article_offset: u64,
     ) -> Result<Self> {
-        let file = File::open(path).map_err(|e| {
-            Error::Extraction(format!("Failed to open {}: {e}", path.display()))
-        })?;
+        let file = File::open(path)
+            .map_err(|e| Error::Extraction(format!("Failed to open {}: {e}", path.display())))?;
 
         // Detect ZIP vs raw JSONL by extension.
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
@@ -559,7 +556,10 @@ impl Iterator for WikipediaJsonlLineIterator {
             // Cow::Owned means from_utf8_lossy made replacements — log so we
             // can gauge how widespread the encoding issues are in this corpus.
             if matches!(line_cow, std::borrow::Cow::Owned(_)) {
-                tracing::debug!(article_index = self.article_index, "non-UTF-8 bytes replaced with U+FFFD");
+                tracing::debug!(
+                    article_index = self.article_index,
+                    "non-UTF-8 bytes replaced with U+FFFD"
+                );
             }
             let line = line_cow.trim();
             if line.is_empty() {
@@ -604,7 +604,8 @@ impl ZipEntryReader {
         let n = archive.len();
         if n == 0 {
             return Err(Error::Extraction(format!(
-                "ZIP archive {} is empty", zip_path.display()
+                "ZIP archive {} is empty",
+                zip_path.display()
             )));
         }
 
@@ -613,16 +614,23 @@ impl ZipEntryReader {
         // process ALL of them. Previously only the first was read, causing 99%+ data loss.
         let jsonl_indices: Vec<usize> = (0..n)
             .filter(|&i| {
-                archive.name_for_index(i)
+                archive
+                    .name_for_index(i)
                     .map(|name| name.ends_with(".jsonl"))
                     .unwrap_or(false)
             })
             .collect();
-        let indices = if jsonl_indices.is_empty() { vec![0] } else { jsonl_indices };
+        let indices = if jsonl_indices.is_empty() {
+            vec![0]
+        } else {
+            jsonl_indices
+        };
 
         eprintln!(
             "[corpus-engine] ZIP {} has {} total entries, {} JSONL shards — extracting all",
-            zip_path.display(), n, indices.len()
+            zip_path.display(),
+            n,
+            indices.len()
         );
 
         // Concatenate all JSONL shards into a single file. Each shard is
@@ -639,29 +647,35 @@ impl ZipEntryReader {
                 cache_path.display(),
                 cache_path.metadata().map(|m| m.len()).unwrap_or(0) as f64 / 1_073_741_824.0,
             );
-            let file = File::open(&cache_path).map_err(|e| {
-                Error::Extraction(format!("Failed to open cached extraction: {e}"))
-            })?;
-            return Ok(Self { inner: BufReader::new(file) });
+            let file = File::open(&cache_path)
+                .map_err(|e| Error::Extraction(format!("Failed to open cached extraction: {e}")))?;
+            return Ok(Self {
+                inner: BufReader::new(file),
+            });
         }
 
         eprintln!(
             "[corpus-engine] Extracting {} JSONL shards (this is slow; cached for future runs)",
             indices.len()
         );
-        let mut tmp = tempfile::NamedTempFile::new().map_err(|e| {
-            Error::Extraction(format!("Failed to create temp file: {e}"))
-        })?;
+        let mut tmp = tempfile::NamedTempFile::new()
+            .map_err(|e| Error::Extraction(format!("Failed to create temp file: {e}")))?;
         for (pos, entry_index) in indices.iter().enumerate() {
-            let name = archive.name_for_index(*entry_index).unwrap_or("?").to_string();
+            let name = archive
+                .name_for_index(*entry_index)
+                .unwrap_or("?")
+                .to_string();
             eprintln!(
                 "[corpus-engine] Extracting shard {}/{}: {}",
-                pos + 1, indices.len(), name
+                pos + 1,
+                indices.len(),
+                name
             );
             let mut zip_entry = archive.by_index(*entry_index).map_err(|e| {
                 Error::Extraction(format!(
                     "Failed to open ZIP entry {} in {}: {e}",
-                    entry_index, zip_path.display()
+                    entry_index,
+                    zip_path.display()
                 ))
             })?;
             std::io::copy(&mut zip_entry, &mut tmp).map_err(|e| {
@@ -670,9 +684,9 @@ impl ZipEntryReader {
         }
 
         // Move temp file to the deterministic cache path.
-        let (_, tmp_path) = tmp.keep().map_err(|e| {
-            Error::Extraction(format!("Failed to persist temp file: {e}"))
-        })?;
+        let (_, tmp_path) = tmp
+            .keep()
+            .map_err(|e| Error::Extraction(format!("Failed to persist temp file: {e}")))?;
         if let Err(e) = std::fs::rename(&tmp_path, &cache_path) {
             // rename fails across filesystems; fall back to copy+delete.
             if let Err(e2) = std::fs::copy(&tmp_path, &cache_path) {
@@ -686,21 +700,28 @@ impl ZipEntryReader {
             cache_path.display()
         );
 
-        let file = File::open(&cache_path).map_err(|e| {
-            Error::Extraction(format!("Failed to open cached extraction: {e}"))
-        })?;
+        let file = File::open(&cache_path)
+            .map_err(|e| Error::Extraction(format!("Failed to open cached extraction: {e}")))?;
 
-        Ok(Self { inner: BufReader::new(file) })
+        Ok(Self {
+            inner: BufReader::new(file),
+        })
     }
 }
 
 impl BufRead for ZipEntryReader {
-    fn fill_buf(&mut self) -> std::io::Result<&[u8]> { self.inner.fill_buf() }
-    fn consume(&mut self, amt: usize) { self.inner.consume(amt) }
+    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+        self.inner.fill_buf()
+    }
+    fn consume(&mut self, amt: usize) {
+        self.inner.consume(amt)
+    }
 }
 
 impl std::io::Read for ZipEntryReader {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> { self.inner.read(buf) }
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.inner.read(buf)
+    }
 }
 
 // Safety: ZipEntryReader wraps a BufReader<File> which is Send.
@@ -845,10 +866,7 @@ fn extract_sections_json(
                             if !target_title.is_empty() {
                                 outgoing_links.push(WikiLink {
                                     target_title,
-                                    link_text: link["text"]
-                                        .as_str()
-                                        .unwrap_or("")
-                                        .to_string(),
+                                    link_text: link["text"].as_str().unwrap_or("").to_string(),
                                 });
                             }
                         }
@@ -899,10 +917,7 @@ fn extract_sections_json(
             .collect();
         if !subsections.is_empty() {
             // Collect into a Vec<Value> slice for the recursive call.
-            let sub_values: Vec<Value> = subsections
-                .into_iter()
-                .cloned()
-                .collect();
+            let sub_values: Vec<Value> = subsections.into_iter().cloned().collect();
             extract_sections_json(
                 &sub_values,
                 article_title,
@@ -924,11 +939,7 @@ fn extract_sections_json(
 mod tests {
     use super::*;
 
-    fn article_json(
-        name: &str,
-        abstract_text: &str,
-        sections: serde_json::Value,
-    ) -> String {
+    fn article_json(name: &str, abstract_text: &str, sections: serde_json::Value) -> String {
         serde_json::json!({
             "name": name,
             "identifier": 12345,

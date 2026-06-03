@@ -400,7 +400,9 @@ impl Default for DaemonSection {
 
 impl Default for DataSection {
     fn default() -> Self {
-        Self { dir: default_data_dir() }
+        Self {
+            dir: default_data_dir(),
+        }
     }
 }
 
@@ -444,30 +446,58 @@ impl Default for WatchedFoldersSection {
     }
 }
 
-fn default_wf_sweep_interval_secs() -> u64 { 120 }
-fn default_wf_grace_secs() -> u64 { 7 * 86_400 }
-fn default_wf_absolute_threshold() -> usize { 100 }
-fn default_wf_fractional_threshold() -> f32 { 0.25 }
-fn default_wf_max_concurrent() -> usize { 2 }
+fn default_wf_sweep_interval_secs() -> u64 {
+    120
+}
+fn default_wf_grace_secs() -> u64 {
+    7 * 86_400
+}
+fn default_wf_absolute_threshold() -> usize {
+    100
+}
+fn default_wf_fractional_threshold() -> f32 {
+    0.25
+}
+fn default_wf_max_concurrent() -> usize {
+    2
+}
 
-fn default_client_port() -> u16 { 9741 }
-fn default_internal_port() -> u16 { 9742 }
-fn default_autostart() -> bool { true }
-fn default_primary_idle_secs() -> u64 { 300 }
+fn default_client_port() -> u16 {
+    9741
+}
+fn default_internal_port() -> u16 {
+    9742
+}
+fn default_autostart() -> bool {
+    true
+}
+fn default_primary_idle_secs() -> u64 {
+    300
+}
 /// Default `0` keeps existing operators on the historical "extras
 /// stay loaded forever" behaviour — they explicitly opt in by
 /// setting a positive value.
-fn default_extras_idle_secs() -> u64 { 0 }
+fn default_extras_idle_secs() -> u64 {
+    0
+}
 /// Default `60` enables foreground-yield with a one-minute window:
 /// background ingest pauses for a minute after each chat request, then
 /// resumes. Set to `0` in `config.toml` to disable on batch hosts
 /// where ingest throughput trumps interactive latency.
-fn default_yield_to_foreground_secs() -> u64 { 60 }
-fn default_freshness_watchers_enabled() -> bool { true }
+fn default_yield_to_foreground_secs() -> u64 {
+    60
+}
+fn default_freshness_watchers_enabled() -> bool {
+    true
+}
 
-fn default_force_tool_calls() -> bool { false }
+fn default_force_tool_calls() -> bool {
+    false
+}
 
-fn default_alternation_grammar() -> bool { false }
+fn default_alternation_grammar() -> bool {
+    false
+}
 
 /// `~/.sovereign/`. Previously lived in `sovereign-cli::util::dirs`;
 /// inlined here so `sovereign-core` has no dependency on the CLI crate.
@@ -531,10 +561,10 @@ impl SetupConfig {
     }
 
     pub fn load_from(path: &Path) -> Result<Self, String> {
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("read {}: {e}", path.display()))?;
-        let mut cfg: SetupConfig = toml::from_str(&content)
-            .map_err(|e| format!("parse {}: {e}", path.display()))?;
+        let content =
+            std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+        let mut cfg: SetupConfig =
+            toml::from_str(&content).map_err(|e| format!("parse {}: {e}", path.display()))?;
         cfg.expand_paths();
         Ok(cfg)
     }
@@ -552,10 +582,8 @@ impl SetupConfig {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("create {}: {e}", parent.display()))?;
         }
-        let toml = toml::to_string_pretty(self)
-            .map_err(|e| format!("serialize config: {e}"))?;
-        std::fs::write(path, toml)
-            .map_err(|e| format!("write {}: {e}", path.display()))?;
+        let toml = toml::to_string_pretty(self).map_err(|e| format!("serialize config: {e}"))?;
+        std::fs::write(path, toml).map_err(|e| format!("write {}: {e}", path.display()))?;
         Ok(())
     }
 
@@ -563,8 +591,7 @@ impl SetupConfig {
     pub fn remove() -> Result<(), String> {
         let path = Self::default_path();
         if path.exists() {
-            std::fs::remove_file(&path)
-                .map_err(|e| format!("remove {}: {e}", path.display()))?;
+            std::fs::remove_file(&path).map_err(|e| format!("remove {}: {e}", path.display()))?;
         }
         Ok(())
     }
@@ -596,7 +623,10 @@ fn migrate_config_between(legacy: &Path, new_path: &Path) {
     }
     if let Some(parent) = new_path.parent() {
         if let Err(e) = std::fs::create_dir_all(parent) {
-            eprintln!("sovereign: migrate config: create {}: {e}", parent.display());
+            eprintln!(
+                "sovereign: migrate config: create {}: {e}",
+                parent.display()
+            );
             return;
         }
     }
@@ -716,7 +746,10 @@ embed = "/models/embed.gguf"
     fn expand_home_resolves_tilde() {
         let home = dirs::home_dir().unwrap();
         assert_eq!(expand_home(Path::new("~/foo/bar")), home.join("foo/bar"));
-        assert_eq!(expand_home(Path::new("/abs/path")), PathBuf::from("/abs/path"));
+        assert_eq!(
+            expand_home(Path::new("/abs/path")),
+            PathBuf::from("/abs/path")
+        );
     }
 
     #[test]
@@ -826,7 +859,10 @@ yield_to_foreground_secs = 0
         migrate_config_between(&legacy, &new_path);
 
         assert!(new_path.exists(), "new path should exist after migration");
-        assert!(!legacy.exists(), "legacy path should be gone after migration");
+        assert!(
+            !legacy.exists(),
+            "legacy path should be gone after migration"
+        );
         assert_eq!(
             std::fs::read_to_string(&new_path).unwrap(),
             "primary=\"/m/p.gguf\"\n"
@@ -969,6 +1005,9 @@ reasoning = "~/dev/big.gguf"
         let path = tmp.path().join("config.toml");
         std::fs::write(&path, toml_str).unwrap();
         let cfg = SetupConfig::load_from(&path).unwrap();
-        assert_eq!(cfg.models.extra.get("reasoning"), Some(&home.join("dev/big.gguf")));
+        assert_eq!(
+            cfg.models.extra.get("reasoning"),
+            Some(&home.join("dev/big.gguf"))
+        );
     }
 }

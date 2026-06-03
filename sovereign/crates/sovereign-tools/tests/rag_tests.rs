@@ -94,9 +94,18 @@ async fn ingest_directory_txt_files() {
 #[tokio::test]
 async fn ingest_and_search_documents() {
     let dir = tempdir_with_files(&[
-        ("rust.txt", "Rust provides memory safety without garbage collection through its ownership system."),
-        ("python.txt", "Python is an interpreted language popular for machine learning and data analysis."),
-        ("go.txt", "Go was designed at Google for building scalable networked services."),
+        (
+            "rust.txt",
+            "Rust provides memory safety without garbage collection through its ownership system.",
+        ),
+        (
+            "python.txt",
+            "Python is an interpreted language popular for machine learning and data analysis.",
+        ),
+        (
+            "go.txt",
+            "Go was designed at Google for building scalable networked services.",
+        ),
     ]);
 
     let store = SqliteStateStore::open_in_memory().unwrap();
@@ -151,10 +160,14 @@ struct SummaryMockInference;
 impl InferenceProvider for SummaryMockInference {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
         // Return a mock summary based on what was asked.
-        let text = if request.prompt.contains("Synthesize") || request.prompt.contains("synthesize") {
+        let text = if request.prompt.contains("Synthesize") || request.prompt.contains("synthesize")
+        {
             "Final comprehensive summary of all sections.".to_string()
         } else {
-            format!("Summary of: {}...", &request.prompt[..request.prompt.len().min(50)])
+            format!(
+                "Summary of: {}...",
+                &request.prompt[..request.prompt.len().min(50)]
+            )
         };
         Ok(CompletionResponse {
             text,
@@ -164,9 +177,13 @@ impl InferenceProvider for SummaryMockInference {
             latency_ms: 1,
             oicp_meta: None,
             finish_reason: None,
-            completion_tokens: None,        })
+            completion_tokens: None,
+        })
     }
-    async fn complete_stream(&self, _: &CompletionRequest) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+    async fn complete_stream(
+        &self,
+        _: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
         Err(Error::NotImplemented("mock".to_string()))
     }
     async fn embed(&self, _: &str) -> Result<Vec<f32>> {
@@ -234,9 +251,11 @@ async fn document_tool_summarize_large() {
     // Ingest a document with 10 chunks (triggers map-reduce).
     let chunks: Vec<DocumentChunk> = (0..10)
         .map(|i| DocumentChunk {
-            id: format!("big:{}",i),
+            id: format!("big:{}", i),
             source: "big.txt".to_string(),
-            content: format!("Chapter {i}. This is a lengthy chapter about topic {i} with lots of detail."),
+            content: format!(
+                "Chapter {i}. This is a lengthy chapter about topic {i} with lots of detail."
+            ),
             chunk_index: i,
             embedding: None,
             created_at: 0,
@@ -266,8 +285,10 @@ async fn document_tool_summarize_large() {
 
     if let StepOutput::Text(text) = result {
         // Should contain the final synthesis.
-        assert!(text.contains("comprehensive summary") || text.contains("Summary"),
-            "Expected synthesis output, got: {text}");
+        assert!(
+            text.contains("comprehensive summary") || text.contains("Summary"),
+            "Expected synthesis output, got: {text}"
+        );
     } else {
         panic!("Expected StepOutput::Text");
     }

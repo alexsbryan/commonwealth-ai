@@ -124,10 +124,7 @@ pub fn traverse(plan: &QueryPlan, atlas: AtlasView<'_>) -> TraversalResult {
     }
 }
 
-fn resolve_target<'a>(
-    target: &QueryTarget,
-    entities: &'a [Entity],
-) -> Option<&'a Entity> {
+fn resolve_target<'a>(target: &QueryTarget, entities: &'a [Entity]) -> Option<&'a Entity> {
     match target {
         QueryTarget::Resolved { entity_id, .. } => {
             entities.iter().find(|e| e.id.as_str() == entity_id)
@@ -156,7 +153,11 @@ fn traverse_entity_lookup(target: &QueryTarget, atlas: AtlasView<'_>) -> Travers
 
     // Claims attributed to this entity.
     for c in atlas.claims {
-        if c.attributed_to.as_ref().map(|a| a == &entity.id).unwrap_or(false) {
+        if c.attributed_to
+            .as_ref()
+            .map(|a| a == &entity.id)
+            .unwrap_or(false)
+        {
             result.claims.push(c.clone());
         }
     }
@@ -214,15 +215,16 @@ fn traverse_entity_lookup(target: &QueryTarget, atlas: AtlasView<'_>) -> Travers
     // alone). Tokens shorter than 4 chars dropped to avoid spurious
     // hits ("the", "and", "of").
     let mut entity_names_lower: Vec<String> = Vec::new();
-    for raw in std::iter::once(entity.canonical_name.clone())
-        .chain(entity.aliases.iter().cloned())
+    for raw in std::iter::once(entity.canonical_name.clone()).chain(entity.aliases.iter().cloned())
     {
         let lower = raw.to_lowercase();
         if lower.len() >= 4 && !entity_names_lower.contains(&lower) {
             entity_names_lower.push(lower.clone());
         }
         for tok in raw.split_whitespace() {
-            let t = tok.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase();
+            let t = tok
+                .trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase();
             if t.len() >= 4 && !entity_names_lower.contains(&t) {
                 entity_names_lower.push(t);
             }
@@ -276,7 +278,10 @@ fn traverse_trajectory(target: &QueryTarget, atlas: AtlasView<'_>) -> TraversalR
     if states.is_empty() {
         return TraversalResult::miss(
             "trajectory",
-            format!("The atlas has no state atoms for {}.", entity.canonical_name),
+            format!(
+                "The atlas has no state atoms for {}.",
+                entity.canonical_name
+            ),
         );
     }
 
@@ -315,7 +320,10 @@ fn traverse_relation_lookup(
     b: &QueryTarget,
     atlas: AtlasView<'_>,
 ) -> TraversalResult {
-    let (ea, eb) = match (resolve_target(a, atlas.entities), resolve_target(b, atlas.entities)) {
+    let (ea, eb) = match (
+        resolve_target(a, atlas.entities),
+        resolve_target(b, atlas.entities),
+    ) {
         (Some(x), Some(y)) => (x, y),
         _ => {
             let label_a = match a {
@@ -358,7 +366,8 @@ fn traverse_relation_lookup(
     );
     result.entities.push(ea.clone());
     result.entities.push(eb.clone());
-    let relation_ids: HashSet<String> = matching.iter().map(|r| r.id.as_str().to_string()).collect();
+    let relation_ids: HashSet<String> =
+        matching.iter().map(|r| r.id.as_str().to_string()).collect();
     result.relations = matching.into_iter().cloned().collect();
 
     // States owned by the relation(s).
@@ -373,9 +382,7 @@ fn traverse_relation_lookup(
 
     // Any Involves edges connecting the relations to these entities.
     for edge in atlas.edges {
-        if edge.edge_type == EdgeType::Involves
-            && relation_ids.contains(edge.source.as_str())
-        {
+        if edge.edge_type == EdgeType::Involves && relation_ids.contains(edge.source.as_str()) {
             result.edges.push(edge.clone());
         }
     }
@@ -468,8 +475,7 @@ fn traverse_corpus_overview(atlas: AtlasView<'_>) -> TraversalResult {
 mod tests {
     use super::*;
     use crate::enrichment::atlas::atoms::{
-        AtomId, ChunkRef, Claim, Entity, Question, Relation, ResolutionStatus, SectionRange,
-        State,
+        AtomId, ChunkRef, Claim, Entity, Question, Relation, ResolutionStatus, SectionRange, State,
     };
     use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
     use crate::enrichment::pipeline::atlas::{
@@ -491,10 +497,10 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-}
-}
+            provenance: Default::default(),
+            concept_kind: None,
+        }
+    }
 
     fn state(idx: usize, owner: usize, label: &str, section: &str) -> State {
         State {
@@ -548,11 +554,11 @@ mod tests {
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
             quotable_excerpt: None,
-                    claim_kind: None,
+            claim_kind: None,
             concession_outcome: None,
             evidence_kind: None,
-}
-}
+        }
+    }
 
     fn question(idx: usize, content: &str) -> Question {
         Question {
@@ -574,7 +580,11 @@ mod tests {
         Vec<Claim>,
         Vec<Question>,
     ) {
-        let entities = vec![entity(1, "Alyosha"), entity(2, "Zossima"), entity(3, "Fyodor")];
+        let entities = vec![
+            entity(1, "Alyosha"),
+            entity(2, "Zossima"),
+            entity(3, "Fyodor"),
+        ];
         let states = vec![
             state(1, 1, "naive novice", "sec_0001"),
             state(2, 1, "resolves to leave", "sec_0003"),
@@ -618,7 +628,10 @@ mod tests {
                 matched_form: "Zossima".into(),
             },
         };
-        let result = traverse(&plan, view(&ents, &states, &rels, &edges, &claims, &questions));
+        let result = traverse(
+            &plan,
+            view(&ents, &states, &rels, &edges, &claims, &questions),
+        );
         assert!(result.hit);
         assert_eq!(result.entities.len(), 1);
         assert_eq!(result.entities[0].canonical_name, "Zossima");
@@ -635,7 +648,10 @@ mod tests {
                 raw_name: "Grushenka".into(),
             },
         };
-        let result = traverse(&plan, view(&ents, &states, &rels, &edges, &claims, &questions));
+        let result = traverse(
+            &plan,
+            view(&ents, &states, &rels, &edges, &claims, &questions),
+        );
         assert!(!result.hit);
         assert!(result.headline.contains("Grushenka"));
     }
@@ -649,7 +665,10 @@ mod tests {
                 matched_form: "Alyosha".into(),
             },
         };
-        let result = traverse(&plan, view(&ents, &states, &rels, &edges, &claims, &questions));
+        let result = traverse(
+            &plan,
+            view(&ents, &states, &rels, &edges, &claims, &questions),
+        );
         assert!(result.hit);
         assert_eq!(result.states.len(), 2);
         // Section order — sec_0001 before sec_0003.
@@ -671,7 +690,10 @@ mod tests {
                 matched_form: "Zossima".into(),
             },
         };
-        let result = traverse(&plan, view(&ents, &states, &rels, &edges, &claims, &questions));
+        let result = traverse(
+            &plan,
+            view(&ents, &states, &rels, &edges, &claims, &questions),
+        );
         assert!(result.hit);
         assert_eq!(result.relations.len(), 1);
         assert_eq!(result.relations[0].label, "Mentor-mentee");
@@ -690,7 +712,10 @@ mod tests {
                 matched_form: "Fyodor".into(),
             },
         };
-        let result = traverse(&plan, view(&ents, &states, &rels, &edges, &claims, &questions));
+        let result = traverse(
+            &plan,
+            view(&ents, &states, &rels, &edges, &claims, &questions),
+        );
         assert!(!result.hit);
         assert!(result.headline.contains("no direct relation"));
     }

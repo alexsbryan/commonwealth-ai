@@ -361,10 +361,7 @@ mod tests {
         }
         // After the burst we expect ONE quarantine, not four.
         let snap = h.snapshot();
-        let pod = snap
-            .iter()
-            .find(|r| r.0 == "pod")
-            .expect("pod recorded");
+        let pod = snap.iter().find(|r| r.0 == "pod").expect("pod recorded");
         // seconds_until_recovery should be close to INITIAL_COOLDOWN,
         // not 4× it. Tolerate up to a few seconds of test runtime
         // skew; the real test is that it isn't multiples larger.

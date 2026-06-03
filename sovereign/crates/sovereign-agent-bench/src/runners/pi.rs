@@ -80,18 +80,25 @@ const NO_PROGRESS_CHECK_EVERY: u32 = 1;
 // `runners::shared_detectors` so the native runner can reuse them
 // (ARCH §10.3). Re-imported below.
 
-use crate::runners::shared_detectors::{
-    ThrashSignal, ThrashTracker, SAME_PATH_WRITE_THRESHOLD,
-};
+use crate::runners::shared_detectors::{ThrashSignal, ThrashTracker, SAME_PATH_WRITE_THRESHOLD};
 
 /// Why the budget kill fired (used internally to classify the artifact's
 /// `ExitReason`).
 #[derive(Debug, Clone)]
 enum KillReason {
-    Tokens { cap: u64, observed: u64 },
-    Wall { cap_seconds: u64 },
-    NoProgress { consecutive: u32 },
-    WriteThrash { consecutive_writes: u32 },
+    Tokens {
+        cap: u64,
+        observed: u64,
+    },
+    Wall {
+        cap_seconds: u64,
+    },
+    NoProgress {
+        consecutive: u32,
+    },
+    WriteThrash {
+        consecutive_writes: u32,
+    },
     /// Model emitted the `done` virtual tool. Pi-agent-core has no
     /// max-iteration heuristic and won't terminate on `done` by
     /// itself (per `invariant_pi_done_heuristic` — it exits only
@@ -196,14 +203,10 @@ impl AgentRunner for PiRunner {
             cmd.env(k, v);
         }
 
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| match e.kind() {
-                std::io::ErrorKind::NotFound => {
-                    AgentRunError::BinaryNotFound(self.binary_path())
-                }
-                _ => AgentRunError::SpawnFailed(e.to_string()),
-            })?;
+        let mut child = cmd.spawn().map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => AgentRunError::BinaryNotFound(self.binary_path()),
+            _ => AgentRunError::SpawnFailed(e.to_string()),
+        })?;
 
         let stdout = child
             .stdout
@@ -283,22 +286,20 @@ impl AgentRunner for PiRunner {
                     // SIGTERM. Resets to zero whenever the workdir
                     // actually changes.
                     if turn_tools > 0 {
-                        calls_since_check =
-                            calls_since_check.saturating_add(turn_tools as u32);
+                        calls_since_check = calls_since_check.saturating_add(turn_tools as u32);
                         if calls_since_check >= NO_PROGRESS_CHECK_EVERY {
                             calls_since_check = 0;
                             let current_hash = hash_workdir(&workdir_path_for_reader);
                             if current_hash == last_workdir_hash {
-                                consecutive_no_progress_calls = consecutive_no_progress_calls
-                                    .saturating_add(turn_tools as u32);
+                                consecutive_no_progress_calls =
+                                    consecutive_no_progress_calls.saturating_add(turn_tools as u32);
                                 tracing::debug!(
                                     problem = %problem_id,
                                     consecutive = consecutive_no_progress_calls,
                                     threshold = NO_PROGRESS_TOOL_CALLS_THRESHOLD,
                                     "agent_bench: no-progress increment"
                                 );
-                                if consecutive_no_progress_calls
-                                    >= NO_PROGRESS_TOOL_CALLS_THRESHOLD
+                                if consecutive_no_progress_calls >= NO_PROGRESS_TOOL_CALLS_THRESHOLD
                                 {
                                     if let Some(tx) = kill_tx_opt.take() {
                                         tracing::warn!(
@@ -440,12 +441,10 @@ impl AgentRunner for PiRunner {
                         consecutive_tool_calls: consecutive,
                         threshold: NO_PROGRESS_TOOL_CALLS_THRESHOLD,
                     },
-                    KillReason::WriteThrash { consecutive_writes } => {
-                        ExitReason::WriteThrash {
-                            consecutive_writes,
-                            threshold: SAME_PATH_WRITE_THRESHOLD,
-                        }
-                    }
+                    KillReason::WriteThrash { consecutive_writes } => ExitReason::WriteThrash {
+                        consecutive_writes,
+                        threshold: SAME_PATH_WRITE_THRESHOLD,
+                    },
                     KillReason::ModelDone => ExitReason::Completed,
                 }
             }
@@ -500,11 +499,9 @@ impl AgentRunner for PiRunner {
 
         // Stamp stderr into Crashed reason when applicable.
         let exit_reason = match exit_reason {
-            ExitReason::Crashed { stderr_tail: prior } if prior.is_empty() => {
-                ExitReason::Crashed {
-                    stderr_tail: cap_tail(&stderr_tail),
-                }
-            }
+            ExitReason::Crashed { stderr_tail: prior } if prior.is_empty() => ExitReason::Crashed {
+                stderr_tail: cap_tail(&stderr_tail),
+            },
             other => other,
         };
 
@@ -729,10 +726,7 @@ fn cap_tail(s: &str) -> String {
         s.to_string()
     } else {
         let cut = s.len() - STDERR_TAIL_CAP_BYTES;
-        format!(
-            "... (truncated {cut} leading bytes) ...\n{}",
-            &s[cut..]
-        )
+        format!("... (truncated {cut} leading bytes) ...\n{}", &s[cut..])
     }
 }
 
@@ -773,13 +767,12 @@ fn parse_pi_line(line: &str) -> ParsedEvent {
     match kind {
         "message_end" => {
             let msg = v.get("message").cloned().unwrap_or(Value::Null);
-            let role = msg
-                .get("role")
-                .and_then(|x| x.as_str())
-                .unwrap_or("");
+            let role = msg.get("role").and_then(|x| x.as_str()).unwrap_or("");
             let usage = msg.get("usage").cloned().unwrap_or(Value::Null);
-            let input_tokens = extract_token_count(&usage, &["input_tokens", "inputTokens", "input"]);
-            let output_tokens = extract_token_count(&usage, &["output_tokens", "outputTokens", "output"]);
+            let input_tokens =
+                extract_token_count(&usage, &["input_tokens", "inputTokens", "input"]);
+            let output_tokens =
+                extract_token_count(&usage, &["output_tokens", "outputTokens", "output"]);
             // Only credit tokens to assistant messages — user-message
             // echoes also carry message_end events but with zero usage.
             // Defensive: zero-usage events fall through harmlessly anyway.
@@ -843,7 +836,9 @@ fn harvest_assistant_blocks(
                     // outcomes leave `canonical_kind = None`,
                     // which the failure-class aggregator surfaces.
                     let canonical_kind = {
-                        use commonwealth_agent_tools::adapter::{AgentToolAdapter, pi as pi_adapter};
+                        use commonwealth_agent_tools::adapter::{
+                            pi as pi_adapter, AgentToolAdapter,
+                        };
                         let adapter = pi_adapter::Adapter::default()
                             .with_problem_commands(pi_build_cmd, pi_verify_cmd);
                         adapter.translate(&name, &input).canonical_kind()
@@ -928,7 +923,11 @@ mod tests {
             {"type": "tool_use", "id": "abc", "name": "write", "input": {"path": "src/lib.rs", "content": "pub fn solve() {}"}},
             {"type": "text", "text": "Done."},
         ]);
-        let (tools, text) = harvest_assistant_blocks(&content, "cargo build", "cargo test --quiet --test integration");
+        let (tools, text) = harvest_assistant_blocks(
+            &content,
+            "cargo build",
+            "cargo test --quiet --test integration",
+        );
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].tool, "write");
         assert!(tools[0].args_preview.contains("src/lib.rs"));
@@ -938,14 +937,16 @@ mod tests {
 
     #[test]
     fn harvest_handles_empty_content() {
-        let (tools, text) = harvest_assistant_blocks(&serde_json::json!([]), "cargo build", "cargo test");
+        let (tools, text) =
+            harvest_assistant_blocks(&serde_json::json!([]), "cargo build", "cargo test");
         assert!(tools.is_empty());
         assert!(text.is_empty());
     }
 
     #[test]
     fn harvest_handles_null_content() {
-        let (tools, text) = harvest_assistant_blocks(&serde_json::Value::Null, "cargo build", "cargo test");
+        let (tools, text) =
+            harvest_assistant_blocks(&serde_json::Value::Null, "cargo build", "cargo test");
         assert!(tools.is_empty());
         assert!(text.is_empty());
     }
@@ -981,8 +982,7 @@ mod tests {
         // pi tools the bench exposes. If a future PR adds a tool to
         // the adapter (e.g. opens up `mv` for some new primitive)
         // without updating PI_TOOL_ALLOWLIST, this fails.
-        let canonical =
-            commonwealth_agent_tools::adapter::pi::Adapter::pi_tool_allowlist();
+        let canonical = commonwealth_agent_tools::adapter::pi::Adapter::pi_tool_allowlist();
         assert_eq!(PI_TOOL_ALLOWLIST, canonical);
     }
 
@@ -1014,8 +1014,14 @@ mod tests {
         ]);
         let tools = tools_in_turn(&content);
         assert_eq!(tools.len(), 3);
-        assert_eq!(tools[0], ("read".to_string(), Some("src/lib.rs".to_string())));
-        assert_eq!(tools[1], ("write".to_string(), Some("src/lib.rs".to_string())));
+        assert_eq!(
+            tools[0],
+            ("read".to_string(), Some("src/lib.rs".to_string()))
+        );
+        assert_eq!(
+            tools[1],
+            ("write".to_string(), Some("src/lib.rs".to_string()))
+        );
         assert_eq!(tools[2], ("bash".to_string(), None));
     }
 }

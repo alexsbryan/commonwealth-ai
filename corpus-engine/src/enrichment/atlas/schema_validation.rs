@@ -59,8 +59,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::atoms::{
-    AtomEnvelope, AtomsFile, Claim, Configuration, Entity, Event, Question,
-    ResolutionStatus, State,
+    AtomEnvelope, AtomsFile, Claim, Configuration, Entity, Event, Question, ResolutionStatus, State,
 };
 use super::cross_corpus::CrossCorpusEdgesFile;
 use super::edges::{Edge, EdgeType, EdgesFile};
@@ -288,8 +287,7 @@ impl CrossCorpusConnectivity {
         if self.local_entity_atom_count == 0 {
             return Vec::new();
         }
-        let fraction =
-            self.local_atoms_with_outbound as f32 / self.local_entity_atom_count as f32;
+        let fraction = self.local_atoms_with_outbound as f32 / self.local_entity_atom_count as f32;
         if fraction < 0.05 {
             vec!["cross_corpus:bridge_coverage_under_5pct".to_string()]
         } else {
@@ -323,8 +321,7 @@ impl DeterministicGapCounts {
         // >= 80% transitions without triggers → Phase 3b isn't
         // linking Events to Transitions.
         if self.total_transitions > 0
-            && (self.transition_without_trigger as f32 / self.total_transitions as f32)
-                >= 0.80
+            && (self.transition_without_trigger as f32 / self.total_transitions as f32) >= 0.80
         {
             out.push("gaps:transition_without_trigger_over_80pct".to_string());
         }
@@ -468,7 +465,15 @@ fn partition_atoms(
             }
         }
     }
-    (entities, events, states, relations, claims, questions, configurations)
+    (
+        entities,
+        events,
+        states,
+        relations,
+        claims,
+        questions,
+        configurations,
+    )
 }
 
 fn build_extraction_coverage(
@@ -522,9 +527,9 @@ fn build_depth_distribution(
     let mut structural = 0;
     let mut structural_classified = 0;
     let bump = |d: &EnrichmentDepth,
-                 extracted: &mut usize,
-                 structural: &mut usize,
-                 structural_classified: &mut usize| match d {
+                extracted: &mut usize,
+                structural: &mut usize,
+                structural_classified: &mut usize| match d {
         EnrichmentDepth::Extracted => *extracted += 1,
         EnrichmentDepth::Structural => *structural += 1,
         EnrichmentDepth::StructuralClassified => *structural_classified += 1,
@@ -738,8 +743,7 @@ fn build_orphan_analysis(atoms: &[AtomEnvelope], edges: &[Edge]) -> OrphanAnalys
 }
 
 fn build_discourse_distribution(claims: &[Claim]) -> DiscourseDistribution {
-    let mut counts: std::collections::HashMap<String, usize> =
-        std::collections::HashMap::new();
+    let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for c in claims {
         let label = discourse_tag(&c.discourse_act);
         *counts.entry(label.to_string()).or_insert(0) += 1;
@@ -751,10 +755,7 @@ fn build_discourse_distribution(claims: &[Claim]) -> DiscourseDistribution {
         .collect();
     buckets.sort_by(|a, b| b.count.cmp(&a.count));
     let (top_act, top_fraction) = match buckets.first() {
-        Some(b) if total_claims > 0 => (
-            Some(b.act.clone()),
-            b.count as f32 / total_claims as f32,
-        ),
+        Some(b) if total_claims > 0 => (Some(b.act.clone()), b.count as f32 / total_claims as f32),
         _ => (None, 0.0),
     };
     DiscourseDistribution {
@@ -797,8 +798,7 @@ fn build_cross_corpus_connectivity(
         .iter()
         .filter(|e| e.edge.edge_type == EdgeType::Grounding)
         .count();
-    let mut outbound_sources: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
+    let mut outbound_sources: std::collections::HashSet<String> = std::collections::HashSet::new();
     for e in &file.edges {
         outbound_sources.insert(e.edge.source.as_str().to_string());
     }
@@ -957,11 +957,11 @@ fn recommendation_for(signature: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::atoms::{
         AtomId, ChunkRef, Entity, Event, SectionPosition, SectionRange, State,
     };
     use super::super::edges::{Edge, EdgeId, EdgeProvenance};
+    use super::*;
     use crate::enrichment::pipeline::atlas::{
         ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus, EventType,
         StateType,
@@ -981,10 +981,10 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-}
-}
+            provenance: Default::default(),
+            concept_kind: None,
+        }
+    }
 
     fn claim_with_act(idx: usize, act: DiscourseAct, confidence: f32) -> Claim {
         Claim {
@@ -999,11 +999,11 @@ mod tests {
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
             quotable_excerpt: None,
-                    claim_kind: None,
+            claim_kind: None,
             concession_outcome: None,
             evidence_kind: None,
-}
-}
+        }
+    }
 
     fn state(idx: usize, owner: usize, confidence: f32) -> State {
         State {
@@ -1108,12 +1108,10 @@ mod tests {
             transitions_without_trigger: 0,
         });
         assert!(report.confidence.low_confidence_fraction > 0.5);
-        assert!(
-            report
-                .confidence
-                .gap_signatures()
-                .contains(&"confidence:low_fraction_over_20pct".to_string())
-        );
+        assert!(report
+            .confidence
+            .gap_signatures()
+            .contains(&"confidence:low_fraction_over_20pct".to_string()));
     }
 
     #[test]
@@ -1143,12 +1141,10 @@ mod tests {
         });
         assert_eq!(report.discourse.top_act.as_deref(), Some("assert"));
         assert!(report.discourse.top_fraction >= 0.90);
-        assert!(
-            report
-                .discourse
-                .gap_signatures()
-                .contains(&"discourse:dominance:assert".to_string())
-        );
+        assert!(report
+            .discourse
+            .gap_signatures()
+            .contains(&"discourse:dominance:assert".to_string()));
     }
 
     #[test]
@@ -1161,10 +1157,9 @@ mod tests {
             total_claims: 40,
             total_questions: 0,
         };
-        assert!(
-            gaps.gap_signatures()
-                .contains(&"gaps:ungrounded_claim_over_50pct".to_string())
-        );
+        assert!(gaps
+            .gap_signatures()
+            .contains(&"gaps:ungrounded_claim_over_50pct".to_string()));
     }
 
     #[test]
@@ -1177,10 +1172,9 @@ mod tests {
             total_claims: 0,
             total_questions: 0,
         };
-        assert!(
-            gaps.gap_signatures()
-                .contains(&"gaps:transition_without_trigger_over_80pct".to_string())
-        );
+        assert!(gaps
+            .gap_signatures()
+            .contains(&"gaps:transition_without_trigger_over_80pct".to_string()));
     }
 
     #[test]
@@ -1420,12 +1414,10 @@ mod tests {
             ungrounded_claims: 0,
             transitions_without_trigger: 0,
         });
-        assert!(
-            report
-                .utilisation
-                .under_utilised_types
-                .contains(&"Claim".to_string())
-        );
+        assert!(report
+            .utilisation
+            .under_utilised_types
+            .contains(&"Claim".to_string()));
     }
 
     #[test]

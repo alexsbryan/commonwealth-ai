@@ -93,16 +93,16 @@ pub async fn generate_title_from_messages(
         top_k: None,
         top_p: None,
         oicp: None,
-                tools: None,
-                tool_choice: None,
-                    model_id: None,
-                    enable_thinking: None,
-    sampling_mode: None,
-    assistant_prefix: None,
-    cmd_prefix: None,
-    url_allowlist: None,
-    evidence_id_allowlist: None,
-    lark_grammar: None,
+        tools: None,
+        tool_choice: None,
+        model_id: None,
+        enable_thinking: None,
+        sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -242,7 +242,8 @@ fn sanitize_title(raw: &str) -> String {
                 // actual answer after the planning dump.
                 after_think
                     .lines()
-                    .map(str::trim).rfind(|l| !l.is_empty())
+                    .map(str::trim)
+                    .rfind(|l| !l.is_empty())
                     .unwrap_or("")
                     .to_string()
             }
@@ -352,9 +353,7 @@ pub fn strip_thinking_response(raw: &str) -> String {
         "Reasoning Process:",
         "Internal reasoning:",
     ];
-    let has_preamble = PREAMBLE_OPENERS
-        .iter()
-        .any(|m| trimmed.starts_with(m));
+    let has_preamble = PREAMBLE_OPENERS.iter().any(|m| trimmed.starts_with(m));
     if has_preamble {
         // Try to find a clean break to a reply: a "Final reply:" /
         // "Reply:" / "Response:" delimiter, OR a double-newline
@@ -465,9 +464,7 @@ where
                     Some(Ok(chunk)) => {
                         buffer.push_str(&chunk);
                         if let Some(idx) = buffer.find(CLOSE) {
-                            let after = buffer[idx + CLOSE.len()..]
-                                .trim_start()
-                                .to_string();
+                            let after = buffer[idx + CLOSE.len()..].trim_start().to_string();
                             st.phase = Phase::Emitting;
                             if !after.is_empty() {
                                 return Some((Ok(after), st));
@@ -558,9 +555,7 @@ pub fn strip_source_citations(raw: &str) -> String {
                         // preceding space so we don't leave a "word ."
                         // seam.
                         let mut emit_end = open_idx;
-                        if emit_end > 0
-                            && remaining.as_bytes()[emit_end - 1] == b' '
-                        {
+                        if emit_end > 0 && remaining.as_bytes()[emit_end - 1] == b' ' {
                             emit_end -= 1;
                         }
                         out.push_str(&remaining[..emit_end]);
@@ -812,10 +807,7 @@ mod tests {
 
     #[test]
     fn sanitize_strips_curly_quotes() {
-        assert_eq!(
-            sanitize_title("\u{201C}Hello world\u{201D}"),
-            "Hello world"
-        );
+        assert_eq!(sanitize_title("\u{201C}Hello world\u{201D}"), "Hello world");
     }
 
     #[test]
@@ -951,9 +943,7 @@ mod tests {
     }
 
     async fn collect(
-        stream: std::pin::Pin<
-            Box<dyn futures::Stream<Item = CoreResult<String>> + Send>,
-        >,
+        stream: std::pin::Pin<Box<dyn futures::Stream<Item = CoreResult<String>> + Send>>,
     ) -> Vec<String> {
         let mut out = Vec::new();
         let mut s = stream;
@@ -1055,10 +1045,7 @@ mod tests {
     fn citations_drop_multiple_in_one_paragraph() {
         let raw =
             "Robinson [Source: Joan Robinson] critiqued the model [Source: Cambridge Capital].";
-        assert_eq!(
-            strip_source_citations(raw),
-            "Robinson critiqued the model."
-        );
+        assert_eq!(strip_source_citations(raw), "Robinson critiqued the model.");
     }
 
     #[test]
@@ -1077,8 +1064,7 @@ mod tests {
     #[test]
     fn citations_unclosed_marker_left_alone() {
         // No `]` within the cap — emit verbatim rather than swallow rest.
-        let raw =
-            "weird sentence with [Source: this never closes and just keeps going forever";
+        let raw = "weird sentence with [Source: this never closes and just keeps going forever";
         assert_eq!(strip_source_citations(raw), raw);
     }
 
@@ -1095,7 +1081,14 @@ mod tests {
     async fn citations_stream_strips_marker_split_across_chunks() {
         // Worst case: marker is fragmented byte-by-byte across chunks.
         let inner = ok_stream(vec![
-            "the framework ", "[", "Source", ":", " Project", " management", "]", " continues.",
+            "the framework ",
+            "[",
+            "Source",
+            ":",
+            " Project",
+            " management",
+            "]",
+            " continues.",
         ]);
         let out = collect(strip_source_citations_stream(inner)).await;
         assert_eq!(out.concat(), "the framework continues.");

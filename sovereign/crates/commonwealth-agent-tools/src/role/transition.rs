@@ -22,10 +22,7 @@ pub enum TransitionTrigger {
 /// Compute next role after the active role's turn ended with the
 /// given trigger. Returns `Some(next_role)` to flip, `None` to
 /// terminate the run, or `Some(current)` to stay in the same role.
-pub fn transition_after(
-    current: Role,
-    trigger: TransitionTrigger,
-) -> NextRole {
+pub fn transition_after(current: Role, trigger: TransitionTrigger) -> NextRole {
     match (current, trigger) {
         // Termination: agent_done from any role.
         (_, TransitionTrigger::Primitive(PrimitiveKind::AgentDone)) => NextRole::Terminate,
@@ -55,10 +52,9 @@ pub fn transition_after(
         (Role::Implementer, TransitionTrigger::Primitive(PrimitiveKind::ReplaceFunction)) => {
             NextRole::Flip(Role::Evaluator)
         }
-        (
-            Role::Implementer,
-            TransitionTrigger::Primitive(PrimitiveKind::HandoffToEvaluator),
-        ) => NextRole::Flip(Role::Evaluator),
+        (Role::Implementer, TransitionTrigger::Primitive(PrimitiveKind::HandoffToEvaluator)) => {
+            NextRole::Flip(Role::Evaluator)
+        }
         // Inspect doesn't flip — Implementer can re-look without
         // committing to a write.
         (Role::Implementer, TransitionTrigger::Primitive(PrimitiveKind::InspectWorkdir)) => {
@@ -68,17 +64,12 @@ pub fn transition_after(
         (Role::Implementer, TransitionTrigger::NoToolCall) => NextRole::Flip(Role::Evaluator),
 
         // Evaluator: handoff_to_implementer flips back.
-        (
-            Role::Evaluator,
-            TransitionTrigger::Primitive(PrimitiveKind::HandoffToImplementer),
-        ) => NextRole::Flip(Role::Implementer),
+        (Role::Evaluator, TransitionTrigger::Primitive(PrimitiveKind::HandoffToImplementer)) => {
+            NextRole::Flip(Role::Implementer)
+        }
         // build / smoke don't flip; Evaluator continues deciding.
-        (Role::Evaluator, TransitionTrigger::Primitive(PrimitiveKind::Build)) => {
-            NextRole::Stay
-        }
-        (Role::Evaluator, TransitionTrigger::Primitive(PrimitiveKind::Smoke)) => {
-            NextRole::Stay
-        }
+        (Role::Evaluator, TransitionTrigger::Primitive(PrimitiveKind::Build)) => NextRole::Stay,
+        (Role::Evaluator, TransitionTrigger::Primitive(PrimitiveKind::Smoke)) => NextRole::Stay,
         // No tool call: Evaluator's forced first tool already ran;
         // assume it's deciding — stay.
         (Role::Evaluator, TransitionTrigger::NoToolCall) => NextRole::Stay,
@@ -173,10 +164,7 @@ mod tests {
     #[test]
     fn agent_done_from_any_role_terminates() {
         for r in Role::all() {
-            let next = transition_after(
-                *r,
-                TransitionTrigger::Primitive(PrimitiveKind::AgentDone),
-            );
+            let next = transition_after(*r, TransitionTrigger::Primitive(PrimitiveKind::AgentDone));
             assert_eq!(next, NextRole::Terminate);
         }
     }

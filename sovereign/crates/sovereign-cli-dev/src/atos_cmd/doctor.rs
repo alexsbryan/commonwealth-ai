@@ -137,7 +137,10 @@ pub(crate) async fn cmd_doctor(_args: &[String]) -> i32 {
     // 9. Fast inference slot — inspect /oicp/v1/capabilities.
     match probe_fast_slot().await {
         Ok(true) => report.pass("fast inference slot", "capability present".into()),
-        Ok(false) => report.warn("fast inference slot", "no fast-capable model registered".into()),
+        Ok(false) => report.warn(
+            "fast inference slot",
+            "no fast-capable model registered".into(),
+        ),
         Err(e) => report.warn("fast inference slot", format!("probe failed: {e}")),
     }
 
@@ -159,7 +162,10 @@ async fn check_feature(
     // spec.md exists
     let spec_path = sovereign_atos::approval::spec_path(repo_root, &f.id);
     if !spec_path.exists() {
-        report.fail(&label, format!("spec.md missing at {}", spec_path.display()));
+        report.fail(
+            &label,
+            format!("spec.md missing at {}", spec_path.display()),
+        );
         return;
     }
 

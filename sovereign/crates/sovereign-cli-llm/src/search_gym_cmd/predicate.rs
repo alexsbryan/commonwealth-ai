@@ -104,15 +104,33 @@ impl Predicate {
     /// fixture-author smell.
     pub fn constraint_count(&self) -> usize {
         let mut n = 0;
-        if self.should_call_search.is_some() { n += 1; }
-        if !self.forbidden_tools.is_empty() { n += 1; }
-        if self.expected_first_tool.is_some() { n += 1; }
-        if self.max_search_calls.is_some() { n += 1; }
-        if self.expected_query_max_tokens.is_some() { n += 1; }
-        if self.must_cite_url_from_mock.is_some() { n += 1; }
-        if self.must_not_cite_url_outside_mock { n += 1; }
-        if !self.query_satisfies.is_empty() { n += 1; }
-        if !self.final_message_satisfies.is_empty() { n += 1; }
+        if self.should_call_search.is_some() {
+            n += 1;
+        }
+        if !self.forbidden_tools.is_empty() {
+            n += 1;
+        }
+        if self.expected_first_tool.is_some() {
+            n += 1;
+        }
+        if self.max_search_calls.is_some() {
+            n += 1;
+        }
+        if self.expected_query_max_tokens.is_some() {
+            n += 1;
+        }
+        if self.must_cite_url_from_mock.is_some() {
+            n += 1;
+        }
+        if self.must_not_cite_url_outside_mock {
+            n += 1;
+        }
+        if !self.query_satisfies.is_empty() {
+            n += 1;
+        }
+        if !self.final_message_satisfies.is_empty() {
+            n += 1;
+        }
         n
     }
 }
@@ -154,7 +172,7 @@ mod tests {
     fn unknown_keys_error_loudly() {
         // §4.3 unknown-id handling: a typo should fail loudly so
         // fixture authors find it immediately.
-        let body = "shoud_call_search = true";  // note typo
+        let body = "shoud_call_search = true"; // note typo
         let err = Predicate::from_toml(body, Path::new("test/pass.toml")).unwrap_err();
         assert!(err.contains("test/pass.toml"), "err={err}");
     }

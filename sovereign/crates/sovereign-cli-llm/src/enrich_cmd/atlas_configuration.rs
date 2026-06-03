@@ -18,8 +18,8 @@ use corpus_engine::enrichment::atlas::{
     analysis::configuration::{
         parse_configurations, summarise_atlas, AtlasSummaryParams, ConfigurationsOutput,
     },
-    read_atlas_atoms, read_atlas_edges, write_atlas_configurations, write_atlas_full,
-    AtomEnvelope, ATLAS_DIRNAME,
+    read_atlas_atoms, read_atlas_edges, write_atlas_configurations, write_atlas_full, AtomEnvelope,
+    ATLAS_DIRNAME,
 };
 use corpus_engine::enrichment::pipeline::{ChatPrompt, PipelineRegistry};
 
@@ -227,7 +227,10 @@ pub async fn cmd_atlas_configuration(args: &[String]) -> i32 {
         Ok(items) => items,
         Err(e) => {
             eprintln!("error: Phase 8 parse failed: {e}");
-            eprintln!("response head:\n{}", response.chars().take(800).collect::<String>());
+            eprintln!(
+                "response head:\n{}",
+                response.chars().take(800).collect::<String>()
+            );
             return 1;
         }
     };
@@ -257,10 +260,7 @@ pub async fn cmd_atlas_configuration(args: &[String]) -> i32 {
     let configurations = parse_configurations(items, &known_atom_ids);
 
     // Summary report before writing.
-    println!(
-        "  ✓ {} configuration(s) produced",
-        configurations.len()
-    );
+    println!("  ✓ {} configuration(s) produced", configurations.len());
     for c in &configurations {
         println!(
             "    · [{}] {} (confidence {:.2}) — {} constituent atom(s)",
@@ -294,8 +294,7 @@ pub async fn cmd_atlas_configuration(args: &[String]) -> i32 {
             corpus_engine::enrichment::atlas::TrajectoriesFile,
         >(&bytes)
         {
-            Ok(file) => serde_json::from_value(file.trajectories)
-                .unwrap_or_default(),
+            Ok(file) => serde_json::from_value(file.trajectories).unwrap_or_default(),
             Err(_) => std::collections::BTreeMap::new(),
         },
         Err(_) => std::collections::BTreeMap::new(),
@@ -317,7 +316,10 @@ pub async fn cmd_atlas_configuration(args: &[String]) -> i32 {
         &trajectories,
     ) {
         Ok(_) => {
-            println!("  ✓ merged {} configuration(s) into atoms.json", configurations.len());
+            println!(
+                "  ✓ merged {} configuration(s) into atoms.json",
+                configurations.len()
+            );
             0
         }
         Err(e) => {

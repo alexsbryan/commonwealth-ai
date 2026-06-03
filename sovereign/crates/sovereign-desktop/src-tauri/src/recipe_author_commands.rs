@@ -23,12 +23,12 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use corpus_engine::{Recipe};
-use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
+use corpus_engine::Recipe;
 use corpus_engine_atos::{FeatureRow, FeatureState, FeatureStore};
+use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
 use sovereign_tools::recipe_author::{
-    self, checkpoint::restore_checkpoint as do_restore_checkpoint, CheckpointMeta,
-    ProjectSummary, RecipeProject,
+    self, checkpoint::restore_checkpoint as do_restore_checkpoint, CheckpointMeta, ProjectSummary,
+    RecipeProject,
 };
 
 use crate::state::AppState;
@@ -36,9 +36,7 @@ use crate::state::AppState;
 /// Pull `notes` + `features` handles off `AppState`. Returns a
 /// stringified error suitable for direct `.map_err(...)?` in the
 /// command bodies — the frontend renders these as toast text.
-async fn handles(
-    state: &Arc<AppState>,
-) -> Result<(Arc<NoteStore>, Arc<FeatureStore>), String> {
+async fn handles(state: &Arc<AppState>) -> Result<(Arc<NoteStore>, Arc<FeatureStore>), String> {
     let notes = state
         .notes
         .read()
@@ -120,16 +118,11 @@ pub async fn recipe_author_list_projects(
         // Try to load the project's sidecar summary. A failure here is
         // not fatal — the row exists, surface it with a default
         // summary so the user can still pick it.
-        let summary = match RecipeProject::load(
-            &row.id,
-            Arc::clone(&notes),
-            Arc::clone(&features),
-        )
-        .await
-        {
-            Ok(p) => p.read_summary().unwrap_or_else(|_| default_summary(&row)),
-            Err(_) => default_summary(&row),
-        };
+        let summary =
+            match RecipeProject::load(&row.id, Arc::clone(&notes), Arc::clone(&features)).await {
+                Ok(p) => p.read_summary().unwrap_or_else(|_| default_summary(&row)),
+                Err(_) => default_summary(&row),
+            };
         out.push(RecipeProjectListEntry::from_row_and_summary(&row, summary));
     }
     // Newest first.
@@ -186,7 +179,9 @@ pub async fn recipe_author_new_project(
         .ok_or_else(|| {
             "recipe_author_new_project: project FeatureRow vanished after creation".to_string()
         })?;
-    let summary = project.read_summary().unwrap_or_else(|_| default_summary(&row));
+    let summary = project
+        .read_summary()
+        .unwrap_or_else(|_| default_summary(&row));
     Ok(RecipeProjectListEntry::from_row_and_summary(&row, summary))
 }
 
@@ -289,13 +284,9 @@ pub async fn recipe_author_dashboard_state(
     feature_id: String,
 ) -> Result<RecipeAuthorDashboardState, String> {
     let (notes, features) = handles(&state).await?;
-    let project = RecipeProject::load(
-        &feature_id,
-        Arc::clone(&notes),
-        Arc::clone(&features),
-    )
-    .await
-    .map_err(|e| format!("recipe_author_dashboard_state: {e}"))?;
+    let project = RecipeProject::load(&feature_id, Arc::clone(&notes), Arc::clone(&features))
+        .await
+        .map_err(|e| format!("recipe_author_dashboard_state: {e}"))?;
 
     let row = features
         .get(&feature_id)
@@ -304,7 +295,9 @@ pub async fn recipe_author_dashboard_state(
         .ok_or_else(|| {
             format!("recipe_author_dashboard_state: feature_id `{feature_id}` not found")
         })?;
-    let summary = project.read_summary().unwrap_or_else(|_| default_summary(&row));
+    let summary = project
+        .read_summary()
+        .unwrap_or_else(|_| default_summary(&row));
 
     // Resolve recipe.toml on disk if the project has a recipe id yet.
     let (recipe_path, recipe_toml) = match summary.recipe_id.as_deref() {
@@ -435,13 +428,9 @@ pub async fn recipe_author_restore_checkpoint(
     req: RestoreCheckpointRequest,
 ) -> Result<RestoreCheckpointOutcome, String> {
     let (notes, features) = handles(&state).await?;
-    let project = RecipeProject::load(
-        &req.feature_id,
-        Arc::clone(&notes),
-        Arc::clone(&features),
-    )
-    .await
-    .map_err(|e| format!("recipe_author_restore_checkpoint: {e}"))?;
+    let project = RecipeProject::load(&req.feature_id, Arc::clone(&notes), Arc::clone(&features))
+        .await
+        .map_err(|e| format!("recipe_author_restore_checkpoint: {e}"))?;
 
     // The summary holds the optional recipe_id we need to overwrite
     // the live recipe.toml from the snapshot. Best-effort — if the
@@ -507,13 +496,10 @@ pub async fn recipe_author_build_prelude(
     feature_id: String,
 ) -> Result<String, String> {
     let (notes, features) = handles(&state).await?;
-    let project = recipe_author::RecipeProject::load(
-        &feature_id,
-        Arc::clone(&notes),
-        Arc::clone(&features),
-    )
-    .await
-    .map_err(|e| format!("Recipe Author: load project '{feature_id}' failed: {e}"))?;
+    let project =
+        recipe_author::RecipeProject::load(&feature_id, Arc::clone(&notes), Arc::clone(&features))
+            .await
+            .map_err(|e| format!("Recipe Author: load project '{feature_id}' failed: {e}"))?;
 
     let situated = recipe_author::situated_context::render(&project)
         .await
@@ -559,9 +545,8 @@ pub async fn recipe_author_build_prelude(
         ),
     };
 
-    let block = format!(
-        "[Project state]\n{situated}{recipe_block}{validation_block}\n[Partner says]\n"
-    );
+    let block =
+        format!("[Project state]\n{situated}{recipe_block}{validation_block}\n[Partner says]\n");
     Ok(block)
 }
 
@@ -573,9 +558,7 @@ pub async fn recipe_author_build_prelude(
 fn inline_validate_recipe(toml: &str) -> String {
     match toml::from_str::<corpus_engine::Recipe>(toml) {
         Ok(_) => String::new(),
-        Err(e) => format!(
-            "\n[Latest validation]\nRecipe does NOT parse. First error:\n{e}\n"
-        ),
+        Err(e) => format!("\n[Latest validation]\nRecipe does NOT parse. First error:\n{e}\n"),
     }
 }
 
@@ -588,4 +571,3 @@ fn sovereign_root_dir() -> std::path::PathBuf {
     }
     std::path::PathBuf::from(".sovereign")
 }
-

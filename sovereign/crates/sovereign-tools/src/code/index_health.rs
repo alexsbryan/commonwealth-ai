@@ -106,9 +106,7 @@ impl IndexHealthChecker {
     }
 }
 
-fn classify(
-    stats: &corpus_engine_scip::scip_graph::ScipGraphStats,
-) -> (bool, StalenessLevel) {
+fn classify(stats: &corpus_engine_scip::scip_graph::ScipGraphStats) -> (bool, StalenessLevel) {
     if stats.symbol_count == 0 && stats.export_age_hours.is_none() {
         return (false, StalenessLevel::Absent);
     }
@@ -123,7 +121,10 @@ fn classify(
     (stats.symbol_count > 0, level)
 }
 
-fn make_hint(level: StalenessLevel, stats: &corpus_engine_scip::scip_graph::ScipGraphStats) -> Option<String> {
+fn make_hint(
+    level: StalenessLevel,
+    stats: &corpus_engine_scip::scip_graph::ScipGraphStats,
+) -> Option<String> {
     match level {
         StalenessLevel::Fresh => None,
         StalenessLevel::Aging => Some(format!(
@@ -210,7 +211,10 @@ mod tests {
         let (present, level) = classify(&stats);
         assert!(present);
         assert_eq!(level, StalenessLevel::Fresh);
-        assert!(make_hint(level, &stats).is_none(), "Fresh index must not produce a hint");
+        assert!(
+            make_hint(level, &stats).is_none(),
+            "Fresh index must not produce a hint"
+        );
     }
 
     #[tokio::test]

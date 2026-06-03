@@ -96,9 +96,13 @@ pub fn migrate_atlas_ids(
                 summary.atoms_already_content_hash += 1;
                 continue;
             }
-            let new_id =
-                AtomId::entity_content_hash(&e.canonical_name, &e.entity_type, corpus_id);
-            check_collision(&mut new_ids_seen, &e.id, &new_id, &mut summary.collisions_detected);
+            let new_id = AtomId::entity_content_hash(&e.canonical_name, &e.entity_type, corpus_id);
+            check_collision(
+                &mut new_ids_seen,
+                &e.id,
+                &new_id,
+                &mut summary.collisions_detected,
+            );
             id_map.insert(e.id.clone(), new_id);
         }
     }
@@ -125,8 +129,10 @@ pub fn migrate_atlas_ids(
                     summary.atoms_already_content_hash += 1;
                     continue;
                 }
-                let resolved_entity =
-                    id_map.get(&s.entity_id).cloned().unwrap_or_else(|| s.entity_id.clone());
+                let resolved_entity = id_map
+                    .get(&s.entity_id)
+                    .cloned()
+                    .unwrap_or_else(|| s.entity_id.clone());
                 let new = AtomId::state_content_hash(
                     &resolved_entity,
                     &s.state_type,
@@ -195,8 +201,7 @@ pub fn migrate_atlas_ids(
                     summary.atoms_already_content_hash += 1;
                     continue;
                 }
-                let new =
-                    AtomId::position_content_hash(&p.canonical_name, &p.stance, corpus_id);
+                let new = AtomId::position_content_hash(&p.canonical_name, &p.stance, corpus_id);
                 (p.id.clone(), new)
             }
             AtomEnvelope::Opposition(o) => {
@@ -214,7 +219,12 @@ pub fn migrate_atlas_ids(
                 continue;
             }
         };
-        check_collision(&mut new_ids_seen, &old_id, &new_id, &mut summary.collisions_detected);
+        check_collision(
+            &mut new_ids_seen,
+            &old_id,
+            &new_id,
+            &mut summary.collisions_detected,
+        );
         id_map.insert(old_id, new_id);
     }
 
@@ -238,13 +248,16 @@ pub fn migrate_atlas_ids(
     // retrieval) sees inconsistent atom state.
     let pre_dedup = atoms_file.atoms.len();
     let mut seen_ids: HashSet<AtomId> = HashSet::new();
-    atoms_file.atoms.retain(|env| seen_ids.insert(env.id().clone()));
+    atoms_file
+        .atoms
+        .retain(|env| seen_ids.insert(env.id().clone()));
     summary.atoms_deduped = pre_dedup - atoms_file.atoms.len();
 
     if !dry_run {
         write_atomic(
             &atlas_dir.join("atoms.json"),
-            &serde_json::to_vec_pretty(&atoms_file).map_err(|e| Error::Serialization(e.to_string()))?,
+            &serde_json::to_vec_pretty(&atoms_file)
+                .map_err(|e| Error::Serialization(e.to_string()))?,
         )?;
         summary.files_touched.push("atoms.json".to_string());
     }
@@ -494,9 +507,7 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrichment::atlas::atoms::{
-        ChunkRef, Entity, AtomsFile,
-    };
+    use crate::enrichment::atlas::atoms::{AtomsFile, ChunkRef, Entity};
     use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
     use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
     use std::fs;
@@ -562,10 +573,8 @@ mod tests {
         assert!(summary.files_touched.contains(&"edges.json".to_string()));
 
         // Re-read and verify content-hash shape on every atom + edge.
-        let atoms: AtomsFile = serde_json::from_slice(
-            &fs::read(atlas_dir.join("atoms.json")).unwrap(),
-        )
-        .unwrap();
+        let atoms: AtomsFile =
+            serde_json::from_slice(&fs::read(atlas_dir.join("atoms.json")).unwrap()).unwrap();
         for env in &atoms.atoms {
             let id = env.id();
             assert!(
@@ -636,19 +645,24 @@ mod tests {
 
         migrate_atlas_ids(tmp.path(), "c", false).unwrap();
 
-        let atoms: AtomsFile = serde_json::from_slice(
-            &fs::read(tmp.path().join("atoms.json")).unwrap(),
-        )
-        .unwrap();
-        let alice_new =
-            atoms.atoms.iter().find_map(|a| match a {
+        let atoms: AtomsFile =
+            serde_json::from_slice(&fs::read(tmp.path().join("atoms.json")).unwrap()).unwrap();
+        let alice_new = atoms
+            .atoms
+            .iter()
+            .find_map(|a| match a {
                 AtomEnvelope::Entity(e) if e.canonical_name == "Alice" => Some(e.id.clone()),
                 _ => None,
-            }).unwrap();
-        let bob_atom = atoms.atoms.iter().find_map(|a| match a {
-            AtomEnvelope::Entity(e) if e.canonical_name == "Bob" => Some(e),
-            _ => None,
-        }).unwrap();
+            })
+            .unwrap();
+        let bob_atom = atoms
+            .atoms
+            .iter()
+            .find_map(|a| match a {
+                AtomEnvelope::Entity(e) if e.canonical_name == "Bob" => Some(e),
+                _ => None,
+            })
+            .unwrap();
         assert_eq!(bob_atom.participants.len(), 1);
         assert_eq!(bob_atom.participants[0], alice_new);
     }
@@ -671,10 +685,8 @@ mod tests {
         assert_eq!(summary.atoms_deduped, 1, "one duplicate Alice collapsed");
         assert_eq!(summary.collisions_detected.len(), 1);
 
-        let atoms: AtomsFile = serde_json::from_slice(
-            &fs::read(tmp.path().join("atoms.json")).unwrap(),
-        )
-        .unwrap();
+        let atoms: AtomsFile =
+            serde_json::from_slice(&fs::read(tmp.path().join("atoms.json")).unwrap()).unwrap();
         assert_eq!(atoms.atoms.len(), 2, "Alice + Bob, no duplicates");
 
         let mut ids: Vec<_> = atoms

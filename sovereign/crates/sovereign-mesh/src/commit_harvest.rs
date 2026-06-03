@@ -142,10 +142,7 @@ pub(crate) fn infer_kind(message: &str) -> &'static str {
     // Conventional-commits style: `<type>(<scope>): <subject>`.
     // We only inspect the type; scope-and-subject aren't relevant
     // for kind inference.
-    let prefix = trimmed
-        .split([':', '(', ' '])
-        .next()
-        .unwrap_or("");
+    let prefix = trimmed.split([':', '(', ' ']).next().unwrap_or("");
     match prefix {
         "fix" | "bugfix" | "feat" | "feature" | "refactor" | "perf" | "revert" => "decision",
         "docs" | "doc" | "comment" | "comments" => "reflection",
@@ -305,7 +302,9 @@ mod tests {
         assert!(!is_harvest_worthy("Add foo"));
         assert!(!is_harvest_worthy("Did the thing"));
         // 9 words (one shy of the floor) — still too short.
-        assert!(!is_harvest_worthy("One two three four five six seven eight nine"));
+        assert!(!is_harvest_worthy(
+            "One two three four five six seven eight nine"
+        ));
         // 10 words — passes.
         assert!(is_harvest_worthy(
             "One two three four five six seven eight nine ten"
@@ -320,7 +319,10 @@ mod tests {
         assert_eq!(infer_kind("feat: add canonical fingerprint"), "decision");
         assert_eq!(infer_kind("refactor: extract the harvester"), "decision");
         assert_eq!(infer_kind("perf: cache the spec stat result"), "decision");
-        assert_eq!(infer_kind("docs: clarify the harvester contract"), "reflection");
+        assert_eq!(
+            infer_kind("docs: clarify the harvester contract"),
+            "reflection"
+        );
         // Unrecognised → conservative default.
         assert_eq!(infer_kind("Switch storage to async"), "decision");
     }
@@ -388,7 +390,11 @@ mod tests {
             .unwrap()
             .success());
         assert!(std::process::Command::new("git")
-            .args(["commit", "-m", "baseline commit one two three four five six seven"])
+            .args([
+                "commit",
+                "-m",
+                "baseline commit one two three four five six seven"
+            ])
             .current_dir(repo)
             .status()
             .unwrap()

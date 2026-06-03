@@ -2,8 +2,6 @@
 //! `maybe_collaborate`, `apply_post_stream_refinement`) and tool-narrowing
 //! that the dispatch path consults before invoking inference.
 
-
-
 use crate::traits::*;
 
 use super::*;
@@ -44,10 +42,7 @@ impl Runtime {
     /// Returns `None` when neither an active skill nor the intent
     /// produces any routing signal — the caller keeps the request
     /// local with whatever default slot policy the runtime uses.
-    pub(crate) fn build_oicp(
-        &self,
-        intent: &Intent,
-    ) -> Option<crate::oicp::InferenceRequirements> {
+    pub(crate) fn build_oicp(&self, intent: &Intent) -> Option<crate::oicp::InferenceRequirements> {
         let from_skills = self.skills.inference_requirements();
         let from_intent = default_oicp_for_intent(intent);
 
@@ -67,8 +62,7 @@ impl Runtime {
         // `LocalOnly` (the spec default) and block every cross-mesh
         // route, so we copy through explicitly.
         let sharding = from_skills.sharding();
-        let mut out = crate::oicp::InferenceRequirements::new()
-            .with_sharding(sharding);
+        let mut out = crate::oicp::InferenceRequirements::new().with_sharding(sharding);
 
         // Hint: skill-declared wins; intent fills in.
         let hint = from_skills
@@ -157,7 +151,11 @@ impl Runtime {
         // Comes BEFORE format_conversation_history because that block
         // already ends with the current user message and the
         // retrieval anchor needs to precede it.
-        if let Some(hits) = context.history_retrieval_hits.as_ref().filter(|h| !h.is_empty()) {
+        if let Some(hits) = context
+            .history_retrieval_hits
+            .as_ref()
+            .filter(|h| !h.is_empty())
+        {
             let mut section = String::from(
                 "Relevant earlier turns from this conversation (selected by similarity to your current message):\n",
             );
@@ -185,9 +183,7 @@ impl Runtime {
         // the model can render its three epistemic registers
         // (history / inference / guess) when surfacing user history.
         let register = context.turn_register();
-        if let Some(mem_section) =
-            memory::format_memories_for_prompt(&context.memories, register)
-        {
+        if let Some(mem_section) = memory::format_memories_for_prompt(&context.memories, register) {
             parts.push(mem_section);
         }
 
@@ -196,10 +192,7 @@ impl Runtime {
                 parts.push(format!("Current user goal: {goal}"));
             }
             if !wm.facts.is_empty() {
-                parts.push(format!(
-                    "Session context:\n- {}",
-                    wm.facts.join("\n- ")
-                ));
+                parts.push(format!("Session context:\n- {}", wm.facts.join("\n- ")));
             }
         }
 
@@ -235,11 +228,8 @@ impl Runtime {
         // long conversations; older entries roll off silently.
         if let Some(searched) = &context.conversation.searched_sources {
             if !searched.is_empty() {
-                let mut sorted: Vec<&crate::types::SearchedSourceEntry> =
-                    searched.iter().collect();
-                sorted.sort_by(|a, b| {
-                    b.last_referenced_turn.cmp(&a.last_referenced_turn)
-                });
+                let mut sorted: Vec<&crate::types::SearchedSourceEntry> = searched.iter().collect();
+                sorted.sort_by(|a, b| b.last_referenced_turn.cmp(&a.last_referenced_turn));
                 sorted.truncate(20);
                 let mut block = String::from(
                     "Web sources gathered so far in this conversation (most recent first):\n",
@@ -322,10 +312,8 @@ impl Runtime {
             .and_then(|id| self.skills.skill_by_id(id))
             .map(|s| s.inference.register)
             .unwrap_or_else(|| self.skills.primary_skill_register());
-        let policy = crate::intent_policy::policy_for_mode_only(
-            register,
-            effective_mode_owned.as_deref(),
-        );
+        let policy =
+            crate::intent_policy::policy_for_mode_only(register, effective_mode_owned.as_deref());
         crate::intent_policy::narrow_tools(&self.tools.descriptors(), &policy)
     }
     /// Build the per-turn tool catalog given a CLASSIFIED intent.
@@ -354,12 +342,13 @@ impl Runtime {
     /// instead of the default `PRIMARY_BASE_SYSTEM_PROMPT`. All other
     /// skills, and sessions with no active skill, keep the prior
     /// factual contract — non-relational behavior is unchanged.
-    pub(crate) fn build_primary_system_message(&self, base: &str, context: &ConversationContext) -> String {
+    pub(crate) fn build_primary_system_message(
+        &self,
+        base: &str,
+        context: &ConversationContext,
+    ) -> String {
         let contract = epistemic_contract_for(context.turn_register());
-        self.build_system_message(
-            &format!("{contract}\n\n{base}"),
-            context,
-        )
+        self.build_system_message(&format!("{contract}\n\n{base}"), context)
     }
     /// Build a Relational/witness system message using the COMPACT
     /// contract instead of the full one. Includes the FTS-retrieved
@@ -384,21 +373,52 @@ impl Runtime {
         let lower = message.to_lowercase();
         // Medical
         const MEDICAL: &[&str] = &[
-            "chest pain", "diagnosis", "diagnos", "symptom", "depress",
-            "anxiety", "doctor", "physician", "therapist", "medication",
-            "prescription", "dosage", "is it", // catches "is it depression?"-style phrasings
-            "should i see", "should i go to", "ER", "emergency room",
+            "chest pain",
+            "diagnosis",
+            "diagnos",
+            "symptom",
+            "depress",
+            "anxiety",
+            "doctor",
+            "physician",
+            "therapist",
+            "medication",
+            "prescription",
+            "dosage",
+            "is it", // catches "is it depression?"-style phrasings
+            "should i see",
+            "should i go to",
+            "ER",
+            "emergency room",
         ];
         // Legal
         const LEGAL: &[&str] = &[
-            "landlord", "lease", "tenant", "deposit", "evict", "lawyer",
-            "attorney", "lawsuit", "sue ", "contract", "court", "rights",
-            "legally", "legal", "jurisdiction",
+            "landlord",
+            "lease",
+            "tenant",
+            "deposit",
+            "evict",
+            "lawyer",
+            "attorney",
+            "lawsuit",
+            "sue ",
+            "contract",
+            "court",
+            "rights",
+            "legally",
+            "legal",
+            "jurisdiction",
         ];
         // Financial / regulated professional
         const FINANCIAL: &[&str] = &[
-            "tax", "irs", "mortgage", "refinance", "401k", "ira",
-            "bankruptcy", "audit",
+            "tax",
+            "irs",
+            "mortgage",
+            "refinance",
+            "401k",
+            "ira",
+            "bankruptcy",
+            "audit",
         ];
         MEDICAL.iter().any(|m| lower.contains(m))
             || LEGAL.iter().any(|m| lower.contains(m))
@@ -409,9 +429,7 @@ impl Runtime {
         context: &ConversationContext,
         user_message: &str,
     ) -> String {
-        let mut s = String::with_capacity(
-            RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT.len() + 1024,
-        );
+        let mut s = String::with_capacity(RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT.len() + 1024);
         s.push_str(RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT);
 
         // Iter2: cap rendered memories at K=3. The retrieval upstream
@@ -428,10 +446,9 @@ impl Runtime {
         } else {
             &context.memories[..]
         };
-        if let Some(mem_section) = memory::format_memories_for_prompt(
-            render_slice,
-            SkillRegister::Relational,
-        ) {
+        if let Some(mem_section) =
+            memory::format_memories_for_prompt(render_slice, SkillRegister::Relational)
+        {
             s.push_str("\n\n");
             s.push_str(&mem_section);
         }
@@ -593,8 +610,7 @@ impl Runtime {
                 // thinking-mode tag emission.
                 let cleaned = crate::title::strip_thinking_response(&resp.text);
                 match serde_json::from_str::<ContradictionCheck>(cleaned.trim()) {
-                    Ok(c) if c.contradiction
-                        && !c.prior_evidence.is_empty() => Some(c),
+                    Ok(c) if c.contradiction && !c.prior_evidence.is_empty() => Some(c),
                     Ok(_) => None,
                     Err(e) => {
                         tracing::debug!(
@@ -709,5 +725,4 @@ impl Runtime {
         )
         .await
     }
-
 }

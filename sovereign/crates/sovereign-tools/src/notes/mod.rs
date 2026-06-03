@@ -24,6 +24,6 @@
 
 pub mod diff_extract;
 pub mod diff_extract_backend;
-pub mod patterns;
 pub mod nudge;
+pub mod patterns;
 pub mod response_mine;

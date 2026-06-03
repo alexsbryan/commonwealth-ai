@@ -9,9 +9,8 @@
 //! views can't drift.
 
 use commonwealth_inference::oicp::{
-    Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, LatencyClass,
-    ModelStatus, ProviderInfo, ProviderManifest, ProviderModel, ProviderType,
-    OICP_VERSION,
+    Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, LatencyClass, ModelStatus,
+    ProviderInfo, ProviderManifest, ProviderModel, ProviderType, OICP_VERSION,
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::Speed;
@@ -85,8 +84,7 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
         if !seen_ids.insert(model_name.clone()) {
             continue;
         }
-        let info = sovereign_core::models_manifest::DEFAULT_MANIFEST
-            .info_for_file(&model_name);
+        let info = sovereign_core::models_manifest::DEFAULT_MANIFEST.info_for_file(&model_name);
         let (capabilities, size_gb) = match info {
             Some(slot) => (slot.capabilities, slot.size_gb),
             None => {
@@ -148,8 +146,8 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
     // appear as a candidate.
     let slow_model_name = provider.model_id_for(Speed::Slow);
     if !slow_model_name.is_empty() && slow_model_name != "unknown" {
-        let info = sovereign_core::models_manifest::DEFAULT_MANIFEST
-            .info_for_file(&slow_model_name);
+        let info =
+            sovereign_core::models_manifest::DEFAULT_MANIFEST.info_for_file(&slow_model_name);
         let (capabilities, size_gb) = match info {
             Some(slot) => (slot.capabilities, slot.size_gb),
             None => {
@@ -207,8 +205,8 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
     // block's gate.
     let fast_model_name = provider.model_id_for(Speed::Fast);
     if !fast_model_name.is_empty() && fast_model_name != "unknown" {
-        let info = sovereign_core::models_manifest::DEFAULT_MANIFEST
-            .info_for_file(&fast_model_name);
+        let info =
+            sovereign_core::models_manifest::DEFAULT_MANIFEST.info_for_file(&fast_model_name);
         let (capabilities, size_gb) = match info {
             Some(slot) => (slot.capabilities, slot.size_gb),
             None => {
@@ -260,12 +258,8 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
     // primary as equally "warm-ish" rather than double-counting
     // either one.
     if let Some(code_name) = provider.code_model_id() {
-        if !code_name.is_empty()
-            && code_name != "unknown"
-            && seen_ids.insert(code_name.clone())
-        {
-            let info = sovereign_core::models_manifest::DEFAULT_MANIFEST
-                .info_for_file(&code_name);
+        if !code_name.is_empty() && code_name != "unknown" && seen_ids.insert(code_name.clone()) {
+            let info = sovereign_core::models_manifest::DEFAULT_MANIFEST.info_for_file(&code_name);
             let (capabilities, size_gb) = match info {
                 Some(slot) => (slot.capabilities, slot.size_gb),
                 None => {
@@ -325,8 +319,8 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
         {
             continue;
         }
-        let info = sovereign_core::models_manifest::DEFAULT_MANIFEST
-            .info_for_file(&extras_model_id);
+        let info =
+            sovereign_core::models_manifest::DEFAULT_MANIFEST.info_for_file(&extras_model_id);
         let (capabilities, size_gb) = match info {
             Some(slot) => (slot.capabilities, slot.size_gb),
             None => {
@@ -410,10 +404,7 @@ pub(crate) fn synthesize_slot_claims(
 
     let (hint, affinity) = if is_code_specialist {
         let code = profile.get(&Capability::Code).copied().unwrap_or(0);
-        (
-            CapabilityHint::code(),
-            (code as f32 / 4.0).clamp(0.0, 1.0),
-        )
+        (CapabilityHint::code(), (code as f32 / 4.0).clamp(0.0, 1.0))
     } else {
         let best = [
             Capability::General,
@@ -467,13 +458,7 @@ pub(crate) fn synthesize_slot_claims(
                 512,
                 (affinity + 0.05).clamp(0.0, 1.0),
             ),
-            CapabilityClaim::new(
-                hint,
-                LatencyClass::Fast,
-                8_000,
-                24_576,
-                affinity,
-            ),
+            CapabilityClaim::new(hint, LatencyClass::Fast, 8_000, 24_576, affinity),
         ],
         Speed::Medium | Speed::Slow => vec![CapabilityClaim::new(
             hint,
@@ -536,7 +521,9 @@ mod self_manifest_tests {
     //! a hot-swap instead of picking the configured specialist.
     use super::{build_self_manifest, synthesize_code_slot_claims};
     use async_trait::async_trait;
-    use commonwealth_inference::oicp::{Capability, CapabilityHint, CapabilityProfile, LatencyClass};
+    use commonwealth_inference::oicp::{
+        Capability, CapabilityHint, CapabilityProfile, LatencyClass,
+    };
     use futures::Stream;
     use sovereign_core::traits::InferenceProvider;
     use sovereign_core::types::{
@@ -598,7 +585,10 @@ mod self_manifest_tests {
         let manifest = build_self_manifest(&stub);
         // No model in the manifest carries a `code` claim when
         // the provider has no code slot configured.
-        let any_code_claim = manifest.models.iter().flat_map(|m| m.claims.iter())
+        let any_code_claim = manifest
+            .models
+            .iter()
+            .flat_map(|m| m.claims.iter())
             .any(|c| c.hint == CapabilityHint::code());
         assert!(
             !any_code_claim,
@@ -649,9 +639,17 @@ mod self_manifest_tests {
         // underlying Slow slot is loaded — anything else would
         // make the load-balancer skip this node when it should
         // be a viable candidate.
-        for m in manifest.models.iter().filter(|m| alias_ids.contains(&m.id.as_str())) {
+        for m in manifest
+            .models
+            .iter()
+            .filter(|m| alias_ids.contains(&m.id.as_str()))
+        {
             assert!(m.status.loaded, "alias `{}` must claim loaded=true", m.id);
-            assert!(m.status.available, "alias `{}` must claim available=true", m.id);
+            assert!(
+                m.status.available,
+                "alias `{}` must claim available=true",
+                m.id
+            );
         }
     }
 

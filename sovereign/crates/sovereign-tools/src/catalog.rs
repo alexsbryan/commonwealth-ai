@@ -161,9 +161,7 @@ fn hydrate_catalog_hit(hit: &ScoredChunk, ctx: &CatalogResolutionContext) -> Opt
         .or_else(|| hit.metadata.get("title").cloned())
         .unwrap_or_else(|| format!("Untitled work {}", work_id));
 
-    let download_url = cat
-        .download_url_template
-        .replace("{id}", &work_id);
+    let download_url = cat.download_url_template.replace("{id}", &work_id);
 
     let estimated_ingest_minutes = estimate_minutes(
         hit.metadata
@@ -178,16 +176,10 @@ fn hydrate_catalog_hit(hit: &ScoredChunk, ctx: &CatalogResolutionContext) -> Opt
         cat.enrich_estimate_wpm,
     );
 
-    let already_ingested_corpus_id = ctx
-        .ingested_works
-        .get(&hit.corpus_id)
-        .and_then(|works| {
-            let suffix = format!("-{}", work_id);
-            works
-                .iter()
-                .find(|cid| cid.ends_with(&suffix))
-                .cloned()
-        });
+    let already_ingested_corpus_id = ctx.ingested_works.get(&hit.corpus_id).and_then(|works| {
+        let suffix = format!("-{}", work_id);
+        works.iter().find(|cid| cid.ends_with(&suffix)).cloned()
+    });
 
     Some(CatalogHit {
         catalog_corpus_id: hit.corpus_id.clone(),
@@ -295,7 +287,10 @@ mod tests {
         assert_eq!(mb.work_id, "2701");
         assert_eq!(mb.title, "Moby Dick");
         assert_eq!(mb.authors.as_deref(), Some("Anon"));
-        assert_eq!(mb.download_url, "https://www.gutenberg.org/cache/epub/2701/pg2701.txt");
+        assert_eq!(
+            mb.download_url,
+            "https://www.gutenberg.org/cache/epub/2701/pg2701.txt"
+        );
         assert_eq!(mb.content_recipe, "gutenberg-work");
         // 215000 / 8000 ≈ 27 min
         assert_eq!(mb.estimated_ingest_minutes, Some(27));

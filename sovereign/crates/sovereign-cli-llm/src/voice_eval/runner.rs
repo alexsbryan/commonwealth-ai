@@ -164,8 +164,7 @@ pub async fn run_live(
                     }
                     _ => Arc::clone(&session.inference),
                 };
-                let live =
-                    run_one(&session, scenario, opts.judge, judge_inference.as_ref()).await;
+                let live = run_one(&session, scenario, opts.judge, judge_inference.as_ref()).await;
                 out.push(live);
                 // _tmpdir_keepalive drops here, cleaning the per-scenario
                 // state directory. No leak of memories or state across
@@ -199,9 +198,7 @@ async fn build_scenario_session(
     opts: &LiveRunOptions,
 ) -> Result<(ChatSession, tempfile::TempDir)> {
     let tmp = tempfile::TempDir::new().map_err(|e| {
-        sovereign_core::error::Error::Serialization(format!(
-            "create voice-eval tempdir: {e}"
-        ))
+        sovereign_core::error::Error::Serialization(format!("create voice-eval tempdir: {e}"))
     })?;
 
     let mut globals = crate::chat_cmd::config::default_globals_for_voice_eval();
@@ -251,11 +248,7 @@ async fn run_one(
 ) -> LiveScenarioResult {
     // Seed memories.
     if let Err(e) = seed_memories(session.store.as_ref(), &scenario.seed_memories).await {
-        return synthesize_failure(
-            scenario,
-            format!("memory-seed failed: {e}"),
-            None,
-        );
+        return synthesize_failure(scenario, format!("memory-seed failed: {e}"), None);
     }
 
     // Conversation id — unique per scenario so the streaming
@@ -267,12 +260,13 @@ async fn run_one(
     // aggregates so an operator can see the small/large model
     // latency gap alongside the quality gap.
     let runtime_started = Instant::now();
-    let (response_text, metrics) = match drive_turn(&session.runtime, &scenario.turn.user, &conv_id).await {
-        Ok(t) => t,
-        Err(e) => {
-            return synthesize_failure(scenario, format!("runtime turn failed: {e}"), None);
-        }
-    };
+    let (response_text, metrics) =
+        match drive_turn(&session.runtime, &scenario.turn.user, &conv_id).await {
+            Ok(t) => t,
+            Err(e) => {
+                return synthesize_failure(scenario, format!("runtime turn failed: {e}"), None);
+            }
+        };
     let runtime_ms = runtime_started.elapsed().as_millis() as u64;
 
     let result = run_checks(scenario, &response_text);
@@ -411,4 +405,3 @@ fn resolve_skills_dir(explicit: Option<&PathBuf>) -> Result<PathBuf> {
         "voice eval: could not find `sovereign/modes/` (or legacy `sovereign/skills/`) walking up from CWD. Pass --skills-dir.".into(),
     ))
 }
-

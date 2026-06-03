@@ -8,8 +8,8 @@
 //!
 //! Output: a single `manifest.json` ready for the grader to read.
 
-use anyhow::{Context, Result, bail};
-use rusqlite::{Connection, OpenFlags, params};
+use anyhow::{bail, Context, Result};
+use rusqlite::{params, Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};

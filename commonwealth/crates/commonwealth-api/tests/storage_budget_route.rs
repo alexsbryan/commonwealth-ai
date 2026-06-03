@@ -42,8 +42,7 @@ async fn get_storage_budget(state: AppState) -> (StatusCode, serde_json::Value) 
     let resp = app.oneshot(req).await.unwrap();
     let status = resp.status();
     let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
-    let json: serde_json::Value =
-        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
     (status, json)
 }
 
@@ -61,8 +60,7 @@ async fn post_storage_budget(
     let resp = app.oneshot(req).await.unwrap();
     let status = resp.status();
     let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
-    let json: serde_json::Value =
-        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
     (status, json)
 }
 
@@ -100,7 +98,9 @@ async fn post_round_trips_through_state() {
 #[tokio::test]
 async fn post_null_clears_budget() {
     let state = fresh_state();
-    state.set_storage_budget_bytes(Some(50_u64 * 1_073_741_824)).unwrap();
+    state
+        .set_storage_budget_bytes(Some(50_u64 * 1_073_741_824))
+        .unwrap();
     assert!(state.storage_budget_bytes().is_some());
 
     let (status, body) =
@@ -127,7 +127,9 @@ async fn budget_remaining_saturates_at_zero_when_used_exceeds() {
     // every scheduler stops assigning new work to this node. This
     // is the load-bearing invariant for the whole feature.
     let state = fresh_state();
-    state.set_storage_budget_bytes(Some(50_u64 * 1_073_741_824)).unwrap();
+    state
+        .set_storage_budget_bytes(Some(50_u64 * 1_073_741_824))
+        .unwrap();
     state.set_storage_used_bytes(80_u64 * 1_073_741_824);
     assert_eq!(state.storage_remaining_bytes(), Some(0));
 }

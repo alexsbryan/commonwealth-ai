@@ -17,9 +17,7 @@ use tokio::io::AsyncWriteExt;
 use crate::state::{self, AppState, DesktopConfig};
 
 #[tauri::command]
-pub async fn diagnose_corpus(
-    state: State<'_, Arc<AppState>>,
-) -> Result<String, String> {
+pub async fn diagnose_corpus(state: State<'_, Arc<AppState>>) -> Result<String, String> {
     let engine_guard = state.corpus_engine.read().await;
     let engine = match engine_guard.as_ref() {
         Some(e) => Arc::clone(e),
@@ -316,10 +314,7 @@ pub async fn lc_start_layered_setup(
 /// the snapshot after a grace window, so the Svelte `installing`
 /// state flips back to `installed` without waiting for the next
 /// `list_corpora` refresh.
-pub fn spawn_corpus_status_poller(
-    app_handle: tauri::AppHandle,
-    state: Arc<AppState>,
-) {
+pub fn spawn_corpus_status_poller(app_handle: tauri::AppHandle, state: Arc<AppState>) {
     tokio::spawn(async move {
         let client = match reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(5))
@@ -422,18 +417,20 @@ fn status_entry_to_payload(entry: &CorpusStatusEntry) -> CorpusProgressPayload {
             bytes_total,
         }) => {
             let msg = bytes_total
-                .map(|t| format!(
-                    "{:.0} / {:.0} MB ({:.0}%)",
-                    *bytes_downloaded as f64 / 1_048_576.0,
-                    t as f64 / 1_048_576.0,
-                    dp,
-                ))
-                .unwrap_or_else(|| {
-                    format!("{:.0} MB", *bytes_downloaded as f64 / 1_048_576.0)
-                });
+                .map(|t| {
+                    format!(
+                        "{:.0} / {:.0} MB ({:.0}%)",
+                        *bytes_downloaded as f64 / 1_048_576.0,
+                        t as f64 / 1_048_576.0,
+                        dp,
+                    )
+                })
+                .unwrap_or_else(|| format!("{:.0} MB", *bytes_downloaded as f64 / 1_048_576.0));
             ("downloading".to_string(), 0u64, Some(msg))
         }
-        Some(P::Extracting { documents_processed }) => (
+        Some(P::Extracting {
+            documents_processed,
+        }) => (
             "extracting".to_string(),
             0,
             Some(format!("{} articles", documents_processed)),
@@ -480,11 +477,9 @@ fn status_entry_to_payload(entry: &CorpusStatusEntry) -> CorpusProgressPayload {
             *total_chunks,
             Some(format!("Done in {duration_secs}s")),
         ),
-        Some(P::Enriching { phase, detail, .. }) => (
-            format!("enriching_{phase}"),
-            0,
-            Some(detail.clone()),
-        ),
+        Some(P::Enriching { phase, detail, .. }) => {
+            (format!("enriching_{phase}"), 0, Some(detail.clone()))
+        }
         None => {
             // No IngestProgress event yet this session — this is the
             // classic "daemon resumed after Desktop close" state. Use
@@ -702,4 +697,3 @@ pub async fn get_corpus_progress(
     let map = state.install_progress.read().await;
     Ok(map.get(&corpus_id).cloned())
 }
-

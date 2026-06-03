@@ -21,12 +21,12 @@
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-use corpus_engine_notes::{NoteStore};
+use corpus_engine_notes::NoteStore;
 use corpus_engine_scip::ScipGraph;
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::traits::Tool;
 use sovereign_tools::mcp_surface::{
-    is_mcp_exposed, render_tools_list, resolve_alias, MCP_TOOL_ALIASES, MCP_TOOLS_ALWAYS,
+    is_mcp_exposed, render_tools_list, resolve_alias, MCP_TOOLS_ALWAYS, MCP_TOOL_ALIASES,
 };
 
 fn empty_graph() -> sovereign_tools::ScipGraphHandle {
@@ -95,16 +95,25 @@ fn render_tools_list_includes_canonical_and_aliases() {
         Arc::clone(&engine),
         Arc::clone(&graph),
     )));
-    registry.register(Box::new(sovereign_tools::BlastRadiusTool::new(Arc::clone(&graph))));
-    registry.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(&notes))));
-    registry.register(Box::new(sovereign_tools::ReadNotesTool::new(Arc::clone(&notes))));
+    registry.register(Box::new(sovereign_tools::BlastRadiusTool::new(Arc::clone(
+        &graph,
+    ))));
+    registry.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
+        &notes,
+    ))));
+    registry.register(Box::new(sovereign_tools::ReadNotesTool::new(Arc::clone(
+        &notes,
+    ))));
 
     let listed = render_tools_list(&registry.descriptors());
     let names: Vec<&str> = listed.iter().filter_map(|t| t["name"].as_str()).collect();
 
     // Canonical (renamed) ids appear.
     for canonical in &["symbols", "callers", "callees", "blast", "note", "notes"] {
-        assert!(names.contains(canonical), "missing canonical {canonical} in {names:?}");
+        assert!(
+            names.contains(canonical),
+            "missing canonical {canonical} in {names:?}"
+        );
     }
 
     // Each legacy alias appears as a deprecated mirror with the

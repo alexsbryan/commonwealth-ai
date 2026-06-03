@@ -2,8 +2,6 @@
 //! anchored to the working-memory current_goal (or honestly anchorless
 //! when none is loaded). Fast-slot acknowledgement only; no synthesis.
 
-
-
 use crate::error::Result;
 
 use super::super::*;
@@ -21,8 +19,8 @@ impl Runtime {
         context: &ConversationContext,
     ) -> Result<Response> {
         // Extract commitment phrase: text after the marker.
-        let phrase = extract_commitment_phrase(message)
-            .unwrap_or_else(|| message.trim().to_string());
+        let phrase =
+            extract_commitment_phrase(message).unwrap_or_else(|| message.trim().to_string());
 
         // Resolve situated anchor — current_goal is the strongest
         // signal; topic_context.topic is fallback; otherwise None.
@@ -65,7 +63,11 @@ impl Runtime {
                 })),
                 version: 0,
             };
-            return Ok(Response { message: response_msg, task: None, metrics: None });
+            return Ok(Response {
+                message: response_msg,
+                task: None,
+                metrics: None,
+            });
         };
 
         // Persist via existing NoteStore API. Defaults to
@@ -106,7 +108,11 @@ impl Runtime {
                     })),
                     version: 0,
                 };
-                return Ok(Response { message: response_msg, task: None, metrics: None });
+                return Ok(Response {
+                    message: response_msg,
+                    task: None,
+                    metrics: None,
+                });
             }
         };
 
@@ -133,6 +139,10 @@ impl Runtime {
             })),
             version: 0,
         };
-        Ok(Response { message: response_msg, task: None, metrics: None })
+        Ok(Response {
+            message: response_msg,
+            task: None,
+            metrics: None,
+        })
     }
 }

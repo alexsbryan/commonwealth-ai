@@ -40,9 +40,7 @@ use sovereign_core::types::AssetState;
 use tokio::sync::{Mutex, OwnedSemaphorePermit, RwLock, Semaphore};
 use tokio::task::JoinHandle;
 
-use crate::enrich::{
-    new_cancellation_flag, run_enrich_build, CancellationFlag, EnrichBuildConfig,
-};
+use crate::enrich::{new_cancellation_flag, run_enrich_build, CancellationFlag, EnrichBuildConfig};
 
 /// Daemon-side defaults the driver needs to synthesize an enrich
 /// config when the user enables enrichment on a folder. Populated
@@ -150,8 +148,8 @@ impl EnrichConfigJson {
                 ))
             })?;
         }
-        let json = serde_json::to_string_pretty(self)
-            .map_err(|e| Error::Serialization(e.to_string()))?;
+        let json =
+            serde_json::to_string_pretty(self).map_err(|e| Error::Serialization(e.to_string()))?;
         let tmp = path.with_extension("json.tmp");
         std::fs::write(&tmp, json).map_err(|e| {
             Error::Execution(format!("write enrich config tmp {}: {e}", tmp.display()))
@@ -215,18 +213,22 @@ impl CostEstimate {
     /// estimate in that case.
     pub fn from_doc_count(doc_count: usize) -> Self {
         if doc_count == 0 {
-            return Self { low_secs: 0, high_secs: 0 };
+            return Self {
+                low_secs: 0,
+                high_secs: 0,
+            };
         }
         let docs = doc_count as u64;
         let chunks_per_doc = 5_u64;
         let low_per_chunk_ms = 500_u64;
         let high_per_chunk_ms = 1_500_u64;
         let fixed_overhead_secs = 30_u64;
-        let low_secs = fixed_overhead_secs
-            + (docs * chunks_per_doc * low_per_chunk_ms) / 1000;
-        let high_secs = fixed_overhead_secs
-            + (docs * chunks_per_doc * high_per_chunk_ms) / 1000;
-        Self { low_secs, high_secs }
+        let low_secs = fixed_overhead_secs + (docs * chunks_per_doc * low_per_chunk_ms) / 1000;
+        let high_secs = fixed_overhead_secs + (docs * chunks_per_doc * high_per_chunk_ms) / 1000;
+        Self {
+            low_secs,
+            high_secs,
+        }
     }
 }
 
@@ -262,10 +264,8 @@ struct JobHandle {
 /// into a single bag.
 #[derive(Clone)]
 pub struct TieredDeps {
-    pub tiered_provider:
-        Arc<dyn corpus_engine::enrichment::tiered::TieredEnrichmentProvider>,
-    pub gliner_extractor:
-        Option<Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>>,
+    pub tiered_provider: Arc<dyn corpus_engine::enrichment::tiered::TieredEnrichmentProvider>,
+    pub gliner_extractor: Option<Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>>,
 }
 
 /// Folder-ingest v1 §3.3 driver. One per daemon instance. Holds
@@ -361,16 +361,13 @@ impl EnrichmentDriver {
     ) -> Result<String> {
         let defaults = {
             let guard = self.defaults.read().await;
-            guard
-                .as_ref()
-                .cloned()
-                .ok_or_else(|| {
-                    Error::Execution(
-                        "enrichment defaults not installed yet — daemon \
+            guard.as_ref().cloned().ok_or_else(|| {
+                Error::Execution(
+                    "enrichment defaults not installed yet — daemon \
                          boot incomplete or models unconfigured"
-                            .into(),
-                    )
-                })?
+                        .into(),
+                )
+            })?
         };
 
         if self.is_running(corpus_id).await {
@@ -382,8 +379,7 @@ impl EnrichmentDriver {
 
         // Synthesize + write the enrich config. The subprocess
         // reads from this exact path on the very next line.
-        let cfg =
-            EnrichConfigJson::synthesize(corpus_id, pipeline_id, source_path, &defaults);
+        let cfg = EnrichConfigJson::synthesize(corpus_id, pipeline_id, source_path, &defaults);
         cfg.save()?;
 
         // Acquire a global permit. With capacity = 1 this means a
@@ -416,12 +412,8 @@ impl EnrichmentDriver {
             // The runner's progress callback fires synchronously
             // for each parsed stdout line; we route directly to
             // the manager-supplied sink.
-            let result = run_enrich_build(
-                &corpus_id_owned,
-                build_cfg,
-                Some(progress.clone()),
-            )
-            .await;
+            let result =
+                run_enrich_build(&corpus_id_owned, build_cfg, Some(progress.clone())).await;
             match result {
                 Ok(out) => {
                     if out.cancelled {
@@ -585,7 +577,9 @@ impl EnrichmentDriver {
                 }
                 Err(e) => {
                     let reason = format!("{e}");
-                    on_state(AssetState::Failed { reason: reason.clone() });
+                    on_state(AssetState::Failed {
+                        reason: reason.clone(),
+                    });
                     tracing::warn!(
                         corpus_id = %corpus_id_owned,
                         error = %reason,
@@ -691,12 +685,8 @@ mod tests {
         // shape; pin field names + camelCase-vs-snake conventions
         // so a refactor that breaks JSON compatibility surfaces
         // before the subprocess reads the file.
-        let cfg = EnrichConfigJson::synthesize(
-            "c1",
-            "literary_atlas",
-            Path::new("/tmp/x"),
-            &defaults(),
-        );
+        let cfg =
+            EnrichConfigJson::synthesize("c1", "literary_atlas", Path::new("/tmp/x"), &defaults());
         let json = serde_json::to_value(&cfg).unwrap();
         // CLI required fields:
         for field in [
@@ -818,7 +808,12 @@ mod tests {
         let progress: crate::enrich::EnrichProgressFn = Arc::new(|_| {});
 
         let _job_id = driver
-            .start_build("c1", Path::new("/tmp"), "philosophy_atlas", progress.clone())
+            .start_build(
+                "c1",
+                Path::new("/tmp"),
+                "philosophy_atlas",
+                progress.clone(),
+            )
             .await
             .expect("first build accepted");
         let second = driver

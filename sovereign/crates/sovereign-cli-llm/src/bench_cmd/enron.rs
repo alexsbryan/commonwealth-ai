@@ -25,13 +25,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, Entity};
-use corpus_engine::enrichment::reconciliation::{
-    reconcile, ReconciliationPolicy,
-};
+use corpus_engine::enrichment::reconciliation::{reconcile, ReconciliationPolicy};
 use serde::{Deserialize, Serialize};
-use sovereign_eval::entity_resolution_bench::{
-    BenchGroundTruth, PeekBudget, Split,
-};
+use sovereign_eval::entity_resolution_bench::{BenchGroundTruth, PeekBudget, Split};
 use sovereign_eval::entity_resolution_score::{score, Clustering, EntityResolutionReport};
 
 use crate::util::help::{self, Help, HelpSection};
@@ -173,16 +169,16 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
             }
             "--indexes-dir" => {
                 i += 1;
-                indexes_dir = Some(PathBuf::from(
-                    args.get(i)
-                        .ok_or_else(|| "--indexes-dir requires a value".to_string())?,
-                ));
+                indexes_dir =
+                    Some(PathBuf::from(args.get(i).ok_or_else(|| {
+                        "--indexes-dir requires a value".to_string()
+                    })?));
             }
             "--name-similarity-threshold" => {
                 i += 1;
-                let v = args.get(i).ok_or_else(|| {
-                    "--name-similarity-threshold requires a value".to_string()
-                })?;
+                let v = args
+                    .get(i)
+                    .ok_or_else(|| "--name-similarity-threshold requires a value".to_string())?;
                 let parsed = v
                     .parse::<f32>()
                     .map_err(|e| format!("--name-similarity-threshold: {e}"))?;
@@ -324,11 +320,12 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
     }
 
     // ── Load ground truth + (optionally) unsealed holdout ──────
-    let gt_path = parsed
-        .bench_dir
-        .join("ground_truth_entities.jsonl");
+    let gt_path = parsed.bench_dir.join("ground_truth_entities.jsonl");
     let mut gt = BenchGroundTruth::load(&gt_path).map_err(|e| {
-        format!("load ground_truth_entities.jsonl ({}): {e}", gt_path.display())
+        format!(
+            "load ground_truth_entities.jsonl ({}): {e}",
+            gt_path.display()
+        )
     })?;
 
     if parsed.split == Split::Holdout && parsed.unseal_holdout {
@@ -353,9 +350,8 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
         let budget_path = parsed
             .bench_dir
             .join("baselines/enron-entity-resolution/peek_budget.json");
-        let mut budget = PeekBudget::load(&budget_path).map_err(|e| {
-            format!("load peek_budget ({}): {e}", budget_path.display())
-        })?;
+        let mut budget = PeekBudget::load(&budget_path)
+            .map_err(|e| format!("load peek_budget ({}): {e}", budget_path.display()))?;
         let n = budget.burn(
             format!(
                 "--unseal-holdout from `sovereign bench enron run`; corpus={}, policy={}",
@@ -364,9 +360,9 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
             ),
             git_head_short(),
         );
-        budget.save(&budget_path).map_err(|e| {
-            format!("save peek_budget: {e}")
-        })?;
+        budget
+            .save(&budget_path)
+            .map_err(|e| format!("save peek_budget: {e}"))?;
         eprintln!("peek_budget: holdout_peeks = {n} (burned this run)");
     }
 
@@ -380,10 +376,7 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
     }
 
     // ── Load the corpus's atoms.json ────────────────────────────
-    let atlas_dir = parsed
-        .indexes_dir
-        .join(&parsed.corpus)
-        .join("atlas");
+    let atlas_dir = parsed.indexes_dir.join(&parsed.corpus).join("atlas");
     let atoms_path = atlas_dir.join("atoms.json");
     if !atoms_path.exists() {
         eprintln!(
@@ -394,10 +387,8 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
         );
         return Ok(2);
     }
-    let atoms_file =
-        corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir).map_err(|e| {
-            format!("read atoms.json ({}): {e}", atoms_path.display())
-        })?;
+    let atoms_file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
+        .map_err(|e| format!("read atoms.json ({}): {e}", atoms_path.display()))?;
 
     let entities: Vec<Entity> = atoms_file
         .atoms
@@ -439,9 +430,8 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
             // Append the reconciler's oplog entries to the on-disk
             // oplog so the audit trail survives the process exiting.
             if !outcome.oplog_entries.is_empty() {
-                let oplog = corpus_engine::enrichment::reconciliation::OplogWriter::new(
-                    atlas_dir.clone(),
-                );
+                let oplog =
+                    corpus_engine::enrichment::reconciliation::OplogWriter::new(atlas_dir.clone());
                 for entry in &outcome.oplog_entries {
                     let _ = oplog.append(entry);
                 }
@@ -584,13 +574,11 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
             .join(default)
     });
     if let Some(parent) = out_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("create {}: {e}", parent.display()))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
     }
-    let json = serde_json::to_string_pretty(&outcome)
-        .map_err(|e| format!("serialise outcome: {e}"))?;
-    std::fs::write(&out_path, json)
-        .map_err(|e| format!("write {}: {e}", out_path.display()))?;
+    let json =
+        serde_json::to_string_pretty(&outcome).map_err(|e| format!("serialise outcome: {e}"))?;
+    std::fs::write(&out_path, json).map_err(|e| format!("write {}: {e}", out_path.display()))?;
     println!("  → {}", out_path.display());
 
     Ok(0)
@@ -657,7 +645,11 @@ async fn cmd_diagnose(args: &[String]) -> Result<i32, String> {
         .map_err(|e| format!("load ground truth ({}): {e}", gt_path.display()))?;
     let gold = gt.by_split(parsed.split);
 
-    println!("─── enron diagnose: {} / {} ───", parsed.corpus, parsed.split.as_str());
+    println!(
+        "─── enron diagnose: {} / {} ───",
+        parsed.corpus,
+        parsed.split.as_str()
+    );
     println!("  entity atoms     : {}", entities.len());
     println!("  reconciled into  : {} clusters", outcome.entities.len());
     println!();
@@ -743,8 +735,7 @@ fn surface_forms_of(e: &Entity) -> Vec<String> {
 }
 
 fn compute_delta_from_floor(bench_dir: &Path, tuned_f1: f64) -> Option<f64> {
-    let floor_path = bench_dir
-        .join("baselines/enron-entity-resolution/pre_reconciliation.json");
+    let floor_path = bench_dir.join("baselines/enron-entity-resolution/pre_reconciliation.json");
     let bytes = std::fs::read(&floor_path).ok()?;
     let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
     let floor_f1 = value
@@ -786,11 +777,7 @@ fn now_secs() -> i64 {
 }
 
 fn sample_first_n(v: &[String], n: usize) -> String {
-    v.iter()
-        .take(n)
-        .cloned()
-        .collect::<Vec<_>>()
-        .join(", ")
+    v.iter().take(n).cloned().collect::<Vec<_>>().join(", ")
 }
 
 /// How many `unmatched_*` surface forms to keep verbatim in a persisted
@@ -851,11 +838,10 @@ mod tests {
     #[test]
     fn parse_args_policy_aliases() {
         for alias in ["floor", "pre-reconciliation", "pre_reconciliation"] {
-            let args: Vec<String> =
-                ["--corpus", "c", "--split", "train", "--policy", alias]
-                    .into_iter()
-                    .map(String::from)
-                    .collect();
+            let args: Vec<String> = ["--corpus", "c", "--split", "train", "--policy", alias]
+                .into_iter()
+                .map(String::from)
+                .collect();
             let a = parse_args(&args).unwrap();
             assert_eq!(a.policy, Policy::PreReconciliation, "{alias}");
         }

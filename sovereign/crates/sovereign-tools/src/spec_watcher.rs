@@ -115,8 +115,8 @@ impl SpecWatcher {
         //     prefix used in `path_is_spec_signal`, every event
         //     would silently fail the strip_prefix check.
         let cache_root: PathBuf = root.to_path_buf();
-        let canonical_root: PathBuf = std::fs::canonicalize(root)
-            .unwrap_or_else(|_| cache_root.clone());
+        let canonical_root: PathBuf =
+            std::fs::canonicalize(root).unwrap_or_else(|_| cache_root.clone());
         let on_change = Arc::new(on_change);
 
         // mpsc bridges from the synchronous notify callback (which
@@ -253,10 +253,7 @@ mod tests {
         let root = Path::new("/tmp/foo");
 
         // Architecture marker.
-        assert!(path_is_spec_signal(
-            root,
-            &root.join("ARCHITECTURE.md"),
-        ));
+        assert!(path_is_spec_signal(root, &root.join("ARCHITECTURE.md"),));
         // Feature spec.
         assert!(path_is_spec_signal(
             root,
@@ -268,10 +265,7 @@ mod tests {
             root,
             &root.join(".sovereign/features/foo/brief.md"),
         ));
-        assert!(!path_is_spec_signal(
-            root,
-            &root.join("Architecture.md"),
-        ));
+        assert!(!path_is_spec_signal(root, &root.join("Architecture.md"),));
 
         // Deeper path under feature dir doesn't match — only the
         // immediate spec.md does.

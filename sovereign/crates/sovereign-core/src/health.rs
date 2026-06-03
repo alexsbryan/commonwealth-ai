@@ -51,10 +51,7 @@ pub enum HealthStatus {
 /// Return the worst (highest-severity) status in `statuses`.
 /// Returns `Healthy` when `statuses` is empty.
 pub fn worst_status(statuses: impl IntoIterator<Item = HealthStatus>) -> HealthStatus {
-    statuses
-        .into_iter()
-        .max()
-        .unwrap_or(HealthStatus::Healthy)
+    statuses.into_iter().max().unwrap_or(HealthStatus::Healthy)
 }
 
 // ─── SlotName ────────────────────────────────────────────────────────────────
@@ -162,7 +159,10 @@ pub enum HealthIssue {
     /// SQLite `PRAGMA integrity_check` returned a non-`ok` result.
     StateStoreCorruption { detail: String },
     /// The SQLite WAL file has grown past the safe threshold.
-    WalOvergrowth { wal_size_bytes: u64, threshold_bytes: u64 },
+    WalOvergrowth {
+        wal_size_bytes: u64,
+        threshold_bytes: u64,
+    },
 }
 
 impl HealthIssue {
@@ -197,7 +197,10 @@ impl HealthIssue {
                 | Self::CorruptEmbeddings { .. }
                 | Self::StateStoreCorruption { .. }
                 | Self::ModelChecksumFailure { .. }
-                | Self::RouterCircuitOpen { fallback_active: false, .. }
+                | Self::RouterCircuitOpen {
+                    fallback_active: false,
+                    ..
+                }
         )
     }
 
@@ -231,7 +234,10 @@ pub enum RecoveryAction {
     /// Rebuild the FTS index for a corpus.
     RebuildFts { corpus_id: String },
     /// Resume an interrupted ingest from the saved cursor.
-    ResumeIngestion { corpus_id: String, resume_from: String },
+    ResumeIngestion {
+        corpus_id: String,
+        resume_from: String,
+    },
     /// Delete stale / orphaned claim rows and re-enqueue extraction.
     RefreshEnrichment { corpus_id: String },
     /// Apply a corpus dataset update (delta or full).
@@ -362,10 +368,20 @@ impl HealthReport {
             format!(
                 "{} issue(s): {}",
                 issues.len(),
-                issues.iter().map(|i| i.tag()).collect::<Vec<_>>().join(", ")
+                issues
+                    .iter()
+                    .map(|i| i.tag())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )
         };
-        Self { component, status, issues, summary, measured_at }
+        Self {
+            component,
+            status,
+            issues,
+            summary,
+            measured_at,
+        }
     }
 }
 
@@ -416,9 +432,7 @@ pub trait HealthCheckable: Send + Sync + 'static {
     fn repair(
         &self,
         issue: &HealthIssue,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<RepairOutcome>> + Send + '_>,
-    >;
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<RepairOutcome>> + Send + '_>>;
 
     /// Whether the monitor may call `repair()` without asking the user first.
     fn can_repair_autonomously(&self, issue: &HealthIssue) -> bool;

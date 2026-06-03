@@ -163,9 +163,7 @@ pub fn write_outputs(
 
 /// Read the three JSON files. Missing files surface as empty
 /// vectors so a partial run doesn't error the audit step.
-pub fn read_outputs(
-    dir: &Path,
-) -> Result<(Vec<Entity>, Vec<Relationship>, Vec<PatternFinding>)> {
+pub fn read_outputs(dir: &Path) -> Result<(Vec<Entity>, Vec<Relationship>, Vec<PatternFinding>)> {
     let invest_dir = dir.join(INVESTIGATION_DIRNAME);
     Ok((
         read_json(&invest_dir.join(ENTITIES_FILENAME))?,
@@ -184,8 +182,8 @@ fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Vec<T>> {
 }
 
 fn write_atomic_json<T: Serialize>(path: &Path, value: T) -> Result<()> {
-    let bytes = serde_json::to_vec_pretty(&value)
-        .map_err(|e| Error::Serialization(e.to_string()))?;
+    let bytes =
+        serde_json::to_vec_pretty(&value).map_err(|e| Error::Serialization(e.to_string()))?;
     let part = path.with_extension("json.part");
     fs::write(&part, bytes)?;
     fs::rename(&part, path)?;
@@ -215,8 +213,7 @@ mod tests {
             attributes: Default::default(),
             evidence: Evidence {
                 chunk_id: "chunk-42".into(),
-                excerpt: "Microsoft committed to a multi-year cloud GPU contract."
-                    .into(),
+                excerpt: "Microsoft committed to a multi-year cloud GPU contract.".into(),
             },
             confidence: 0.85,
         }];

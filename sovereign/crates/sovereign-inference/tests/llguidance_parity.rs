@@ -17,11 +17,7 @@
 //! they require a real `LlamaModel` / GGUF on disk; placeholder
 //! markers below document the intent.
 
-use llguidance::{
-    api::TopLevelGrammar,
-    toktrie::ApproximateTokEnv,
-    Matcher, ParserFactory,
-};
+use llguidance::{api::TopLevelGrammar, toktrie::ApproximateTokEnv, Matcher, ParserFactory};
 use sovereign_inference::llguidance_constraint::default_additional_properties_false;
 
 // ─── helpers ───────────────────────────────────────────────────────────
@@ -244,7 +240,11 @@ fn parity_essay_readiness_integer_bounds_enforced() {
         assert!(allows(&mut m, d), "digit {} must be allowed", d as char);
     }
     for d in b'4'..=b'9' {
-        assert!(!allows(&mut m, d), "digit {} must be masked (above maximum)", d as char);
+        assert!(
+            !allows(&mut m, d),
+            "digit {} must be masked (above maximum)",
+            d as char
+        );
     }
 }
 
@@ -268,7 +268,10 @@ fn parity_thread_judge_type_union_accepts_integer_and_null() {
     consume_ok(&mut m, br#"{"evidence_turn":"#);
     // Either a digit (integer branch) or `n` (null literal) must be
     // reachable from this state.
-    assert!(allows(&mut m, b'0'), "digit must be reachable (integer branch)");
+    assert!(
+        allows(&mut m, b'0'),
+        "digit must be reachable (integer branch)"
+    );
     assert!(allows(&mut m, b'n'), "`n` must be reachable (null branch)");
 }
 
@@ -300,7 +303,11 @@ fn parity_intent_enum_router_only_emits_listed_values() {
     consume_ok(&mut m, br#"{"intent":""#);
     // First-letter set of the enum values: S, L, C, R, A, E, M.
     for c in [b'S', b'L', b'C', b'R', b'A', b'E', b'M'] {
-        assert!(allows(&mut m, c), "first-letter {} must be allowed", c as char);
+        assert!(
+            allows(&mut m, c),
+            "first-letter {} must be allowed",
+            c as char
+        );
     }
     // Non-starter letters must be masked.
     for c in [b'X', b'Z', b'B', b'D'] {
@@ -350,7 +357,10 @@ fn parity_tool_envelope_oneof_with_cmd_prefix() {
     let mut m = matcher_for(schema);
     consume_ok(&mut m, br#"{"name":"bash","arguments":{"cmd":""#);
     // Literal prefix "cargo " must be forced one byte at a time.
-    assert!(allows(&mut m, b'c'), "first prefix byte `c` must be allowed");
+    assert!(
+        allows(&mut m, b'c'),
+        "first prefix byte `c` must be allowed"
+    );
     // Any other first byte must be masked.
     for c in [b'l', b'r', b'g', b'x', b'C'] {
         assert!(
@@ -424,7 +434,11 @@ fn env_gate_off_by_default_when_var_missing() {
 #[test]
 fn env_gate_on_with_literal_one() {
     assert!(env_gate_parser(|k| {
-        if k == "SOVEREIGN_FULL_LLGUIDANCE" { Some("1".into()) } else { None }
+        if k == "SOVEREIGN_FULL_LLGUIDANCE" {
+            Some("1".into())
+        } else {
+            None
+        }
     }));
 }
 
@@ -433,7 +447,11 @@ fn env_gate_on_with_case_insensitive_true() {
     for v in ["true", "True", "TRUE", "tRuE"] {
         assert!(
             env_gate_parser(|k| {
-                if k == "SOVEREIGN_FULL_LLGUIDANCE" { Some(v.into()) } else { None }
+                if k == "SOVEREIGN_FULL_LLGUIDANCE" {
+                    Some(v.into())
+                } else {
+                    None
+                }
             }),
             "value {v:?} must enable the gate"
         );
@@ -445,7 +463,11 @@ fn env_gate_off_with_falsy_and_garbage_values() {
     for v in ["0", "false", "False", "no", "yes", "", "garbage"] {
         assert!(
             !env_gate_parser(|k| {
-                if k == "SOVEREIGN_FULL_LLGUIDANCE" { Some(v.into()) } else { None }
+                if k == "SOVEREIGN_FULL_LLGUIDANCE" {
+                    Some(v.into())
+                } else {
+                    None
+                }
             }),
             "value {v:?} must NOT enable the gate (only `1`/`true` do)"
         );

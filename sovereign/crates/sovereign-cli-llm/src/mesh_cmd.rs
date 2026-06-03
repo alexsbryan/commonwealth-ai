@@ -84,14 +84,10 @@ pub async fn run_corpus(args: &[String]) -> i32 {
         "watch-status" => crate::corpus_watch_cmd::run_status(&args[1..]).await,
         "watch-pause" => crate::corpus_watch_cmd::run_pause(&args[1..]).await,
         "watch-resume" => crate::corpus_watch_cmd::run_resume(&args[1..]).await,
-        "watch-confirm-deletion" => {
-            crate::corpus_watch_cmd::run_confirm_deletion(&args[1..]).await
-        }
+        "watch-confirm-deletion" => crate::corpus_watch_cmd::run_confirm_deletion(&args[1..]).await,
         "watch-sync-now" => crate::corpus_watch_cmd::run_sync_now(&args[1..]).await,
         "watch-add-root" => crate::corpus_watch_cmd::run_add_root(&args[1..]).await,
-        "watch-remove-root" => {
-            crate::corpus_watch_cmd::run_remove_root(&args[1..]).await
-        }
+        "watch-remove-root" => crate::corpus_watch_cmd::run_remove_root(&args[1..]).await,
         "watch-remove" => crate::corpus_watch_cmd::run_remove(&args[1..]).await,
         "stream-axes" => cmd_corpus_stream_axes(&args[1..]).await,
         other => {
@@ -108,15 +104,29 @@ const HELP_MESH: crate::util::help::Help = crate::util::help::Help {
     sections: &[
         crate::util::help::HelpSection::Usage("sovereign mesh <subcommand> [args]"),
         crate::util::help::HelpSection::Subcommands(&[
-            ("create",    "Promote the solo mesh to a joinable mesh; print invite"),
-            ("join <arg>","Join an existing mesh (bare key, https url, or sovereign://)"),
-            ("rotate",    "Generate a new shareable join key (invalidates the previous)"),
-            ("status",    "Show mesh members, hosted knowledge, loaded models"),
-            ("balance",   "Show your contribution to the mesh"),
-            ("leave",     "Leave the current mesh"),
-            ("logs",      "Show mesh daemon logs"),
-            ("fetch-model <name>",
-             "Pull a GGUF from a mesh peer over the tailnet (no R2 credentials required)"),
+            (
+                "create",
+                "Promote the solo mesh to a joinable mesh; print invite",
+            ),
+            (
+                "join <arg>",
+                "Join an existing mesh (bare key, https url, or sovereign://)",
+            ),
+            (
+                "rotate",
+                "Generate a new shareable join key (invalidates the previous)",
+            ),
+            (
+                "status",
+                "Show mesh members, hosted knowledge, loaded models",
+            ),
+            ("balance", "Show your contribution to the mesh"),
+            ("leave", "Leave the current mesh"),
+            ("logs", "Show mesh daemon logs"),
+            (
+                "fetch-model <name>",
+                "Pull a GGUF from a mesh peer over the tailnet (no R2 credentials required)",
+            ),
         ]),
         crate::util::help::HelpSection::Notes(
             "Run `sovereign mesh <subcommand> --help` for subcommand-specific flags.",
@@ -129,9 +139,10 @@ const HELP_MESH_CREATE: crate::util::help::Help = crate::util::help::Help {
     summary: "Promote the solo mesh to a joinable mesh and print the shareable invite.",
     sections: &[
         crate::util::help::HelpSection::Usage("sovereign mesh create [--name <name>]"),
-        crate::util::help::HelpSection::Flags(&[
-            ("--name <name>", "Human-readable mesh name (default: \"<host>'s Mesh\")"),
-        ]),
+        crate::util::help::HelpSection::Flags(&[(
+            "--name <name>",
+            "Human-readable mesh name (default: \"<host>'s Mesh\")",
+        )]),
         crate::util::help::HelpSection::Notes(
             "Errors if a mesh already exists (e.g. from `sovereign setup`'s silent solo mesh).\n\
              In that case, run `sovereign mesh rotate` to generate a new shareable key instead.",
@@ -145,12 +156,18 @@ const HELP_MESH_JOIN: crate::util::help::Help = crate::util::help::Help {
     sections: &[
         crate::util::help::HelpSection::Usage("sovereign mesh join <arg>"),
         crate::util::help::HelpSection::Examples(&[
-            ("sovereign mesh join cwth-a1b2-c3d4-e5f6",
-             "Bare key typed from another user's terminal"),
-            ("sovereign mesh join https://sovereign.dev/join/cwth-a1b2-c3d4-e5f6",
-             "Clickable https link from an email"),
-            ("sovereign mesh join sovereign://join/cwth-a1b2-c3d4-e5f6",
-             "Native app deep link"),
+            (
+                "sovereign mesh join cwth-a1b2-c3d4-e5f6",
+                "Bare key typed from another user's terminal",
+            ),
+            (
+                "sovereign mesh join https://sovereign.dev/join/cwth-a1b2-c3d4-e5f6",
+                "Clickable https link from an email",
+            ),
+            (
+                "sovereign mesh join sovereign://join/cwth-a1b2-c3d4-e5f6",
+                "Native app deep link",
+            ),
         ]),
     ],
 };
@@ -296,7 +313,9 @@ async fn cmd_join(args: &[String]) -> i32 {
     // /v1/mesh/join on the daemon side.
     if parse_join_argument(arg).is_none() {
         eprintln!("Invalid join argument: {arg}");
-        eprintln!("Expected a bare key (cwth-XXXX-XXXX-XXXX), an https URL, or a sovereign:// link.");
+        eprintln!(
+            "Expected a bare key (cwth-XXXX-XXXX-XXXX), an https URL, or a sovereign:// link."
+        );
         return 1;
     }
 
@@ -445,7 +464,9 @@ async fn cmd_rotate(args: &[String]) -> i32 {
             0
         }
         Ok(None) => {
-            eprintln!("No mesh to rotate — run `sovereign setup` or `sovereign mesh create` first.");
+            eprintln!(
+                "No mesh to rotate — run `sovereign setup` or `sovereign mesh create` first."
+            );
             1
         }
         Err(e) => {
@@ -525,7 +546,9 @@ async fn cmd_status(args: &[String]) -> i32 {
         Ok(r) => r,
         Err(e) => {
             eprintln!("mesh status: daemon at {url} not reachable: {e}");
-            eprintln!("hint: `sovereign daemon status` to check, `sovereign daemon start` to launch.");
+            eprintln!(
+                "hint: `sovereign daemon status` to check, `sovereign daemon start` to launch."
+            );
             return 1;
         }
     };
@@ -616,7 +639,10 @@ async fn cmd_status(args: &[String]) -> i32 {
         total = status.members_total,
     );
     println!();
-    println!("  {:<22} {:<12} {:<8} address(es)", "node_id", "name", "status");
+    println!(
+        "  {:<22} {:<12} {:<8} address(es)",
+        "node_id", "name", "status"
+    );
     println!("  {:-<22} {:-<12} {:-<8} {:-<25}", "", "", "", "");
     for m in &members {
         let self_tag = if m.is_self { " *" } else { "" };
@@ -729,27 +755,23 @@ async fn cmd_fetch_model(args: &[String]) -> i32 {
     // first-boot loop.
     let dest_dir = match out_override {
         Some(p) => p,
-        None => {
-            match sovereign_core::setup_config::SetupConfig::load() {
-                Ok(cfg) => cfg
-                    .models
-                    .primary
-                    .parent()
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|| PathBuf::from(".")),
-                Err(e) => {
-                    eprintln!(
-                        "error: could not load setup config to choose default --out dir: {e}"
-                    );
-                    eprintln!("hint: pass --out <dir> explicitly, or run `sovereign daemon --setup-only` first.");
-                    return 1;
-                }
+        None => match sovereign_core::setup_config::SetupConfig::load() {
+            Ok(cfg) => cfg
+                .models
+                .primary
+                .parent()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(".")),
+            Err(e) => {
+                eprintln!("error: could not load setup config to choose default --out dir: {e}");
+                eprintln!("hint: pass --out <dir> explicitly, or run `sovereign daemon --setup-only` first.");
+                return 1;
             }
-        }
+        },
     };
 
     let client = match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(60 * 60))  // 1h cap for very slow links
+        .timeout(std::time::Duration::from_secs(60 * 60)) // 1h cap for very slow links
         .build()
     {
         Ok(c) => c,
@@ -784,7 +806,11 @@ async fn cmd_fetch_model(args: &[String]) -> i32 {
     };
 
     println!();
-    println!("Searching {} peer(s) for '{}'…", peer_candidates.len(), name);
+    println!(
+        "Searching {} peer(s) for '{}'…",
+        peer_candidates.len(),
+        name
+    );
 
     for peer_url in &peer_candidates {
         // Probe the peer's listing first so we can pick the one
@@ -809,7 +835,11 @@ async fn cmd_fetch_model(args: &[String]) -> i32 {
         );
         let started = std::time::Instant::now();
         let progress = |downloaded: u64, total: u64| {
-            let pct = if total > 0 { 100 * downloaded / total } else { 0 };
+            let pct = if total > 0 {
+                100 * downloaded / total
+            } else {
+                0
+            };
             eprint!(
                 "\r  {} / {} MiB ({}%)…   ",
                 downloaded / (1024 * 1024),
@@ -867,7 +897,11 @@ async fn collect_peer_internal_urls() -> std::io::Result<Vec<String>> {
     let v: serde_json::Value = serde_json::from_slice(&bytes)?;
     let self_id = v.get("self_node_id").and_then(|x| x.as_str()).unwrap_or("");
     let mut urls = Vec::new();
-    if let Some(members) = v.get("mesh").and_then(|m| m.get("members")).and_then(|m| m.as_object()) {
+    if let Some(members) = v
+        .get("mesh")
+        .and_then(|m| m.get("members"))
+        .and_then(|m| m.as_object())
+    {
         for (nid, member) in members {
             if nid == self_id {
                 continue;
@@ -1179,7 +1213,9 @@ async fn cmd_corpus_remove(args: &[String]) -> i32 {
     };
 
     if canonical_only && partitions_only {
-        eprintln!("--canonical-only and --partitions-only are mutually exclusive (default removes both).");
+        eprintln!(
+            "--canonical-only and --partitions-only are mutually exclusive (default removes both)."
+        );
         return 1;
     }
 
@@ -1201,7 +1237,9 @@ async fn cmd_corpus_remove(args: &[String]) -> i32 {
     if let Ok(entries) = std::fs::read_dir(&index_dir) {
         for entry in entries.flatten() {
             let name = entry.file_name();
-            let Some(name_str) = name.to_str() else { continue };
+            let Some(name_str) = name.to_str() else {
+                continue;
+            };
             if !name_str.starts_with(&prefix) {
                 continue;
             }
@@ -1292,9 +1330,7 @@ async fn cmd_corpus_remove(args: &[String]) -> i32 {
                     "⚠  This corpus has {} Tier-2 enriched entities (atlas).",
                     summary.tier2_count
                 );
-                println!(
-                    "   That work is local-only unless a mesh peer has pulled this atlas."
-                );
+                println!("   That work is local-only unless a mesh peer has pulled this atlas.");
                 println!(
                     "   Consider running `sovereign mesh push {corpus_id}` first if you have peers."
                 );
@@ -1502,10 +1538,9 @@ fn read_corpus_status_row(corpus_id: &str, dir: &std::path::Path) -> CorpusStatu
     // with what mesh gossip advertises (Phase C1) and b) repeat
     // status calls don't reparse atoms.json on every invocation.
     let atlas_dir = dir.join("atlas");
-    let summary =
-        corpus_engine::enrichment::atlas::read_or_compute_atlas_summary(&atlas_dir)
-            .ok()
-            .flatten();
+    let summary = corpus_engine::enrichment::atlas::read_or_compute_atlas_summary(&atlas_dir)
+        .ok()
+        .flatten();
     let (atlas_entities, atlas_extracted_entities) = match summary {
         Some(s) => (Some(s.atom_count as usize), Some(s.tier2_count as usize)),
         None => (None, None),
@@ -1633,10 +1668,7 @@ async fn cmd_corpus_stream_axes(args: &[String]) -> i32 {
     let mut skipped = 0usize;
     let mut errors = 0usize;
 
-    println!(
-        "{:<32} {:<10} {:<10} from",
-        "corpus", "stability", "source"
-    );
+    println!("{:<32} {:<10} {:<10} from", "corpus", "stability", "source");
     println!("{}", "─".repeat(96));
 
     for info in indexes {
@@ -1838,7 +1870,11 @@ async fn cmd_corpus_diag(args: &[String]) -> i32 {
         return 1;
     };
 
-    println!("Opening index at {} ({}) …", index_path.display(), surface_label);
+    println!(
+        "Opening index at {} ({}) …",
+        index_path.display(),
+        surface_label
+    );
 
     // If we're reading a partition, surface the processed-shards gap
     // up front. The whole point of diag is to answer "is this corpus
@@ -1846,9 +1882,7 @@ async fn cmd_corpus_diag(args: &[String]) -> i32 {
     // this so we don't have to wait for the title-list comparison
     // below to discover an obvious gap.
     if surface_label.starts_with("partition-") {
-        if let Some(shard_summary) =
-            processed_shards_summary(&index_path, total_shards_override)
-        {
+        if let Some(shard_summary) = processed_shards_summary(&index_path, total_shards_override) {
             println!("  shard coverage: {shard_summary}");
         }
     }
@@ -1947,7 +1981,6 @@ async fn cmd_corpus_diag(args: &[String]) -> i32 {
         }
     }
 
-
     // Decide which title list to compare against. For wikipedia we
     // default to the bundled VITAL_ARTICLES_L5; --titles-file overrides.
     let (expected_titles, source_label) = match (titles_file.as_deref(), corpus_id.as_str()) {
@@ -1976,10 +2009,8 @@ async fn cmd_corpus_diag(args: &[String]) -> i32 {
 
     let expected_count = expected_titles.len();
     let intersect = indexed_titles.intersection(&expected_titles).count();
-    let missing: Vec<&String> =
-        expected_titles.difference(&indexed_titles).collect();
-    let unexpected: Vec<&String> =
-        indexed_titles.difference(&expected_titles).collect();
+    let missing: Vec<&String> = expected_titles.difference(&indexed_titles).collect();
+    let unexpected: Vec<&String> = indexed_titles.difference(&expected_titles).collect();
 
     println!("\nFilter list: {source_label}");
     println!("  titles in list:           {expected_count}");
@@ -2131,7 +2162,11 @@ async fn cmd_corpus_dedupe(args: &[String]) -> i32 {
         return 1;
     };
 
-    println!("Opening index at {} ({})…", index_path.display(), surface_label);
+    println!(
+        "Opening index at {} ({})…",
+        index_path.display(),
+        surface_label
+    );
     let index = match corpus_engine::CorpusIndex::open(&index_path).await {
         Ok(i) => i,
         Err(e) => {
@@ -2196,10 +2231,7 @@ async fn cmd_corpus_dedupe(args: &[String]) -> i32 {
             println!("  rows before:              {}", report.rows_before);
             println!("  rows after:               {}", report.rows_after);
             println!("  duplicates deleted:       {}", report.duplicates_deleted);
-            println!(
-                "  unique hashes preserved:  {}",
-                report.unique_hashes_kept
-            );
+            println!("  unique hashes preserved:  {}", report.unique_hashes_kept);
             println!(
                 "  hashless rows preserved:  {}",
                 report.hashless_rows_preserved
@@ -2331,7 +2363,11 @@ async fn cmd_corpus_repair(args: &[String]) -> i32 {
         return 1;
     };
 
-    println!("Resolved index: {} ({})", index_path.display(), surface_label);
+    println!(
+        "Resolved index: {} ({})",
+        index_path.display(),
+        surface_label
+    );
 
     // Read the raw meta so we can show the user the exact diff.
     let meta_path = index_path.join("_corpus_meta.json");
@@ -2361,7 +2397,9 @@ async fn cmd_corpus_repair(args: &[String]) -> i32 {
     let vector_built = meta_json["vector_index_built"].as_bool().unwrap_or(false);
     let content_fts = meta_json["content_fts_built"].as_bool().unwrap_or(false);
     let title_fts = meta_json["title_fts_built"].as_bool().unwrap_or(false);
-    let in_progress = meta_json["ingestion_in_progress"].as_bool().unwrap_or(false);
+    let in_progress = meta_json["ingestion_in_progress"]
+        .as_bool()
+        .unwrap_or(false);
 
     // Compute missing shards. If total_shards isn't stamped, fall back
     // to "trailing shard from max(processed)+1" — same heuristic as
@@ -2402,7 +2440,11 @@ async fn cmd_corpus_repair(args: &[String]) -> i32 {
     println!("  content_fts_built:        {content_fts}");
     println!("  title_fts_built:          {title_fts}");
     println!("  provenance:               {provenance}");
-    println!("  processed shards:         {} of {}", processed.len(), total_for_display);
+    println!(
+        "  processed shards:         {} of {}",
+        processed.len(),
+        total_for_display
+    );
     if !missing.is_empty() {
         println!("  missing shards:           {missing:?}");
     }
@@ -2507,7 +2549,9 @@ async fn cmd_corpus_repair(args: &[String]) -> i32 {
     println!("Next steps:");
     println!("  - The daemon's auto-resume loop will pick this up on its next tick.");
     println!("  - Or run `sovereign corpus install {corpus_id}` to kick off resume now.");
-    println!("  - Either path will skip already-embedded content_hashes via the embed-side dedup gate.");
+    println!(
+        "  - Either path will skip already-embedded content_hashes via the embed-side dedup gate."
+    );
     0
 }
 
@@ -2633,7 +2677,10 @@ async fn cmd_corpus_pull(args: &[String]) -> i32 {
             };
             println!("✓ pulled {corpus_id}");
             println!("  fingerprint:        {}", report.fingerprint);
-            println!("  uncompressed bytes: {}", human_bytes(report.bytes_uncompressed));
+            println!(
+                "  uncompressed bytes: {}",
+                human_bytes(report.bytes_uncompressed)
+            );
             println!(
                 "  elapsed:            {}m{}s ({:.1} MB/s uncompressed)",
                 elapsed.as_secs() / 60,
@@ -2815,8 +2862,7 @@ async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
     }
 
     let mut summaries: Vec<PartitionSummary> = Vec::new();
-    let mut union_processed: std::collections::BTreeSet<u64> =
-        std::collections::BTreeSet::new();
+    let mut union_processed: std::collections::BTreeSet<u64> = std::collections::BTreeSet::new();
     let mut total_chunks_input: u64 = 0;
 
     for (path, label) in &partitions {
@@ -2846,8 +2892,7 @@ async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
         // Read total_shards + scope directly from the meta JSON since
         // they're not exposed via IndexInfo. Falls back to None on any
         // parse error — fine, we'll just not stamp them on canonical.
-        let raw = std::fs::read_to_string(path.join("_corpus_meta.json"))
-            .unwrap_or_default();
+        let raw = std::fs::read_to_string(path.join("_corpus_meta.json")).unwrap_or_default();
         let meta_v: serde_json::Value =
             serde_json::from_str(&raw).unwrap_or(serde_json::Value::Null);
         let total_shards = meta_v["total_shards"].as_u64().map(|n| n as usize);
@@ -2966,8 +3011,14 @@ async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
 
     println!();
     println!("Merge plan:");
-    println!("  embedding model:  {} ({}d)", resolved_model, first.embedding_dimensions);
-    println!("  total chunks in:  {total_chunks_input} (across {} partitions; will dedup during merge)", summaries.len());
+    println!(
+        "  embedding model:  {} ({}d)",
+        resolved_model, first.embedding_dimensions
+    );
+    println!(
+        "  total chunks in:  {total_chunks_input} (across {} partitions; will dedup during merge)",
+        summaries.len()
+    );
     println!(
         "  processed shards: {} of {}{}",
         union_processed.len(),
@@ -2990,15 +3041,16 @@ async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
     );
     println!("  output:           {}", canonical_path.display());
     if remove_partitions {
-        println!("  cleanup:          DELETE all {} partition dir(s) after merge succeeds", summaries.len());
+        println!(
+            "  cleanup:          DELETE all {} partition dir(s) after merge succeeds",
+            summaries.len()
+        );
     } else {
         println!("  cleanup:          partitions left in place (re-run with --remove-partitions to delete)");
     }
 
     if !yes {
-        eprint!(
-            "\nProceed? [y/N] "
-        );
+        eprint!("\nProceed? [y/N] ");
         use std::io::BufRead;
         let stdin = std::io::stdin();
         let mut line = String::new();
@@ -3019,37 +3071,38 @@ async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
     // progress callback. Keeping the merge logic in one place stops
     // the two paths from drifting.
     let merge_start = std::time::Instant::now();
-    let progress_cb: std::sync::Arc<
-        dyn Fn(corpus_engine::MergePhaseProgress) + Send + Sync,
-    > = std::sync::Arc::new(|phase| match phase {
-        corpus_engine::MergePhaseProgress::DiscoveryComplete { partition_count } => {
-            eprintln!("\n[1/3] Merging {partition_count} partition(s) (chunk copy + dedup pass)…");
-        }
-        corpus_engine::MergePhaseProgress::MergeComplete {
-            chunks_merged,
-            chunks_deduped,
-        } => {
-            eprintln!(
+    let progress_cb: std::sync::Arc<dyn Fn(corpus_engine::MergePhaseProgress) + Send + Sync> =
+        std::sync::Arc::new(|phase| match phase {
+            corpus_engine::MergePhaseProgress::DiscoveryComplete { partition_count } => {
+                eprintln!(
+                    "\n[1/3] Merging {partition_count} partition(s) (chunk copy + dedup pass)…"
+                );
+            }
+            corpus_engine::MergePhaseProgress::MergeComplete {
+                chunks_merged,
+                chunks_deduped,
+            } => {
+                eprintln!(
                 "  merged {chunks_merged} chunks ({chunks_deduped} duplicates collapsed during merge)"
             );
-            eprintln!("\n[2/3] Stamping canonical metadata (scope, processed_shards, total_shards, provenance)…");
-        }
-        corpus_engine::MergePhaseProgress::MetaStamped => {
-            eprintln!("  ✓");
-            eprintln!("\n[3/3] Building search indexes (IVF-PQ + FTS)…");
-            eprintln!(
-                "  this is the slow phase; on Wikipedia-scale data it can take 30+ minutes"
-            );
-        }
-        corpus_engine::MergePhaseProgress::BuildSubPhase { done, total } => {
-            if total > 0 {
-                eprintln!("  build progress: {done}/{total}");
+                eprintln!("\n[2/3] Stamping canonical metadata (scope, processed_shards, total_shards, provenance)…");
             }
-        }
-        corpus_engine::MergePhaseProgress::Complete => {
-            eprintln!("  ✓ canonical marked complete");
-        }
-    });
+            corpus_engine::MergePhaseProgress::MetaStamped => {
+                eprintln!("  ✓");
+                eprintln!("\n[3/3] Building search indexes (IVF-PQ + FTS)…");
+                eprintln!(
+                    "  this is the slow phase; on Wikipedia-scale data it can take 30+ minutes"
+                );
+            }
+            corpus_engine::MergePhaseProgress::BuildSubPhase { done, total } => {
+                if total > 0 {
+                    eprintln!("  build progress: {done}/{total}");
+                }
+            }
+            corpus_engine::MergePhaseProgress::Complete => {
+                eprintln!("  ✓ canonical marked complete");
+            }
+        });
 
     let report = match corpus_engine::merge_partitions_into_canonical(
         &index_dir,
@@ -3087,7 +3140,12 @@ async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
         merge_start.elapsed().as_secs_f64(),
     );
     println!("  canonical:        {}", report.canonical_path.display());
-    println!("  chunks:           {} (input {}, deduped during merge {})", report.chunks_merged, report.chunks_input, report.chunks_input.saturating_sub(report.chunks_merged));
+    println!(
+        "  chunks:           {} (input {}, deduped during merge {})",
+        report.chunks_merged,
+        report.chunks_input,
+        report.chunks_input.saturating_sub(report.chunks_merged)
+    );
     println!(
         "  shards covered:   {} of {}",
         report.shard_union.len(),
@@ -3096,7 +3154,10 @@ async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
             .map(|n| n.to_string())
             .unwrap_or_else(|| "?".to_string()),
     );
-    println!("  embedding model:  {} ({}d)", report.embedding_model, report.embedding_dimensions);
+    println!(
+        "  embedding model:  {} ({}d)",
+        report.embedding_model, report.embedding_dimensions
+    );
     println!();
     println!("Next: the daemon's installed_indexes() picks up the canonical on its next tick.");
     println!("Verify with: sovereign corpus diag {corpus_id}");
@@ -3147,9 +3208,8 @@ async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
         .join("indexes");
 
     // Build a no-op embed function — reconstruction reads metadata only.
-    let noop_embed: corpus_engine::EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async { Ok(vec![0.0_f32; 0]) })
-    });
+    let noop_embed: corpus_engine::EmbedFn =
+        Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; 0]) }));
 
     let recipes_dir = dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
@@ -3168,23 +3228,36 @@ async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
 
     // Print report.
     let method_label = match &report.method {
-        ReconstructionMethod::IterPosVerification => "iter-pos verification (parquet row counts)".to_string(),
-        ReconstructionMethod::ChunkCountHeuristic { median_rows_per_file } => {
+        ReconstructionMethod::IterPosVerification => {
+            "iter-pos verification (parquet row counts)".to_string()
+        }
+        ReconstructionMethod::ChunkCountHeuristic {
+            median_rows_per_file,
+        } => {
             format!("chunk-count heuristic (median {median_rows_per_file} rows/file)")
         }
         ReconstructionMethod::SingleFile => "single-file source (no shard splitting)".to_string(),
     };
 
     let total = report.manifest.files.len();
-    let complete = report.manifest.files.iter().filter(|f| {
-        matches!(f.status, corpus_engine::SourceFileStatus::Complete { .. })
-    }).count();
-    let in_progress = report.manifest.files.iter().filter(|f| {
-        matches!(f.status, corpus_engine::SourceFileStatus::InProgress { .. })
-    }).count();
-    let pending = report.manifest.files.iter().filter(|f| {
-        matches!(f.status, corpus_engine::SourceFileStatus::Pending)
-    }).count();
+    let complete = report
+        .manifest
+        .files
+        .iter()
+        .filter(|f| matches!(f.status, corpus_engine::SourceFileStatus::Complete { .. }))
+        .count();
+    let in_progress = report
+        .manifest
+        .files
+        .iter()
+        .filter(|f| matches!(f.status, corpus_engine::SourceFileStatus::InProgress { .. }))
+        .count();
+    let pending = report
+        .manifest
+        .files
+        .iter()
+        .filter(|f| matches!(f.status, corpus_engine::SourceFileStatus::Pending))
+        .count();
 
     println!();
     println!("Manifest reconstruction report for '{corpus_id}'");
@@ -3365,16 +3438,18 @@ async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
     // Engine just needs the directories + a no-op embed for this
     // file-moving operation; ingestion won't run during migration.
     let recipes_dir = data_dir.join("recipes");
-    let noop_embed: corpus_engine::EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async { Ok(vec![0.0_f32; 0]) })
-    });
+    let noop_embed: corpus_engine::EmbedFn =
+        Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; 0]) }));
     let engine = CorpusEngine::new(recipes_dir, index_dir, noop_embed)
         .with_self_node_id(self_node_id_str.clone());
 
     match engine.migrate_canonical_to_partition(&corpus_id) {
         Ok(new_path) => {
             println!();
-            println!("✓ Migration complete. New partition-of-self: {}", new_path.display());
+            println!(
+                "✓ Migration complete. New partition-of-self: {}",
+                new_path.display()
+            );
             println!();
             println!("Next steps:");
             println!(
@@ -3411,10 +3486,7 @@ async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
 /// finished writing to" — peer-pulled partitions for OTHER nodes
 /// have `indexes_built: false` until coordinate_merge promotes
 /// them, so we don't accidentally read a peer's partial download.
-fn find_self_partition(
-    index_dir: &std::path::Path,
-    corpus_id: &str,
-) -> Option<(PathBuf, String)> {
+fn find_self_partition(index_dir: &std::path::Path, corpus_id: &str) -> Option<(PathBuf, String)> {
     let prefix = format!("{corpus_id}-partition-");
     let mut best: Option<(PathBuf, String, bool)> = None;
     let entries = std::fs::read_dir(index_dir).ok()?;
@@ -3424,8 +3496,12 @@ fn find_self_partition(
             continue;
         }
         let name = entry.file_name();
-        let Some(name_str) = name.to_str() else { continue };
-        let Some(suffix) = name_str.strip_prefix(&prefix) else { continue };
+        let Some(name_str) = name.to_str() else {
+            continue;
+        };
+        let Some(suffix) = name_str.strip_prefix(&prefix) else {
+            continue;
+        };
         let meta_path = path.join("_corpus_meta.json");
         let Ok(content) = std::fs::read_to_string(&meta_path) else {
             continue;
@@ -3470,13 +3546,10 @@ fn processed_shards_summary(
         .filter_map(|x| x.as_u64())
         .collect();
     if processed.is_empty() && total_override.is_none() {
-        return Some(
-            "processed_shards present but empty (no shards finalized)".to_string(),
-        );
+        return Some("processed_shards present but empty (no shards finalized)".to_string());
     }
     let max_idx = processed.iter().copied().max().unwrap_or(0);
-    let processed_set: std::collections::HashSet<u64> =
-        processed.iter().copied().collect();
+    let processed_set: std::collections::HashSet<u64> = processed.iter().copied().collect();
 
     // Resolve total shards via the priority chain.
     let total_meta = v["total_shards"].as_u64().map(|n| n as usize);
@@ -3487,14 +3560,9 @@ fn processed_shards_summary(
     };
 
     let total = total_inferred as u64;
-    let missing: Vec<u64> = (0..total)
-        .filter(|i| !processed_set.contains(i))
-        .collect();
+    let missing: Vec<u64> = (0..total).filter(|i| !processed_set.contains(i)).collect();
 
-    let trailing_caveat = matches!(
-        total_source,
-        "inferred from max(processed)+1"
-    );
+    let trailing_caveat = matches!(total_source, "inferred from max(processed)+1");
 
     if missing.is_empty() {
         Some(format!(
@@ -3503,8 +3571,7 @@ fn processed_shards_summary(
             total,
         ))
     } else {
-        let preview: Vec<String> =
-            missing.iter().take(8).map(|n| n.to_string()).collect();
+        let preview: Vec<String> = missing.iter().take(8).map(|n| n.to_string()).collect();
         let suffix = if missing.len() > 8 {
             format!(" + {} more", missing.len() - 8)
         } else {
@@ -3538,9 +3605,5 @@ fn hostname() -> Option<String> {
     ::hostname::get()
         .ok()
         .and_then(|h| h.into_string().ok())
-        .map(|s| {
-            s.strip_suffix(".local")
-                .map(|t| t.to_string())
-                .unwrap_or(s)
-        })
+        .map(|s| s.strip_suffix(".local").map(|t| t.to_string()).unwrap_or(s))
 }

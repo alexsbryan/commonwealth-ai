@@ -162,6 +162,9 @@ mod tests {
     #[test]
     fn no_serve_flag_skips_spawn() {
         assert!(should_skip_spawn(&["--no-serve".to_string()]));
-        assert!(!should_skip_spawn(&["--port".to_string(), "9741".to_string()]));
+        assert!(!should_skip_spawn(&[
+            "--port".to_string(),
+            "9741".to_string()
+        ]));
     }
 }

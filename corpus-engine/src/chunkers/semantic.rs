@@ -156,11 +156,10 @@ fn split_at_headings(text: &str) -> Vec<String> {
             continue;
         }
 
-        if is_heading_line(line)
-            && !current.is_empty() {
-                sections.push(current);
-                current = String::new();
-            }
+        if is_heading_line(line) && !current.is_empty() {
+            sections.push(current);
+            current = String::new();
+        }
 
         current.push_str(line);
         current.push('\n');
@@ -224,7 +223,11 @@ mod tests {
         let chunker = SemanticChunker::new(100);
         let text = "# Introduction\n\nSome intro text here.\n\n# Methods\n\nSome methods text here.\n\n# Results\n\nSome results text here.";
         let chunks = chunker.chunk(text);
-        assert!(chunks.len() >= 2, "Expected multiple chunks, got {}", chunks.len());
+        assert!(
+            chunks.len() >= 2,
+            "Expected multiple chunks, got {}",
+            chunks.len()
+        );
         for (i, chunk) in chunks.iter().enumerate() {
             assert_eq!(chunk.index, i);
         }
@@ -235,7 +238,11 @@ mod tests {
         let chunker = SemanticChunker::new(60);
         let text = "Lead paragraph with enough text.\n\n== History ==\n\nHistory text here is long enough.\n\n== Features ==\n\nFeatures text here is also long.";
         let chunks = chunker.chunk(text);
-        assert!(chunks.len() >= 2, "Expected multiple chunks, got {}", chunks.len());
+        assert!(
+            chunks.len() >= 2,
+            "Expected multiple chunks, got {}",
+            chunks.len()
+        );
     }
 
     #[test]
@@ -243,7 +250,11 @@ mod tests {
         let chunker = SemanticChunker::new(80);
         let text = "Introduction\n============\n\nSome intro.\n\nMethods\n-------\n\nSome methods text here that is long.";
         let chunks = chunker.chunk(text);
-        assert!(chunks.len() >= 2, "Expected at least 2 chunks, got {}", chunks.len());
+        assert!(
+            chunks.len() >= 2,
+            "Expected at least 2 chunks, got {}",
+            chunks.len()
+        );
     }
 
     #[test]

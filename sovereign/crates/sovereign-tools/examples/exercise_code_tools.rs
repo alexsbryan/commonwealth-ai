@@ -52,12 +52,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("─── symbol_lookup(name = \"Runtime\") ───");
     // SymbolLookupTool now reads SCIP. Example uses an empty
     // in-memory graph; lookups will report "not found" honestly.
-    let graph: sovereign_tools::ScipGraphHandle = Arc::new(
-        arc_swap::ArcSwap::from_pointee(
-            corpus_engine_scip::ScipGraph::open_in_memory("example")
-                .expect("in-memory ScipGraph"),
-        ),
-    );
+    let graph: sovereign_tools::ScipGraphHandle = Arc::new(arc_swap::ArcSwap::from_pointee(
+        corpus_engine_scip::ScipGraph::open_in_memory("example").expect("in-memory ScipGraph"),
+    ));
     let sym_tool = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph));
     let out = sym_tool
         .execute(&serde_json::json!({ "name": "Runtime" }), &ctx)
@@ -92,10 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("─── code_search(query = \"parse the recipe\") [FTS fallback] ───");
     let search_tool = CodeSearchTool::new(Arc::clone(&engine));
     let out = search_tool
-        .execute(
-            &serde_json::json!({ "query": "parse the recipe" }),
-            &ctx,
-        )
+        .execute(&serde_json::json!({ "query": "parse the recipe" }), &ctx)
         .await?;
     print_text(&out);
     println!();

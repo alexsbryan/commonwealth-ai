@@ -25,9 +25,7 @@ use corpus_engine::enrichment::atlas::writer::{
 use corpus_engine::enrichment::domain::Domain;
 use corpus_engine::enrichment::domains::conversational::ConversationalDomain;
 use corpus_engine::enrichment::domains::personal::PersonalDomain;
-use corpus_engine::enrichment::entity_extraction::{
-    run_entity_extraction, EntityExtractionResult,
-};
+use corpus_engine::enrichment::entity_extraction::{run_entity_extraction, EntityExtractionResult};
 use corpus_engine::enrichment::EnrichmentProgress;
 use corpus_engine::index::StoredChunk;
 
@@ -100,7 +98,10 @@ pub(super) async fn cmd_extract(args: &[String]) -> i32 {
     let store = match SqliteStateStore::open(&db_path) {
         Ok(s) => Arc::new(s),
         Err(e) => {
-            eprintln!("awareness extract: open {} failed: {e}", display_path(&db_path));
+            eprintln!(
+                "awareness extract: open {} failed: {e}",
+                display_path(&db_path)
+            );
             return 1;
         }
     };
@@ -125,15 +126,18 @@ pub(super) async fn cmd_extract(args: &[String]) -> i32 {
         personal_chunks.len(),
         if personal_chunks.len() == 1 { "" } else { "s" }
     );
-    let personal_atlas_dir = atlas_dir_for(&root, PERSONAL_VIEW).join("..").canonicalize().unwrap_or_else(|_| {
-        // canonicalize fails when the dir doesn't exist yet; fall
-        // back to the corpus dir literally (atlas_dir_for joins
-        // `atlas/` at the end).
-        atlas_dir_for(&root, PERSONAL_VIEW)
-            .parent()
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| atlas_dir_for(&root, PERSONAL_VIEW))
-    });
+    let personal_atlas_dir = atlas_dir_for(&root, PERSONAL_VIEW)
+        .join("..")
+        .canonicalize()
+        .unwrap_or_else(|_| {
+            // canonicalize fails when the dir doesn't exist yet; fall
+            // back to the corpus dir literally (atlas_dir_for joins
+            // `atlas/` at the end).
+            atlas_dir_for(&root, PERSONAL_VIEW)
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| atlas_dir_for(&root, PERSONAL_VIEW))
+        });
     // Use a clean reconstruction — the canonicalize dance above is
     // fragile when the dir doesn't yet exist. Rebuild from root.
     let personal_corpus_dir = root.join("indexes").join(PERSONAL_VIEW);
@@ -143,7 +147,10 @@ pub(super) async fn cmd_extract(args: &[String]) -> i32 {
         ExtractSummary::empty(PERSONAL_VIEW)
     } else {
         let domain = PersonalDomain;
-        let id_map = build_id_map(&personal_chunks, &memories.iter().map(|m| m.id.clone()).collect::<Vec<_>>());
+        let id_map = build_id_map(
+            &personal_chunks,
+            &memories.iter().map(|m| m.id.clone()).collect::<Vec<_>>(),
+        );
         let result = run_entity_extraction_with_progress(
             &personal_chunks,
             &domain,
@@ -212,16 +219,15 @@ pub(super) async fn cmd_extract(args: &[String]) -> i32 {
         let domain = ConversationalDomain;
         let id_map = build_id_map(
             &conv_chunks,
-            &conversations.iter().map(|c| c.id.clone()).collect::<Vec<_>>(),
+            &conversations
+                .iter()
+                .map(|c| c.id.clone())
+                .collect::<Vec<_>>(),
         );
         let conv_corpus_dir = root.join("indexes").join(CONVERSATIONAL_VIEW);
-        let result = run_entity_extraction_with_progress(
-            &conv_chunks,
-            &domain,
-            inference.clone(),
-            verbose,
-        )
-        .await;
+        let result =
+            run_entity_extraction_with_progress(&conv_chunks, &domain, inference.clone(), verbose)
+                .await;
         let result = match result {
             Ok(r) => r,
             Err(e) => {
@@ -501,7 +507,7 @@ mod tests {
             deleted_at: None,
             skill_id: None,
             enabled_corpora: None,
-        searched_sources: None,
+            searched_sources: None,
         }
     }
 

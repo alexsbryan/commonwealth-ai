@@ -24,9 +24,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use corpus_engine::enrichment::atlas::{
-    read_atlas_atoms, AtomEnvelope, ATLAS_DIRNAME,
-};
+use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope, ATLAS_DIRNAME};
 use corpus_engine::filters::normalize_title;
 
 use super::paths;
@@ -222,14 +220,18 @@ pub async fn cmd_atlas_eval(args: &[String]) -> i32 {
         // "Einstein" beats "Albert Einstein in popular media").
         let mut scored: Vec<(u32, &EntityIndex)> = Vec::new();
         for e in &index {
-            let name_hits: u32 =
-                q_tokens.iter().filter(|t| e.name_tokens.contains(*t)).count() as u32;
+            let name_hits: u32 = q_tokens
+                .iter()
+                .filter(|t| e.name_tokens.contains(*t))
+                .count() as u32;
             let alias_hits: u32 = q_tokens
                 .iter()
                 .filter(|t| e.alias_tokens.contains(*t))
                 .count() as u32;
-            let desc_hits: u32 =
-                q_tokens.iter().filter(|t| e.desc_tokens.contains(*t)).count() as u32;
+            let desc_hits: u32 = q_tokens
+                .iter()
+                .filter(|t| e.desc_tokens.contains(*t))
+                .count() as u32;
             let score = name_hits * 3 + alias_hits * 2 + desc_hits;
             if score == 0 {
                 continue;
@@ -302,11 +304,7 @@ pub async fn cmd_atlas_eval(args: &[String]) -> i32 {
         sum_precision += prec;
         // MRR per question: 1/rank of the FIRST expected source that
         // appears in top-K, or 0 if none.
-        let first_hit_rank = r
-            .hit_ranks
-            .iter()
-            .filter_map(|h| h.as_ref().copied())
-            .min();
+        let first_hit_rank = r.hit_ranks.iter().filter_map(|h| h.as_ref().copied()).min();
         if let Some(rank) = first_hit_rank {
             mrr_sum += 1.0 / ((rank + 1) as f64);
             sum_first_rank += rank + 1;
@@ -361,14 +359,20 @@ pub async fn cmd_atlas_eval(args: &[String]) -> i32 {
     println!("Atlas: {corpus_id}");
     println!("  bank             : {}", bank.bank.name);
     println!("  bank.corpus      : {}", bank.bank.corpus);
-    println!("  scored entities  : {} (placeholders skipped: {placeholder_skipped})", index.len());
+    println!(
+        "  scored entities  : {} (placeholders skipped: {placeholder_skipped})",
+        index.len()
+    );
     println!("  top_k            : {}", parsed.top_k);
     println!();
     println!("Aggregate:");
     println!("  questions scored        : {question_with_at_least_one_source}");
     println!("  macro recall@K          : {:>6.3}", avg_recall);
     println!("  macro precision@K       : {:>6.3}", avg_precision);
-    println!("  micro recall@K          : {:>6.3} ({total_hits}/{total_expected})", micro_recall);
+    println!(
+        "  micro recall@K          : {:>6.3} ({total_hits}/{total_expected})",
+        micro_recall
+    );
     println!("  MRR                     : {:>6.3}", mrr);
     if let Some(r) = median_first_rank {
         println!("  mean first-hit rank     : {:>6.2} (n={first_rank_n})", r);
@@ -376,7 +380,10 @@ pub async fn cmd_atlas_eval(args: &[String]) -> i32 {
         println!("  mean first-hit rank     : (no hits)");
     }
     println!();
-    println!("Per-question (rank of each expected_source in top-{}):", parsed.top_k);
+    println!(
+        "Per-question (rank of each expected_source in top-{}):",
+        parsed.top_k
+    );
     for r in &per_question {
         let mark = if r.expected_sources_normalized.is_empty() {
             "—"
@@ -387,12 +394,13 @@ pub async fn cmd_atlas_eval(args: &[String]) -> i32 {
         } else {
             "✗"
         };
-        println!("  {mark} [{}] {} ({})", r.category, r.id, short(&r.question, 80));
-        for (exp, rank) in r
-            .expected_sources_normalized
-            .iter()
-            .zip(r.hit_ranks.iter())
-        {
+        println!(
+            "  {mark} [{}] {} ({})",
+            r.category,
+            r.id,
+            short(&r.question, 80)
+        );
+        for (exp, rank) in r.expected_sources_normalized.iter().zip(r.hit_ranks.iter()) {
             match rank {
                 Some(rk) => println!("        rank {:>3}  {}", rk + 1, exp),
                 None => println!("        miss     {}", exp),
@@ -431,13 +439,12 @@ fn tokenize_into(text: &str, bag: &mut HashSet<String>) {
 /// words that would otherwise dominate Jaccard scores. Deliberately
 /// short to avoid over-pruning rare-word signals.
 const STOPWORDS: &[&str] = &[
-    "the", "and", "for", "are", "but", "not", "you", "all", "any", "can",
-    "had", "her", "was", "one", "our", "out", "day", "get", "has", "him",
-    "his", "how", "man", "new", "now", "old", "see", "two", "way", "who",
-    "boy", "did", "its", "let", "put", "say", "she", "too", "use", "what",
-    "when", "with", "from", "have", "this", "that", "they", "their", "them",
-    "then", "than", "into", "were", "your", "about", "which", "would",
-    "there", "between", "should", "could",
+    "the", "and", "for", "are", "but", "not", "you", "all", "any", "can", "had", "her", "was",
+    "one", "our", "out", "day", "get", "has", "him", "his", "how", "man", "new", "now", "old",
+    "see", "two", "way", "who", "boy", "did", "its", "let", "put", "say", "she", "too", "use",
+    "what", "when", "with", "from", "have", "this", "that", "they", "their", "them", "then",
+    "than", "into", "were", "your", "about", "which", "would", "there", "between", "should",
+    "could",
 ];
 
 fn short(s: &str, max: usize) -> String {

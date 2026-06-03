@@ -223,11 +223,7 @@ mod tests {
             ),
             ("start_date", ParameterValue::Date("2022-01-01".into())),
         ]);
-        let bindings = for_each_bindings(
-            &["entity".into(), "form_type".into()],
-            &p,
-        )
-        .unwrap();
+        let bindings = for_each_bindings(&["entity".into(), "form_type".into()], &p).unwrap();
         assert_eq!(bindings.len(), 4); // 2 × 2
 
         // Every binding carries start_date intact.

@@ -49,7 +49,10 @@ pub async fn cmd_validate(args: &[String]) -> i32 {
         }
     };
     if !probe_daemon(&cfg.base_url).await {
-        eprintln!("error: daemon is not responding at {} — start it first", cfg.base_url);
+        eprintln!(
+            "error: daemon is not responding at {} — start it first",
+            cfg.base_url
+        );
         return 2;
     }
 
@@ -92,7 +95,11 @@ pub async fn cmd_validate(args: &[String]) -> i32 {
     println!("{}", "-".repeat(100));
     for (i, row) in res.rows.iter().enumerate() {
         let q: String = row.question.chars().take(58).collect();
-        let pass_marker = if row.top_match_similarity >= parsed.pass { " " } else { "!" };
+        let pass_marker = if row.top_match_similarity >= parsed.pass {
+            " "
+        } else {
+            "!"
+        };
         println!(
             "{:>3}{} | {:<60} | {:>6.2} | {:>3} | {:>4} | {:>3}",
             i + 1,
@@ -175,7 +182,12 @@ fn parse_args(args: &[String]) -> Result<ParsedValidate, String> {
     }
     let corpus_id = corpus_id.ok_or_else(|| "missing <corpus-id>".to_string())?;
     let questions_path = questions_path.ok_or_else(|| "missing --questions <path>".to_string())?;
-    Ok(ParsedValidate { corpus_id, questions_path, threshold, pass })
+    Ok(ParsedValidate {
+        corpus_id,
+        questions_path,
+        threshold,
+        pass,
+    })
 }
 
 #[cfg(test)]
@@ -184,11 +196,7 @@ mod tests {
 
     #[test]
     fn parse_validate_minimum() {
-        let args = vec![
-            "ak".into(),
-            "--questions".into(),
-            "/tmp/q.json".into(),
-        ];
+        let args = vec!["ak".into(), "--questions".into(), "/tmp/q.json".into()];
         let p = parse_args(&args).unwrap();
         assert_eq!(p.corpus_id, "ak");
         assert_eq!(p.questions_path, PathBuf::from("/tmp/q.json"));

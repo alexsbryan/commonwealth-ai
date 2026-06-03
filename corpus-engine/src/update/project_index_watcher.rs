@@ -12,8 +12,8 @@ use std::time::SystemTime;
 
 use async_trait::async_trait;
 
-use corpus_engine_notes::project_docs::ProjectDocsStore;
 use crate::update::watcher_coordinator::{BackgroundWatcher, WatcherStatus};
+use corpus_engine_notes::project_docs::ProjectDocsStore;
 
 /// Watches `*.md` files and keeps the [`ProjectDocsStore`] in sync.
 pub struct ProjectIndexWatcher {

@@ -48,10 +48,7 @@ impl HtmlSectionsExtractor {
     /// Construct from a list of section rules. Compiles every regex
     /// up front; a bad regex surfaces as a recipe-level error
     /// before any file is read.
-    pub fn new(
-        rules: &[SectionRule],
-        fallback: Option<FallbackRule>,
-    ) -> Result<Self> {
+    pub fn new(rules: &[SectionRule], fallback: Option<FallbackRule>) -> Result<Self> {
         if rules.is_empty() {
             return Err(Error::Recipe(
                 "html_sections requires at least one [[extract.sections]] entry".into(),
@@ -95,7 +92,13 @@ impl Extractor for HtmlSectionsExtractor {
         let mut misses: Vec<MissReport> = Vec::new();
 
         for file in &files {
-            process_one_file(file, &self.rules, self.fallback.as_ref(), &mut docs, &mut misses)?;
+            process_one_file(
+                file,
+                &self.rules,
+                self.fallback.as_ref(),
+                &mut docs,
+                &mut misses,
+            )?;
         }
 
         // Persist misses sidecar even when empty — its absence vs.
@@ -129,9 +132,8 @@ fn process_one_file(
     docs: &mut Vec<ExtractedDoc>,
     misses: &mut Vec<MissReport>,
 ) -> Result<()> {
-    let raw = fs::read_to_string(file).map_err(|e| {
-        Error::Extraction(format!("Failed to read {}: {e}", file.display()))
-    })?;
+    let raw = fs::read_to_string(file)
+        .map_err(|e| Error::Extraction(format!("Failed to read {}: {e}", file.display())))?;
     let title = extract_title_from_html(&raw).unwrap_or_else(|| {
         file.file_stem()
             .and_then(|s| s.to_str())
@@ -181,9 +183,7 @@ fn process_one_file(
     if !any_matched {
         if let Some(fb) = fallback {
             let body = match fb {
-                FallbackRule::FullDocument { max_chars } => {
-                    truncate_chars(&stripped, *max_chars)
-                }
+                FallbackRule::FullDocument { max_chars } => truncate_chars(&stripped, *max_chars),
                 FallbackRule::FirstNChars { n } => truncate_chars(&stripped, Some(*n)),
             };
             if !body.trim().is_empty() {
@@ -359,11 +359,9 @@ mod tests {
         )
         .unwrap();
 
-        let extractor = HtmlSectionsExtractor::new(
-            &[rule("md_and_a", r"(?i)Item\s+7", r"(?i)Item\s+8")],
-            None,
-        )
-        .unwrap();
+        let extractor =
+            HtmlSectionsExtractor::new(&[rule("md_and_a", r"(?i)Item\s+7", r"(?i)Item\s+8")], None)
+                .unwrap();
 
         let docs: Vec<_> = extractor
             .extract(dir.path())
@@ -371,11 +369,7 @@ mod tests {
             .collect::<std::result::Result<Vec<_>, _>>()
             .unwrap();
         assert_eq!(docs.len(), 1);
-        assert!(docs[0]
-            .title
-            .as_deref()
-            .unwrap()
-            .contains("md_and_a"));
+        assert!(docs[0].title.as_deref().unwrap().contains("md_and_a"));
         assert!(docs[0].content.contains("Forward-looking"));
         assert!(!docs[0].content.contains("Tables"));
 
@@ -466,16 +460,10 @@ mod tests {
     fn no_fallback_drops_files_with_no_match() {
         let dir = tempfile::tempdir().unwrap();
         let f = dir.path().join("filing.html");
-        std::fs::write(
-            &f,
-            "<html><body><p>nothing relevant</p></body></html>",
-        )
-        .unwrap();
-        let extractor = HtmlSectionsExtractor::new(
-            &[rule("md_and_a", r"(?i)Item\s+7", r"(?i)Item\s+8")],
-            None,
-        )
-        .unwrap();
+        std::fs::write(&f, "<html><body><p>nothing relevant</p></body></html>").unwrap();
+        let extractor =
+            HtmlSectionsExtractor::new(&[rule("md_and_a", r"(?i)Item\s+7", r"(?i)Item\s+8")], None)
+                .unwrap();
         let docs: Vec<_> = extractor
             .extract(dir.path())
             .unwrap()

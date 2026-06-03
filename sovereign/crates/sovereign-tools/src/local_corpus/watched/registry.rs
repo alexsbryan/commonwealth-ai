@@ -64,12 +64,9 @@ impl WatchedFolderRegistry {
     /// sweep interval and sync_mode but preserves the lock +
     /// `last_started_unix` (so a re-register doesn't reset the
     /// cadence clock) and any in-flight `manual_sync_pending` flag.
-    pub async fn register(
-        &self,
-        corpus_id: impl Into<String>,
-        sweep_interval_secs: u64,
-    ) {
-        self.register_with_mode(corpus_id, sweep_interval_secs, SyncMode::Continuous).await;
+    pub async fn register(&self, corpus_id: impl Into<String>, sweep_interval_secs: u64) {
+        self.register_with_mode(corpus_id, sweep_interval_secs, SyncMode::Continuous)
+            .await;
     }
 
     /// Same as `register` but with an explicit sync_mode. The
@@ -201,7 +198,9 @@ impl WatchedFolderRegistry {
                 let due = slot.last_started_unix == 0
                     || now_unix.saturating_sub(slot.last_started_unix) >= interval;
                 if due {
-                    DispatchDecision::Due { take_pending: false }
+                    DispatchDecision::Due {
+                        take_pending: false,
+                    }
                 } else {
                     DispatchDecision::NotDue
                 }
@@ -274,7 +273,10 @@ mod tests {
         let g1 = r.try_acquire("c1").await;
         assert!(g1.is_some());
         let g2 = r.try_acquire("c1").await;
-        assert!(g2.is_none(), "second acquire on the same corpus must return None");
+        assert!(
+            g2.is_none(),
+            "second acquire on the same corpus must return None"
+        );
         drop(g1);
         // After the first guard drops, the lock is available again.
         let g3 = r.try_acquire("c1").await;
@@ -296,7 +298,12 @@ mod tests {
         r.register_with_mode("c1", 120, SyncMode::Continuous).await;
         // last_started == 0 → due immediately on first tick
         let d = r.dispatch_decision("c1", 1000, 60).await;
-        assert_eq!(d, Some(DispatchDecision::Due { take_pending: false }));
+        assert_eq!(
+            d,
+            Some(DispatchDecision::Due {
+                take_pending: false
+            })
+        );
     }
 
     #[tokio::test]
@@ -312,7 +319,9 @@ mod tests {
         // 120 seconds in: due
         assert_eq!(
             r.dispatch_decision("c1", 1120, 60).await,
-            Some(DispatchDecision::Due { take_pending: false }),
+            Some(DispatchDecision::Due {
+                take_pending: false
+            }),
         );
     }
 
@@ -329,7 +338,9 @@ mod tests {
         );
         assert_eq!(
             r.dispatch_decision("c1", 1060, 60).await,
-            Some(DispatchDecision::Due { take_pending: false }),
+            Some(DispatchDecision::Due {
+                take_pending: false
+            }),
         );
     }
 
@@ -370,7 +381,8 @@ mod tests {
     #[tokio::test]
     async fn is_manual_distinguishes_modes() {
         let r = WatchedFolderRegistry::new();
-        r.register_with_mode("cont", 120, SyncMode::Continuous).await;
+        r.register_with_mode("cont", 120, SyncMode::Continuous)
+            .await;
         r.register_with_mode("man", 120, SyncMode::Manual).await;
         assert!(!r.is_manual("cont").await);
         assert!(r.is_manual("man").await);

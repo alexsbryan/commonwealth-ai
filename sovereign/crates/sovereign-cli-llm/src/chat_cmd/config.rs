@@ -136,9 +136,7 @@ pub fn parse_globals(args: &[String]) -> Result<(ChatGlobals, Vec<String>), Stri
                     .parse()
                     .map_err(|_| format!("--temperature: not a float: {v}"))?;
                 if !(0.0..=2.0).contains(&t) {
-                    return Err(format!(
-                        "--temperature must be in [0.0, 2.0], got {t}"
-                    ));
+                    return Err(format!("--temperature must be in [0.0, 2.0], got {t}"));
                 }
                 globals.temperature = Some(t);
                 i += 2;
@@ -192,8 +190,7 @@ mod tests {
 
     #[test]
     fn parse_globals_strips_v1_suffix_from_daemon() {
-        let (g, _) =
-            parse_globals(&svec(&["--daemon", "http://localhost:9741/v1"])).unwrap();
+        let (g, _) = parse_globals(&svec(&["--daemon", "http://localhost:9741/v1"])).unwrap();
         assert_eq!(g.daemon_base, "http://localhost:9741");
     }
 

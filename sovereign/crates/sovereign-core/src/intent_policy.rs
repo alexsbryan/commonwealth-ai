@@ -188,9 +188,7 @@ pub fn policy_for(
             // for an in-flight tool loop, so re-classifying it would
             // break the resume contract.
             let recipe_intent = match &effective_intent {
-                Intent::ComplexTask | Intent::Continuation { .. } => {
-                    effective_intent.clone()
-                }
+                Intent::ComplexTask | Intent::Continuation { .. } => effective_intent.clone(),
                 _ => Intent::ComplexTask,
             };
             IntentPolicy {
@@ -264,10 +262,7 @@ fn intent_derived(intent: &Intent, register: SkillRegister) -> IntentPolicy {
 ///
 /// Post-classification call sites should use [`policy_for`] instead
 /// to pick up the intent-derived narrowing.
-pub fn policy_for_mode_only(
-    register: SkillRegister,
-    active_mode: Option<&str>,
-) -> IntentPolicy {
+pub fn policy_for_mode_only(register: SkillRegister, active_mode: Option<&str>) -> IntentPolicy {
     match active_mode {
         Some(MODE_INNER_WORK) => IntentPolicy {
             tool_filter: ToolFilter::none(),
@@ -356,14 +351,12 @@ fn tool_filter_for_intent(intent: &Intent) -> ToolFilter {
         // Single-tool dispatch — only that tool is allowed. The
         // router already picked the tool; the catalog filter just
         // enforces that the planner doesn't substitute another.
-        Intent::SimpleAction { tool } => {
-            ToolFilter::allow(std::iter::once(tool.clone()))
-        }
+        Intent::SimpleAction { tool } => ToolFilter::allow(std::iter::once(tool.clone())),
         // Emotive / commitment / imperative — these shouldn't reach
         // for tools at all. Empty allowlist makes that structural.
-        Intent::ExpressiveQuery
-        | Intent::ConationQuery
-        | Intent::CommissiveQuery => ToolFilter::none(),
+        Intent::ExpressiveQuery | Intent::ConationQuery | Intent::CommissiveQuery => {
+            ToolFilter::none()
+        }
         // Continuation resumes a prior task — its policy comes from
         // the prior task's plan, not from this dispatch. Unrestricted
         // here lets the continuation handler decide.
@@ -453,14 +446,38 @@ mod tests {
 
     fn full_catalog() -> Vec<ToolDescriptor> {
         [
-            "knowledge_lookup", "search", "knowledge", "shell", "symbol_lookup",
-            "code_search", "recent_changes", "find_callers", "find_callees",
-            "blast_radius", "file", "file_write", "document", "document_operation",
-            "claim_search", "epistemic_landscape", "web_search", "web_fetch",
-            "wikipedia_fetch", "registry_browse", "recipe_read", "recipe_write",
-            "recipe_write_structured", "recipe_validate", "recipe_test",
-            "checkpoint", "decision_log", "capability_request", "research_finding",
-            "probe_url", "note", "run_tests",
+            "knowledge_lookup",
+            "search",
+            "knowledge",
+            "shell",
+            "symbol_lookup",
+            "code_search",
+            "recent_changes",
+            "find_callers",
+            "find_callees",
+            "blast_radius",
+            "file",
+            "file_write",
+            "document",
+            "document_operation",
+            "claim_search",
+            "epistemic_landscape",
+            "web_search",
+            "web_fetch",
+            "wikipedia_fetch",
+            "registry_browse",
+            "recipe_read",
+            "recipe_write",
+            "recipe_write_structured",
+            "recipe_validate",
+            "recipe_test",
+            "checkpoint",
+            "decision_log",
+            "capability_request",
+            "research_finding",
+            "probe_url",
+            "note",
+            "run_tests",
         ]
         .iter()
         .map(|id| fake_descriptor(id))
@@ -469,11 +486,7 @@ mod tests {
 
     #[test]
     fn policy_for_knowledge_query_allowlists_retrieval_tools() {
-        let policy = policy_for(
-            &Intent::KnowledgeQuery,
-            SkillRegister::Factual,
-            None,
-        );
+        let policy = policy_for(&Intent::KnowledgeQuery, SkillRegister::Factual, None);
         assert_eq!(policy.source, PolicySource::IntentDerived);
         assert_eq!(policy.register, SkillRegister::Factual);
         let narrowed = narrow_tools(&full_catalog(), &policy);
@@ -487,11 +500,7 @@ mod tests {
 
     #[test]
     fn policy_for_metalingual_query_allowlists_code_intel() {
-        let policy = policy_for(
-            &Intent::MetalingualQuery,
-            SkillRegister::Factual,
-            None,
-        );
+        let policy = policy_for(&Intent::MetalingualQuery, SkillRegister::Factual, None);
         let narrowed = narrow_tools(&full_catalog(), &policy);
         let ids: Vec<&str> = narrowed.iter().map(|d| d.id.as_str()).collect();
         assert!(ids.contains(&"symbol_lookup"));
@@ -504,11 +513,7 @@ mod tests {
 
     #[test]
     fn policy_for_complex_task_allows_write_tools() {
-        let policy = policy_for(
-            &Intent::ComplexTask,
-            SkillRegister::Factual,
-            None,
-        );
+        let policy = policy_for(&Intent::ComplexTask, SkillRegister::Factual, None);
         let narrowed = narrow_tools(&full_catalog(), &policy);
         let ids: Vec<&str> = narrowed.iter().map(|d| d.id.as_str()).collect();
         assert!(ids.contains(&"shell"));
@@ -520,7 +525,9 @@ mod tests {
     #[test]
     fn policy_for_simple_action_allowlists_just_that_tool() {
         let policy = policy_for(
-            &Intent::SimpleAction { tool: "knowledge_lookup".into() },
+            &Intent::SimpleAction {
+                tool: "knowledge_lookup".into(),
+            },
             SkillRegister::Factual,
             None,
         );
@@ -599,7 +606,10 @@ mod tests {
         // the planner's prompt construction is order-sensitive.
         let policy = IntentPolicy {
             tool_filter: ToolFilter::allow([
-                "find_callees", "symbol_lookup", "code_search", "find_callers",
+                "find_callees",
+                "symbol_lookup",
+                "code_search",
+                "find_callers",
             ]),
             synthesis_addendum: None,
             register: SkillRegister::Factual,
@@ -612,7 +622,12 @@ mod tests {
         let ids: Vec<&str> = narrowed.iter().map(|d| d.id.as_str()).collect();
         assert_eq!(
             ids,
-            vec!["symbol_lookup", "code_search", "find_callers", "find_callees"]
+            vec![
+                "symbol_lookup",
+                "code_search",
+                "find_callers",
+                "find_callees"
+            ]
         );
     }
 

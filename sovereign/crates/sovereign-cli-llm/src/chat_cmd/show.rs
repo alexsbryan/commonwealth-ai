@@ -12,8 +12,11 @@ const HELP: Help = Help {
     sections: &[
         HelpSection::Usage("sovereign chat show <conversation_id> [--show-reasoning]"),
         HelpSection::Flags(&[
-            ("--show-reasoning", "Expand <think> blocks inline for every assistant message."),
-            ("--help, -h",       "Show this message."),
+            (
+                "--show-reasoning",
+                "Expand <think> blocks inline for every assistant message.",
+            ),
+            ("--help, -h", "Show this message."),
         ]),
     ],
 };

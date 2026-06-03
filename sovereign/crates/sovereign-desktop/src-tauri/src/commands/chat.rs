@@ -295,11 +295,7 @@ async fn build_context_augmented_message(
         return user_message.to_string();
     }
 
-    format!(
-        "{}\n\n---\n\n{}",
-        blocks.join("\n\n---\n\n"),
-        user_message
-    )
+    format!("{}\n\n---\n\n{}", blocks.join("\n\n---\n\n"), user_message)
 }
 
 #[tauri::command]
@@ -593,4 +589,3 @@ pub async fn resume_session(
         streaming: true,
     })
 }
-

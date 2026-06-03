@@ -230,11 +230,13 @@ pub fn summarise_atlas(
     let mut trajectories_out: Vec<TrajectorySynopsis> = entity_refs
         .iter()
         .filter_map(|e| {
-            states_by_owner.get(e.id.as_str()).map(|ss| TrajectorySynopsis {
-                entity_id: e.id.as_str().to_string(),
-                canonical_name: e.canonical_name.clone(),
-                state_labels: ss.iter().map(|s| s.label.clone()).collect(),
-            })
+            states_by_owner
+                .get(e.id.as_str())
+                .map(|ss| TrajectorySynopsis {
+                    entity_id: e.id.as_str().to_string(),
+                    canonical_name: e.canonical_name.clone(),
+                    state_labels: ss.iter().map(|s| s.label.clone()).collect(),
+                })
         })
         .collect();
     trajectories_out.truncate(params.max_trajectories);
@@ -253,11 +255,10 @@ pub fn summarise_atlas(
         .map(|c| ClaimSynopsis {
             id: c.id.as_str().to_string(),
             content: c.content.clone(),
-            attributed_to: c.attributed_to.as_ref().and_then(|aid| {
-                id_to_name
-                    .get(aid.as_str())
-                    .map(|s| s.to_string())
-            }),
+            attributed_to: c
+                .attributed_to
+                .as_ref()
+                .and_then(|aid| id_to_name.get(aid.as_str()).map(|s| s.to_string())),
             discourse_act: format!("{:?}", c.discourse_act).to_lowercase(),
         })
         .collect();
@@ -373,8 +374,7 @@ pub fn parse_configurations(
                 }
             }
         }
-        let filtered_atoms: Vec<AtomId> =
-            collected.into_iter().map(AtomId::from_raw).collect();
+        let filtered_atoms: Vec<AtomId> = collected.into_iter().map(AtomId::from_raw).collect();
 
         let evidence: Vec<ChunkRef> = item
             .evidence_chunk_ids
@@ -390,8 +390,7 @@ pub fn parse_configurations(
             evidence,
             confidence,
             interpretive_note: item.interpretive_note.trim().to_string(),
-            enrichment_depth:
-                crate::enrichment::pipeline::atlas::EnrichmentDepth::Extracted,
+            enrichment_depth: crate::enrichment::pipeline::atlas::EnrichmentDepth::Extracted,
         });
     }
     out
@@ -518,10 +517,10 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-}
-}
+            provenance: Default::default(),
+            concept_kind: None,
+        }
+    }
 
     fn relation(idx: usize, label: &str, participants: Vec<AtomId>) -> Relation {
         Relation {
@@ -562,11 +561,11 @@ mod tests {
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
             quotable_excerpt: None,
-                    claim_kind: None,
+            claim_kind: None,
             concession_outcome: None,
             evidence_kind: None,
-}
-}
+        }
+    }
 
     fn question(idx: usize, content: &str, open: bool) -> Question {
         Question {
@@ -645,7 +644,10 @@ mod tests {
             AtlasSummaryParams::default(),
         );
         assert_eq!(summary.relations.len(), 1);
-        assert_eq!(summary.relations[0].participants, vec!["Alyosha", "Zossima"]);
+        assert_eq!(
+            summary.relations[0].participants,
+            vec!["Alyosha", "Zossima"]
+        );
     }
 
     #[test]
@@ -742,8 +744,10 @@ mod tests {
             confidence: 0.8,
             evidence_chunk_ids: vec![],
         }];
-        let known: std::collections::HashSet<String> =
-            ["claim-0007", "entity-0042"].iter().map(|s| s.to_string()).collect();
+        let known: std::collections::HashSet<String> = ["claim-0007", "entity-0042"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let configs = parse_configurations(items, &known);
         let ids: Vec<&str> = configs[0]
             .constituent_atoms
@@ -842,9 +846,7 @@ mod tests {
         ];
         let mut params = AtlasSummaryParams::default();
         params.max_entities = 2;
-        let summary = summarise_atlas(
-            &entities, &[], &[], &[], &[], &[], &[], 1, params,
-        );
+        let summary = summarise_atlas(&entities, &[], &[], &[], &[], &[], &[], 1, params);
         let names: Vec<&str> = summary
             .entities
             .iter()

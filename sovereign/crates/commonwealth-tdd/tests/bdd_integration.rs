@@ -11,11 +11,25 @@ use commonwealth_tdd::tasks::bdd::{bdd_cycle, BddCycleArgs, ReviewMode};
 use commonwealth_tdd::{DeterministicChatBackend, TrialConfig, TrialStatus, Workdir};
 
 fn init_git(path: &Path) {
-    let _ = Command::new("git").arg("-C").arg(path).arg("init").arg("--initial-branch=main").output();
-    let _ = Command::new("git").arg("-C").arg(path).args(["config", "user.email", "t@t.t"]).output();
-    let _ = Command::new("git").arg("-C").arg(path).args(["config", "user.name", "t"]).output();
     let _ = Command::new("git")
-        .arg("-C").arg(path)
+        .arg("-C")
+        .arg(path)
+        .arg("init")
+        .arg("--initial-branch=main")
+        .output();
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["config", "user.email", "t@t.t"])
+        .output();
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["config", "user.name", "t"])
+        .output();
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
         .args(["commit", "--allow-empty", "-m", "init"])
         .output();
 }
@@ -26,9 +40,14 @@ fn write_committed(path: &Path, name: &str, content: &str) {
         std::fs::create_dir_all(p).unwrap();
     }
     std::fs::write(&full, content).unwrap();
-    let _ = Command::new("git").arg("-C").arg(path).args(["add", name]).output();
     let _ = Command::new("git")
-        .arg("-C").arg(path)
+        .arg("-C")
+        .arg(path)
+        .args(["add", name])
+        .output();
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
         .args(["commit", "-m", &format!("add {name}")])
         .output();
 }

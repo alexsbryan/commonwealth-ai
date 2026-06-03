@@ -14,8 +14,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine_notes::{NoteStore};
-use corpus_engine_atos::{FeatureStore};
+use corpus_engine_atos::FeatureStore;
+use corpus_engine_notes::NoteStore;
 
 /// `.sovereign/` at the current repo root — matches where
 /// `sovereign project serve` writes notes.db / features.db.

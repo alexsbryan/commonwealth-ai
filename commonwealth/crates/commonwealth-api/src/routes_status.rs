@@ -39,12 +39,19 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             model: format!("{}", p.model),
             nodes: p.assignments.len(),
             tps: p.estimated_tokens_per_sec,
-            loaded: state.inner.inference_store.get_llama_address(p.model).is_some(),
+            loaded: state
+                .inner
+                .inference_store
+                .get_llama_address(p.model)
+                .is_some(),
         })
         .collect();
 
     Json(StatusResponse {
-        node_id: format!("{}", state.inner.self_node_id_swap.load_full().as_ref().clone()),
+        node_id: format!(
+            "{}",
+            state.inner.self_node_id_swap.load_full().as_ref().clone()
+        ),
         mesh: MeshStatus {
             name: mesh.name.clone(),
             members_online,

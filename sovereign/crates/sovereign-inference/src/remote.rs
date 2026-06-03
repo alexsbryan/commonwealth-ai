@@ -36,12 +36,7 @@ pub struct RemoteApiProvider {
 const DEFAULT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1800);
 
 impl RemoteApiProvider {
-    pub fn new(
-        endpoint: &str,
-        api_key: Option<String>,
-        model_id: &str,
-        context_size: u32,
-    ) -> Self {
+    pub fn new(endpoint: &str, api_key: Option<String>, model_id: &str, context_size: u32) -> Self {
         Self::with_timeout(endpoint, api_key, model_id, context_size, DEFAULT_TIMEOUT)
     }
 
@@ -119,10 +114,7 @@ impl RemoteApiProvider {
         // by name, bypassing OICP. With None we send an empty model
         // and the picker uses the OICP envelope (latency_class)
         // we attached below.
-        let model_field = request
-            .model_id
-            .as_deref()
-            .unwrap_or("");
+        let model_field = request.model_id.as_deref().unwrap_or("");
         let mut body = serde_json::json!({
             "model": model_field,
             "messages": messages,
@@ -156,8 +148,8 @@ impl RemoteApiProvider {
                 Speed::Medium => sovereign_core::oicp::LatencyClass::Normal,
                 Speed::Slow => sovereign_core::oicp::LatencyClass::Extended,
             };
-            let mut req = sovereign_core::oicp::InferenceRequirements::new()
-                .with_latency_class(class);
+            let mut req =
+                sovereign_core::oicp::InferenceRequirements::new().with_latency_class(class);
             if let Some(n) = request.max_tokens {
                 req = req.with_max_output_tokens(n as u32);
             }
@@ -240,10 +232,7 @@ impl RemoteApiProvider {
     /// `http://host:9741/v1`; peer-inference callers pass
     /// `http://peer:9741`. Both resolve to the same warmup URL here.
     fn warmup_url(&self) -> String {
-        let base = self
-            .endpoint
-            .strip_suffix("/v1")
-            .unwrap_or(&self.endpoint);
+        let base = self.endpoint.strip_suffix("/v1").unwrap_or(&self.endpoint);
         format!("{base}/internal/inference/warmup")
     }
 
@@ -388,9 +377,7 @@ impl InferenceProvider for RemoteApiProvider {
             .map(|u| (u.total_tokens, u.prompt_tokens, Some(u.completion_tokens)))
             .unwrap_or((0, 0, None));
 
-        let model_id = chat_response
-            .model
-            .unwrap_or_else(|| self.model_id.clone());
+        let model_id = chat_response.model.unwrap_or_else(|| self.model_id.clone());
 
         if let Some(ref fr) = finish_reason {
             tracing::debug!(
@@ -480,8 +467,12 @@ impl InferenceProvider for RemoteApiProvider {
                     if line == "data: [DONE]" {
                         break 'outer;
                     }
-                    let Some(data) = line.strip_prefix("data: ") else { continue };
-                    let Ok(parsed) = serde_json::from_str::<StreamChunk>(data) else { continue };
+                    let Some(data) = line.strip_prefix("data: ") else {
+                        continue;
+                    };
+                    let Ok(parsed) = serde_json::from_str::<StreamChunk>(data) else {
+                        continue;
+                    };
                     if let Some(u) = parsed.usage {
                         usage = Some(StreamUsage {
                             prompt_tokens: u.prompt_tokens as u32,
@@ -491,10 +482,10 @@ impl InferenceProvider for RemoteApiProvider {
                     }
                     for choice in parsed.choices {
                         if let Some(text) = choice.delta.content {
-                            if !text.is_empty()
-                                && tx.send(StreamFrame::Token(text)).await.is_err() {
-                                    return;
-                                }
+                            if !text.is_empty() && tx.send(StreamFrame::Token(text)).await.is_err()
+                            {
+                                return;
+                            }
                         }
                         if let Some(reason_str) = choice.finish_reason {
                             finish_reason = FinishReason::from_openai_str(&reason_str);
@@ -543,36 +534,33 @@ impl InferenceProvider for RemoteApiProvider {
 
         let byte_stream = response.bytes_stream();
 
-        let token_stream = byte_stream
-            .filter_map(|chunk| async move {
-                let bytes = chunk.ok()?;
-                let text = String::from_utf8_lossy(&bytes);
+        let token_stream = byte_stream.filter_map(|chunk| async move {
+            let bytes = chunk.ok()?;
+            let text = String::from_utf8_lossy(&bytes);
 
-                let mut tokens = Vec::new();
-                for line in text.lines() {
-                    let line = line.trim();
-                    if line == "data: [DONE]" {
-                        break;
-                    }
-                    if let Some(data) = line.strip_prefix("data: ") {
-                        if let Ok(chunk) = serde_json::from_str::<StreamChunk>(data) {
-                            if let Some(content) = chunk
-                                .choices
-                                .first()
-                                .and_then(|c| c.delta.content.clone())
-                            {
-                                tokens.push(content);
-                            }
+            let mut tokens = Vec::new();
+            for line in text.lines() {
+                let line = line.trim();
+                if line == "data: [DONE]" {
+                    break;
+                }
+                if let Some(data) = line.strip_prefix("data: ") {
+                    if let Ok(chunk) = serde_json::from_str::<StreamChunk>(data) {
+                        if let Some(content) =
+                            chunk.choices.first().and_then(|c| c.delta.content.clone())
+                        {
+                            tokens.push(content);
                         }
                     }
                 }
+            }
 
-                if tokens.is_empty() {
-                    None
-                } else {
-                    Some(Ok(tokens.join("")))
-                }
-            });
+            if tokens.is_empty() {
+                None
+            } else {
+                Some(Ok(tokens.join("")))
+            }
+        });
 
         Ok(Box::pin(token_stream))
     }
@@ -608,7 +596,9 @@ impl InferenceProvider for RemoteApiProvider {
             .map_err(|e| Error::Inference(format!("Embedding request failed: {e}")))?;
 
         if !response.status().is_success() {
-            return Err(Error::NotImplemented("Embedding not supported by this endpoint".to_string()));
+            return Err(Error::NotImplemented(
+                "Embedding not supported by this endpoint".to_string(),
+            ));
         }
 
         #[derive(Deserialize)]
@@ -630,7 +620,9 @@ impl InferenceProvider for RemoteApiProvider {
             .into_iter()
             .next()
             .map(|d| d.embedding)
-            .ok_or(Error::Inference("No embedding data in response".to_string()))
+            .ok_or(Error::Inference(
+                "No embedding data in response".to_string(),
+            ))
     }
 
     fn capabilities(&self) -> ProviderCapabilities {
@@ -684,12 +676,7 @@ mod tests {
 
     #[test]
     fn build_request_basic() {
-        let provider = RemoteApiProvider::new(
-            "http://localhost:8000/v1",
-            None,
-            "test-model",
-            4096,
-        );
+        let provider = RemoteApiProvider::new("http://localhost:8000/v1", None, "test-model", 4096);
 
         // Caller-specified `model_id` flows to the wire `model` field.
         // When `request.model_id = None` (default), the field is left
@@ -707,12 +694,7 @@ mod tests {
 
     #[test]
     fn build_request_default_model_id_is_empty_for_oicp_slot_routing() {
-        let provider = RemoteApiProvider::new(
-            "http://localhost:8000/v1",
-            None,
-            "test-model",
-            4096,
-        );
+        let provider = RemoteApiProvider::new("http://localhost:8000/v1", None, "test-model", 4096);
         // CompletionRequest::new defaults model_id = None — the wire
         // `model` field is empty so the daemon picks via OICP envelope.
         let request = CompletionRequest::new("Hello");
@@ -722,12 +704,7 @@ mod tests {
 
     #[test]
     fn build_request_with_system() {
-        let provider = RemoteApiProvider::new(
-            "http://localhost:8000/v1",
-            None,
-            "test-model",
-            4096,
-        );
+        let provider = RemoteApiProvider::new("http://localhost:8000/v1", None, "test-model", 4096);
 
         let request = CompletionRequest {
             prompt: "Hi".to_string(),
@@ -742,14 +719,14 @@ mod tests {
             oicp: None,
             tools: None,
             tool_choice: None,
-                    model_id: None,
-                    enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
 
         let body = provider.build_request(&request);
@@ -763,16 +740,9 @@ mod tests {
 
     #[test]
     fn build_request_with_oicp() {
-        use sovereign_core::oicp::{
-            CapabilityHint, InferenceRequirements, LatencyClass,
-        };
+        use sovereign_core::oicp::{CapabilityHint, InferenceRequirements, LatencyClass};
 
-        let provider = RemoteApiProvider::new(
-            "http://localhost:8000/v1",
-            None,
-            "test-model",
-            4096,
-        );
+        let provider = RemoteApiProvider::new("http://localhost:8000/v1", None, "test-model", 4096);
 
         let request = CompletionRequest {
             prompt: "Review this code".to_string(),
@@ -792,14 +762,14 @@ mod tests {
             ),
             tools: None,
             tool_choice: None,
-                    model_id: None,
-                    enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
 
         let body = provider.build_request(&request);
@@ -819,28 +789,21 @@ mod tests {
             "model",
             4096,
         );
-        assert_eq!(provider.auth_header(), Some("Bearer sk-test-key".to_string()));
+        assert_eq!(
+            provider.auth_header(),
+            Some("Bearer sk-test-key".to_string())
+        );
     }
 
     #[test]
     fn auth_header_absent() {
-        let provider = RemoteApiProvider::new(
-            "http://localhost:8000/v1",
-            None,
-            "model",
-            4096,
-        );
+        let provider = RemoteApiProvider::new("http://localhost:8000/v1", None, "model", 4096);
         assert_eq!(provider.auth_header(), None);
     }
 
     #[test]
     fn warmup_url_strips_v1_suffix() {
-        let provider = RemoteApiProvider::new(
-            "http://localhost:9741/v1",
-            None,
-            "model",
-            4096,
-        );
+        let provider = RemoteApiProvider::new("http://localhost:9741/v1", None, "model", 4096);
         assert_eq!(
             provider.warmup_url(),
             "http://localhost:9741/internal/inference/warmup",
@@ -849,12 +812,7 @@ mod tests {
 
     #[test]
     fn warmup_url_preserves_bare_host() {
-        let provider = RemoteApiProvider::new(
-            "http://peer:9741",
-            None,
-            "mesh-peer",
-            32_768,
-        );
+        let provider = RemoteApiProvider::new("http://peer:9741", None, "mesh-peer", 32_768);
         assert_eq!(
             provider.warmup_url(),
             "http://peer:9741/internal/inference/warmup",

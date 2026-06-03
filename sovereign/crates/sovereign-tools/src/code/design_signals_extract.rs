@@ -75,8 +75,7 @@ impl Tool for DesignSignalsExtractTool {
         ToolDescriptor {
             id: "design_signals_extract".to_string(),
             name: "Design Signals Extract".to_string(),
-            description:
-                "Parse a DESIGN.md file and return the structural signals the \
+            description: "Parse a DESIGN.md file and return the structural signals the \
                  solo-mode fallback and agent-collaborative session both rely \
                  on: the Anchors block's bullets, structural gaps (TBD \
                  markers, empty/placeholder sections, open X-vs-Y choices, \
@@ -85,7 +84,7 @@ impl Tool for DesignSignalsExtractTool {
                  secrets / consumers). Strictly structural — does NOT \
                  interpret semantics. Run after each substantive edit to a \
                  DESIGN.md to see which gaps the user should still resolve."
-                    .to_string(),
+                .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -101,18 +100,16 @@ impl Tool for DesignSignalsExtractTool {
             }),
             examples: vec![
                 ToolExample {
-                    situation:
-                        "The user just edited DESIGN.md — check which \
+                    situation: "The user just edited DESIGN.md — check which \
                          structural gaps remain before asking another \
                          question."
-                            .into(),
+                        .into(),
                     call: json!({ "design_path": "DESIGN.md" }),
                 },
                 ToolExample {
-                    situation:
-                        "Running from a subdirectory; verify the doc at \
+                    situation: "Running from a subdirectory; verify the doc at \
                          the known project root."
-                            .into(),
+                        .into(),
                     call: json!({ "design_path": "/absolute/path/to/DESIGN.md" }),
                 },
             ],
@@ -167,13 +164,15 @@ impl Tool for DesignSignalsExtractTool {
             .and_then(|v| v.as_str())
             .unwrap_or("DESIGN.md");
 
-        let resolved = resolve_design_path(raw_path, self.project_root.as_deref())
-            .ok_or_else(|| Error::Tool {
-                tool_id: "design_signals_extract".to_string(),
-                message: format!(
-                    "could not resolve '{raw_path}' — provide an absolute path, \
+        let resolved =
+            resolve_design_path(raw_path, self.project_root.as_deref()).ok_or_else(|| {
+                Error::Tool {
+                    tool_id: "design_signals_extract".to_string(),
+                    message: format!(
+                        "could not resolve '{raw_path}' — provide an absolute path, \
                      or configure the tool with a project_root."
-                ),
+                    ),
+                }
             })?;
 
         let text = std::fs::read_to_string(&resolved).map_err(|e| Error::Tool {
@@ -317,7 +316,10 @@ mod tests {
             .iter()
             .map(|g| g["reason"].as_str().unwrap())
             .collect();
-        assert!(reasons.contains(&"TbdMarker"), "expected TbdMarker gap in {reasons:?}");
+        assert!(
+            reasons.contains(&"TbdMarker"),
+            "expected TbdMarker gap in {reasons:?}"
+        );
 
         assert_eq!(v["keywords"]["persistence"], Value::Bool(true));
     }
@@ -381,10 +383,7 @@ mod tests {
             turn_index: 0,
         };
         let out = tool
-            .execute(
-                &json!({ "design_path": design.to_string_lossy() }),
-                &ctx,
-            )
+            .execute(&json!({ "design_path": design.to_string_lossy() }), &ctx)
             .await
             .expect("execute");
         let StepOutput::Json(v) = out else { panic!() };
@@ -407,6 +406,7 @@ mod tests {
     fn validate_accepts_empty_params() {
         let tool = DesignSignalsExtractTool::new();
         tool.validate(&json!({})).expect("empty params ok");
-        tool.validate(&json!({ "design_path": "foo.md" })).expect("path param ok");
+        tool.validate(&json!({ "design_path": "foo.md" }))
+            .expect("path param ok");
     }
 }

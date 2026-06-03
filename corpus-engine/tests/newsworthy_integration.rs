@@ -24,8 +24,8 @@ use corpus_engine::error::Result;
 use corpus_engine::index::CorpusIndex;
 use corpus_engine::types::EmbedFn;
 use corpus_engine::update::newsworthy_watcher::{
-    APP_ID_PORTAL, APP_ID_TRACKED, Lifecycle, MediaWikiClient, NewsworthyConfig,
-    NewsworthyHost, RevisionRecord, TrackedArticle, WikipediaNewsworthyWatcher,
+    Lifecycle, MediaWikiClient, NewsworthyConfig, NewsworthyHost, RevisionRecord, TrackedArticle,
+    WikipediaNewsworthyWatcher, APP_ID_PORTAL, APP_ID_TRACKED,
 };
 use corpus_engine::CorpusEngine;
 
@@ -91,7 +91,10 @@ async fn first_tick_fetches_pending_articles_into_parent() {
         .unwrap()
         .iter()
         .any(|id| id == "Kyiv");
-    assert!(kyiv_present, "Kyiv should be source_doc_id'd into wikipedia");
+    assert!(
+        kyiv_present,
+        "Kyiv should be source_doc_id'd into wikipedia"
+    );
 
     // Tracked entry transitioned PendingFetch → Present.
     let tracked = env.host.scan_tracked();
@@ -111,7 +114,11 @@ async fn subsequent_tick_refreshes_when_revision_diverged() {
 
     // Second tick: stub batch_revisions returns 1000 (different),
     // so each Present entry routes to the refresh path.
-    let r2 = env.watcher.tick(env.now + chrono::Duration::hours(25)).await.unwrap();
+    let r2 = env
+        .watcher
+        .tick(env.now + chrono::Duration::hours(25))
+        .await
+        .unwrap();
     assert!(
         r2.rev_checked > 0,
         "second tick must run revision checks for Present entries"
@@ -129,13 +136,12 @@ async fn portal_marker_short_circuits_when_revid_unchanged() {
 
     let r1 = env.watcher.tick(env.now).await.unwrap();
     assert!(r1.portal_ingested);
-    let portal_chunks_after_first =
-        CorpusIndex::open(&env.idx_dir.join("wikipedia-newsworthy"))
-            .await
-            .unwrap()
-            .chunk_count()
-            .await
-            .unwrap();
+    let portal_chunks_after_first = CorpusIndex::open(&env.idx_dir.join("wikipedia-newsworthy"))
+        .await
+        .unwrap()
+        .chunk_count()
+        .await
+        .unwrap();
 
     // Second tick on the same day with the same revid — no portal
     // ingest should happen. (Article fetches still happen for any
@@ -146,13 +152,12 @@ async fn portal_marker_short_circuits_when_revid_unchanged() {
         "second tick at same date+revid must short-circuit"
     );
 
-    let portal_chunks_after_second =
-        CorpusIndex::open(&env.idx_dir.join("wikipedia-newsworthy"))
-            .await
-            .unwrap()
-            .chunk_count()
-            .await
-            .unwrap();
+    let portal_chunks_after_second = CorpusIndex::open(&env.idx_dir.join("wikipedia-newsworthy"))
+        .await
+        .unwrap()
+        .chunk_count()
+        .await
+        .unwrap();
     assert_eq!(
         portal_chunks_after_first, portal_chunks_after_second,
         "portal chunk count must be stable across idempotent ticks",
@@ -180,11 +185,7 @@ impl TestEnv {
         std::fs::create_dir_all(&idx_dir).unwrap();
 
         let embed: EmbedFn = Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.1_f32; 4]) }));
-        let engine = Arc::new(CorpusEngine::new(
-            recipes_dir,
-            idx_dir.clone(),
-            embed,
-        ));
+        let engine = Arc::new(CorpusEngine::new(recipes_dir, idx_dir.clone(), embed));
 
         // Pre-create the two indexes the watcher writes into. This
         // matches what the bulk-install path produces in production —

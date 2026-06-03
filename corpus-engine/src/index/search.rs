@@ -84,7 +84,11 @@ impl CorpusIndex {
             row_count,
             self.embedding_dimensions,
             indices.len(),
-            if index_names.is_empty() { "  (none)".to_string() } else { index_names.join("\n") },
+            if index_names.is_empty() {
+                "  (none)".to_string()
+            } else {
+                index_names.join("\n")
+            },
             if ivf_built { "YES" } else { "NO" },
             if content_fts { "YES" } else { "NO" },
             if title_fts { "YES" } else { "NO" },
@@ -108,11 +112,15 @@ impl CorpusIndex {
         const FLAT_SCAN_THRESHOLD: usize = 10_000;
         let row_count = self.table.count_rows(None).await.unwrap_or(usize::MAX);
         let indices = self.table.list_indices().await.unwrap_or_default();
-        let ivf_built = indices.iter().any(|idx| idx.columns.iter().any(|c| c == "embedding"));
-        let do_vector = !query_embedding.is_empty()
-            && (ivf_built || row_count < FLAT_SCAN_THRESHOLD);
+        let ivf_built = indices
+            .iter()
+            .any(|idx| idx.columns.iter().any(|c| c == "embedding"));
+        let do_vector =
+            !query_embedding.is_empty() && (ivf_built || row_count < FLAT_SCAN_THRESHOLD);
         let fts_built = !sanitized.is_empty()
-            && indices.iter().any(|idx| idx.columns.iter().any(|c| c == "content" || c == "title"));
+            && indices
+                .iter()
+                .any(|idx| idx.columns.iter().any(|c| c == "content" || c == "title"));
         let do_fts = fts_built;
 
         tracing::info!(
@@ -146,9 +154,7 @@ impl CorpusIndex {
                 .query()
                 .nearest_to(query_embedding.to_vec())
                 .map_err(|e| Error::Database(format!("vector query: {e}")))?
-                .full_text_search(
-                    FullTextSearchQuery::new(sanitized),
-                )
+                .full_text_search(FullTextSearchQuery::new(sanitized))
                 .nprobes(50)
                 .limit(limit)
                 .execute()
@@ -175,9 +181,7 @@ impl CorpusIndex {
             // FTS-only search.
             self.table
                 .query()
-                .full_text_search(
-                    FullTextSearchQuery::new(sanitized),
-                )
+                .full_text_search(FullTextSearchQuery::new(sanitized))
                 .limit(limit)
                 .execute()
                 .await
@@ -191,9 +195,7 @@ impl CorpusIndex {
         // Hybrid search may return _relevance_score or _score instead of _distance.
         if let Some(first) = results.first() {
             let schema = first.schema();
-            let col_names: Vec<&str> = schema.fields().iter()
-                .map(|f| f.name().as_str())
-                .collect();
+            let col_names: Vec<&str> = schema.fields().iter().map(|f| f.name().as_str()).collect();
             // Schema is fully static after index creation — once
             // an operator has confirmed the columns at TRACE on a
             // first run, nothing learns more from seeing them again
@@ -245,14 +247,20 @@ impl CorpusIndex {
 
             let num_rows = batch.num_rows();
             for i in 0..num_rows {
-                let content = contents
-                    .map(|c| c.value(i).to_string())
-                    .unwrap_or_default();
+                let content = contents.map(|c| c.value(i).to_string()).unwrap_or_default();
                 let title = titles.and_then(|t| {
-                    if t.is_null(i) { None } else { Some(t.value(i).to_string()) }
+                    if t.is_null(i) {
+                        None
+                    } else {
+                        Some(t.value(i).to_string())
+                    }
                 });
                 let url = urls.and_then(|u| {
-                    if u.is_null(i) { None } else { Some(u.value(i).to_string()) }
+                    if u.is_null(i) {
+                        None
+                    } else {
+                        Some(u.value(i).to_string())
+                    }
                 });
                 let metadata: HashMap<String, String> = metadata_col
                     .and_then(|m| {
@@ -300,12 +308,15 @@ impl CorpusIndex {
 
                 let chunk_id = id_col.map(|c| c.value(i) as u64);
                 let source_doc_id = source_doc_id_col.and_then(|s| {
-                    if s.is_null(i) { None } else { Some(s.value(i).to_string()) }
+                    if s.is_null(i) {
+                        None
+                    } else {
+                        Some(s.value(i).to_string())
+                    }
                 });
                 let vector_distance = if do_vector {
-                    embedding_col.and_then(|fl| {
-                        cosine_distance_from_fixed_list(fl, i, query_embedding)
-                    })
+                    embedding_col
+                        .and_then(|fl| cosine_distance_from_fixed_list(fl, i, query_embedding))
                 } else {
                     None
                 };
@@ -324,7 +335,11 @@ impl CorpusIndex {
             }
         }
 
-        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         // Apply score threshold only in vector-only mode, where score = 1/(1+cosine_distance)
         // and 0.45 corresponds to cosine_distance ≈ 1.22 (weak semantic match).
         // In hybrid mode, scores are RRF (_relevance_score ≈ 0.016) — incompatible scale,
@@ -545,28 +560,23 @@ impl CorpusIndex {
                         let blended = alpha * rerank_norm
                             + (1.0 - alpha) * fusion_norm
                             + config.atlas_weight * atlas_norm;
-                        chunk.metadata.insert(
-                            "fusion_score".to_string(),
-                            format!("{:.6}", chunk.score),
-                        );
-                        chunk.metadata.insert(
-                            "rerank_score".to_string(),
-                            format!("{:.6}", logit),
-                        );
+                        chunk
+                            .metadata
+                            .insert("fusion_score".to_string(), format!("{:.6}", chunk.score));
+                        chunk
+                            .metadata
+                            .insert("rerank_score".to_string(), format!("{:.6}", logit));
                         if atlas_active {
-                            chunk.metadata.insert(
-                                "atlas_score".to_string(),
-                                format!("{:.6}", raw_atlas),
-                            );
-                            chunk.metadata.insert(
-                                "atlas_norm".to_string(),
-                                format!("{:.6}", atlas_norm),
-                            );
+                            chunk
+                                .metadata
+                                .insert("atlas_score".to_string(), format!("{:.6}", raw_atlas));
+                            chunk
+                                .metadata
+                                .insert("atlas_norm".to_string(), format!("{:.6}", atlas_norm));
                         }
-                        chunk.metadata.insert(
-                            "blended_score".to_string(),
-                            format!("{:.6}", blended),
-                        );
+                        chunk
+                            .metadata
+                            .insert("blended_score".to_string(), format!("{:.6}", blended));
                         chunk.score = blended;
                         chunk
                     })
@@ -578,14 +588,12 @@ impl CorpusIndex {
                 candidates
                     .into_iter()
                     .map(|mut chunk| {
-                        chunk.metadata.insert(
-                            "fusion_score".to_string(),
-                            format!("{:.6}", chunk.score),
-                        );
-                        chunk.metadata.insert(
-                            "rerank_mode".to_string(),
-                            "dedup_only".to_string(),
-                        );
+                        chunk
+                            .metadata
+                            .insert("fusion_score".to_string(), format!("{:.6}", chunk.score));
+                        chunk
+                            .metadata
+                            .insert("rerank_mode".to_string(), "dedup_only".to_string());
                         chunk
                     })
                     .collect()
@@ -628,17 +636,14 @@ impl CorpusIndex {
             // Sources without a `source_doc_id` fall back to
             // `title`; chunks with neither (rare) are bucketed
             // under their chunk_id so they don't collide.
-            let mut seen: std::collections::HashSet<String> =
-                std::collections::HashSet::new();
+            let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
             let mut deduped: Vec<ScoredChunk> = Vec::with_capacity(limit.max(16));
             for chunk in reranked.into_iter() {
                 let key = chunk
                     .source_doc_id
                     .clone()
                     .or_else(|| chunk.title.clone())
-                    .unwrap_or_else(|| {
-                        format!("__chunk_{:?}", chunk.chunk_id)
-                    });
+                    .unwrap_or_else(|| format!("__chunk_{:?}", chunk.chunk_id));
                 if seen.insert(key) {
                     deduped.push(chunk);
                 }
@@ -672,8 +677,7 @@ impl CorpusIndex {
         // literal — the HashSet passes and title clones never run. They
         // only execute when an investigator sets `retrieval_audit=info`.
         // No added allocation on the hot retrieval path otherwise.
-        let audit_on =
-            tracing::enabled!(target: "retrieval_audit", tracing::Level::INFO);
+        let audit_on = tracing::enabled!(target: "retrieval_audit", tracing::Level::INFO);
         let source_key = |c: &ScoredChunk| -> String {
             c.source_doc_id
                 .clone()
@@ -804,9 +808,7 @@ impl CorpusIndex {
                 .and_then(|c| c.as_any().downcast_ref::<StringArray>());
 
             for i in 0..batch.num_rows() {
-                let content = contents
-                    .map(|c| c.value(i).to_string())
-                    .unwrap_or_default();
+                let content = contents.map(|c| c.value(i).to_string()).unwrap_or_default();
                 let chunk_title = titles.and_then(|t| {
                     if t.is_null(i) {
                         None
@@ -833,7 +835,11 @@ impl CorpusIndex {
 
                 let chunk_id = id_col.map(|c| c.value(i) as u64);
                 let source_doc_id = source_doc_id_col.and_then(|s| {
-                    if s.is_null(i) { None } else { Some(s.value(i).to_string()) }
+                    if s.is_null(i) {
+                        None
+                    } else {
+                        Some(s.value(i).to_string())
+                    }
                 });
 
                 out.push(ScoredChunk {

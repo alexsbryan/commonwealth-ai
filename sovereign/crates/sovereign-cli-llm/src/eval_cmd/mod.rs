@@ -47,9 +47,10 @@ const HELP: Help = Help {
     summary: "Run a question bank against a corpus; measure retrieval quality.",
     sections: &[
         HelpSection::Usage("sovereign eval <subcommand> [args]"),
-        HelpSection::Subcommands(&[
-            ("run", "Execute a bank and print per-question + rollup scores."),
-        ]),
+        HelpSection::Subcommands(&[(
+            "run",
+            "Execute a bank and print per-question + rollup scores.",
+        )]),
         HelpSection::Notes(
             "Operates against the running daemon at localhost:9741 (override with \
              --daemon). Retrieval-only — does not call the chat model. The bank \
@@ -284,10 +285,7 @@ async fn cmd_run(args: &[String]) -> i32 {
             }
             "--limit" => {
                 i += 1;
-                a.limit = rest
-                    .get(i)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(a.limit);
+                a.limit = rest.get(i).and_then(|s| s.parse().ok()).unwrap_or(a.limit);
             }
             "--inspect" => {
                 a.inspect = true;
@@ -393,7 +391,9 @@ async fn cmd_run(args: &[String]) -> i32 {
             "--atlas-include" => {
                 i += 1;
                 let Some(v) = rest.get(i) else {
-                    eprintln!("error: --atlas-include needs a comma-separated value (e.g. `claim`)");
+                    eprintln!(
+                        "error: --atlas-include needs a comma-separated value (e.g. `claim`)"
+                    );
                     return 2;
                 };
                 a.atlas_include_kinds = v
@@ -442,9 +442,7 @@ async fn cmd_run(args: &[String]) -> i32 {
             let before = bank.threads.len();
             bank.threads.retain(|t| t.id == filter);
             if bank.threads.is_empty() {
-                eprintln!(
-                    "error: --thread-id `{filter}` matched no threads (bank has {before})"
-                );
+                eprintln!("error: --thread-id `{filter}` matched no threads (bank has {before})");
                 return 2;
             }
             eprintln!(
@@ -455,7 +453,9 @@ async fn cmd_run(args: &[String]) -> i32 {
         let total_turns: usize = bank.threads.iter().map(|t| t.turns.len()).sum();
         eprintln!(
             "loaded thread bank `{}` — {} threads, {total_turns} turns, target corpus `{}`",
-            bank.bank.name, bank.threads.len(), bank.bank.corpus,
+            bank.bank.name,
+            bank.threads.len(),
+            bank.bank.corpus,
         );
         crate::util::tracing_init::init_tracing(
             "sovereign_cli=info,sovereign_tools::atlas_context_manager=info,\
@@ -544,63 +544,50 @@ async fn cmd_run(args: &[String]) -> i32 {
         return 0;
     }
 
-    let atlas_ctxs: Vec<sovereign_core::atlas_context::AtlasContext> = if let Some(id_list) =
-        a.with_atlas.as_deref()
-    {
-        let include_claims = a
-            .atlas_include_kinds
-            .iter()
-            .any(|k| k == "claim");
-        let include_tensions = a
-            .atlas_include_kinds
-            .iter()
-            .any(|k| k == "tension");
-        let include_configurations = a
-            .atlas_include_kinds
-            .iter()
-            .any(|k| k == "configuration");
-        // Surface unknown kinds as a warning so typos don't silently
-        // produce an entities-only run.
-        for k in &a.atlas_include_kinds {
-            if !matches!(
-                k.as_str(),
-                "claim" | "entity" | "tension" | "configuration"
-            ) {
-                eprintln!(
-                    "warn: --atlas-include `{k}` is not yet recognised; \
+    let atlas_ctxs: Vec<sovereign_core::atlas_context::AtlasContext> =
+        if let Some(id_list) = a.with_atlas.as_deref() {
+            let include_claims = a.atlas_include_kinds.iter().any(|k| k == "claim");
+            let include_tensions = a.atlas_include_kinds.iter().any(|k| k == "tension");
+            let include_configurations = a.atlas_include_kinds.iter().any(|k| k == "configuration");
+            // Surface unknown kinds as a warning so typos don't silently
+            // produce an entities-only run.
+            for k in &a.atlas_include_kinds {
+                if !matches!(k.as_str(), "claim" | "entity" | "tension" | "configuration") {
+                    eprintln!(
+                        "warn: --atlas-include `{k}` is not yet recognised; \
                      accepted today: entity, claim, tension, configuration."
-                );
-            }
-        }
-        let filter = runner::AtlasLoadFilter {
-            min_description_chars: a.atlas_min_description_chars,
-            depth_allowlist: a.atlas_depth.clone(),
-            max_entries: a.atlas_max_entries,
-            include_claims,
-            include_tensions,
-            include_configurations,
-        };
-        // `--with-atlas` accepts a comma-separated list of atlas
-        // corpus ids. Each loads independently (with its own
-        // canonical_name = article_slug derivation) and the per-question
-        // retrieval pools their entries via `atlas_top_k_across`. This
-        // is the multi-article SEP-pilot path: enrich N per-article
-        // atlases, point one --with-atlas at all of them, let the
-        // global cosine pick the topically-aligned surfaces.
-        let mut out = Vec::new();
-        for id in id_list.split(',').map(str::trim).filter(|s| !s.is_empty()) {
-            match runner::load_atlas_context(&session, id, a.atlas_top_k, &filter).await {
-                Ok(ctx) => out.push(ctx),
-                Err(e) => {
-                    eprintln!("error: --with-atlas {id}: {e}");
-                    return 1;
+                    );
                 }
             }
-        }
-        out
-    } else {
-        Vec::new()
-    };
+            let filter = runner::AtlasLoadFilter {
+                min_description_chars: a.atlas_min_description_chars,
+                depth_allowlist: a.atlas_depth.clone(),
+                max_entries: a.atlas_max_entries,
+                include_claims,
+                include_tensions,
+                include_configurations,
+            };
+            // `--with-atlas` accepts a comma-separated list of atlas
+            // corpus ids. Each loads independently (with its own
+            // canonical_name = article_slug derivation) and the per-question
+            // retrieval pools their entries via `atlas_top_k_across`. This
+            // is the multi-article SEP-pilot path: enrich N per-article
+            // atlases, point one --with-atlas at all of them, let the
+            // global cosine pick the topically-aligned surfaces.
+            let mut out = Vec::new();
+            for id in id_list.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+                match runner::load_atlas_context(&session, id, a.atlas_top_k, &filter).await {
+                    Ok(ctx) => out.push(ctx),
+                    Err(e) => {
+                        eprintln!("error: --with-atlas {id}: {e}");
+                        return 1;
+                    }
+                }
+            }
+            out
+        } else {
+            Vec::new()
+        };
 
     // Load the structural graph layer for each atlas (atoms-by-id,
     // edge adjacency). Used by `atlas_navigate` for graph BFS — the
@@ -610,9 +597,8 @@ async fn cmd_run(args: &[String]) -> i32 {
     let atlas_graphs: Vec<runner::AtlasGraph> = atlas_ctxs
         .iter()
         .filter_map(|ctx| {
-            let atlas_dir =
-                crate::enrich_cmd::paths::index_root(&ctx.atlas_corpus_id)
-                    .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME);
+            let atlas_dir = crate::enrich_cmd::paths::index_root(&ctx.atlas_corpus_id)
+                .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME);
             match runner::AtlasGraph::load_from_disk(&ctx.atlas_corpus_id, &atlas_dir) {
                 Ok(g) => Some(g),
                 Err(e) => {

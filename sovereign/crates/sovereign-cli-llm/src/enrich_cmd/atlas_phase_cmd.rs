@@ -11,8 +11,8 @@ use std::sync::Arc;
 
 use corpus_engine::enrichment::pipeline::{
     atlas::SectionExtraction, AtlasCluster, ExemplarBank, Facet, NamedCluster, Phase1Output,
-    Phase2AtlasOutput, Phase3AtlasOutput, PhaseCache, PhaseFailure, PhaseFailureKind,
-    PhaseRunner, PipelinePhase, PipelineRegistry, RunOutputWriter, SketchExcerpt,
+    Phase2AtlasOutput, Phase3AtlasOutput, PhaseCache, PhaseFailure, PhaseFailureKind, PhaseRunner,
+    PipelinePhase, PipelineRegistry, RunOutputWriter, SketchExcerpt,
 };
 
 use super::config::EnrichConfig;
@@ -97,7 +97,8 @@ pub async fn cmd_cluster_atlas(args: &[String]) -> i32 {
 
 const NAME_HELP: Help = Help {
     command: "sovereign enrich name-atlas-clusters",
-    summary: "Phase 3 (atlas): name each facet cluster with a position / trajectory / thread label.",
+    summary:
+        "Phase 3 (atlas): name each facet cluster with a position / trajectory / thread label.",
     sections: &[
         HelpSection::Usage("sovereign enrich name-atlas-clusters <corpus-id>"),
         HelpSection::Notes(
@@ -197,20 +198,23 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let bank =
-        match ExemplarBank::load_embedded(&exemplar_path, PipelinePhase::AtlasNamedClusters, &embed)
-            .await
-        {
-            Ok(b) => b,
-            Err(e) => {
-                eprintln!(
-                    "  · warning: could not load exemplar bank at {}: {} — continuing without",
-                    exemplar_path.display(),
-                    e
-                );
-                ExemplarBank::open(&exemplar_path, PipelinePhase::AtlasNamedClusters).unwrap()
-            }
-        };
+    let bank = match ExemplarBank::load_embedded(
+        &exemplar_path,
+        PipelinePhase::AtlasNamedClusters,
+        &embed,
+    )
+    .await
+    {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!(
+                "  · warning: could not load exemplar bank at {}: {} — continuing without",
+                exemplar_path.display(),
+                e
+            );
+            ExemplarBank::open(&exemplar_path, PipelinePhase::AtlasNamedClusters).unwrap()
+        }
+    };
 
     println!(
         "  running phase 3 (atlas) — naming {} cluster(s) across {} facet(s)",
@@ -232,7 +236,13 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
     let total = phase2.clusters.len();
 
     for (i, cluster) in phase2.clusters.iter().enumerate() {
-        print!("    [{}/{}] {} ({})… ", i + 1, total, cluster.id, cluster.facet.as_str());
+        print!(
+            "    [{}/{}] {} ({})… ",
+            i + 1,
+            total,
+            cluster.id,
+            cluster.facet.as_str()
+        );
         use std::io::Write;
         std::io::stdout().flush().ok();
 
@@ -283,7 +293,8 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
             }
         };
 
-        let Some(prompt) = pipeline.compose_phase3_facet(cluster, cluster.facet, &excerpts, &picked)
+        let Some(prompt) =
+            pipeline.compose_phase3_facet(cluster, cluster.facet, &excerpts, &picked)
         else {
             eprintln!(
                 "FAILED: pipeline `{}` does not implement compose_phase3_facet — use \

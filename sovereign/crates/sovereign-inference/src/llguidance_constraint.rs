@@ -83,9 +83,8 @@ impl LlguidanceConstraint {
         let factory = factory_for(model);
         let trimmed = grammar_or_schema.trim_start();
         let grammar = if trimmed.starts_with('{') {
-            let schema: serde_json::Value = serde_json::from_str(trimmed).map_err(|e| {
-                LlgError::ParserCreate(format!("json schema parse: {e}"))
-            })?;
+            let schema: serde_json::Value = serde_json::from_str(trimmed)
+                .map_err(|e| LlgError::ParserCreate(format!("json schema parse: {e}")))?;
             TopLevelGrammar::from_json_schema(schema)
         } else {
             TopLevelGrammar::from_lark(grammar_or_schema.to_string())
@@ -119,9 +118,8 @@ impl LlguidanceConstraint {
     ) -> Result<Self, LlgError> {
         let mut walked = schema.clone();
         default_additional_properties_false(&mut walked);
-        let serialised = serde_json::to_string(&walked).map_err(|e| {
-            LlgError::ParserCreate(format!("serialise walked schema: {e}"))
-        })?;
+        let serialised = serde_json::to_string(&walked)
+            .map_err(|e| LlgError::ParserCreate(format!("serialise walked schema: {e}")))?;
         Self::new(&serialised, model)
     }
 
@@ -350,7 +348,9 @@ fn build_tok_env(model: &LlamaModel) -> TokEnv {
 /// See `LLGUIDANCE_MIGRATION_AUDIT.md` §3.A.
 pub fn default_additional_properties_false(schema: &mut serde_json::Value) {
     use serde_json::Value;
-    let Some(obj) = schema.as_object_mut() else { return };
+    let Some(obj) = schema.as_object_mut() else {
+        return;
+    };
 
     let is_typed_object = obj
         .get("type")
@@ -482,7 +482,11 @@ mod tests {
         let grammar = TopLevelGrammar::from_lark("start: \"hi\"\n".to_string());
         let parser = factory.create_parser(grammar);
         let mut matcher = Matcher::new(parser);
-        assert!(!matcher.is_error(), "matcher init: {:?}", matcher.get_error());
+        assert!(
+            !matcher.is_error(),
+            "matcher init: {:?}",
+            matcher.get_error()
+        );
 
         // Initial mask must allow `h` (token id 'h' = 0x68 under single-
         // byte env).
@@ -623,14 +627,24 @@ mod tests {
         let grammar = TopLevelGrammar::from_lark(grammar_src.to_string());
         let parser = factory.create_parser(grammar);
         let mut matcher = Matcher::new(parser);
-        assert!(!matcher.is_error(), "matcher init: {:?}", matcher.get_error());
+        assert!(
+            !matcher.is_error(),
+            "matcher init: {:?}",
+            matcher.get_error()
+        );
 
         // Both branches must be reachable from the start state: `{`
         // (commits to envelope) and at least one non-`{` byte
         // (commits to text branch). Test passes if both are in the
         // mask before the first commit.
         let mask = matcher.compute_mask().expect("mask");
-        assert!(mask.is_allowed(b'{' as u32), "envelope branch must be reachable");
-        assert!(mask.is_allowed(b'h' as u32), "text branch must be reachable");
+        assert!(
+            mask.is_allowed(b'{' as u32),
+            "envelope branch must be reachable"
+        );
+        assert!(
+            mask.is_allowed(b'h' as u32),
+            "text branch must be reachable"
+        );
     }
 }

@@ -85,9 +85,8 @@ async fn cmd_finalize(args: &[String]) -> i32 {
     // `finalise_solo_ingest` only inspects the filesystem — no embed
     // calls. A noop EmbedFn keeps the engine constructable without
     // booting the daemon.
-    let noop_embed: corpus_engine::EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async move { Ok(vec![0.0_f32; 1]) })
-    });
+    let noop_embed: corpus_engine::EmbedFn =
+        Arc::new(|_text: &str| Box::pin(async move { Ok(vec![0.0_f32; 1]) }));
     let engine = corpus_engine::CorpusEngine::new(recipes_dir, data_dir, noop_embed);
     match engine.finalise_solo_ingest(&corpus_id) {
         Ok(true) => {
@@ -129,7 +128,10 @@ async fn cmd_reflect(args: &[String]) -> i32 {
     if std::env::var("SOVEREIGN_NO_REFLECTION").as_deref() == Ok("1") {
         return 0;
     }
-    if matches!(args.first().map(String::as_str), Some("--help" | "-h" | "help")) {
+    if matches!(
+        args.first().map(String::as_str),
+        Some("--help" | "-h" | "help")
+    ) {
         crate::util::help::print(&REFLECT_HELP);
         return 0;
     }
@@ -144,10 +146,7 @@ async fn cmd_reflect(args: &[String]) -> i32 {
     while i < args.len() {
         match args[i].as_str() {
             "--hours" => {
-                hours = args
-                    .get(i + 1)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(4);
+                hours = args.get(i + 1).and_then(|s| s.parse().ok()).unwrap_or(4);
                 i += 2;
             }
             "--repo-root" => {
@@ -301,13 +300,7 @@ fn git_diff_head_names(repo_root: &Path) -> Vec<String> {
 fn git_recent_commit_files(repo_root: &Path, hours: u64) -> Vec<String> {
     let since = format!("{hours} hours ago");
     let out = std::process::Command::new("git")
-        .args([
-            "log",
-            "--since",
-            &since,
-            "--name-only",
-            "--pretty=format:",
-        ])
+        .args(["log", "--since", &since, "--name-only", "--pretty=format:"])
         .current_dir(repo_root)
         .output();
     let Ok(o) = out else { return Vec::new() };
@@ -371,7 +364,10 @@ async fn cmd_brief(args: &[String]) -> i32 {
     use sovereign_tools::code::brief::{assemble_brief, BriefInputs};
     use sovereign_tools::code::working_set::{detect_working_set, Strategy};
 
-    if matches!(args.first().map(String::as_str), Some("--help" | "-h" | "help")) {
+    if matches!(
+        args.first().map(String::as_str),
+        Some("--help" | "-h" | "help")
+    ) {
         crate::util::help::print(&BRIEF_HELP);
         return 0;
     }
@@ -404,17 +400,11 @@ async fn cmd_brief(args: &[String]) -> i32 {
                 i += 2;
             }
             "--hours" => {
-                hours = args
-                    .get(i + 1)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(24);
+                hours = args.get(i + 1).and_then(|s| s.parse().ok()).unwrap_or(24);
                 i += 2;
             }
             "--budget" => {
-                budget_tokens = args
-                    .get(i + 1)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(1500);
+                budget_tokens = args.get(i + 1).and_then(|s| s.parse().ok()).unwrap_or(1500);
                 i += 2;
             }
             "--repo-root" => {
@@ -464,9 +454,7 @@ async fn cmd_brief(args: &[String]) -> i32 {
         "recent" => Strategy::RecentCommits { hours },
         "explicit" => Strategy::Explicit(explicit_files),
         other => {
-            eprintln!(
-                "error: --strategy must be one of: branch, recent, explicit (got `{other}`)"
-            );
+            eprintln!("error: --strategy must be one of: branch, recent, explicit (got `{other}`)");
             return 2;
         }
     };
@@ -680,10 +668,7 @@ const BRIEF_HELP: crate::util::help::Help = crate::util::help::Help {
                 "--feature-id <id>",
                 "ATOS feature id, used to scope notes. Mirrors SOVEREIGN_FEATURE_ID env var.",
             ),
-            (
-                "--output <md>",
-                "Write to this path instead of stdout.",
-            ),
+            ("--output <md>", "Write to this path instead of stdout."),
             (
                 "--file <path>",
                 "(For --strategy explicit) Add a file to the working set. Repeat for multiple.",
@@ -697,18 +682,29 @@ const BRIEF_HELP: crate::util::help::Help = crate::util::help::Help {
     ],
 };
 
-
 const HELP: crate::util::help::Help = crate::util::help::Help {
     command: "sovereign code",
     summary: "Code intelligence tooling: index a repository, watch for changes, check MCP.",
     sections: &[
         crate::util::help::HelpSection::Usage("sovereign code <subcommand> [args]"),
         crate::util::help::HelpSection::Subcommands(&[
-            ("index <path>",       "Index a local repository with tree-sitter"),
-            ("finalize <id>",      "Promote a stranded <id>-partition-local/ to canonical"),
-            ("watch <corpus-id>",  "Run a filesystem watcher that re-indexes on save"),
-            ("mcp-status",         "Ping the local MCP server and list exposed tools"),
-            ("search <query>",     "(placeholder) Use the Sovereign chat or MCP for now"),
+            ("index <path>", "Index a local repository with tree-sitter"),
+            (
+                "finalize <id>",
+                "Promote a stranded <id>-partition-local/ to canonical",
+            ),
+            (
+                "watch <corpus-id>",
+                "Run a filesystem watcher that re-indexes on save",
+            ),
+            (
+                "mcp-status",
+                "Ping the local MCP server and list exposed tools",
+            ),
+            (
+                "search <query>",
+                "(placeholder) Use the Sovereign chat or MCP for now",
+            ),
         ]),
         crate::util::help::HelpSection::Notes(
             "`index` and `watch` take --corpus-id <id>, --data-dir <dir>, --root <path>.\n\
@@ -832,11 +828,17 @@ pub async fn rebuild_code_corpus(
     let target = data_dir.join(corpus_id);
     if target.exists() {
         clear_lancedb_artifacts(&target).map_err(|e| {
-            format!("cannot clear existing LanceDB index at {}: {e}", target.display())
+            format!(
+                "cannot clear existing LanceDB index at {}: {e}",
+                target.display()
+            )
         })?;
     }
     clear_partitions_for(data_dir, corpus_id).map_err(|e| {
-        format!("cannot clear partition dirs under {}: {e}", data_dir.display())
+        format!(
+            "cannot clear partition dirs under {}: {e}",
+            data_dir.display()
+        )
     })?;
 
     // Vector ANN enabled — every corpus on this node shares one
@@ -1093,9 +1095,15 @@ async fn cmd_mcp_status(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let version = init_json["result"]["protocolVersion"].as_str().unwrap_or("?");
-    let server_name = init_json["result"]["serverInfo"]["name"].as_str().unwrap_or("?");
-    let server_version = init_json["result"]["serverInfo"]["version"].as_str().unwrap_or("?");
+    let version = init_json["result"]["protocolVersion"]
+        .as_str()
+        .unwrap_or("?");
+    let server_name = init_json["result"]["serverInfo"]["name"]
+        .as_str()
+        .unwrap_or("?");
+    let server_version = init_json["result"]["serverInfo"]["version"]
+        .as_str()
+        .unwrap_or("?");
     println!("  ✓ initialize");
     println!("    protocolVersion: {version}");
     println!("    serverInfo:      {server_name} v{server_version}");
@@ -1185,7 +1193,11 @@ fn default_data_dir() -> Option<PathBuf> {
     // `util::dirs::sovereign_indexes()` but keep the Option return so
     // existing `.or_else(default_data_dir)` callers stay stable.
     let p = crate::util::dirs::sovereign_indexes();
-    if p == PathBuf::from(".") { None } else { Some(p) }
+    if p == PathBuf::from(".") {
+        None
+    } else {
+        Some(p)
+    }
 }
 
 /// Remove every entry in `dir` that belongs to the LanceDB index
@@ -1237,10 +1249,7 @@ fn clear_lancedb_artifacts(dir: &std::path::Path) -> std::io::Result<()> {
 /// Non-partition siblings (other corpora, arbitrary files) are
 /// untouched. A missing `root` is not an error — first-ever
 /// rebuild on a machine with no indexes yet is a normal state.
-fn clear_partitions_for(
-    root: &std::path::Path,
-    corpus_id: &str,
-) -> std::io::Result<()> {
+fn clear_partitions_for(root: &std::path::Path, corpus_id: &str) -> std::io::Result<()> {
     let prefix = format!("{corpus_id}-partition-");
     let entries = match std::fs::read_dir(root) {
         Ok(e) => e,
@@ -1305,7 +1314,10 @@ async fn build_daemon_embed_fn() -> std::result::Result<(EmbedFn, String), Strin
     match probe.get(&probe_url).send().await {
         Ok(r) if r.status().is_success() => {}
         Ok(r) => {
-            return Err(format!("daemon at :{port} returned {} from /v1/models", r.status()));
+            return Err(format!(
+                "daemon at :{port} returned {} from /v1/models",
+                r.status()
+            ));
         }
         Err(_) => {
             return Err(format!("daemon unreachable at localhost:{port}"));
@@ -1316,13 +1328,8 @@ async fn build_daemon_embed_fn() -> std::result::Result<(EmbedFn, String), Strin
     // its single `model_id`. Its `InferenceProvider::embed` sends
     // `{"model": "<embed_model>", "input": "<text>"}` to
     // `/embeddings`, which is the exact contract we want.
-    let provider: Arc<dyn InferenceProvider> = Arc::new(RemoteApiProvider::new(
-        &endpoint,
-        None,
-        &embed_model,
-        8192,
-    ));
+    let provider: Arc<dyn InferenceProvider> =
+        Arc::new(RemoteApiProvider::new(&endpoint, None, &embed_model, 8192));
     let f = sovereign_tools::corpus::inference_to_embed_fn(provider);
     Ok((f, embed_model))
 }
-

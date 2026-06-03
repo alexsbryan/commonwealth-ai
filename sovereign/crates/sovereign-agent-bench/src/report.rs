@@ -35,11 +35,7 @@ fn default_run_trials() -> u8 {
 
 impl BenchReport {
     pub fn compute_grand_total(problems: &[ProblemScore]) -> u16 {
-        problems
-            .iter()
-            .map(|p| p.total as u16)
-            .sum::<u16>()
-            .min(72)
+        problems.iter().map(|p| p.total as u16).sum::<u16>().min(72)
     }
 
     /// Text rollup — concise, one line per problem + grand total.

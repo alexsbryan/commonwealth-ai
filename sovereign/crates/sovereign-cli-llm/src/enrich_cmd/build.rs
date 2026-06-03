@@ -25,11 +25,11 @@ use super::{
     atlas_configuration, atlas_gaps, atlas_phase_cmd, atlas_resolve, atlas_tensions,
     atlas_tensions_classify, config::EnrichConfig, extract, paths, schema_review, seed_cmd,
 };
+use crate::util::help::{self, Help, HelpSection};
 use corpus_engine::enrichment::pipeline::{
     BuildStep, EnrichProgress, EnrichProgressFn, PipelineRegistry, SeedStrategy,
 };
 use std::sync::Arc;
-use crate::util::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich build",
@@ -124,10 +124,7 @@ pub async fn cmd_build(args: &[String]) -> i32 {
 /// (`sovereign-desktop/src-tauri/src/enrich_commands.rs`). Adding a
 /// per-step side effect means editing here once rather than across
 /// frontends.
-pub async fn build_with_progress(
-    parsed: &ParsedBuild,
-    progress: Option<EnrichProgressFn>,
-) -> i32 {
+pub async fn build_with_progress(parsed: &ParsedBuild, progress: Option<EnrichProgressFn>) -> i32 {
     let emit = |evt: EnrichProgress| {
         if let Some(cb) = progress.as_ref() {
             cb(evt);
@@ -174,10 +171,7 @@ pub async fn build_with_progress(
         });
         let code = run_step(step, parsed).await;
         if code != 0 {
-            let message = format!(
-                "step `{}` exited with code {code}",
-                step.label()
-            );
+            let message = format!("step `{}` exited with code {code}", step.label());
             eprintln!();
             eprintln!("error: {message}. Build stopped.");
             emit(EnrichProgress::StepFailed {
@@ -227,8 +221,7 @@ fn print_cli_event(evt: &EnrichProgress) {
         } => {
             println!("=== enrich build — {corpus_id} ===");
             if !auto_skipped.is_empty() {
-                let labels: Vec<&str> =
-                    auto_skipped.iter().map(|s| s.id()).collect();
+                let labels: Vec<&str> = auto_skipped.iter().map(|s| s.id()).collect();
                 println!(
                     "  pipeline `{pipeline_id}` auto-skips: {}",
                     labels.join(", ")
@@ -246,10 +239,7 @@ fn print_cli_event(evt: &EnrichProgress) {
             total,
             ..
         } => {
-            println!(
-                "─── [{ordinal}/{total}] {} ───",
-                step.id()
-            );
+            println!("─── [{ordinal}/{total}] {} ───", step.id());
         }
         EnrichProgress::StepDone { .. } => {
             println!();
@@ -309,12 +299,12 @@ fn step_canonical_output(step: Step, corpus_id: &str) -> Option<std::path::PathB
     match step {
         Step::Extract => Some(paths::cache_dir(corpus_id).join("questions.json")),
         Step::Cluster => Some(paths::cache_dir(corpus_id).join("atlas-clusters.json")),
-        Step::Name => {
-            Some(paths::cache_dir(corpus_id).join("atlas-named-clusters.json"))
-        }
-        Step::Resolve => {
-            Some(paths::index_root(corpus_id).join("atlas").join("atoms.json"))
-        }
+        Step::Name => Some(paths::cache_dir(corpus_id).join("atlas-named-clusters.json")),
+        Step::Resolve => Some(
+            paths::index_root(corpus_id)
+                .join("atlas")
+                .join("atoms.json"),
+        ),
         Step::Tensions => Some(
             paths::index_root(corpus_id)
                 .join("atlas")
@@ -391,9 +381,7 @@ async fn run_step(step: Step, parsed: &ParsedBuild) -> i32 {
                 // Phase 1 here MUST carry section_extraction — if it
                 // doesn't, the cache is stale; re-run extract instead
                 // of silently skipping into a doomed cluster step.
-                if matches!(step, Step::Extract)
-                    && !extract_cache_has_atlas_payloads(&cache_path)
-                {
+                if matches!(step, Step::Extract) && !extract_cache_has_atlas_payloads(&cache_path) {
                     println!(
                         "  · {} cached file at {} is from a non-atlas run \
                          (no section_extraction payloads); invalidating cache.",
@@ -413,10 +401,7 @@ async fn run_step(step: Step, parsed: &ParsedBuild) -> i32 {
                         step.label(),
                         cache_path.display()
                     );
-                    println!(
-                        "    To force re-run: rm {}",
-                        cache_path.display()
-                    );
+                    println!("    To force re-run: rm {}", cache_path.display());
                     return 0;
                 }
             }
@@ -429,8 +414,7 @@ async fn run_step(step: Step, parsed: &ParsedBuild) -> i32 {
         Step::Cluster => atlas_phase_cmd::cmd_cluster_atlas(&[corpus.into()]).await,
         Step::Name => atlas_phase_cmd::cmd_name_atlas_clusters(&[corpus.into()]).await,
         Step::Resolve => {
-            atlas_resolve::cmd_atlas_resolve(&[corpus.into(), "--phase".into(), "all".into()])
-                .await
+            atlas_resolve::cmd_atlas_resolve(&[corpus.into(), "--phase".into(), "all".into()]).await
         }
         Step::Tensions => {
             // Phase 6 has two halves: deterministic candidate
@@ -448,9 +432,7 @@ async fn run_step(step: Step, parsed: &ParsedBuild) -> i32 {
             atlas_tensions_classify::cmd_atlas_tensions_classify(&[corpus.into()]).await
         }
         Step::Gaps => atlas_gaps::cmd_atlas_gaps(&[corpus.into()]).await,
-        Step::Configure => {
-            atlas_configuration::cmd_atlas_configuration(&[corpus.into()]).await
-        }
+        Step::Configure => atlas_configuration::cmd_atlas_configuration(&[corpus.into()]).await,
         Step::Report => schema_review::cmd_schema_report(&[corpus.into()]).await,
     }
 }
@@ -559,11 +541,7 @@ async fn run_extract_step(parsed: &ParsedBuild) -> i32 {
     );
     println!();
 
-    let retry_args: Vec<String> = vec![
-        corpus.into(),
-        "--retry-failed".into(),
-        "--terse".into(),
-    ];
+    let retry_args: Vec<String> = vec![corpus.into(), "--retry-failed".into(), "--terse".into()];
     let retry_code = extract::cmd_extract(&retry_args).await;
 
     // After the retry, re-read the latest run file to decide
@@ -752,11 +730,13 @@ pub(super) struct PipelineCapabilities {
     pub runs_configuration_phase: bool,
 }
 
-fn load_pipeline_capabilities(
-    corpus_id: &str,
-) -> Result<PipelineCapabilities, (i32, String)> {
-    let cfg = EnrichConfig::require(corpus_id)
-        .map_err(|e| (1, format!("loading enrichment config for `{corpus_id}`: {e}")))?;
+fn load_pipeline_capabilities(corpus_id: &str) -> Result<PipelineCapabilities, (i32, String)> {
+    let cfg = EnrichConfig::require(corpus_id).map_err(|e| {
+        (
+            1,
+            format!("loading enrichment config for `{corpus_id}`: {e}"),
+        )
+    })?;
     let registry = PipelineRegistry::builtin();
     let pipeline = registry.get(&cfg.pipeline_id).ok_or_else(|| {
         (
@@ -927,9 +907,9 @@ fn parse_args(args: &[String]) -> Result<ParsedBuild, String> {
                 i += 1;
             }
             "--chapters" => {
-                let raw = args.get(i + 1).ok_or_else(|| {
-                    "--chapters requires a comma-separated id list".to_string()
-                })?;
+                let raw = args
+                    .get(i + 1)
+                    .ok_or_else(|| "--chapters requires a comma-separated id list".to_string())?;
                 chapters = Some(
                     raw.split(',')
                         .map(|s| s.trim().to_string())
@@ -995,10 +975,7 @@ mod tests {
 
     #[test]
     fn extract_cache_atlas_detection() {
-        let tmp = std::env::temp_dir().join(format!(
-            "sov-build-cache-test-{}",
-            std::process::id()
-        ));
+        let tmp = std::env::temp_dir().join(format!("sov-build-cache-test-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
 
         // Atlas-shaped cache: one chapter with a section_extraction object.
@@ -1050,12 +1027,8 @@ mod tests {
 
     #[test]
     fn parse_accepts_chapter_subset() {
-        let p = parse_args(&[
-            "bk".into(),
-            "--chapters".into(),
-            "sec_0001,sec_0002".into(),
-        ])
-        .unwrap();
+        let p =
+            parse_args(&["bk".into(), "--chapters".into(), "sec_0001,sec_0002".into()]).unwrap();
         match p.selection {
             Selection::Chapters(ids) => {
                 assert_eq!(ids, vec!["sec_0001", "sec_0002"]);
@@ -1092,8 +1065,7 @@ mod tests {
 
     #[test]
     fn parse_rejects_unknown_skip_name() {
-        let err =
-            parse_args(&["bk".into(), "--skip".into(), "banana".into()]).unwrap_err();
+        let err = parse_args(&["bk".into(), "--skip".into(), "banana".into()]).unwrap_err();
         assert!(err.contains("unknown step"));
     }
 
@@ -1244,12 +1216,7 @@ mod tests {
         // Explicit --skip + capability-auto-skip compose —
         // neither hides the other, both land in their
         // respective categories.
-        let parsed = parse_args(&[
-            "bk".into(),
-            "--skip".into(),
-            "tensions".into(),
-        ])
-        .unwrap();
+        let parsed = parse_args(&["bk".into(), "--skip".into(), "tensions".into()]).unwrap();
         let caps = PipelineCapabilities {
             pipeline_id: "minimal_atlas".into(),
             seed_strategy_none: true,
@@ -1302,20 +1269,14 @@ mod tests {
         // Typos in the skip list are operator errors — surfacing
         // as an Err prevents a UI dialog that silently runs a
         // phase the operator thought it had excluded.
-        let err = ParsedBuild::from_inputs(
-            "bk",
-            None,
-            &["configure".into(), "nope".into()],
-            false,
-        )
-        .unwrap_err();
+        let err = ParsedBuild::from_inputs("bk", None, &["configure".into(), "nope".into()], false)
+            .unwrap_err();
         assert!(err.contains("nope"));
     }
 
     #[test]
     fn from_inputs_rejects_empty_chapter_list() {
-        let err =
-            ParsedBuild::from_inputs("bk", Some(vec![]), &[], false).unwrap_err();
+        let err = ParsedBuild::from_inputs("bk", Some(vec![]), &[], false).unwrap_err();
         assert!(err.contains("empty"));
     }
 }

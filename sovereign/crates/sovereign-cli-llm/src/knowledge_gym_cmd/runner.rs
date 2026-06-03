@@ -62,7 +62,10 @@ impl Transcript {
     /// (e.g. `expected_first_tool` looks at turn 0; legacy
     /// `should_call_knowledge_lookup` looks at the union).
     pub fn all_tool_calls(&self) -> Vec<&ToolCallRecord> {
-        self.turns.iter().flat_map(|t| t.tool_calls.iter()).collect()
+        self.turns
+            .iter()
+            .flat_map(|t| t.tool_calls.iter())
+            .collect()
     }
 
     /// The final assistant message of the LAST turn — what the
@@ -70,9 +73,7 @@ impl Transcript {
     /// turns' messages live in `turns[N].final_message` for
     /// turn-scoped predicates.
     pub fn final_message(&self) -> Option<&str> {
-        self.turns
-            .last()
-            .and_then(|t| t.final_message.as_deref())
+        self.turns.last().and_then(|t| t.final_message.as_deref())
     }
 }
 
@@ -126,8 +127,7 @@ pub struct ReplayReport {
 
 impl ReplayReport {
     fn passed(&self) -> bool {
-        self.transcript.runner_error.is_none()
-            && self.predicates.iter().all(|p| p.passed)
+        self.transcript.runner_error.is_none() && self.predicates.iter().all(|p| p.passed)
     }
 }
 
@@ -218,7 +218,14 @@ pub fn summarise(reports: &[FixtureReport]) -> AggregateSummary {
         pass_rate,
         per_fixture: reports
             .iter()
-            .map(|r| (r.slug.clone(), r.pass_count(), r.replays.len(), r.pass_rate()))
+            .map(|r| {
+                (
+                    r.slug.clone(),
+                    r.pass_count(),
+                    r.replays.len(),
+                    r.pass_rate(),
+                )
+            })
             .collect(),
     }
 }
@@ -253,10 +260,7 @@ pub async fn run_fixture_replays(
 /// runner.
 async fn run_once(client: &reqwest::Client, cfg: &RunnerCfg, fx: &Fixture) -> Transcript {
     let mut tx = Transcript::default();
-    let endpoint = format!(
-        "{}/v1/chat/completions",
-        cfg.base_url.trim_end_matches('/')
-    );
+    let endpoint = format!("{}/v1/chat/completions", cfg.base_url.trim_end_matches('/'));
 
     // Accumulated conversation messages threaded across turns.
     // For turn 0 this is empty; for turn N>0 it contains turn 0..N-1's
@@ -282,15 +286,20 @@ async fn run_once(client: &reqwest::Client, cfg: &RunnerCfg, fx: &Fixture) -> Tr
         ) {
             Ok(r) => r,
             Err(e) => {
-                tx.runner_error =
-                    Some(format!("build turn {turn_idx} request: {e}"));
+                tx.runner_error = Some(format!("build turn {turn_idx} request: {e}"));
                 return tx;
             }
         };
         let mut turn_tx = TurnTranscript::default();
-        let outcome =
-            run_turn_loop(client, &endpoint, request, spec, &mut turn_tx, &mut conversation)
-                .await;
+        let outcome = run_turn_loop(
+            client,
+            &endpoint,
+            request,
+            spec,
+            &mut turn_tx,
+            &mut conversation,
+        )
+        .await;
         tx.model_ms += turn_tx.model_ms;
         tx.turns.push(turn_tx);
         if let Err(e) = outcome {
@@ -419,9 +428,7 @@ async fn run_turn_loop(
         let message = resp_json
             .pointer("/choices/0/message")
             .cloned()
-            .ok_or_else(|| {
-                format!("daemon response missing choices[0].message loop={loop_idx}")
-            })?;
+            .ok_or_else(|| format!("daemon response missing choices[0].message loop={loop_idx}"))?;
 
         let tool_calls = message
             .get("tool_calls")
@@ -491,9 +498,7 @@ async fn run_turn_loop(
                     .unwrap_or_default();
                 let ids: Vec<String> = evidence_arr
                     .iter()
-                    .filter_map(|e| {
-                        e.get("id").and_then(|s| s.as_str().map(str::to_string))
-                    })
+                    .filter_map(|e| e.get("id").and_then(|s| s.as_str().map(str::to_string)))
                     .collect();
                 let kinds: Vec<String> = evidence_arr
                     .iter()
@@ -569,7 +574,9 @@ async fn run_turn_loop(
         }
     }
 
-    Err(format!("hit MAX_TOOL_LOOPS={MAX_TOOL_LOOPS} without a final message"))
+    Err(format!(
+        "hit MAX_TOOL_LOOPS={MAX_TOOL_LOOPS} without a final message"
+    ))
 }
 
 /// One predicate-evaluation scope: a slice of tool calls, the
@@ -683,7 +690,10 @@ fn eval_block(
         .collect();
     let first_tool = scope.tool_calls.first().map(|t| t.name.as_str());
 
-    if let Some(expected) = pass.get("should_call_knowledge_lookup").and_then(|v| v.as_bool()) {
+    if let Some(expected) = pass
+        .get("should_call_knowledge_lookup")
+        .and_then(|v| v.as_bool())
+    {
         let actual = !lookup_calls.is_empty();
         push(
             out,
@@ -780,7 +790,10 @@ fn eval_block(
         );
     }
 
-    if let Some(max) = pass.get("max_cited_evidence_ids").and_then(|v| v.as_integer()) {
+    if let Some(max) = pass
+        .get("max_cited_evidence_ids")
+        .and_then(|v| v.as_integer())
+    {
         push(
             out,
             "max_cited_evidence_ids",
@@ -794,10 +807,7 @@ fn eval_block(
         .and_then(|v| v.as_bool())
         == Some(true)
     {
-        let msg_l = scope
-            .final_message
-            .unwrap_or_default()
-            .to_lowercase();
+        let msg_l = scope.final_message.unwrap_or_default().to_lowercase();
         // SHAPE-level — no bank-derived phrases (per
         // feedback_no_teaching_to_test). The predicate looks for
         // SHAPE of "honest gap acknowledgement":
@@ -813,37 +823,58 @@ fn eval_block(
         // to a single phrasing convention.
 
         let negated_possession = [
-            "don't have", "do not have", "doesn't have",
-            "don't know", "do not know", "doesn't know",
-            "cannot find", "can't find", "cannot retrieve",
-            "no information", "no data", "no records",
-            "no evidence", "no result", "no idea",
-            "not available", "not in my", "not in the",
+            "don't have",
+            "do not have",
+            "doesn't have",
+            "don't know",
+            "do not know",
+            "doesn't know",
+            "cannot find",
+            "can't find",
+            "cannot retrieve",
+            "no information",
+            "no data",
+            "no records",
+            "no evidence",
+            "no result",
+            "no idea",
+            "not available",
+            "not in my",
+            "not in the",
         ]
         .iter()
         .any(|w| msg_l.contains(w));
 
         let temporal_scope = [
-            "real-time", "real time", "live data", "up-to-date",
-            "current information", "current data", "today's",
-            "recent", "latest",
+            "real-time",
+            "real time",
+            "live data",
+            "up-to-date",
+            "current information",
+            "current data",
+            "today's",
+            "recent",
+            "latest",
         ]
         .iter()
         .any(|w| msg_l.contains(w));
 
         let external_pointer = [
-            "check ", "visit ", "look at ", "consult ",
-            "recommend checking", "would need to", "you can find",
+            "check ",
+            "visit ",
+            "look at ",
+            "consult ",
+            "recommend checking",
+            "would need to",
+            "you can find",
             "you could check",
         ]
         .iter()
         .any(|w| msg_l.contains(w));
 
-        let direct_uncertainty = [
-            "unfortunately", "sorry", "unsure", "i'm not sure",
-        ]
-        .iter()
-        .any(|w| msg_l.contains(w));
+        let direct_uncertainty = ["unfortunately", "sorry", "unsure", "i'm not sure"]
+            .iter()
+            .any(|w| msg_l.contains(w));
 
         let passed = negated_possession
             || (temporal_scope && (negated_possession || external_pointer || direct_uncertainty))
@@ -888,25 +919,15 @@ fn eval_block(
             out,
             "must_reference_prior_turn_evidence",
             !prior_refs.is_empty(),
-            format!(
-                "current_turn={current_turn}, prior_refs={prior_refs:?}, cited={cited_ids:?}"
-            ),
+            format!("current_turn={current_turn}, prior_refs={prior_refs:?}, cited={cited_ids:?}"),
         );
     }
 
     // `expect_cache_hit` — true requires at least one tool call
     // in scope to have come back with `cached: true`. Validates
     // Tier 4's cache observably from the runner side.
-    if pass
-        .get("expect_cache_hit")
-        .and_then(|v| v.as_bool())
-        == Some(true)
-    {
-        let hits = scope
-            .tool_calls
-            .iter()
-            .filter(|tc| tc.cached)
-            .count();
+    if pass.get("expect_cache_hit").and_then(|v| v.as_bool()) == Some(true) {
+        let hits = scope.tool_calls.iter().filter(|tc| tc.cached).count();
         push(
             out,
             "expect_cache_hit",
@@ -934,9 +955,7 @@ fn eval_block(
             .iter()
             .flat_map(|tc| tc.returned_evidence_kinds.iter().cloned())
             .collect();
-        let passed = expected_set
-            .iter()
-            .all(|k| actual_set.contains(k));
+        let passed = expected_set.iter().all(|k| actual_set.contains(k));
         push(
             out,
             "evidence_set_includes_kind",
@@ -1010,17 +1029,32 @@ fn eval_block(
         let msg_l = scope.final_message.unwrap_or_default().to_lowercase();
 
         let contrast_token = [
-            "however", "but ", "yet", "whereas", "while",
-            "on the other hand", "in contrast", "by contrast",
-            "though", "although",
+            "however",
+            "but ",
+            "yet",
+            "whereas",
+            "while",
+            "on the other hand",
+            "in contrast",
+            "by contrast",
+            "though",
+            "although",
         ]
         .iter()
         .any(|w| msg_l.contains(w));
 
         let disagreement_token = [
-            "disagree", "conflict", "contradict", "inconsisten",
-            "tension", "differ", "different account",
-            "competing", "at odds", "diverge", "discrepancy",
+            "disagree",
+            "conflict",
+            "contradict",
+            "inconsisten",
+            "tension",
+            "differ",
+            "different account",
+            "competing",
+            "at odds",
+            "diverge",
+            "discrepancy",
         ]
         .iter()
         .any(|w| msg_l.contains(w));
@@ -1028,10 +1062,15 @@ fn eval_block(
         // Plural-source acknowledgement — the model is talking
         // about multiple evidence rows, not picking one.
         let plural_sources = [
-            "two sources", "both sources", "two accounts",
-            "the sources", "the evidence rows", "the two pieces",
+            "two sources",
+            "both sources",
+            "two accounts",
+            "the sources",
+            "the evidence rows",
+            "the two pieces",
             "one source", // "one source says X, another says Y"
-            "another source", "the other source",
+            "another source",
+            "the other source",
         ]
         .iter()
         .any(|w| msg_l.contains(w));
@@ -1041,9 +1080,7 @@ fn eval_block(
         // grounding in one row, which isn't conflict attribution.
         let two_plus_cited = cited_ids.len() >= 2;
 
-        let passed = two_plus_cited
-            && (disagreement_token
-                || (contrast_token && plural_sources));
+        let passed = two_plus_cited && (disagreement_token || (contrast_token && plural_sources));
 
         push(
             out,
@@ -1081,15 +1118,23 @@ fn eval_block(
         // clarify / state" family — all common English shapes
         // for "source-doesn't-address-this-specific-point".
         let direct_denial = [
-            "doesn't directly", "does not directly",
-            "doesn't specifically", "does not specifically",
-            "doesn't explicitly", "does not explicitly",
-            "doesn't clarify", "does not clarify",
-            "doesn't state", "does not state",
-            "doesn't answer", "does not answer",
-            "without directly", "not directly address",
+            "doesn't directly",
+            "does not directly",
+            "doesn't specifically",
+            "does not specifically",
+            "doesn't explicitly",
+            "does not explicitly",
+            "doesn't clarify",
+            "does not clarify",
+            "doesn't state",
+            "does not state",
+            "doesn't answer",
+            "does not answer",
+            "without directly",
+            "not directly address",
             "not specifically address",
-            "no explicit", "no specific mention",
+            "no explicit",
+            "no specific mention",
         ]
         .iter()
         .any(|w| msg_l.contains(w));
@@ -1100,15 +1145,24 @@ fn eval_block(
         // structurally identical to "doesn't include" — they
         // partition what the source has from what it doesn't.
         let scope_qualifier = [
-            "doesn't cover", "does not cover",
-            "doesn't include", "does not include",
-            "leaves out", "leaving out",
-            "without addressing", "without specifying",
-            "related to", "in the context of",
-            "tangentially", "adjacent to", "broader topic",
-            "the evidence is about", "the corpus has",
+            "doesn't cover",
+            "does not cover",
+            "doesn't include",
+            "does not include",
+            "leaves out",
+            "leaving out",
+            "without addressing",
+            "without specifying",
+            "related to",
+            "in the context of",
+            "tangentially",
+            "adjacent to",
+            "broader topic",
+            "the evidence is about",
+            "the corpus has",
             "no information about the specific",
-            "but leaves", "but does not",
+            "but leaves",
+            "but does not",
             "covers the", // "covers the rate but leaves out the formulation"
         ]
         .iter()
@@ -1117,9 +1171,13 @@ fn eval_block(
         // Hedge token — softening the answer rather than
         // asserting confidently.
         let hedge_token = [
-            "while", "although", "though",
-            "more general", "the closest",
-            "what's available", "what i can tell",
+            "while",
+            "although",
+            "though",
+            "more general",
+            "the closest",
+            "what's available",
+            "what i can tell",
         ]
         .iter()
         .any(|w| msg_l.contains(w));
@@ -1129,8 +1187,7 @@ fn eval_block(
         // honest answer, not partial-match acknowledgement).
         let some_citation = !cited_ids.is_empty();
 
-        let passed = some_citation
-            && (direct_denial || (scope_qualifier && hedge_token));
+        let passed = some_citation && (direct_denial || (scope_qualifier && hedge_token));
 
         push(
             out,

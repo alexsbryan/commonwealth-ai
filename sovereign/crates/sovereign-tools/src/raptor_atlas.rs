@@ -36,9 +36,7 @@ use sovereign_core::error::Result;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::*;
 
-use crate::raptor_checkpoint::{
-    CheckpointDecision, LevelClustering, RaptorCheckpointHandle,
-};
+use crate::raptor_checkpoint::{CheckpointDecision, LevelClustering, RaptorCheckpointHandle};
 use corpus_engine::enrichment::state::{EnrichmentPhase, EnrichmentProgressSink};
 
 /// Target average number of input items per leaf cluster. With 1006
@@ -179,35 +177,37 @@ pub async fn build_raptor_atlas_with_checkpoint(
     // init produces different clusters on retry and the cached
     // per-cluster nodes would no longer match the live cluster
     // identities.
-    let (k_leaves, leaf_assignments) = match checkpoint
-        .and_then(|h| h.read_clustering(0).ok().flatten())
-    {
-        Some(c) => {
-            tracing::debug!(
-                level = 0,
-                k = c.k,
-                "raptor_atlas: reusing persisted clustering"
-            );
-            (c.k as usize, c.assignments.into_iter().map(|a| a as usize).collect())
-        }
-        None => {
-            let k = target_k(chunks.len(), LEAF_TARGET_CLUSTER_SIZE);
-            let assignments = kmeans_cluster(embeddings, k, /* max_iters = */ 40);
-            if let Some(handle) = checkpoint {
-                let record = LevelClustering {
-                    k: k as u32,
-                    assignments: assignments.iter().map(|a| *a as u32).collect(),
-                };
-                if let Err(e) = handle.write_clustering(0, &record) {
-                    tracing::warn!(
-                        error = %e,
-                        "raptor_atlas: persist clustering failed; retry won't be deterministic"
-                    );
-                }
+    let (k_leaves, leaf_assignments) =
+        match checkpoint.and_then(|h| h.read_clustering(0).ok().flatten()) {
+            Some(c) => {
+                tracing::debug!(
+                    level = 0,
+                    k = c.k,
+                    "raptor_atlas: reusing persisted clustering"
+                );
+                (
+                    c.k as usize,
+                    c.assignments.into_iter().map(|a| a as usize).collect(),
+                )
             }
-            (k, assignments)
-        }
-    };
+            None => {
+                let k = target_k(chunks.len(), LEAF_TARGET_CLUSTER_SIZE);
+                let assignments = kmeans_cluster(embeddings, k, /* max_iters = */ 40);
+                if let Some(handle) = checkpoint {
+                    let record = LevelClustering {
+                        k: k as u32,
+                        assignments: assignments.iter().map(|a| *a as u32).collect(),
+                    };
+                    if let Err(e) = handle.write_clustering(0, &record) {
+                        tracing::warn!(
+                            error = %e,
+                            "raptor_atlas: persist clustering failed; retry won't be deterministic"
+                        );
+                    }
+                }
+                (k, assignments)
+            }
+        };
 
     let mut leaf_inputs: Vec<LeafSummarizationInput> = Vec::with_capacity(k_leaves);
     for cluster_idx in 0..k_leaves {
@@ -221,14 +221,28 @@ pub async fn build_raptor_atlas_with_checkpoint(
             // skip them — k effectively shrinks to occupied clusters.
             continue;
         }
-        let centroid = mean_vector(&member_indices.iter().map(|&i| &embeddings[i]).collect::<Vec<_>>());
+        let centroid = mean_vector(
+            &member_indices
+                .iter()
+                .map(|&i| &embeddings[i])
+                .collect::<Vec<_>>(),
+        );
         let coherence = mean_cosine_to_centroid(
-            &member_indices.iter().map(|&i| &embeddings[i]).collect::<Vec<_>>(),
+            &member_indices
+                .iter()
+                .map(|&i| &embeddings[i])
+                .collect::<Vec<_>>(),
             &centroid,
         );
         let quote_spans = extract_quote_spans_for_cluster(
-            &member_indices.iter().map(|&i| &chunks[i]).collect::<Vec<_>>(),
-            &member_indices.iter().map(|&i| &embeddings[i]).collect::<Vec<_>>(),
+            &member_indices
+                .iter()
+                .map(|&i| &chunks[i])
+                .collect::<Vec<_>>(),
+            &member_indices
+                .iter()
+                .map(|&i| &embeddings[i])
+                .collect::<Vec<_>>(),
             &centroid,
             MAX_QUOTE_SPANS_PER_NODE,
         );
@@ -333,8 +347,10 @@ pub async fn build_raptor_atlas_with_checkpoint(
     let mut current_level: u8 = 1;
     let mut current_layer: Vec<RaptorNode> = leaf_nodes;
     while current_layer.len() > ROOT_BRANCHING_CEILING {
-        let layer_embeddings: Vec<Vec<f32>> =
-            current_layer.iter().map(|n| n.summary_embedding.clone()).collect();
+        let layer_embeddings: Vec<Vec<f32>> = current_layer
+            .iter()
+            .map(|n| n.summary_embedding.clone())
+            .collect();
         // Non-leaf layers use smaller fan-out so the recursion
         // produces a proper mid-level scene-scale layer rather than
         // collapsing straight to the root in one step.
@@ -372,8 +388,7 @@ pub async fn build_raptor_atlas_with_checkpoint(
                 .map(|&i| current_layer[i].node_id.clone())
                 .collect();
             // Union evidence chunk IDs from all child subtrees.
-            let mut evidence: std::collections::BTreeSet<u32> =
-                std::collections::BTreeSet::new();
+            let mut evidence: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
             for &i in &member_indices {
                 evidence.extend(current_layer[i].evidence_chunk_ids.iter().copied());
             }
@@ -416,7 +431,8 @@ pub async fn build_raptor_atlas_with_checkpoint(
             });
         }
 
-        let next_layer = summarize_clusters_buffered(inference, next_inputs, doc_type.clone()).await;
+        let next_layer =
+            summarize_clusters_buffered(inference, next_inputs, doc_type.clone()).await;
         if next_layer.is_empty() {
             // All summarization failed at this level. Treat the
             // existing layer as the root layer (no parent gets built).
@@ -453,9 +469,7 @@ pub async fn build_raptor_atlas_with_checkpoint(
                 .take_while(|n| !std::ptr::eq(*n, node))
                 .filter(|n| n.level == node.level)
                 .count();
-            if let Err(e) =
-                handle.write_cluster_node(node.level, same_level_predecessors, node)
-            {
+            if let Err(e) = handle.write_cluster_node(node.level, same_level_predecessors, node) {
                 tracing::warn!(
                     level = node.level,
                     error = %e,
@@ -531,7 +545,9 @@ async fn summarize_clusters_buffered_with_checkpoint(
                 EnrichmentPhase::RaptorLeaves,
                 completed as u64,
                 total_clusters as u64,
-                Some(&format!("summarising leaves ({completed}/{total_clusters})")),
+                Some(&format!(
+                    "summarising leaves ({completed}/{total_clusters})"
+                )),
             )
             .await;
         }
@@ -640,18 +656,12 @@ async fn summarize_one_cluster(
         DocumentTypeTag::Argument => {
             "claim-level summary: which claim is advanced, what reasoning supports it"
         }
-        DocumentTypeTag::Evidence => {
-            "result-level summary: what was tested, what was measured"
-        }
-        DocumentTypeTag::Chronicle => {
-            "episode-level summary: who, when, what occurred"
-        }
+        DocumentTypeTag::Evidence => "result-level summary: what was tested, what was measured",
+        DocumentTypeTag::Chronicle => "episode-level summary: who, when, what occurred",
         DocumentTypeTag::Technical => {
             "procedure-level summary: what step or component is described"
         }
-        DocumentTypeTag::Unknown => {
-            "section-level summary: topic and what is said about it"
-        }
+        DocumentTypeTag::Unknown => "section-level summary: topic and what is said about it",
     };
 
     let prompt = format!(
@@ -800,8 +810,7 @@ fn extract_quote_spans_for_cluster(
     // longest-sentence-per-chunk is a strong proxy because the
     // chunker already prefers paragraph-coherent boundaries.
     let mut spans: Vec<QuoteSpan> = Vec::new();
-    let mut seen_prefixes: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
+    let mut seen_prefixes: std::collections::HashSet<String> = std::collections::HashSet::new();
     for chunk in member_chunks {
         // Split on sentence-terminators, keep the offsets for
         // QuoteSpan accuracy.
@@ -816,7 +825,11 @@ fn extract_quote_spans_for_cluster(
             if trimmed.len() < MIN_QUOTE_SPAN_CHARS {
                 continue;
             }
-            if best.as_ref().map(|(_, _, t)| trimmed.len() > t.len()).unwrap_or(true) {
+            if best
+                .as_ref()
+                .map(|(_, _, t)| trimmed.len() > t.len())
+                .unwrap_or(true)
+            {
                 best = Some((start, end.min(chunk.content.len()), trimmed.to_string()));
             }
         }
@@ -854,9 +867,7 @@ fn kmeans_cluster(embeddings: &[Vec<f32>], k: usize, max_iters: usize) -> Vec<us
     // Init: pick k evenly-spaced vectors. Beats first-k for
     // documents where the first chunks are similar (e.g. a long
     // book opens with the same setting).
-    let mut centroids: Vec<Vec<f32>> = (0..k)
-        .map(|i| embeddings[i * n / k].clone())
-        .collect();
+    let mut centroids: Vec<Vec<f32>> = (0..k).map(|i| embeddings[i * n / k].clone()).collect();
     let mut assignments = vec![0usize; n];
 
     for _iter in 0..max_iters {
@@ -1022,14 +1033,18 @@ mod tests {
 
     #[test]
     fn extract_quote_spans_pulls_longest_sentence_per_chunk() {
-        let chunks = [ChunkInput {
+        let chunks = [
+            ChunkInput {
                 chunk_id: 1,
-                content: "Short. This is the load-bearing sentence with quite a few words. Tiny.".to_string(),
+                content: "Short. This is the load-bearing sentence with quite a few words. Tiny."
+                    .to_string(),
             },
             ChunkInput {
                 chunk_id: 2,
-                content: "Another chunk where this longer sentence is the one to anchor on. End.".to_string(),
-            }];
+                content: "Another chunk where this longer sentence is the one to anchor on. End."
+                    .to_string(),
+            },
+        ];
         let embs = [vec![1.0, 0.0], vec![0.0, 1.0]];
         let refs: Vec<&Vec<f32>> = embs.iter().collect();
         let chunk_refs: Vec<&ChunkInput> = chunks.iter().collect();
@@ -1045,20 +1060,30 @@ mod tests {
 
     #[test]
     fn extract_quote_spans_dedupes_by_prefix() {
-        let chunks = [ChunkInput {
+        let chunks = [
+            ChunkInput {
                 chunk_id: 1,
-                content: "The professor walked through London streets alone and unsuspected by men.".to_string(),
+                content:
+                    "The professor walked through London streets alone and unsuspected by men."
+                        .to_string(),
             },
             ChunkInput {
                 chunk_id: 2,
-                content: "The professor walked through London streets alone and unsuspected by men.".to_string(),
-            }];
+                content:
+                    "The professor walked through London streets alone and unsuspected by men."
+                        .to_string(),
+            },
+        ];
         let embs = [vec![1.0, 0.0], vec![1.0, 0.0]];
         let refs: Vec<&Vec<f32>> = embs.iter().collect();
         let chunk_refs: Vec<&ChunkInput> = chunks.iter().collect();
         let centroid = vec![1.0, 0.0];
         let spans = extract_quote_spans_for_cluster(&chunk_refs, &refs, &centroid, 5);
-        assert_eq!(spans.len(), 1, "identical spans across chunks should dedupe");
+        assert_eq!(
+            spans.len(),
+            1,
+            "identical spans across chunks should dedupe"
+        );
     }
 
     #[test]

@@ -4,10 +4,10 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::oicp::{
-    Capability, CapabilityHint, InferenceRequirements, LatencyClass,
-    ProficiencyLevel, ShardingPrivacy,
+    Capability, CapabilityHint, InferenceRequirements, LatencyClass, ProficiencyLevel,
+    ShardingPrivacy,
 };
-use crate::types::{Intent, TrustLevel, compute_trust_level};
+use crate::types::{compute_trust_level, Intent, TrustLevel};
 
 // ─── Skill Definition ──────────────────────────────────────────
 
@@ -371,7 +371,10 @@ pub fn load_from_directory(dir: &Path) -> Vec<Skill> {
     let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(e) => {
-            eprintln!("[skills] Could not read skills directory {}: {e}", dir.display());
+            eprintln!(
+                "[skills] Could not read skills directory {}: {e}",
+                dir.display()
+            );
             return skills;
         }
     };
@@ -391,23 +394,20 @@ pub fn load_from_directory(dir: &Path) -> Vec<Skill> {
             Ok(content) => {
                 if let Some(skill) = parse_skill_toml(&content) {
                     if skill.trust_level == TrustLevel::Unsigned {
-                        eprintln!("[skills] Loaded: {} v{} (unsigned)", skill.name, skill.version);
+                        eprintln!(
+                            "[skills] Loaded: {} v{} (unsigned)",
+                            skill.name, skill.version
+                        );
                     } else {
                         eprintln!("[skills] Loaded: {} v{}", skill.name, skill.version);
                     }
                     skills.push(skill);
                 } else {
-                    eprintln!(
-                        "[skills] Skipping malformed skill: {}",
-                        toml_path.display()
-                    );
+                    eprintln!("[skills] Skipping malformed skill: {}", toml_path.display());
                 }
             }
             Err(e) => {
-                eprintln!(
-                    "[skills] Could not read {}: {e}",
-                    toml_path.display()
-                );
+                eprintln!("[skills] Could not read {}: {e}", toml_path.display());
             }
         }
     }
@@ -1036,13 +1036,15 @@ privacy = "{}"
         let mut reg = SkillRegistry::new();
         reg.register(workspace_skill("recipe-author", ShardingPrivacy::LocalOnly));
         reg.register(workspace_skill("inner-work", ShardingPrivacy::LocalOnly));
-        reg.register(skill_with_privacy("auto-memory", ShardingPrivacy::LocalOnly));
+        reg.register(skill_with_privacy(
+            "auto-memory",
+            ShardingPrivacy::LocalOnly,
+        ));
 
         reg.activate_all();
 
         // Workspaces stay inactive; background activates.
-        let active_ids: Vec<&str> =
-            reg.active_skills().iter().map(|s| s.id.as_str()).collect();
+        let active_ids: Vec<&str> = reg.active_skills().iter().map(|s| s.id.as_str()).collect();
         assert_eq!(active_ids, vec!["auto-memory"]);
 
         // primary_skill_id_for_conversation falls through to the
@@ -1152,8 +1154,8 @@ register = "relational"
         let path = modes_dir.join("inner-work").join("skill.toml");
         let content = std::fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-        let skill = parse_skill_toml(&content)
-            .unwrap_or_else(|| panic!("parse {}", path.display()));
+        let skill =
+            parse_skill_toml(&content).unwrap_or_else(|| panic!("parse {}", path.display()));
         assert_eq!(skill.id, "inner-work");
         assert_eq!(
             skill.inference.register,
@@ -1181,8 +1183,8 @@ register = "relational"
 
         let inner_work_toml = std::fs::read_to_string(modes_dir.join("inner-work/skill.toml"))
             .expect("read modes/inner-work/skill.toml");
-        let inner_work = parse_skill_toml(&inner_work_toml)
-            .expect("parse modes/inner-work/skill.toml");
+        let inner_work =
+            parse_skill_toml(&inner_work_toml).expect("parse modes/inner-work/skill.toml");
         assert_eq!(inner_work.id, "inner-work");
         assert_eq!(inner_work.inference.register, SkillRegister::Relational);
         assert!(
@@ -1195,13 +1197,17 @@ register = "relational"
         let recipe_author_toml =
             std::fs::read_to_string(modes_dir.join("recipe-author/skill.toml"))
                 .expect("read modes/recipe-author/skill.toml");
-        let recipe_author = parse_skill_toml(&recipe_author_toml)
-            .expect("parse modes/recipe-author/skill.toml");
+        let recipe_author =
+            parse_skill_toml(&recipe_author_toml).expect("parse modes/recipe-author/skill.toml");
         assert_eq!(recipe_author.id, "recipe-author");
         // Spot-check the must-have recipe tools (matches the
         // intent_policy::recipe_author_tools() table).
-        let required: std::collections::HashSet<&str> =
-            recipe_author.tool_config.required.iter().map(String::as_str).collect();
+        let required: std::collections::HashSet<&str> = recipe_author
+            .tool_config
+            .required
+            .iter()
+            .map(String::as_str)
+            .collect();
         for needed in ["recipe_validate", "recipe_test", "decision_log"] {
             assert!(
                 required.contains(needed),

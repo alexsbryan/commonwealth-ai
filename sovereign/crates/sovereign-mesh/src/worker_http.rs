@@ -55,8 +55,8 @@ use sha2::{Digest, Sha256};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::worker_pod::{
-    BootstrapBlob, Sha256Digest, WorkerPodError, derive_signing_key, pubkey_thumbprint,
-    verify_worker_token,
+    derive_signing_key, pubkey_thumbprint, verify_worker_token, BootstrapBlob, Sha256Digest,
+    WorkerPodError,
 };
 
 // ───── Job + unit data shapes ───────────────────────────────────────
@@ -802,8 +802,7 @@ pub fn worker_router(state: Arc<WorkerState>) -> Router {
     // docs/PINNED_WORKER_AS_INFERENCE_PEER.md §3: same router, same
     // auth middleware, no second permission system.
     if state.inference_proxy.is_some() {
-        router =
-            router.merge(crate::worker_inference_proxy::inference_proxy_routes());
+        router = router.merge(crate::worker_inference_proxy::inference_proxy_routes());
     }
     router
         .layer(axum::middleware::from_fn_with_state(
@@ -875,10 +874,7 @@ struct HealthResponse {
 
 async fn health_handler(State(state): State<Arc<WorkerState>>) -> Json<HealthResponse> {
     let uploads = state.uploads.read().await;
-    let uploads_ready = uploads
-        .values()
-        .filter(|p| p.digest.is_some())
-        .count();
+    let uploads_ready = uploads.values().filter(|p| p.digest.is_some()).count();
     Json(HealthResponse {
         job_id: state.blob.job_id.clone(),
         uploads_ready,
@@ -1099,10 +1095,7 @@ async fn completed_handler(
         .cloned()
         .collect();
     units.sort_by_key(|u| u.unit_id);
-    let cursor = units
-        .last()
-        .map(|u| u.unit_id)
-        .unwrap_or(q.since);
+    let cursor = units.last().map(|u| u.unit_id).unwrap_or(q.since);
     Json(CompletedResponse {
         units,
         cursor,
@@ -1131,9 +1124,9 @@ async fn shutdown_handler(State(state): State<Arc<WorkerState>>) -> Json<Shutdow
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::worker_pod::{BootstrapInputs, mint_bootstrap, sign_worker_token, TokenClaims};
+    use crate::worker_pod::{mint_bootstrap, sign_worker_token, BootstrapInputs, TokenClaims};
     use axum::body::Body;
-    use axum::http::{Method, Request as HttpRequest, header::CONTENT_TYPE};
+    use axum::http::{header::CONTENT_TYPE, Method, Request as HttpRequest};
     use ed25519_dalek::SigningKey;
     use std::collections::BTreeMap;
     use tower::ServiceExt;
@@ -1178,7 +1171,8 @@ mod tests {
         };
         let (blob, _thumb) = mint_bootstrap(inputs).unwrap();
         let token = blob.worker_token.clone();
-        let state = Arc::new(WorkerState::from_blob(blob.clone(), Arc::new(InstantRunner)).unwrap());
+        let state =
+            Arc::new(WorkerState::from_blob(blob.clone(), Arc::new(InstantRunner)).unwrap());
         (state, blob, token)
     }
 
@@ -1193,7 +1187,9 @@ mod tests {
     }
 
     async fn read_json(resp: Response) -> serde_json::Value {
-        let body = axum::body::to_bytes(resp.into_body(), 1 << 20).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), 1 << 20)
+            .await
+            .unwrap();
         serde_json::from_slice(&body).unwrap_or(serde_json::json!(null))
     }
 
@@ -1225,7 +1221,12 @@ mod tests {
         let bad_token = sign_worker_token(&imposter, &claims).unwrap();
 
         let app = worker_router(state);
-        let req = auth_req(Method::GET, "/internal/worker/health", &bad_token, Body::empty());
+        let req = auth_req(
+            Method::GET,
+            "/internal/worker/health",
+            &bad_token,
+            Body::empty(),
+        );
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
@@ -1234,7 +1235,12 @@ mod tests {
     async fn valid_token_passes_health() {
         let (state, _blob, token) = test_setup(b"hello");
         let app = worker_router(state);
-        let req = auth_req(Method::GET, "/internal/worker/health", &token, Body::empty());
+        let req = auth_req(
+            Method::GET,
+            "/internal/worker/health",
+            &token,
+            Body::empty(),
+        );
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
         let v = read_json(resp).await;
@@ -1382,7 +1388,12 @@ mod tests {
         assert_eq!(v["units"][0]["unit_id"], 3);
 
         // 6. DELETE triggers shutdown flag.
-        let req = auth_req(Method::DELETE, "/internal/worker/job", &token, Body::empty());
+        let req = auth_req(
+            Method::DELETE,
+            "/internal/worker/job",
+            &token,
+            Body::empty(),
+        );
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
         assert!(state
@@ -1637,10 +1648,8 @@ mod tests {
                 // a future which never resolves. reqwest sees an open
                 // connection with no bytes arriving.
                 let first = Bytes::copy_from_slice(&state.payload[..1024]);
-                let stalled = stream::once(async move {
-                    Ok::<Bytes, std::io::Error>(first)
-                })
-                .chain(stream::pending());
+                let stalled = stream::once(async move { Ok::<Bytes, std::io::Error>(first) })
+                    .chain(stream::pending());
                 AxumResponse::builder()
                     .status(StatusCode::OK)
                     .header("Content-Length", state.payload.len().to_string())
@@ -1683,8 +1692,7 @@ mod tests {
         };
 
         let started = std::time::Instant::now();
-        let result =
-            fetch_and_validate_with_timeouts(&client, &url, &expected, timeouts).await;
+        let result = fetch_and_validate_with_timeouts(&client, &url, &expected, timeouts).await;
         let elapsed = started.elapsed();
         let _ = tx.send(());
 

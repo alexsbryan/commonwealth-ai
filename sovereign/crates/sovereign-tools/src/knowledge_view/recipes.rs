@@ -15,8 +15,8 @@
 use std::path::Path;
 
 use corpus_engine::recipe::{
-    AcquirerConfig, ChunkerConfig, CorpusMeta, ExtractorConfig, IndexConfig, Recipe,
-    EnrichmentConfig,
+    AcquirerConfig, ChunkerConfig, CorpusMeta, EnrichmentConfig, ExtractorConfig, IndexConfig,
+    Recipe,
 };
 use serde_json::json;
 
@@ -191,10 +191,7 @@ pub fn institutional_notes_recipe(db_path: &Path) -> Recipe {
 /// startup so a future skill that declares `privacy = "local_only"`
 /// (e.g. a future `health-journal` skill) automatically participates
 /// in the guarantee without editing this recipe.
-pub fn conversation_history_recipe(
-    db_path: &Path,
-    local_only_skill_ids: &[&str],
-) -> Recipe {
+pub fn conversation_history_recipe(db_path: &Path, local_only_skill_ids: &[&str]) -> Recipe {
     let filter_clause = if local_only_skill_ids.is_empty() {
         String::new()
     } else {
@@ -510,9 +507,7 @@ mod tests {
 
         let recipe = conversation_history_recipe(&db_path, &[]);
         let query = match recipe.acquire {
-            AcquirerConfig::Custom { params, .. } => {
-                params["query"].as_str().unwrap().to_string()
-            }
+            AcquirerConfig::Custom { params, .. } => params["query"].as_str().unwrap().to_string(),
             _ => unreachable!(),
         };
 

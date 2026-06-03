@@ -10,15 +10,9 @@ pub mod deprecation {
 pub mod prompts {
     pub use sovereign_cli_shared::prompts::prompt_path;
 }
-pub mod dirs {
-    
-}
-pub mod tracing_init {
-    
-}
-pub mod urls {
-    
-}
+pub mod dirs {}
+pub mod tracing_init {}
+pub mod urls {}
 pub mod log_rotation {
     pub use crate::log_rotation::*;
 }

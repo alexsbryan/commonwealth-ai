@@ -59,13 +59,8 @@ fn build_state(self_id: NodeId) -> AppState {
     };
     let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
     let app_registry = Arc::new(AppRegistry::new());
-    let state = AppState::new_with_platform_and_engine(
-        self_id,
-        mesh,
-        mesh_store,
-        app_registry,
-        None,
-    );
+    let state =
+        AppState::new_with_platform_and_engine(self_id, mesh, mesh_store, app_registry, None);
     let provider: Arc<dyn InferenceProvider> =
         Arc::new(TestProvider::new().with_model_id("manifest-stub"));
     let adapter: Arc<dyn LocalInferenceService> =
@@ -95,10 +90,7 @@ fn affinities(body: &serde_json::Value) -> Vec<f64> {
     out
 }
 
-async fn fetch_manifest(
-    addr: SocketAddr,
-    header: Option<(&str, String)>,
-) -> serde_json::Value {
+async fn fetch_manifest(addr: SocketAddr, header: Option<(&str, String)>) -> serde_json::Value {
     let mut req = reqwest::Client::new().get(format!("http://{addr}/oicp/v1/capabilities"));
     if let Some((name, value)) = header {
         req = req.header(name, value);
@@ -139,11 +131,7 @@ async fn x_node_id_with_set_preference_halves_all_claim_affinities() {
     );
 
     // Stamped: X-Node-Id == target → every claim halved.
-    let stamped = fetch_manifest(
-        addr,
-        Some(("X-Node-Id", id_to_hex(&target_peer))),
-    )
-    .await;
+    let stamped = fetch_manifest(addr, Some(("X-Node-Id", id_to_hex(&target_peer)))).await;
     let stamped_affinities = affinities(&stamped);
     assert_eq!(
         stamped_affinities.len(),
@@ -176,21 +164,14 @@ async fn x_node_id_for_unmatched_peer_does_not_modify_affinities() {
     state
         .inner
         .peer_preferences
-        .set(
-            &stored_peer,
-            PeerPreference::new(0.25, None).unwrap(),
-        )
+        .set(&stored_peer, PeerPreference::new(0.25, None).unwrap())
         .expect("set preference");
 
     let addr = spawn(state).await;
     let baseline = fetch_manifest(addr, None).await;
     let baseline_affinities = affinities(&baseline);
 
-    let fetched = fetch_manifest(
-        addr,
-        Some(("X-Node-Id", id_to_hex(&unrelated_peer))),
-    )
-    .await;
+    let fetched = fetch_manifest(addr, Some(("X-Node-Id", id_to_hex(&unrelated_peer)))).await;
     let fetched_affinities = affinities(&fetched);
     assert_eq!(
         baseline_affinities, fetched_affinities,
@@ -211,10 +192,7 @@ async fn no_header_does_not_pick_up_any_stored_preference() {
     state
         .inner
         .peer_preferences
-        .set(
-            &stored_peer,
-            PeerPreference::new(0.1, None).unwrap(),
-        )
+        .set(&stored_peer, PeerPreference::new(0.1, None).unwrap())
         .expect("set preference");
 
     let addr = spawn(state).await;

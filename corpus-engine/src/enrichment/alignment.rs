@@ -53,7 +53,9 @@ pub async fn align_clusters(
     let mut unaligned_large: Vec<&super::clustering::ClusterInfo> = Vec::new();
 
     for cluster in &clusters.clusters {
-        let Some(label) = &cluster.label else { continue };
+        let Some(label) = &cluster.label else {
+            continue;
+        };
         if !label.is_argumentative || !label.is_coherent {
             continue;
         }
@@ -86,7 +88,9 @@ pub async fn align_clusters(
     // Promote unaligned clusters to discovered positions.
     let mut promoted = 0;
     for cluster in &unaligned_large {
-        let Some(label) = &cluster.label else { continue };
+        let Some(label) = &cluster.label else {
+            continue;
+        };
         let Some(pos_name) = &label.position_name else {
             continue;
         };
@@ -101,7 +105,9 @@ pub async fn align_clusters(
             pos_name,
             chunk_text.join("\n---\n")
         );
-        let claim = (inference)(&prompt, None).await.unwrap_or_else(|_| pos_name.clone());
+        let claim = (inference)(&prompt, None)
+            .await
+            .unwrap_or_else(|_| pos_name.clone());
 
         let discovered_id = format!("p_discovered_{}", cluster.id);
         aligned.insert(cluster.id, discovered_id);

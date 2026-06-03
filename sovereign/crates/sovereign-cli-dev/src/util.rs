@@ -16,9 +16,7 @@ pub mod deprecation {
 }
 
 pub mod prompts {
-    pub use sovereign_cli_shared::prompts::{
-        confirm, prompt_path, prompt_string, stdin_is_tty,
-    };
+    pub use sovereign_cli_shared::prompts::{confirm, prompt_path, prompt_string, stdin_is_tty};
 }
 
 pub mod dirs {

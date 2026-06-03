@@ -2,8 +2,6 @@
 //! The handler rebinds against the prior turn's intent and re-issues
 //! synthesis with the user's tweak folded in.
 
-
-
 use crate::error::Result;
 use crate::traits::*;
 
@@ -26,9 +24,11 @@ impl Runtime {
         let lower_tr = lower.trim();
 
         // Cancel sub-shape — short-circuits without synthesis.
-        let is_cancel = ["stop", "cancel", "abort", "halt"]
-            .iter()
-            .any(|k| lower_tr == *k || lower_tr.starts_with(&format!("{k} ")) || lower_tr.starts_with(&format!("{k},")));
+        let is_cancel = ["stop", "cancel", "abort", "halt"].iter().any(|k| {
+            lower_tr == *k
+                || lower_tr.starts_with(&format!("{k} "))
+                || lower_tr.starts_with(&format!("{k},"))
+        });
         if is_cancel {
             if let Some(s) = self.sessions.latest_for_conversation(conversation_id) {
                 s.cancel.cancel();
@@ -46,7 +46,11 @@ impl Runtime {
                 })),
                 version: 0,
             };
-            return Ok(Response { message: response_msg, task: None, metrics: None });
+            return Ok(Response {
+                message: response_msg,
+                task: None,
+                metrics: None,
+            });
         }
 
         // Find the prior user message + assistant reply to transform.
@@ -66,7 +70,8 @@ impl Runtime {
 
         if last_assistant.is_none() {
             let empty = "I don't see a previous reply to act on \u{2014} could you rephrase \
-                         what you'd like?".to_string();
+                         what you'd like?"
+                .to_string();
             let response_msg = Message {
                 id: uuid::Uuid::new_v4().to_string(),
                 conversation_id: conversation_id.to_string(),
@@ -79,24 +84,33 @@ impl Runtime {
                 })),
                 version: 0,
             };
-            return Ok(Response { message: response_msg, task: None, metrics: None });
+            return Ok(Response {
+                message: response_msg,
+                task: None,
+                metrics: None,
+            });
         }
         let prior_assistant = last_assistant.unwrap();
         let prior_user_text = last_user.map(|m| m.content.as_str()).unwrap_or("");
 
         // Map the directive to a transformation cue.
-        let directive_phrase = if lower.contains("shorter") || lower.contains("terse")
-            || lower.contains("concise") || lower.contains("tldr")
+        let directive_phrase = if lower.contains("shorter")
+            || lower.contains("terse")
+            || lower.contains("concise")
+            || lower.contains("tldr")
             || lower.contains("skip")
         {
             "Produce a shorter version of the prior reply. Skip preamble and recapping; \
              keep only the load-bearing claims."
-        } else if lower.contains("longer") || lower.contains("more detail")
-            || lower.contains("expand") || lower.contains("elaborate")
+        } else if lower.contains("longer")
+            || lower.contains("more detail")
+            || lower.contains("expand")
+            || lower.contains("elaborate")
         {
             "Produce a more detailed version of the prior reply with worked examples \
              and additional context. Keep the same factual claims."
-        } else if lower.contains("slower") || lower.contains("step by step")
+        } else if lower.contains("slower")
+            || lower.contains("step by step")
             || lower.contains("walk through")
         {
             "Re-express the prior reply as a step-by-step walkthrough. Number the steps; \
@@ -130,12 +144,12 @@ impl Runtime {
             tool_choice: None,
             model_id: None,
             enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
         let completion = self.inference.complete(&request).await?;
         let response_msg = Message {
@@ -151,6 +165,10 @@ impl Runtime {
             })),
             version: 0,
         };
-        Ok(Response { message: response_msg, task: None, metrics: None })
+        Ok(Response {
+            message: response_msg,
+            task: None,
+            metrics: None,
+        })
     }
 }

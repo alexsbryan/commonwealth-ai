@@ -22,7 +22,10 @@ impl AppRegistry {
 
     /// Register or update an app manifest.
     pub async fn register(&self, manifest: MeshAppManifest) {
-        self.apps.write().await.insert(manifest.app_id.clone(), manifest);
+        self.apps
+            .write()
+            .await
+            .insert(manifest.app_id.clone(), manifest);
     }
 
     /// Remove an app from the registry. Returns true if it existed.

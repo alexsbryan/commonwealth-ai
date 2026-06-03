@@ -190,7 +190,11 @@ fn compose_cli_tools_catalog(descriptors: &[sovereign_core::types::ToolDescripto
         (Effect::Write, Scope::Persistent, "Write · Persistent"),
         (Effect::Write, Scope::External, "Write · External"),
         (Effect::ReadWrite, Scope::Session, "ReadWrite · Session"),
-        (Effect::ReadWrite, Scope::Persistent, "ReadWrite · Persistent"),
+        (
+            Effect::ReadWrite,
+            Scope::Persistent,
+            "ReadWrite · Persistent",
+        ),
         (Effect::ReadWrite, Scope::External, "ReadWrite · External"),
     ];
     let mut grouped: BTreeMap<(u8, u8), Vec<&ToolDescriptor>> = BTreeMap::new();
@@ -245,7 +249,10 @@ fn compose_cli_tools_catalog(descriptors: &[sovereign_core::types::ToolDescripto
 
 fn first_sentence(desc: &str) -> String {
     let cleaned: String = desc.split_whitespace().collect::<Vec<_>>().join(" ");
-    let cut = cleaned.find(". ").map(|i| &cleaned[..i]).unwrap_or(&cleaned);
+    let cut = cleaned
+        .find(". ")
+        .map(|i| &cleaned[..i])
+        .unwrap_or(&cleaned);
     if cut.len() > 80 {
         format!("{}…", &cut[..77])
     } else {
@@ -358,9 +365,12 @@ fn detect_charter_drift(sovereign_dir: &Path, charter: &str) -> Option<String> {
     if recorded == current {
         None
     } else {
-        Some("⚠ **Charter drift** — CHARTER.md on disk differs from the recorded hash. \
+        Some(
+            "⚠ **Charter drift** — CHARTER.md on disk differs from the recorded hash. \
              Run `sovereign project amend` to reconcile, or `git checkout --` \
-             the file.".to_string())
+             the file."
+                .to_string(),
+        )
     }
 }
 
@@ -423,7 +433,14 @@ async fn compose_notes_digest(repo_root: &Path, feature_id: &str) -> String {
         } else {
             format!("{}:{}", n.scope, n.feature_id.as_deref().unwrap_or(""))
         };
-        let first_line: String = n.content.lines().next().unwrap_or("").chars().take(160).collect();
+        let first_line: String = n
+            .content
+            .lines()
+            .next()
+            .unwrap_or("")
+            .chars()
+            .take(160)
+            .collect();
         out.push_str(&format!(
             "- `[note:{}]` [{}] [{}] {}\n",
             n.id, n.kind, scope_tag, first_line
@@ -550,12 +567,12 @@ mod tests {
             chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         }
     }
 
@@ -622,9 +639,7 @@ mod tests {
         // descriptor for the canonical code-intel tool (`symbols`,
         // Read · Persistent) so the grouping + id assertions exercise
         // the rendering path without standing up a real ToolRegistry.
-        use sovereign_core::types::{
-            Effect, Idempotency, Latency, Scope, ToolDescriptor,
-        };
+        use sovereign_core::types::{Effect, Idempotency, Latency, Scope, ToolDescriptor};
         let descriptors = vec![ToolDescriptor {
             id: "symbols".to_string(),
             name: "symbols".to_string(),
@@ -673,14 +688,17 @@ mod tests {
 
         let inj = ContextInjector::empty();
         let mut req = minimal_request();
-        req.messages.insert(0, ChatMessage::new("system", "Original system directive."));
+        req.messages
+            .insert(0, ChatMessage::new("system", "Original system directive."));
         let mut session = MiddlewareSession::default();
         let ctx = ctx_with(Some("fx"), tmp.path().to_path_buf());
         inj.process(&mut req, &mut session, &ctx).await.unwrap();
 
         assert_eq!(req.messages[0].role, "system");
         assert!(req.messages[0].content.contains("<atos-instructions>"));
-        assert!(req.messages[0].content.contains("Original system directive."));
+        assert!(req.messages[0]
+            .content
+            .contains("Original system directive."));
     }
 
     #[tokio::test]
@@ -734,9 +752,7 @@ mod tests {
         let mut req = minimal_request();
         let mut session = MiddlewareSession::default();
         let mut delta = ArtifactDelta::default();
-        delta
-            .notes_by_kind
-            .insert("uncertainty".into(), 2);
+        delta.notes_by_kind.insert("uncertainty".into(), 2);
         delta
             .recent_note_ids
             .insert("uncertainty".into(), vec!["abc-1".into(), "abc-2".into()]);

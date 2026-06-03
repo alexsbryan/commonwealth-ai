@@ -148,7 +148,10 @@ impl CorpusEngine {
         if let Some(prebuilt) = recipe.prebuilt.as_ref() {
             if prebuilt.compatible_embedding_model == self.expected_embedding_model {
                 let started = Instant::now();
-                match self.try_restore_prebuilt(&recipe, prebuilt, &progress).await {
+                match self
+                    .try_restore_prebuilt(&recipe, prebuilt, &progress)
+                    .await
+                {
                     Ok(restored) => {
                         let duration_secs = started.elapsed().as_secs();
                         tracing::info!(
@@ -487,24 +490,21 @@ impl CorpusEngine {
         // throughput instead of doubling it (single-threaded embed slot
         // + LanceDB writer mutex), so we reject the second caller
         // outright. The guard is held until this function returns.
-        let _partition_guard =
-            self.try_acquire_partition_lock(index_path).ok_or_else(|| {
-                Error::Recipe(format!(
-                    "another ingest is already writing to '{}'. \
+        let _partition_guard = self.try_acquire_partition_lock(index_path).ok_or_else(|| {
+            Error::Recipe(format!(
+                "another ingest is already writing to '{}'. \
                      Refusing to start a second concurrent run on the \
                      same partition — the existing run will continue \
                      and this unit should be re-leased to a different peer.",
-                    index_path.display()
-                ))
-            })?;
+                index_path.display()
+            ))
+        })?;
 
         let start = Instant::now();
 
         // Step 1: Acquire source data.
         let download_dir = self.index_dir.join("_downloads");
-        let source_path = self
-            .acquire_source(recipe, &download_dir, progress)
-            .await?;
+        let source_path = self.acquire_source(recipe, &download_dir, progress).await?;
 
         // Step 2: Extract documents.
         let extractor = self.make_extractor(&recipe.extract, &recipe.corpus.id);
@@ -553,9 +553,7 @@ impl CorpusEngine {
         // filtered ingests — `docs_processed / expected_filter_docs`
         // is a much more honest signal than shard-scan progress when
         // the filter rejects ~99% of the source ZIP.
-        let expected_filter_docs: Option<u64> = filter_pipeline
-            .expected_count()
-            .map(|n| n as u64);
+        let expected_filter_docs: Option<u64> = filter_pipeline.expected_count().map(|n| n as u64);
         let doc_iter: Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send> =
             if filter_pipeline.is_active() {
                 let filter = std::sync::Arc::new(filter_pipeline);
@@ -718,10 +716,9 @@ impl CorpusEngine {
         // didn't initiate. SelfInitiated is the default; only stamp
         // explicitly when peer_pulled is true.
         if peer_pulled {
-            if let Err(e) = crate::index::set_provenance(
-                index_path,
-                crate::index::CorpusProvenance::PeerPulled,
-            ) {
+            if let Err(e) =
+                crate::index::set_provenance(index_path, crate::index::CorpusProvenance::PeerPulled)
+            {
                 tracing::warn!(
                     corpus = %recipe.corpus.id,
                     path = %index_path.display(),
@@ -864,8 +861,8 @@ impl CorpusEngine {
         // Initialise counters. On resume these start from where we left off.
         let mut total_chunks = index.chunk_count().await.unwrap_or(0);
         let mut docs_processed = 0u64; // successful docs in THIS run
-        let mut docs_skipped = 0u64;   // docs skipped due to extraction errors this run
-        let mut iter_pos = 0u64;       // absolute position in the source iterator
+        let mut docs_skipped = 0u64; // docs skipped due to extraction errors this run
+        let mut iter_pos = 0u64; // absolute position in the source iterator
 
         // ── Source-file manifest tracking ─────────────────────────────────
         //
@@ -879,8 +876,8 @@ impl CorpusEngine {
         //
         // After `update_committed_iter_pos(iter_pos)` at each flush, any file
         // whose `boundary <= iter_pos` is now fully committed to LanceDB.
-        let mut source_manifest: Option<SourceFileManifest> = SourceFileManifest::load(index_path)
-            .unwrap_or(None);
+        let mut source_manifest: Option<SourceFileManifest> =
+            SourceFileManifest::load(index_path).unwrap_or(None);
         let mut file_boundary_iter_pos: HashMap<String, u64> = HashMap::new();
         let mut prev_source_file: Option<String> = None;
         // Per-file chunk counters: filename → chunks pushed to pending_chunks.
@@ -941,31 +938,29 @@ impl CorpusEngine {
         // means within-batch duplicates are also caught — a section
         // that appears identically in two source docs gets embedded
         // exactly once.
-        let mut seen_hashes: std::collections::HashSet<String> = match index
-            .list_indexed_content_hashes()
-            .await
-        {
-            Ok(set) => {
-                if !set.is_empty() {
-                    eprintln!(
-                        "[{}] Embed-side dedup gate: {} existing content_hashes loaded — \
+        let mut seen_hashes: std::collections::HashSet<String> =
+            match index.list_indexed_content_hashes().await {
+                Ok(set) => {
+                    if !set.is_empty() {
+                        eprintln!(
+                            "[{}] Embed-side dedup gate: {} existing content_hashes loaded — \
                          resume will skip already-embedded chunks",
-                        recipe.corpus.id,
-                        set.len()
-                    );
+                            recipe.corpus.id,
+                            set.len()
+                        );
+                    }
+                    set
                 }
-                set
-            }
-            Err(e) => {
-                tracing::warn!(
-                    corpus = %recipe.corpus.id,
-                    error = %e,
-                    "ingest: failed to seed embed-side dedup gate; \
-                     proceeding with empty seen-set (resume may re-embed already-written rows)"
-                );
-                std::collections::HashSet::new()
-            }
-        };
+                Err(e) => {
+                    tracing::warn!(
+                        corpus = %recipe.corpus.id,
+                        error = %e,
+                        "ingest: failed to seed embed-side dedup gate; \
+                         proceeding with empty seen-set (resume may re-embed already-written rows)"
+                    );
+                    std::collections::HashSet::new()
+                }
+            };
         let mut dedup_skipped: u64 = 0;
 
         let use_batch_embed = self.batch_embed.is_some();
@@ -990,7 +985,11 @@ impl CorpusEngine {
             embed_batch_size,
             INDEX_FLUSH_SIZE,
             use_batch_embed,
-            if resuming { format!(" from iter {resume_iter_pos}") } else { String::new() },
+            if resuming {
+                format!(" from iter {resume_iter_pos}")
+            } else {
+                String::new()
+            },
         );
 
         // Register (or look up) the cancellation flag for this corpus.
@@ -1079,7 +1078,8 @@ impl CorpusEngine {
                     }
                     // Transition InProgress state in manifest if present.
                     if let Some(ref mut manifest) = source_manifest {
-                        if let Some(record) = manifest.files.iter_mut().find(|r| &r.filename == sf) {
+                        if let Some(record) = manifest.files.iter_mut().find(|r| &r.filename == sf)
+                        {
                             if matches!(record.status, SourceFileStatus::Pending) {
                                 record.status = SourceFileStatus::InProgress {
                                     started_at: Utc::now(),
@@ -1133,8 +1133,11 @@ impl CorpusEngine {
             // be ambiguous, so we silently fall through to per-chunk
             // content embedding for multi-chunk extractors. See the
             // `embed_text` doc on `ExtractedDoc` for context.
-            let single_chunk_embed_override =
-                if text_chunks.len() == 1 { doc.embed_text.as_deref() } else { None };
+            let single_chunk_embed_override = if text_chunks.len() == 1 {
+                doc.embed_text.as_deref()
+            } else {
+                None
+            };
 
             for tc in text_chunks {
                 let content = if let Some(ref title) = doc.title {
@@ -1175,8 +1178,7 @@ impl CorpusEngine {
                     url: doc.url.clone(),
                     metadata: doc.metadata.as_ref().map(|m| m.to_string()),
                     content_hash: Some(content_hash),
-                    source_doc_id: doc.url.clone()
-                        .or_else(|| Some(doc.source_id.clone())),
+                    source_doc_id: doc.url.clone().or_else(|| Some(doc.source_id.clone())),
                     source_file: doc.source_file.clone(),
                     code,
                     unit_id,
@@ -1223,8 +1225,7 @@ impl CorpusEngine {
                                 );
                                 if let Some(ref cb) = progress {
                                     cb(IngestProgress::Embedding {
-                                        chunks_embedded: total_chunks
-                                            + index_buffer.len() as u64,
+                                        chunks_embedded: total_chunks + index_buffer.len() as u64,
                                         total: 0,
                                         docs_processed: resume_iter_pos + docs_processed,
                                         chunks_per_sec: 0.0,
@@ -1394,10 +1395,8 @@ impl CorpusEngine {
             total_chunks += flush_count as u64;
             index.insert_batch(&index_buffer).await?;
             if !unit_scoped {
-                let _ = index.update_committed_iter_pos_with_shards(
-                    iter_pos,
-                    assigned_shard_set.as_deref(),
-                );
+                let _ = index
+                    .update_committed_iter_pos_with_shards(iter_pos, assigned_shard_set.as_deref());
             }
 
             // Tally AFTER successful insert.
@@ -1512,15 +1511,19 @@ impl CorpusEngine {
                 });
             }
             let sub_phase_cb: Option<Box<dyn Fn(u64, u64) + Send + Sync>> =
-                progress.as_ref().map(|cb| -> Box<dyn Fn(u64, u64) + Send + Sync> {
-                    Box::new(move |done, total_phases| {
-                        cb(IngestProgress::Indexing {
-                            chunks_indexed: total_chunks * done / total_phases,
-                            total: total_chunks,
-                        });
-                    })
-                });
-            index.build_indexes(build_vector, build_fts, sub_phase_cb.as_deref()).await?;
+                progress
+                    .as_ref()
+                    .map(|cb| -> Box<dyn Fn(u64, u64) + Send + Sync> {
+                        Box::new(move |done, total_phases| {
+                            cb(IngestProgress::Indexing {
+                                chunks_indexed: total_chunks * done / total_phases,
+                                total: total_chunks,
+                            });
+                        })
+                    });
+            index
+                .build_indexes(build_vector, build_fts, sub_phase_cb.as_deref())
+                .await?;
             // Checkpoint: if killed after this point, resume can skip rebuild.
             let _ = index.mark_indexes_built();
         }
@@ -1578,67 +1581,68 @@ impl CorpusEngine {
                         // IngestResult shape via the post-block
                         // `index.info()` summary.
                         'enrichment: {
-                        if enrichment_config.enrichment_type == "tiered" {
-                            // Two tiered variants: the conv-grouping
-                            // one (`run_tiered_enrichment`) buckets
-                            // chunks by `conv_uuid` (per the conv
-                            // corpora schema), and the folder-grouping
-                            // one (`run_folder_tiered_enrichment`)
-                            // buckets by `source_doc_id` (one bag per
-                            // file, what watched-folder and vault
-                            // corpora produce). Pick by recipe's
-                            // display.category — vault + watched
-                            // folders take the folder variant.
-                            let display_category = recipe
-                                .display
-                                .as_ref()
-                                .and_then(|d| d.category.as_deref())
-                                .unwrap_or("");
-                            let is_folder_shape =
-                                matches!(display_category, "vault" | "watched_folder");
-                            if is_folder_shape {
-                                crate::enrichment::tiered::run_folder_tiered_enrichment(
-                                    &recipe.corpus.id,
-                                    index_path,
-                                    self.tiered_provider(),
-                                    self.chunk_entity_extractor(),
-                                )
-                                .await?;
-                            } else {
-                                crate::enrichment::tiered::run_tiered_enrichment(
-                                    recipe,
-                                    index_path,
-                                    self.tiered_provider(),
-                                    self.chunk_entity_extractor(),
-                                )
-                                .await?;
+                            if enrichment_config.enrichment_type == "tiered" {
+                                // Two tiered variants: the conv-grouping
+                                // one (`run_tiered_enrichment`) buckets
+                                // chunks by `conv_uuid` (per the conv
+                                // corpora schema), and the folder-grouping
+                                // one (`run_folder_tiered_enrichment`)
+                                // buckets by `source_doc_id` (one bag per
+                                // file, what watched-folder and vault
+                                // corpora produce). Pick by recipe's
+                                // display.category — vault + watched
+                                // folders take the folder variant.
+                                let display_category = recipe
+                                    .display
+                                    .as_ref()
+                                    .and_then(|d| d.category.as_deref())
+                                    .unwrap_or("");
+                                let is_folder_shape =
+                                    matches!(display_category, "vault" | "watched_folder");
+                                if is_folder_shape {
+                                    crate::enrichment::tiered::run_folder_tiered_enrichment(
+                                        &recipe.corpus.id,
+                                        index_path,
+                                        self.tiered_provider(),
+                                        self.chunk_entity_extractor(),
+                                    )
+                                    .await?;
+                                } else {
+                                    crate::enrichment::tiered::run_tiered_enrichment(
+                                        recipe,
+                                        index_path,
+                                        self.tiered_provider(),
+                                        self.chunk_entity_extractor(),
+                                    )
+                                    .await?;
+                                }
+                                break 'enrichment;
                             }
-                            break 'enrichment;
-                        }
 
-                        let field_engine =
-                            crate::enrichment::field_engine::FieldModelEngine::from_recipe(
-                                recipe,
-                                self.embed.clone(),
-                                inference.clone(),
-                            )?;
-                        let id = recipe.corpus.id.clone();
-                        // Bridge enrichment-phase events to the outer
-                        // `IngestProgress` channel so HTTP consumers
-                        // (desktop UI, CLI poll) see real-time phase
-                        // transitions during Phase 1 / 1b / 2 /
-                        // clustering / 3 instead of staring at the
-                        // last `Embedding` event. Without this bridge,
-                        // a long enrichment phase looked like a hang
-                        // (observed 2026-05-20: conversations-anthropic
-                        // ingest stuck at "Embedding chunks…" while
-                        // HDBSCAN clustered 16326×1024 silently).
-                        let outer_progress = progress.as_ref();
-                        let progress_fn = move |p: crate::enrichment::clustering::EnrichmentProgress| {
-                            use crate::enrichment::clustering::EnrichmentProgress as EP;
-                            // Existing stderr-render path — unchanged so
-                            // log consumers see the same lines.
-                            match &p {
+                            let field_engine =
+                                crate::enrichment::field_engine::FieldModelEngine::from_recipe(
+                                    recipe,
+                                    self.embed.clone(),
+                                    inference.clone(),
+                                )?;
+                            let id = recipe.corpus.id.clone();
+                            // Bridge enrichment-phase events to the outer
+                            // `IngestProgress` channel so HTTP consumers
+                            // (desktop UI, CLI poll) see real-time phase
+                            // transitions during Phase 1 / 1b / 2 /
+                            // clustering / 3 instead of staring at the
+                            // last `Embedding` event. Without this bridge,
+                            // a long enrichment phase looked like a hang
+                            // (observed 2026-05-20: conversations-anthropic
+                            // ingest stuck at "Embedding chunks…" while
+                            // HDBSCAN clustered 16326×1024 silently).
+                            let outer_progress = progress.as_ref();
+                            let progress_fn =
+                                move |p: crate::enrichment::clustering::EnrichmentProgress| {
+                                    use crate::enrichment::clustering::EnrichmentProgress as EP;
+                                    // Existing stderr-render path — unchanged so
+                                    // log consumers see the same lines.
+                                    match &p {
                                 EP::Phase { phase, name, note } => {
                                     if note.is_empty() {
                                         eprintln!("[{id}] Phase {phase}: {name}");
@@ -1676,16 +1680,16 @@ impl CorpusEngine {
                                     eprintln!("[{id}] Cluster labeling complete: {labeled_count} clusters labeled"),
                             }
 
-                            // New: forward to the IngestProgress channel.
-                            // Mapping rules:
-                            //   - Phase variants emit `Enriching` with a
-                            //     stable machine-token phase name. The
-                            //     desktop UI maps these to display labels.
-                            //   - Numeric progress (Phase1Progress,
-                            //     ClusteringComplete) sets `fraction` so
-                            //     progress bars can move.
-                            if let Some(cb) = outer_progress {
-                                let evt = match &p {
+                                    // New: forward to the IngestProgress channel.
+                                    // Mapping rules:
+                                    //   - Phase variants emit `Enriching` with a
+                                    //     stable machine-token phase name. The
+                                    //     desktop UI maps these to display labels.
+                                    //   - Numeric progress (Phase1Progress,
+                                    //     ClusteringComplete) sets `fraction` so
+                                    //     progress bars can move.
+                                    if let Some(cb) = outer_progress {
+                                        let evt = match &p {
                                     EP::Phase { phase, name, note } => {
                                         let detail = if note.is_empty() {
                                             format!("Phase {phase}: {name}")
@@ -1761,12 +1765,12 @@ impl CorpusEngine {
                                         fraction: Some(1.0),
                                     }),
                                 };
-                                if let Some(evt) = evt {
-                                    cb(evt);
-                                }
-                            }
-                        };
-                        field_engine.enrich(&index, &progress_fn).await?;
+                                        if let Some(evt) = evt {
+                                            cb(evt);
+                                        }
+                                    }
+                                };
+                            field_engine.enrich(&index, &progress_fn).await?;
                         } // end 'enrichment: block (tiered vs legacy field-model)
                     }
                     None => {
@@ -1791,7 +1795,10 @@ impl CorpusEngine {
             // Mark the index as fully committed so it survives a restart as "Indexed"
             // rather than being treated as a partial/incomplete ingest.
             if let Err(e) = index.mark_ingestion_complete() {
-                tracing::warn!("Failed to mark ingestion complete for '{}': {e}", recipe.corpus.id);
+                tracing::warn!(
+                    "Failed to mark ingestion complete for '{}': {e}",
+                    recipe.corpus.id
+                );
             }
 
             // Stamp the canonical content fingerprint as the last
@@ -1966,14 +1973,20 @@ impl CorpusEngine {
         if let Some(indices) = file_indices {
             match (&mut recipe.acquire, &mut recipe.extract) {
                 (
-                    AcquirerConfig::HuggingFaceDataset { ref mut file_indices, .. },
+                    AcquirerConfig::HuggingFaceDataset {
+                        ref mut file_indices,
+                        ..
+                    },
                     _,
                 ) => {
                     *file_indices = Some(indices);
                 }
                 (
                     _,
-                    ExtractorConfig::WikipediaJsonl { ref mut shard_indices, .. },
+                    ExtractorConfig::WikipediaJsonl {
+                        ref mut shard_indices,
+                        ..
+                    },
                 ) => {
                     *shard_indices = Some(indices);
                 }
@@ -1988,8 +2001,13 @@ impl CorpusEngine {
         }
 
         // Override article_range on the Wikipedia JSONL extractor when provided.
-        if let (Some(range), ExtractorConfig::WikipediaJsonl { ref mut article_range, .. }) =
-            (article_range, &mut recipe.extract)
+        if let (
+            Some(range),
+            ExtractorConfig::WikipediaJsonl {
+                ref mut article_range,
+                ..
+            },
+        ) = (article_range, &mut recipe.extract)
         {
             *article_range = Some(range);
         }

@@ -16,8 +16,12 @@ use crate::eval_cmd::bank::{EvalBank, LatencyBudget};
 use crate::eval_cmd::runner::{EvalResult, EvalRun};
 
 pub fn print_text(run: &EvalRun, inspect: bool, bank: Option<&EvalBank>) {
-    println!("═══ {} (corpus={}) — {} questions ═══",
-        run.bank_name, run.corpus, run.results.len());
+    println!(
+        "═══ {} (corpus={}) — {} questions ═══",
+        run.bank_name,
+        run.corpus,
+        run.results.len()
+    );
     println!();
 
     for r in &run.results {
@@ -68,7 +72,11 @@ fn print_question_row(r: &EvalResult, inspect: bool) {
             chunks = s.retrieved_chunk_count,
         );
     } else {
-        let vec_tag = if r.vector_eligible { "vec+fts" } else { "fts-only" };
+        let vec_tag = if r.vector_eligible {
+            "vec+fts"
+        } else {
+            "fts-only"
+        };
         // When `--loose-source-judge` was on, render the loose score
         // as a parenthetical delta next to the rigid one so a glance
         // tells you "rigid X / Y; loose Z / Y" — never lower than X.
@@ -155,11 +163,7 @@ fn print_question_row(r: &EvalResult, inspect: bool) {
             // In synth mode the metadata snippets don't carry a score,
             // so we hide the `score=` prefix when it's stuck at 0.0.
             if r.synth.is_some() {
-                println!(
-                    "         [{rank:>2}] {title}",
-                    rank = i + 1,
-                    title = title,
-                );
+                println!("         [{rank:>2}] {title}", rank = i + 1, title = title,);
             } else {
                 println!(
                     "         [{rank:>2}] score={score:.3} {title}",
@@ -179,8 +183,20 @@ fn print_category_rollup(run: &EvalRun) {
     //  judge_present_count, loose_source_m, loose_source_present_count)
     //  — the `*_present_count`s let us skip a column for categories
     //  where every row was --no-judge or had no loose pass.
-    let mut by_cat: BTreeMap<&str, (usize, usize, usize, usize, usize, usize, usize, usize, usize)> =
-        BTreeMap::new();
+    let mut by_cat: BTreeMap<
+        &str,
+        (
+            usize,
+            usize,
+            usize,
+            usize,
+            usize,
+            usize,
+            usize,
+            usize,
+            usize,
+        ),
+    > = BTreeMap::new();
     for r in &run.results {
         let entry = by_cat
             .entry(r.category.as_str())
@@ -229,11 +245,7 @@ fn print_overall(run: &EvalRun) {
     let (jm, jt, jc) = run.results.iter().fold((0usize, 0usize, 0usize), |acc, r| {
         if let Some(s) = r.synth.as_ref() {
             if let Some(j) = s.judge_fact_score.as_ref() {
-                return (
-                    acc.0 + j.matched.len(),
-                    acc.1 + j.total_expected,
-                    acc.2 + 1,
-                );
+                return (acc.0 + j.matched.len(), acc.1 + j.total_expected, acc.2 + 1);
             }
         }
         acc
@@ -298,16 +310,16 @@ fn print_overall(run: &EvalRun) {
     if !has_synth {
         return;
     }
-    let (cfm, cft) = run
-        .results
-        .iter()
-        .filter_map(|r| r.synth.as_ref())
-        .fold((0usize, 0usize), |acc, s| {
-            (
-                acc.0 + s.chunks_fact_score.matched.len(),
-                acc.1 + s.chunks_fact_score.total_expected,
-            )
-        });
+    let (cfm, cft) =
+        run.results
+            .iter()
+            .filter_map(|r| r.synth.as_ref())
+            .fold((0usize, 0usize), |acc, s| {
+                (
+                    acc.0 + s.chunks_fact_score.matched.len(),
+                    acc.1 + s.chunks_fact_score.total_expected,
+                )
+            });
     let total_wall_ms: u64 = run
         .results
         .iter()
@@ -416,7 +428,8 @@ fn print_latency_rollup(run: &EvalRun, budget: Option<&LatencyBudget>) {
             p95 as f64 / 1000.0,
             max as f64 / 1000.0,
             match (total_target, max_target) {
-                (Some(t), Some(m)) => format!("p95 budget {}ms · {} over hard cap {}ms", t, over_max, m),
+                (Some(t), Some(m)) =>
+                    format!("p95 budget {}ms · {} over hard cap {}ms", t, over_max, m),
                 (Some(t), None) => format!("p95 budget {}ms", t),
                 (None, Some(m)) => format!("{} over hard cap {}ms", over_max, m),
                 (None, None) => "no budget".to_string(),
@@ -503,12 +516,7 @@ pub fn print_routing(run: &crate::eval_cmd::runner::RoutingRun) {
             .unwrap_or_default();
         println!(
             "  {mark} [{:30}] expected={:14} actual={:14} conf={:.2} {:>5}ms  {}",
-            r.question_id,
-            r.expected,
-            r.actual_intent,
-            r.confidence,
-            r.latency_ms,
-            rationale
+            r.question_id, r.expected, r.actual_intent, r.confidence, r.latency_ms, rationale
         );
     }
 
@@ -528,10 +536,12 @@ pub fn print_routing(run: &crate::eval_cmd::runner::RoutingRun) {
     }
     println!("\n─── per category ───");
     for (cat, (correct, total, lat_sum)) in &by_cat {
-        let avg_ms = if *total > 0 { lat_sum / (*total as u64) } else { 0 };
-        println!(
-            "  {cat:<26} {correct}/{total} correct  avg {avg_ms}ms"
-        );
+        let avg_ms = if *total > 0 {
+            lat_sum / (*total as u64)
+        } else {
+            0
+        };
+        println!("  {cat:<26} {correct}/{total} correct  avg {avg_ms}ms");
     }
     let n = run.results.len();
     let avg_total = if n > 0 { total_latency / n as u64 } else { 0 };
@@ -564,7 +574,11 @@ mod tests {
             matched: matched.iter().map(|s| s.to_string()).collect(),
             missing: missing.iter().map(|s| s.to_string()).collect(),
             total_expected: total,
-            ratio: if total == 0 { None } else { Some(matched.len() as f32 / total as f32) },
+            ratio: if total == 0 {
+                None
+            } else {
+                Some(matched.len() as f32 / total as f32)
+            },
         }
     }
 

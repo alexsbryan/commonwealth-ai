@@ -73,7 +73,9 @@ impl Tool for GetLintOutputTool {
         params
             .get("run_id")
             .and_then(|v| v.as_i64())
-            .ok_or_else(|| Error::InvalidInput("get_lint_output requires 'run_id' (integer)".to_string()))?;
+            .ok_or_else(|| {
+                Error::InvalidInput("get_lint_output requires 'run_id' (integer)".to_string())
+            })?;
         Ok(())
     }
 

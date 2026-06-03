@@ -204,7 +204,10 @@ async fn cmd_build_graph(args: &[String]) -> i32 {
         "  chunks:   {} with metadata, {} skipped",
         summary.chunks_with_metadata, summary.chunks_without_metadata,
     );
-    eprintln!("  articles: {articles} in scope ({} dangling targets)", summary.dangling_targets);
+    eprintln!(
+        "  articles: {articles} in scope ({} dangling targets)",
+        summary.dangling_targets
+    );
     eprintln!("  edges:    {edges} unique (source, section, target)");
     eprintln!("  sections: {} signal rows", summary.sections_inserted);
     eprintln!("  ingest:   {ingest_ms} ms");

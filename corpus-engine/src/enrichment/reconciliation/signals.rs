@@ -207,12 +207,14 @@ impl MergeSignalCheck for OrgRoleSignal {
         // enron-sample-multi-tiny train: 86 Enron employees including
         // Lay, Skilling, and Fastow folded into a single canonical,
         // dropping tuned B³ precision from 1.000 (conv) to 0.593.
-        match (&left.affiliation, &right.affiliation, &left.role, &right.role) {
+        match (
+            &left.affiliation,
+            &right.affiliation,
+            &left.role,
+            &right.role,
+        ) {
             (Some(la), Some(ra), Some(lr), Some(rr))
-                if !la.is_empty()
-                    && !ra.is_empty()
-                    && !lr.is_empty()
-                    && !rr.is_empty() =>
+                if !la.is_empty() && !ra.is_empty() && !lr.is_empty() && !rr.is_empty() =>
             {
                 fold_name(la) == fold_name(ra) && fold_name(lr) == fold_name(rr)
             }

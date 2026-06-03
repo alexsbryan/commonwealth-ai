@@ -190,8 +190,11 @@ impl ToolPatternMatcher {
         // pattern matching but DO count it toward cooldown decrement
         // (otherwise an agent that errored its way through wouldn't
         // make progress on its `IsolatedInvestigation` window).
-        let successful: Vec<&ToolCallLogRow> =
-            chronological.iter().copied().filter(|r| r.outcome == "success").collect();
+        let successful: Vec<&ToolCallLogRow> = chronological
+            .iter()
+            .copied()
+            .filter(|r| r.outcome == "success")
+            .collect();
 
         // Decrement cooldowns by 1 per scan, dropping any that hit zero.
         cooldowns.retain(|_, remaining| {
@@ -229,8 +232,7 @@ impl ToolPatternMatcher {
                 .map(|r| r.tool_name.clone())
                 .collect();
             if !investigative.is_empty() {
-                let mut tools: Vec<String> =
-                    investigative.to_vec();
+                let mut tools: Vec<String> = investigative.to_vec();
                 tools.push("build".into());
                 tools.dedup();
                 hits.push(ObservedPattern {
@@ -258,7 +260,10 @@ impl ToolPatternMatcher {
         // symbols} and there's no `build` or `note` in the window.
         // Fires once per cooldown window so we don't spam the
         // observed-patterns section.
-        let invest_count = successful.iter().filter(|r| matches_investigation(&r.tool_name)).count();
+        let invest_count = successful
+            .iter()
+            .filter(|r| matches_investigation(&r.tool_name))
+            .count();
         let action_count = successful
             .iter()
             .filter(|r| r.tool_name == "build" || r.tool_name == "note")
@@ -338,18 +343,20 @@ impl ToolPatternMatcher {
     pub async fn observe_and_record(&self, session_id: &str, feature_id: Option<&str>) {
         // Pull the recent rows for this session. Logging may have
         // happened on a different thread; use a generous since=0.
-        let rows: Vec<ToolCallLogRow> =
-            match self.notes.tool_call_log_rows(0, WINDOW).await {
-                Ok(rs) => rs.into_iter().filter(|r| r.session_id == session_id).collect(),
-                Err(e) => {
-                    tracing::warn!(
-                        session_id,
-                        error = %e,
-                        "tool_pattern_matcher: failed to read tool_call_log; skipping observation"
-                    );
-                    return;
-                }
-            };
+        let rows: Vec<ToolCallLogRow> = match self.notes.tool_call_log_rows(0, WINDOW).await {
+            Ok(rs) => rs
+                .into_iter()
+                .filter(|r| r.session_id == session_id)
+                .collect(),
+            Err(e) => {
+                tracing::warn!(
+                    session_id,
+                    error = %e,
+                    "tool_pattern_matcher: failed to read tool_call_log; skipping observation"
+                );
+                return;
+            }
+        };
         let row_refs: Vec<&ToolCallLogRow> = rows.iter().collect();
 
         // Take the per-session cooldown state, run scan, store back.
@@ -481,7 +488,9 @@ mod tests {
         // second fire.
         let hits2 = scan_chronological(&log, &mut cooldowns);
         assert!(
-            hits2.iter().all(|h| h.rule != PatternRule::IsolatedInvestigation),
+            hits2
+                .iter()
+                .all(|h| h.rule != PatternRule::IsolatedInvestigation),
             "cooldown should suppress re-firing of IsolatedInvestigation: {hits2:?}"
         );
     }
@@ -518,7 +527,8 @@ mod tests {
         let mut cooldowns = HashMap::new();
         let hits = scan_chronological(&log, &mut cooldowns);
         assert!(
-            hits.iter().any(|h| h.rule == PatternRule::NotesInformedDecision),
+            hits.iter()
+                .any(|h| h.rule == PatternRule::NotesInformedDecision),
             "expected NotesInformedDecision in {hits:?}"
         );
     }
@@ -539,7 +549,9 @@ mod tests {
         // only itself in the successful set — should fire the
         // BuildFollowsAction quieter rule, not InvestigateThenAct.
         assert!(
-            !hits.iter().any(|h| h.rule == PatternRule::InvestigateThenAct),
+            !hits
+                .iter()
+                .any(|h| h.rule == PatternRule::InvestigateThenAct),
             "errored investigation should not trigger InvestigateThenAct: {hits:?}"
         );
     }
@@ -587,8 +599,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
         // Seed the log with a blast→build sequence.
-        store.log_tool_call("sess-7", "blast", "success").await.unwrap();
-        store.log_tool_call("sess-7", "build", "success").await.unwrap();
+        store
+            .log_tool_call("sess-7", "blast", "success")
+            .await
+            .unwrap();
+        store
+            .log_tool_call("sess-7", "build", "success")
+            .await
+            .unwrap();
 
         let matcher = ToolPatternMatcher::new(Arc::clone(&store));
         matcher.observe_and_record("sess-7", None).await;
@@ -596,14 +614,7 @@ mod tests {
         // The store doesn't expose a source-filtered read directly;
         // query reflection-kind notes and filter to source=Observed.
         let rows = store
-            .read_notes(
-                None,
-                &[],
-                &[],
-                &["reflection".to_string()],
-                100,
-                false,
-            )
+            .read_notes(None, &[], &[], &["reflection".to_string()], 100, false)
             .await
             .unwrap();
         let observed: Vec<_> = rows

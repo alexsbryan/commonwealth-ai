@@ -112,9 +112,7 @@ async fn resume_in_progress_ingests(state: AppState) {
     // bench's chat slot. Default behaviour (env unset / "0" / "false")
     // is unchanged.
     if env_truthy("SOVEREIGN_DISABLE_AUTO_RESUME") {
-        tracing::info!(
-            "auto_resume: SOVEREIGN_DISABLE_AUTO_RESUME set — skipping ingest resume"
-        );
+        tracing::info!("auto_resume: SOVEREIGN_DISABLE_AUTO_RESUME set — skipping ingest resume");
         return;
     }
     let Some(engine) = state.inner.corpus_engine.clone() else {

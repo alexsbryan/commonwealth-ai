@@ -66,10 +66,11 @@ pub fn extract_text_from_html(html: &str) -> String {
                     || tag_start.starts_with(b"<h")
                     || tag_start.starts_with(b"</h")
                     || tag_start.starts_with(b"<li"))
-                    && !last_was_space {
-                        result.push('\n');
-                        last_was_space = true;
-                    }
+                    && !last_was_space
+                {
+                    result.push('\n');
+                    last_was_space = true;
+                }
             }
             i += 1;
             continue;

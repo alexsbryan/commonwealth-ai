@@ -72,8 +72,7 @@ fn main() {
     };
     let model_params = LlamaModelParams::default().with_n_gpu_layers(gpu_layers);
     let model = Arc::new(
-        LlamaModel::load_from_file(&backend, &args.model, &model_params)
-            .expect("load model"),
+        LlamaModel::load_from_file(&backend, &args.model, &model_params).expect("load model"),
     );
     println!(
         "model loaded: layers={} size_mb={}",
@@ -105,8 +104,7 @@ fn main() {
             .with_offload_kqv(offload_kqv);
 
         let mut ctx = unsafe {
-            let model_ref: &'static LlamaModel =
-                &*(Arc::as_ptr(&model) as *const LlamaModel);
+            let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model) as *const LlamaModel);
             model_ref
                 .new_context(&backend, ctx_params)
                 .expect("new_context")
@@ -175,9 +173,7 @@ fn run_turn(
 
         batch.clear();
         let pos = (n_prompt + decoded) as i32;
-        batch
-            .add(token, pos, &[0], true)
-            .expect("batch.add decode");
+        batch.add(token, pos, &[0], true).expect("batch.add decode");
         ctx.decode(&mut batch).expect("decode step");
         decoded += 1;
     }

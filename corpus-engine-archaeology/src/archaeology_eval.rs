@@ -232,7 +232,11 @@ pub fn run_witness_checks(
         out.push(WitnessCheck {
             atom_id: atom.atom_id.clone(),
             kind: WitnessKind::FirstSeenCommitExists,
-            verdict: if first_ok { Verdict::Pass } else { Verdict::Fail },
+            verdict: if first_ok {
+                Verdict::Pass
+            } else {
+                Verdict::Fail
+            },
             detail: if first_ok {
                 String::new()
             } else {
@@ -248,7 +252,11 @@ pub fn run_witness_checks(
         out.push(WitnessCheck {
             atom_id: atom.atom_id.clone(),
             kind: WitnessKind::LastModifiedCommitExists,
-            verdict: if last_ok { Verdict::Pass } else { Verdict::Fail },
+            verdict: if last_ok {
+                Verdict::Pass
+            } else {
+                Verdict::Fail
+            },
             detail: if last_ok {
                 String::new()
             } else {
@@ -275,7 +283,11 @@ pub fn run_witness_checks(
             out.push(WitnessCheck {
                 atom_id: atom.atom_id.clone(),
                 kind: touches_kind,
-                verdict: if touched { Verdict::Pass } else { Verdict::Fail },
+                verdict: if touched {
+                    Verdict::Pass
+                } else {
+                    Verdict::Fail
+                },
                 detail: if touched {
                     String::new()
                 } else {
@@ -300,7 +312,10 @@ pub fn run_witness_checks(
             detail: if exists {
                 String::new()
             } else {
-                format!("{} not present at HEAD (renamed or deleted)", atom.file_path.display())
+                format!(
+                    "{} not present at HEAD (renamed or deleted)",
+                    atom.file_path.display()
+                )
             },
         });
     }
@@ -325,10 +340,7 @@ pub fn run_witness_checks(
                     let mut hit = false;
                     for k in &inquiry.keywords {
                         let needle = k.to_lowercase();
-                        if subjects
-                            .iter()
-                            .any(|s| s.to_lowercase().contains(&needle))
-                        {
+                        if subjects.iter().any(|s| s.to_lowercase().contains(&needle)) {
                             hit = true;
                             break;
                         }
@@ -358,7 +370,11 @@ pub fn run_witness_checks(
                     out.push(WitnessCheck {
                         atom_id: atom.atom_id.clone(),
                         kind: WitnessKind::AuthorPresent,
-                        verdict: if overlap { Verdict::Pass } else { Verdict::Fail },
+                        verdict: if overlap {
+                            Verdict::Pass
+                        } else {
+                            Verdict::Fail
+                        },
                         detail: if overlap {
                             String::new()
                         } else {
@@ -376,7 +392,11 @@ pub fn run_witness_checks(
                     out.push(WitnessCheck {
                         atom_id: atom.atom_id.clone(),
                         kind: WitnessKind::DateInRange,
-                        verdict: if in_range { Verdict::Pass } else { Verdict::Fail },
+                        verdict: if in_range {
+                            Verdict::Pass
+                        } else {
+                            Verdict::Fail
+                        },
                         detail: if in_range {
                             String::new()
                         } else {
@@ -537,8 +557,16 @@ pub struct PathChange {
 }
 
 pub fn diff_against_baseline(curr: &EvalReport, prev: &EvalReport) -> BaselineDiff {
-    let curr_ids: BTreeSet<&str> = curr.atom_witnesses.iter().map(|w| w.atom_id.as_str()).collect();
-    let prev_ids: BTreeSet<&str> = prev.atom_witnesses.iter().map(|w| w.atom_id.as_str()).collect();
+    let curr_ids: BTreeSet<&str> = curr
+        .atom_witnesses
+        .iter()
+        .map(|w| w.atom_id.as_str())
+        .collect();
+    let prev_ids: BTreeSet<&str> = prev
+        .atom_witnesses
+        .iter()
+        .map(|w| w.atom_id.as_str())
+        .collect();
     let added: Vec<String> = curr_ids
         .difference(&prev_ids)
         .map(|s| s.to_string())
@@ -906,7 +934,11 @@ mod tests {
         let repo = tmp.path();
         init_repo(repo);
         write_and_add(repo, "src/lib.rs", "fn v1() {}\n");
-        commit_at(repo, "fix: dedup installed_indexes by (corpus_id, chunk_id)", 1_700_000_000);
+        commit_at(
+            repo,
+            "fix: dedup installed_indexes by (corpus_id, chunk_id)",
+            1_700_000_000,
+        );
         let history = batch_harvest_all_commits(repo).unwrap();
         let prov = enrich_atom(
             "entity-0001",
@@ -976,7 +1008,10 @@ mod tests {
         let report = run_eval("test-atlas", tmp.path(), &prov, &[]).unwrap();
         assert_eq!(report.atom_count, 1);
         assert_eq!(report.fabricated_atoms, 0);
-        assert!(report.witness_rate > 0.99, "all 4 always-on checks should pass");
+        assert!(
+            report.witness_rate > 0.99,
+            "all 4 always-on checks should pass"
+        );
         let w = &report.atom_witnesses[0];
         assert_eq!(w.passed, 4);
         assert_eq!(w.failed, 0);
@@ -987,8 +1022,7 @@ mod tests {
         let (tmp, prov) = make_fixture();
         // Mutate first_seen.hash to a non-existent commit.
         let mut bad = prov.clone();
-        bad[0].first_seen.hash =
-            "0000000000000000000000000000000000000000".into();
+        bad[0].first_seen.hash = "0000000000000000000000000000000000000000".into();
         let report = run_eval("test-atlas", tmp.path(), &bad, &[]).unwrap();
         assert_eq!(report.fabricated_atoms, 1, "fabrication detector must fire");
         // FirstSeenTouchesFile should have flipped to Stale (commit

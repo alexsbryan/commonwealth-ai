@@ -191,7 +191,9 @@ pub fn strip_presenter_artifacts(raw: &str) -> String {
         if PREAMBLE_PREFIXES.iter().any(|p| trimmed.starts_with(p)) {
             if let Some(idx) = trimmed.find("\n\n") {
                 Some(trimmed[idx + 2..].to_string())
-            } else { trimmed.find('\n').map(|idx| trimmed[idx + 1..].to_string()) }
+            } else {
+                trimmed.find('\n').map(|idx| trimmed[idx + 1..].to_string())
+            }
         } else {
             None
         }
@@ -407,7 +409,11 @@ mod tests {
         let sys = req.system_message.as_deref().unwrap();
         // Short imperative — no "RIGHT X" rule headers, no
         // "you are an expert" framing.
-        assert!(sys.len() < 400, "system prompt should be short ({} chars)", sys.len());
+        assert!(
+            sys.len() < 400,
+            "system prompt should be short ({} chars)",
+            sys.len()
+        );
         assert!(!sys.contains("RIGHT ATTENTION"));
         assert!(!sys.contains("witness, not a performer"));
         // But the load-bearing concepts surface compactly: confidence
@@ -439,8 +445,14 @@ mod tests {
         );
         // Bench scenario names MUST NOT appear in the examples.
         for forbidden in &[
-            "Jordan", "Aleksei", "Devi", "Mark", "Sam",
-            "therapist", "anxiety", "depression",
+            "Jordan",
+            "Aleksei",
+            "Devi",
+            "Mark",
+            "Sam",
+            "therapist",
+            "anxiety",
+            "depression",
         ] {
             assert!(
                 !p.contains(forbidden),
@@ -462,12 +474,7 @@ mod tests {
         // The Presenter prompt must include both the user message
         // and the Drafter notes — without the user message, iter4
         // showed the model defaults to writing about the draft.
-        let req = present_request(
-            "USER_MSG",
-            "DRAFT_BODY",
-            SkillRegister::Relational,
-            1024,
-        );
+        let req = present_request("USER_MSG", "DRAFT_BODY", SkillRegister::Relational, 1024);
         assert!(req.prompt.contains("USER_MSG"));
         assert!(req.prompt.contains("DRAFT_BODY"));
     }
@@ -490,10 +497,7 @@ mod tests {
     #[test]
     fn strip_presenter_artifacts_removes_markdown_label() {
         let raw = "**Rewritten Response:**\n\nYou mentioned Jordan once.";
-        assert_eq!(
-            strip_presenter_artifacts(raw),
-            "You mentioned Jordan once."
-        );
+        assert_eq!(strip_presenter_artifacts(raw), "You mentioned Jordan once.");
     }
 
     #[test]

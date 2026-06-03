@@ -51,12 +51,7 @@ fn build_wired_app_state() -> (AppState, Arc<AtomicUsize>) {
     let mut members = HashMap::new();
     members.insert(
         self_id,
-        member_with_last_seen(
-            self_id,
-            "self",
-            100,
-            "127.0.0.1:9742".parse().unwrap(),
-        ),
+        member_with_last_seen(self_id, "self", 100, "127.0.0.1:9742".parse().unwrap()),
     );
     let mesh = Mesh {
         id: MeshId::from_u128(42),
@@ -68,13 +63,8 @@ fn build_wired_app_state() -> (AppState, Arc<AtomicUsize>) {
 
     let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
     let app_registry = Arc::new(AppRegistry::new());
-    let app_state = AppState::new_with_platform_and_engine(
-        self_id,
-        mesh,
-        mesh_store,
-        app_registry,
-        None,
-    );
+    let app_state =
+        AppState::new_with_platform_and_engine(self_id, mesh, mesh_store, app_registry, None);
 
     // ── Order matches `daemon.rs:1199-1217` exactly ───────────────
     // Both installers go through `Arc::get_mut`; cloning
@@ -144,7 +134,9 @@ async fn with_local_inference_routes_chat_completions_to_adapter() {
     // Body sanity: we got back the stub provider's output, not a
     // forward_to_model fallthrough payload.
     let body: serde_json::Value = resp.json().await.unwrap();
-    let content = body["choices"][0]["message"]["content"].as_str().unwrap_or("");
+    let content = body["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or("");
     assert!(
         !content.is_empty(),
         "local_inference path must return a non-empty completion body; got: {body}"

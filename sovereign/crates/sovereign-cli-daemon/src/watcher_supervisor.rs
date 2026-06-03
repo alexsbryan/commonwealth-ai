@@ -26,9 +26,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use corpus_engine::{
-    BackgroundWatcher, CoordinatorHandle, WatcherCoordinator, WatcherHeartbeat,
-};
+use corpus_engine::{BackgroundWatcher, CoordinatorHandle, WatcherCoordinator, WatcherHeartbeat};
 use tokio::task::JoinHandle;
 
 /// How often the monitor re-checks coordinator liveness.
@@ -73,8 +71,8 @@ impl WatcherSupervisor {
     /// heartbeat so both this monitor and the status tools observe the
     /// same liveness.
     async fn start_once(&self) -> corpus_engine::error::Result<CoordinatorHandle> {
-        let mut coordinator = WatcherCoordinator::new(self.debounce_ms)
-            .with_heartbeat(Arc::clone(&self.heartbeat));
+        let mut coordinator =
+            WatcherCoordinator::new(self.debounce_ms).with_heartbeat(Arc::clone(&self.heartbeat));
         for w in &self.watchers {
             coordinator.register(Arc::clone(w));
         }
@@ -212,17 +210,15 @@ mod tests {
         let w: Arc<dyn BackgroundWatcher> = Arc::new(NoopWatcher {
             calls: Arc::new(AtomicUsize::new(0)),
         });
-        let sup = WatcherSupervisor::new(
-            vec![w],
-            vec![dir.clone()],
-            200,
-            Arc::clone(&hb),
-        );
+        let sup = WatcherSupervisor::new(vec![w], vec![dir.clone()], 200, Arc::clone(&hb));
         let monitor = sup.spawn().expect("supervisor should spawn");
 
         // Give the monitor a beat to run start_once.
         tokio::time::sleep(Duration::from_millis(150)).await;
-        assert!(hb.is_live(30), "heartbeat must be live once supervisor starts");
+        assert!(
+            hb.is_live(30),
+            "heartbeat must be live once supervisor starts"
+        );
 
         monitor.abort();
         std::fs::remove_dir_all(&dir).ok();

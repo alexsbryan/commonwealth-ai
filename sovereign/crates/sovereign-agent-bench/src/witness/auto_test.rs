@@ -51,7 +51,8 @@ pub async fn run_auto_witness(
     if !fixture_src.is_dir() {
         return Err(AutoWitnessError::FixtureSourceMissing(fixture_src));
     }
-    copy_dir_recursive(&fixture_src, workdir).map_err(|e| AutoWitnessError::FixtureCopy(e.to_string()))?;
+    copy_dir_recursive(&fixture_src, workdir)
+        .map_err(|e| AutoWitnessError::FixtureCopy(e.to_string()))?;
 
     // 2. Run verify_cmd from inside the workdir. Cap wall time at
     // 2× the agent's wall budget — a model that writes an
@@ -74,10 +75,7 @@ pub async fn run_auto_witness(
 
     // 3. Parse + bucket.
     let parsed = parse_test_output(problem.witness.language, &stdout_tail);
-    let bucketed = bucket_pass_fraction(
-        parsed.pass_fraction(),
-        &problem.witness.score_buckets,
-    );
+    let bucketed = bucket_pass_fraction(parsed.pass_fraction(), &problem.witness.score_buckets);
     info!(
         problem = %problem.meta.id,
         language = problem.witness.language.id(),
@@ -259,11 +257,7 @@ fn truncate_tail(s: &str, limit: usize) -> String {
     while cut < s.len() && !s.is_char_boundary(cut) {
         cut += 1;
     }
-    format!(
-        "... (truncated head: {} bytes dropped)\n{}",
-        cut,
-        &s[cut..]
-    )
+    format!("... (truncated head: {} bytes dropped)\n{}", cut, &s[cut..])
 }
 
 #[cfg(test)]
@@ -281,7 +275,10 @@ mod tests {
         let tail_marker = "20 failed in 0.05s\n";
         let combined = format!("{body}{tail_marker}");
         let cut = truncate_tail(&combined, 200);
-        assert!(cut.contains("20 failed in 0.05s"), "summary line lost: {cut}");
+        assert!(
+            cut.contains("20 failed in 0.05s"),
+            "summary line lost: {cut}"
+        );
         assert!(cut.contains("(truncated head:"));
     }
 
@@ -399,7 +396,8 @@ mod tests {
 
     #[test]
     fn parse_test_output_dispatches_per_language() {
-        let rust_out = "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n";
+        let rust_out =
+            "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n";
         let r = parse_test_output(WitnessLanguage::Rust, rust_out);
         assert_eq!(r.passed, 4);
     }

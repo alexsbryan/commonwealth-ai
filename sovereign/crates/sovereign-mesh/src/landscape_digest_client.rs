@@ -209,7 +209,7 @@ mod tests {
                 skill_id: None,
                 title: None,
                 enabled_corpora: None,
-            searched_sources: None,
+                searched_sources: None,
             },
             memories: vec![],
             working_memory: None,
@@ -254,7 +254,7 @@ mod tests {
                 skill_id: None,
                 title: None,
                 enabled_corpora: None,
-            searched_sources: None,
+                searched_sources: None,
             },
             memories: vec![],
             working_memory: None,
@@ -270,7 +270,9 @@ mod tests {
         };
 
         client.splice_landscape_digests(&mut ctx, None).await;
-        let digests = ctx.knowledge_view_digests.expect("digests must be Some(empty)");
+        let digests = ctx
+            .knowledge_view_digests
+            .expect("digests must be Some(empty)");
         assert!(digests.is_empty());
     }
 }

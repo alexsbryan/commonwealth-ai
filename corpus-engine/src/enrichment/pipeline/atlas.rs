@@ -546,7 +546,6 @@ pub enum SeedOrigin {
     None,
 }
 
-
 /// How a pipeline produces its seed entity list. The runner
 /// dispatches on this enum to decide whether to call
 /// `compose_seed_prompt` (Llm), `extract_seed_structural`
@@ -1426,7 +1425,8 @@ mod tests {
             }],
             argument_reconstructions: Vec::new(),
             type_extension: None,
-            type_extensions: Vec::new(),        };
+            type_extensions: Vec::new(),
+        };
 
         let json = serde_json::to_string_pretty(&extraction).unwrap();
         let parsed: SectionExtraction = serde_json::from_str(&json).unwrap();

@@ -39,14 +39,10 @@ impl CorpusEngine {
                     .iter()
                     .map(|(k, v)| (k.clone(), v.as_interpolation()))
                     .collect();
-                let render =
-                    |tpl: &str| crate::acquirers::http_api::template::render_template(
-                        tpl, "", &bindings,
-                    );
-                let url_rendered = url
-                    .as_deref()
-                    .map(render)
-                    .transpose()?;
+                let render = |tpl: &str| {
+                    crate::acquirers::http_api::template::render_template(tpl, "", &bindings)
+                };
+                let url_rendered = url.as_deref().map(render).transpose()?;
                 let urls_rendered = urls
                     .as_ref()
                     .map(|v| v.iter().map(|u| render(u)).collect::<Result<Vec<_>>>())
@@ -75,16 +71,21 @@ impl CorpusEngine {
                 let acq = LocalFileAcquirer::new(path);
                 acq.acquire()
             }
-            AcquirerConfig::HuggingFaceDataset { repo, subset, file_indices } => {
+            AcquirerConfig::HuggingFaceDataset {
+                repo,
+                subset,
+                file_indices,
+            } => {
                 let mut acq = HuggingFaceDatasetAcquirer::new(repo, subset.as_deref());
                 if let Some(indices) = file_indices {
                     acq.file_indices = Some(indices.clone());
                 }
-                acq.download(download_dir, &recipe.corpus.id, progress).await
+                acq.download(download_dir, &recipe.corpus.id, progress)
+                    .await
             }
-            AcquirerConfig::WebCrawl { .. } => {
-                Err(Error::Recipe("Web crawl acquirer not yet implemented".into()))
-            }
+            AcquirerConfig::WebCrawl { .. } => Err(Error::Recipe(
+                "Web crawl acquirer not yet implemented".into(),
+            )),
             AcquirerConfig::HttpApi {
                 base_url,
                 requests,
@@ -148,16 +149,14 @@ impl CorpusEngine {
                 min_answer_length,
                 exclude_closed,
                 tag_filter,
-            } => {
-                Box::new(extractors::xml::StackExchangeExtractor {
-                    min_score: *min_score,
-                    mode: *mode,
-                    max_answers_per_question: *max_answers_per_question,
-                    min_answer_length: *min_answer_length,
-                    exclude_closed: *exclude_closed,
-                    tag_filter: tag_filter.clone(),
-                })
-            }
+            } => Box::new(extractors::xml::StackExchangeExtractor {
+                min_score: *min_score,
+                mode: *mode,
+                max_answers_per_question: *max_answers_per_question,
+                min_answer_length: *min_answer_length,
+                exclude_closed: *exclude_closed,
+                tag_filter: tag_filter.clone(),
+            }),
             ExtractorConfig::Jsonl {
                 content_field,
                 title_field,
@@ -206,9 +205,7 @@ impl CorpusEngine {
                         sections,
                         fallback.clone(),
                     )
-                    .unwrap_or_else(|e| {
-                        panic!("html_sections recipe failed to construct: {e}")
-                    }),
+                    .unwrap_or_else(|e| panic!("html_sections recipe failed to construct: {e}")),
                 )
             }
             ExtractorConfig::Csv {
@@ -266,14 +263,12 @@ impl CorpusEngine {
                 factual_patterns,
                 article_range,
                 shard_indices,
-            } => Box::new(
-                extractors::wikipedia_jsonl::WikipediaJsonlExtractor {
-                    controversy_patterns: controversy_patterns.clone(),
-                    factual_patterns: factual_patterns.clone(),
-                    article_range: *article_range,
-                    shard_indices: shard_indices.clone(),
-                },
-            ),
+            } => Box::new(extractors::wikipedia_jsonl::WikipediaJsonlExtractor {
+                controversy_patterns: controversy_patterns.clone(),
+                factual_patterns: factual_patterns.clone(),
+                article_range: *article_range,
+                shard_indices: shard_indices.clone(),
+            }),
             #[cfg(feature = "treesitter")]
             ExtractorConfig::Code {
                 context_lines,
@@ -318,7 +313,11 @@ impl CorpusEngine {
                 element: element.clone(),
                 title_attr: title_attr.clone(),
             }),
-            ExtractorConfig::Custom { kind, extension, params: _params } => {
+            ExtractorConfig::Custom {
+                kind,
+                extension,
+                params: _params,
+            } => {
                 let registered = self.custom_extractor(kind).unwrap_or_else(|| {
                     panic!(
                         "No custom extractor registered for kind '{kind}'. \
@@ -333,7 +332,9 @@ impl CorpusEngine {
                     extractor: registered,
                 })
             }
-            ExtractorConfig::DescribedAsset { max_bytes_per_asset } => {
+            ExtractorConfig::DescribedAsset {
+                max_bytes_per_asset,
+            } => {
                 let asset_store = self.asset_store_for(corpus_id);
                 let registry = self.asset_sub_extractors();
                 let asset_atoms_sidecar = self
@@ -341,14 +342,12 @@ impl CorpusEngine {
                     .join(corpus_id)
                     .join("atlas")
                     .join("asset_atoms.jsonl");
-                Box::new(
-                    extractors::described_asset::DescribedAssetExtractor {
-                        store: asset_store,
-                        registry,
-                        asset_atoms_sidecar,
-                        max_bytes_per_asset: *max_bytes_per_asset,
-                    },
-                )
+                Box::new(extractors::described_asset::DescribedAssetExtractor {
+                    store: asset_store,
+                    registry,
+                    asset_atoms_sidecar,
+                    max_bytes_per_asset: *max_bytes_per_asset,
+                })
             }
             ExtractorConfig::Email {
                 max_body_bytes,
@@ -357,13 +356,12 @@ impl CorpusEngine {
                 let asset_store = self.asset_store_for(corpus_id);
                 let registry = self.asset_sub_extractors();
                 let atlas_dir = self.index_dir().join(corpus_id).join("atlas");
-                let dispatch =
-                    extractors::email_rfc5322::EmailAssetDispatch {
-                        store: asset_store,
-                        registry,
-                        asset_atoms_sidecar: atlas_dir.join("asset_atoms.jsonl"),
-                        asset_edges_sidecar: atlas_dir.join("asset_edges.jsonl"),
-                    };
+                let dispatch = extractors::email_rfc5322::EmailAssetDispatch {
+                    store: asset_store,
+                    registry,
+                    asset_atoms_sidecar: atlas_dir.join("asset_atoms.jsonl"),
+                    asset_edges_sidecar: atlas_dir.join("asset_edges.jsonl"),
+                };
                 Box::new(
                     extractors::email_rfc5322::EmailExtractor::new(
                         extractors::email_rfc5322::EmailExtractorConfig {
@@ -404,9 +402,9 @@ impl CorpusEngine {
                 })
             }
             ChunkerConfig::Passthrough => Box::new(chunkers::passthrough::PassthroughChunker),
-            ChunkerConfig::PortalEventBullet { max_chars } => Box::new(
-                chunkers::portal_event_bullet::PortalEventBulletChunker::new(*max_chars),
-            ),
+            ChunkerConfig::PortalEventBullet { max_chars } => {
+                Box::new(chunkers::portal_event_bullet::PortalEventBulletChunker::new(*max_chars))
+            }
             ChunkerConfig::ThreadedTurns => {
                 Box::new(chunkers::threaded_turns::ThreadedTurnsChunker::new())
             }

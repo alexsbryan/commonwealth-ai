@@ -250,7 +250,8 @@ mod tests {
 
     #[test]
     fn pytest_text_extracts_summary() {
-        let out = "FAILED tests/test_a.py::test_b - assert 1 == 2\n=== 3 passed, 1 failed in 0.05s ===\n";
+        let out =
+            "FAILED tests/test_a.py::test_b - assert 1 == 2\n=== 3 passed, 1 failed in 0.05s ===\n";
         let r = parse_pytest_text(out);
         assert_eq!(r.passed, 3);
         assert_eq!(r.failed, 1);
@@ -261,7 +262,8 @@ mod tests {
     fn pytest_text_quiet_mode_summary() {
         // `-q` mode: no `===` decoration. The empirical fix from
         // 3.2-lights-out-python 2026-05-22 — preserved here.
-        let out = "......F.....\nFAILED tests/test_a.py::test_b - assert\n1 failed, 11 passed in 0.05s\n";
+        let out =
+            "......F.....\nFAILED tests/test_a.py::test_b - assert\n1 failed, 11 passed in 0.05s\n";
         let r = parse_pytest_text(out);
         assert_eq!(r.passed, 11);
         assert_eq!(r.failed, 1);

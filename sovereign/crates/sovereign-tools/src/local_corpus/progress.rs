@@ -17,10 +17,12 @@ use super::pre_scanner::FileMeta;
 #[serde(tag = "phase", content = "data", rename_all = "snake_case")]
 pub enum LocalCorpusProgress {
     // Shared phases (both flows) ─────────────────────────────────
-
     /// Walking the directory tree and classifying files. Emitted by
     /// `PreScanner`.
-    Scanning { done: usize, total: usize },
+    Scanning {
+        done: usize,
+        total: usize,
+    },
 
     /// Staging extracted text out of PDFs/MD into a JSONL file. One
     /// event per file completed.
@@ -53,24 +55,38 @@ pub enum LocalCorpusProgress {
     },
 
     // Obsidian-only phases ──────────────────────────────────────
-
     /// Clustering + labeling + open-question detection. M4.
-    Clustering { stage: ClusterStage },
+    Clustering {
+        stage: ClusterStage,
+    },
 
     /// Writing a snapshot before touching any note. M5.
-    Snapshotting { done: usize, total: usize },
+    Snapshotting {
+        done: usize,
+        total: usize,
+    },
 
     /// Writing `sovereign/*` tags into note frontmatter. M5.
-    Writing { done: usize, total: usize },
+    Writing {
+        done: usize,
+        total: usize,
+    },
 
     /// Restoring from a snapshot. M5.
-    RollingBack { done: usize, total: usize },
+    RollingBack {
+        done: usize,
+        total: usize,
+    },
 
     // Terminal phases ───────────────────────────────────────────
+    Complete {
+        result: CompletionResult,
+    },
 
-    Complete { result: CompletionResult },
-
-    Error { message: String, recoverable: bool },
+    Error {
+        message: String,
+        recoverable: bool,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Copy)]

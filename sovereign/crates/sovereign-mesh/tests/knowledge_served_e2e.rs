@@ -196,10 +196,7 @@ async fn peer_request_emits_one_knowledge_query_served_per_contributing_corpus()
             corpus_id == "sep" || corpus_id == "wikipedia",
             "unexpected corpus_id in event: {corpus_id}"
         );
-        assert_eq!(
-            *chunks, 1,
-            "each corpus contributed exactly one chunk"
-        );
+        assert_eq!(*chunks, 1, "each corpus contributed exactly one chunk");
     }
 }
 

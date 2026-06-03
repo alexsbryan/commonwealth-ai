@@ -341,7 +341,11 @@ mod tests {
         let state = fixture_state(vec![path.clone()]);
         let app = router(state);
         let resp = app
-            .oneshot(Request::get("/internal/v1/models/list").body(axum::body::Body::empty()).unwrap())
+            .oneshot(
+                Request::get("/internal/v1/models/list")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);

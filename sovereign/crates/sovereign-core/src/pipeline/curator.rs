@@ -26,9 +26,7 @@ use crate::traits::InferenceProvider;
 use crate::types::{CompletionRequest, Intent, RouterClassification, Speed};
 
 use super::prompts::CURATOR_SYSTEM;
-use super::stages::{
-    CuratedPackage, DraftBudget, RetrievedChunk, SkeletonSection, Sufficiency,
-};
+use super::stages::{CuratedPackage, DraftBudget, RetrievedChunk, SkeletonSection, Sufficiency};
 
 /// Decide whether the Curator stage should run for a given turn.
 ///
@@ -80,7 +78,13 @@ pub async fn curate(
         return Ok(CuratedPackage::passthrough(candidates, max_tokens));
     }
 
-    let request = curate_request(classification, register, user_message, &candidates, max_tokens);
+    let request = curate_request(
+        classification,
+        register,
+        user_message,
+        &candidates,
+        max_tokens,
+    );
     let response = provider.complete(&request).await?;
     parse_curator_response(&response.text, candidates, max_tokens)
 }
@@ -432,30 +436,15 @@ mod tests {
 
     #[test]
     fn should_curate_bypasses_tiny_candidate_set() {
-        assert!(!should_curate(
-            &classification(Intent::DeepQuery),
-            3
-        ));
-        assert!(should_curate(
-            &classification(Intent::DeepQuery),
-            4
-        ));
+        assert!(!should_curate(&classification(Intent::DeepQuery), 3));
+        assert!(should_curate(&classification(Intent::DeepQuery), 4));
     }
 
     #[test]
     fn should_curate_runs_on_deep_query_with_many_candidates() {
-        assert!(should_curate(
-            &classification(Intent::DeepQuery),
-            20
-        ));
-        assert!(should_curate(
-            &classification(Intent::ComparisonQuery),
-            12
-        ));
-        assert!(should_curate(
-            &classification(Intent::KnowledgeQuery),
-            10
-        ));
+        assert!(should_curate(&classification(Intent::DeepQuery), 20));
+        assert!(should_curate(&classification(Intent::ComparisonQuery), 12));
+        assert!(should_curate(&classification(Intent::KnowledgeQuery), 10));
     }
 
     #[test]
@@ -524,7 +513,10 @@ mod tests {
         assert!(pkg.kept_chunks.is_empty());
         assert!(pkg.skeleton.is_empty());
         match pkg.sufficiency {
-            Sufficiency::Insufficient { reason, suggested_action } => {
+            Sufficiency::Insufficient {
+                reason,
+                suggested_action,
+            } => {
                 assert_eq!(reason, "Off-domain corpus");
                 assert_eq!(suggested_action, "install philosophy");
             }

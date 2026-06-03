@@ -184,8 +184,8 @@ pub struct IngestionHandoff {
     /// distinguish a freshly-opened queue from a stale replay.
     #[serde(default)]
     pub queue_version: u32,
-    pub created_at: u64,   // Unix timestamp (ms)
-    pub updated_at: u64,   // Unix timestamp (ms)
+    pub created_at: u64, // Unix timestamp (ms)
+    pub updated_at: u64, // Unix timestamp (ms)
 }
 
 impl IngestionHandoff {
@@ -244,7 +244,15 @@ impl IngestionHandoff {
         // Queue handoffs set phase through the real lifecycle AND have empty
         // partitions. The disambiguator is `partitions.is_empty()` — phase
         // alone is insufficient because legacy_open == Open.
-        self.partitions.is_empty() && matches!(self.phase, HandoffPhase::Open | HandoffPhase::Draining | HandoffPhase::Merging | HandoffPhase::Complete | HandoffPhase::Failed { .. })
+        self.partitions.is_empty()
+            && matches!(
+                self.phase,
+                HandoffPhase::Open
+                    | HandoffPhase::Draining
+                    | HandoffPhase::Merging
+                    | HandoffPhase::Complete
+                    | HandoffPhase::Failed { .. }
+            )
     }
 }
 
@@ -279,9 +287,7 @@ pub enum PartitionStatus {
         completed_at: u64, // Unix timestamp (ms)
     },
     /// Ingestion failed; the merge leader should skip or retry this partition.
-    Failed {
-        reason: String,
-    },
+    Failed { reason: String },
 }
 
 // -----------------------------------------------------------------
@@ -350,10 +356,7 @@ pub enum UnitStatus {
         attempts: u32,
     },
     /// Peer successfully finished ingesting this unit.
-    Complete {
-        peer: NodeId,
-        completed_at_ms: u64,
-    },
+    Complete { peer: NodeId, completed_at_ms: u64 },
     /// Terminal after `MAX_UNIT_ATTEMPTS` failed leases. The merge leader
     /// proceeds without this unit; the corpus will be missing its chunks.
     Failed {

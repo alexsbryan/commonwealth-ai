@@ -64,7 +64,9 @@ pub fn write_failing_test(args: WriteFailingTestArgs) -> Trial {
         model: args.model,
         prompt,
         test_command,
-        polarity: Polarity::GenerateOneFailing { test_name_hint: None },
+        polarity: Polarity::GenerateOneFailing {
+            test_name_hint: None,
+        },
         config: args.config.unwrap_or_default(),
         syntax_validator: None,
     }

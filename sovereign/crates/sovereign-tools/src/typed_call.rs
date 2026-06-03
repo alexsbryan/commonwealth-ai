@@ -165,7 +165,10 @@ impl<'a> TypedLlmCall<'a> {
                             );
                         }
                     }
-                    return Ok(TypedCallReport { value, attempts: attempt });
+                    return Ok(TypedCallReport {
+                        value,
+                        attempts: attempt,
+                    });
                 }
                 Err(e) => {
                     last_parse_err = Some(e);
@@ -275,7 +278,8 @@ mod tests {
                 latency_ms: 0,
                 oicp_meta: None,
                 finish_reason: None,
-                completion_tokens: None,            })
+                completion_tokens: None,
+            })
         }
         async fn complete_stream(
             &self,
@@ -306,9 +310,8 @@ mod tests {
 
     #[tokio::test]
     async fn initial_budget_success_fires_one_call() {
-        let inf: Arc<dyn InferenceProvider> = Arc::new(ScriptedInference::new(vec![Ok(
-            r#"{"k":"v"}"#.into(),
-        )]));
+        let inf: Arc<dyn InferenceProvider> =
+            Arc::new(ScriptedInference::new(vec![Ok(r#"{"k":"v"}"#.into())]));
         let call = TypedLlmCall::new("sys", schema());
         let report = call
             .run(&inf, |_b| async { "user".to_string() }, parse_json)
@@ -365,11 +368,10 @@ mod tests {
 
     #[tokio::test]
     async fn both_attempts_fail_returns_parse_exhausted() {
-        let inf: Arc<dyn InferenceProvider> =
-            Arc::new(ScriptedInference::new(vec![
-                Ok("not json".into()),
-                Ok("still not json".into()),
-            ]));
+        let inf: Arc<dyn InferenceProvider> = Arc::new(ScriptedInference::new(vec![
+            Ok("not json".into()),
+            Ok("still not json".into()),
+        ]));
         let call = TypedLlmCall::new("sys", schema());
         let err = call
             .run(&inf, |_b| async { "user".to_string() }, parse_json)

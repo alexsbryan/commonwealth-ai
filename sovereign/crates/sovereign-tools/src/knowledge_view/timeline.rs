@@ -31,9 +31,7 @@ use std::path::Path;
 
 use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, Entity};
 use corpus_engine::enrichment::atlas::edges::{Edge, EdgeType};
-use corpus_engine::enrichment::atlas::writer::{
-    read_atlas_atoms, read_atlas_edges, ATLAS_DIRNAME,
-};
+use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, read_atlas_edges, ATLAS_DIRNAME};
 use corpus_engine::enrichment::pipeline::atlas::EntityType;
 
 // ── Public types ────────────────────────────────────────────────
@@ -311,9 +309,7 @@ pub fn interactions_within(timeline: &InteractionTimeline, since: i64, now: i64)
 mod tests {
     use super::*;
     use corpus_engine::enrichment::atlas::atoms::{AtomId, ChunkRef};
-    use corpus_engine::enrichment::atlas::edges::{
-        Edge, EdgeId, EdgeProvenance, EdgeType,
-    };
+    use corpus_engine::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
     use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 
     fn person(idx: usize, name: &str, affiliation: Option<&str>, role: Option<&str>) -> Entity {
@@ -330,10 +326,10 @@ mod tests {
             role: role.map(|s| s.into()),
             participants: Vec::new(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-}
-}
+            provenance: Default::default(),
+            concept_kind: None,
+        }
+    }
 
     fn org(idx: usize, name: &str) -> Entity {
         Entity {
@@ -349,10 +345,10 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-}
-}
+            provenance: Default::default(),
+            concept_kind: None,
+        }
+    }
 
     fn initiative(idx: usize, name: &str, participant_ids: &[AtomId]) -> Entity {
         Entity {
@@ -368,10 +364,10 @@ mod tests {
             role: None,
             participants: participant_ids.to_vec(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-}
-}
+            provenance: Default::default(),
+            concept_kind: None,
+        }
+    }
 
     fn involves_edge(idx: usize, target: &AtomId, chunk_id: &str) -> Edge {
         Edge {
@@ -474,9 +470,18 @@ mod tests {
             role: None,
             participants: Vec::new(),
             interactions: vec![
-                Interaction { timestamp: Some(100), source_chunk_id: "a".into() },
-                Interaction { timestamp: Some(500), source_chunk_id: "b".into() },
-                Interaction { timestamp: None, source_chunk_id: "c".into() },
+                Interaction {
+                    timestamp: Some(100),
+                    source_chunk_id: "a".into(),
+                },
+                Interaction {
+                    timestamp: Some(500),
+                    source_chunk_id: "b".into(),
+                },
+                Interaction {
+                    timestamp: None,
+                    source_chunk_id: "c".into(),
+                },
             ],
             atos_project: None,
         };

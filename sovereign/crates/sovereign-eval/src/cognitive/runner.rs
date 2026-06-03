@@ -10,12 +10,12 @@
 //! suite reproducible. Operators iterating on item shape can override
 //! via the CLI.
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use crate::cognitive::item::{Item, Scoring, render};
+use crate::cognitive::item::{render, Item, Scoring};
 
 /// Same temperature/seed convention as `judge.rs:JUDGE_TEMPERATURE` /
 /// `JUDGE_SEED`. The cognitive bank is meant to be reproducible.
@@ -73,16 +73,19 @@ pub struct ItemResult {
 pub fn run_item(item: &Item, opts: &RunOpts<'_>) -> Result<ItemResult> {
     let rendered = render(item, opts.workspace_root)
         .with_context(|| format!("rendering prompt for `{}`", item.item.id))?;
-    let system = rendered
-        .system
-        .as_deref()
-        .unwrap_or(FALLBACK_SYSTEM_PROMPT);
+    let system = rendered.system.as_deref().unwrap_or(FALLBACK_SYSTEM_PROMPT);
     let response_format = response_format_for(&item.scoring);
     let started = Instant::now();
     let outcome = call_chat_completions(opts, system, &rendered.user, response_format.as_ref());
     let elapsed = started.elapsed();
     let (transport_ok, response_raw, prompt_tokens, completion_tokens, error) = match outcome {
-        Ok(call) => (true, call.content, call.prompt_tokens, call.completion_tokens, None),
+        Ok(call) => (
+            true,
+            call.content,
+            call.prompt_tokens,
+            call.completion_tokens,
+            None,
+        ),
         Err(e) => (false, String::new(), None, None, Some(e.to_string())),
     };
     Ok(ItemResult {
@@ -125,9 +128,7 @@ struct CallOutcome {
 /// other OpenAI-compatible runner.
 pub(crate) fn response_format_for(scoring: &Scoring) -> Option<serde_json::Value> {
     match scoring {
-        Scoring::MultiChoice {
-            choice_field, ..
-        } => Some(serde_json::json!({
+        Scoring::MultiChoice { choice_field, .. } => Some(serde_json::json!({
             "type": "json_schema",
             "json_schema": {
                 "name": "rationale_then_choice",
@@ -262,7 +263,11 @@ fn call_chat_completions(
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().unwrap_or_default();
-        let truncated = if text.len() > 1024 { &text[..1024] } else { &text[..] };
+        let truncated = if text.len() > 1024 {
+            &text[..1024]
+        } else {
+            &text[..]
+        };
         bail!("daemon returned {status}: {truncated}");
     }
     let v: serde_json::Value = resp.json().context("parsing daemon response")?;

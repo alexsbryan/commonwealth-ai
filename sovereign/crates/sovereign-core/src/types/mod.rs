@@ -71,14 +71,15 @@ impl Default for InferenceConfig {
     }
 }
 
-
 // ── extracted submodules (façade re-export; ARCH §3.2) ──
-mod completion; pub use completion::*;
-mod routing; pub use routing::*;
-mod conversation; pub use conversation::*;
-mod narration; pub use narration::*;
-
-
+mod completion;
+pub use completion::*;
+mod routing;
+pub use routing::*;
+mod conversation;
+pub use conversation::*;
+mod narration;
+pub use narration::*;
 
 // ─── Plan Types ────────────────────────────────────────────────
 
@@ -293,7 +294,6 @@ pub struct StepError {
     pub message: String,
 }
 
-
 // ─── Task Types ────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -340,7 +340,6 @@ pub enum MemoryKind {
     Raw,
     Summary,
 }
-
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Memory {
@@ -417,10 +416,13 @@ pub struct RoutingCorrection {
 pub enum SourceType {
     #[default]
     UserDocument,
-    Corpus { corpus_id: String },
-    WebSearch { url: String },
+    Corpus {
+        corpus_id: String,
+    },
+    WebSearch {
+        url: String,
+    },
 }
-
 
 impl SourceType {
     pub fn to_db_columns(&self) -> (&'static str, Option<&str>) {
@@ -436,9 +438,7 @@ impl SourceType {
             "corpus" => SourceType::Corpus {
                 corpus_id: corpus_id.unwrap_or_default().to_string(),
             },
-            "web" => SourceType::WebSearch {
-                url: String::new(),
-            },
+            "web" => SourceType::WebSearch { url: String::new() },
             _ => SourceType::UserDocument,
         }
     }
@@ -465,9 +465,17 @@ pub enum CoverageDecision {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "origin", rename_all = "snake_case")]
 pub enum SourceOrigin {
-    Local { corpus: String, article_title: String },
-    Web { url: String, domain: String },
-    UserDocument { filename: String },
+    Local {
+        corpus: String,
+        article_title: String,
+    },
+    Web {
+        url: String,
+        domain: String,
+    },
+    UserDocument {
+        filename: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -773,11 +781,26 @@ mod finish_reason_tests {
     /// the chip.
     #[test]
     fn finish_reason_serializes_as_openai_string() {
-        assert_eq!(serde_json::to_string(&FinishReason::Stop).unwrap(), "\"stop\"");
-        assert_eq!(serde_json::to_string(&FinishReason::Length).unwrap(), "\"length\"");
-        assert_eq!(serde_json::to_string(&FinishReason::ToolCalls).unwrap(), "\"tool_calls\"");
-        assert_eq!(serde_json::to_string(&FinishReason::ContentFilter).unwrap(), "\"content_filter\"");
-        assert_eq!(serde_json::to_string(&FinishReason::Cancelled).unwrap(), "\"cancelled\"");
+        assert_eq!(
+            serde_json::to_string(&FinishReason::Stop).unwrap(),
+            "\"stop\""
+        );
+        assert_eq!(
+            serde_json::to_string(&FinishReason::Length).unwrap(),
+            "\"length\""
+        );
+        assert_eq!(
+            serde_json::to_string(&FinishReason::ToolCalls).unwrap(),
+            "\"tool_calls\""
+        );
+        assert_eq!(
+            serde_json::to_string(&FinishReason::ContentFilter).unwrap(),
+            "\"content_filter\""
+        );
+        assert_eq!(
+            serde_json::to_string(&FinishReason::Cancelled).unwrap(),
+            "\"cancelled\""
+        );
         assert_eq!(
             serde_json::to_string(&FinishReason::Error("oom".into())).unwrap(),
             "\"error\""
@@ -814,7 +837,10 @@ mod finish_reason_tests {
     #[test]
     fn finish_reason_rejects_unknown_string() {
         let r: Result<FinishReason, _> = serde_json::from_str("\"bogus\"");
-        assert!(r.is_err(), "unknown finish_reason should fail to deserialize");
+        assert!(
+            r.is_err(),
+            "unknown finish_reason should fail to deserialize"
+        );
     }
 }
 
@@ -834,7 +860,7 @@ mod knowledge_view_digest_tests {
                 deleted_at: None,
                 skill_id: None,
                 enabled_corpora: None,
-            searched_sources: None,
+                searched_sources: None,
             },
             memories: vec![],
             working_memory: None,
@@ -951,10 +977,7 @@ mod routing_policy_tests {
 
     #[test]
     fn high_confidence_commits() {
-        let policy = decide_policy(
-            &classification(0.95),
-            &ConfidenceThresholds::default(),
-        );
+        let policy = decide_policy(&classification(0.95), &ConfidenceThresholds::default());
         assert_eq!(policy.tier, ConfidenceTier::High);
         assert_eq!(policy.move_kind, MoveKind::Commit);
     }
@@ -962,19 +985,13 @@ mod routing_policy_tests {
     #[test]
     fn boundary_exactly_at_high_commits() {
         // 0.80 is inclusive of the High tier.
-        let policy = decide_policy(
-            &classification(0.80),
-            &ConfidenceThresholds::default(),
-        );
+        let policy = decide_policy(&classification(0.80), &ConfidenceThresholds::default());
         assert_eq!(policy.tier, ConfidenceTier::High);
     }
 
     #[test]
     fn moderate_confidence_proposes() {
-        let policy = decide_policy(
-            &classification(0.65),
-            &ConfidenceThresholds::default(),
-        );
+        let policy = decide_policy(&classification(0.65), &ConfidenceThresholds::default());
         assert_eq!(policy.tier, ConfidenceTier::Moderate);
         assert_eq!(policy.move_kind, MoveKind::Propose);
     }
@@ -982,29 +999,20 @@ mod routing_policy_tests {
     #[test]
     fn boundary_exactly_at_moderate_proposes() {
         // 0.55 is inclusive of the Moderate tier.
-        let policy = decide_policy(
-            &classification(0.55),
-            &ConfidenceThresholds::default(),
-        );
+        let policy = decide_policy(&classification(0.55), &ConfidenceThresholds::default());
         assert_eq!(policy.tier, ConfidenceTier::Moderate);
     }
 
     #[test]
     fn low_confidence_asks() {
-        let policy = decide_policy(
-            &classification(0.30),
-            &ConfidenceThresholds::default(),
-        );
+        let policy = decide_policy(&classification(0.30), &ConfidenceThresholds::default());
         assert_eq!(policy.tier, ConfidenceTier::Low);
         assert_eq!(policy.move_kind, MoveKind::Ask);
     }
 
     #[test]
     fn just_under_moderate_asks() {
-        let policy = decide_policy(
-            &classification(0.549),
-            &ConfidenceThresholds::default(),
-        );
+        let policy = decide_policy(&classification(0.549), &ConfidenceThresholds::default());
         assert_eq!(policy.tier, ConfidenceTier::Low);
     }
 
@@ -1029,10 +1037,7 @@ mod routing_policy_tests {
         // Glassbox metadata is written into message.metadata as JSON.
         // If the policy struct isn't round-trippable, the UI can't
         // render the tier badge / rationale.
-        let policy = decide_policy(
-            &classification(0.82),
-            &ConfidenceThresholds::default(),
-        );
+        let policy = decide_policy(&classification(0.82), &ConfidenceThresholds::default());
         let json = serde_json::to_string(&policy).unwrap();
         let back: RoutingPolicy = serde_json::from_str(&json).unwrap();
         assert_eq!(back.tier, policy.tier);
@@ -1114,12 +1119,7 @@ mod next_step_offer_tests {
     fn offers_capped_at_two() {
         // Even with a dominant source + a clean secondary, we
         // never emit more than two buttons.
-        let chunks = vec![
-            chunk("A"),
-            chunk("B"),
-            chunk("C"),
-            chunk("D"),
-        ];
+        let chunks = vec![chunk("A"), chunk("B"), chunk("C"), chunk("D")];
         let ctx = OfferContext {
             user_message: "explain",
             top_source_title: Some("A"),
@@ -1168,7 +1168,10 @@ mod next_step_offer_tests {
             retrieval_missed: true,
         };
         let offers = build_next_step_offers(&ctx);
-        assert!(offers.is_empty(), "miss must suppress all offers: {offers:?}");
+        assert!(
+            offers.is_empty(),
+            "miss must suppress all offers: {offers:?}"
+        );
     }
 
     #[test]

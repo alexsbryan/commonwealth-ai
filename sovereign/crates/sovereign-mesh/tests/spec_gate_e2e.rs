@@ -91,10 +91,7 @@ async fn spawn_router(
     feature_root_path: std::path::PathBuf,
     notifier: McpNotifier,
 ) -> std::net::SocketAddr {
-    let notes_path = tempfile::tempdir()
-        .unwrap()
-        .path()
-        .join("notes.db");
+    let notes_path = tempfile::tempdir().unwrap().path().join("notes.db");
     // Tempdir holding the notes path; held alive by leaking — the
     // tokio runtime owns the test lifetime.
     let notes = Arc::new(NoteStore::open(&notes_path).expect("notes open"));
@@ -256,11 +253,7 @@ async fn sse_pushes_tools_list_changed_via_get_mcp() {
             buf.extend_from_slice(&bytes);
             // Split on SSE event boundary "\n\n". Anything between
             // is a single event; we extract `data:` lines.
-            while let Some(idx) = buf
-                .windows(2)
-                .position(|w| w == b"\n\n")
-                .map(|p| p + 2)
-            {
+            while let Some(idx) = buf.windows(2).position(|w| w == b"\n\n").map(|p| p + 2) {
                 let event_bytes = buf.drain(..idx).collect::<Vec<u8>>();
                 let event = String::from_utf8_lossy(&event_bytes);
                 for line in event.lines() {
@@ -324,8 +317,7 @@ async fn initialize_advertises_tools_list_changed_capability() {
         .expect("initialize JSON");
 
     assert_eq!(
-        resp["result"]["capabilities"]["tools"]["listChanged"],
-        true,
+        resp["result"]["capabilities"]["tools"]["listChanged"], true,
         "initialize must advertise tools.listChanged: true so clients \
          subscribe to the SSE channel and refetch on the gate flip"
     );

@@ -122,14 +122,7 @@ async fn blast_then_build_writes_observed_note_via_live_mcp_wire() {
     let deadline = std::time::Instant::now() + Duration::from_secs(3);
     loop {
         let rows = notes
-            .read_notes(
-                None,
-                &[],
-                &[],
-                &["reflection".to_string()],
-                100,
-                false,
-            )
+            .read_notes(None, &[], &[], &["reflection".to_string()], 100, false)
             .await
             .unwrap();
         let observed: Vec<_> = rows

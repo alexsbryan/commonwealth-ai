@@ -234,8 +234,9 @@ pub fn run_metacognition_log_migrations(conn: &Connection) -> rusqlite::Result<(
 pub fn run_antifragile_routing_migrations(conn: &Connection) -> rusqlite::Result<()> {
     // was_redirected: 0 (not redirected, default) | 1 (user redirected away
     // from the initially-routed intent)
-    let _ = conn
-        .execute_batch("ALTER TABLE routing_log ADD COLUMN was_redirected INTEGER NOT NULL DEFAULT 0");
+    let _ = conn.execute_batch(
+        "ALTER TABLE routing_log ADD COLUMN was_redirected INTEGER NOT NULL DEFAULT 0",
+    );
     // redirect_to: wire-form intent hint the user chose via the
     // InterpretationBanner redirect chip. NULL when was_redirected = 0.
     let _ = conn.execute_batch("ALTER TABLE routing_log ADD COLUMN redirect_to TEXT");
@@ -445,12 +446,8 @@ pub fn run_index_readiness_migration(conn: &Connection) -> rusqlite::Result<()> 
 /// `NULL` — a memory predating this migration simply has no linkage,
 /// and a conversation predating this migration has no skill attribution.
 pub fn run_knowledge_view_migrations(conn: &Connection) -> rusqlite::Result<()> {
-    let _ = conn.execute_batch(
-        "ALTER TABLE memories ADD COLUMN source_conversation_id TEXT",
-    );
-    let _ = conn.execute_batch(
-        "ALTER TABLE conversations ADD COLUMN skill_id TEXT",
-    );
+    let _ = conn.execute_batch("ALTER TABLE memories ADD COLUMN source_conversation_id TEXT");
+    let _ = conn.execute_batch("ALTER TABLE conversations ADD COLUMN skill_id TEXT");
     Ok(())
 }
 
@@ -469,9 +466,7 @@ pub fn run_knowledge_view_migrations(conn: &Connection) -> rusqlite::Result<()> 
 /// anywhere except scoped contexts. The backfill is one-shot
 /// (`WHERE source_skill_id IS NULL`); re-running is a no-op.
 pub fn run_inner_work_memory_wall_migrations(conn: &Connection) -> rusqlite::Result<()> {
-    let _ = conn.execute_batch(
-        "ALTER TABLE memories ADD COLUMN source_skill_id TEXT",
-    );
+    let _ = conn.execute_batch("ALTER TABLE memories ADD COLUMN source_skill_id TEXT");
     // Backfill: tag memories whose source conversation has a known skill.
     // Idempotent because of the `IS NULL` guard.
     let _ = conn.execute_batch(
@@ -515,15 +510,11 @@ pub fn run_inner_work_memory_wall_migrations(conn: &Connection) -> rusqlite::Res
 /// is fine. The `source_conversation_id` lookup the worker runs
 /// piggybacks on the existing scope index — no new index for that.
 pub fn run_memory_compaction_migrations(conn: &Connection) -> rusqlite::Result<()> {
-    let _ = conn.execute_batch(
-        "ALTER TABLE memories ADD COLUMN kind TEXT NOT NULL DEFAULT 'raw'",
-    );
+    let _ = conn.execute_batch("ALTER TABLE memories ADD COLUMN kind TEXT NOT NULL DEFAULT 'raw'");
     let _ = conn.execute_batch(
         "ALTER TABLE memories ADD COLUMN source_memory_ids TEXT NOT NULL DEFAULT '[]'",
     );
-    let _ = conn.execute_batch(
-        "ALTER TABLE memories ADD COLUMN superseded_by TEXT",
-    );
+    let _ = conn.execute_batch("ALTER TABLE memories ADD COLUMN superseded_by TEXT");
     let _ = conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_memories_superseded_by
          ON memories(superseded_by)",
@@ -793,9 +784,7 @@ pub fn run_surface_skill_backfill(conn: &Connection) -> rusqlite::Result<()> {
 /// from the desktop chip-toggle UI; nothing in the runtime sets it
 /// automatically.
 pub fn run_corpus_filter_migration(conn: &Connection) -> rusqlite::Result<()> {
-    let _ = conn.execute_batch(
-        "ALTER TABLE conversations ADD COLUMN enabled_corpora TEXT",
-    );
+    let _ = conn.execute_batch("ALTER TABLE conversations ADD COLUMN enabled_corpora TEXT");
     Ok(())
 }
 
@@ -815,8 +804,6 @@ pub fn run_corpus_filter_migration(conn: &Connection) -> rusqlite::Result<()> {
 /// from the `submit_information_search` Tauri command after every
 /// successful search. The runtime doesn't write it directly.
 pub fn run_searched_sources_migration(conn: &Connection) -> rusqlite::Result<()> {
-    let _ = conn.execute_batch(
-        "ALTER TABLE conversations ADD COLUMN searched_sources TEXT",
-    );
+    let _ = conn.execute_batch("ALTER TABLE conversations ADD COLUMN searched_sources TEXT");
     Ok(())
 }

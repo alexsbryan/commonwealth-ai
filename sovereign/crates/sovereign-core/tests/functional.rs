@@ -35,7 +35,9 @@ async fn deep_query_searches_local_knowledge() {
     );
     // Found results from the SEP corpus
     assert!(
-        prov.sources.iter().any(|s| s.origin == "sep" && s.count > 0),
+        prov.sources
+            .iter()
+            .any(|s| s.origin == "sep" && s.count > 0),
         "Should find SEP chunks for Bergson query. Sources: {:?}",
         prov.sources
     );
@@ -96,11 +98,15 @@ async fn fts5_handles_natural_language_with_punctuation() {
     .await;
 
     // Natural language with apostrophes and question marks
-    let resp = h.send("What's Rust? Is it good for systems programming?").await;
+    let resp = h
+        .send("What's Rust? Is it good for systems programming?")
+        .await;
     let prov = h.provenance(&resp);
 
     assert!(
-        prov.sources.iter().any(|s| s.origin == "wiki" && s.count > 0),
+        prov.sources
+            .iter()
+            .any(|s| s.origin == "wiki" && s.count > 0),
         "FTS5 should match despite punctuation in query. Sources: {:?}",
         prov.sources
     );
@@ -299,8 +305,14 @@ async fn ingested_corpus_searchable_via_fts5() {
     h.ingest_test_corpus(
         "test",
         vec![
-            ("doc1", "Quantum mechanics describes the behavior of particles at atomic scales."),
-            ("doc2", "Classical mechanics was developed by Newton and Lagrange."),
+            (
+                "doc1",
+                "Quantum mechanics describes the behavior of particles at atomic scales.",
+            ),
+            (
+                "doc2",
+                "Classical mechanics was developed by Newton and Lagrange.",
+            ),
         ],
     )
     .await;
@@ -352,7 +364,9 @@ async fn layered_confidence_no_unverified_tags() {
     )
     .await;
 
-    let resp = h.send("What is quantum superposition and how does it relate to consciousness?").await;
+    let resp = h
+        .send("What is quantum superposition and how does it relate to consciousness?")
+        .await;
 
     // The response should not contain [unverified] tags — the layered
     // confidence system should present general knowledge naturally.
@@ -364,12 +378,20 @@ async fn layered_confidence_no_unverified_tags() {
 
     // Should not refuse to answer.
     assert!(
-        !resp.message.content.to_lowercase().contains("i cannot find"),
+        !resp
+            .message
+            .content
+            .to_lowercase()
+            .contains("i cannot find"),
         "Should not refuse to answer. Got: {}",
         resp.message.content
     );
     assert!(
-        !resp.message.content.to_lowercase().contains("i cannot provide"),
+        !resp
+            .message
+            .content
+            .to_lowercase()
+            .contains("i cannot provide"),
         "Should not refuse to answer. Got: {}",
         resp.message.content
     );
@@ -378,10 +400,16 @@ async fn layered_confidence_no_unverified_tags() {
 #[tokio::test]
 async fn empty_corpus_produces_response_not_refusal() {
     let h = TestHarness::new();
-    h.ingest_test_corpus("empty", vec![("stub", "Unrelated stub content about cooking recipes.")]).await;
+    h.ingest_test_corpus(
+        "empty",
+        vec![("stub", "Unrelated stub content about cooking recipes.")],
+    )
+    .await;
 
     // Ask about something not in the corpus at all.
-    let resp = h.send("What are the core differences between Theravada and Zen Buddhism?").await;
+    let resp = h
+        .send("What are the core differences between Theravada and Zen Buddhism?")
+        .await;
 
     // Should produce a response, not an empty string.
     assert!(
@@ -405,15 +433,21 @@ async fn topic_context_tracks_across_turns() {
     let conv_id = "topic-test";
 
     // Turn 1: establish a topic.
-    let r1 = h.send_in("Tell me about Schrödinger's cat experiment", conv_id).await;
+    let r1 = h
+        .send_in("Tell me about Schrödinger's cat experiment", conv_id)
+        .await;
     assert!(!r1.message.content.is_empty());
 
     // Turn 2: follow up in the same domain.
-    let r2 = h.send_in("How does this relate to quantum decoherence?", conv_id).await;
+    let r2 = h
+        .send_in("How does this relate to quantum decoherence?", conv_id)
+        .await;
     assert!(!r2.message.content.is_empty());
 
     // Turn 3: a third turn.
-    let r3 = h.send_in("What about the many-worlds interpretation?", conv_id).await;
+    let r3 = h
+        .send_in("What about the many-worlds interpretation?", conv_id)
+        .await;
     assert!(!r3.message.content.is_empty());
 
     // All three turns should have produced responses.
@@ -614,10 +648,10 @@ async fn auto_title_skips_when_only_assistant_messages() {
 
 #[tokio::test]
 async fn rebuild_skeleton_from_stored_chunks() {
+    use sovereign_core::traits::DocumentAssetStore;
     use sovereign_core::types::{
         AssetState, DocumentAsset, DocumentChunk, DocumentTypeTag, SourceType,
     };
-    use sovereign_core::traits::DocumentAssetStore;
 
     let h = TestHarness::new();
 
@@ -660,10 +694,8 @@ async fn rebuild_skeleton_from_stored_chunks() {
     let inference: std::sync::Arc<dyn sovereign_core::traits::InferenceProvider> =
         std::sync::Arc::new(harness::DeterministicInference);
     let store_arc: std::sync::Arc<dyn sovereign_core::traits::StateStore> =
-        std::sync::Arc::clone(&h.store)
-            as std::sync::Arc<dyn sovereign_core::traits::StateStore>;
-    let manager =
-        sovereign_tools::document_asset::DocumentAssetManager::new(inference, store_arc);
+        std::sync::Arc::clone(&h.store) as std::sync::Arc<dyn sovereign_core::traits::StateStore>;
+    let manager = sovereign_tools::document_asset::DocumentAssetManager::new(inference, store_arc);
 
     let skeleton = manager
         .rebuild_skeleton(&asset_id)
@@ -677,7 +709,10 @@ async fn rebuild_skeleton_from_stored_chunks() {
         "rebuilt skeleton should have at least one section annotation"
     );
     assert!(
-        skeleton.main_entities.iter().any(|e| e.name == "Test Entity"),
+        skeleton
+            .main_entities
+            .iter()
+            .any(|e| e.name == "Test Entity"),
         "rebuilt skeleton should include 'Test Entity' from the harness"
     );
 
@@ -734,11 +769,13 @@ async fn ingest_emits_progress_under_the_prepared_asset_id() {
         Arc::new(harness::DeterministicInference);
     let store_arc: Arc<dyn sovereign_core::traits::StateStore> =
         Arc::clone(&h.store) as Arc<dyn sovereign_core::traits::StateStore>;
-    let manager =
-        sovereign_tools::document_asset::DocumentAssetManager::new(inference, store_arc);
+    let manager = sovereign_tools::document_asset::DocumentAssetManager::new(inference, store_arc);
 
     // prepare() persists a Pending asset and hands back its id.
-    let prepared = manager.prepare(&path).await.expect("prepare should succeed");
+    let prepared = manager
+        .prepare(&path)
+        .await
+        .expect("prepare should succeed");
     let expected_id = prepared.asset.id.clone();
     assert!(
         matches!(prepared.asset.state, AssetState::Pending),
@@ -804,10 +841,8 @@ async fn ingest_emits_progress_under_the_prepared_asset_id() {
 
 #[tokio::test]
 async fn rebuild_skeleton_missing_chunks_returns_not_found() {
-    use sovereign_core::types::{
-        AssetState, DocumentAsset, DocumentTypeTag,
-    };
     use sovereign_core::traits::DocumentAssetStore;
+    use sovereign_core::types::{AssetState, DocumentAsset, DocumentTypeTag};
 
     let h = TestHarness::new();
 
@@ -831,10 +866,8 @@ async fn rebuild_skeleton_missing_chunks_returns_not_found() {
     let inference: std::sync::Arc<dyn sovereign_core::traits::InferenceProvider> =
         std::sync::Arc::new(harness::DeterministicInference);
     let store_arc: std::sync::Arc<dyn sovereign_core::traits::StateStore> =
-        std::sync::Arc::clone(&h.store)
-            as std::sync::Arc<dyn sovereign_core::traits::StateStore>;
-    let manager =
-        sovereign_tools::document_asset::DocumentAssetManager::new(inference, store_arc);
+        std::sync::Arc::clone(&h.store) as std::sync::Arc<dyn sovereign_core::traits::StateStore>;
+    let manager = sovereign_tools::document_asset::DocumentAssetManager::new(inference, store_arc);
 
     let result = manager.rebuild_skeleton(&asset_id).await;
     assert!(
@@ -846,8 +879,8 @@ async fn rebuild_skeleton_missing_chunks_returns_not_found() {
 // ─── ReasonWithTools ─────────────────────────────────────────
 
 use sovereign_core::executor::{AutoApprovalChannel, Executor, TaskContext};
-use sovereign_core::ToolRegistry;
 use sovereign_core::SkillRegistry;
+use sovereign_core::ToolRegistry;
 
 #[tokio::test]
 async fn reason_with_tools_searches_then_synthesizes() {
@@ -855,8 +888,14 @@ async fn reason_with_tools_searches_then_synthesizes() {
     h.ingest_test_corpus(
         "sep",
         vec![
-            ("bergson", "Henri Bergson wrote Laughter examining comedy as social corrective."),
-            ("epistemology", "Epistemology studies the nature and scope of knowledge."),
+            (
+                "bergson",
+                "Henri Bergson wrote Laughter examining comedy as social corrective.",
+            ),
+            (
+                "epistemology",
+                "Epistemology studies the nature and scope of knowledge.",
+            ),
         ],
     )
     .await;
@@ -870,7 +909,8 @@ async fn reason_with_tools_searches_then_synthesizes() {
     let mut tools = ToolRegistry::new();
     tools.register(Box::new(sovereign_tools::search::SearchTool::new(
         std::sync::Arc::clone(&store),
-        std::sync::Arc::clone(&inference) as std::sync::Arc<dyn sovereign_core::traits::InferenceProvider>,
+        std::sync::Arc::clone(&inference)
+            as std::sync::Arc<dyn sovereign_core::traits::InferenceProvider>,
     )));
 
     let executor = Executor::new(
@@ -959,7 +999,8 @@ async fn reason_with_tools_searches_then_synthesizes() {
 #[tokio::test]
 async fn reason_with_tools_caps_at_max_iterations() {
     let h = TestHarness::new();
-    h.ingest_test_corpus("sep", vec![("test", "Some content.")]).await;
+    h.ingest_test_corpus("sep", vec![("test", "Some content.")])
+        .await;
 
     let inference = std::sync::Arc::new(harness::AlwaysSearchInference);
     let store: std::sync::Arc<dyn sovereign_core::traits::StateStore> =
@@ -968,7 +1009,8 @@ async fn reason_with_tools_caps_at_max_iterations() {
     let mut tools = ToolRegistry::new();
     tools.register(Box::new(sovereign_tools::search::SearchTool::new(
         std::sync::Arc::clone(&store),
-        std::sync::Arc::clone(&inference) as std::sync::Arc<dyn sovereign_core::traits::InferenceProvider>,
+        std::sync::Arc::clone(&inference)
+            as std::sync::Arc<dyn sovereign_core::traits::InferenceProvider>,
     )));
 
     let executor = Executor::new(
@@ -1020,11 +1062,16 @@ async fn reason_with_tools_caps_at_max_iterations() {
     let output = result.completed.get(&0).unwrap();
 
     match output {
-        StepOutput::ReasonWithToolsResult { iterations, capped, .. } => {
+        StepOutput::ReasonWithToolsResult {
+            iterations, capped, ..
+        } => {
             assert_eq!(*iterations, 2, "Should hit the cap at 2 iterations");
             assert!(*capped, "Should be capped");
         }
-        other => panic!("Expected ReasonWithToolsResult, got {:?}", std::mem::discriminant(other)),
+        other => panic!(
+            "Expected ReasonWithToolsResult, got {:?}",
+            std::mem::discriminant(other)
+        ),
     }
 }
 
@@ -1077,14 +1124,12 @@ async fn auto_collaborate_on_with_gap_and_user_content_returns_refined_answer() 
         GapScript::Gap {
             gap: "Need a 2024 pharmaceutical R&D statistic".to_string(),
         },
-        RefineScript::Text(
-            "REFINED: integrates user source on pharma R&D post-IRA.".to_string(),
-        ),
-        InfoResponseScript::Pasted(
-            "Per NEJM 2024: post-IRA R&D investment fell 12%.".to_string(),
-        ),
+        RefineScript::Text("REFINED: integrates user source on pharma R&D post-IRA.".to_string()),
+        InfoResponseScript::Pasted("Per NEJM 2024: post-IRA R&D investment fell 12%.".to_string()),
     );
-    let resp = h.send("What is the evidence on IRA's innovation effects?").await;
+    let resp = h
+        .send("What is the evidence on IRA's innovation effects?")
+        .await;
 
     assert!(
         resp.message.content.starts_with("REFINED:"),
@@ -1103,7 +1148,9 @@ async fn auto_collaborate_on_with_user_skip_returns_original_answer() {
         RefineScript::Unused,
         InfoResponseScript::Skip,
     );
-    let resp = h.send("What is the evidence on IRA's innovation effects?").await;
+    let resp = h
+        .send("What is the evidence on IRA's innovation effects?")
+        .await;
 
     // The original corpus-only answer stays put; no panic from Unused script.
     assert!(
@@ -1437,7 +1484,6 @@ async fn post_stream_refinement_noops_when_user_skips() {
         .is_empty());
 }
 
-
 // ─── Tier 2: conversation skill_id tagging ───────────────────
 
 #[tokio::test]
@@ -1460,7 +1506,9 @@ privacy = "local_only"
 
     let h = TestHarness::with_skills(skills);
     let conv_id = uuid::Uuid::new_v4().to_string();
-    let _ = h.send_in("what does meaningful work look like for me?", &conv_id).await;
+    let _ = h
+        .send_in("what does meaningful work look like for me?", &conv_id)
+        .await;
 
     let conv = h.store.get_conversation(&conv_id).await.unwrap();
     assert_eq!(
@@ -1507,12 +1555,7 @@ privacy = "mesh_allowed"
     let h = TestHarness::with_skills(skills);
     let conv_id = uuid::Uuid::new_v4().to_string();
     let _ = h.send_in("first message", &conv_id).await;
-    let first_tag = h
-        .store
-        .get_conversation(&conv_id)
-        .await
-        .unwrap()
-        .skill_id;
+    let first_tag = h.store.get_conversation(&conv_id).await.unwrap().skill_id;
     assert_eq!(first_tag.as_deref(), Some("research-analyst"));
 
     // Second turn in the same conversation. skill_id must not be
@@ -1522,12 +1565,7 @@ privacy = "mesh_allowed"
     // registry post-construction — the invariant is enforced at
     // the SQL layer anyway.)
     let _ = h.send_in("follow-up", &conv_id).await;
-    let second_tag = h
-        .store
-        .get_conversation(&conv_id)
-        .await
-        .unwrap()
-        .skill_id;
+    let second_tag = h.store.get_conversation(&conv_id).await.unwrap().skill_id;
     assert_eq!(
         second_tag.as_deref(),
         Some("research-analyst"),
@@ -1564,10 +1602,7 @@ async fn summarize_dropped_history_uses_fast_slot_only() {
 
     #[async_trait]
     impl InferenceProvider for CapturingProvider {
-        async fn complete(
-            &self,
-            request: &CompletionRequest,
-        ) -> CoreResult<CompletionResponse> {
+        async fn complete(&self, request: &CompletionRequest) -> CoreResult<CompletionResponse> {
             *self.captured.lock().unwrap() = Some(request.clone());
             // Return a valid JSON envelope so the parse path
             // succeeds and the function returns Ok(Some(_)). The
@@ -1634,9 +1669,12 @@ async fn summarize_dropped_history_uses_fast_slot_only() {
         .await
         .expect("summarize should complete with the captured response");
 
-    let captured = provider.captured.lock().unwrap().clone().expect(
-        "summarize_dropped_history must call inference.complete exactly once",
-    );
+    let captured = provider
+        .captured
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("summarize_dropped_history must call inference.complete exactly once");
 
     // CRITICAL: removing this `Speed::Fast` would let chat content
     // leak over the mesh on a local_only conversation. The

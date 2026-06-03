@@ -174,7 +174,10 @@ pub async fn apply_watched_diff(
 
             Ok(extracted)
         };
-        Box::pin(fut) as Pin<Box<dyn std::future::Future<Output = corpus_engine::error::Result<String>> + Send>>
+        Box::pin(fut)
+            as Pin<
+                Box<dyn std::future::Future<Output = corpus_engine::error::Result<String>> + Send>,
+            >
     };
 
     // 4. Bridge engine progress channel into our EventSink.

@@ -38,11 +38,7 @@ pub const DEFAULT_KEEP_N_BAKS: usize = 5;
 /// that exceeds `size_cap`. Errors are logged and swallowed so
 /// rotation can never take the daemon down. Returns the number of
 /// files actually rotated for callers that want to surface a metric.
-pub fn rotate_daemon_logs(
-    log_dir: &Path,
-    size_cap: u64,
-    keep_n_baks: usize,
-) -> usize {
+pub fn rotate_daemon_logs(log_dir: &Path, size_cap: u64, keep_n_baks: usize) -> usize {
     // The four canonical filenames the daemon writes to. `daemon.log`
     // is the launchd StandardOutPath (tracing → stderr defaults
     // notwithstanding, fmt() defaults to stdout), `daemon.err` is
@@ -110,9 +106,7 @@ fn rotate_one(path: &Path, size_cap: u64, keep_n_baks: usize) -> std::io::Result
     // simultaneously, briefly) is exactly what `cp + : > file`
     // produces in shell — durable, no in-flight loss.
     std::fs::copy(path, &bak_path)?;
-    let f = std::fs::OpenOptions::new()
-        .write(true)
-        .open(path)?;
+    let f = std::fs::OpenOptions::new().write(true).open(path)?;
     f.set_len(0)?;
     drop(f);
 
@@ -282,8 +276,8 @@ mod tests {
             // mtime defaults to now; we order by timestamp-in-name
             // implicitly by creation order via short sleeps. For test
             // determinism, set mtime explicitly.
-            let mtime = std::time::SystemTime::UNIX_EPOCH
-                + std::time::Duration::from_secs(ts as u64);
+            let mtime =
+                std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(ts as u64);
             // filetime crate isn't a dep — fall back to leaving mtime
             // at "now" and rely on the digit suffix as a proxy. The
             // trim function sorts by mtime, but on most filesystems
@@ -302,7 +296,11 @@ mod tests {
             .map(|e| e.file_name().into_string().unwrap())
             .filter(|n| n.starts_with("daemon.log.") && n.ends_with(".bak"))
             .collect();
-        assert_eq!(baks.len(), 3, "expected exactly 3 baks after trim, got {baks:?}");
+        assert_eq!(
+            baks.len(),
+            3,
+            "expected exactly 3 baks after trim, got {baks:?}"
+        );
     }
 
     #[test]

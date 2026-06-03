@@ -138,10 +138,13 @@ fn plan_reset(root: &std::path::Path, _mode: ResetMode) -> ResetPlan {
 
 fn print_plan(plan: &ResetPlan, mode: ResetMode) {
     println!();
-    println!("awareness reset — plan ({}):", match mode {
-        ResetMode::EntitiesOnly => "--entities-only",
-        ResetMode::Full => "--full",
-    });
+    println!(
+        "awareness reset — plan ({}):",
+        match mode {
+            ResetMode::EntitiesOnly => "--entities-only",
+            ResetMode::Full => "--full",
+        }
+    );
     println!();
     println!("Will delete the following files:");
     if plan.atlas_files.is_empty() {

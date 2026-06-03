@@ -231,7 +231,9 @@ mod tests {
     #[test]
     fn find_question_by_text_no_match() {
         let skeleton = test_skeleton();
-        assert!(skeleton.find_question_by_text("quantum mechanics").is_none());
+        assert!(skeleton
+            .find_question_by_text("quantum mechanics")
+            .is_none());
     }
 
     #[test]

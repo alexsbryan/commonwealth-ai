@@ -84,10 +84,7 @@ pub enum ExitReason {
     /// 6 times consecutively despite explicit syntax-error
     /// rejection in chat history. Force-exit so the trial doesn't
     /// burn tokens on repeated identical attempts.
-    StickyRetry {
-        primitive: String,
-        repeats: u32,
-    },
+    StickyRetry { primitive: String, repeats: u32 },
     /// Search-not-agent runner observed `rounds_without_improvement`
     /// consecutive rounds where no candidate strictly improved the
     /// test-pass count. Distinct from `NoProgress` (which is
@@ -96,20 +93,15 @@ pub enum ExitReason {
     /// Reasonable cap is 3 rounds: at that point the diversity
     /// ladder has fully widened and further attempts are unlikely
     /// to find a path.
-    SearchStalled {
-        rounds_without_improvement: u32,
-    },
+    SearchStalled { rounds_without_improvement: u32 },
     /// Search-not-agent runner exhausted its round budget without
     /// reaching all-tests-passing. Distinct from `SearchStalled`
     /// (which is "stopped improving") — exhaustion is "ran out of
     /// budget while still making forward progress." Operator can
     /// distinguish "give it more rounds" (exhausted) from "intervene
     /// architecturally" (stalled).
-    SearchExhaustedRounds {
-        rounds: u32,
-    },
+    SearchExhaustedRounds { rounds: u32 },
 }
-
 
 impl ExitReason {
     pub fn id(&self) -> &'static str {

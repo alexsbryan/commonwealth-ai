@@ -78,7 +78,9 @@ impl CorpusEngine {
             "ingest: downloading prebuilt snapshot"
         );
         let downloader = BulkDownloader::new(&url, true);
-        let archive_path = downloader.download(&download_dir, &corpus_id, progress).await?;
+        let archive_path = downloader
+            .download(&download_dir, &corpus_id, progress)
+            .await?;
 
         let expected_sha = if prebuilt.sha256.is_empty() {
             None

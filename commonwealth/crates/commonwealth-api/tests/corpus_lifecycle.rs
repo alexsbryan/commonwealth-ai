@@ -178,7 +178,7 @@ fn test_state(tmp: &TempDir, embed_fn: corpus_engine::types::EmbedFn) -> AppStat
         members: HashMap::new(),
         peers: vec![],
     };
-    
+
     AppState::new_with_platform_and_engine(
         NodeId::from_u128(1),
         mesh,
@@ -302,11 +302,8 @@ where
 /// Poll on-disk state until `predicate` holds or timeout. Lets us
 /// assert the daemon finished the wipe / finalise without sprinkling
 /// raw sleeps through the test.
-async fn wait_until_filesystem<F>(
-    check: F,
-    timeout: Duration,
-    label: &str,
-) where
+async fn wait_until_filesystem<F>(check: F, timeout: Duration, label: &str)
+where
     F: Fn() -> bool,
 {
     let deadline = tokio::time::Instant::now() + timeout;
@@ -339,9 +336,17 @@ async fn install_cancel_reinstall_lifecycle() {
         &serde_json::json!({ "corpus_id": corpus_id }),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "install returned non-OK: {:?}", String::from_utf8_lossy(&body));
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "install returned non-OK: {:?}",
+        String::from_utf8_lossy(&body)
+    );
     let install_resp: InstallResp = serde_json::from_slice(&body).unwrap();
-    assert!(install_resp.spawned, "first install should report spawned=true");
+    assert!(
+        install_resp.spawned,
+        "first install should report spawned=true"
+    );
     assert_eq!(install_resp.corpus_id, corpus_id);
 
     // A second install immediately afterwards must be idempotent.
@@ -375,11 +380,7 @@ async fn install_cancel_reinstall_lifecycle() {
     // on-disk + progress view. This is the data path the Desktop
     // poller consumes so the UI reflects daemon-owned ingests even
     // when Desktop didn't initiate them.
-    let (status, body) = get(
-        internal_router(state.clone()),
-        "/internal/corpus/status",
-    )
-    .await;
+    let (status, body) = get(internal_router(state.clone()), "/internal/corpus/status").await;
     assert_eq!(status, StatusCode::OK);
     let status_resp: StatusResponse = serde_json::from_slice(&body).unwrap();
     let entry = status_resp
@@ -387,7 +388,10 @@ async fn install_cancel_reinstall_lifecycle() {
         .iter()
         .find(|e| e.corpus_id == corpus_id)
         .expect("status response must include our active corpus");
-    assert!(entry.active, "entry should be marked active while ingesting");
+    assert!(
+        entry.active,
+        "entry should be marked active while ingesting"
+    );
     assert!(
         entry.partition_in_progress,
         "entry should report partition_in_progress while the ingest writes to the partition dir"
@@ -421,7 +425,12 @@ async fn install_cancel_reinstall_lifecycle() {
         &serde_json::json!({ "corpus_id": corpus_id, "confirm_wipe": true }),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "cancel returned non-OK: {:?}", String::from_utf8_lossy(&body));
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "cancel returned non-OK: {:?}",
+        String::from_utf8_lossy(&body)
+    );
     let cancel_resp: CancelResp = serde_json::from_slice(&body).unwrap();
     assert!(cancel_resp.wiped, "cancel should report the wipe completed");
     // `cancel_signalled` is racy: if the ingest finished before cancel
@@ -466,7 +475,12 @@ async fn install_cancel_reinstall_lifecycle() {
         &serde_json::json!({ "corpus_id": corpus_id }),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "reinstall returned non-OK: {:?}", String::from_utf8_lossy(&body));
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "reinstall returned non-OK: {:?}",
+        String::from_utf8_lossy(&body)
+    );
     let resp: InstallResp = serde_json::from_slice(&body).unwrap();
     assert!(resp.spawned, "reinstall should spawn a fresh task");
 
@@ -708,11 +722,7 @@ async fn status_sampler_publishes_estimated_fraction_on_resume() {
     // First poll: sampler hasn't run yet, so sidecar is absent and
     // we should see None for estimated_total_sections. The handler
     // kicks off the sampler in a spawn_blocking task.
-    let (status, body) = get(
-        internal_router(state.clone()),
-        "/internal/corpus/status",
-    )
-    .await;
+    let (status, body) = get(internal_router(state.clone()), "/internal/corpus/status").await;
     assert_eq!(status, StatusCode::OK);
     let resp: StatusResponse = serde_json::from_slice(&body).unwrap();
     let first = resp
@@ -732,20 +742,14 @@ async fn status_sampler_publishes_estimated_fraction_on_resume() {
     // keeps the test fast locally.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
     let entry = loop {
-        let (_, body) = get(
-            internal_router(state.clone()),
-            "/internal/corpus/status",
-        )
-        .await;
+        let (_, body) = get(internal_router(state.clone()), "/internal/corpus/status").await;
         let resp: StatusResponse = serde_json::from_slice(&body).unwrap();
         let entry = resp
             .entries
             .into_iter()
             .find(|e| e.corpus_id == corpus_id)
             .expect("status must still include corpus");
-        if entry.estimated_total_sections.is_some()
-            && entry.estimated_fraction.is_some()
-        {
+        if entry.estimated_total_sections.is_some() && entry.estimated_fraction.is_some() {
             break entry;
         }
         if tokio::time::Instant::now() >= deadline {

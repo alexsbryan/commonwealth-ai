@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use corpus_engine::{CorpusEngine, EmbedFn, LintResultStore, TestResultStore};
-use corpus_engine_notes::{NoteStore, NotePropagationEvent};
+use corpus_engine_notes::{NotePropagationEvent, NoteStore};
 use sovereign_core::model_family::{
     EmbedModelInfo, ModelFamily, NormalizationStrategy, PoolingStrategy,
 };
@@ -187,7 +187,10 @@ async fn run_daemon(args: &[String]) -> i32 {
     // canonical-path checks.
     if config_override.is_none() && !sovereign_core::setup_config::SetupConfig::exists() {
         if !std::io::stdin().is_terminal() {
-            eprintln!("error: no config at {}", SetupConfig::default_path().display());
+            eprintln!(
+                "error: no config at {}",
+                SetupConfig::default_path().display()
+            );
             eprintln!(
                 "hint: launchd/systemd can't run the interactive wizard. \
                  Run `sovereign daemon --setup-only` from a terminal first."
@@ -261,9 +264,7 @@ async fn run_daemon(args: &[String]) -> i32 {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("error: {e}");
-                eprintln!(
-                    "hint: run `sovereign daemon --setup-only` to (re-)create the config."
-                );
+                eprintln!("hint: run `sovereign daemon --setup-only` to (re-)create the config.");
                 return 1;
             }
         },
@@ -334,9 +335,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     // when nothing was set on the CLI invocation. Operators who want
     // a one-shot test (`SOVEREIGN_FORCE_TOOL_CALLS=0 sovereign daemon
     // run`) can still do so without editing the config file.
-    if config.daemon.force_tool_calls
-        && std::env::var("SOVEREIGN_FORCE_TOOL_CALLS").is_err()
-    {
+    if config.daemon.force_tool_calls && std::env::var("SOVEREIGN_FORCE_TOOL_CALLS").is_err() {
         std::env::set_var("SOVEREIGN_FORCE_TOOL_CALLS", "1");
         tracing::info!(
             "daemon: force_tool_calls=true — grammar engaged on every \
@@ -357,8 +356,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     // launchd-spawned daemons don't inherit caller env, so flipping
     // this in setup_config.toml is the load-bearing path on macOS
     // hosts running the daemon via `sovereign daemon start`.
-    if config.daemon.alternation_grammar
-        && std::env::var("SOVEREIGN_ALTERNATION_GRAMMAR").is_err()
+    if config.daemon.alternation_grammar && std::env::var("SOVEREIGN_ALTERNATION_GRAMMAR").is_err()
     {
         std::env::set_var("SOVEREIGN_ALTERNATION_GRAMMAR", "1");
         tracing::info!(
@@ -442,9 +440,7 @@ async fn run_daemon(args: &[String]) -> i32 {
             // checks against it and evicts cold slots if needed.
             // Without a budget, eviction is disabled and slots persist
             // until manually unloaded — matches historical behaviour.
-            if let Err(e) =
-                arc.set_extras_memory_budget(config.models.max_extras_memory_bytes())
-            {
+            if let Err(e) = arc.set_extras_memory_budget(config.models.max_extras_memory_bytes()) {
                 eprintln!("error: failed to set extras memory budget: {e}");
                 return 1;
             }
@@ -513,7 +509,10 @@ async fn run_daemon(args: &[String]) -> i32 {
         }
         Err(e) => {
             eprintln!("error: failed to load models: {e}");
-            eprintln!("hint: verify paths in {}", SetupConfig::default_path().display());
+            eprintln!(
+                "hint: verify paths in {}",
+                SetupConfig::default_path().display()
+            );
             return 1;
         }
     };
@@ -546,30 +545,28 @@ async fn run_daemon(args: &[String]) -> i32 {
     // configured (no workspace resolved, or sovereign.toml has no
     // [lint_runner]/[test_runner]), the tools report `never_run` —
     // accurate and unambiguous.
-    let lint_store: Arc<LintResultStore> = match LintResultStore::open(
-        &data_dir.join("lint_results.db"),
-    ) {
-        Ok(s) => Arc::new(s),
-        Err(e) => {
-            eprintln!(
-                "error: cannot open lint results db {}: {e}",
-                data_dir.join("lint_results.db").display()
-            );
-            return 1;
-        }
-    };
-    let test_store: Arc<TestResultStore> = match TestResultStore::open(
-        &data_dir.join("test_results.db"),
-    ) {
-        Ok(s) => Arc::new(s),
-        Err(e) => {
-            eprintln!(
-                "error: cannot open test results db {}: {e}",
-                data_dir.join("test_results.db").display()
-            );
-            return 1;
-        }
-    };
+    let lint_store: Arc<LintResultStore> =
+        match LintResultStore::open(&data_dir.join("lint_results.db")) {
+            Ok(s) => Arc::new(s),
+            Err(e) => {
+                eprintln!(
+                    "error: cannot open lint results db {}: {e}",
+                    data_dir.join("lint_results.db").display()
+                );
+                return 1;
+            }
+        };
+    let test_store: Arc<TestResultStore> =
+        match TestResultStore::open(&data_dir.join("test_results.db")) {
+            Ok(s) => Arc::new(s),
+            Err(e) => {
+                eprintln!(
+                    "error: cannot open test results db {}: {e}",
+                    data_dir.join("test_results.db").display()
+                );
+                return 1;
+            }
+        };
 
     // Wipe orphan rows left by a previous daemon process that was
     // SIGKILLed mid-run. Without this, `lint_status` / `test_status`
@@ -638,8 +635,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     // long-term-persistence-via-mesh.json design. The atlas-relevant
     // records have TTLs measured in hours; restart cost is acceptable.
     let work_atlas_mesh_store: Arc<commonwealth_state::MeshStore> = Arc::new(
-        commonwealth_state::MeshStore::in_memory()
-            .expect("in-memory MeshStore for work atlas"),
+        commonwealth_state::MeshStore::in_memory().expect("in-memory MeshStore for work atlas"),
     );
     // Node identity — same resolution order EmbeddedDaemon uses when
     // it starts (file-on-disk → mesh.json → generate). Resolved early
@@ -664,15 +660,14 @@ async fn run_daemon(args: &[String]) -> i32 {
         let path = dirs::home_dir()
             .map(|h| h.join(".sovereign").join("work-atlas.toml"))
             .unwrap_or_else(|| data_dir.join("work-atlas.toml"));
-        sovereign_work_atlas::WorkAtlasConfig::load_or_default(&path)
-            .unwrap_or_else(|e| {
-                tracing::warn!(
-                    error = %e,
-                    path = %path.display(),
-                    "work_atlas: config load failed, using defaults"
-                );
-                sovereign_work_atlas::WorkAtlasConfig::defaults()
-            })
+        sovereign_work_atlas::WorkAtlasConfig::load_or_default(&path).unwrap_or_else(|e| {
+            tracing::warn!(
+                error = %e,
+                path = %path.display(),
+                "work_atlas: config load failed, using defaults"
+            );
+            sovereign_work_atlas::WorkAtlasConfig::defaults()
+        })
     };
     // Resolved later if the workspace has an `origin` remote.
     let mut work_atlas_observer: Option<Arc<sovereign_work_atlas::AtlasObserver>> = None;
@@ -681,9 +676,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     let mut work_atlas_branch: Option<String> = None;
 
     if let Some(ref ws) = workspace_dir {
-        let sov_cfg = corpus_engine::SovereignConfig::load_or_default(
-            &ws.join(".sovereign"),
-        );
+        let sov_cfg = corpus_engine::SovereignConfig::load_or_default(&ws.join(".sovereign"));
         // Single-permit semaphore shared by the lint + test watchers so
         // their cargo subprocesses serialize instead of compounding
         // memory pressure. Without this, both fire concurrent cargo
@@ -695,7 +688,11 @@ async fn run_daemon(args: &[String]) -> i32 {
         if let Some(ref cfg) = sov_cfg.lint_runner {
             let working_dir = cfg.working_dir.as_ref().map(|d| {
                 let p = PathBuf::from(d);
-                if p.is_absolute() { p } else { ws.join(p) }
+                if p.is_absolute() {
+                    p
+                } else {
+                    ws.join(p)
+                }
             });
             watched_lint_scope = Some(cfg.command.clone());
             lint_watcher = Some(Arc::new(
@@ -716,7 +713,11 @@ async fn run_daemon(args: &[String]) -> i32 {
         if let Some(ref cfg) = sov_cfg.test_runner {
             let working_dir = cfg.working_dir.as_ref().map(|d| {
                 let p = PathBuf::from(d);
-                if p.is_absolute() { p } else { ws.join(p) }
+                if p.is_absolute() {
+                    p
+                } else {
+                    ws.join(p)
+                }
             });
             watched_test_scope = Some(cfg.command.clone());
             test_watcher = Some(Arc::new(
@@ -872,7 +873,11 @@ async fn run_daemon(args: &[String]) -> i32 {
     // ~/.sovereign bind-mount) doesn't create duplicates — this
     // field is informational, surfaced in the audit display.
     if let Err(e) = notes_store.set_origin_node_id(self_node_id.to_string()) {
-        tracing::warn!(target = "notes", error = e, "notes: origin_node_id already set — wiring race?");
+        tracing::warn!(
+            target = "notes",
+            error = e,
+            "notes: origin_node_id already set — wiring race?"
+        );
     }
 
     // GliNER per-chunk entity extractor — hoisted out of the engine
@@ -885,9 +890,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     // it as a `GlinerFn` adapter without re-loading the model.
     let mut gliner_raw: Option<Arc<sovereign_tools::gliner_ner::GlinerExtractor>> = None;
     let chunk_entity_extractor: Option<
-        std::sync::Arc<
-            dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor,
-        >,
+        std::sync::Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>,
     > = {
         let model_id = sovereign_tools::gliner_ner::DEFAULT_MODEL_ID;
         if sovereign_tools::gliner_ner::probe_model_available(model_id) {
@@ -907,7 +910,10 @@ async fn run_daemon(args: &[String]) -> i32 {
                                     Arc::new(store_for_extractor),
                                     ex_arc,
                                 ),
-                            ) as Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>)
+                            )
+                                as Arc<
+                                    dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor,
+                                >)
                         }
                         Err(e) => {
                             tracing::warn!(
@@ -952,15 +958,16 @@ async fn run_daemon(args: &[String]) -> i32 {
             })
         });
         let provider_for_batch = Arc::clone(&provider);
-        let batch_embed: corpus_engine::types::BatchEmbedFn = Arc::new(move |texts: &[String]| {
-            let p = Arc::clone(&provider_for_batch);
-            let texts = texts.to_vec();
-            Box::pin(async move {
-                p.embed_batch(&texts)
-                    .await
-                    .map_err(|e| corpus_engine::Error::Embed(e.to_string()))
-            })
-        });
+        let batch_embed: corpus_engine::types::BatchEmbedFn =
+            Arc::new(move |texts: &[String]| {
+                let p = Arc::clone(&provider_for_batch);
+                let texts = texts.to_vec();
+                Box::pin(async move {
+                    p.embed_batch(&texts)
+                        .await
+                        .map_err(|e| corpus_engine::Error::Embed(e.to_string()))
+                })
+            });
 
         // Wire the SAME embed slot into the NoteStore so T1
         // (semantic-blend retrieval) lights up. NoteStore has its
@@ -982,7 +989,10 @@ async fn run_daemon(args: &[String]) -> i32 {
         if let Err(e) = notes_store.set_embed_fn(notes_embed) {
             tracing::warn!(target = "notes", error = e, "notes: embed_fn already set");
         } else {
-            tracing::info!(target = "notes", "notes: T1 embed_fn wired to local embed slot");
+            tracing::info!(
+                target = "notes",
+                "notes: T1 embed_fn wired to local embed slot"
+            );
         }
 
         // T2: wire the same GLiNER session into the NoteStore so
@@ -1022,10 +1032,16 @@ async fn run_daemon(args: &[String]) -> i32 {
             if let Err(e) = notes_store.set_gliner_fn(notes_gliner) {
                 tracing::warn!(target = "notes", error = e, "notes: gliner_fn already set");
             } else {
-                tracing::info!(target = "notes", "notes: T2 gliner_fn wired to loaded GLiNER session");
+                tracing::info!(
+                    target = "notes",
+                    "notes: T2 gliner_fn wired to loaded GLiNER session"
+                );
             }
         } else {
-            tracing::info!(target = "notes", "notes: GLiNER not loaded; T2 will use author-supplied symbols/files only");
+            tracing::info!(
+                target = "notes",
+                "notes: GLiNER not loaded; T2 will use author-supplied symbols/files only"
+            );
         }
         // Derive the embed model identifier from the configured GGUF
         // path so `_corpus_meta.json` records the actual model rather
@@ -1075,9 +1091,7 @@ async fn run_daemon(args: &[String]) -> i32 {
         // dispatch-plan-only mode when no provider is injected, which
         // is still useful diagnostic output.
         let tiered_provider: Option<
-            std::sync::Arc<
-                dyn corpus_engine::enrichment::tiered::TieredEnrichmentProvider,
-            >,
+            std::sync::Arc<dyn corpus_engine::enrichment::tiered::TieredEnrichmentProvider>,
         > = {
             let db_path = data_dir.join("sovereign.db");
             match sovereign_store::sqlite::SqliteStateStore::open(&db_path) {
@@ -1096,19 +1110,17 @@ async fn run_daemon(args: &[String]) -> i32 {
                     // default and the cross-note briefing block was
                     // always empty.
                     let indexes_root = data_dir.join("indexes");
-                    let resolver: Arc<
-                        dyn sovereign_tools::conv_tiered_provider::IndexDirResolver,
-                    > = Arc::new(
-                        sovereign_tools::conv_tiered_provider::StaticIndexDirResolver {
-                            indexes_root: indexes_root.clone(),
-                        },
-                    );
-                    let prov =
-                        sovereign_tools::conv_tiered_provider::FolderTieredProvider::new(
-                            store_arc,
-                            Arc::clone(&provider),
-                        )
-                        .with_index_dir_resolver(resolver);
+                    let resolver: Arc<dyn sovereign_tools::conv_tiered_provider::IndexDirResolver> =
+                        Arc::new(
+                            sovereign_tools::conv_tiered_provider::StaticIndexDirResolver {
+                                indexes_root: indexes_root.clone(),
+                            },
+                        );
+                    let prov = sovereign_tools::conv_tiered_provider::FolderTieredProvider::new(
+                        store_arc,
+                        Arc::clone(&provider),
+                    )
+                    .with_index_dir_resolver(resolver);
                     Some(std::sync::Arc::new(prov))
                 }
                 Err(e) => {
@@ -1151,27 +1163,23 @@ async fn run_daemon(args: &[String]) -> i32 {
     // Installed on the manager via `set_tiered_deps` after the
     // manager is constructed (~line 1593 below). Without these,
     // `enable_enrichment` falls back to the legacy subprocess.
-    let folder_tiered_deps: Option<
-        sovereign_tools::local_corpus::watched::enrich::TieredDeps,
-    > = {
+    let folder_tiered_deps: Option<sovereign_tools::local_corpus::watched::enrich::TieredDeps> = {
         let db_path = data_dir.join("sovereign.db");
         match sovereign_store::sqlite::SqliteStateStore::open(&db_path) {
             Ok(store) => {
                 let store_arc = Arc::new(store);
                 let indexes_root = data_dir.join("indexes");
-                let resolver: Arc<
-                    dyn sovereign_tools::conv_tiered_provider::IndexDirResolver,
-                > = Arc::new(
-                    sovereign_tools::conv_tiered_provider::StaticIndexDirResolver {
-                        indexes_root: indexes_root.clone(),
-                    },
-                );
-                let folder_prov =
-                    sovereign_tools::conv_tiered_provider::FolderTieredProvider::new(
-                        store_arc,
-                        Arc::clone(&provider),
-                    )
-                    .with_index_dir_resolver(resolver);
+                let resolver: Arc<dyn sovereign_tools::conv_tiered_provider::IndexDirResolver> =
+                    Arc::new(
+                        sovereign_tools::conv_tiered_provider::StaticIndexDirResolver {
+                            indexes_root: indexes_root.clone(),
+                        },
+                    );
+                let folder_prov = sovereign_tools::conv_tiered_provider::FolderTieredProvider::new(
+                    store_arc,
+                    Arc::clone(&provider),
+                )
+                .with_index_dir_resolver(resolver);
                 let folder_prov_arc: Arc<
                     dyn corpus_engine::enrichment::tiered::TieredEnrichmentProvider,
                 > = Arc::new(folder_prov);
@@ -1263,9 +1271,8 @@ async fn run_daemon(args: &[String]) -> i32 {
     // pinned_source.peer_inference_endpoints() returns an empty Vec
     // and the composite degrades to mesh-only.
     // Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
-    let pinned_source = Arc::new(
-        sovereign_mesh::pinned_worker_source::PinnedWorkerEndpointSource::new(),
-    );
+    let pinned_source =
+        Arc::new(sovereign_mesh::pinned_worker_source::PinnedWorkerEndpointSource::new());
     if let Some(dir) = sovereign_mesh::pinned_pod_snapshot::default_snapshot_dir() {
         let snapshots = sovereign_mesh::pinned_pod_snapshot::load_all_snapshots(&dir);
         let now_unix = std::time::SystemTime::now()
@@ -1363,15 +1370,13 @@ async fn run_daemon(args: &[String]) -> i32 {
             // setup transition usually completes within a few
             // hundred ms; cap at 30s so a stuck setup never hangs
             // this spawn.
-            let deadline =
-                tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
             let mut publisher_installed = false;
             loop {
                 if let Some(state) = daemon_for_alias_push.app_state().await {
                     if !publisher_installed {
-                        state.install_in_flight_publisher(
-                            mesh_for_alias_push.in_flight_publisher(),
-                        );
+                        state
+                            .install_in_flight_publisher(mesh_for_alias_push.in_flight_publisher());
                         publisher_installed = true;
                         tracing::info!(
                             "daemon_cmd: installed in-flight publisher on AppState \
@@ -1433,52 +1438,60 @@ async fn run_daemon(args: &[String]) -> i32 {
     {
         let mesh_for_sink = Arc::clone(&work_atlas_mesh_store);
         let self_id_for_sink = self_node_id;
-        let sink: corpus_engine_notes::PropagationSinkFn = Arc::new(move |ev: &NotePropagationEvent| {
-            let app_id = if ev.tombstone {
-                // Tombstones ride the public namespace so peers
-                // converge to the deleted state. Private notes
-                // never propagate, so private tombstones don't
-                // need to either.
-                "notes"
-            } else {
-                "notes"
-            };
-            match serde_json::to_vec(ev) {
-                Ok(bytes) => {
-                    if let Err(e) = mesh_for_sink.set(
-                        app_id,
-                        &ev.content_hash,
-                        bytes.into(),
-                        self_id_for_sink,
-                    ) {
+        let sink: corpus_engine_notes::PropagationSinkFn =
+            Arc::new(move |ev: &NotePropagationEvent| {
+                let app_id = if ev.tombstone {
+                    // Tombstones ride the public namespace so peers
+                    // converge to the deleted state. Private notes
+                    // never propagate, so private tombstones don't
+                    // need to either.
+                    "notes"
+                } else {
+                    "notes"
+                };
+                match serde_json::to_vec(ev) {
+                    Ok(bytes) => {
+                        if let Err(e) = mesh_for_sink.set(
+                            app_id,
+                            &ev.content_hash,
+                            bytes.into(),
+                            self_id_for_sink,
+                        ) {
+                            tracing::warn!(
+                                target = "notes",
+                                error = %e,
+                                content_hash = %ev.content_hash,
+                                "notes: mesh propagation sink set() failed"
+                            );
+                        } else {
+                            tracing::debug!(
+                                target = "notes",
+                                content_hash = %ev.content_hash,
+                                tombstone = ev.tombstone,
+                                "notes: propagated"
+                            );
+                        }
+                    }
+                    Err(e) => {
                         tracing::warn!(
                             target = "notes",
                             error = %e,
-                            content_hash = %ev.content_hash,
-                            "notes: mesh propagation sink set() failed"
-                        );
-                    } else {
-                        tracing::debug!(
-                            target = "notes",
-                            content_hash = %ev.content_hash,
-                            tombstone = ev.tombstone,
-                            "notes: propagated"
+                            "notes: failed to serialize propagation event"
                         );
                     }
                 }
-                Err(e) => {
-                    tracing::warn!(
-                        target = "notes",
-                        error = %e,
-                        "notes: failed to serialize propagation event"
-                    );
-                }
-            }
-        });
+            });
         if let Err(e) = notes_store.set_propagation_sink(sink) {
-            tracing::warn!(target = "notes", error = e, "notes: propagation_sink already set");
+            tracing::warn!(
+                target = "notes",
+                error = e,
+                "notes: propagation_sink already set"
+            );
         } else {
-            tracing::info!(target = "notes", "notes: propagation_sink wired to MeshStore (app_id=notes)");
+            tracing::info!(
+                target = "notes",
+                "notes: propagation_sink wired to MeshStore (app_id=notes)"
+            );
         }
     }
 
@@ -1607,8 +1620,8 @@ async fn run_daemon(args: &[String]) -> i32 {
         let enrich_dir = data_dir.join("enrichment");
         let idx_dir = data_dir.join("indexes");
         tokio::spawn(async move {
-            let cli_binary = std::env::current_exe()
-                .unwrap_or_else(|_| std::path::PathBuf::from("sovereign"));
+            let cli_binary =
+                std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("sovereign"));
             tracing::info!(
                 enrichment_dir = %enrich_dir.display(),
                 "tier-2 resume: scanning for unfinished workspaces"
@@ -1636,10 +1649,9 @@ async fn run_daemon(args: &[String]) -> i32 {
                     // exhaustiveness check requires us to cover it.
                     Tier2LaunchOutcome::DeferredToPeer { .. } => {}
                     Tier2LaunchOutcome::InitFailed { reason }
-                    | Tier2LaunchOutcome::SpawnFailed { reason } => tracing::warn!(
-                        reason,
-                        "tier-2 resume: re-spawn failed"
-                    ),
+                    | Tier2LaunchOutcome::SpawnFailed { reason } => {
+                        tracing::warn!(reason, "tier-2 resume: re-spawn failed")
+                    }
                 }
             }
         });
@@ -1747,9 +1759,9 @@ async fn run_daemon(args: &[String]) -> i32 {
     // standalone daemon (CLI-mode) instead of the in-process Tauri
     // daemon. Loopback-only.
     daemon
-        .install_reading_http_router(
-            sovereign_mesh::reading_http::reading_router(Arc::clone(&daemon)),
-        )
+        .install_reading_http_router(sovereign_mesh::reading_http::reading_router(Arc::clone(
+            &daemon,
+        )))
         .await;
     daemon
         .set_provider_factory(Arc::new(LlamaCppFactory {
@@ -1911,10 +1923,7 @@ async fn run_daemon(args: &[String]) -> i32 {
                 let chat_model = id_from_path(&config.models.primary);
                 let embed_model = id_from_path(&config.models.embed);
                 if !chat_model.is_empty() && !embed_model.is_empty() {
-                    let base_url = format!(
-                        "http://127.0.0.1:{}",
-                        config.daemon.client_port
-                    );
+                    let base_url = format!("http://127.0.0.1:{}", config.daemon.client_port);
                     manager
                         .set_enrichment_defaults(
                             sovereign_tools::local_corpus::watched::enrich::EnrichmentDefaults {
@@ -2007,16 +2016,13 @@ async fn run_daemon(args: &[String]) -> i32 {
         let daemon_for_atlas = Arc::clone(&daemon);
         let broadcaster_for_atlas = Arc::clone(&work_atlas_broadcaster);
         tokio::spawn(async move {
-            let deadline =
-                tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
             loop {
                 if let Some(state) = daemon_for_atlas.app_state().await {
                     let real: Box<dyn sovereign_work_atlas::tools::ClaimBroadcaster> =
                         Box::new(sovereign_mesh::MeshBroadcaster::new(state));
                     broadcaster_for_atlas.set(real);
-                    tracing::info!(
-                        "work_atlas: real broadcaster wired (peer fan-out active)"
-                    );
+                    tracing::info!("work_atlas: real broadcaster wired (peer fan-out active)");
                     return;
                 }
                 if tokio::time::Instant::now() >= deadline {
@@ -2031,12 +2037,11 @@ async fn run_daemon(args: &[String]) -> i32 {
             }
         });
     }
-    let _work_atlas_gc_handle =
-        sovereign_work_atlas::gc::WorkAtlasGc::new(
-            Arc::clone(&work_atlas_store),
-            work_atlas_cfg.clone(),
-        )
-        .spawn();
+    let _work_atlas_gc_handle = sovereign_work_atlas::gc::WorkAtlasGc::new(
+        Arc::clone(&work_atlas_store),
+        work_atlas_cfg.clone(),
+    )
+    .spawn();
 
     // ── Foreground back-pressure for lint/test watchers ─────────────
     //
@@ -2058,21 +2063,16 @@ async fn run_daemon(args: &[String]) -> i32 {
         let lint_for_hook = lint_watcher.clone();
         let test_for_hook = test_watcher.clone();
         tokio::spawn(async move {
-            let deadline =
-                tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
             loop {
                 if let Some(hook) = daemon_for_hook.build_yield_hook().await {
                     if let Some(w) = lint_for_hook.as_ref() {
                         w.set_yield_hook(Arc::clone(&hook));
-                        tracing::info!(
-                            "foreground-yield: hook installed on lint watcher"
-                        );
+                        tracing::info!("foreground-yield: hook installed on lint watcher");
                     }
                     if let Some(w) = test_for_hook.as_ref() {
                         w.set_yield_hook(Arc::clone(&hook));
-                        tracing::info!(
-                            "foreground-yield: hook installed on test watcher"
-                        );
+                        tracing::info!("foreground-yield: hook installed on test watcher");
                     }
                     return;
                 }
@@ -2225,9 +2225,7 @@ async fn build_tool_registry(
     // per-conversation scoping in `CacheKey` keeps the slices
     // isolated even when two clients hit different conversations
     // simultaneously.
-    let tool_cache = std::sync::Arc::new(
-        sovereign_core::tool_result_cache::ToolResultCache::new(),
-    );
+    let tool_cache = std::sync::Arc::new(sovereign_core::tool_result_cache::ToolResultCache::new());
     let mut tools = ToolRegistry::new().with_cache(std::sync::Arc::clone(&tool_cache));
 
     // Call-graph tools. Merge every `scip_graph.db` under the indexes
@@ -2250,25 +2248,19 @@ async fn build_tool_registry(
     tools.register(Box::new(sovereign_tools::CodeSearchTool::new(Arc::clone(
         &engine,
     ))));
-    tools.register(Box::new(sovereign_tools::RecentChangesTool::new(Arc::clone(
-        &engine,
-    ))));
-    let health_checker = Arc::new(
-        sovereign_tools::IndexHealthChecker::new(Arc::clone(&graph_handle)),
-    );
+    tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
+        Arc::clone(&engine),
+    )));
+    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(
+        &graph_handle,
+    )));
     tools.register(Box::new(
-        sovereign_tools::FindCallersTool::new(
-            Arc::clone(&engine),
-            Arc::clone(&graph_handle),
-        )
-        .with_health_checker(Arc::clone(&health_checker)),
+        sovereign_tools::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&graph_handle))
+            .with_health_checker(Arc::clone(&health_checker)),
     ));
     tools.register(Box::new(
-        sovereign_tools::FindCalleesTool::new(
-            Arc::clone(&engine),
-            Arc::clone(&graph_handle),
-        )
-        .with_health_checker(Arc::clone(&health_checker)),
+        sovereign_tools::FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&graph_handle))
+            .with_health_checker(Arc::clone(&health_checker)),
     ));
     tools.register(Box::new(
         sovereign_tools::BlastRadiusTool::new(Arc::clone(&graph_handle))
@@ -2303,9 +2295,7 @@ async fn build_tool_registry(
         ),
     ));
     tools.register(Box::new(
-        sovereign_work_atlas::tools::WorkInFlightTool::new(
-            Arc::clone(&work_atlas_store),
-        ),
+        sovereign_work_atlas::tools::WorkInFlightTool::new(Arc::clone(&work_atlas_store)),
     ));
 
     // ── Lint / test watcher tools ───────────────────────────────
@@ -2357,9 +2347,7 @@ async fn build_tool_registry(
     // to dispatch into. Without it, agents calling `run_tests` would
     // get a confusing no-op; the absence is the honest signal.
     if let Some(ref w) = test_watcher {
-        tools.register(Box::new(sovereign_tools::RunTestsTool::new(
-            Arc::clone(w),
-        )));
+        tools.register(Box::new(sovereign_tools::RunTestsTool::new(Arc::clone(w))));
     }
 
     // NOTE: knowledge_lookup (Tool-Mastery Phase 5) is wired in
@@ -2391,9 +2379,9 @@ async fn build_tool_registry(
     // Project context — served from `indexes/project_docs.db` if a
     // project has been init'd. Absent on a bare-setup daemon; that's
     // fine, just one fewer tool.
-    if let Ok(ds) = corpus_engine_notes::ProjectDocsStore::open(
-        &indexes_dir.join("project_docs.db"),
-    ) {
+    if let Ok(ds) =
+        corpus_engine_notes::ProjectDocsStore::open(&indexes_dir.join("project_docs.db"))
+    {
         tools.register(Box::new(sovereign_tools::ProjectContextTool::new(
             Arc::new(ds),
         )));
@@ -2414,9 +2402,7 @@ async fn build_tool_registry(
     // reads the DESIGN.md path argument at call time. No
     // `with_project_root` in the daemon context because the daemon
     // doesn't know which project the caller means.
-    tools.register(Box::new(
-        sovereign_tools::DesignSignalsExtractTool::new(),
-    ));
+    tools.register(Box::new(sovereign_tools::DesignSignalsExtractTool::new()));
 
     tools
 }
@@ -2425,11 +2411,9 @@ async fn build_tool_registry(
 /// single in-memory graph. Same idea as `project_cmd::load_merged_graph`
 /// but without the operator-facing stdout printing, since the daemon
 /// runs under launchd/systemd.
-async fn build_merged_scip_graph(
-    indexes_dir: &std::path::Path,
-) -> corpus_engine_scip::ScipGraph {
-    let merged = corpus_engine_scip::ScipGraph::open_in_memory("merged")
-        .expect("in-memory ScipGraph");
+async fn build_merged_scip_graph(indexes_dir: &std::path::Path) -> corpus_engine_scip::ScipGraph {
+    let merged =
+        corpus_engine_scip::ScipGraph::open_in_memory("merged").expect("in-memory ScipGraph");
     let Ok(entries) = std::fs::read_dir(indexes_dir) else {
         return merged;
     };
@@ -2486,11 +2470,12 @@ async fn stop_daemon() -> i32 {
         {
             // SAFETY: POSIX kill is async-signal-safe; we're only sending
             // SIGTERM to a pid we own (we wrote the pidfile ourselves).
-            let rc = unsafe { libc_kill(pid, 15 /* SIGTERM */) };
+            let rc = unsafe {
+                libc_kill(pid, 15 /* SIGTERM */)
+            };
             if rc == 0 {
                 // Wait up to 10s for graceful exit, polling liveness.
-                let deadline =
-                    std::time::Instant::now() + std::time::Duration::from_secs(10);
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
                 while std::time::Instant::now() < deadline {
                     if unsafe { libc_kill(pid, 0) } != 0 {
                         let _ = std::fs::remove_file(daemon_pid_path());
@@ -2524,7 +2509,9 @@ async fn stop_daemon() -> i32 {
     // reports success while the actual daemon keeps serving.
     #[cfg(unix)]
     if let Some(pid) = find_daemon_pid_by_port(9741) {
-        let rc = unsafe { libc_kill(pid, 15 /* SIGTERM */) };
+        let rc = unsafe {
+            libc_kill(pid, 15 /* SIGTERM */)
+        };
         if rc == 0 {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
             while std::time::Instant::now() < deadline {
@@ -2535,9 +2522,7 @@ async fn stop_daemon() -> i32 {
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             }
-            eprintln!(
-                "⚠ pid {pid} (owner of :9741) didn't exit after 10s; leaving it alone"
-            );
+            eprintln!("⚠ pid {pid} (owner of :9741) didn't exit after 10s; leaving it alone");
             return 1;
         }
         // kill() failed (most likely EPERM on a daemon owned by another
@@ -2575,12 +2560,7 @@ fn find_daemon_pid_by_port(port: u16) -> Option<i32> {
     // `-i 4TCP:<port>` is more selective than `-i :<port>` — IPv4 only,
     // TCP only, avoiding UDP false positives.
     if let Ok(out) = Command::new("lsof")
-        .args([
-            "-t",
-            "-sTCP:LISTEN",
-            "-i",
-            &format!("4TCP:{port}"),
-        ])
+        .args(["-t", "-sTCP:LISTEN", "-i", &format!("4TCP:{port}")])
         .output()
     {
         if out.status.success() {
@@ -2594,11 +2574,7 @@ fn find_daemon_pid_by_port(port: u16) -> Option<i32> {
     // with no header. The pid lives inside `users:(("name",pid=N,fd=...))`
     // so we have to extract it. -H suppresses the header line.
     if let Ok(out) = Command::new("ss")
-        .args([
-            "-H",
-            "-tlnp",
-            &format!("sport = :{port}"),
-        ])
+        .args(["-H", "-tlnp", &format!("sport = :{port}")])
         .output()
     {
         if out.status.success() {
@@ -2627,8 +2603,7 @@ fn parse_first_pid_line(bytes: &[u8]) -> Option<i32> {
 fn parse_ss_first_pid(text: &str) -> Option<i32> {
     for line in text.lines() {
         if let Some(rest) = line.split("pid=").nth(1) {
-            let digits: String =
-                rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+            let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
             if let Ok(p) = digits.parse::<i32>() {
                 return Some(p);
             }
@@ -2682,7 +2657,10 @@ mod stop_daemon_tests {
     #[test]
     fn ss_no_pid_token_returns_none() {
         assert_eq!(parse_ss_first_pid(""), None);
-        assert_eq!(parse_ss_first_pid("LISTEN 0 128 0.0.0.0:22 0.0.0.0:*"), None);
+        assert_eq!(
+            parse_ss_first_pid("LISTEN 0 128 0.0.0.0:22 0.0.0.0:*"),
+            None
+        );
     }
 }
 
@@ -3163,15 +3141,12 @@ async fn status_daemon() -> i32 {
             return 1;
         }
     };
-    match client
-        .get("http://127.0.0.1:9741/v1/models")
-        .send()
-        .await
-    {
+    match client.get("http://127.0.0.1:9741/v1/models").send().await {
         Ok(r) if r.status().is_success() => {
-            let body: serde_json::Value = r.json().await.unwrap_or_else(|_| {
-                serde_json::json!({"data": []})
-            });
+            let body: serde_json::Value = r
+                .json()
+                .await
+                .unwrap_or_else(|_| serde_json::json!({"data": []}));
             let count = body
                 .get("data")
                 .and_then(|d| d.as_array())
@@ -3263,14 +3238,14 @@ impl ProviderFactory for LlamaCppFactory {
             ModelFamily::Unknown,
             ModelFamily::Unknown,
             // code slot is Qwen3-Coder-30B-A3B-Instruct (the only code
-        // GGUF we ship today). Pinning the family to Qwen3 picks up
-        // Qwen's recommended sampling defaults — top_k=20 (vs the
-        // Unknown fallback of 40), top_p=0.95, presence_penalty=1.5
-        // — and the SystemPromptToken thinking control. Empirically
-        // (2026-05-08 measurement) the Unknown defaults left the
-        // sampler too permissive on long Rust emissions, contributing
-        // to the character-drop pattern (`f3 2`, `Lat encyClass`).
-        ModelFamily::Qwen3,
+            // GGUF we ship today). Pinning the family to Qwen3 picks up
+            // Qwen's recommended sampling defaults — top_k=20 (vs the
+            // Unknown fallback of 40), top_p=0.95, presence_penalty=1.5
+            // — and the SystemPromptToken thinking control. Empirically
+            // (2026-05-08 measurement) the Unknown defaults left the
+            // sampler too permissive on long Rust emissions, contributing
+            // to the character-drop pattern (`f3 2`, `Lat encyClass`).
+            ModelFamily::Qwen3,
         )
         .map_err(|e| format!("reload: failed to load models: {e}"))?;
         // Keep a typed `Arc<EmbeddedLlamaCpp>` to fire
@@ -3310,20 +3285,16 @@ impl ProviderFactory for LlamaCppFactory {
                 // task hasn't run; reload still installs the new
                 // MIP, and the spawned task will install its
                 // publisher when it next polls.
-                None => Arc::new(
-                    sovereign_mesh::peer_inference::MeshInferenceProvider::new(
-                        raw,
-                        Arc::clone(&self.daemon),
-                    ),
-                ),
-            }
-        } else {
-            Arc::new(
-                sovereign_mesh::peer_inference::MeshInferenceProvider::new(
+                None => Arc::new(sovereign_mesh::peer_inference::MeshInferenceProvider::new(
                     raw,
                     Arc::clone(&self.daemon),
-                ),
-            )
+                )),
+            }
+        } else {
+            Arc::new(sovereign_mesh::peer_inference::MeshInferenceProvider::new(
+                raw,
+                Arc::clone(&self.daemon),
+            ))
         };
         // Push current slot aliases into the freshly-built mesh
         // provider so a reload preserves the deferred-resolution
@@ -3366,20 +3337,19 @@ async fn wait_for_shutdown() {
     // "low memory" jetsam event.
     #[cfg(unix)]
     {
-        let mut sigterm = match tokio::signal::unix::signal(
-            tokio::signal::unix::SignalKind::terminate(),
-        ) {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::warn!(
-                    error = %e,
-                    "sigterm handler install failed — falling back to SIGINT-only"
-                );
-                let _ = tokio::signal::ctrl_c().await;
-                log_shutdown_context("SIGINT", "fallback");
-                return;
-            }
-        };
+        let mut sigterm =
+            match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "sigterm handler install failed — falling back to SIGINT-only"
+                    );
+                    let _ = tokio::signal::ctrl_c().await;
+                    log_shutdown_context("SIGINT", "fallback");
+                    return;
+                }
+            };
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
                 log_shutdown_context("SIGINT", "primary");
@@ -3478,11 +3448,7 @@ fn warn_orphaned_indexes(
         .collect();
     let mut orphans: Vec<String> = Vec::new();
     for entry in entries.flatten() {
-        let Some(name) = entry
-            .file_name()
-            .to_str()
-            .map(|s| s.to_string())
-        else {
+        let Some(name) = entry.file_name().to_str().map(|s| s.to_string()) else {
             continue;
         };
         // Skip flat files (project_docs.db, lint_results.db, etc.).
@@ -3581,8 +3547,8 @@ async fn run_worker_daemon(args: &[String]) -> i32 {
     // during early integration testing — useful when validating the
     // wire protocol against a real Vast pod before the child daemon
     // is known-good. Production default is `subprocess`.
-    let runner_kind = std::env::var("SOVEREIGN_WORKER_RUNNER")
-        .unwrap_or_else(|_| "subprocess".to_string());
+    let runner_kind =
+        std::env::var("SOVEREIGN_WORKER_RUNNER").unwrap_or_else(|_| "subprocess".to_string());
     // Keep the runner as both `Arc<dyn WorkerRunner>` (for the worker
     // daemon entrypoint) and — in the subprocess case — as a typed
     // `Arc<SubprocessRunner>` so we can call `child_ready_signal()`
@@ -3616,12 +3582,13 @@ async fn run_worker_daemon(args: &[String]) -> i32 {
                 ..Default::default()
             };
             let child_port = cfg.child_client_port;
-            let subprocess =
-                Arc::new(sovereign_mesh::worker_subprocess_runner::SubprocessRunner::new(
+            let subprocess = Arc::new(
+                sovereign_mesh::worker_subprocess_runner::SubprocessRunner::new(
                     cfg,
                     signals.0.clone(),
                     signals.1.clone(),
-                ));
+                ),
+            );
             // Build the proxy config from the same readiness atomic
             // the subprocess runner flips when `/v1/models` first
             // returns 200. The proxy reads it on every request so
@@ -3705,11 +3672,7 @@ mod workspace_autodetect_tests {
     #[test]
     fn looks_like_workspace_rejects_workspace_without_lint_script() {
         let tmp = TempDir::new().unwrap();
-        fs::write(
-            tmp.path().join("Cargo.toml"),
-            "[workspace]\nmembers = []\n",
-        )
-        .unwrap();
+        fs::write(tmp.path().join("Cargo.toml"), "[workspace]\nmembers = []\n").unwrap();
         assert!(!looks_like_sovereign_workspace(tmp.path()));
     }
 
@@ -3742,5 +3705,3 @@ mod workspace_autodetect_tests {
         assert!(ascend_for_sovereign_workspace(&plain).is_none());
     }
 }
-
-

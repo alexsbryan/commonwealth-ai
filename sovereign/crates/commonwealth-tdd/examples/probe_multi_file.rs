@@ -19,9 +19,7 @@ use std::time::Duration;
 
 use commonwealth_tdd::tasks::framework::{detect_framework, Framework};
 use commonwealth_tdd::tasks::split_file::{cleanup_structural_test, SplitFileArgs};
-use commonwealth_tdd::{
-    run_trial, tasks::split_file, ReqwestChatBackend, TrialConfig, Workdir,
-};
+use commonwealth_tdd::{run_trial, tasks::split_file, ReqwestChatBackend, TrialConfig, Workdir};
 
 #[derive(Default)]
 struct Args {
@@ -48,7 +46,11 @@ fn parse_args() -> Args {
             "--workdir" => args.workdir = Some(it.next().expect("--workdir value").into()),
             "--path" => args.path = Some(it.next().expect("--path value")),
             "--max-lines" => {
-                args.max_lines = it.next().expect("--max-lines value").parse().expect("usize")
+                args.max_lines = it
+                    .next()
+                    .expect("--max-lines value")
+                    .parse()
+                    .expect("usize")
             }
             "--test-command" => args.test_command = Some(it.next().expect("--test-command value")),
             "--model" => args.model = it.next().expect("--model value"),
@@ -65,10 +67,9 @@ fn parse_args() -> Args {
 async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(
-                    "commonwealth_tdd=info,probe_multi_file=info",
-                )),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                tracing_subscriber::EnvFilter::new("commonwealth_tdd=info,probe_multi_file=info")
+            }),
         )
         .init();
 
@@ -115,9 +116,10 @@ async fn main() {
 
     println!("─── Result ──────────────────────────────────────────");
     println!("status:       {:?}", r.status);
-    println!("tests:        before={}p/{}f after={}p/{}f",
-        r.tests_before.passed, r.tests_before.failed,
-        r.tests_after.passed, r.tests_after.failed);
+    println!(
+        "tests:        before={}p/{}f after={}p/{}f",
+        r.tests_before.passed, r.tests_before.failed, r.tests_after.passed, r.tests_after.failed
+    );
     println!("rounds:       {}", r.rounds);
     println!("wall time:    {:.1}s", elapsed.as_secs_f64());
     println!();

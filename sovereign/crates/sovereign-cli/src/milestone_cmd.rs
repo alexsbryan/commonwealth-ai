@@ -56,7 +56,10 @@ pub async fn run(args: &[String]) -> i32 {
     }
     let feature_id = positional[0].clone();
     let Ok(ordinal) = positional[1].parse::<i64>() else {
-        eprintln!("  sovereign milestone: <N> must be an integer (got {:?})", positional[1]);
+        eprintln!(
+            "  sovereign milestone: <N> must be an integer (got {:?})",
+            positional[1]
+        );
         return 2;
     };
 

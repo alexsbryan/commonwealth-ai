@@ -12,8 +12,8 @@
 //!   errors before wasting time on test runs.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
@@ -23,8 +23,8 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::WatcherHeartbeat;
 use corpus_engine::lint_results::{LintResult, LintResultStore, LintRunSummary};
+use corpus_engine::WatcherHeartbeat;
 
 use super::watcher_health::{
     apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs,
@@ -242,10 +242,7 @@ impl Tool for LintStatusTool {
         let where_ = top_file
             .map(|f| format!(" (first in {f})"))
             .unwrap_or_default();
-        Some(format!(
-            "{} lint error(s){where_}{age}",
-            summary.fail_count
-        ))
+        Some(format!("{} lint error(s){where_}{age}", summary.fail_count))
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
@@ -311,9 +308,12 @@ impl Tool for LintStatusTool {
         })?;
 
         let Some(run) = latest else {
-            let files_block = query_paths
-                .as_ref()
-                .map(|paths| paths.iter().map(|p| never_checked_entry(p)).collect::<Vec<_>>());
+            let files_block = query_paths.as_ref().map(|paths| {
+                paths
+                    .iter()
+                    .map(|p| never_checked_entry(p))
+                    .collect::<Vec<_>>()
+            });
             let reason = assess(&WatcherHealthInputs {
                 heartbeat: self.heartbeat.as_ref(),
                 legacy_active,
@@ -416,12 +416,12 @@ impl Tool for LintStatusTool {
         // for it. Reuses the same raw_* diagnostics so the per-file
         // counts agree with the (possibly filtered) top-level
         // arrays.
-        let files_block: Option<Vec<serde_json::Value>> = query_paths.as_ref().map(|paths| paths
-                    .iter()
-                    .map(|p| {
-                        self.freshness_entry(p, &run, &stale, &raw_failures, &raw_warnings)
-                    })
-                    .collect());
+        let files_block: Option<Vec<serde_json::Value>> = query_paths.as_ref().map(|paths| {
+            paths
+                .iter()
+                .map(|p| self.freshness_entry(p, &run, &stale, &raw_failures, &raw_warnings))
+                .collect()
+        });
 
         Ok(StepOutput::Json(json!({
             "status": status,
@@ -449,10 +449,8 @@ impl LintStatusTool {
     /// paths. Returns `None` when neither param is set (workspace-only
     /// mode — existing callers see no behaviour change).
     fn resolve_query_paths(&self, params: &serde_json::Value) -> Option<Vec<PathBuf>> {
-        let explicit: Option<Vec<String>> = params
-            .get("files")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
+        let explicit: Option<Vec<String>> =
+            params.get("files").and_then(|v| v.as_array()).map(|arr| {
                 arr.iter()
                     .filter_map(|x| x.as_str().map(|s| s.to_string()))
                     .collect()
@@ -659,7 +657,10 @@ fn filter_results_by_paths(
 fn diag_matches_path(diag_file: &str, query_path: &Path, workspace_root: Option<&Path>) -> bool {
     let diag = Path::new(diag_file);
     if diag.is_absolute() {
-        if let (Ok(a), Ok(b)) = (std::fs::canonicalize(diag), std::fs::canonicalize(query_path)) {
+        if let (Ok(a), Ok(b)) = (
+            std::fs::canonicalize(diag),
+            std::fs::canonicalize(query_path),
+        ) {
             return a == b;
         }
         return diag == query_path;
@@ -720,10 +721,8 @@ async fn build_previous_run(
     } else {
         "fresh_failing"
     };
-    let looks_like_compile_failure = run.exit_code != 0
-        && run.pass_count == 0
-        && run.fail_count == 0
-        && run.warn_count == 0;
+    let looks_like_compile_failure =
+        run.exit_code != 0 && run.pass_count == 0 && run.fail_count == 0 && run.warn_count == 0;
     let errors = store
         .latest_failures(10)
         .await
@@ -779,7 +778,11 @@ mod tests {
         std::fs::write(&file, b"").unwrap();
         let canonical = std::fs::canonicalize(&file).unwrap();
         // Cargo would emit a workspace-relative diagnostic.
-        assert!(diag_matches_path("src/lib.rs", &canonical, Some(&workspace)));
+        assert!(diag_matches_path(
+            "src/lib.rs",
+            &canonical,
+            Some(&workspace)
+        ));
         std::fs::remove_file(&file).ok();
         std::fs::remove_dir_all(&workspace).ok();
     }
@@ -807,9 +810,7 @@ mod tests {
 
     #[test]
     fn resolve_query_paths_prefers_explicit_files_over_changed() {
-        let store = Arc::new(
-            LintResultStore::open(std::path::Path::new(":memory:")).unwrap(),
-        );
+        let store = Arc::new(LintResultStore::open(std::path::Path::new(":memory:")).unwrap());
         let tool = LintStatusTool::new(store).with_workspace_root(std::env::temp_dir());
         let params = json!({
             "files": ["a.rs", "b.rs"],
@@ -823,9 +824,7 @@ mod tests {
 
     #[test]
     fn resolve_query_paths_returns_none_when_neither_set() {
-        let store = Arc::new(
-            LintResultStore::open(std::path::Path::new(":memory:")).unwrap(),
-        );
+        let store = Arc::new(LintResultStore::open(std::path::Path::new(":memory:")).unwrap());
         let tool = LintStatusTool::new(store);
         assert!(tool.resolve_query_paths(&json!({})).is_none());
     }
@@ -852,9 +851,7 @@ mod tests {
     #[tokio::test]
     async fn running_branch_surfaces_compile_failed_previous_run() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Arc::new(
-            LintResultStore::open(&dir.path().join("lint.db")).unwrap(),
-        );
+        let store = Arc::new(LintResultStore::open(&dir.path().join("lint.db")).unwrap());
 
         // Run 1: compile-failure shape — non-zero exit, no diagnostics.
         let r1 = store.begin_run().await.unwrap();
@@ -891,9 +888,7 @@ mod tests {
     #[tokio::test]
     async fn running_branch_with_no_prior_run_returns_null_previous() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Arc::new(
-            LintResultStore::open(&dir.path().join("lint.db")).unwrap(),
-        );
+        let store = Arc::new(LintResultStore::open(&dir.path().join("lint.db")).unwrap());
         let _r = store.begin_run().await.unwrap();
 
         let tool = LintStatusTool::new(Arc::clone(&store));

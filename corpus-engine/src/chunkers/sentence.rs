@@ -123,7 +123,11 @@ mod tests {
         let chunker = SentenceChunker::new(50);
         let text = "First sentence. Second sentence. Third sentence. Fourth sentence.";
         let chunks = chunker.chunk(text);
-        assert!(chunks.len() > 1, "Expected multiple chunks, got {}", chunks.len());
+        assert!(
+            chunks.len() > 1,
+            "Expected multiple chunks, got {}",
+            chunks.len()
+        );
         for (i, chunk) in chunks.iter().enumerate() {
             assert_eq!(chunk.index, i);
             assert!(!chunk.content.is_empty());
@@ -145,7 +149,11 @@ mod tests {
         let text = "What is this? It is great! Another sentence. And more.";
         let chunks = chunker.chunk(text);
         assert!(!chunks.is_empty());
-        let all: String = chunks.iter().map(|c| c.content.clone()).collect::<Vec<_>>().join(" ");
+        let all: String = chunks
+            .iter()
+            .map(|c| c.content.clone())
+            .collect::<Vec<_>>()
+            .join(" ");
         assert!(all.contains("What is this?"));
         assert!(all.contains("It is great!"));
     }

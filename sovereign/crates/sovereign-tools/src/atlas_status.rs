@@ -101,11 +101,7 @@ pub fn compute_atlas_status(indexes_dir: &Path, enrichment_dir: &Path) -> Vec<At
     rows
 }
 
-fn compute_one(
-    corpus_id: &str,
-    corpus_dir: &Path,
-    enrichment_dir: &Path,
-) -> AtlasStatusRow {
+fn compute_one(corpus_id: &str, corpus_dir: &Path, enrichment_dir: &Path) -> AtlasStatusRow {
     let atlas_dir = corpus_dir.join("atlas");
     let atlas = read_or_compute_atlas_summary(&atlas_dir).ok().flatten();
     let embed_cache_present = atlas_dir.join("atoms.embeddings.bin").exists();
@@ -159,10 +155,8 @@ fn read_tier2_progress(
     let chapters_manifest = indexes_dir?
         .join(format!("{corpus_id}-tier2"))
         .join("chapters.json");
-    let (done, total) = crate::atlas_postinstall::checkpoint_progress(
-        workspace_dir,
-        &chapters_manifest,
-    )?;
+    let (done, total) =
+        crate::atlas_postinstall::checkpoint_progress(workspace_dir, &chapters_manifest)?;
     Some(Tier2Progress {
         chapters_done: done,
         chapters_total: total,
@@ -233,9 +227,9 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-})]);
+            provenance: Default::default(),
+            concept_kind: None,
+        })]);
         std::fs::write(
             atlas_dir.join("atoms.json"),
             serde_json::to_vec_pretty(&atoms).unwrap(),

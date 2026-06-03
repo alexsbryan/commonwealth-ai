@@ -10,14 +10,13 @@
 //! whole prompt budget.
 
 use crate::enrichment::pipeline::atlas::{
-    EntityStateSketch, EventSketch, NarrativeExtension, ParticipantArcSketch,
-    RelationSketch, RelationStateSketch, TypeExtension,
+    EntityStateSketch, EventSketch, NarrativeExtension, ParticipantArcSketch, RelationSketch,
+    RelationStateSketch, TypeExtension,
 };
 use crate::enrichment::pipeline::types::strip_reasoning_tags;
 use crate::error::{Error, Result};
 
-pub const PHASE1_NARRATIVE_SYSTEM: &str =
-    include_str!("narrative_phase1_system.md");
+pub const PHASE1_NARRATIVE_SYSTEM: &str = include_str!("narrative_phase1_system.md");
 
 pub fn phase1_narrative_schema() -> serde_json::Value {
     serde_json::json!({
@@ -184,9 +183,7 @@ pub fn parse_phase1_narrative(response: &str) -> Result<NarrativeExtension> {
         })
         .unwrap_or_default();
 
-    fn parse_relation_like(
-        arr: &[serde_json::Value],
-    ) -> Vec<(Vec<String>, String, String)> {
+    fn parse_relation_like(arr: &[serde_json::Value]) -> Vec<(Vec<String>, String, String)> {
         arr.iter()
             .filter_map(|e| {
                 let participants = e
@@ -194,9 +191,7 @@ pub fn parse_phase1_narrative(response: &str) -> Result<NarrativeExtension> {
                     .and_then(|x| x.as_array())
                     .map(|a| {
                         a.iter()
-                            .filter_map(|p| {
-                                p.as_str().map(str::trim).filter(|s| !s.is_empty())
-                            })
+                            .filter_map(|p| p.as_str().map(str::trim).filter(|s| !s.is_empty()))
                             .map(str::to_string)
                             .collect::<Vec<_>>()
                     })
@@ -307,7 +302,10 @@ mod tests {
         }"#;
         let e = parse_phase1_narrative(json).expect("parses");
         assert_eq!(e.events.len(), 1);
-        assert_eq!(e.events[0].description, "Wheelers arrive at the homestead in late November.");
+        assert_eq!(
+            e.events[0].description,
+            "Wheelers arrive at the homestead in late November."
+        );
     }
 
     #[test]
@@ -328,7 +326,8 @@ mod tests {
 
     #[test]
     fn strips_reasoning_tags() {
-        let json = "<think>scanning</think>{\"events\":[{\"description\":\"Hawthorn split open.\"}]}";
+        let json =
+            "<think>scanning</think>{\"events\":[{\"description\":\"Hawthorn split open.\"}]}";
         let e = parse_phase1_narrative(json).expect("parses");
         assert_eq!(e.events.len(), 1);
     }

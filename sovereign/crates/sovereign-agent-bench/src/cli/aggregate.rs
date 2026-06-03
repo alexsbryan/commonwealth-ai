@@ -259,7 +259,8 @@ pub fn walk_artifact_root(root: &Path) -> Result<Vec<CellObservation>, Aggregate
 }
 
 fn read_dir_sorted(p: &Path) -> Result<Vec<std::fs::DirEntry>, AggregateError> {
-    let mut entries: Vec<std::fs::DirEntry> = std::fs::read_dir(p)?.filter_map(|e| e.ok()).collect();
+    let mut entries: Vec<std::fs::DirEntry> =
+        std::fs::read_dir(p)?.filter_map(|e| e.ok()).collect();
     entries.sort_by_key(|e| e.file_name());
     Ok(entries)
 }

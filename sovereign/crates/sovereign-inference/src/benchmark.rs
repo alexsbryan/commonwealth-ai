@@ -68,8 +68,7 @@ pub async fn run_baseline_benchmark(
         "bench: starting baseline probe"
     );
 
-    let mut request = CompletionRequest::new(BENCHMARK_PROMPT)
-        .with_speed(Speed::Fast);
+    let mut request = CompletionRequest::new(BENCHMARK_PROMPT).with_speed(Speed::Fast);
     request.max_tokens = Some(BENCHMARK_MAX_TOKENS as usize);
     request.temperature = Some(0.0);
 
@@ -99,7 +98,10 @@ pub async fn run_baseline_benchmark(
         }
     };
 
-    if tokio::time::timeout(BENCHMARK_TIMEOUT, probe).await.is_err() {
+    if tokio::time::timeout(BENCHMARK_TIMEOUT, probe)
+        .await
+        .is_err()
+    {
         tracing::warn!(
             timeout_secs = BENCHMARK_TIMEOUT.as_secs(),
             chunks_so_far = chunk_count,
@@ -120,9 +122,7 @@ pub async fn run_baseline_benchmark(
 
     let (pp_tok_s, tg_tok_s) = match first_chunk_at {
         None => {
-            tracing::warn!(
-                "bench: no tokens generated — recording neutral throughput"
-            );
+            tracing::warn!("bench: no tokens generated — recording neutral throughput");
             (0.0_f32, 0.0_f32)
         }
         Some(first) => {

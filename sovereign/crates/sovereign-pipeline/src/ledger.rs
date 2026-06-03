@@ -85,7 +85,9 @@ fn write_atomic(path: &Path, pods: &[PodRecord]) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let file = LedgerFile { pods: pods.to_vec() };
+    let file = LedgerFile {
+        pods: pods.to_vec(),
+    };
     let body = serde_json::to_vec_pretty(&file)?;
     let tmp = path.with_extension("json.tmp");
     {

@@ -68,26 +68,14 @@ pub struct TemplateChapter {
 /// commit: drop `<name>.toml` next to this module and append a row
 /// here. `load_builtin(name)` parses on demand.
 const BUILTINS: &[(&str, &str)] = &[
-    (
-        "free-will-debate",
-        include_str!("free-will-debate.toml"),
-    ),
+    ("free-will-debate", include_str!("free-will-debate.toml")),
     (
         "virtue-ethics-fragments",
         include_str!("virtue-ethics-fragments.toml"),
     ),
-    (
-        "stoicism-mini",
-        include_str!("stoicism-mini.toml"),
-    ),
-    (
-        "bk-book-1",
-        include_str!("bk-book-1.toml"),
-    ),
-    (
-        "dubliners-3",
-        include_str!("dubliners-3.toml"),
-    ),
+    ("stoicism-mini", include_str!("stoicism-mini.toml")),
+    ("bk-book-1", include_str!("bk-book-1.toml")),
+    ("dubliners-3", include_str!("dubliners-3.toml")),
 ];
 
 /// Section-detection regex paired with the chapter materialiser. A
@@ -114,8 +102,8 @@ pub fn load_builtin(name: &str) -> Result<Template, String> {
 }
 
 pub fn load_from_path(path: &std::path::Path) -> Result<Template, String> {
-    let body = std::fs::read_to_string(path)
-        .map_err(|e| format!("read {}: {e}", path.display()))?;
+    let body =
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     parse_template(&body).map_err(|e| format!("parse {}: {e}", path.display()))
 }
 
@@ -155,8 +143,7 @@ mod tests {
 
     #[test]
     fn virtue_ethics_fragments_parses() {
-        load_builtin("virtue-ethics-fragments")
-            .expect("virtue-ethics-fragments.toml should parse");
+        load_builtin("virtue-ethics-fragments").expect("virtue-ethics-fragments.toml should parse");
     }
 
     #[test]
@@ -196,9 +183,7 @@ mod tests {
     /// This is the runtime semantics of `CHAPTER_REGEX` without taking
     /// a regex dep into this crate.
     fn count_chapter_headers(text: &str) -> usize {
-        text.lines()
-            .filter(|l| l.starts_with("## "))
-            .count()
+        text.lines().filter(|l| l.starts_with("## ")).count()
     }
 
     #[test]

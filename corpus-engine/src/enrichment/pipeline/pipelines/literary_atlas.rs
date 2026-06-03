@@ -39,22 +39,28 @@ use serde::Deserialize;
 use tracing::debug;
 
 static PHASE1_ATLAS_SYSTEM: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "literary_atlas/phase1_system.md",
-        include_str!("literary_atlas_prompts/phase1_system.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "literary_atlas/phase1_system.md",
+            include_str!("literary_atlas_prompts/phase1_system.md"),
+        )
+    });
 
 static PHASE1B_ENTITY_COVERAGE: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "literary_atlas/phase1b_entity_coverage.md",
-        include_str!("literary_atlas_prompts/phase1b_entity_coverage.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "literary_atlas/phase1b_entity_coverage.md",
+            include_str!("literary_atlas_prompts/phase1b_entity_coverage.md"),
+        )
+    });
 
 static PHASE1B_CONCEPT_COVERAGE: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "literary_atlas/phase1b_concept_coverage.md",
-        include_str!("literary_atlas_prompts/phase1b_concept_coverage.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "literary_atlas/phase1b_concept_coverage.md",
+            include_str!("literary_atlas_prompts/phase1b_concept_coverage.md"),
+        )
+    });
 
 /// Terse Phase 1 preamble used when a default run failed with
 /// `PhaseFailureKind::ThinkTruncated`. The asset drops the shape
@@ -62,10 +68,12 @@ static PHASE1B_CONCEPT_COVERAGE: ::std::sync::LazyLock<&'static str> =
 /// model emits JSON directly instead of burning its output budget
 /// on reflection.
 static PHASE1_ATLAS_SYSTEM_TERSE: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "literary_atlas/phase1_system_terse.md",
-        include_str!("literary_atlas_prompts/phase1_system_terse.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "literary_atlas/phase1_system_terse.md",
+            include_str!("literary_atlas_prompts/phase1_system_terse.md"),
+        )
+    });
 
 // Per-facet Phase 3 naming preambles. `compose_phase3_facet`
 // selects among these by facet. Each targets the naming convention
@@ -73,46 +81,60 @@ static PHASE1_ATLAS_SYSTEM_TERSE: ::std::sync::LazyLock<&'static str> =
 // family, entity-state → trajectory arc, relation-state →
 // relational dynamic, event → narrative thread.
 static PHASE3_QUESTION_NAMING: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "literary_atlas/phase3_question_naming.md",
-        include_str!("literary_atlas_prompts/phase3_question_naming.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "literary_atlas/phase3_question_naming.md",
+            include_str!("literary_atlas_prompts/phase3_question_naming.md"),
+        )
+    });
 static PHASE3_CLAIM_NAMING: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "literary_atlas/phase3_claim_naming.md",
-        include_str!("literary_atlas_prompts/phase3_claim_naming.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "literary_atlas/phase3_claim_naming.md",
+            include_str!("literary_atlas_prompts/phase3_claim_naming.md"),
+        )
+    });
 static PHASE3_ENTITY_STATE_NAMING: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "literary_atlas/phase3_entity_state_trajectory_naming.md",
-        include_str!("literary_atlas_prompts/phase3_entity_state_trajectory_naming.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "literary_atlas/phase3_entity_state_trajectory_naming.md",
+            include_str!("literary_atlas_prompts/phase3_entity_state_trajectory_naming.md"),
+        )
+    });
 static PHASE3_RELATION_STATE_NAMING: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "literary_atlas/phase3_relation_state_trajectory_naming.md",
-        include_str!("literary_atlas_prompts/phase3_relation_state_trajectory_naming.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "literary_atlas/phase3_relation_state_trajectory_naming.md",
+            include_str!("literary_atlas_prompts/phase3_relation_state_trajectory_naming.md"),
+        )
+    });
 static PHASE3_EVENT_NAMING: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "literary_atlas/phase3_event_thread_naming.md",
-        include_str!("literary_atlas_prompts/phase3_event_thread_naming.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "literary_atlas/phase3_event_thread_naming.md",
+            include_str!("literary_atlas_prompts/phase3_event_thread_naming.md"),
+        )
+    });
 
 static PHASE1A_SEED_SYSTEM: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "literary_atlas/phase1a_seed_system.md",
-        include_str!("literary_atlas_prompts/phase1a_seed_system.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "literary_atlas/phase1a_seed_system.md",
+            include_str!("literary_atlas_prompts/phase1a_seed_system.md"),
+        )
+    });
 
 /// Phase 8 configuration-detection preamble. The LLM reads the
 /// atlas summary (not raw text) and emits 0–3 Configuration atoms
 /// per spec §2.7, each with an `interpretive_note` articulating
 /// alternative readings (the Ricoeur constraint per spec §1.2).
 static PHASE8_CONFIGURATION_SYSTEM: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "literary_atlas/phase8_configuration.md",
-        include_str!("literary_atlas_prompts/phase8_configuration.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "literary_atlas/phase8_configuration.md",
+            include_str!("literary_atlas_prompts/phase8_configuration.md"),
+        )
+    });
 
 /// Phase 6 atlas Tension classifier preamble. The LLM reads one
 /// resolved candidate (a claim+state pair sharing an entity) and
@@ -120,10 +142,12 @@ static PHASE8_CONFIGURATION_SYSTEM: ::std::sync::LazyLock<&'static str> =
 /// tension. Yes-verdicts promote to `EdgeType::Tension` records on
 /// `edges.json` via `analysis::tension_classifier::classification_to_edge`.
 static PHASE6_CLASSIFIER_SYSTEM: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "literary_atlas/phase6_classifier_system.md",
-        include_str!("literary_atlas_prompts/phase6_classifier_system.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "literary_atlas/phase6_classifier_system.md",
+            include_str!("literary_atlas_prompts/phase6_classifier_system.md"),
+        )
+    });
 
 /// Pipeline id exposed by the registry.
 pub const PIPELINE_ID: &str = "literary_atlas";
@@ -136,7 +160,9 @@ pub struct LiteraryAtlasPipeline {
 
 impl LiteraryAtlasPipeline {
     pub fn new() -> Self {
-        Self { inner: LiteraryPipeline::new() }
+        Self {
+            inner: LiteraryPipeline::new(),
+        }
     }
 }
 
@@ -187,21 +213,14 @@ impl Pipeline for LiteraryAtlasPipeline {
 
     // ── Phase 1 — atlas extraction ────────────────────────────
 
-    fn compose_phase1(
-        &self,
-        chapter: &ChapterInput,
-        exemplars: &[&Exemplar],
-    ) -> ChatPrompt {
+    fn compose_phase1(&self, chapter: &ChapterInput, exemplars: &[&Exemplar]) -> ChatPrompt {
         // Delegate to the seed-aware variant with no seed so the
         // seed-aware rendering path has a single call site. When a
         // seed is available the runner calls `compose_phase1_with_seed`
         // directly and gets the same body + an extra "known canonical
         // names" block at the top.
         let user = render_phase1_user_body(
-            chapter,
-            exemplars,
-            /*include_exemplars=*/ true,
-            /*seed=*/ None,
+            chapter, exemplars, /*include_exemplars=*/ true, /*seed=*/ None,
         );
         ChatPrompt::new(self.phase1_system(), user)
             .with_response_schema(
@@ -217,10 +236,7 @@ impl Pipeline for LiteraryAtlasPipeline {
     /// and drops the exemplar block to save tokens on a chapter that
     /// already blew past the output budget. Parser is shared with
     /// the default variant.
-    fn compose_phase1_terse(
-        &self,
-        chapter: &ChapterInput,
-    ) -> Option<ChatPrompt> {
+    fn compose_phase1_terse(&self, chapter: &ChapterInput) -> Option<ChatPrompt> {
         let user = render_phase1_user_body(
             chapter,
             /*exemplars=*/ &[],
@@ -265,10 +281,7 @@ impl Pipeline for LiteraryAtlasPipeline {
         )
     }
 
-    fn parse_phase1b_coverage(
-        &self,
-        response: &str,
-    ) -> Result<Vec<EntitySketch>> {
+    fn parse_phase1b_coverage(&self, response: &str) -> Result<Vec<EntitySketch>> {
         parse_phase1b_coverage_response(response)
     }
 
@@ -362,12 +375,8 @@ impl Pipeline for LiteraryAtlasPipeline {
         exemplars: &[&Exemplar],
         seed: Option<&SeedEntities>,
     ) -> ChatPrompt {
-        let user = render_phase1_user_body(
-            chapter,
-            exemplars,
-            /*include_exemplars=*/ true,
-            seed,
-        );
+        let user =
+            render_phase1_user_body(chapter, exemplars, /*include_exemplars=*/ true, seed);
         ChatPrompt::new(self.phase1_system(), user)
             .with_response_schema(
                 "phase1_section_extraction",
@@ -388,12 +397,9 @@ impl Pipeline for LiteraryAtlasPipeline {
         // cleaning pass do we deserialize into the typed Raw
         // layout. Without this pre-pass a single duplicate field or
         // hallucinated comment string costs the whole section.
-        let mut value: serde_json::Value =
-            serde_json::from_str(&cleaned).map_err(|e| {
-                Error::Serialization(format!(
-                    "phase 1 (atlas) response is not valid JSON: {e}"
-                ))
-            })?;
+        let mut value: serde_json::Value = serde_json::from_str(&cleaned).map_err(|e| {
+            Error::Serialization(format!("phase 1 (atlas) response is not valid JSON: {e}"))
+        })?;
         sanitize_phase1_object_arrays(&mut value);
 
         // Deserialize through a lenient Raw layout that tolerates
@@ -403,17 +409,14 @@ impl Pipeline for LiteraryAtlasPipeline {
         // rest of a chapter's extraction. Hard-failing on shape only
         // makes sense when the response as a whole is unusable.
         let raw: RawSectionExtraction = serde_json::from_value(value).map_err(|e| {
-            Error::Serialization(format!(
-                "phase 1 (atlas) response is not valid JSON: {e}"
-            ))
+            Error::Serialization(format!("phase 1 (atlas) response is not valid JSON: {e}"))
         })?;
         let mut extraction = raw.into_extraction();
 
         // Reject the common failure mode where the model echoes the
         // schema placeholder for section_id instead of stamping the
         // real one.
-        if extraction.section_id.trim().is_empty()
-            || is_placeholder_literal(&extraction.section_id)
+        if extraction.section_id.trim().is_empty() || is_placeholder_literal(&extraction.section_id)
         {
             // Section id is stamped by the runner from the chapter
             // input anyway — we don't care what the model put here
@@ -562,11 +565,7 @@ impl Pipeline for LiteraryAtlasPipeline {
         )
     }
 
-    fn parse_phase3_facet(
-        &self,
-        _facet: Facet,
-        response: &str,
-    ) -> Result<Phase3FacetParseResult> {
+    fn parse_phase3_facet(&self, _facet: Facet, response: &str) -> Result<Phase3FacetParseResult> {
         let cleaned = prepare_phase_json(response, "phase 3 (atlas)")?;
 
         // Accept arbitrary JSON values inside `metadata` because the
@@ -581,17 +580,14 @@ impl Pipeline for LiteraryAtlasPipeline {
             #[serde(default)]
             metadata: Option<std::collections::HashMap<String, serde_json::Value>>,
         }
-        let raw: Raw = serde_json::from_str(&cleaned).map_err(|e| {
-            Error::Serialization(format!("phase 3 (atlas) JSON parse error: {e}"))
-        })?;
+        let raw: Raw = serde_json::from_str(&cleaned)
+            .map_err(|e| Error::Serialization(format!("phase 3 (atlas) JSON parse error: {e}")))?;
         let label = raw
             .label
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty() && !is_placeholder_literal(s))
             .ok_or_else(|| {
-                Error::Serialization(
-                    "phase 3 (atlas) response missing non-empty `label`".into(),
-                )
+                Error::Serialization("phase 3 (atlas) response missing non-empty `label`".into())
             })?;
         let metadata: std::collections::HashMap<String, String> = raw
             .metadata
@@ -767,7 +763,10 @@ impl Pipeline for LiteraryAtlasPipeline {
 
         user.push_str("\nReturn 0–3 configurations as strict JSON per the system prompt.");
 
-        Some(ChatPrompt::new(*PHASE8_CONFIGURATION_SYSTEM, user).with_phase_id("phase8_configuration"))
+        Some(
+            ChatPrompt::new(*PHASE8_CONFIGURATION_SYSTEM, user)
+                .with_phase_id("phase8_configuration"),
+        )
     }
 
     fn parse_phase8_configuration(
@@ -788,13 +787,16 @@ impl Pipeline for LiteraryAtlasPipeline {
         content: &crate::enrichment::atlas::analysis::CandidateContent,
     ) -> Option<ChatPrompt> {
         Some(
-            ChatPrompt::new(*PHASE6_CLASSIFIER_SYSTEM, render_phase6_classifier_user_body(content))
-                .with_response_schema(
-                    "phase6_classifier_response",
-                    crate::enrichment::atlas::analysis::phase6_classifier_response_schema(),
-                )
-                .with_phase_id("phase6_classifier")
-                .with_max_output_tokens(256),
+            ChatPrompt::new(
+                *PHASE6_CLASSIFIER_SYSTEM,
+                render_phase6_classifier_user_body(content),
+            )
+            .with_response_schema(
+                "phase6_classifier_response",
+                crate::enrichment::atlas::analysis::phase6_classifier_response_schema(),
+            )
+            .with_phase_id("phase6_classifier")
+            .with_max_output_tokens(256),
         )
     }
 }
@@ -1089,18 +1091,14 @@ pub(super) fn render_phase1b_user_body(
         user.push_str("  (none)\n");
     } else {
         for e in &existing.entities_introduced {
-            user.push_str(&format!(
-                "  - {:?}: {}\n",
-                e.entity_type, e.canonical_name
-            ));
+            user.push_str(&format!("  - {:?}: {}\n", e.entity_type, e.canonical_name));
         }
     }
     user.push_str(&format!(
         "\n**Other counts:** {} event(s), {} state(s), {} relation(s), \
          {} claim(s), {} question(s).\n\n",
         existing.events.len(),
-        existing.entities_developed.len()
-            + existing.relations_developed.len(),
+        existing.entities_developed.len() + existing.relations_developed.len(),
         existing.relations_introduced.len(),
         existing.claims.len(),
         existing.questions_raised.len(),
@@ -1118,9 +1116,7 @@ pub(super) fn render_phase1b_user_body(
 /// concept variant as `entity_type: concept`. Drops entries with an
 /// empty canonical name; passes the rest through with sensible
 /// fallbacks.
-pub(super) fn parse_phase1b_coverage_response(
-    response: &str,
-) -> Result<Vec<EntitySketch>> {
+pub(super) fn parse_phase1b_coverage_response(response: &str) -> Result<Vec<EntitySketch>> {
     let cleaned = prepare_phase_json(response, "phase 1b (coverage)")?;
 
     #[derive(Deserialize, Default)]
@@ -1364,8 +1360,7 @@ impl RawEntitySketch {
         // process — so the retype is conservative and reverses a known
         // failure mode without affecting concept-typed entries the
         // model already got right.
-        let entity_type = if matches!(entity_type, EntityType::Person)
-            && is_position_suffix(&name)
+        let entity_type = if matches!(entity_type, EntityType::Person) && is_position_suffix(&name)
         {
             EntityType::Concept
         } else {
@@ -1560,9 +1555,7 @@ impl RawClaimSketch {
         // `epistemic_status` has a sensible narrative-prose default —
         // the text commits unless it signals otherwise. Defaulting is
         // preferable to losing the claim.
-        let epistemic_status = self
-            .epistemic_status
-            .unwrap_or(EpistemicStatus::Confident);
+        let epistemic_status = self.epistemic_status.unwrap_or(EpistemicStatus::Confident);
         let attributed_to = self
             .attributed_to
             .and_then(phase3_metadata_value_to_string)
@@ -1654,9 +1647,7 @@ impl RawArgumentReconstructionSketch {
         // that the model captured part of the structure; downstream
         // consumers can decide what to render.
         if premises.is_empty() && conclusion.is_empty() {
-            debug!(
-                "literary_atlas: dropping argument sketch '{name}' — no premises or conclusion"
-            );
+            debug!("literary_atlas: dropping argument sketch '{name}' — no premises or conclusion");
             return None;
         }
         use crate::enrichment::atlas::atoms::Objection;
@@ -1667,10 +1658,9 @@ impl RawArgumentReconstructionSketch {
             .filter_map(|raw| {
                 let (name, content) = match raw {
                     RawObjection::Str(s) => (s.trim().to_string(), String::new()),
-                    RawObjection::Obj { name, content } => (
-                        name.trim().to_string(),
-                        content.trim().to_string(),
-                    ),
+                    RawObjection::Obj { name, content } => {
+                        (name.trim().to_string(), content.trim().to_string())
+                    }
                 };
                 if name.is_empty() {
                     None
@@ -2085,8 +2075,7 @@ const PHASE1A_SEED_SCHEMA: &str = r##"{
 }"##;
 
 pub fn phase1a_seed_schema() -> serde_json::Value {
-    serde_json::from_str(PHASE1A_SEED_SCHEMA)
-        .expect("PHASE1A_SEED_SCHEMA must be valid JSON")
+    serde_json::from_str(PHASE1A_SEED_SCHEMA).expect("PHASE1A_SEED_SCHEMA must be valid JSON")
 }
 
 /// Parse a Phase 8 (`configurations`) response with tolerance for
@@ -2108,20 +2097,17 @@ pub fn phase1a_seed_schema() -> serde_json::Value {
 pub(crate) fn parse_phase8_configuration_tolerant(
     response: &str,
 ) -> Result<Vec<crate::enrichment::atlas::analysis::Phase8ParseItem>> {
-    let cleaned =
-        match super::literary::prepare_phase_json(response, "phase 8 (configuration)") {
-            Ok(c) => c,
-            Err(Error::Serialization(msg))
-                if msg.contains("contained no recognisable JSON object") =>
-            {
-                tracing::warn!(
-                    phase = "phase8_configuration",
-                    "model returned no JSON block; treating as 0 configurations"
-                );
-                return Ok(Vec::new());
-            }
-            Err(e) => return Err(e),
-        };
+    let cleaned = match super::literary::prepare_phase_json(response, "phase 8 (configuration)") {
+        Ok(c) => c,
+        Err(Error::Serialization(msg)) if msg.contains("contained no recognisable JSON object") => {
+            tracing::warn!(
+                phase = "phase8_configuration",
+                "model returned no JSON block; treating as 0 configurations"
+            );
+            return Ok(Vec::new());
+        }
+        Err(e) => return Err(e),
+    };
 
     let root: serde_json::Value = serde_json::from_str(&cleaned).map_err(|e| {
         Error::Serialization(format!(
@@ -2437,7 +2423,9 @@ mod tests {
         // exemplar block, since the whole point is to save tokens
         // on a chapter that already blew past the budget.
         let p = LiteraryAtlasPipeline::new();
-        let prompt = p.compose_phase1_terse(&sample_chapter()).expect("literary_atlas always returns Some");
+        let prompt = p
+            .compose_phase1_terse(&sample_chapter())
+            .expect("literary_atlas always returns Some");
         // Pin the terse-specific directive from the asset.
         assert!(
             prompt.system.contains("Do NOT show your reasoning"),
@@ -2463,7 +2451,9 @@ mod tests {
         // default at an identical chapter input.
         let p = LiteraryAtlasPipeline::new();
         let default_prompt = p.compose_phase1(&sample_chapter(), &[]);
-        let terse_prompt = p.compose_phase1_terse(&sample_chapter()).expect("literary_atlas always returns Some");
+        let terse_prompt = p
+            .compose_phase1_terse(&sample_chapter())
+            .expect("literary_atlas always returns Some");
         let default_total = default_prompt.system.len() + default_prompt.user.len();
         let terse_total = terse_prompt.system.len() + terse_prompt.user.len();
         assert!(
@@ -2541,10 +2531,7 @@ mod tests {
             EpistemicStatus::Confident
         );
         // Anchors preserved.
-        assert_eq!(
-            extraction.claims[0].anchor,
-            "love in dreams is greedy"
-        );
+        assert_eq!(extraction.claims[0].anchor, "love in dreams is greedy");
     }
 
     #[test]
@@ -2552,10 +2539,7 @@ mod tests {
         let p = LiteraryAtlasPipeline::new();
         let response = r#"{"section_id": "sec_0001"}"#;
         let err = p.parse_phase1(response).unwrap_err();
-        assert!(
-            format!("{err}").contains("did not extract"),
-            "got: {err}"
-        );
+        assert!(format!("{err}").contains("did not extract"), "got: {err}");
     }
 
     #[test]
@@ -2569,10 +2553,7 @@ mod tests {
           }]
         }"#;
         let err = p.parse_phase1(response).unwrap_err();
-        assert!(
-            format!("{err}").contains("questions"),
-            "got: {err}"
-        );
+        assert!(format!("{err}").contains("questions"), "got: {err}");
     }
 
     #[test]
@@ -2929,9 +2910,7 @@ mod tests {
             "scope": "novel-wide"
           }
         }"#;
-        let parsed = p
-            .parse_phase3_facet(Facet::EntityState, response)
-            .unwrap();
+        let parsed = p.parse_phase3_facet(Facet::EntityState, response).unwrap();
         assert!(parsed.label.contains("Jane's movement"));
         assert_eq!(parsed.metadata.get("entity_name").unwrap(), "Jane");
     }
@@ -2959,7 +2938,9 @@ mod tests {
             "dynamic_type": "convergence"
           }
         }"#;
-        let parsed = p.parse_phase3_facet(Facet::RelationState, response).unwrap();
+        let parsed = p
+            .parse_phase3_facet(Facet::RelationState, response)
+            .unwrap();
         assert!(parsed.label.contains("Frankfurt"));
         assert_eq!(
             parsed.metadata.get("participants").unwrap(),
@@ -3094,7 +3075,9 @@ impl AtlasIngestion for ExtractionFirstAdapter {
 /// so the registry file stays free of strategy-specific imports
 /// beyond the trait.
 pub fn register_extraction_first(registry: &mut AtlasIngestionRegistry) {
-    registry.register("extraction_first", || Arc::new(ExtractionFirstAdapter::new()));
+    registry.register("extraction_first", || {
+        Arc::new(ExtractionFirstAdapter::new())
+    });
 }
 
 #[cfg(test)]

@@ -27,7 +27,11 @@ pub struct FindCallersTool {
 
 impl FindCallersTool {
     pub fn new(engine: Arc<CorpusEngine>, graph: ScipGraphHandle) -> Self {
-        Self { engine, graph, checker: None }
+        Self {
+            engine,
+            graph,
+            checker: None,
+        }
     }
 
     pub fn with_health_checker(mut self, checker: Arc<IndexHealthChecker>) -> Self {
@@ -108,11 +112,7 @@ impl Tool for FindCallersTool {
         Ok(())
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let symbol = params
             .get("symbol")
             .and_then(|v| v.as_str())
@@ -125,13 +125,14 @@ impl Tool for FindCallersTool {
             .min(2) as usize;
 
         let graph = self.graph.load_full();
-        let (callers, caution) = graph
-            .find_callers(symbol, depth)
-            .await
-            .map_err(|e| Error::Tool {
-                tool_id: "callers".to_string(),
-                message: e.to_string(),
-            })?;
+        let (callers, caution) =
+            graph
+                .find_callers(symbol, depth)
+                .await
+                .map_err(|e| Error::Tool {
+                    tool_id: "callers".to_string(),
+                    message: e.to_string(),
+                })?;
 
         if callers.is_empty() {
             return Ok(StepOutput::Text(format!(

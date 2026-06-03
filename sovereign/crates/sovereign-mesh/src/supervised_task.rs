@@ -90,11 +90,7 @@ impl SupervisedTask {
 ///   supervisor exits. This is how config-reload swaps work: the
 ///   old watcher returns cleanly after receiving a signal, new one
 ///   is supervised fresh.
-pub fn supervise<F, Fut>(
-    kind: WatcherKind,
-    state: Arc<ProjectState>,
-    build: F,
-) -> SupervisedTask
+pub fn supervise<F, Fut>(kind: WatcherKind, state: Arc<ProjectState>, build: F) -> SupervisedTask
 where
     F: Fn() -> Fut + Send + Sync + 'static,
     Fut: Future<Output = ()> + Send + 'static,
@@ -337,12 +333,13 @@ mod tests {
     #[tokio::test]
     async fn clean_exit_leaves_idle() {
         let state = ProjectState::new("test");
-        let task = supervise(WatcherKind::Config, Arc::clone(&state), || async { /* return */ });
+        let task = supervise(
+            WatcherKind::Config,
+            Arc::clone(&state),
+            || async { /* return */ },
+        );
 
         task.join().await.ok();
-        assert_eq!(
-            state.status(WatcherKind::Config).await,
-            WatcherStatus::Idle
-        );
+        assert_eq!(state.status(WatcherKind::Config).await, WatcherStatus::Idle);
     }
 }

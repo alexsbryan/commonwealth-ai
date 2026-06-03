@@ -138,9 +138,7 @@ pub fn load_node_id(data_dir: &Path) -> std::io::Result<Option<NodeId>> {
             // directly from outside that crate — go through the
             // serde path using a tiny JSON shim.
             let id: NodeId = serde_json::from_value(serde_json::json!(arr))
-                .map_err(|e| {
-                    std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-                })?;
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
             Ok(Some(id))
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -260,18 +258,13 @@ pub fn clear_join_key(data_dir: &Path) -> std::io::Result<()> {
 /// Atomically persist `mesh` + `self_node_id` to `<data_dir>/mesh.json`.
 /// Write-to-tempfile-then-rename so a crash mid-write can't corrupt
 /// the previous state.
-pub fn save(
-    data_dir: &Path,
-    mesh: &Mesh,
-    self_node_id: NodeId,
-) -> std::io::Result<()> {
+pub fn save(data_dir: &Path, mesh: &Mesh, self_node_id: NodeId) -> std::io::Result<()> {
     fs::create_dir_all(data_dir)?;
     let target = mesh_file(data_dir);
     let tmp = target.with_extension("json.tmp");
     let payload = PersistedMesh::from_live(mesh, self_node_id);
-    let bytes = serde_json::to_vec_pretty(&payload).map_err(|e| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-    })?;
+    let bytes = serde_json::to_vec_pretty(&payload)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     {
         let mut f = fs::File::create(&tmp)?;
         f.write_all(&bytes)?;
@@ -289,9 +282,8 @@ pub fn load(data_dir: &Path) -> std::io::Result<Option<PersistedMesh>> {
     let target = mesh_file(data_dir);
     match fs::read(&target) {
         Ok(bytes) => {
-            let parsed: PersistedMesh = serde_json::from_slice(&bytes).map_err(|e| {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-            })?;
+            let parsed: PersistedMesh = serde_json::from_slice(&bytes)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
             Ok(Some(parsed))
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -332,7 +324,10 @@ pub fn rotate_join_key(data_dir: &Path) -> std::io::Result<Option<RotatedKey>> {
     // Refresh the cached plaintext too so the share UI shows the new
     // link immediately on next status poll, not after a restart.
     save_join_key(data_dir, &new_key)?;
-    Ok(Some(RotatedKey { mesh_name, join_key: new_key }))
+    Ok(Some(RotatedKey {
+        mesh_name,
+        join_key: new_key,
+    }))
 }
 
 /// Remove the persisted mesh file. Called on `leave_mesh`.
@@ -350,9 +345,7 @@ pub fn clear(data_dir: &Path) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commonwealth_core::capabilities::{
-        AvailableResources, HardwareProfile, NodeCapabilities,
-    };
+    use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
     use commonwealth_core::mesh::NodeStatus;
     use std::collections::HashMap;
     use tempfile::TempDir;

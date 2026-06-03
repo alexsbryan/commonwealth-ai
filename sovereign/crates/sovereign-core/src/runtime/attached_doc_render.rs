@@ -26,10 +26,7 @@ pub(crate) enum AttachedDocSegment {
     /// A forcing gate (no-retrieval, triangulation). Always rendered
     /// in full — gate text is short and load-bearing for the next
     /// turn's reasoning.
-    Gate {
-        thinking: String,
-        gate_text: String,
-    },
+    Gate { thinking: String, gate_text: String },
     /// The "you've used all your searches — synthesize" cue that
     /// closes the iteration loop. Always rendered in full.
     FinalCue(String),
@@ -86,7 +83,10 @@ pub(crate) fn render_attached_doc_conversation(
                     ));
                 }
             }
-            AttachedDocSegment::Gate { thinking, gate_text } => {
+            AttachedDocSegment::Gate {
+                thinking,
+                gate_text,
+            } => {
                 out.push_str(&format!(" {thinking}\n\n[gate] {gate_text}\n\nAssistant:"));
             }
             AttachedDocSegment::FinalCue(text) => {

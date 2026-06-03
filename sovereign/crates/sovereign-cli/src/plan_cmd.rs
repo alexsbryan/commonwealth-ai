@@ -31,7 +31,10 @@ const REQUIRED_SECTIONS: &[&str] = &[
 ];
 
 async fn cmd_validate(args: &[String]) -> i32 {
-    if matches!(args.first().map(String::as_str), Some("--help" | "-h" | "help")) {
+    if matches!(
+        args.first().map(String::as_str),
+        Some("--help" | "-h" | "help")
+    ) {
         eprintln!("Usage: sovereign plan validate <path>");
         eprintln!();
         eprintln!("Lint a plan markdown file for the four alignment sections.");
@@ -69,17 +72,13 @@ async fn cmd_validate(args: &[String]) -> i32 {
         eprintln!("    - {s}");
     }
     eprintln!();
-    eprintln!(
-        "  Required sections (in any order, but conventionally first):"
-    );
+    eprintln!("  Required sections (in any order, but conventionally first):");
     for s in REQUIRED_SECTIONS {
         eprintln!("    {s}");
     }
     eprintln!();
     eprintln!("  Template at ~/.claude/plans/_TEMPLATE.md.");
-    eprintln!(
-        "  Rationale in feedback_plan_alignment_sections.md."
-    );
+    eprintln!("  Rationale in feedback_plan_alignment_sections.md.");
     1
 }
 

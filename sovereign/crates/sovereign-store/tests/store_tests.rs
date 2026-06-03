@@ -42,8 +42,8 @@ fn make_task(id: &str, convo: &str) -> Task {
                 },
                 requires_approval: false,
                 inputs: vec![],
-            sampling: None,
-            evaluation: None,
+                sampling: None,
+                evaluation: None,
             }],
             edges: vec![],
         },
@@ -229,14 +229,8 @@ async fn test_memory_confidence_update(store: &dyn StateStore) {
 }
 
 async fn test_routing_log(store: &dyn StateStore) {
-    store
-        .log_routing("hash1", "SimpleQuery", 50)
-        .await
-        .unwrap();
-    store
-        .log_routing("hash2", "DeepQuery", 100)
-        .await
-        .unwrap();
+    store.log_routing("hash1", "SimpleQuery", 50).await.unwrap();
+    store.log_routing("hash2", "DeepQuery", 100).await.unwrap();
 
     // No corrections yet (all are unknown).
     let corrections = store.get_routing_corrections(10).await.unwrap();
@@ -338,7 +332,12 @@ async fn memory_documents_stub() {
 async fn memory_search_messages() {
     let store = InMemoryStateStore::new();
     store
-        .save_message(&make_message("m1", "c1", Role::User, "I love Rust programming"))
+        .save_message(&make_message(
+            "m1",
+            "c1",
+            Role::User,
+            "I love Rust programming",
+        ))
         .await
         .unwrap();
     store
@@ -468,15 +467,30 @@ async fn sqlite_documents_stub() {
 async fn sqlite_fts5_search() {
     let store = sqlite_store();
     store
-        .save_message(&make_message("m1", "c1", Role::User, "I love Rust programming"))
+        .save_message(&make_message(
+            "m1",
+            "c1",
+            Role::User,
+            "I love Rust programming",
+        ))
         .await
         .unwrap();
     store
-        .save_message(&make_message("m2", "c1", Role::User, "Python is also great"))
+        .save_message(&make_message(
+            "m2",
+            "c1",
+            Role::User,
+            "Python is also great",
+        ))
         .await
         .unwrap();
     store
-        .save_message(&make_message("m3", "c1", Role::Assistant, "Rust is fast and safe"))
+        .save_message(&make_message(
+            "m3",
+            "c1",
+            Role::Assistant,
+            "Rust is fast and safe",
+        ))
         .await
         .unwrap();
 
@@ -647,7 +661,10 @@ fn make_raptor_node(id: &str, level: u8, children: Vec<String>, members: Vec<u32
 async fn sqlite_raptor_node_roundtrip() {
     let store = sqlite_store();
     let asset_id = "doc-raptor-1";
-    store.save_document_asset(&make_asset(asset_id)).await.unwrap();
+    store
+        .save_document_asset(&make_asset(asset_id))
+        .await
+        .unwrap();
 
     let leaf_a = make_raptor_node("leaf-a", 0, vec![], vec![0, 1, 2]);
     let leaf_b = make_raptor_node("leaf-b", 0, vec![], vec![3, 4, 5]);
@@ -673,7 +690,10 @@ async fn sqlite_raptor_node_roundtrip() {
     let fetched_leaf = store.get_raptor_node("leaf-a").await.unwrap().unwrap();
     assert_eq!(fetched_leaf.summary, "summary for leaf-a");
     assert_eq!(fetched_leaf.summary_embedding, vec![0.1, 0.2, 0.3, 0.4]);
-    assert_eq!(fetched_leaf.quote_spans[0].text, "verbatim quote from the source chunk");
+    assert_eq!(
+        fetched_leaf.quote_spans[0].text,
+        "verbatim quote from the source chunk"
+    );
 
     // The parent has empty direct_member_chunk_ids (NULL on disk),
     // and the round-trip should keep it empty (not error on missing column).
@@ -700,7 +720,10 @@ async fn sqlite_raptor_node_roundtrip() {
 async fn sqlite_asset_motif_roundtrip() {
     let store = sqlite_store();
     let asset_id = "doc-motif-1";
-    store.save_document_asset(&make_asset(asset_id)).await.unwrap();
+    store
+        .save_document_asset(&make_asset(asset_id))
+        .await
+        .unwrap();
 
     let motifs = vec![
         AssetMotif {
@@ -762,7 +785,11 @@ async fn sqlite_asset_motif_roundtrip() {
 // chunks and `chunk_entities` rows. Spec:
 // `sovereign/docs/specs/PROGRESSIVE_ENRICHMENT.md` §B.
 
-fn mk_entity_row(corpus_id: &str, chunk_id: u64, text: &str) -> sovereign_core::conv_tiered::ChunkEntityRow {
+fn mk_entity_row(
+    corpus_id: &str,
+    chunk_id: u64,
+    text: &str,
+) -> sovereign_core::conv_tiered::ChunkEntityRow {
     sovereign_core::conv_tiered::ChunkEntityRow {
         corpus_id: corpus_id.to_string(),
         chunk_id,
@@ -794,7 +821,10 @@ async fn list_extracted_chunk_ids_unions_for_and_non_grouped_writes() {
         .save_chunk_entities_for_conv(
             "corpus-a",
             "conv-x",
-            &[mk_entity_row("corpus-a", 10, "Borges"), mk_entity_row("corpus-a", 11, "Bach")],
+            &[
+                mk_entity_row("corpus-a", 10, "Borges"),
+                mk_entity_row("corpus-a", 11, "Bach"),
+            ],
         )
         .await
         .unwrap();

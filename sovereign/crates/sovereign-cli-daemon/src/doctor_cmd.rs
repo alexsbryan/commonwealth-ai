@@ -56,13 +56,10 @@ struct CheckResult {
 // ── TCP probe ─────────────────────────────────────────────────────────────────
 
 async fn tcp_connectable(host: &str, port: u16) -> bool {
-    timeout(
-        Duration::from_secs(2),
-        TcpStream::connect((host, port)),
-    )
-    .await
-    .map(|r| r.is_ok())
-    .unwrap_or(false)
+    timeout(Duration::from_secs(2), TcpStream::connect((host, port)))
+        .await
+        .map(|r| r.is_ok())
+        .unwrap_or(false)
 }
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
@@ -419,9 +416,7 @@ fn check_test_runner(sovereign_dir: &std::path::Path) -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Warning,
             message: "test_runner not configured — test_status tool unavailable".into(),
-            repair: Repair::Manual(
-                "Add [test_runner] section to .sovereign/sovereign.toml".into(),
-            ),
+            repair: Repair::Manual("Add [test_runner] section to .sovereign/sovereign.toml".into()),
         }
     }
 }
@@ -442,9 +437,7 @@ fn check_lint_runner(sovereign_dir: &std::path::Path) -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Warning,
             message: "lint_runner not configured — lint_status tool unavailable".into(),
-            repair: Repair::Manual(
-                "Add [lint_runner] section to .sovereign/sovereign.toml".into(),
-            ),
+            repair: Repair::Manual("Add [lint_runner] section to .sovereign/sovereign.toml".into()),
         }
     }
 }
@@ -511,12 +504,12 @@ async fn check_watcher_live() -> CheckResult {
                     name: "watcher_live",
                     layer: Layer::Sovereign,
                     status: CheckStatus::Warning,
-                    message: "lint/test watcher not configured (see test_runner / lint_runner)".into(),
-                    repair: Repair::Manual(
-                        hint.unwrap_or_else(|| {
-                            "Restore .sovereign/sovereign.toml.with-watchers and restart the daemon".into()
-                        }),
-                    ),
+                    message: "lint/test watcher not configured (see test_runner / lint_runner)"
+                        .into(),
+                    repair: Repair::Manual(hint.unwrap_or_else(|| {
+                        "Restore .sovereign/sovereign.toml.with-watchers and restart the daemon"
+                            .into()
+                    })),
                 }
             } else {
                 // Configured but NOT live — the formerly-invisible state.
@@ -536,7 +529,9 @@ async fn check_watcher_live() -> CheckResult {
             name: "watcher_live",
             layer: Layer::Sovereign,
             status: CheckStatus::Warning,
-            message: "lint_status returned no `watcher` health object — daemon/tool version mismatch?".into(),
+            message:
+                "lint_status returned no `watcher` health object — daemon/tool version mismatch?"
+                    .into(),
             repair: Repair::Executable("sovereign daemon restart".into()),
         },
     }
@@ -561,12 +556,10 @@ fn find_watcher_health(v: &serde_json::Value) -> Option<serde_json::Value> {
         serde_json::Value::Array(arr) => arr.iter().find_map(find_watcher_health),
         // Tool output is sometimes embedded as a JSON string in a text
         // content block — parse and recurse.
-        serde_json::Value::String(s) => {
-            serde_json::from_str::<serde_json::Value>(s)
-                .ok()
-                .as_ref()
-                .and_then(find_watcher_health)
-        }
+        serde_json::Value::String(s) => serde_json::from_str::<serde_json::Value>(s)
+            .ok()
+            .as_ref()
+            .and_then(find_watcher_health),
         _ => None,
     }
 }
@@ -609,9 +602,7 @@ async fn check_mesh_member(client_url: &str) -> CheckResult {
                     name: "mesh_member",
                     layer: Layer::Commonwealth,
                     status: CheckStatus::Passed,
-                    message: format!(
-                        "member of \"{name}\" — {online}/{total} online"
-                    ),
+                    message: format!("member of \"{name}\" — {online}/{total} online"),
                     repair: Repair::None,
                 }
             } else if total == 1 {
@@ -725,18 +716,14 @@ async fn check_activity_reporting(internal_url: &str) -> CheckResult {
             layer: Layer::Commonwealth,
             status: CheckStatus::Warning,
             message: format!("activity endpoint returned HTTP {}", r.status()),
-            repair: Repair::Manual(
-                "Add commonwealth url to sovereign server config".into(),
-            ),
+            repair: Repair::Manual("Add commonwealth url to sovereign server config".into()),
         },
         None => CheckResult {
             name: "activity_reporting",
             layer: Layer::Commonwealth,
             status: CheckStatus::Warning,
             message: "could not reach activity reporting endpoint".into(),
-            repair: Repair::Manual(
-                "Add commonwealth url to sovereign server config".into(),
-            ),
+            repair: Repair::Manual("Add commonwealth url to sovereign server config".into()),
         },
     }
 }
@@ -892,7 +879,9 @@ async fn check_project_watchers() -> CheckResult {
             name: "project_watchers",
             layer: Layer::Sovereign,
             status: CheckStatus::Warning,
-            message: "/v1/projects returned 404 — project_http_router not mounted (restart the daemon)".into(),
+            message:
+                "/v1/projects returned 404 — project_http_router not mounted (restart the daemon)"
+                    .into(),
             repair: Repair::Executable("sovereign daemon restart".into()),
         };
     }
@@ -960,9 +949,7 @@ async fn check_project_watchers() -> CheckResult {
                 disabled.len(),
                 disabled.join(", ")
             ),
-            repair: Repair::Executable(
-                "sovereign project watch restart <corpus_id>".into(),
-            ),
+            repair: Repair::Executable("sovereign project watch restart <corpus_id>".into()),
         };
     }
     if !crashed.is_empty() {
@@ -1022,10 +1009,7 @@ fn check_scip_integrity() -> CheckResult {
         if !db.exists() {
             continue;
         }
-        let corpus = entry
-            .file_name()
-            .to_string_lossy()
-            .to_string();
+        let corpus = entry.file_name().to_string_lossy().to_string();
         match corpus_engine_scip::ScipGraph::open_with_integrity(&db, &corpus) {
             Ok(_) => {
                 checked += 1;
@@ -1234,11 +1218,8 @@ async fn check_watcher_freshness() -> CheckResult {
             Some(a) => a,
             None => continue, // no export recorded — `scip_indexed` covers
         };
-        let newest_source_age = newest_source_age_secs(
-            &entry.root,
-            &entry.watchers.ignore_paths,
-            WALK_FILE_BUDGET,
-        );
+        let newest_source_age =
+            newest_source_age_secs(&entry.root, &entry.watchers.ignore_paths, WALK_FILE_BUDGET);
         match newest_source_age {
             Some(src_age) if src_age + FRESHNESS_GRACE_SECS < export_age => {
                 // Source is meaningfully newer than the last completed export.
@@ -1284,9 +1265,7 @@ async fn check_watcher_freshness() -> CheckResult {
                 registry
                     .entries()
                     .iter()
-                    .map(|e| {
-                        format!("sovereign project refresh --name {} --local", e.corpus_id)
-                    })
+                    .map(|e| format!("sovereign project refresh --name {} --local", e.corpus_id))
                     .collect(),
             ),
         };
@@ -1594,7 +1573,8 @@ fn check_legacy_hooks() -> CheckResult {
             stale.join(", ")
         ),
         repair: Repair::Executable(
-            "sovereign project install-hooks  (in the affected repo — removes the legacy hook)".into(),
+            "sovereign project install-hooks  (in the affected repo — removes the legacy hook)"
+                .into(),
         ),
     }
 }
@@ -1764,10 +1744,8 @@ timeout_secs = 60
 debounce_ms = 800
 "#;
 
-const SKILL_MD_TEMPLATE: &str =
-    include_str!("../../../.opencode/skills/sovereign-code/SKILL.md");
-const HOOK_CONFIG_TEMPLATE: &str =
-    include_str!("../../../.opencode/oh-my-opencode.jsonc");
+const SKILL_MD_TEMPLATE: &str = include_str!("../../../.opencode/skills/sovereign-code/SKILL.md");
+const HOOK_CONFIG_TEMPLATE: &str = include_str!("../../../.opencode/oh-my-opencode.jsonc");
 
 // ── Inline repair helpers ─────────────────────────────────────────────────────
 
@@ -1812,10 +1790,7 @@ fn attempt_write_runner_config(sovereign_dir: &std::path::Path) {
 /// under the current working directory.
 fn attempt_write_skill_file() {
     let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    let skill_dir = cwd
-        .join(".opencode")
-        .join("skills")
-        .join("sovereign-code");
+    let skill_dir = cwd.join(".opencode").join("skills").join("sovereign-code");
     if let Err(e) = std::fs::create_dir_all(&skill_dir) {
         println!(
             "  ✗ skill_file: could not create directory {}: {e}",
@@ -1830,7 +1805,10 @@ fn attempt_write_skill_file() {
     }
     match std::fs::write(&skill_md, SKILL_MD_TEMPLATE) {
         Ok(_) => println!("  ✓ skill_file: wrote {}", skill_md.display()),
-        Err(e) => println!("  ✗ skill_file: could not write {}: {e}", skill_md.display()),
+        Err(e) => println!(
+            "  ✗ skill_file: could not write {}: {e}",
+            skill_md.display()
+        ),
     }
 }
 
@@ -1853,7 +1831,10 @@ fn attempt_write_hook_config() {
     }
     match std::fs::write(&hook_file, HOOK_CONFIG_TEMPLATE) {
         Ok(_) => println!("  ✓ hook_config: wrote {}", hook_file.display()),
-        Err(e) => println!("  ✗ hook_config: could not write {}: {e}", hook_file.display()),
+        Err(e) => println!(
+            "  ✗ hook_config: could not write {}: {e}",
+            hook_file.display()
+        ),
     }
 }
 
@@ -1862,9 +1843,7 @@ fn attempt_write_hook_config() {
 async fn run_fix(results: &[CheckResult], sovereign_dir: &std::path::Path) {
     let fixable: Vec<_> = results
         .iter()
-        .filter(|r| {
-            r.status == CheckStatus::Failed || r.status == CheckStatus::Warning
-        })
+        .filter(|r| r.status == CheckStatus::Failed || r.status == CheckStatus::Warning)
         .collect();
 
     if fixable.is_empty() {
@@ -1873,8 +1852,13 @@ async fn run_fix(results: &[CheckResult], sovereign_dir: &std::path::Path) {
     }
 
     // ── Executable repairs ────────────────────────────────────────
-    for r in fixable.iter().filter(|r| matches!(r.repair, Repair::Executable(_))) {
-        let Repair::Executable(cmd) = &r.repair else { continue };
+    for r in fixable
+        .iter()
+        .filter(|r| matches!(r.repair, Repair::Executable(_)))
+    {
+        let Repair::Executable(cmd) = &r.repair else {
+            continue;
+        };
         println!("  Repairing {}: {cmd}", r.name);
         let mut parts = cmd.splitn(2, ' ');
         let prog = parts.next().unwrap_or(cmd);
@@ -1891,8 +1875,13 @@ async fn run_fix(results: &[CheckResult], sovereign_dir: &std::path::Path) {
     }
 
     // ── MultiExecutable repairs (e.g. one per stale SCIP corpus) ─
-    for r in fixable.iter().filter(|r| matches!(r.repair, Repair::MultiExecutable(_))) {
-        let Repair::MultiExecutable(cmds) = &r.repair else { continue };
+    for r in fixable
+        .iter()
+        .filter(|r| matches!(r.repair, Repair::MultiExecutable(_)))
+    {
+        let Repair::MultiExecutable(cmds) = &r.repair else {
+            continue;
+        };
         println!("  Repairing {} ({} commands):", r.name, cmds.len());
         let mut all_ok = true;
         for cmd in cmds {
@@ -1958,13 +1947,17 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
     command: "sovereign doctor",
     summary: "Diagnose setup and daemon health across the Sovereign / Commonwealth / OmO layers.",
     sections: &[
-        crate::util::help::HelpSection::Usage(
-            "sovereign doctor [--fix] [--watch] [--json]",
-        ),
+        crate::util::help::HelpSection::Usage("sovereign doctor [--fix] [--watch] [--json]"),
         crate::util::help::HelpSection::Flags(&[
-            ("--fix",    "Attempt automatic repair for failing checks"),
-            ("--watch",  "Re-run periodically (every 5s) with a clear screen"),
-            ("--json",   "Emit structured JSON (one object per check) for scripting"),
+            ("--fix", "Attempt automatic repair for failing checks"),
+            (
+                "--watch",
+                "Re-run periodically (every 5s) with a clear screen",
+            ),
+            (
+                "--json",
+                "Emit structured JSON (one object per check) for scripting",
+            ),
         ]),
         crate::util::help::HelpSection::Notes(
             "Checks three layers: Sovereign (server, indexes, config), Commonwealth (daemon,\n\
@@ -2003,7 +1996,11 @@ pub async fn run_doctor(args: &[String]) -> i32 {
     }
 
     let has_failures = results.iter().any(|r| r.status == CheckStatus::Failed);
-    if has_failures { 1 } else { 0 }
+    if has_failures {
+        1
+    } else {
+        0
+    }
 }
 
 fn find_sovereign_dir_or_cwd(cwd: &std::path::Path) -> PathBuf {
@@ -2060,7 +2057,10 @@ async fn run_watch(sovereign_dir: &std::path::Path, json: bool) -> i32 {
                 print!("\x1b[2J\x1b[H");
             }
             if json {
-                let issues: Vec<_> = results.iter().filter(|r| r.status == CheckStatus::Failed).collect();
+                let issues: Vec<_> = results
+                    .iter()
+                    .filter(|r| r.status == CheckStatus::Failed)
+                    .collect();
                 println!(
                     "{}",
                     serde_json::to_string(&serde_json::json!({

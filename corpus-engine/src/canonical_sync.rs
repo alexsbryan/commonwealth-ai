@@ -95,23 +95,18 @@ fn walk_and_append<W: Write>(
     dir: &Path,
     bytes_in: &mut u64,
 ) -> Result<()> {
-    let entries = std::fs::read_dir(dir).map_err(|e| {
-        Error::Database(format!("pack_canonical: read_dir {}: {e}", dir.display()))
-    })?;
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| Error::Database(format!("pack_canonical: read_dir {}: {e}", dir.display())))?;
     for entry in entries {
-        let entry = entry.map_err(|e| {
-            Error::Database(format!("pack_canonical: dir entry: {e}"))
-        })?;
+        let entry =
+            entry.map_err(|e| Error::Database(format!("pack_canonical: dir entry: {e}")))?;
         let path = entry.path();
-        let rel = path.strip_prefix(root).map_err(|e| {
-            Error::Database(format!("pack_canonical: strip_prefix: {e}"))
-        })?;
+        let rel = path
+            .strip_prefix(root)
+            .map_err(|e| Error::Database(format!("pack_canonical: strip_prefix: {e}")))?;
 
         let meta = entry.metadata().map_err(|e| {
-            Error::Database(format!(
-                "pack_canonical: metadata {}: {e}",
-                path.display()
-            ))
+            Error::Database(format!("pack_canonical: metadata {}: {e}", path.display()))
         })?;
         if meta.is_dir() {
             walk_and_append(builder, root, &path, bytes_in)?;
@@ -122,18 +117,12 @@ fn walk_and_append<W: Write>(
             header.set_mtime(0);
             header.set_cksum();
             let mut file = std::fs::File::open(&path).map_err(|e| {
-                Error::Database(format!(
-                    "pack_canonical: open {}: {e}",
-                    path.display()
-                ))
+                Error::Database(format!("pack_canonical: open {}: {e}", path.display()))
             })?;
             builder
                 .append_data(&mut header, rel, &mut file)
                 .map_err(|e| {
-                    Error::Database(format!(
-                        "pack_canonical: append {}: {e}",
-                        rel.display()
-                    ))
+                    Error::Database(format!("pack_canonical: append {}: {e}", rel.display()))
                 })?;
             *bytes_in = bytes_in.saturating_add(meta.len());
         }
@@ -157,10 +146,7 @@ fn walk_and_append<W: Write>(
 /// `tar::Archive::set_overwrite(false)` is set so a duplicate
 /// entry can't blast over an earlier one — defence-in-depth even
 /// though our `pack_canonical` won't produce duplicates.
-pub fn unpack_canonical<R: Read>(
-    reader: R,
-    dest_path: &Path,
-) -> Result<u64> {
+pub fn unpack_canonical<R: Read>(reader: R, dest_path: &Path) -> Result<u64> {
     if dest_path.exists() {
         return Err(Error::Database(format!(
             "unpack_canonical: refuses to overwrite existing {}",
@@ -185,9 +171,8 @@ pub fn unpack_canonical<R: Read>(
         .entries()
         .map_err(|e| Error::Database(format!("unpack_canonical: entries: {e}")))?;
     for entry in entries {
-        let mut entry = entry.map_err(|e| {
-            Error::Database(format!("unpack_canonical: entry: {e}"))
-        })?;
+        let mut entry =
+            entry.map_err(|e| Error::Database(format!("unpack_canonical: entry: {e}")))?;
         // Path safety check: tar::Entries::path returns the entry's
         // declared path; we additionally verify the canonicalised
         // unpack target falls under dest_path before unpacking.
@@ -201,9 +186,10 @@ pub fn unpack_canonical<R: Read>(
                 entry_path.display()
             )));
         }
-        if entry_path.components().any(|c| {
-            matches!(c, std::path::Component::ParentDir)
-        }) {
+        if entry_path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
             return Err(Error::Database(format!(
                 "unpack_canonical: refuses '..' in entry path {}",
                 entry_path.display()
@@ -212,10 +198,7 @@ pub fn unpack_canonical<R: Read>(
         let target = dest_path.join(&entry_path);
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
-                Error::Database(format!(
-                    "unpack_canonical: mkdir {}: {e}",
-                    parent.display()
-                ))
+                Error::Database(format!("unpack_canonical: mkdir {}: {e}", parent.display()))
             })?;
         }
         let written = entry.unpack(&target).map_err(|e| {
@@ -243,9 +226,17 @@ mod tests {
         let src = tempdir().unwrap();
         let canonical = src.path().join("test-corpus");
         fs::create_dir_all(canonical.join("chunks.lance/_versions")).unwrap();
-        fs::write(canonical.join("_corpus_meta.json"), b"{\"corpus_id\":\"test\"}").unwrap();
+        fs::write(
+            canonical.join("_corpus_meta.json"),
+            b"{\"corpus_id\":\"test\"}",
+        )
+        .unwrap();
         fs::write(canonical.join("chunks.lance/manifest.json"), b"manifest").unwrap();
-        fs::write(canonical.join("chunks.lance/_versions/1.bin"), vec![0u8; 1024]).unwrap();
+        fs::write(
+            canonical.join("chunks.lance/_versions/1.bin"),
+            vec![0u8; 1024],
+        )
+        .unwrap();
         fs::write(
             canonical.join("chunks.lance/_versions/2.bin"),
             vec![42u8; 2048],
@@ -259,13 +250,11 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
         let bytes_in = pack_canonical(&canonical, &mut buf, 1).unwrap();
         assert!(bytes_in > 0);
-        let bytes_out =
-            unpack_canonical(buf.as_slice(), &dst_canonical).unwrap();
+        let bytes_out = unpack_canonical(buf.as_slice(), &dst_canonical).unwrap();
         assert!(bytes_out > 0);
 
         // File tree equality.
-        let read =
-            |p: &Path| std::fs::read(p).unwrap();
+        let read = |p: &Path| std::fs::read(p).unwrap();
         assert_eq!(
             read(&canonical.join("_corpus_meta.json")),
             read(&dst_canonical.join("_corpus_meta.json"))

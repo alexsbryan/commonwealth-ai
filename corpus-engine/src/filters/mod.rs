@@ -126,7 +126,11 @@ pub struct FilterPipeline {
 }
 
 impl FilterPipeline {
-    pub fn new(children: Vec<Arc<dyn DocumentFilter>>, mode: ComposeMode, signature: String) -> Self {
+    pub fn new(
+        children: Vec<Arc<dyn DocumentFilter>>,
+        mode: ComposeMode,
+        signature: String,
+    ) -> Self {
         Self {
             children,
             mode,
@@ -309,7 +313,10 @@ mod tests {
         assert_eq!(normalize_title("Albert Einstein"), "albert einstein");
         assert_eq!(normalize_title("Albert_Einstein"), "albert einstein");
         assert_eq!(normalize_title("ALBERT  einstein"), "albert einstein");
-        assert_eq!(normalize_title("  Apple_(disambiguation) "), "apple (disambiguation)");
+        assert_eq!(
+            normalize_title("  Apple_(disambiguation) "),
+            "apple (disambiguation)"
+        );
     }
 
     #[test]
@@ -337,13 +344,21 @@ mod tests {
     fn any_mode_accepts_when_one_child_accepts() {
         struct Yes;
         impl DocumentFilter for Yes {
-            fn accept(&self, _: &ExtractedDoc) -> bool { true }
-            fn description(&self) -> String { "yes".into() }
+            fn accept(&self, _: &ExtractedDoc) -> bool {
+                true
+            }
+            fn description(&self) -> String {
+                "yes".into()
+            }
         }
         struct No;
         impl DocumentFilter for No {
-            fn accept(&self, _: &ExtractedDoc) -> bool { false }
-            fn description(&self) -> String { "no".into() }
+            fn accept(&self, _: &ExtractedDoc) -> bool {
+                false
+            }
+            fn description(&self) -> String {
+                "no".into()
+            }
         }
         let p = FilterPipeline::new(
             vec![Arc::new(No), Arc::new(Yes)],
@@ -357,13 +372,21 @@ mod tests {
     fn all_mode_rejects_when_one_child_rejects() {
         struct Yes;
         impl DocumentFilter for Yes {
-            fn accept(&self, _: &ExtractedDoc) -> bool { true }
-            fn description(&self) -> String { "yes".into() }
+            fn accept(&self, _: &ExtractedDoc) -> bool {
+                true
+            }
+            fn description(&self) -> String {
+                "yes".into()
+            }
         }
         struct No;
         impl DocumentFilter for No {
-            fn accept(&self, _: &ExtractedDoc) -> bool { false }
-            fn description(&self) -> String { "no".into() }
+            fn accept(&self, _: &ExtractedDoc) -> bool {
+                false
+            }
+            fn description(&self) -> String {
+                "no".into()
+            }
         }
         let p = FilterPipeline::new(
             vec![Arc::new(Yes), Arc::new(No)],
@@ -375,8 +398,12 @@ mod tests {
 
     #[test]
     fn signature_changes_with_filter_config() {
-        let a = vec![FilterConfig::TitleList { list_file: "x".into() }];
-        let b = vec![FilterConfig::TitleList { list_file: "y".into() }];
+        let a = vec![FilterConfig::TitleList {
+            list_file: "x".into(),
+        }];
+        let b = vec![FilterConfig::TitleList {
+            list_file: "y".into(),
+        }];
         assert_ne!(
             compute_signature(&a, ComposeMode::Any),
             compute_signature(&b, ComposeMode::Any),
@@ -391,8 +418,13 @@ mod tests {
     #[test]
     fn signature_is_stable_across_calls() {
         let cfg = vec![
-            FilterConfig::PageviewRank { rank_file: "@bundled:r".into(), max_rank: 100_000 },
-            FilterConfig::TitleList { list_file: "@bundled:v".into() },
+            FilterConfig::PageviewRank {
+                rank_file: "@bundled:r".into(),
+                max_rank: 100_000,
+            },
+            FilterConfig::TitleList {
+                list_file: "@bundled:v".into(),
+            },
         ];
         let s1 = compute_signature(&cfg, ComposeMode::Any);
         let s2 = compute_signature(&cfg, ComposeMode::Any);

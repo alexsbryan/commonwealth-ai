@@ -35,9 +35,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
-use crate::enrichment::pipeline::atlas::{
-    EntitySketch, EventSketch, EventType, SectionExtraction,
-};
+use crate::enrichment::pipeline::atlas::{EntitySketch, EventSketch, EventType, SectionExtraction};
 use crate::error::Result;
 use crate::types::EmbedFn;
 
@@ -148,10 +146,8 @@ pub async fn resolve_entities_and_events(
     // atoms). Runs after synthesis so synthesized atoms also benefit
     // from the merge if a typo variant of the same name landed in
     // entities_introduced earlier.
-    let typo_merges = dedup_typo_fragmented_entities(
-        &mut entity_result.entities,
-        &mut entity_result.name_index,
-    );
+    let typo_merges =
+        dedup_typo_fragmented_entities(&mut entity_result.entities, &mut entity_result.name_index);
     if !typo_merges.is_empty() {
         info!(
             merged = typo_merges.len(),
@@ -168,13 +164,8 @@ pub async fn resolve_entities_and_events(
     // match exactly. Built AFTER synthesis so synthesized atoms also
     // catch alternative spellings via the token paths.
     let token_index = build_token_index(&entity_result.entities);
-    let event_result = resolve_events(
-        sections,
-        embed_fn,
-        &entity_result.name_index,
-        &token_index,
-    )
-    .await?;
+    let event_result =
+        resolve_events(sections, embed_fn, &entity_result.name_index, &token_index).await?;
     Ok(ResolutionOutput {
         entities: entity_result.entities,
         events: event_result.events,
@@ -218,9 +209,7 @@ fn synthesize_entities_from_unresolved_event_participants(
                 if trimmed.is_empty() {
                     continue;
                 }
-                if resolve_entity_id_fuzzy(trimmed, name_index, &token_index)
-                    .is_some()
-                {
+                if resolve_entity_id_fuzzy(trimmed, name_index, &token_index).is_some() {
                     continue;
                 }
                 let new_id = AtomId::entity(entities.len() + 1);
@@ -262,9 +251,9 @@ fn synthesize_entities_from_unresolved_event_participants(
                     affiliation: None,
                     role: None,
                     participants: Vec::new(),
-                                    provenance: Default::default(),
-                                    concept_kind: None,
-};
+                    provenance: Default::default(),
+                    concept_kind: None,
+                };
                 name_index.insert(fold(trimmed), new_id.clone());
                 entities.push(entity);
                 token_index = build_token_index(entities);
@@ -349,12 +338,7 @@ fn dedup_typo_fragmented_entities(
                 if !typo_dedup_match(&entities[i], &entities[j]) {
                     continue;
                 }
-                chosen = Some(pick_typo_dedup_survivor(
-                    &entities[i],
-                    &entities[j],
-                    i,
-                    j,
-                ));
+                chosen = Some(pick_typo_dedup_survivor(&entities[i], &entities[j], i, j));
                 break 'pair_search;
             }
         }
@@ -412,8 +396,7 @@ fn dedup_typo_fragmented_entities(
             }
         }
         let canon = entities[survivor_position].canonical_name.clone();
-        let aliases_snapshot: Vec<String> =
-            entities[survivor_position].aliases.clone();
+        let aliases_snapshot: Vec<String> = entities[survivor_position].aliases.clone();
         name_index.insert(fold(&canon), survivor_id.clone());
         for alias in aliases_snapshot {
             name_index.insert(fold(&alias), survivor_id.clone());
@@ -425,12 +408,7 @@ fn dedup_typo_fragmented_entities(
 
 /// Decide which of two near-duplicate atoms survives. Returns
 /// `(survivor_idx, loser_idx)` referring to the input vec positions.
-fn pick_typo_dedup_survivor(
-    a: &Entity,
-    b: &Entity,
-    idx_a: usize,
-    idx_b: usize,
-) -> (usize, usize) {
+fn pick_typo_dedup_survivor(a: &Entity, b: &Entity, idx_a: usize, idx_b: usize) -> (usize, usize) {
     use std::cmp::Ordering;
 
     let prefer_a = match a
@@ -630,9 +608,9 @@ async fn resolve_entities(
                         affiliation: None,
                         role: None,
                         participants: Vec::new(),
-                                            provenance: Default::default(),
-                                            concept_kind: None,
-};
+                        provenance: Default::default(),
+                        concept_kind: None,
+                    };
                     entities.push(entity);
                     descriptions.push(candidate_emb);
                     section_refs.push(1);
@@ -658,7 +636,10 @@ async fn resolve_entities(
         e.salience = *refs as f32 / max_refs as f32;
     }
 
-    Ok(EntityResolution { entities, name_index })
+    Ok(EntityResolution {
+        entities,
+        name_index,
+    })
 }
 
 /// Small adapter: the EntityStateSketch's `entity_name` field is
@@ -729,8 +710,7 @@ fn find_merge_target(
     // Rules 2 and 3 require scanning; bound the scan to a 5-section
     // lookback window. Start from the most recent entities so we
     // match the nearest section first (stable when ties happen).
-    let lookback_ordinal = current_section_ordinal
-        .saturating_sub(ENTITY_WINDOW_SECTIONS);
+    let lookback_ordinal = current_section_ordinal.saturating_sub(ENTITY_WINDOW_SECTIONS);
     for (idx, existing) in entities.iter().enumerate().rev() {
         if first_section_ordinal[idx] < lookback_ordinal {
             // Past the window — rule 2/3 doesn't apply.
@@ -762,10 +742,8 @@ fn find_merge_target(
             }
         }
 
-        let has_both_embeddings =
-            !candidate_emb.is_empty() && !descriptions[idx].is_empty();
-        let one_side_empty =
-            candidate_emb.is_empty() ^ descriptions[idx].is_empty();
+        let has_both_embeddings = !candidate_emb.is_empty() && !descriptions[idx].is_empty();
+        let one_side_empty = candidate_emb.is_empty() ^ descriptions[idx].is_empty();
 
         // Rule 2: Levenshtein ≤ 2 on whole folded name AND
         // description cosine ≥ ENTITY_MERGE_COSINE. Tight
@@ -807,10 +785,7 @@ fn find_merge_target(
         // sibling collapse (Alexei vs Dmitri don't merge via a
         // shared `karamazov` token alone).
         if first_token_matches(&sketch.canonical_name, &existing.canonical_name)
-            && shared_long_token_count(
-                &sketch.canonical_name,
-                &existing.canonical_name,
-            ) >= 1
+            && shared_long_token_count(&sketch.canonical_name, &existing.canonical_name) >= 1
         {
             if has_both_embeddings {
                 let cosine = cosine_similarity(candidate_emb, &descriptions[idx]);
@@ -838,7 +813,10 @@ fn merge_into_existing(
     let canon = sketch.canonical_name.trim().to_string();
     if !canon.is_empty()
         && !canon.eq_ignore_ascii_case(&entity.canonical_name)
-        && !entity.aliases.iter().any(|a| a.eq_ignore_ascii_case(&canon))
+        && !entity
+            .aliases
+            .iter()
+            .any(|a| a.eq_ignore_ascii_case(&canon))
     {
         entity.aliases.push(canon);
     }
@@ -908,9 +886,7 @@ async fn resolve_events(
     name_index: &HashMap<String, AtomId>,
     token_index: &HashMap<String, Vec<AtomId>>,
 ) -> Result<EventResolution> {
-    use crate::enrichment::pipeline::types::{
-        PhaseFailure, PhaseFailureKind, PipelinePhase,
-    };
+    use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind, PipelinePhase};
 
     let mut events: Vec<Event> = Vec::new();
     let mut descriptions: Vec<Vec<f32>> = Vec::new();
@@ -934,10 +910,7 @@ async fn resolve_events(
             for name in &unresolved {
                 failures.push(PhaseFailure {
                     phase: PipelinePhase::Questions, // Phase 3a rides on the Questions cache
-                    subject: format!(
-                        "sketch:event:{}#{}",
-                        section.section_id, sketch_index
-                    ),
+                    subject: format!("sketch:event:{}#{}", section.section_id, sketch_index),
                     kind: PhaseFailureKind::UnresolvedEntityName,
                     reason: format!(
                         "event participant `{}` did not resolve to any Entity atom \
@@ -1016,9 +989,7 @@ async fn resolve_events(
             // duplicates.
             for pid in &participant_ids {
                 let already_edged = involves_edges.iter().any(|e| {
-                    e.edge_type == EdgeType::Involves
-                        && e.source == event_id
-                        && e.target == *pid
+                    e.edge_type == EdgeType::Involves && e.source == event_id && e.target == *pid
                 });
                 if already_edged {
                     continue;
@@ -1038,7 +1009,11 @@ async fn resolve_events(
         }
     }
 
-    Ok(EventResolution { events, involves_edges, failures })
+    Ok(EventResolution {
+        events,
+        involves_edges,
+        failures,
+    })
 }
 
 /// Resolve a list of participant names to Entity atom ids.
@@ -1126,9 +1101,7 @@ pub fn resolve_step_3b(
     entities: &[super::atoms::Entity],
     events: &[super::atoms::Event],
 ) -> Result<Step3bOutput> {
-    use crate::enrichment::pipeline::types::{
-        PhaseFailure, PhaseFailureKind, PipelinePhase,
-    };
+    use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind, PipelinePhase};
 
     let name_index = build_name_index(entities);
     let token_index = build_token_index(entities);
@@ -1146,11 +1119,9 @@ pub fn resolve_step_3b(
             if sketch.entity_name.trim().is_empty() || sketch.label.trim().is_empty() {
                 continue;
             }
-            let Some(entity_id) = resolve_entity_id_fuzzy(
-                &sketch.entity_name,
-                &name_index,
-                &token_index,
-            ) else {
+            let Some(entity_id) =
+                resolve_entity_id_fuzzy(&sketch.entity_name, &name_index, &token_index)
+            else {
                 let reason = format!(
                     "entity-state sketch references unknown entity `{}` (state label: `{}`)",
                     sketch.entity_name.trim(),
@@ -1339,12 +1310,14 @@ pub fn resolve_step_3b(
                     relation_key_to_id.insert(key.clone(), new_id.clone());
                     relations.push(super::atoms::Relation {
                         id: new_id.clone(),
-                        label: format!("Unnamed relation between {}", sketch.participants.join(" × ")),
+                        label: format!(
+                            "Unnamed relation between {}",
+                            sketch.participants.join(" × ")
+                        ),
                         participants: participant_ids.clone(),
-                        relation_type:
-                            crate::enrichment::pipeline::atlas::RelationType::Other(
-                                "unclassified".into(),
-                            ),
+                        relation_type: crate::enrichment::pipeline::atlas::RelationType::Other(
+                            "unclassified".into(),
+                        ),
                         evidence: Vec::new(),
                         section_range: super::atoms::SectionRange::point(
                             section.section_id.clone(),
@@ -1412,10 +1385,7 @@ pub fn resolve_step_3b(
                     // attribution without having to diff the content.
                     failures.push(PhaseFailure {
                         phase: PipelinePhase::Questions,
-                        subject: format!(
-                            "sketch:claim:{}#{}",
-                            section.section_id, sketch_index
-                        ),
+                        subject: format!("sketch:claim:{}#{}", section.section_id, sketch_index),
                         kind: PhaseFailureKind::UnresolvedClaimAttribution,
                         reason: format!(
                             "claim attributed_to `{}` did not resolve (claim content: `{}`)",
@@ -1520,13 +1490,11 @@ pub fn resolve_step_3b(
     //     set. Premises/conclusion/objections are propagated as-is;
     //     they don't need cross-section resolution because the
     //     model produces them as self-contained propositions.
-    let mut argument_reconstructions: Vec<super::atoms::ArgumentReconstruction> =
-        Vec::new();
+    let mut argument_reconstructions: Vec<super::atoms::ArgumentReconstruction> = Vec::new();
     for section in sections {
         for sketch in &section.argument_reconstructions {
-            let arg_id = super::atoms::AtomId::argument_reconstruction(
-                argument_reconstructions.len() + 1,
-            );
+            let arg_id =
+                super::atoms::AtomId::argument_reconstruction(argument_reconstructions.len() + 1);
             let proponent_id = if sketch.proponent.is_empty() {
                 None
             } else {
@@ -1587,8 +1555,7 @@ pub fn resolve_step_3b(
         std::collections::BTreeMap::new();
     let states_by_owner = group_states_by_owner(&states);
     for (owner_id, owner_states) in states_by_owner {
-        let (owner_name, owner_atom_type) =
-            owner_display(&owner_id, entities, &relations);
+        let (owner_name, owner_atom_type) = owner_display(&owner_id, entities, &relations);
         let mut traj_states = Vec::with_capacity(owner_states.len());
         let mut traj_transitions = Vec::with_capacity(owner_states.len().saturating_sub(1));
         for state in &owner_states {
@@ -1643,9 +1610,7 @@ pub fn resolve_step_3b(
 
 // ── Step 3b helpers ────────────────────────────────────────
 
-fn build_name_index(
-    entities: &[super::atoms::Entity],
-) -> HashMap<String, super::atoms::AtomId> {
+fn build_name_index(entities: &[super::atoms::Entity]) -> HashMap<String, super::atoms::AtomId> {
     let mut index: HashMap<String, super::atoms::AtomId> = HashMap::new();
     for e in entities {
         index.insert(fold(&e.canonical_name), e.id.clone());
@@ -1748,7 +1713,9 @@ pub(super) fn resolve_entity_id_fuzzy(
             }
         }
         if matched_entities.len() == 1 {
-            *votes.entry(matched_entities.into_iter().next().unwrap()).or_insert(0) += 1;
+            *votes
+                .entry(matched_entities.into_iter().next().unwrap())
+                .or_insert(0) += 1;
         }
     }
     if votes.len() == 1 {
@@ -1823,10 +1790,7 @@ pub(super) fn resolve_entity_id_with_salience(
     let mut shortlist: Vec<&super::atoms::Entity> = Vec::new();
     for e in entities {
         let first_ok = first_token_matches(name, &e.canonical_name)
-            || e
-                .aliases
-                .iter()
-                .any(|a| first_token_matches(name, a));
+            || e.aliases.iter().any(|a| first_token_matches(name, a));
         if !first_ok {
             continue;
         }
@@ -1958,9 +1922,7 @@ fn group_states_by_owner(
 /// Transition-trigger matcher to decide which section ids fall
 /// between a `from` state and a `to` state. Building this from the
 /// order `sections` arrive in is deterministic across runs.
-fn build_section_ordinal_map(
-    sections: &[SectionExtraction],
-) -> HashMap<String, usize> {
+fn build_section_ordinal_map(sections: &[SectionExtraction]) -> HashMap<String, usize> {
     sections
         .iter()
         .enumerate()
@@ -2006,9 +1968,7 @@ fn find_trigger_event(
             };
             // Half-open window (from_ord, to_ord] — the trigger sits
             // strictly after `from` and at or before `to`.
-            *ord > *from_ord
-                && *ord <= *to_ord
-                && e.participants.iter().any(|p| p == owner_id)
+            *ord > *from_ord && *ord <= *to_ord && e.participants.iter().any(|p| p == owner_id)
         })
         .collect();
     if matches.len() == 1 {
@@ -2190,7 +2150,11 @@ fn has_whole_word(haystack: &str, needle: &str) -> bool {
                 .unwrap_or(true);
         let end = pos + needle.len();
         let after_ok = end == haystack.len()
-            || haystack[end..].chars().next().map(is_boundary).unwrap_or(true);
+            || haystack[end..]
+                .chars()
+                .next()
+                .map(is_boundary)
+                .unwrap_or(true);
         if before_ok && after_ok {
             return true;
         }
@@ -2248,8 +2212,7 @@ fn shared_token_overlap(a: &str, b: &str) -> usize {
         .filter(|t| t.len() >= ENTITY_MERGE_TOKEN_MIN_LEN)
         .map(str::to_string)
         .collect();
-    let a_exact: std::collections::HashSet<&str> =
-        tokens_a.iter().map(String::as_str).collect();
+    let a_exact: std::collections::HashSet<&str> = tokens_a.iter().map(String::as_str).collect();
     // Two pass: count exact matches first (each b-token can match at
     // most one a-token) then count fuzzy matches for b-tokens that
     // did not match exactly. Fuzzy = Levenshtein ≤ 1 on tokens of
@@ -2278,10 +2241,7 @@ fn shared_token_overlap(a: &str, b: &str) -> usize {
         }
     }
     // Fuzzy pass — only for b-tokens that had no exact match.
-    for tb in tokens_b
-        .iter()
-        .filter(|tb| !a_exact.contains(tb.as_str()))
-    {
+    for tb in tokens_b.iter().filter(|tb| !a_exact.contains(tb.as_str())) {
         if tb.len() < FUZZY_TOKEN_MIN_LEN {
             continue;
         }
@@ -2560,13 +2520,10 @@ pub fn resolve_type_extensions(
     next_opposition_idx: usize,
     next_edge_idx: usize,
 ) -> TypeExtensionResolveOutput {
-    use crate::enrichment::pipeline::atlas::{EntityType, TypeExtension};
-    use crate::enrichment::pipeline::types::{
-        PhaseFailure, PhaseFailureKind, PipelinePhase,
-    };
     use super::atoms::{AtomId, ChunkRef, Claim, Entity, Opposition, Position};
     use super::edges::{EdgeId, EdgeProvenance, EdgeType};
-    
+    use crate::enrichment::pipeline::atlas::{EntityType, TypeExtension};
+    use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind, PipelinePhase};
 
     let mut out = TypeExtensionResolveOutput::default();
     let mut entity_idx = next_entity_idx;
@@ -2580,21 +2537,19 @@ pub fn resolve_type_extensions(
     // proponent / evidence-supports resolution. Plus a name index
     // for positions (so EvidenceFor edges can target positions, not
     // just claims).
-    let concept_name_to_id: std::collections::HashMap<String, AtomId> =
-        existing_entities
-            .iter()
-            .filter(|e| matches!(e.entity_type, EntityType::Concept))
-            .map(|e| (fold(&e.canonical_name), e.id.clone()))
-            .collect();
+    let concept_name_to_id: std::collections::HashMap<String, AtomId> = existing_entities
+        .iter()
+        .filter(|e| matches!(e.entity_type, EntityType::Concept))
+        .map(|e| (fold(&e.canonical_name), e.id.clone()))
+        .collect();
     let entity_name_to_id: std::collections::HashMap<String, AtomId> = existing_entities
         .iter()
         .map(|e| (fold(&e.canonical_name), e.id.clone()))
         .collect();
-    let position_name_to_id: std::collections::HashMap<String, AtomId> =
-        existing_positions
-            .iter()
-            .map(|p| (fold(&p.canonical_name), p.id.clone()))
-            .collect();
+    let position_name_to_id: std::collections::HashMap<String, AtomId> = existing_positions
+        .iter()
+        .map(|p| (fold(&p.canonical_name), p.id.clone()))
+        .collect();
 
     for section in sections {
         for ext in section.iter_type_extensions() {
@@ -2697,7 +2652,8 @@ pub fn resolve_type_extensions(
                     id: new_claim_id.clone(),
                     content: claim_content,
                     discourse_act: crate::enrichment::pipeline::atlas::DiscourseAct::Assert,
-                    epistemic_status: crate::enrichment::pipeline::atlas::EpistemicStatus::Confident,
+                    epistemic_status:
+                        crate::enrichment::pipeline::atlas::EpistemicStatus::Confident,
                     scope: crate::enrichment::pipeline::atlas::ClaimScope::Contextual,
                     evidence: vec![ChunkRef::new(section.section_id.clone(), None)],
                     quotable_excerpt: None,
@@ -2812,7 +2768,8 @@ pub fn resolve_type_extensions(
                     id: new_claim_id.clone(),
                     content: content.to_string(),
                     discourse_act: crate::enrichment::pipeline::atlas::DiscourseAct::Object,
-                    epistemic_status: crate::enrichment::pipeline::atlas::EpistemicStatus::Confident,
+                    epistemic_status:
+                        crate::enrichment::pipeline::atlas::EpistemicStatus::Confident,
                     scope: crate::enrichment::pipeline::atlas::ClaimScope::Contextual,
                     evidence: vec![ChunkRef::new(section.section_id.clone(), None)],
                     quotable_excerpt: None,
@@ -2908,7 +2865,8 @@ mod tests {
             questions_raised: Vec::new(),
             argument_reconstructions: Vec::new(),
             type_extension: None,
-            type_extensions: Vec::new(),        }
+            type_extensions: Vec::new(),
+        }
     }
 
     fn entity(name: &str, aliases: &[&str], description: &str) -> EntitySketch {
@@ -2950,7 +2908,9 @@ mod tests {
                 vec![],
             ),
         ];
-        let out = resolve_entities_and_events(&sections, &fake_embed()).await.unwrap();
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
         assert_eq!(
             out.entities.len(),
             1,
@@ -2975,16 +2935,26 @@ mod tests {
         let sections = vec![
             section(
                 "sec_0001",
-                vec![entity("Ivan", &[], "One distinct description starting with O.")],
+                vec![entity(
+                    "Ivan",
+                    &[],
+                    "One distinct description starting with O.",
+                )],
                 vec![],
             ),
             section(
                 "sec_0002",
-                vec![entity("Ilya", &[], "A different description starting with A.")],
+                vec![entity(
+                    "Ilya",
+                    &[],
+                    "A different description starting with A.",
+                )],
                 vec![],
             ),
         ];
-        let out = resolve_entities_and_events(&sections, &fake_embed()).await.unwrap();
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
         assert_eq!(
             out.entities.len(),
             2,
@@ -3013,7 +2983,9 @@ mod tests {
                 vec![],
             ),
         ];
-        let out = resolve_entities_and_events(&sections, &fake_embed()).await.unwrap();
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
         assert_eq!(
             out.entities.len(),
             1,
@@ -3037,11 +3009,7 @@ mod tests {
         let mut sections = Vec::new();
         sections.push(section(
             "sec_0001",
-            vec![entity(
-                "Fyodorovich Alexei",
-                &[],
-                "Youngest brother.",
-            )],
+            vec![entity("Fyodorovich Alexei", &[], "Youngest brother.")],
             vec![],
         ));
         for i in 2..=9 {
@@ -3049,14 +3017,12 @@ mod tests {
         }
         sections.push(section(
             "sec_0010",
-            vec![entity(
-                "Alexei Fyodorovich Karamazov",
-                &[],
-                "The novice.",
-            )],
+            vec![entity("Alexei Fyodorovich Karamazov", &[], "The novice.")],
             vec![],
         ));
-        let out = resolve_entities_and_events(&sections, &fake_embed()).await.unwrap();
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
         assert_eq!(
             out.entities.len(),
             2,
@@ -3086,7 +3052,9 @@ mod tests {
             vec![entity("Alyosha", &[], "")],
             vec![],
         ));
-        let out = resolve_entities_and_events(&sections, &fake_embed()).await.unwrap();
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
         assert_eq!(
             out.entities.len(),
             1,
@@ -3116,7 +3084,9 @@ mod tests {
                 vec![],
             ),
         ];
-        let out = resolve_entities_and_events(&sections, &fake_embed()).await.unwrap();
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
         // Though "Ivan" is 4 chars (below the 5-char floor anyway),
         // this test also pins the behavior should the floor ever
         // drop: "Ivan" would still not substring-merge into
@@ -3142,7 +3112,9 @@ mod tests {
                 vec![],
             ),
         ];
-        let out = resolve_entities_and_events(&sections, &fake_embed()).await.unwrap();
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
         assert_eq!(out.entities.len(), 1);
     }
 
@@ -3166,11 +3138,7 @@ mod tests {
             ),
             section(
                 "sec_0002",
-                vec![entity(
-                    "Fyodor Karazov",
-                    &[],
-                    "The Karamazov patriarch.",
-                )],
+                vec![entity("Fyodor Karazov", &[], "The Karamazov patriarch.")],
                 vec![],
             ),
         ];
@@ -3193,11 +3161,7 @@ mod tests {
         let sections = vec![
             section(
                 "sec_0001",
-                vec![entity(
-                    "Alexei Karamazov",
-                    &[],
-                    "A Karamazov brother.",
-                )],
+                vec![entity("Alexei Karamazov", &[], "A Karamazov brother.")],
                 vec![],
             ),
             section(
@@ -3261,11 +3225,7 @@ mod tests {
         let sections = vec![
             section(
                 "sec_0001",
-                vec![entity(
-                    "Alexei Karamazov",
-                    &[],
-                    "The youngest brother.",
-                )],
+                vec![entity("Alexei Karamazov", &[], "The youngest brother.")],
                 vec![],
             ),
             section(
@@ -3313,7 +3273,9 @@ mod tests {
                 vec![],
             ),
         ];
-        let out = resolve_entities_and_events(&sections, &fake_embed()).await.unwrap();
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
         assert_eq!(
             out.entities.len(),
             2,
@@ -3348,7 +3310,9 @@ mod tests {
             )],
             vec![],
         ));
-        let out = resolve_entities_and_events(&sections, &fake_embed()).await.unwrap();
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
         assert_eq!(
             out.entities.len(),
             1,
@@ -3364,10 +3328,7 @@ mod tests {
             section(
                 "sec_0001",
                 vec![entity("Alyosha", &[], "")],
-                vec![event(
-                    "Alyosha arrives at the monastery.",
-                    &["Alyosha"],
-                )],
+                vec![event("Alyosha arrives at the monastery.", &["Alyosha"])],
             ),
             section(
                 "sec_0002",
@@ -3375,7 +3336,9 @@ mod tests {
                 vec![event("Alyosha arrives at the monastery.", &["Alyosha"])],
             ),
         ];
-        let out = resolve_entities_and_events(&sections, &always_one_embed()).await.unwrap();
+        let out = resolve_entities_and_events(&sections, &always_one_embed())
+            .await
+            .unwrap();
         assert_eq!(
             out.events.len(),
             1,
@@ -3402,7 +3365,9 @@ mod tests {
             vec![],
             vec![event("Alyosha arrives at the monastery.", &["Alyosha"])],
         ));
-        let out = resolve_entities_and_events(&sections, &always_one_embed()).await.unwrap();
+        let out = resolve_entities_and_events(&sections, &always_one_embed())
+            .await
+            .unwrap();
         assert_eq!(
             out.events.len(),
             2,
@@ -3415,12 +3380,11 @@ mod tests {
         let sections = vec![section(
             "sec_0001",
             vec![entity("Alyosha", &[], ""), entity("Zosima", &[], "")],
-            vec![event(
-                "Zosima instructs Alyosha.",
-                &["Zosima", "Alyosha"],
-            )],
+            vec![event("Zosima instructs Alyosha.", &["Zosima", "Alyosha"])],
         )];
-        let out = resolve_entities_and_events(&sections, &fake_embed()).await.unwrap();
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
         assert_eq!(out.events.len(), 1);
         // One Involves edge per participant, source = event id.
         let involves: Vec<&Edge> = out
@@ -3439,11 +3403,17 @@ mod tests {
         // Alyosha appears in 3 sections, Zosima in 1. Salience is
         // a monotonic function of reference count; Alyosha > Zosima.
         let sections = vec![
-            section("sec_0001", vec![entity("Alyosha", &[], ""), entity("Zosima", &[], "")], vec![]),
+            section(
+                "sec_0001",
+                vec![entity("Alyosha", &[], ""), entity("Zosima", &[], "")],
+                vec![],
+            ),
             section("sec_0002", vec![entity("Alyosha", &[], "")], vec![]),
             section("sec_0003", vec![entity("Alyosha", &[], "")], vec![]),
         ];
-        let out = resolve_entities_and_events(&sections, &fake_embed()).await.unwrap();
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
         let a = out
             .entities
             .iter()
@@ -3473,7 +3443,9 @@ mod tests {
                 &["Alyosha", "Stranger"],
             )],
         )];
-        let out = resolve_entities_and_events(&sections, &fake_embed()).await.unwrap();
+        let out = resolve_entities_and_events(&sections, &fake_embed())
+            .await
+            .unwrap();
         assert_eq!(out.events.len(), 1);
         assert_eq!(out.events[0].participants.len(), 2);
         assert_eq!(out.entities.len(), 2);
@@ -3488,7 +3460,10 @@ mod tests {
         );
         // Two Involves edges, one per participant.
         assert_eq!(
-            out.edges.iter().filter(|e| e.edge_type == EdgeType::Involves).count(),
+            out.edges
+                .iter()
+                .filter(|e| e.edge_type == EdgeType::Involves)
+                .count(),
             2
         );
         // Synthesis must clear the failure buffer — no
@@ -3511,11 +3486,11 @@ mod tests {
 
     #[test]
     fn step_3b_resolves_state_relation_claim_question_atoms_from_sketches() {
+        use super::super::atoms::{AtomId, ChunkRef, Entity};
         use crate::enrichment::pipeline::atlas::{
             ClaimSketch, DiscourseAct, EnrichmentDepth, EntitySketch, EntityStateSketch,
             EntityType, EpistemicStatus, QuestionSketch, RelationSketch, RelationStateSketch,
         };
-        use super::super::atoms::{AtomId, Entity, ChunkRef};
 
         // Build two canonical entities from (simulated) Step 3a.
         let entities = vec![
@@ -3532,9 +3507,9 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-                            provenance: Default::default(),
-                            concept_kind: None,
-},
+                provenance: Default::default(),
+                concept_kind: None,
+            },
             Entity {
                 id: AtomId::entity(2),
                 canonical_name: "Zossima".into(),
@@ -3548,9 +3523,9 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-                            provenance: Default::default(),
-                            concept_kind: None,
-},
+                provenance: Default::default(),
+                concept_kind: None,
+            },
         ];
 
         // Two sections, in order. sec_0001 introduces a state +
@@ -3560,16 +3535,14 @@ mod tests {
             SectionExtraction {
                 section_id: "sec_0001".into(),
                 enrichment_depth: EnrichmentDepth::Extracted,
-                entities_introduced: vec![
-                    EntitySketch {
-                        canonical_name: "Alyosha".into(),
-                        aliases: vec![],
-                        entity_type: EntityType::Person,
-                        description: "".into(),
-                        defining_quote: None,
-                        anchor: String::new(),
-                    },
-                ],
+                entities_introduced: vec![EntitySketch {
+                    canonical_name: "Alyosha".into(),
+                    aliases: vec![],
+                    entity_type: EntityType::Person,
+                    description: "".into(),
+                    defining_quote: None,
+                    anchor: String::new(),
+                }],
                 entities_developed: vec![EntityStateSketch {
                     entity_name: "Alyosha".into(),
                     label: "Eager attention at the elder's feet".into(),
@@ -3600,7 +3573,8 @@ mod tests {
                 }],
                 argument_reconstructions: Vec::new(),
                 type_extension: None,
-                type_extensions: Vec::new(),            },
+                type_extensions: Vec::new(),
+            },
             SectionExtraction {
                 section_id: "sec_0002".into(),
                 enrichment_depth: EnrichmentDepth::Extracted,
@@ -3674,8 +3648,7 @@ mod tests {
             id: super::super::atoms::AtomId::entity(1),
             canonical_name: "Alyosha".into(),
             aliases: Vec::new(),
-            entity_type:
-                crate::enrichment::pipeline::atlas::EntityType::Person,
+            entity_type: crate::enrichment::pipeline::atlas::EntityType::Person,
             first_appearance: super::super::atoms::ChunkRef::new("sec_0001", None),
             description: "x".into(),
             defining_quote: None,
@@ -3758,10 +3731,7 @@ mod tests {
         // shared token, so with a matching first name ("Fyodor")
         // rule 3 fires (≥2 shared tokens).
         assert_eq!(
-            shared_token_overlap(
-                "Fyodor Karamазов",
-                "Fyodor Pavlovich Karamazov"
-            ),
+            shared_token_overlap("Fyodor Karamазов", "Fyodor Pavlovich Karamazov"),
             2
         );
     }
@@ -3793,26 +3763,17 @@ mod tests {
         );
         // Two long shared tokens: "alexei" (6) + "karamazov" (9).
         assert_eq!(
-            shared_long_token_count(
-                "Alexei Fyodorovich Karamazov",
-                "Alexei Petrovich Karamazov"
-            ),
+            shared_long_token_count("Alexei Fyodorovich Karamazov", "Alexei Petrovich Karamazov"),
             2
         );
         // Single shared long token: the Fyodor drift case.
         assert_eq!(
-            shared_long_token_count(
-                "Fyodor Pavlovich Karamazov",
-                "Fyodor Karazov"
-            ),
+            shared_long_token_count("Fyodor Pavlovich Karamazov", "Fyodor Karazov"),
             1
         );
         // No long tokens shared — all short tokens would be
         // filtered out.
-        assert_eq!(
-            shared_long_token_count("the end", "the top"),
-            0
-        );
+        assert_eq!(shared_long_token_count("the end", "the top"), 0);
     }
 
     #[test]
@@ -3851,10 +3812,7 @@ mod tests {
             "zossima ↔ zosima (Lev 1) should count as a fuzzy match"
         );
         assert_eq!(
-            shared_token_overlap(
-                "Ivan Fyodoroič Kárámazov",
-                "Iván Fyódorič Kárazòv"
-            ),
+            shared_token_overlap("Ivan Fyodoroič Kárámazov", "Iván Fyódorič Kárazòv"),
             // After fold + Lev-1 fuzzy:
             //   ivan (4 chars) — filtered by min-len 3 but below
             //   fuzzy guard 5, so must match exactly → does match.
@@ -3865,10 +3823,7 @@ mod tests {
         );
         // Distinct entities must stay apart — only one shared
         // long-token, no fuzzy headroom.
-        assert_eq!(
-            shared_token_overlap("Ivan Karamazov", "Ilya Karamazov"),
-            1,
-        );
+        assert_eq!(shared_token_overlap("Ivan Karamazov", "Ilya Karamazov"), 1,);
     }
 
     #[test]
@@ -3879,14 +3834,14 @@ mod tests {
         assert_eq!(shared_token_overlap("of the house", "the house of"), 2);
         // Russian patronymic: 2 long-enough tokens share.
         assert_eq!(
-            shared_token_overlap(
-                "alexei fyodorovich karamazov",
-                "alexei fyodorovich"
-            ),
+            shared_token_overlap("alexei fyodorovich karamazov", "alexei fyodorovich"),
             2
         );
         // Disjoint tokens share none.
-        assert_eq!(shared_token_overlap("ivan karamazov", "alexei smerdyakov"), 0);
+        assert_eq!(
+            shared_token_overlap("ivan karamazov", "alexei smerdyakov"),
+            0
+        );
     }
 
     // ── Landing 2.A — fuzzy participant snap fallbacks ────────
@@ -3909,9 +3864,9 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-                            provenance: Default::default(),
-                            concept_kind: None,
-},
+                provenance: Default::default(),
+                concept_kind: None,
+            },
             Entity {
                 id: AtomId::entity(2),
                 canonical_name: "Alexei Fyedorovitch Kramzof".into(),
@@ -3925,9 +3880,9 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-                            provenance: Default::default(),
-                            concept_kind: None,
-},
+                provenance: Default::default(),
+                concept_kind: None,
+            },
             Entity {
                 id: AtomId::entity(3),
                 canonical_name: "Sofya Ivanovna Karamzova".into(),
@@ -3941,9 +3896,9 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-                            provenance: Default::default(),
-                            concept_kind: None,
-},
+                provenance: Default::default(),
+                concept_kind: None,
+            },
         ]
     }
 
@@ -3993,12 +3948,8 @@ mod tests {
         let entities = fuzzy_fixture_entities();
         let name_index = build_name_index(&entities);
         let token_index = build_token_index(&entities);
-        let id = resolve_entity_id_fuzzy(
-            "Fyodor Pvlvitch Karazoff",
-            &name_index,
-            &token_index,
-        )
-        .expect("Fyodor + Karazoff should resolve to entity-0001");
+        let id = resolve_entity_id_fuzzy("Fyodor Pvlvitch Karazoff", &name_index, &token_index)
+            .expect("Fyodor + Karazoff should resolve to entity-0001");
         assert_eq!(id.as_str(), "entity-0001");
     }
 
@@ -4025,9 +3976,9 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-                            provenance: Default::default(),
-                            concept_kind: None,
-},
+                provenance: Default::default(),
+                concept_kind: None,
+            },
             Entity {
                 id: AtomId::entity(2),
                 canonical_name: "Marika".into(),
@@ -4041,9 +3992,9 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-                            provenance: Default::default(),
-                            concept_kind: None,
-},
+                provenance: Default::default(),
+                concept_kind: None,
+            },
         ];
         let name_index = build_name_index(&entities);
         let token_index = build_token_index(&entities);
@@ -4080,9 +4031,9 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-}];
+            provenance: Default::default(),
+            concept_kind: None,
+        }];
         let name_index = build_name_index(&entities);
         let token_index = build_token_index(&entities);
         // `Anka` is Lev-1 from `Anna` but both are 4 chars. Guard
@@ -4116,9 +4067,9 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-}
+            provenance: Default::default(),
+            concept_kind: None,
+        }
     }
 
     fn low_salience_fyodor_drift() -> super::super::atoms::Entity {
@@ -4136,9 +4087,9 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-}
+            provenance: Default::default(),
+            concept_kind: None,
+        }
     }
 
     fn two_contested_ivans() -> (super::super::atoms::Entity, super::super::atoms::Entity) {
@@ -4156,9 +4107,9 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-                    provenance: Default::default(),
-                    concept_kind: None,
-};
+            provenance: Default::default(),
+            concept_kind: None,
+        };
         let b = Entity {
             id: AtomId::entity(2),
             canonical_name: "Ivan Petrovich Sidorov".into(),
@@ -4172,9 +4123,9 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-                    provenance: Default::default(),
-                    concept_kind: None,
-};
+            provenance: Default::default(),
+            concept_kind: None,
+        };
         (a, b)
     }
 
@@ -4190,13 +4141,8 @@ mod tests {
         // "Fyodor" alone is ambiguous — both entities' first tokens
         // fold to "fyodor" and both have "fyodor" as a long token.
         assert!(resolve_entity_id_fuzzy("Fyodor", &name_index, &token_index).is_none());
-        let id = resolve_entity_id_with_salience(
-            "Fyodor",
-            &entities,
-            &name_index,
-            &token_index,
-        )
-        .expect("salience-aware fallback should snap to dominant");
+        let id = resolve_entity_id_with_salience("Fyodor", &entities, &name_index, &token_index)
+            .expect("salience-aware fallback should snap to dominant");
         assert_eq!(id.as_str(), "entity-0001");
     }
 
@@ -4223,9 +4169,9 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-                            provenance: Default::default(),
-                            concept_kind: None,
-},
+                provenance: Default::default(),
+                concept_kind: None,
+            },
             Entity {
                 id: AtomId::entity(2),
                 canonical_name: "Ivan Petrovich Karamazov".into(),
@@ -4239,9 +4185,9 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-                            provenance: Default::default(),
-                            concept_kind: None,
-},
+                provenance: Default::default(),
+                concept_kind: None,
+            },
         ];
         let name_index = build_name_index(&contested);
         let token_index = build_token_index(&contested);
@@ -4273,24 +4219,17 @@ mod tests {
         let name_index = build_name_index(&entities);
         let token_index = build_token_index(&entities);
         // "Ivan" (4 chars) is below min-token-length → None.
-        assert!(resolve_entity_id_with_salience(
-            "Ivan",
-            &entities,
-            &name_index,
-            &token_index,
-        )
-        .is_none());
+        assert!(
+            resolve_entity_id_with_salience("Ivan", &entities, &name_index, &token_index,)
+                .is_none()
+        );
         // "Ivan Karamazov" shares "karamazov" with Fyodor but the
         // first_token_matches guard rejects Fyodor (fyodor ≠ ivan).
         // Ivan's canonical "Ivan Karamazov" matches perfectly via
         // the strict path — salience fallback isn't needed.
-        let id = resolve_entity_id_with_salience(
-            "Ivan Karamazov",
-            &entities,
-            &name_index,
-            &token_index,
-        )
-        .expect("should snap to Ivan");
+        let id =
+            resolve_entity_id_with_salience("Ivan Karamazov", &entities, &name_index, &token_index)
+                .expect("should snap to Ivan");
         assert_eq!(id.as_str(), "entity-0001"); // Ivan is entity-0001 in this fixture because he was listed first in two_contested_ivans
     }
 
@@ -4309,10 +4248,8 @@ mod tests {
         // becomes more permissive (Landing 2.A), this invariant
         // must still hold; if it ever changes the caller must
         // decide the policy deliberately rather than drifting.
-        use crate::enrichment::pipeline::atlas::{
-            EnrichmentDepth, RelationSketch,
-        };
         use super::super::atoms::{AtomId, ChunkRef, Entity};
+        use crate::enrichment::pipeline::atlas::{EnrichmentDepth, RelationSketch};
 
         let entities = vec![
             Entity {
@@ -4328,9 +4265,9 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-                            provenance: Default::default(),
-                            concept_kind: None,
-},
+                provenance: Default::default(),
+                concept_kind: None,
+            },
             Entity {
                 id: AtomId::entity(2),
                 canonical_name: "Zossima".into(),
@@ -4344,9 +4281,9 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-                            provenance: Default::default(),
-                            concept_kind: None,
-},
+                provenance: Default::default(),
+                concept_kind: None,
+            },
         ];
 
         // Two sections each introducing a relation between the
@@ -4435,9 +4372,7 @@ mod tests {
         // Alyosha's state moves from sec_0001 ("at the monastery") to
         // sec_0003 ("leaving"). A single event in sec_0002 has
         // Alyosha as participant — that's the unambiguous trigger.
-        use crate::enrichment::pipeline::atlas::{
-            EnrichmentDepth, EntityStateSketch,
-        };
+        use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityStateSketch};
 
         let entities = vec![single_entity(1, "Alyosha")];
         let events = vec![entity_event(
@@ -4488,7 +4423,10 @@ mod tests {
             .trajectories
             .get(super::super::atoms::AtomId::entity(1).as_str())
             .unwrap();
-        assert_eq!(traj.transitions[0].trigger_event.as_deref(), Some("event-0001"));
+        assert_eq!(
+            traj.transitions[0].trigger_event.as_deref(),
+            Some("event-0001")
+        );
     }
 
     #[test]
@@ -4496,9 +4434,7 @@ mod tests {
         // Two events in the window, both with Alyosha as participant
         // → we can't prove which is the trigger, so leave None rather
         // than pick one arbitrarily.
-        use crate::enrichment::pipeline::atlas::{
-            EnrichmentDepth, EntityStateSketch,
-        };
+        use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityStateSketch};
 
         let entities = vec![single_entity(1, "Alyosha")];
         let events = vec![
@@ -4593,8 +4529,7 @@ mod tests {
 
         let out = resolve_step_3b(&sections, &entities, &[]).unwrap();
 
-        let kinds: Vec<PhaseFailureKind> =
-            out.failures.iter().map(|f| f.kind).collect();
+        let kinds: Vec<PhaseFailureKind> = out.failures.iter().map(|f| f.kind).collect();
         assert!(
             kinds.contains(&PhaseFailureKind::UnresolvedEntityName),
             "expected UnresolvedEntityName from case (1), got kinds: {:?}",
@@ -4626,18 +4561,22 @@ mod tests {
         );
         // Subjects carry the sketch-scoped prefix so the aggregator
         // can trace a group back to its exact origin.
+        assert!(out
+            .failures
+            .iter()
+            .any(|f| { f.subject.starts_with("sketch:entity_state:sec_0001#") }));
         assert!(out.failures.iter().any(|f| {
-            f.subject.starts_with("sketch:entity_state:sec_0001#")
+            f.subject
+                .starts_with("sketch:relation_introduced:sec_0001#")
         }));
-        assert!(out.failures.iter().any(|f| {
-            f.subject.starts_with("sketch:relation_introduced:sec_0001#")
-        }));
-        assert!(out.failures.iter().any(|f| {
-            f.subject.starts_with("sketch:relation_developed:sec_0001#")
-        }));
-        assert!(out.failures.iter().any(|f| {
-            f.subject.starts_with("sketch:claim:sec_0001#")
-        }));
+        assert!(out
+            .failures
+            .iter()
+            .any(|f| { f.subject.starts_with("sketch:relation_developed:sec_0001#") }));
+        assert!(out
+            .failures
+            .iter()
+            .any(|f| { f.subject.starts_with("sketch:claim:sec_0001#") }));
         // Claim content is still emitted — only attribution is lost.
         assert_eq!(out.claims.len(), 1);
         assert_eq!(out.claims[0].attributed_to, None);
@@ -4692,14 +4631,9 @@ mod tests {
         // The only event in the window is about a different entity
         // (Ivan), not Alyosha. The owner-participant filter drops it,
         // so there's no match → None.
-        use crate::enrichment::pipeline::atlas::{
-            EnrichmentDepth, EntityStateSketch,
-        };
+        use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityStateSketch};
 
-        let entities = vec![
-            single_entity(1, "Alyosha"),
-            single_entity(2, "Ivan"),
-        ];
+        let entities = vec![single_entity(1, "Alyosha"), single_entity(2, "Ivan")];
         let events = vec![entity_event(
             1,
             "sec_0002",
@@ -4737,8 +4671,7 @@ mod tests {
             .edges
             .iter()
             .filter(|e| {
-                e.edge_type == EdgeType::Transition
-                    && e.source.as_str().starts_with("state-")
+                e.edge_type == EdgeType::Transition && e.source.as_str().starts_with("state-")
             })
             .collect();
         assert_eq!(alyosha_transitions.len(), 1);
@@ -4823,7 +4756,10 @@ mod tests {
         let sections = vec![section(
             "sec_0001",
             vec![],
-            vec![event("Anonymous event with blank participant", &["", "   "])],
+            vec![event(
+                "Anonymous event with blank participant",
+                &["", "   "],
+            )],
         )];
         let out = resolve_entities_and_events(&sections, &fake_embed())
             .await
@@ -4876,7 +4812,10 @@ mod tests {
             out.entities.len(),
             1,
             "all four typo variants should collapse into a single atom; got: {:?}",
-            out.entities.iter().map(|e| &e.canonical_name).collect::<Vec<_>>()
+            out.entities
+                .iter()
+                .map(|e| &e.canonical_name)
+                .collect::<Vec<_>>()
         );
         let survivor = &out.entities[0];
         // The three loser spellings must surface as aliases so an
@@ -4956,7 +4895,10 @@ mod tests {
             out.entities.len(),
             3,
             "short names must not be typo-merged; got: {:?}",
-            out.entities.iter().map(|e| &e.canonical_name).collect::<Vec<_>>()
+            out.entities
+                .iter()
+                .map(|e| &e.canonical_name)
+                .collect::<Vec<_>>()
         );
     }
 
@@ -4993,8 +4935,7 @@ mod tests {
             .collect();
         assert_eq!(involves.len(), 1, "one Involves edge for the one event");
         assert_eq!(
-            &involves[0].target,
-            survivor_id,
+            &involves[0].target, survivor_id,
             "typo-named participant must route to the survivor atom"
         );
         assert!(
@@ -5021,9 +4962,9 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-                    provenance: Default::default(),
-                    concept_kind: None,
-};
+            provenance: Default::default(),
+            concept_kind: None,
+        };
         // Short names below TYPO_DEDUP_MIN_FOLDED_LEN must not match.
         assert!(!typo_dedup_match(&mk("Lewis"), &mk("Lewes")));
         // Long-enough names with prefix mismatch must not match.
@@ -5033,10 +4974,7 @@ mod tests {
         ));
         // Long-enough names with prefix match and Lev within the cap
         // must match.
-        assert!(typo_dedup_match(
-            &mk("Compatibilism"),
-            &mk("Compatibelism")
-        ));
+        assert!(typo_dedup_match(&mk("Compatibilism"), &mk("Compatibelism")));
         // Different entity types must not match even when the names
         // are otherwise dedup-eligible.
         let person = Entity {
@@ -5127,9 +5065,7 @@ mod tests {
             "chunk:7".into(),
             super::super::citation::SourceCitation {
                 section_id: "chunk:7".into(),
-                passage_preview: Some(
-                    "Verbatim source sentence about spread pricing.".into(),
-                ),
+                passage_preview: Some("Verbatim source sentence about spread pricing.".into()),
             },
         );
 

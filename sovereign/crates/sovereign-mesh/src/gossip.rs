@@ -23,9 +23,9 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use commonwealth_api::state::AppState;
-use commonwealth_core::ids::NodeId;
-use commonwealth_core::mesh::{Mesh, MemberRecord, MeshPeering, NodeStatus};
 use commonwealth_core::ids::MeshId;
+use commonwealth_core::ids::NodeId;
+use commonwealth_core::mesh::{MemberRecord, Mesh, MeshPeering, NodeStatus};
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
@@ -228,9 +228,7 @@ pub async fn run_one_round(
             let prior_status = m.status;
             // Only decay if the record is actually stale AND not
             // already Offline (avoid unnecessary writes).
-            if now.saturating_sub(m.last_seen) > threshold
-                && m.status != NodeStatus::Offline
-            {
+            if now.saturating_sub(m.last_seen) > threshold && m.status != NodeStatus::Offline {
                 m.status = NodeStatus::Offline;
                 // Extra diagnostic fields for the ~9 min flap
                 // (see todo `f152dfe7` #4). `threshold_secs` +
@@ -253,7 +251,6 @@ pub async fn run_one_round(
             // Here in the decay pass `m.status` can only move
             // Online→Offline, so no online-transition log to emit.
             let _ = prior_status; // reserved for future use
-
         }
         mesh.members
             .values()
@@ -263,9 +260,7 @@ pub async fn run_one_round(
                 // `last_working_address_cache` has a hint) try IPv4
                 // before falling through to IPv6. Subsequent rounds
                 // are reordered by the cache regardless.
-                let addrs = commonwealth_core::peer_addr::sorted_addresses(
-                    &m.addresses.to_vec(),
-                );
+                let addrs = commonwealth_core::peer_addr::sorted_addresses(&m.addresses.to_vec());
                 (m.node_id, addrs)
             })
             .collect()
@@ -460,9 +455,8 @@ pub async fn run_one_round(
                         // Sort addresses IPv4-first via the shared
                         // ranker so mesh-store push retries match
                         // the order used by inference routing.
-                        let addrs = commonwealth_core::peer_addr::sorted_addresses(
-                            &m.addresses.to_vec(),
-                        );
+                        let addrs =
+                            commonwealth_core::peer_addr::sorted_addresses(&m.addresses.to_vec());
                         (m.node_id, addrs)
                     })
                     .collect()
@@ -532,20 +526,13 @@ pub async fn run_one_round(
 /// caller could in principle broadcast a Private record. The work
 /// atlas's typed facade only calls `broadcast_now` for Public claims
 /// — Private claims skip this entirely.
-pub async fn broadcast_now(
-    app_state: &AppState,
-    app_id: &str,
-    key: &str,
-) {
+pub async fn broadcast_now(app_state: &AppState, app_id: &str, key: &str) {
     if commonwealth_state::is_gossip_excluded(app_id) {
         // Defence-in-depth: even if a caller passed a private app_id,
         // refuse to broadcast it. This is the third privacy layer
         // for the work atlas — store-level mapping + gossip filter +
         // this guard.
-        tracing::warn!(
-            app_id,
-            "work_atlas:broadcast_now refused private app_id"
-        );
+        tracing::warn!(app_id, "work_atlas:broadcast_now refused private app_id");
         return;
     }
 
@@ -561,11 +548,7 @@ pub async fn broadcast_now(
         }
     };
 
-    let self_id = *app_state
-        .inner
-        .self_node_id_swap
-        .load_full()
-        .as_ref();
+    let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
     let wire = serde_json::json!({
         "entries": [{
             "app_id": entry.app_id,
@@ -582,9 +565,7 @@ pub async fn broadcast_now(
             .values()
             .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
             .map(|m| {
-                let addrs = commonwealth_core::peer_addr::sorted_addresses(
-                    &m.addresses.to_vec(),
-                );
+                let addrs = commonwealth_core::peer_addr::sorted_addresses(&m.addresses.to_vec());
                 (m.node_id, addrs)
             })
             .collect()

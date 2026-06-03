@@ -38,11 +38,7 @@ impl AssetSubExtractor for DocxSubExtractor {
         // ZIP magic + we'll let `extract` confirm by looking for
         // `word/document.xml`. Without an extension hint, defer the
         // disambiguation to extract().
-        head_bytes.starts_with(b"PK\x03\x04")
-            && path
-                .extension()
-                .and_then(|s| s.to_str())
-                .is_none()
+        head_bytes.starts_with(b"PK\x03\x04") && path.extension().and_then(|s| s.to_str()).is_none()
     }
 
     fn extract(
@@ -53,10 +49,7 @@ impl AssetSubExtractor for DocxSubExtractor {
         _store: &dyn AssetStore,
     ) -> Result<AssetExtraction> {
         let mut zip = ZipArchive::new(Cursor::new(bytes)).map_err(|e| {
-            Error::Extraction(format!(
-                "docx: cannot open zip in {}: {e}",
-                path.display()
-            ))
+            Error::Extraction(format!("docx: cannot open zip in {}: {e}", path.display()))
         })?;
         // The word body is always at `word/document.xml`; alternative
         // payloads (`word/document2.xml`) exist on extreme edge cases
@@ -149,8 +142,7 @@ impl AssetSubExtractor for DocxSubExtractor {
             asset_kind: "docx".into(),
             tier: ExtractionTier::Prose,
             mime: Some(
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    .into(),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document".into(),
             ),
             parsed_form: None,
         })
@@ -174,8 +166,8 @@ mod tests {
         let buf: Vec<u8> = Vec::new();
         let cursor = Cursor::new(buf);
         let mut zip = zip::ZipWriter::new(cursor);
-        let opts: SimpleFileOptions = SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated);
+        let opts: SimpleFileOptions =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
         zip.start_file("word/document.xml", opts).unwrap();
         let mut body = String::new();
         body.push_str(r#"<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>"#);
@@ -202,21 +194,13 @@ mod tests {
         ) -> Result<crate::asset_store::AssetReceipt> {
             unreachable!("not used in docx sub-extractor")
         }
-        fn put_parsed(
-            &self,
-            _: &str,
-            _: &str,
-            _: &[u8],
-        ) -> Result<std::path::PathBuf> {
+        fn put_parsed(&self, _: &str, _: &str, _: &[u8]) -> Result<std::path::PathBuf> {
             unreachable!()
         }
         fn record_parsed_form(&self, _: &str, _: &Path) -> Result<()> {
             unreachable!()
         }
-        fn lookup(
-            &self,
-            _: &str,
-        ) -> Result<Option<crate::asset_store::LedgerEntry>> {
+        fn lookup(&self, _: &str) -> Result<Option<crate::asset_store::LedgerEntry>> {
             Ok(None)
         }
         fn entries(&self) -> Result<Vec<crate::asset_store::LedgerEntry>> {

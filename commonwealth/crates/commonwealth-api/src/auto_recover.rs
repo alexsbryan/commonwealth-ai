@@ -118,10 +118,7 @@ pub enum RecoveryOutcome {
     },
     /// Recovery merge produced a built canonical with the supplied
     /// chunk count and shard coverage.
-    Recovered {
-        chunks: u64,
-        shards_covered: usize,
-    },
+    Recovered { chunks: u64, shards_covered: usize },
     /// Recovery attempted but failed; caller should fall back. The
     /// error is already logged at `error!` level.
     Failed(String),
@@ -142,10 +139,7 @@ pub enum RecoveryOutcome {
 /// and `NotEnoughPartitions` short-circuit before the cooldown
 /// stamp — they're cheap, deterministic checks that should always
 /// re-evaluate fresh.
-pub async fn try_recover_stranded_partitions(
-    index_dir: &Path,
-    corpus_id: &str,
-) -> RecoveryOutcome {
+pub async fn try_recover_stranded_partitions(index_dir: &Path, corpus_id: &str) -> RecoveryOutcome {
     // Cheap pre-checks first — these don't consume the cooldown.
     let canonical_dir = index_dir.join(corpus_id);
     let canonical_meta = canonical_dir.join("_corpus_meta.json");
@@ -170,8 +164,7 @@ pub async fn try_recover_stranded_partitions(
     // canonical.
     let prefix = format!("{corpus_id}-partition-");
     let mut partition_count = 0usize;
-    let mut shard_union: std::collections::BTreeSet<usize> =
-        std::collections::BTreeSet::new();
+    let mut shard_union: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
     let mut total_shards: Option<usize> = None;
     if let Ok(entries) = std::fs::read_dir(index_dir) {
         for entry in entries.flatten() {
@@ -238,8 +231,7 @@ pub async fn try_recover_stranded_partitions(
     // exactly what we want.
     if let Some(n) = total_shards {
         if shard_union.len() < n {
-            let missing: Vec<usize> =
-                (0..n).filter(|s| !shard_union.contains(s)).collect();
+            let missing: Vec<usize> = (0..n).filter(|s| !shard_union.contains(s)).collect();
             tracing::warn!(
                 corpus = %corpus_id,
                 covered = shard_union.len(),
@@ -289,20 +281,18 @@ pub async fn try_recover_stranded_partitions(
     // human-readable variant lives in the CLI; here every phase
     // boundary becomes a structured info! event for journalctl /
     // sovereign log scraping.
-    let progress: std::sync::Arc<
-        dyn Fn(corpus_engine::MergePhaseProgress) + Send + Sync,
-    > = {
+    let progress: std::sync::Arc<dyn Fn(corpus_engine::MergePhaseProgress) + Send + Sync> = {
         let corpus_id = corpus_id.to_string();
         std::sync::Arc::new(move |phase| {
             let corpus = corpus_id.clone();
             match phase {
-                corpus_engine::MergePhaseProgress::DiscoveryComplete {
-                    partition_count,
-                } => tracing::info!(
-                    %corpus,
-                    partition_count,
-                    "auto_recover: discovery complete"
-                ),
+                corpus_engine::MergePhaseProgress::DiscoveryComplete { partition_count } => {
+                    tracing::info!(
+                        %corpus,
+                        partition_count,
+                        "auto_recover: discovery complete"
+                    )
+                }
                 corpus_engine::MergePhaseProgress::MergeComplete {
                     chunks_merged,
                     chunks_deduped,
@@ -358,17 +348,9 @@ pub async fn try_recover_stranded_partitions(
             // safe to call unconditionally.
             if let Some(home) = dirs::home_dir() {
                 let canonical_path = index_dir.join(corpus_id);
-                match corpus_engine::alignment_projector::project(
-                    &canonical_path,
-                    &home,
-                )
-                .await
-                {
+                match corpus_engine::alignment_projector::project(&canonical_path, &home).await {
                     Ok(p) => {
-                        if p.wrote > 0
-                            || p.skipped_local_newer > 0
-                            || p.swept_incoming > 0
-                        {
+                        if p.wrote > 0 || p.skipped_local_newer > 0 || p.swept_incoming > 0 {
                             tracing::info!(
                                 corpus = %corpus_id,
                                 wrote = p.wrote,
@@ -470,7 +452,10 @@ mod tests {
         // owned directory goes away (e.g. after a `sovereign
         // corpus remove` flow).
         let outcome2 = try_recover_stranded_partitions(dir.path(), "commonwealth").await;
-        assert!(matches!(outcome2, RecoveryOutcome::CanonicalDirectoryReserved));
+        assert!(matches!(
+            outcome2,
+            RecoveryOutcome::CanonicalDirectoryReserved
+        ));
     }
 
     #[tokio::test]
@@ -549,8 +534,13 @@ mod tests {
         // junk for actual merge purposes (no embedding model, no
         // chunks table). What matters is we did NOT short-circuit
         // with IncompleteCoverage.
-        let unique_corpus = format!("foo_{}", std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).unwrap().as_micros());
+        let unique_corpus = format!(
+            "foo_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        );
         // Re-create with the unique corpus prefix to avoid cooldown
         // collision with other tests.
         let p1u = dir.path().join(format!("{unique_corpus}-partition-aaaa"));
@@ -576,8 +566,13 @@ mod tests {
         // failure (junk meta for merge purposes) is fine — we just
         // need to confirm IncompleteCoverage didn't fire.
         let dir = tempfile::tempdir().unwrap();
-        let unique_corpus = format!("complete_{}", std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).unwrap().as_micros());
+        let unique_corpus = format!(
+            "complete_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        );
         let p1 = dir.path().join(format!("{unique_corpus}-partition-aaaa"));
         std::fs::create_dir_all(&p1).unwrap();
         std::fs::write(
@@ -612,9 +607,7 @@ mod tests {
         // (junk meta). Stamps the cooldown.
         let unique_corpus = format!("xyz_{}", std::process::id());
         // Need to re-create the partition dir with the unique name.
-        let real_partition = dir
-            .path()
-            .join(format!("{unique_corpus}-partition-aaaa"));
+        let real_partition = dir.path().join(format!("{unique_corpus}-partition-aaaa"));
         std::fs::create_dir_all(&real_partition).unwrap();
         std::fs::write(real_partition.join("_corpus_meta.json"), "{}").unwrap();
 

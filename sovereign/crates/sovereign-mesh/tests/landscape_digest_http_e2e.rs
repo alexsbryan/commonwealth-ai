@@ -48,9 +48,8 @@ async fn bare_manager() -> Arc<KnowledgeViewManager> {
     std::fs::create_dir_all(&indexes_dir).unwrap();
     std::fs::create_dir_all(&recipes_dir).unwrap();
     let _ = std::fs::File::create(&db_path).unwrap();
-    let embed: corpus_engine::EmbedFn = Arc::new(|_| {
-        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) })
-    });
+    let embed: corpus_engine::EmbedFn =
+        Arc::new(|_| Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) }));
     let infer: corpus_engine::InferenceFn = Arc::new(|_, _: Option<&serde_json::Value>| {
         Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
     });

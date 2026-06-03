@@ -97,7 +97,9 @@ pub struct ThreadJudge {
     pub coverage_mean: Option<f32>,
 }
 
-fn default_judge_trials() -> usize { 1 }
+fn default_judge_trials() -> usize {
+    1
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThreadFactEvidence {
@@ -322,10 +324,8 @@ async fn run_one_turn(
         })
         .collect();
 
-    let fact_recall: ScoreSnapshot =
-        score_facts_in_text(&turn.expected_facts, &visible).into();
-    let source_recall: ScoreSnapshot =
-        score_sources_titles(&turn.expected_sources, &titles).into();
+    let fact_recall: ScoreSnapshot = score_facts_in_text(&turn.expected_facts, &visible).into();
+    let source_recall: ScoreSnapshot = score_sources_titles(&turn.expected_sources, &titles).into();
 
     TurnResult {
         turn_index,
@@ -382,8 +382,7 @@ fn compute_degradation(turns: &[TurnResult]) -> DegradationCurve {
         }
     };
 
-    let latency_ms_per_turn: Vec<Option<u64>> =
-        turns.iter().map(|t| t.total_latency_ms).collect();
+    let latency_ms_per_turn: Vec<Option<u64>> = turns.iter().map(|t| t.total_latency_ms).collect();
 
     DegradationCurve {
         first_failure_turn: first_failure,
@@ -410,7 +409,10 @@ async fn score_thread_coverage(
 
     let mut transcript = String::new();
     for t in turns {
-        transcript.push_str(&format!("[Turn {}] LEARNER: {}\n", t.turn_index, t.question));
+        transcript.push_str(&format!(
+            "[Turn {}] LEARNER: {}\n",
+            t.turn_index, t.question
+        ));
         transcript.push_str(&format!("[Turn {}] TUTOR: {}\n\n", t.turn_index, t.answer));
     }
 
@@ -606,7 +608,12 @@ async fn score_thread_coverage_multi(
     }
     let mut trial_results: Vec<ThreadJudge> = Vec::with_capacity(trials);
     for t in 0..trials {
-        eprintln!("  [thread-judge] trial {}/{} for {}", t + 1, trials, thread.id);
+        eprintln!(
+            "  [thread-judge] trial {}/{} for {}",
+            t + 1,
+            trials,
+            thread.id
+        );
         if let Some(j) = score_thread_coverage(session, thread, turns).await {
             trial_results.push(j);
         }
@@ -692,7 +699,10 @@ fn empty_coverage(facts: &[String]) -> ScoreSnapshot {
 /// Print one terse per-thread block + global rollup. Caller can pipe
 /// to --output for the full JSON.
 pub fn print_threads_text(run: &ThreadEvalRun) {
-    println!("── thread bench: {} (corpus {}) ─────────────────", run.bank, run.corpus);
+    println!(
+        "── thread bench: {} (corpus {}) ─────────────────",
+        run.bank, run.corpus
+    );
     println!("started:  {}", run.started_at);
     println!("finished: {}", run.finished_at);
     println!("threads:  {}", run.threads.len());
@@ -784,16 +794,9 @@ pub fn print_threads_text(run: &ThreadEvalRun) {
     } else {
         total_src_matched as f32 / total_src_expected as f32
     };
-    println!(
-        "fact_recall:     {fact_pct:.3} ({total_fact_matched}/{total_fact_expected})"
-    );
-    println!(
-        "source_recall:   {src_pct:.3} ({total_src_matched}/{total_src_expected})"
-    );
-    println!(
-        "wall total:      {:.1}s",
-        total_wall_ms as f64 / 1000.0
-    );
+    println!("fact_recall:     {fact_pct:.3} ({total_fact_matched}/{total_fact_expected})");
+    println!("source_recall:   {src_pct:.3} ({total_src_matched}/{total_src_expected})");
+    println!("wall total:      {:.1}s", total_wall_ms as f64 / 1000.0);
     if judges_run > 0 {
         println!(
             "judge coverage:  {:.3} (mean over {judges_run} threads)",

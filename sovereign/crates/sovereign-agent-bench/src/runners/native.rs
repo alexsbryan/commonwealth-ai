@@ -26,7 +26,9 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use serde_json::{json, Value};
 
-use commonwealth_agent_tools::adapter::{native as native_adapter, AgentToolAdapter, TranslateOutcome};
+use commonwealth_agent_tools::adapter::{
+    native as native_adapter, AgentToolAdapter, TranslateOutcome,
+};
 use commonwealth_agent_tools::executor::ExecCtx;
 use commonwealth_agent_tools::registry::Registry;
 use commonwealth_agent_tools::role::{
@@ -42,8 +44,7 @@ use crate::runner::{
 };
 use crate::runners::shared_detectors::{
     CycleSignal, HandoffCycleCounter, ThrashSignal, ThrashTracker, VerifySignal,
-    VerifyStuckTracker, HANDOFF_CYCLE_CAP, SAME_PATH_WRITE_THRESHOLD,
-    VERIFY_STUCK_THRESHOLD,
+    VerifyStuckTracker, HANDOFF_CYCLE_CAP, SAME_PATH_WRITE_THRESHOLD, VERIFY_STUCK_THRESHOLD,
 };
 
 const DEFAULT_PROVIDER_URL: &str = "http://localhost:9741/v1";
@@ -249,7 +250,12 @@ async fn run_native_monolithic(
         // (typical smoke <5s) while still bounding pathological hangs
         // at a fraction of the overall run budget.
         .with_subprocess_wall_cap(Duration::from_secs(120))
-        .with_build_cmd(runner.build_cmd.clone().unwrap_or_else(|| ctx.build_cmd.clone()))
+        .with_build_cmd(
+            runner
+                .build_cmd
+                .clone()
+                .unwrap_or_else(|| ctx.build_cmd.clone()),
+        )
         .with_verify_cmd(
             runner
                 .verify_cmd
@@ -264,7 +270,10 @@ async fn run_native_monolithic(
 
     let mut messages: Vec<Value> = Vec::new();
     messages.push(system_message());
-    messages.push(user_message(&format_initial_prompt(&exec_ctx.workdir, &ctx.prompt)));
+    messages.push(user_message(&format_initial_prompt(
+        &exec_ctx.workdir,
+        &ctx.prompt,
+    )));
 
     let tools = adapter.tool_descriptors();
     let mut tool_calls_record: Vec<ToolCallRecord> = Vec::new();
@@ -327,7 +336,9 @@ async fn run_native_monolithic(
                 .and_then(|v| v.as_u64())
                 .unwrap_or(tokens.input);
             tokens.output = tokens.output.saturating_add(
-                u.get("completion_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+                u.get("completion_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0),
             );
         }
 
@@ -390,7 +401,11 @@ async fn run_native_monolithic(
 
         let mut model_done = false;
         for tc in &tool_calls {
-            let id = tc.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let id = tc
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let fn_obj = tc.get("function").cloned().unwrap_or(Value::Null);
             let name = fn_obj
                 .get("name")
@@ -422,7 +437,10 @@ async fn run_native_monolithic(
 
             // Detector update + result formatting.
             let (tool_result_content, kill_now) = match outcome {
-                TranslateOutcome::Canonical { canonical, canonical_kind } => {
+                TranslateOutcome::Canonical {
+                    canonical,
+                    canonical_kind,
+                } => {
                     use commonwealth_agent_tools::PrimitiveKind;
                     // Update thrash tracker BEFORE executing so a
                     // 3rd same-path write triggers without us
@@ -473,13 +491,12 @@ async fn run_native_monolithic(
                     } else {
                         match registry.dispatch(&exec_ctx, &canonical).await {
                             Ok(result) => {
-                                let body = serde_json::to_string(&result.payload)
-                                    .unwrap_or_default();
+                                let body =
+                                    serde_json::to_string(&result.payload).unwrap_or_default();
                                 (body, false)
                             }
                             Err(e) => {
-                                let body =
-                                    json!({"error": e.to_string()}).to_string();
+                                let body = json!({"error": e.to_string()}).to_string();
                                 (body, false)
                             }
                         }
@@ -606,7 +623,12 @@ async fn run_native_role_aware(
         // (typical smoke <5s) while still bounding pathological hangs
         // at a fraction of the overall run budget.
         .with_subprocess_wall_cap(Duration::from_secs(120))
-        .with_build_cmd(runner.build_cmd.clone().unwrap_or_else(|| ctx.build_cmd.clone()))
+        .with_build_cmd(
+            runner
+                .build_cmd
+                .clone()
+                .unwrap_or_else(|| ctx.build_cmd.clone()),
+        )
         .with_verify_cmd(
             runner
                 .verify_cmd
@@ -749,11 +771,8 @@ async fn run_native_role_aware(
             .as_deref()
             .map(extract_referenced_names)
             .unwrap_or_default();
-        let user_msg = format_initial_prompt_with_promoted(
-            workdir.path(),
-            &ctx.prompt,
-            &promoted_names,
-        );
+        let user_msg =
+            format_initial_prompt_with_promoted(workdir.path(), &ctx.prompt, &promoted_names);
         let role_messages = build_role_messages(
             active_role,
             &profile,
@@ -769,8 +788,8 @@ async fn run_native_role_aware(
         // schema validator rejects any attempt to re-emit them.
         // Closes the build-loop-after-pass class observed on every
         // 2.1 native role-aware trial (HANDOFF.md 2026-05-21 night).
-        let evaluator_terminating = matches!(active_role, Role::Evaluator)
-            && role_dossier.smoke_just_passed();
+        let evaluator_terminating =
+            matches!(active_role, Role::Evaluator) && role_dossier.smoke_just_passed();
         let role_tools = if evaluator_terminating {
             tracing::info!(
                 problem = %problem_id,
@@ -843,7 +862,9 @@ async fn run_native_role_aware(
                 .and_then(|v| v.as_u64())
                 .unwrap_or(tokens.input);
             tokens.output = tokens.output.saturating_add(
-                u.get("completion_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+                u.get("completion_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0),
             );
         }
 
@@ -951,7 +972,11 @@ async fn run_native_role_aware(
         // append result, possibly transition.
         let mut transitioned_this_turn = false;
         for tc in &tool_calls {
-            let id = tc.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let id = tc
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let fn_obj = tc.get("function").cloned().unwrap_or(Value::Null);
             let name = fn_obj
                 .get("name")
@@ -998,7 +1023,11 @@ async fn run_native_role_aware(
                 role_dossier.push_outcome(
                     active_role,
                     canonical_kind.unwrap_or(PrimitiveKind::AgentDone),
-                    format!("rejected: `{}` not allowed in {} role", name, active_role.id()),
+                    format!(
+                        "rejected: `{}` not allowed in {} role",
+                        name,
+                        active_role.id()
+                    ),
                 );
                 let allowed_list: Vec<String> = profile
                     .allowed_primitives
@@ -1031,7 +1060,11 @@ async fn run_native_role_aware(
             // agent_done which terminates).
             let canonical = match outcome {
                 TranslateOutcome::Canonical { canonical, .. } => canonical,
-                TranslateOutcome::Unrecognized { tool_name, args_summary, reason } => {
+                TranslateOutcome::Unrecognized {
+                    tool_name,
+                    args_summary,
+                    reason,
+                } => {
                     let stdout_tail = format!(
                         "error: tool `{tool_name}` arguments did not parse\n  \
                          = reason: {reason}\n  \
@@ -1121,11 +1154,7 @@ async fn run_native_role_aware(
                         error = %e,
                         "native_runner: dispatch failed"
                     );
-                    role_dossier.push_outcome(
-                        active_role,
-                        kind,
-                        format!("error: {e}"),
-                    );
+                    role_dossier.push_outcome(active_role, kind, format!("error: {e}"));
                     // Render in cargo-shape texture so the model sees
                     // a structured, actionable error instead of the
                     // bare enum string. Per ARCH §0.1 (glassbox):
@@ -1203,7 +1232,9 @@ async fn run_native_role_aware(
             // of thrash.
             if matches!(
                 kind,
-                PrimitiveKind::WriteFile | PrimitiveKind::PatchFile | PrimitiveKind::ReplaceFunction
+                PrimitiveKind::WriteFile
+                    | PrimitiveKind::PatchFile
+                    | PrimitiveKind::ReplaceFunction
             ) {
                 let path = match &canonical {
                     commonwealth_agent_tools::Primitive::WriteFile(args) => {
@@ -1263,8 +1294,7 @@ async fn run_native_role_aware(
                 // Run only on Smoke (Build doesn't enumerate tests).
                 if matches!(kind, PrimitiveKind::Smoke) {
                     let parsed = crate::witness::test_result_parser::parse_pytest_text(tail);
-                    let new_failed: HashSet<String> =
-                        parsed.failed_names.iter().cloned().collect();
+                    let new_failed: HashSet<String> = parsed.failed_names.iter().cloned().collect();
                     let regressed: Vec<String> = match &last_failed_set {
                         Some(prev) => new_failed.difference(prev).cloned().collect(),
                         None => Vec::new(),
@@ -1278,11 +1308,8 @@ async fn run_native_role_aware(
                                 "native_runner: rollback failed to restore workdir"
                             );
                         } else {
-                            let sample: Vec<&str> = regressed
-                                .iter()
-                                .take(3)
-                                .map(|s| s.as_str())
-                                .collect();
+                            let sample: Vec<&str> =
+                                regressed.iter().take(3).map(|s| s.as_str()).collect();
                             let msg = format!(
                                 "REGRESSION: your last edit broke {} previously-passing test(s) ({}). Workdir reverted to pre-edit state. Try a different approach for this fix.",
                                 regressed.len(),
@@ -1303,9 +1330,7 @@ async fn run_native_role_aware(
                     }
                 }
                 role_dossier.record_verification(kind, ok, tail);
-                if let VerifySignal::Kill { hash_repeats } =
-                    verify_stuck.observe(ok, tail)
-                {
+                if let VerifySignal::Kill { hash_repeats } = verify_stuck.observe(ok, tail) {
                     tracing::warn!(
                         problem = %problem_id,
                         role = active_role.id(),
@@ -1443,11 +1468,7 @@ async fn run_native_role_aware(
                     {
                         role_dossier.note_yield(
                             active_role,
-                            format!(
-                                "{} called {}",
-                                active_role.id(),
-                                kind.id()
-                            ),
+                            format!("{} called {}", active_role.id(), kind.id()),
                         );
                     }
                     active_role = r;
@@ -1515,7 +1536,10 @@ async fn run_native_role_aware(
         // empty plan — the no-plan case still produces an
         // honest measurement of what the Implementer can do
         // without guidance.
-        if matches!(active_role, Role::Planner) && total_role_calls >= 3 && role_dossier.plan.is_none() {
+        if matches!(active_role, Role::Planner)
+            && total_role_calls >= 3
+            && role_dossier.plan.is_none()
+        {
             tracing::info!(
                 problem = %problem_id,
                 role = "planner",
@@ -1653,10 +1677,7 @@ fn build_role_request_body(
 
 /// POST a pre-built request body to the daemon. Returns the parsed
 /// response on success, or `Err(text)` on HTTP / parse failure.
-async fn post_chat_completion(
-    runner: &NativeRunner,
-    body: &Value,
-) -> Result<Value, String> {
+async fn post_chat_completion(runner: &NativeRunner, body: &Value) -> Result<Value, String> {
     let url = format!("{}/chat/completions", runner.provider_url);
     let resp = runner
         .http
@@ -1673,8 +1694,12 @@ async fn post_chat_completion(
             text.chars().take(500).collect::<String>()
         ));
     }
-    serde_json::from_str(&text)
-        .map_err(|e| format!("parse: {e} (body: {})", text.chars().take(500).collect::<String>()))
+    serde_json::from_str(&text).map_err(|e| {
+        format!(
+            "parse: {e} (body: {})",
+            text.chars().take(500).collect::<String>()
+        )
+    })
 }
 
 // ── HTTP transport ───────────────────────────────────────────────
@@ -1705,10 +1730,17 @@ async fn send_chat_completion(
     let status = resp.status();
     let text = resp.text().await.map_err(|e| format!("read body: {e}"))?;
     if !status.is_success() {
-        return Err(format!("daemon {status}: {}", text.chars().take(500).collect::<String>()));
+        return Err(format!(
+            "daemon {status}: {}",
+            text.chars().take(500).collect::<String>()
+        ));
     }
-    let v: Value = serde_json::from_str(&text)
-        .map_err(|e| format!("parse: {e} (body: {})", text.chars().take(500).collect::<String>()))?;
+    let v: Value = serde_json::from_str(&text).map_err(|e| {
+        format!(
+            "parse: {e} (body: {})",
+            text.chars().take(500).collect::<String>()
+        )
+    })?;
     Ok(v)
 }
 
@@ -1950,7 +1982,11 @@ fn render_workdir_anchors_with_promoted(
                         || s.starts_with("export class ")
                         || s.starts_with("type ")
                         || s.starts_with("interface ");
-                    if is_decl { Some(i) } else { None }
+                    if is_decl {
+                        Some(i)
+                    } else {
+                        None
+                    }
                 })
                 .collect();
             for (k, &i) in decl_lines.iter().enumerate() {
@@ -1973,8 +2009,7 @@ fn render_workdir_anchors_with_promoted(
                     .unwrap_or(false);
                 if name_promoted {
                     let body_len = end - start + 1;
-                    let remaining = MAX_TOTAL_ANCHOR_LINES
-                        .saturating_sub(total_lines_rendered);
+                    let remaining = MAX_TOTAL_ANCHOR_LINES.saturating_sub(total_lines_rendered);
                     let take = body_len.min(remaining);
                     out.push_str(&format!(
                         "{:>4}: {}  [lines {}-{}]  ← PROMOTED (named in pseudocode)\n",
@@ -2017,10 +2052,7 @@ fn snapshot_workdir(workdir: &Path) -> HashMap<PathBuf, String> {
 /// left as-is (the user-message workdir-state preamble still sees
 /// them, and the model can choose to delete them via write_file
 /// with empty content if needed).
-fn restore_workdir(
-    workdir: &Path,
-    snapshot: &HashMap<PathBuf, String>,
-) -> std::io::Result<()> {
+fn restore_workdir(workdir: &Path, snapshot: &HashMap<PathBuf, String>) -> std::io::Result<()> {
     for (rel, content) in snapshot {
         let abs = workdir.join(rel);
         if let Some(parent) = abs.parent() {
@@ -2134,7 +2166,10 @@ fn walk_for_hash(dir: &Path, hasher: &mut DefaultHasher) {
     entries.sort_by_key(|e| e.file_name());
     for entry in entries {
         let p = entry.path();
-        let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let name = p
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         if name == "target" || name == ".git" {
             continue;
         }
@@ -2191,12 +2226,21 @@ mod tests {
         // Mutate both files.
         std::fs::write(tmp.path().join("a.py"), "x = 999\n").unwrap();
         std::fs::write(tmp.path().join("src/b.py"), "y = 999\n").unwrap();
-        assert_eq!(std::fs::read_to_string(tmp.path().join("a.py")).unwrap(), "x = 999\n");
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("a.py")).unwrap(),
+            "x = 999\n"
+        );
 
         // Restore.
         restore_workdir(tmp.path(), &snap).unwrap();
-        assert_eq!(std::fs::read_to_string(tmp.path().join("a.py")).unwrap(), "x = 1\n");
-        assert_eq!(std::fs::read_to_string(tmp.path().join("src/b.py")).unwrap(), "y = 2\n");
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("a.py")).unwrap(),
+            "x = 1\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("src/b.py")).unwrap(),
+            "y = 2\n"
+        );
     }
 
     #[test]
@@ -2285,7 +2329,10 @@ mod tests {
         assert!(s.contains("PROMOTED"));
         // Non-promoted (other and the rest): just signature.
         assert!(s.contains("def other():"));
-        assert!(!s.contains("\n    pass"), "body of other() should NOT be inlined");
+        assert!(
+            !s.contains("\n    pass"),
+            "body of other() should NOT be inlined"
+        );
     }
 
     #[test]
@@ -2314,9 +2361,9 @@ mod tests {
         assert!(s.contains("def fn_590()"));
         // Extent annotation must be present so the model knows each
         // declaration's body range.
-        assert!(s.contains("[lines 1-10]"));   // fn_0 → fn_10 next
-        assert!(s.contains("[lines 11-20]"));  // fn_10 → fn_20 next
-        // Last function (fn_590 at line 591) extends to EOF (600).
+        assert!(s.contains("[lines 1-10]")); // fn_0 → fn_10 next
+        assert!(s.contains("[lines 11-20]")); // fn_10 → fn_20 next
+                                              // Last function (fn_590 at line 591) extends to EOF (600).
         assert!(s.contains("[lines 591-600]"));
         // Body lines (`    pass`) must NOT appear in outline mode.
         assert!(!s.contains(":     pass"));
@@ -2367,8 +2414,7 @@ mod tests {
         }
         let s = render_workdir_anchors(tmp.path());
         assert!(
-            s.contains("further source files omitted")
-                || s.matches("###").count() <= 25,
+            s.contains("further source files omitted") || s.matches("###").count() <= 25,
             "expected anchor cap to drop later files; got {} fenced blocks",
             s.matches("###").count()
         );
@@ -2437,7 +2483,10 @@ mod tests {
         assert_eq!(msgs.len(), 4, "system + user + assistant + tool_result");
         assert_eq!(msgs[0].get("role").and_then(|v| v.as_str()), Some("system"));
         assert_eq!(msgs[1].get("role").and_then(|v| v.as_str()), Some("user"));
-        assert_eq!(msgs[2].get("role").and_then(|v| v.as_str()), Some("assistant"));
+        assert_eq!(
+            msgs[2].get("role").and_then(|v| v.as_str()),
+            Some("assistant")
+        );
         assert_eq!(msgs[3].get("role").and_then(|v| v.as_str()), Some("tool"));
         // History payload preserved verbatim.
         assert_eq!(
@@ -2450,13 +2499,7 @@ mod tests {
     fn build_role_messages_empty_history_is_just_system_and_user() {
         let profile = default_profile_for(Role::Implementer);
         let dossier = RoleDossier::new();
-        let msgs = build_role_messages(
-            Role::Implementer,
-            &profile,
-            &dossier,
-            "INITIAL",
-            &[],
-        );
+        let msgs = build_role_messages(Role::Implementer, &profile, &dossier, "INITIAL", &[]);
         assert_eq!(msgs.len(), 2);
     }
 
@@ -2472,14 +2515,8 @@ mod tests {
         let profile = default_profile_for(Role::Implementer);
         let msgs = vec![json!({"role": "user", "content": "do x"})];
         let tools: Vec<Value> = vec![];
-        let body = build_role_request_body(
-            "commonwealth/primary",
-            &msgs,
-            &tools,
-            512,
-            &profile,
-            None,
-        );
+        let body =
+            build_role_request_body("commonwealth/primary", &msgs, &tools, 512, &profile, None);
         assert_eq!(body["model"], "commonwealth/primary");
     }
 
@@ -2494,7 +2531,10 @@ mod tests {
         let fallback = "commonwealth/primary";
         assert_eq!(map.model_for(Role::Planner, fallback), fallback);
         assert_eq!(map.model_for(Role::Implementer, fallback), fallback);
-        assert_eq!(map.model_for(Role::Evaluator, fallback), "commonwealth/coder");
+        assert_eq!(
+            map.model_for(Role::Evaluator, fallback),
+            "commonwealth/coder"
+        );
     }
 
     #[test]
@@ -2519,9 +2559,18 @@ mod tests {
                     .and_then(|n| n.as_str())
             })
             .collect();
-        assert!(!names.contains(&"build"), "build must be excluded: {names:?}");
-        assert!(!names.contains(&"smoke"), "smoke must be excluded: {names:?}");
-        assert!(names.contains(&"agent_done"), "agent_done present: {names:?}");
+        assert!(
+            !names.contains(&"build"),
+            "build must be excluded: {names:?}"
+        );
+        assert!(
+            !names.contains(&"smoke"),
+            "smoke must be excluded: {names:?}"
+        );
+        assert!(
+            names.contains(&"agent_done"),
+            "agent_done present: {names:?}"
+        );
         assert!(
             names.contains(&"handoff_to_implementer"),
             "handoff_to_implementer present: {names:?}"

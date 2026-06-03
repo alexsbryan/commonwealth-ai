@@ -58,15 +58,14 @@ impl WorkAtlasGc {
         // 1. Drop expired claims, both namespaces.
         for privacy in [Privacy::Public, Privacy::Private] {
             for claim in self.store.scan_claims(privacy)? {
-                if claim.ttl_expires_at < now
-                    && self.store.release_claim(claim.claim_id)? {
-                        tracing::info!(
-                            claim_id = %claim.claim_id,
-                            session_id = %claim.session_id,
-                            "work_atlas:claim_evicted_ttl"
-                        );
-                        report.claims_evicted += 1;
-                    }
+                if claim.ttl_expires_at < now && self.store.release_claim(claim.claim_id)? {
+                    tracing::info!(
+                        claim_id = %claim.claim_id,
+                        session_id = %claim.session_id,
+                        "work_atlas:claim_evicted_ttl"
+                    );
+                    report.claims_evicted += 1;
+                }
             }
         }
 
@@ -104,12 +103,18 @@ impl WorkAtlasGc {
                     .map(|o| o.file_path)
                     .collect();
                 for path in cascade_paths {
-                    if self.store.delete_observation(privacy, session.session_id, &path)? {
+                    if self
+                        .store
+                        .delete_observation(privacy, session.session_id, &path)?
+                    {
                         report.observations_cascade_evicted += 1;
                     }
                 }
             }
-            if self.store.delete_session(session.session_id, session.privacy)? {
+            if self
+                .store
+                .delete_session(session.session_id, session.privacy)?
+            {
                 tracing::info!(
                     session_id = %session.session_id,
                     idle_secs = now.saturating_sub(session.last_activity_at),

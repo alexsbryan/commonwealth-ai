@@ -480,11 +480,7 @@ pub async fn apply(
 /// synthetic tools, grammar lock) interfere with codex's training
 /// contract. History compression is orthogonal — it prevents MoE
 /// context-drift on any agentic harness regardless of contract shape.
-pub async fn apply_baseline(
-    state: &AppState,
-    headers: &HeaderMap,
-    req: &mut ResponsesRequest,
-) {
+pub async fn apply_baseline(state: &AppState, headers: &HeaderMap, req: &mut ResponsesRequest) {
     apply_history_compression(state, headers, req).await;
 }
 
@@ -548,7 +544,11 @@ pub fn scrub_paths(s: &str) -> String {
                     break;
                 }
                 components += 1;
-                if j < bytes.len() && bytes[j] == b'/' && j + 1 < bytes.len() && is_path_char(bytes[j + 1]) {
+                if j < bytes.len()
+                    && bytes[j] == b'/'
+                    && j + 1 < bytes.len()
+                    && is_path_char(bytes[j + 1])
+                {
                     j += 1;
                     continue;
                 }
@@ -956,8 +956,7 @@ fn repair_toml_body(buffer: &[String]) -> Vec<String> {
         if inner.starts_with('[') {
             header_seen = true;
         }
-        let is_kv =
-            !inner.is_empty() && inner.contains('=') && !inner.starts_with('[');
+        let is_kv = !inner.is_empty() && inner.contains('=') && !inner.starts_with('[');
         if !header_seen && !header_injected && is_kv {
             out.push("+[package]".to_string());
             header_injected = true;
@@ -1101,10 +1100,8 @@ fn classify_cmd(cmd: &str) -> CmdMode {
         }
     }
     match head.as_str() {
-        "cat" | "ls" | "rg" | "find" | "head" | "tail" | "grep" | "file" | "stat"
-        | "less" | "more" | "pwd" | "wc" | "du" | "awk" | "sed" | "tree" | "which" => {
-            CmdMode::Read
-        }
+        "cat" | "ls" | "rg" | "find" | "head" | "tail" | "grep" | "file" | "stat" | "less"
+        | "more" | "pwd" | "wc" | "du" | "awk" | "sed" | "tree" | "which" => CmdMode::Read,
         _ => CmdMode::Action,
     }
 }
@@ -1124,9 +1121,7 @@ fn classify_cmd(cmd: &str) -> CmdMode {
 ///
 /// Idempotent: bails when the last user message is already a
 /// runtime nudge.
-pub fn apply_read_attractor_nudge_chat(
-    req: &mut crate::openai_types::ChatCompletionRequest,
-) {
+pub fn apply_read_attractor_nudge_chat(req: &mut crate::openai_types::ChatCompletionRequest) {
     if req.messages.is_empty() {
         return;
     }
@@ -1191,8 +1186,7 @@ pub fn apply_read_attractor_nudge_chat(
     );
     info!(
         reads,
-        actions,
-        "frontdoor: read-attractor nudge injected (chat)"
+        actions, "frontdoor: read-attractor nudge injected (chat)"
     );
     // System-role injection at the tail. Empirical (gym 006,
     // 2026-05-13):
@@ -1306,8 +1300,8 @@ pub fn apply_read_attractor_nudge_chat(
     // ("1. Cargo.toml in oicp-types/... (placeholder for actual
     // content)") because the prefix already wrote the path and the
     // next byte must extend a `+`-prefixed body line.
-    let target_path = extract_recent_add_file_path(messages)
-        .or_else(|| extract_first_path_hint(messages));
+    let target_path =
+        extract_recent_add_file_path(messages).or_else(|| extract_first_path_hint(messages));
     req.cmd_prefix = Some(match target_path {
         Some(p) => format!("apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: {p}\n+"),
         None => "apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: ".to_string(),
@@ -1320,9 +1314,7 @@ pub fn apply_read_attractor_nudge_chat(
 /// read-attractor / failure-recovery nudge to bake the target path
 /// into the cmd_prefix so the grammar walker commits the path
 /// structurally rather than letting the model invent one.
-fn extract_recent_add_file_path(
-    messages: &[crate::openai_types::ChatMessage],
-) -> Option<String> {
+fn extract_recent_add_file_path(messages: &[crate::openai_types::ChatMessage]) -> Option<String> {
     for msg in messages.iter().rev() {
         if msg.role != "assistant" {
             continue;
@@ -1332,8 +1324,7 @@ fn extract_recent_add_file_path(
         if tc.function.name != "exec_command" {
             continue;
         }
-        let args: serde_json::Value =
-            serde_json::from_str(&tc.function.arguments).ok()?;
+        let args: serde_json::Value = serde_json::from_str(&tc.function.arguments).ok()?;
         let cmd = args.get("cmd").and_then(|c| c.as_str())?;
         if let Some(p) = find_add_file_marker(cmd) {
             return Some(p);
@@ -1361,18 +1352,18 @@ fn find_add_file_marker(cmd: &str) -> Option<String> {
 /// path-shaped token (`.<ext>` tail with a known build-tool extension).
 /// Used when no prior Add File marker exists — the user is asking for
 /// a fresh write and the path lives in the task text.
-fn extract_first_path_hint(
-    messages: &[crate::openai_types::ChatMessage],
-) -> Option<String> {
+fn extract_first_path_hint(messages: &[crate::openai_types::ChatMessage]) -> Option<String> {
     const EXTS: &[&str] = &[
-        ".rs", ".toml", ".md", ".json", ".yaml", ".yml", ".py", ".ts",
-        ".tsx", ".js", ".jsx", ".go", ".sh", ".txt", ".sql",
+        ".rs", ".toml", ".md", ".json", ".yaml", ".yml", ".py", ".ts", ".tsx", ".js", ".jsx",
+        ".go", ".sh", ".txt", ".sql",
     ];
     for msg in messages {
         if msg.role != "user" && msg.role != "tool" {
             continue;
         }
-        for token in msg.content.split(|c: char| c.is_whitespace() || matches!(c, ',' | ';' | '(' | ')' | '`' | '"' | '\'')) {
+        for token in msg.content.split(|c: char| {
+            c.is_whitespace() || matches!(c, ',' | ';' | '(' | ')' | '`' | '"' | '\'')
+        }) {
             let candidate = token.trim_end_matches(['.', ',', ':', '!', '?', ';']);
             if candidate.len() < 3 || candidate.len() > 120 {
                 continue;
@@ -1388,7 +1379,6 @@ fn extract_first_path_hint(
     }
     None
 }
-
 
 /// Pull the task seed (what the user originally asked for) out of a
 /// frontdoor compressed-history user message.
@@ -1497,7 +1487,6 @@ fn collect_read_turn_indices(messages: &[crate::openai_types::ChatMessage]) -> V
     out
 }
 
-
 /// Detects a failed last `exec_command` in the chat history and
 /// appends a synthetic user note instructing the model NOT to repeat
 /// the same command.
@@ -1550,10 +1539,8 @@ pub fn apply_failure_nudge_chat(req: &mut crate::openai_types::ChatCompletionReq
             "assistant" => {
                 if let Some(tcs) = msg.tool_calls.as_ref() {
                     if let Some(tc) = tcs.first() {
-                        failed_call = Some((
-                            tc.function.name.clone(),
-                            tc.function.arguments.clone(),
-                        ));
+                        failed_call =
+                            Some((tc.function.name.clone(), tc.function.arguments.clone()));
                     }
                     break;
                 }
@@ -1570,7 +1557,9 @@ pub fn apply_failure_nudge_chat(req: &mut crate::openai_types::ChatCompletionReq
             _ => break,
         }
     }
-    let Some((name, args)) = failed_call else { return };
+    let Some((name, args)) = failed_call else {
+        return;
+    };
     let args_preview = if args.len() > 200 {
         let mut end = 200;
         while end > 0 && !args.is_char_boundary(end) {
@@ -1615,8 +1604,7 @@ pub fn apply_failure_nudge_chat(req: &mut crate::openai_types::ChatCompletionReq
         exit_code
     );
     if let Some(last_tool_msg) = messages.last_mut() {
-        if last_tool_msg.role == "tool" && !last_tool_msg.content.starts_with("[FAILURE")
-        {
+        if last_tool_msg.role == "tool" && !last_tool_msg.content.starts_with("[FAILURE") {
             let mut new_content = banner.clone();
             new_content.push_str(&last_tool_msg.content);
             last_tool_msg.content = new_content;
@@ -1874,7 +1862,9 @@ pub fn apply_anti_repetition_chat(req: &mut crate::openai_types::ChatCompletionR
     if run_len < REPETITION_THRESHOLD {
         return;
     }
-    let Some((name, args)) = last_call else { return };
+    let Some((name, args)) = last_call else {
+        return;
+    };
     let args_preview = if args.len() > 200 {
         let mut end = 200;
         while end > 0 && !args.is_char_boundary(end) {
@@ -1925,16 +1915,13 @@ pub fn apply_anti_repetition_chat(req: &mut crate::openai_types::ChatCompletionR
 /// Privacy: tool-result content stays inside the conversation. We
 /// only extract bytes that were already part of the request the
 /// daemon received — no new information crosses any boundary.
-pub fn apply_url_allowlist_from_tool_results(
-    req: &mut crate::openai_types::ChatCompletionRequest,
-) {
+pub fn apply_url_allowlist_from_tool_results(req: &mut crate::openai_types::ChatCompletionRequest) {
     if req.url_allowlist.is_some() {
         // Caller supplied one; respect it.
         return;
     }
     let mut urls: Vec<String> = Vec::new();
-    let mut seen: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     for msg in &req.messages {
         if msg.role != "tool" {
             continue;
@@ -2028,8 +2015,7 @@ pub fn apply_evidence_id_allowlist_from_tool_results(
         return;
     }
     let mut ids: Vec<String> = Vec::new();
-    let mut seen: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     for msg in &req.messages {
         if msg.role != "tool" {
             continue;
@@ -2219,10 +2205,12 @@ fn levenshtein_capped(a: &str, b: &str, cap: usize) -> usize {
         curr[0] = j;
         let mut row_min = curr[0];
         for i in 1..=m {
-            let cost = if a_chars[i - 1] == b_chars[j - 1] { 0 } else { 1 };
-            curr[i] = (prev[i] + 1)
-                .min(curr[i - 1] + 1)
-                .min(prev[i - 1] + cost);
+            let cost = if a_chars[i - 1] == b_chars[j - 1] {
+                0
+            } else {
+                1
+            };
+            curr[i] = (prev[i] + 1).min(curr[i - 1] + 1).min(prev[i - 1] + cost);
             if curr[i] < row_min {
                 row_min = curr[i];
             }
@@ -2257,8 +2245,7 @@ fn path_components(path: &str) -> Vec<&str> {
 fn context_path_components(
     messages: &[crate::openai_types::ChatMessage],
 ) -> std::collections::HashMap<String, usize> {
-    let mut counts: std::collections::HashMap<String, usize> =
-        std::collections::HashMap::new();
+    let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     let add_from = |s: &str, counts: &mut std::collections::HashMap<String, usize>| {
         for p in extract_absolute_paths(s) {
             for c in path_components(&p) {
@@ -2404,11 +2391,10 @@ pub fn canonicalize_chat_response_paths(
         if tc.function.name != "exec_command" {
             continue;
         }
-        let parsed: serde_json::Value =
-            match serde_json::from_str(&tc.function.arguments) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
+        let parsed: serde_json::Value = match serde_json::from_str(&tc.function.arguments) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
         let cmd = match parsed.get("cmd").and_then(|v| v.as_str()) {
             Some(s) => s,
             None => continue,
@@ -2506,9 +2492,7 @@ pub fn canonicalize_chat_response_tool_calls(
 ///
 /// No-ops if `message.tool_calls` already has entries — the model
 /// emitted in the structured channel, no promotion needed.
-pub fn promote_in_content_tool_call(
-    message: &mut crate::openai_types::ChatMessage,
-) -> bool {
+pub fn promote_in_content_tool_call(message: &mut crate::openai_types::ChatMessage) -> bool {
     // Don't touch already-structured tool calls. If the model used
     // both channels (rare but possible), the structured one wins;
     // we'd rather lose a duplicate than synthesise a competing one.
@@ -2560,10 +2544,7 @@ pub fn promote_in_content_tool_call(
     message.tool_calls = Some(vec![crate::openai_types::ToolCall {
         id,
         kind: "function".to_string(),
-        function: crate::openai_types::FunctionCall {
-            name,
-            arguments,
-        },
+        function: crate::openai_types::FunctionCall { name, arguments },
     }]);
     message.content = String::new();
     true
@@ -2720,7 +2701,11 @@ pub(crate) async fn apply_distiller(
     let key = sha256_hex(&original_blob);
 
     // Cache hit?
-    if let Some(cached) = distiller_cache().lock().ok().and_then(|m| m.get(&key).cloned()) {
+    if let Some(cached) = distiller_cache()
+        .lock()
+        .ok()
+        .and_then(|m| m.get(&key).cloned())
+    {
         debug!(
             cache_key = %&key[..12],
             "frontdoor: distiller cache hit"
@@ -2787,12 +2772,12 @@ pub(crate) async fn apply_distiller(
         chat_template_kwargs: Some(serde_json::json!({"enable_thinking": false})),
         think_budget: Some(0),
         tool_profile: None,
-    sampling_mode: None,
-    assistant_prefix: None,
-    cmd_prefix: None,
-    url_allowlist: None,
-    evidence_id_allowlist: None,
-    lark_grammar: None,
+        sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
     };
 
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
@@ -2949,21 +2934,19 @@ pub fn apply_anti_repetition(req: &mut ResponsesRequest) {
     let mut run_len: usize = 0;
     for item in items.iter().rev() {
         match item {
-            ResponsesInputItem::FunctionCall(c) => {
-                match last_call {
-                    None => {
-                        last_call = Some(c);
-                        run_len = 1;
-                    }
-                    Some(prev) => {
-                        if prev.name == c.name && prev.arguments == c.arguments {
-                            run_len += 1;
-                        } else {
-                            break;
-                        }
+            ResponsesInputItem::FunctionCall(c) => match last_call {
+                None => {
+                    last_call = Some(c);
+                    run_len = 1;
+                }
+                Some(prev) => {
+                    if prev.name == c.name && prev.arguments == c.arguments {
+                        run_len += 1;
+                    } else {
+                        break;
                     }
                 }
-            }
+            },
             ResponsesInputItem::FunctionCallOutput(_) => {
                 // Tool result between calls — keep walking; doesn't
                 // affect the run length.
@@ -3143,10 +3126,7 @@ fn plan_blocks(items: &[ResponsesInputItem]) -> Option<BlockPlan> {
     // compressible items is fat enough that the total exceeds the
     // working-context ceiling, summarise the eligible prefix as a
     // single best-effort "byte-backup" block.
-    let bytes_in_compressible: usize = items[..compressible_count]
-        .iter()
-        .map(item_byte_size)
-        .sum();
+    let bytes_in_compressible: usize = items[..compressible_count].iter().map(item_byte_size).sum();
     if bytes_in_compressible > HISTORY_COMPRESS_BYTES {
         return Some(BlockPlan {
             closed_blocks: 1,
@@ -3224,7 +3204,10 @@ async fn apply_history_compression(
             continue;
         }
         let key = sha256_hex(&block_blob);
-        let cached = history_cache().lock().ok().and_then(|m| m.get(&key).cloned());
+        let cached = history_cache()
+            .lock()
+            .ok()
+            .and_then(|m| m.get(&key).cloned());
         let summary = match cached {
             Some(s) => {
                 debug!(
@@ -3299,12 +3282,12 @@ async fn summarise_block(
         chat_template_kwargs: Some(serde_json::json!({"enable_thinking": false})),
         think_budget: Some(0),
         tool_profile: None,
-    sampling_mode: None,
-    assistant_prefix: None,
-    cmd_prefix: None,
-    url_allowlist: None,
-    evidence_id_allowlist: None,
-    lark_grammar: None,
+        sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
     };
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
     let status = response.status();
@@ -3630,7 +3613,10 @@ mod tests {
     fn detect_harness_reads_user_agent_first() {
         use axum::http::HeaderValue;
         let mut h = HeaderMap::new();
-        h.insert("user-agent", HeaderValue::from_static("codex_cli_rs/0.130.0"));
+        h.insert(
+            "user-agent",
+            HeaderValue::from_static("codex_cli_rs/0.130.0"),
+        );
         assert_eq!(detect_harness(&h), Harness::Codex);
 
         let mut h = HeaderMap::new();
@@ -3648,7 +3634,10 @@ mod tests {
         // SOVEREIGN_HARNESS env wins over UA.
         std::env::set_var("SOVEREIGN_HARNESS", "bare");
         let mut h = HeaderMap::new();
-        h.insert("user-agent", HeaderValue::from_static("codex_cli_rs/0.130.0"));
+        h.insert(
+            "user-agent",
+            HeaderValue::from_static("codex_cli_rs/0.130.0"),
+        );
         assert_eq!(detect_harness(&h), Harness::Bare);
 
         // Legacy SOVEREIGN_FRONTDOOR=1 maps to Opencode when no
@@ -3680,7 +3669,9 @@ mod tests {
             ResponsesInputItem::Message(MessageItem {
                 role: "assistant".into(),
                 content: MessageContent::Parts(vec![
-                    ResponsesContentPart::InputText { text: "wxyz".into() },
+                    ResponsesContentPart::InputText {
+                        text: "wxyz".into(),
+                    },
                     ResponsesContentPart::OutputText { text: "123".into() },
                     ResponsesContentPart::Other,
                 ]),
@@ -3765,7 +3756,10 @@ mod tests {
         let out = scrub_paths(s);
         // No path-shape match here — slash isn't followed by a path component
         // because spaces interrupt.
-        assert!(out.contains("/"), "single-slash uses with spaces should not be scrubbed");
+        assert!(
+            out.contains("/"),
+            "single-slash uses with spaces should not be scrubbed"
+        );
     }
 
     #[test]
@@ -3789,7 +3783,10 @@ mod tests {
                    *** End Patch EOF";
         let canonical = canonicalize_apply_patch_heredoc(bad).expect("should canonicalize");
         // The three pass-yaml predicates for fixture 005:
-        assert!(canonical.contains("apply_patch"), "missing apply_patch opener");
+        assert!(
+            canonical.contains("apply_patch"),
+            "missing apply_patch opener"
+        );
         assert!(
             canonical.contains("*** Add File: src/lib.rs"),
             "missing canonical Add File marker:\n{canonical}"
@@ -3836,8 +3833,14 @@ mod tests {
                    *** End Patch\n\
                    EOF";
         let canonical = canonicalize_apply_patch_heredoc(bad).expect("should canonicalize");
-        assert!(canonical.contains("+edition = \"2021\""), "edition gained +");
-        assert!(canonical.contains("+description = \"foo\""), "description gained +");
+        assert!(
+            canonical.contains("+edition = \"2021\""),
+            "edition gained +"
+        );
+        assert!(
+            canonical.contains("+description = \"foo\""),
+            "description gained +"
+        );
         assert!(canonical.contains("+serde = \"1\""), "serde gained +");
         // Lines already prefixed are not double-prefixed.
         assert!(!canonical.contains("++"));
@@ -3922,7 +3925,10 @@ mod tests {
                    EOF";
         let canonical = canonicalize_apply_patch_heredoc(bad).expect("should canonicalize");
         // Wrapper `+{` and `+}` lines removed.
-        assert!(!canonical.contains("+{\n"), "wrapper open-brace not stripped:\n{canonical}");
+        assert!(
+            !canonical.contains("+{\n"),
+            "wrapper open-brace not stripped:\n{canonical}"
+        );
         assert!(!canonical.contains("+}\n"));
         // Trailing commas stripped.
         assert!(canonical.contains("+name = \"oicp-types\"\n"));
@@ -4006,7 +4012,10 @@ mod tests {
         let canonical = canonicalize_apply_patch_heredoc(good).expect("should canonicalize");
         // No double-injection of [package].
         let header_count = canonical.matches("+[package]").count();
-        assert_eq!(header_count, 1, "[package] should appear exactly once:\n{canonical}");
+        assert_eq!(
+            header_count, 1,
+            "[package] should appear exactly once:\n{canonical}"
+        );
     }
 
     #[test]
@@ -4128,12 +4137,12 @@ mod tests {
             chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         }
     }
 
@@ -4176,11 +4185,20 @@ mod tests {
         let mut req = ChatCompletionRequest {
             messages: vec![
                 make_user("task"),
-                make_assistant_tool_call("exec_command", r#"{"cmd":"xattr -d com.apple.provenance x"}"#),
+                make_assistant_tool_call(
+                    "exec_command",
+                    r#"{"cmd":"xattr -d com.apple.provenance x"}"#,
+                ),
                 make_tool_result("call_exec_command", "Operation not permitted"),
-                make_assistant_tool_call("exec_command", r#"{"cmd":"xattr -d com.apple.provenance x"}"#),
+                make_assistant_tool_call(
+                    "exec_command",
+                    r#"{"cmd":"xattr -d com.apple.provenance x"}"#,
+                ),
                 make_tool_result("call_exec_command", "Operation not permitted"),
-                make_assistant_tool_call("exec_command", r#"{"cmd":"xattr -d com.apple.provenance x"}"#),
+                make_assistant_tool_call(
+                    "exec_command",
+                    r#"{"cmd":"xattr -d com.apple.provenance x"}"#,
+                ),
                 make_tool_result("call_exec_command", "Operation not permitted"),
             ],
             ..chat_req_defaults()
@@ -4208,7 +4226,11 @@ mod tests {
         };
         let before = req.messages.len();
         apply_anti_repetition_chat(&mut req);
-        assert_eq!(req.messages.len(), before, "must not inject below threshold");
+        assert_eq!(
+            req.messages.len(),
+            before,
+            "must not inject below threshold"
+        );
     }
 
     #[test]
@@ -4241,7 +4263,8 @@ mod tests {
         use crate::openai_types::ChatCompletionRequest;
         let envelope_shadow = crate::openai_types::ChatMessage {
             role: "assistant".to_string(),
-            content: "{\n\"name\": \"exec_command\",\n\"arguments\": {\"cmd\": \"xattr -d X\"}\n}".into(),
+            content: "{\n\"name\": \"exec_command\",\n\"arguments\": {\"cmd\": \"xattr -d X\"}\n}"
+                .into(),
             tool_call_id: None,
             tool_calls: None,
         };
@@ -4371,7 +4394,8 @@ mod tests {
         use crate::openai_types::ChatCompletionRequest;
         let envelope = crate::openai_types::ChatMessage {
             role: "assistant".to_string(),
-            content: "{\"name\":\"exec_command\",\"arguments\":{\"cmd\":\"rg 'x' --files\"}}".into(),
+            content: "{\"name\":\"exec_command\",\"arguments\":{\"cmd\":\"rg 'x' --files\"}}"
+                .into(),
             tool_call_id: None,
             tool_calls: None,
         };
@@ -4631,7 +4655,9 @@ mod tests {
         // Codex's explore-first system prompt should be replaced.
         let first_sys = req.messages.iter().find(|m| m.role == "system").unwrap();
         assert!(
-            !first_sys.content.starts_with("You are a coding agent running in the Codex CLI"),
+            !first_sys
+                .content
+                .starts_with("You are a coding agent running in the Codex CLI"),
             "codex system prompt should be replaced when read-attractor fires"
         );
         assert!(first_sys.content.contains("apply_patch"));
@@ -4673,12 +4699,11 @@ mod tests {
         use crate::openai_types::ChatCompletionRequest;
         let compressed = crate::openai_types::ChatMessage {
             role: "user".to_string(),
-            content:
-                "# Conversation so far (compressed by frontdoor)\n\n## Block 1 of 3\n\n\
+            content: "# Conversation so far (compressed by frontdoor)\n\n## Block 1 of 3\n\n\
                  The user wants me to implement the oicp-types crate per spec. The \
                  agent has executed `cat` on the spec file three times. Now reading \
                  ARCHITECTURE.md for orientation."
-                    .to_string(),
+                .to_string(),
             tool_call_id: None,
             tool_calls: None,
         };
@@ -4698,7 +4723,8 @@ mod tests {
         // No message starts with the frontdoor's compression banner.
         for msg in &req.messages {
             assert!(
-                !msg.content.starts_with("# Conversation so far (compressed by frontdoor)"),
+                !msg.content
+                    .starts_with("# Conversation so far (compressed by frontdoor)"),
                 "compressed-history header should be gone after rewrite"
             );
         }
@@ -4776,9 +4802,7 @@ mod tests {
         use crate::openai_types::ChatCompletionRequest;
         let env = |c: &str| crate::openai_types::ChatMessage {
             role: "assistant".to_string(),
-            content: format!(
-                "{{\"name\":\"exec_command\",\"arguments\":{{\"cmd\":\"{c}\"}}}}"
-            ),
+            content: format!("{{\"name\":\"exec_command\",\"arguments\":{{\"cmd\":\"{c}\"}}}}"),
             tool_call_id: None,
             tool_calls: None,
         };
@@ -4843,10 +4867,7 @@ mod tests {
 
     #[test]
     fn find_canonical_component_picks_higher_frequency_similar() {
-        let ctx = make_components(&[
-            ("atos-experiment-oicp-types", 3),
-            ("Users", 4),
-        ]);
+        let ctx = make_components(&[("atos-experiment-oicp-types", 3), ("Users", 4)]);
         // Drift drops the leading 'a'. Typo absent from context →
         // any similar component wins. Found: atos-experiment.
         let canonical = find_canonical_component("tos-experiment-oicp-types", &ctx);
@@ -4905,8 +4926,7 @@ mod tests {
             ("atos-experiment-oicp-types", 3),
             ("oicp-v0.3.md", 2),
         ]);
-        let bad =
-            "cat /Users/alexsbryan/dev/tos-experiment-oicp-types/oicp-v0.3.md";
+        let bad = "cat /Users/alexsbryan/dev/tos-experiment-oicp-types/oicp-v0.3.md";
         let fixed = canonicalize_paths_in_cmd(bad, &ctx).expect("should rewrite");
         assert!(fixed.contains("atos-experiment-oicp-types"));
         assert!(!fixed.contains("/tos-experiment-oicp-types"));
@@ -4920,12 +4940,7 @@ mod tests {
 
     #[test]
     fn canonicalize_paths_in_cmd_noop_when_no_similar_context_path() {
-        let ctx = make_components(&[
-            ("usr", 1),
-            ("local", 1),
-            ("bin", 1),
-            ("python", 1),
-        ]);
+        let ctx = make_components(&[("usr", 1), ("local", 1), ("bin", 1), ("python", 1)]);
         assert!(canonicalize_paths_in_cmd("ls /tmp/foo/bar", &ctx).is_none());
     }
 
@@ -4943,14 +4958,12 @@ mod tests {
             kind: "function".into(),
             function: FunctionCall {
                 name: "exec_command".into(),
-                arguments: r#"{"cmd":"cat /Users/alex/tos-experiment-oicp-types/foo.md"}"#
-                    .into(),
+                arguments: r#"{"cmd":"cat /Users/alex/tos-experiment-oicp-types/foo.md"}"#.into(),
             },
         }];
         let fixed = canonicalize_chat_response_paths(&mut tcs, &ctx);
         assert_eq!(fixed, 1);
-        let parsed: serde_json::Value =
-            serde_json::from_str(&tcs[0].function.arguments).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&tcs[0].function.arguments).unwrap();
         let cmd = parsed["cmd"].as_str().unwrap();
         assert!(cmd.contains("atos-experiment-oicp-types"));
         assert!(!cmd.contains("/tos-experiment-oicp-types"));
@@ -4960,10 +4973,7 @@ mod tests {
     fn gather_context_paths_pulls_from_content_and_tool_calls() {
         let mut req_msgs = vec![
             make_user("Spec at /Users/alex/foo/bar.md"),
-            make_assistant_tool_call(
-                "exec_command",
-                r#"{"cmd":"cat /Users/alex/baz/qux.md"}"#,
-            ),
+            make_assistant_tool_call("exec_command", r#"{"cmd":"cat /Users/alex/baz/qux.md"}"#),
         ];
         // Add a content with a path too.
         req_msgs.push(crate::openai_types::ChatMessage {
@@ -5020,7 +5030,8 @@ mod tests {
         // (or models that hallucinate the old field) must still parse
         // — serde's `#[serde(default)]` ignores unknown JSON keys by
         // default for this struct.
-        let raw = r#"{"task":"x","constraints":"","done_when":"y","files_to_touch":["/abs/lib.rs"]}"#;
+        let raw =
+            r#"{"task":"x","constraints":"","done_when":"y","files_to_touch":["/abs/lib.rs"]}"#;
         let d = parse_directive(raw).unwrap();
         assert_eq!(d.task, "x");
     }
@@ -5176,8 +5187,9 @@ That's my answer."#;
 
     #[test]
     fn plan_blocks_none_when_under_keep_recent() {
-        let items: Vec<ResponsesInputItem> =
-            (0..HISTORY_KEEP_RECENT).map(|i| mk_msg("user", &format!("t{i}"))).collect();
+        let items: Vec<ResponsesInputItem> = (0..HISTORY_KEEP_RECENT)
+            .map(|i| mk_msg("user", &format!("t{i}")))
+            .collect();
         assert!(plan_blocks(&items).is_none());
     }
 
@@ -5240,10 +5252,7 @@ That's my answer."#;
         assert_eq!(plan.triggered_by, BlockTrigger::ByteBackup);
         assert_eq!(plan.closed_blocks, 1);
         // Eligible prefix = all items minus KEEP_RECENT
-        assert_eq!(
-            plan.block_items_end,
-            items.len() - HISTORY_KEEP_RECENT
-        );
+        assert_eq!(plan.block_items_end, items.len() - HISTORY_KEEP_RECENT);
     }
 
     #[test]
@@ -5256,11 +5265,8 @@ That's my answer."#;
 
     #[test]
     fn render_block_summaries_multi_block_labels_each() {
-        let out = render_block_summaries(&[
-            "alpha".to_string(),
-            "beta".to_string(),
-            "gamma".to_string(),
-        ]);
+        let out =
+            render_block_summaries(&["alpha".to_string(), "beta".to_string(), "gamma".to_string()]);
         assert!(out.contains("## Block 1 of 3"));
         assert!(out.contains("## Block 2 of 3"));
         assert!(out.contains("## Block 3 of 3"));
@@ -5408,8 +5414,7 @@ That's my answer."#;
             },
             _ => panic!("expected note"),
         };
-        assert!(last_text.contains(r#"{\"cmd\":\"b\"}"#)
-            || last_text.contains(r#"{"cmd":"b"}"#));
+        assert!(last_text.contains(r#"{\"cmd\":\"b\"}"#) || last_text.contains(r#"{"cmd":"b"}"#));
     }
 
     #[test]
@@ -5513,10 +5518,7 @@ That's my answer."#;
 
         // Env set to a real file with content: brief prepends.
         let dir = std::env::temp_dir();
-        let path = dir.join(format!(
-            "sovereign_brief_test_{}.md",
-            std::process::id()
-        ));
+        let path = dir.join(format!("sovereign_brief_test_{}.md", std::process::id()));
         std::fs::write(&path, "BRIEF CONTENT\n- rule one\n- rule two\n").unwrap();
         std::env::set_var(env_name, path.to_str().unwrap());
 
@@ -5629,16 +5631,14 @@ That's my answer."#;
 
     #[test]
     fn extract_urls_picks_up_simple_https() {
-        let urls = super::extract_urls_from_text(
-            "see https://example.test/path for more"
-        );
+        let urls = super::extract_urls_from_text("see https://example.test/path for more");
         assert_eq!(urls, vec!["https://example.test/path"]);
     }
 
     #[test]
     fn extract_urls_strips_trailing_sentence_punctuation() {
         let urls = super::extract_urls_from_text(
-            "Read https://example.test/article. Then https://example.test/follow-up!"
+            "Read https://example.test/article. Then https://example.test/follow-up!",
         );
         assert_eq!(
             urls,
@@ -5652,7 +5652,7 @@ That's my answer."#;
     #[test]
     fn extract_urls_handles_markdown_link_form() {
         let urls = super::extract_urls_from_text(
-            "[label](https://example.test/x) and [other](https://example.test/y)"
+            "[label](https://example.test/x) and [other](https://example.test/y)",
         );
         // The `)` terminates the URL — parentheses are URL terminators.
         assert_eq!(
@@ -5665,7 +5665,7 @@ That's my answer."#;
     fn extract_urls_handles_numbered_list_form() {
         // The gym runner + production WebSearchTool both use this shape.
         let urls = super::extract_urls_from_text(
-            "[1] First — https://example.test/a\n[2] Second — https://example.test/b\n"
+            "[1] First — https://example.test/a\n[2] Second — https://example.test/b\n",
         );
         assert_eq!(
             urls,
@@ -5682,9 +5682,8 @@ That's my answer."#;
 
     #[test]
     fn extract_urls_handles_both_http_and_https() {
-        let urls = super::extract_urls_from_text(
-            "secure https://a.test/x and insecure http://b.test/y"
-        );
+        let urls =
+            super::extract_urls_from_text("secure https://a.test/x and insecure http://b.test/y");
         assert_eq!(urls, vec!["https://a.test/x", "http://b.test/y"]);
     }
 
@@ -5694,14 +5693,17 @@ That's my answer."#;
             user_msg("question"),
             tool_msg(
                 "[1] Title — https://example.test/result\n\
-                 [2] Other — https://example.test/result2"
+                 [2] Other — https://example.test/result2",
             ),
         ]);
         super::apply_url_allowlist_from_tool_results(&mut req);
         let urls = req.url_allowlist.expect("should be populated");
         assert_eq!(
             urls,
-            vec!["https://example.test/result", "https://example.test/result2"]
+            vec![
+                "https://example.test/result",
+                "https://example.test/result2"
+            ]
         );
     }
 
@@ -5716,7 +5718,10 @@ That's my answer."#;
         ]);
         super::apply_url_allowlist_from_tool_results(&mut req);
         let urls = req.url_allowlist.expect("should be populated");
-        assert_eq!(urls, vec!["https://example.test/x", "https://example.test/y"]);
+        assert_eq!(
+            urls,
+            vec!["https://example.test/x", "https://example.test/y"]
+        );
     }
 
     #[test]
@@ -5748,9 +5753,7 @@ That's my answer."#;
         // important for the gym runner which does its own
         // accumulation client-side and would be double-counted if
         // we overwrote it here.
-        let mut req = req_with_messages(vec![tool_msg(
-            "[1] — https://from-tool.test/x",
-        )]);
+        let mut req = req_with_messages(vec![tool_msg("[1] — https://from-tool.test/x")]);
         req.url_allowlist = Some(vec!["https://caller-chosen.test/y".into()]);
         super::apply_url_allowlist_from_tool_results(&mut req);
         let urls = req.url_allowlist.expect("preserved");

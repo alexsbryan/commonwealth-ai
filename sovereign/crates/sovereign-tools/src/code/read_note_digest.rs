@@ -43,7 +43,10 @@ pub struct ReadNoteDigestTool {
 
 impl ReadNoteDigestTool {
     pub fn new(notes: Arc<NoteStore>) -> Self {
-        Self { notes, inference: None }
+        Self {
+            notes,
+            inference: None,
+        }
     }
 
     pub fn with_inference(mut self, inference: Arc<dyn InferenceProvider>) -> Self {
@@ -58,13 +61,12 @@ impl Tool for ReadNoteDigestTool {
         ToolDescriptor {
             id: "read_note_digest".to_string(),
             name: "Read Note Digest".to_string(),
-            description:
-                "Return a markdown digest (≤2k tokens) summarizing notes that match the \
+            description: "Return a markdown digest (≤2k tokens) summarizing notes that match the \
                  scope/feature/kinds filter. Cached per notes_version — a fresh call right after \
                  a write_note will regenerate. Use at session start or after a compaction event \
                  to rebuild working context without rehydrating every raw note. Reference notes \
                  by id via read_note_by_id when you need the full content."
-                    .to_string(),
+                .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -153,13 +155,7 @@ impl Tool for ReadNoteDigestTool {
                     .filter_map(|v| v.as_str().map(String::from))
                     .collect()
             })
-            .unwrap_or_else(|| {
-                vec![
-                    "decision".into(),
-                    "invariant".into(),
-                    "attempt".into(),
-                ]
-            });
+            .unwrap_or_else(|| vec!["decision".into(), "invariant".into(), "attempt".into()]);
         let limit = params
             .get("limit")
             .and_then(|v| v.as_u64())
@@ -169,14 +165,10 @@ impl Tool for ReadNoteDigestTool {
 
         // Cache lookup. scope_hash depends on every dimension that
         // would change the digest's content.
-        let version = self
-            .notes
-            .notes_version()
-            .await
-            .map_err(|e| Error::Tool {
-                tool_id: "read_note_digest".into(),
-                message: e.to_string(),
-            })?;
+        let version = self.notes.notes_version().await.map_err(|e| Error::Tool {
+            tool_id: "read_note_digest".into(),
+            message: e.to_string(),
+        })?;
         let scope_hash = compute_scope_hash(&scopes, feature_id.as_deref(), &kinds, limit);
 
         if let Some(cached) = self
@@ -294,7 +286,13 @@ fn format_notes_for_prompt(notes: &[NoteRow]) -> String {
         } else {
             format!("{}:{}", n.scope, n.feature_id.as_deref().unwrap_or(""))
         };
-        out.push_str(&format!("[note:{}] [{}] [{}] {}\n", n.id, n.kind, scope_tag, n.content.trim()));
+        out.push_str(&format!(
+            "[note:{}] [{}] [{}] {}\n",
+            n.id,
+            n.kind,
+            scope_tag,
+            n.content.trim()
+        ));
     }
     out
 }
@@ -303,7 +301,7 @@ fn fallback_header_digest(notes: &[NoteRow]) -> String {
     let mut out = String::from(
         "> **Digest fallback.** The Fast inference slot is not available — \
          returning note headers without summarization. The operator should \
-         start the mesh daemon to restore full digests.\n\n"
+         start the mesh daemon to restore full digests.\n\n",
     );
     for n in notes.iter().take(40) {
         let first_line = n.content.lines().next().unwrap_or("").trim();
@@ -311,15 +309,15 @@ fn fallback_header_digest(notes: &[NoteRow]) -> String {
         out.push_str(&format!("- `[note:{}]` [{}] {}\n", n.id, n.kind, snippet));
     }
     if notes.len() > 40 {
-        out.push_str(&format!("\n… {} more notes; call read_notes to see them all.\n", notes.len() - 40));
+        out.push_str(&format!(
+            "\n… {} more notes; call read_notes to see them all.\n",
+            notes.len() - 40
+        ));
     }
     out
 }
 
-async fn summarize_via_fast_slot(
-    provider: &dyn InferenceProvider,
-    raw: &str,
-) -> Result<String> {
+async fn summarize_via_fast_slot(provider: &dyn InferenceProvider, raw: &str) -> Result<String> {
     let system = "You are a summarizer. Given a list of engineering notes (one per line, \
                   each prefixed with [note:<id>] [<kind>] [<scope>]), produce a compact \
                   markdown digest of the key invariants, decisions, and active attempts. \
@@ -339,14 +337,14 @@ async fn summarize_via_fast_slot(
         oicp: None,
         tools: None,
         tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-    sampling_mode: None,
-    assistant_prefix: None,
-    cmd_prefix: None,
-    url_allowlist: None,
-    evidence_id_allowlist: None,
-    lark_grammar: None,
+        model_id: None,
+        enable_thinking: None,
+        sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
     };
     let response = provider.complete(&request).await.map_err(|e| Error::Tool {
         tool_id: "read_note_digest".into(),
@@ -386,27 +384,25 @@ mod tests {
 
     #[test]
     fn fallback_header_digest_references_notes_by_id() {
-        let rows = vec![
-            NoteRow {
-                id: "abc-1".into(),
-                kind: "decision".into(),
-                content: "use FTS5".into(),
-                symbols: vec![],
-                files: vec![],
-                session_id: "s".into(),
-                created_at: "2026-04-19T00:00:00+00:00".into(),
-                tool_name: None,
-                retired_at: None,
-                retired_by: None,
-                scope: "global".into(),
-                feature_id: None,
-                promoted_from: None,
-                related_entity: None,
-                source: "agent".into(),
-                supersedes: None,
-                payload_json: None,
-            },
-        ];
+        let rows = vec![NoteRow {
+            id: "abc-1".into(),
+            kind: "decision".into(),
+            content: "use FTS5".into(),
+            symbols: vec![],
+            files: vec![],
+            session_id: "s".into(),
+            created_at: "2026-04-19T00:00:00+00:00".into(),
+            tool_name: None,
+            retired_at: None,
+            retired_by: None,
+            scope: "global".into(),
+            feature_id: None,
+            promoted_from: None,
+            related_entity: None,
+            source: "agent".into(),
+            supersedes: None,
+            payload_json: None,
+        }];
         let out = fallback_header_digest(&rows);
         assert!(out.contains("[note:abc-1]"));
         assert!(out.contains("decision"));

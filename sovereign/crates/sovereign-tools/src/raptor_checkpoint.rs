@@ -186,7 +186,8 @@ impl RaptorCheckpointHandle {
 
     /// Idempotent: create the manifest if absent.
     pub fn ensure_manifest(&self) -> Result<()> {
-        std::fs::create_dir_all(&self.dir).map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
+        std::fs::create_dir_all(&self.dir)
+            .map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
         if self.manifest_path().exists() {
             return Ok(());
         }
@@ -224,7 +225,8 @@ impl RaptorCheckpointHandle {
     }
 
     pub fn write_clustering(&self, level: u8, clustering: &LevelClustering) -> Result<()> {
-        std::fs::create_dir_all(self.level_dir(level)).map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
+        std::fs::create_dir_all(self.level_dir(level))
+            .map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
         write_json_atomic(&self.clustering_path(level), clustering)
     }
     pub fn read_clustering(&self, level: u8) -> Result<Option<LevelClustering>> {
@@ -232,12 +234,10 @@ impl RaptorCheckpointHandle {
         if !path.exists() {
             return Ok(None);
         }
-        let bytes = std::fs::read(&path).map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
+        let bytes = std::fs::read(&path)
+            .map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
         let parsed = serde_json::from_slice(&bytes).map_err(|e| {
-            Error::Storage(format!(
-                "raptor_checkpoint: parse {}: {e}",
-                path.display()
-            ))
+            Error::Storage(format!("raptor_checkpoint: parse {}: {e}", path.display()))
         })?;
         Ok(Some(parsed))
     }
@@ -248,24 +248,19 @@ impl RaptorCheckpointHandle {
         cluster_idx: usize,
         node: &RaptorNode,
     ) -> Result<()> {
-        std::fs::create_dir_all(self.level_dir(level)).map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
+        std::fs::create_dir_all(self.level_dir(level))
+            .map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
         write_json_atomic(&self.cluster_node_path(level, cluster_idx), node)
     }
-    pub fn read_cluster_node(
-        &self,
-        level: u8,
-        cluster_idx: usize,
-    ) -> Result<Option<RaptorNode>> {
+    pub fn read_cluster_node(&self, level: u8, cluster_idx: usize) -> Result<Option<RaptorNode>> {
         let path = self.cluster_node_path(level, cluster_idx);
         if !path.exists() {
             return Ok(None);
         }
-        let bytes = std::fs::read(&path).map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
+        let bytes = std::fs::read(&path)
+            .map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
         let parsed: RaptorNode = serde_json::from_slice(&bytes).map_err(|e| {
-            Error::Storage(format!(
-                "raptor_checkpoint: parse {}: {e}",
-                path.display()
-            ))
+            Error::Storage(format!("raptor_checkpoint: parse {}: {e}", path.display()))
         })?;
         Ok(Some(parsed))
     }
@@ -280,7 +275,9 @@ impl RaptorCheckpointHandle {
         }
         let mut by_level: std::collections::BTreeMap<u8, Vec<(usize, RaptorNode)>> =
             std::collections::BTreeMap::new();
-        for entry in std::fs::read_dir(&self.dir).map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))? {
+        for entry in std::fs::read_dir(&self.dir)
+            .map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?
+        {
             let entry = entry.map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
             let path = entry.path();
             if !path.is_dir() {
@@ -297,8 +294,11 @@ impl RaptorCheckpointHandle {
                 Ok(v) => v,
                 Err(_) => continue,
             };
-            for file in std::fs::read_dir(&path).map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))? {
-                let file = file.map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
+            for file in std::fs::read_dir(&path)
+                .map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?
+            {
+                let file =
+                    file.map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
                 let fpath = file.path();
                 let Some(fname) = fpath.file_name().and_then(|n| n.to_str()) else {
                     continue;
@@ -313,12 +313,10 @@ impl RaptorCheckpointHandle {
                     Ok(v) => v,
                     Err(_) => continue,
                 };
-                let bytes = std::fs::read(&fpath).map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
+                let bytes = std::fs::read(&fpath)
+                    .map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
                 let node: RaptorNode = serde_json::from_slice(&bytes).map_err(|e| {
-                    Error::Storage(format!(
-                        "raptor_checkpoint: parse {}: {e}",
-                        fpath.display()
-                    ))
+                    Error::Storage(format!("raptor_checkpoint: parse {}: {e}", fpath.display()))
                 })?;
                 by_level.entry(level).or_default().push((idx, node));
             }
@@ -343,14 +341,20 @@ pub enum CheckpointDecision {
 
 fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
+        std::fs::create_dir_all(parent)
+            .map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
     }
     let json = serde_json::to_vec_pretty(value).map_err(|e| {
-        Error::Storage(format!("raptor_checkpoint: serialize {}: {e}", path.display()))
+        Error::Storage(format!(
+            "raptor_checkpoint: serialize {}: {e}",
+            path.display()
+        ))
     })?;
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, &json).map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
-    std::fs::rename(&tmp, path).map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
+    std::fs::write(&tmp, &json)
+        .map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
+    std::fs::rename(&tmp, path)
+        .map_err(|e| Error::Storage(format!("raptor_checkpoint io: {e}")))?;
     Ok(())
 }
 

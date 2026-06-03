@@ -32,7 +32,9 @@ pub struct CancellationFlag {
 
 impl CancellationFlag {
     pub fn new() -> Self {
-        Self { flag: Arc::new(AtomicBool::new(false)) }
+        Self {
+            flag: Arc::new(AtomicBool::new(false)),
+        }
     }
 
     pub fn cancel(&self) {
@@ -84,9 +86,7 @@ impl CancellationRegistry {
     /// share cancellation.
     pub fn register(&self, corpus_id: &str) -> CancellationFlag {
         let mut map = self.inner.write().expect("cancel registry poisoned");
-        map.entry(corpus_id.to_string())
-            .or_default()
-            .clone()
+        map.entry(corpus_id.to_string()).or_default().clone()
     }
 
     /// Fire cancellation for `corpus_id` if a flag is registered.

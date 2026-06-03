@@ -17,9 +17,7 @@ use std::path::Path;
 use corpus_engine::enrichment::atlas::analysis::configuration::ConfigurationsOutput;
 use corpus_engine::enrichment::atlas::analysis::gaps::{Gap, GapKind, GapsOutput};
 use corpus_engine::enrichment::atlas::analysis::tensions::TensionCandidatesOutput;
-use corpus_engine::enrichment::atlas::atoms::{
-    AtomEnvelope, AtomId, AtomsFile, ResolutionStatus,
-};
+use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomsFile, ResolutionStatus};
 use corpus_engine::enrichment::atlas::edges::{EdgeType, EdgesFile};
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 use corpus_engine::enrichment::pipeline::atlas::EntityType;
@@ -253,8 +251,7 @@ fn read_optional<T: for<'de> Deserialize<'de>>(
 }
 
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
-    let raw =
-        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let raw = std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", path.display()))
 }
 
@@ -332,7 +329,9 @@ fn print_atoms(snap: &Snapshot, limit: usize) {
             AtomEnvelope::Question(_) => "Question",
             AtomEnvelope::Configuration(_) => "Configuration",
             AtomEnvelope::ArgumentReconstruction(_) => "ArgumentReconstruction",
-        AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => unreachable!("typed atoms wired in Gap B Stage 4"),
+            AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => {
+                unreachable!("typed atoms wired in Gap B Stage 4")
+            }
             AtomEnvelope::Asset(_) => "Asset",
         };
         *counts.entry(key).or_insert(0) += 1;
@@ -478,10 +477,7 @@ fn print_fault_lines(snap: &Snapshot, limit: usize) {
         .iter()
         .filter(|e| e.edge_type == EdgeType::Tension)
         .collect();
-    println!(
-        "  Tension edges (LLM-classified): {}",
-        tension_edges.len()
-    );
+    println!("  Tension edges (LLM-classified): {}", tension_edges.len());
     if tension_edges.is_empty() {
         println!("  · No Tension edges in edges.json.");
         println!();
@@ -496,10 +492,7 @@ fn print_fault_lines(snap: &Snapshot, limit: usize) {
             .entity_name_by_id(&e.target)
             .unwrap_or_else(|| e.target.as_str().to_string());
         let crux = e.sub_question.as_deref().unwrap_or("(no crux)");
-        println!(
-            "    · {a} ⟷ {b}    conf {conf:.2}",
-            conf = e.confidence
-        );
+        println!("    · {a} ⟷ {b}    conf {conf:.2}", conf = e.confidence);
         println!("        crux: {}", trim_to(crux, 100));
     }
     if tension_edges.len() > limit {

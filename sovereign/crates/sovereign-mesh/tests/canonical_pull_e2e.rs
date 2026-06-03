@@ -23,10 +23,10 @@ use std::time::Duration;
 
 use commonwealth_api::server::internal_router;
 use commonwealth_api::state::AppState;
+use commonwealth_app::AppRegistry;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
-use commonwealth_app::AppRegistry;
 use corpus_engine::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
 use sovereign_mesh::canonical_pull::{pull_canonical_from_peer, PullError};
@@ -35,10 +35,7 @@ use tempfile::tempdir;
 /// Build a tiny canonical with three chunks carrying explicit
 /// content_hashes. Returns the index_dir (parent of canonical) and
 /// the stamped fingerprint.
-async fn create_synthetic_canonical(
-    index_dir: &Path,
-    corpus_id: &str,
-) -> String {
+async fn create_synthetic_canonical(index_dir: &Path, corpus_id: &str) -> String {
     let canonical_path = index_dir.join(corpus_id);
     let idx = CorpusIndex::create(
         &canonical_path,
@@ -104,9 +101,8 @@ async fn app_state_with_engine(index_dir: &Path) -> AppState {
         members: Default::default(),
         peers: vec![],
     };
-    let zero_embed: EmbedFn = Arc::new(|_t: &str| {
-        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) })
-    });
+    let zero_embed: EmbedFn =
+        Arc::new(|_t: &str| Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) }));
     let engine = Arc::new(
         CorpusEngine::new(index_dir.to_path_buf(), index_dir.to_path_buf(), zero_embed)
             .with_embedding_model("test-embed"),
@@ -127,8 +123,7 @@ async fn canonical_pull_round_trip_via_internal_router() {
     let server_index_dir = server_dir.path().to_path_buf();
 
     // Build the source canonical and stamp its fingerprint.
-    let expected_fp =
-        create_synthetic_canonical(&server_index_dir, "wiki-mini").await;
+    let expected_fp = create_synthetic_canonical(&server_index_dir, "wiki-mini").await;
     assert!(!expected_fp.is_empty(), "fingerprint must be non-empty");
 
     // Bind internal_router on an ephemeral port pointing at this
@@ -212,8 +207,7 @@ async fn canonical_pull_rejects_wrong_expected_fingerprint() {
 async fn canonical_pull_falls_through_on_unreachable_first_url() {
     let server_dir = tempdir().unwrap();
     let server_index_dir = server_dir.path().to_path_buf();
-    let expected_fp =
-        create_synthetic_canonical(&server_index_dir, "wiki-mini").await;
+    let expected_fp = create_synthetic_canonical(&server_index_dir, "wiki-mini").await;
 
     let state = app_state_with_engine(&server_index_dir).await;
     let addr = spawn_router(state).await;
@@ -255,13 +249,7 @@ async fn canonical_pull_returns_404_when_corpus_absent() {
     let client_index_dir = client_dir.path().to_path_buf();
 
     let candidates = vec![peer_url];
-    let r = pull_canonical_from_peer(
-        &candidates,
-        "missing-corpus",
-        &client_index_dir,
-        None,
-    )
-    .await;
+    let r = pull_canonical_from_peer(&candidates, "missing-corpus", &client_index_dir, None).await;
     match r {
         Err(PullError::PeerHttpError { status, .. }) => {
             assert_eq!(status, 404, "expected 404 for missing canonical");

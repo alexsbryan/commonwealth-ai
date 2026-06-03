@@ -133,9 +133,8 @@ pub(crate) async fn run_collaboration(
                 conversation_id: conversation_id.to_string(),
                 event: NarrationEvent {
                     phase: NarrationPhase::GapCheckFired,
-                    text:
-                        "Drafted. Auditing the answer for anything worth asking you about."
-                            .to_string(),
+                    text: "Drafted. Auditing the answer for anything worth asking you about."
+                        .to_string(),
                     elapsed_ms: 0,
                 },
             })
@@ -259,16 +258,16 @@ pub(crate) async fn run_collaboration(
         top_k: inference_config.top_k,
         top_p: None,
         oicp: None,
-                tools: None,
-                tool_choice: None,
-                    model_id: None,
-                    enable_thinking: None,
-    sampling_mode: None,
-    assistant_prefix: None,
-    cmd_prefix: None,
-    url_allowlist: None,
-    evidence_id_allowlist: None,
-    lark_grammar: None,
+        tools: None,
+        tool_choice: None,
+        model_id: None,
+        enable_thinking: None,
+        sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
     };
 
     match inference.complete(&refine_req).await {
@@ -285,17 +284,14 @@ pub(crate) async fn run_collaboration(
                 // bubble didn't change. Caller still emits
                 // `message-refined` with the original content so the
                 // UI's `refining` flag clears.
-                if let (Some(events), Some(sid)) =
-                    (routing_events.as_ref(), session_id.as_ref())
-                {
+                if let (Some(events), Some(sid)) = (routing_events.as_ref(), session_id.as_ref()) {
                     events
                         .emit_turn_narration(TurnNarration {
                             session_id: sid.clone(),
                             conversation_id: conversation_id.to_string(),
                             event: NarrationEvent {
                                 phase: NarrationPhase::GapCheckFired,
-                                text: "Reviewed the source — no change to the answer."
-                                    .to_string(),
+                                text: "Reviewed the source — no change to the answer.".to_string(),
                                 elapsed_ms: t_start.elapsed().as_millis() as u64,
                             },
                         })
@@ -319,9 +315,7 @@ pub(crate) async fn run_collaboration(
             // with the original content to clear the UI's
             // `refining` flag — silence there is the stuck-state bug
             // this enum was introduced to prevent.
-            if let (Some(events), Some(sid)) =
-                (routing_events.as_ref(), session_id.as_ref())
-            {
+            if let (Some(events), Some(sid)) = (routing_events.as_ref(), session_id.as_ref()) {
                 events
                     .emit_turn_narration(TurnNarration {
                         session_id: sid.clone(),
@@ -331,8 +325,7 @@ pub(crate) async fn run_collaboration(
                                 stage: "refinement".to_string(),
                                 error: err_str.clone(),
                             },
-                            text: "Refinement failed — kept the original answer."
-                                .to_string(),
+                            text: "Refinement failed — kept the original answer.".to_string(),
                             elapsed_ms: t_start.elapsed().as_millis() as u64,
                         },
                     })

@@ -52,7 +52,11 @@ async fn main() {
             path
         }
         TriageOutcome::NoAtlas => {
-            eprintln!("no atlas at {}/{}/atlas/atoms.json", indexes_dir.display(), corpus_id);
+            eprintln!(
+                "no atlas at {}/{}/atlas/atoms.json",
+                indexes_dir.display(),
+                corpus_id
+            );
             std::process::exit(1);
         }
         TriageOutcome::Failed { reason } => {
@@ -65,8 +69,12 @@ async fn main() {
     let v: serde_json::Value = serde_json::from_str(&raw).expect("parse triage output");
     println!(
         "\ntier breakdown: L1={} L2={} L3={} L4={} L5={} off-list={}",
-        v["tier_breakdown"]["l1"], v["tier_breakdown"]["l2"], v["tier_breakdown"]["l3"],
-        v["tier_breakdown"]["l4"], v["tier_breakdown"]["l5"], v["tier_breakdown"]["off_list"]
+        v["tier_breakdown"]["l1"],
+        v["tier_breakdown"]["l2"],
+        v["tier_breakdown"]["l3"],
+        v["tier_breakdown"]["l4"],
+        v["tier_breakdown"]["l5"],
+        v["tier_breakdown"]["off_list"]
     );
     println!("\ntop {budget} (tier · canonical_name):");
     for (i, name) in v["top_in_corpus_by_centrality"]

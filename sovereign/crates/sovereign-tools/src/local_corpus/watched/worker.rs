@@ -530,7 +530,11 @@ impl Worker {
                 .map(|prev| now_unix.saturating_sub(prev) >= WRITEBACK_DEBOUNCE_SECS)
                 .unwrap_or(true);
             if debounce_ok {
-                match self.manager.refresh_writeback_if_clustered(&corpus_id).await {
+                match self
+                    .manager
+                    .refresh_writeback_if_clustered(&corpus_id)
+                    .await
+                {
                     Ok(Some(wb_result)) => {
                         for touched in &wb_result.touched_user_notes {
                             if let Some(entry) = state.entries.get_mut(&touched.relative_path) {
@@ -653,7 +657,10 @@ impl Worker {
         // tracing-bridge sink); tracing events go to the operator's
         // log either way.
         match &event {
-            WatchedFolderEvent::SweepStarted { corpus_id, sweep_id } => {
+            WatchedFolderEvent::SweepStarted {
+                corpus_id,
+                sweep_id,
+            } => {
                 tracing::debug!(corpus_id = %corpus_id, sweep_id = %sweep_id, "watched_folder:sweep_started");
             }
             WatchedFolderEvent::Walked { corpus_id, visited } => {
@@ -764,7 +771,10 @@ pub(crate) fn collect_failed_files(
 ) -> Vec<crate::local_corpus::watched::state::FailedFile> {
     use crate::local_corpus::watched::state::FailedFile;
     let mut out = Vec::new();
-    let push = |out: &mut Vec<FailedFile>, kind: &str, reason: &str, meta: &crate::local_corpus::pre_scanner::FileMeta| {
+    let push = |out: &mut Vec<FailedFile>,
+                kind: &str,
+                reason: &str,
+                meta: &crate::local_corpus::pre_scanner::FileMeta| {
         let Some(doc_id) = walker::doc_id_for(root, &meta.path) else {
             return;
         };
@@ -778,7 +788,12 @@ pub(crate) fn collect_failed_files(
         });
     };
     for f in &raw.corrupt_files {
-        push(&mut out, "corrupt", "pdf-extract failed to parse the document", f);
+        push(
+            &mut out,
+            "corrupt",
+            "pdf-extract failed to parse the document",
+            f,
+        );
     }
     for f in &raw.protected_pdfs {
         push(
@@ -827,7 +842,10 @@ mod tests {
         // the scheduler matches on these to decide whether to log a
         // benign skip vs. retry vs. drop the corpus.
         assert_ne!(SkipReason::AlreadyRunning, SkipReason::PausedManually);
-        assert_ne!(SkipReason::PausedAwaitingConfirmation, SkipReason::NotRegistered);
+        assert_ne!(
+            SkipReason::PausedAwaitingConfirmation,
+            SkipReason::NotRegistered
+        );
         assert_ne!(SkipReason::NotWatchedSourceType, SkipReason::NotRegistered);
     }
 
@@ -865,7 +883,11 @@ mod tests {
             &wf,
             /* ocr_available = */ true, // irrelevant when with_ocr=false
         );
-        assert_eq!(out.len(), 1, "scanned PDF should surface as failure when OCR is off");
+        assert_eq!(
+            out.len(),
+            1,
+            "scanned PDF should surface as failure when OCR is off"
+        );
         assert_eq!(out[0].kind, "scanned_no_text");
         assert!(out[0].reason.contains("turn on OCR"));
     }

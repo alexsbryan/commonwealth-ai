@@ -70,7 +70,11 @@ fn main() {
 
     let schema = load_schema(&args);
     let schema_str = serde_json::to_string(&schema).expect("serialise schema");
-    println!("schema ({} bytes): {}", schema_str.len(), short(&schema_str));
+    println!(
+        "schema ({} bytes): {}",
+        schema_str.len(),
+        short(&schema_str)
+    );
     println!();
 
     let backend = Arc::new(LlamaBackend::init().expect("LlamaBackend::init"));
@@ -80,8 +84,7 @@ fn main() {
     };
     let model_params = LlamaModelParams::default().with_n_gpu_layers(gpu_layers);
     let model = Arc::new(
-        LlamaModel::load_from_file(&backend, &args.model, &model_params)
-            .expect("load model"),
+        LlamaModel::load_from_file(&backend, &args.model, &model_params).expect("load model"),
     );
     println!(
         "model loaded: layers={} size_mb={}",
@@ -102,8 +105,7 @@ fn main() {
     // SAFETY: ctx lives strictly inside this fn; model outlives ctx
     // via the outer Arc, but llama_cpp_4's new_context takes a borrow.
     let mut ctx = unsafe {
-        let model_ref: &'static LlamaModel =
-            &*(Arc::as_ptr(&model) as *const LlamaModel);
+        let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model) as *const LlamaModel);
         model_ref
             .new_context(&backend, ctx_params)
             .expect("new_context")
@@ -203,9 +205,7 @@ fn drive_turn(
 
         batch.clear();
         let pos = (n_prompt + decoded) as i32;
-        batch
-            .add(token, pos, &[0], true)
-            .expect("batch.add decode");
+        batch.add(token, pos, &[0], true).expect("batch.add decode");
         ctx.decode(&mut batch).expect("decode step");
         decoded += 1;
     }
@@ -237,8 +237,10 @@ fn report(iters: &[IterResult]) {
     let total_decoded: usize = iters.iter().map(|x| x.decoded_tokens).sum();
     let total_ms: u64 = iters.iter().map(|x| x.decode_ms).sum();
     let tok_per_s = total_decoded as f64 / (total_ms.max(1) as f64 / 1000.0);
-    let all_mask: Vec<u128> =
-        iters.iter().flat_map(|x| x.mask_us_samples.iter().copied()).collect();
+    let all_mask: Vec<u128> = iters
+        .iter()
+        .flat_map(|x| x.mask_us_samples.iter().copied())
+        .collect();
     let p50 = percentile_us(&all_mask, 50);
     let p99 = percentile_us(&all_mask, 99);
 
@@ -392,9 +394,7 @@ impl Args {
         let model = model.unwrap_or_else(|| {
             eprintln!("error: --model <path.gguf> is required");
             eprintln!();
-            eprintln!(
-                "usage: bench_constraint --model <gguf> [--iters 5] [--gen-tokens 200]"
-            );
+            eprintln!("usage: bench_constraint --model <gguf> [--iters 5] [--gen-tokens 200]");
             eprintln!("       [--n-ctx 8192] [--threads 8] [--backend cpu|gpu]");
             eprintln!("       [--schema-file <path>] [--prompt-extra \"...\"]");
             std::process::exit(2);

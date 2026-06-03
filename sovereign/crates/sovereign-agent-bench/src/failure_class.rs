@@ -127,16 +127,26 @@ impl FailureClass {
             FailureClass::TokenBudget => "output-token budget exceeded",
             FailureClass::LoopTrap => "no-progress detector cut off a tool loop",
             FailureClass::ToolDenied => "agent attempted disallowed tool",
-            FailureClass::ParseFailedEnvelope => "model emitted tool call; daemon parser rejected it",
-            FailureClass::DaemonTruncate => "daemon stopped model early (<200 tokens, no tool call)",
+            FailureClass::ParseFailedEnvelope => {
+                "model emitted tool call; daemon parser rejected it"
+            }
+            FailureClass::DaemonTruncate => {
+                "daemon stopped model early (<200 tokens, no tool call)"
+            }
             FailureClass::ModelChatted => "model talked itself into 'done' without a tool call",
             FailureClass::EmptyResponse => "agent produced no output",
             FailureClass::ToolCallNoop => "agent only read/grep'd, never wrote",
             FailureClass::AlgorithmicWrong => "agent wrote code; tests failed",
             FailureClass::WriteThrash => "agent wrote same path 2x without bash verify between",
-            FailureClass::VerifyStuck => "build/smoke produced identical failing output 3x — agent could not fix",
-            FailureClass::CycleLimit => "Implementer↔Evaluator alternated past cycle cap without converging",
-            FailureClass::RoleTurnCap => "role exceeded per-tenure tool-call cap (Planner=3, Implementer=20, Evaluator=10)",
+            FailureClass::VerifyStuck => {
+                "build/smoke produced identical failing output 3x — agent could not fix"
+            }
+            FailureClass::CycleLimit => {
+                "Implementer↔Evaluator alternated past cycle cap without converging"
+            }
+            FailureClass::RoleTurnCap => {
+                "role exceeded per-tenure tool-call cap (Planner=3, Implementer=20, Evaluator=10)"
+            }
         }
     }
 
@@ -213,10 +223,7 @@ const SOLVED_THRESHOLD: f64 = 0.85;
 
 /// Derive a class from the (agent run, witness) pair. See module-level
 /// docs for the rule table.
-pub fn classify(
-    agent: &PersistedAgentRun,
-    witness: Option<&PersistedWitness>,
-) -> FailureClass {
+pub fn classify(agent: &PersistedAgentRun, witness: Option<&PersistedWitness>) -> FailureClass {
     // Rule 1, 2: witness-driven (when witness ran). Witness runs even
     // on a crashed agent so these arms fire BEFORE the exit-reason
     // arms — a partial implementation that crashed late still gets
@@ -458,7 +465,11 @@ mod tests {
     #[test]
     fn algorithmic_wrong_when_write_but_tests_fail() {
         let agent = run(
-            vec![("read", ""), ("write", "src/lib.rs"), ("bash", "cargo test")],
+            vec![
+                ("read", ""),
+                ("write", "src/lib.rs"),
+                ("bash", "cargo test"),
+            ],
             800,
             json!({"kind": "completed"}),
             "DONE",

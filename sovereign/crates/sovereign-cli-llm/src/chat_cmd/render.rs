@@ -51,8 +51,12 @@ pub fn split_reasoning(raw: &str) -> (Vec<String>, String) {
 /// Returns an empty string when no provenance is present — keeps
 /// callers simple (just `println!("{}", header)` unconditionally).
 pub fn provenance_header(metadata: Option<&serde_json::Value>) -> String {
-    let Some(meta) = metadata else { return String::new() };
-    let Some(prov) = meta.get("provenance") else { return String::new() };
+    let Some(meta) = metadata else {
+        return String::new();
+    };
+    let Some(prov) = meta.get("provenance") else {
+        return String::new();
+    };
 
     let sources = prov
         .get("sources")
@@ -95,7 +99,9 @@ pub fn provenance_header(metadata: Option<&serde_json::Value>) -> String {
 /// triangle; the CLI unfolds it unconditionally because the whole
 /// point is diagnostic visibility.
 pub fn retrieved_chunks_footer(metadata: Option<&serde_json::Value>) -> String {
-    let Some(meta) = metadata else { return String::new() };
+    let Some(meta) = metadata else {
+        return String::new();
+    };
     let Some(chunks) = meta.get("retrieved_chunks").and_then(|c| c.as_array()) else {
         return String::new();
     };
@@ -169,18 +175,16 @@ mod tests {
 
     #[test]
     fn split_reasoning_handles_single_block() {
-        let (think, visible) = split_reasoning(
-            "<think>Reasoning trace goes here</think>The actual answer.",
-        );
+        let (think, visible) =
+            split_reasoning("<think>Reasoning trace goes here</think>The actual answer.");
         assert_eq!(think, vec!["Reasoning trace goes here".to_string()]);
         assert_eq!(visible, "The actual answer.");
     }
 
     #[test]
     fn split_reasoning_handles_multiple_blocks() {
-        let (think, visible) = split_reasoning(
-            "before<think>one</think>middle<think>two</think>after",
-        );
+        let (think, visible) =
+            split_reasoning("before<think>one</think>middle<think>two</think>after");
         assert_eq!(think.len(), 2);
         assert_eq!(visible, "beforemiddleafter");
     }

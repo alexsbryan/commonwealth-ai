@@ -29,8 +29,8 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use corpus_engine_notes::{NoteRow, NoteStore};
 use corpus_engine_atos::{AtosRunRow, FeatureRow, FeatureStore, MilestoneRow};
+use corpus_engine_notes::{NoteRow, NoteStore};
 
 pub mod approval;
 pub mod charter;
@@ -345,11 +345,7 @@ pub trait AtosOrchestrator: Send + Sync {
 
     /// Render a markdown report for the given feature. `ReportSection`
     /// picks the view (per-milestone, red team, or full epistemic).
-    async fn render_report(
-        &self,
-        feature_id: &str,
-        section: ReportSection,
-    ) -> Result<String>;
+    async fn render_report(&self, feature_id: &str, section: ReportSection) -> Result<String>;
 
     /// Promote a note to a new scope via [`NoteStore::promote_note`].
     async fn promote_note(
@@ -377,11 +373,11 @@ pub trait AtosOrchestrator: Send + Sync {
 
 // ─── Public re-exports ───────────────────────────────────────────────────────
 
+pub use corpus_engine_atos::FeatureRow as _FeatureRow;
 /// Expose the `Arc<FeatureStore>` + `Arc<NoteStore>` handles so
 /// transports that construct a `LocalAtosOrchestrator` don't need a
 /// direct corpus-engine import just for those types.
 pub use corpus_engine_notes::{NoteScope, NoteStore as _NoteStore};
-pub use corpus_engine_atos::FeatureRow as _FeatureRow;
 
 /// Convenience constructor that wires a store pair into the default
 /// orchestrator. The optional `InferenceProvider` drives the Fast-slot

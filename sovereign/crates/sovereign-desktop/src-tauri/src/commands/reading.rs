@@ -113,16 +113,14 @@ fn chunk_record_dto_from_row(
         .map(String::from);
 
     let atom_spans: Vec<AtomSpanDto> = match (atoms, section_id.as_deref()) {
-        (Some(atoms), Some(_)) => {
-            corpus_engine::atlas_traversal::detect_atom_spans(
-                &row.content,
-                section_id.as_deref(),
-                atoms,
-            )
-            .into_iter()
-            .map(AtomSpanDto::from)
-            .collect()
-        }
+        (Some(atoms), Some(_)) => corpus_engine::atlas_traversal::detect_atom_spans(
+            &row.content,
+            section_id.as_deref(),
+            atoms,
+        )
+        .into_iter()
+        .map(AtomSpanDto::from)
+        .collect(),
         _ => Vec::new(),
     };
 
@@ -172,7 +170,10 @@ fn parse_conversation_segments_dto(content: &str) -> Vec<ConversationSegmentDto>
         };
         let body = content[body_start..body_end].to_string();
         if !role.is_empty() {
-            segments.push(ConversationSegmentDto { role, content: body });
+            segments.push(ConversationSegmentDto {
+                role,
+                content: body,
+            });
         }
         idx = if body_end == content.len() {
             content.len()
@@ -263,9 +264,7 @@ pub async fn read_get_chunk(
     let row_opt = rows.pop();
     let dto = match row_opt {
         Some(row) => {
-            let conv =
-                maybe_resolve_conversation_meta_for_commands(&state, &corpus_id, &row)
-                    .await;
+            let conv = maybe_resolve_conversation_meta_for_commands(&state, &corpus_id, &row).await;
             Some(chunk_record_dto_from_row(
                 &corpus_id,
                 &row,
@@ -313,25 +312,17 @@ pub async fn read_get_chunk_neighbors(
     // per neighbor), and adjacent chunks tend to share a
     // conversation_id so the get_conversation cache hits hot.
     let center_conv =
-        maybe_resolve_conversation_meta_for_commands(&state, &corpus_id, &window.center)
-            .await;
-    let center = chunk_record_dto_from_row(
-        &corpus_id,
-        &window.center,
-        atoms_ref,
-        center_conv,
-    );
+        maybe_resolve_conversation_meta_for_commands(&state, &corpus_id, &window.center).await;
+    let center = chunk_record_dto_from_row(&corpus_id, &window.center, atoms_ref, center_conv);
     let outbound_url = center.url.clone();
     let mut prev: Vec<ChunkRecordDto> = Vec::with_capacity(window.prev.len());
     for r in &window.prev {
-        let conv =
-            maybe_resolve_conversation_meta_for_commands(&state, &corpus_id, r).await;
+        let conv = maybe_resolve_conversation_meta_for_commands(&state, &corpus_id, r).await;
         prev.push(chunk_record_dto_from_row(&corpus_id, r, atoms_ref, conv));
     }
     let mut next: Vec<ChunkRecordDto> = Vec::with_capacity(window.next.len());
     for r in &window.next {
-        let conv =
-            maybe_resolve_conversation_meta_for_commands(&state, &corpus_id, r).await;
+        let conv = maybe_resolve_conversation_meta_for_commands(&state, &corpus_id, r).await;
         next.push(chunk_record_dto_from_row(&corpus_id, r, atoms_ref, conv));
     }
 
@@ -444,7 +435,9 @@ pub async fn read_get_atom_card(
     let cross = corpus_engine::enrichment::atlas::read_atlas_cross_corpus_edges(&atlas_dir)
         .map(|f| f.edges)
         .unwrap_or_default();
-    Ok(Some(build_atom_card_dto(&corpus_id, atom, &atoms, &edges, &cross)))
+    Ok(Some(build_atom_card_dto(
+        &corpus_id, atom, &atoms, &edges, &cross,
+    )))
 }
 
 #[tauri::command]
@@ -670,7 +663,9 @@ fn edge_type_label_dto(t: corpus_engine::enrichment::atlas::EdgeType) -> &'stati
         EdgeType::Grounding => "grounding",
         EdgeType::Framing => "framing",
         EdgeType::Provenance => "provenance",
-        EdgeType::EvidenceFor | EdgeType::Concedes | EdgeType::OpposesIn => unreachable!("typed edges wired in Gap B Stage 4"),
+        EdgeType::EvidenceFor | EdgeType::Concedes | EdgeType::OpposesIn => {
+            unreachable!("typed edges wired in Gap B Stage 4")
+        }
         EdgeType::Attaches => "attaches",
     }
 }
@@ -732,7 +727,9 @@ fn atom_evidence_section_refs_dto(
             }
             out
         }
-        AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => unreachable!("typed atoms wired in Gap B Stage 4"),
+        AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => {
+            unreachable!("typed atoms wired in Gap B Stage 4")
+        }
         AtomEnvelope::Asset(_) => Vec::new(),
     }
 }
@@ -754,4 +751,3 @@ fn cross_corpus_links_dto(
         })
         .collect()
 }
-

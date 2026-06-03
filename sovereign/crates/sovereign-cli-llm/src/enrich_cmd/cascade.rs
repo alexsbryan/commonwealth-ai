@@ -150,10 +150,7 @@ pub async fn cmd_cascade(args: &[String]) -> i32 {
                 r.output.tensions.len(),
                 r.failures.len()
             ),
-            CascadeStep::Phase7(r) => println!(
-                "    ✓ phase 7: {} gap(s)",
-                r.output.gaps.len()
-            ),
+            CascadeStep::Phase7(r) => println!("    ✓ phase 7: {} gap(s)", r.output.gaps.len()),
         }
     }
 
@@ -171,10 +168,7 @@ fn parse_args(args: &[String]) -> Result<(String, PipelinePhase), String> {
                 let v = args
                     .get(i + 1)
                     .ok_or("--from requires a phase id".to_string())?;
-                from = Some(
-                    PipelinePhase::from_str(v)
-                        .map_err(|e| format!("--from: {e}"))?,
-                );
+                from = Some(PipelinePhase::from_str(v).map_err(|e| format!("--from: {e}"))?);
                 i += 2;
             }
             other if other.starts_with("--") => {

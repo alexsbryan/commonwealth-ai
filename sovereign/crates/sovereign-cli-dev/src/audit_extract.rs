@@ -168,14 +168,9 @@ fn build_diff(repo_root: &Path, old: Option<&str>, new: &str) -> Option<String> 
 /// the project's notes DB. Used to dedup before persisting a new
 /// extraction — an LLM run on overlapping diffs commonly
 /// re-derives the same decisions.
-async fn existing_extracted_bodies(
-    notes: &NoteStore,
-) -> std::collections::HashSet<String> {
+async fn existing_extracted_bodies(notes: &NoteStore) -> std::collections::HashSet<String> {
     let mut out = std::collections::HashSet::new();
-    let rows = match notes
-        .read_notes(None, &[], &[], &[], 1000, false)
-        .await
-    {
+    let rows = match notes.read_notes(None, &[], &[], &[], 1000, false).await {
         Ok(r) => r,
         Err(e) => {
             tracing::warn!(
@@ -256,8 +251,11 @@ pub async fn run(
         };
     }
 
-    let diff = match build_diff(repo_root, state.last_extracted_head.as_deref(), &current_head)
-    {
+    let diff = match build_diff(
+        repo_root,
+        state.last_extracted_head.as_deref(),
+        &current_head,
+    ) {
         Some(d) if !d.is_empty() => d,
         Some(_) => {
             // Empty diff between two distinct heads — should be
@@ -338,10 +336,7 @@ pub async fn run(
 /// or unreadable. The audit's other extraction streams (agent /
 /// committed / observed / inferred-via-recover) keep the floor
 /// non-empty even when this skips.
-pub async fn run_with_default_backend(
-    repo_root: &Path,
-    notes: &NoteStore,
-) -> ExtractRunSummary {
+pub async fn run_with_default_backend(repo_root: &Path, notes: &NoteStore) -> ExtractRunSummary {
     let setup = match sovereign_core::setup_config::SetupConfig::load() {
         Ok(s) => s,
         Err(e) => {
@@ -483,7 +478,11 @@ mod tests {
             .unwrap()
             .success());
         assert!(std::process::Command::new("git")
-            .args(["commit", "-m", "baseline commit one two three four five six"])
+            .args([
+                "commit",
+                "-m",
+                "baseline commit one two three four five six"
+            ])
             .current_dir(r)
             .status()
             .unwrap()
@@ -501,7 +500,11 @@ mod tests {
             .unwrap()
             .success());
         assert!(std::process::Command::new("git")
-            .args(["commit", "-m", "Switch storage to async channels for ingest"])
+            .args([
+                "commit",
+                "-m",
+                "Switch storage to async channels for ingest"
+            ])
             .current_dir(repo)
             .status()
             .unwrap()
@@ -549,7 +552,10 @@ mod tests {
         let state_path = audit_state_path(dir.path());
         assert!(state_path.exists());
         let state = AuditExtractState::load(dir.path());
-        assert_eq!(state.last_extracted_head.as_deref(), summary.head.as_deref());
+        assert_eq!(
+            state.last_extracted_head.as_deref(),
+            summary.head.as_deref()
+        );
     }
 
     /// Re-running with the same head short-circuits — no backend

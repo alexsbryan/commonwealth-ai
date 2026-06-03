@@ -152,10 +152,7 @@ pub async fn cmd_atlas_cross_corpus(args: &[String]) -> i32 {
             }
         }
         if !s.sample_rejections.is_empty() {
-            println!(
-                "    sample rejections (cap {}):",
-                s.sample_rejections.len()
-            );
+            println!("    sample rejections (cap {}):", s.sample_rejections.len());
             for sample in &s.sample_rejections {
                 println!(
                     "      · {} ({:?}) ↮ {} ({:?})  reason={}",
@@ -230,10 +227,8 @@ pub async fn cmd_atlas_cross_corpus(args: &[String]) -> i32 {
         .map(|e| (e.id.as_str().to_string(), e.canonical_name.clone()))
         .collect();
 
-    let local_file = CrossCorpusEdgesFile::new(
-        local_cfg.corpus_id.clone(),
-        report.accepted_edges.clone(),
-    );
+    let local_file =
+        CrossCorpusEdgesFile::new(local_cfg.corpus_id.clone(), report.accepted_edges.clone());
     let peer_edges: Vec<_> = report
         .accepted_edges
         .iter()
@@ -298,9 +293,9 @@ fn parse_args(args: &[String]) -> Result<ParsedCrossCorpus, String> {
         let a = &args[i];
         match a.as_str() {
             "--explain" => {
-                let val = args.get(i + 1).ok_or_else(|| {
-                    "--explain requires an edge id argument".to_string()
-                })?;
+                let val = args
+                    .get(i + 1)
+                    .ok_or_else(|| "--explain requires an edge id argument".to_string())?;
                 explain_edge_id = Some(val.clone());
                 i += 2;
             }

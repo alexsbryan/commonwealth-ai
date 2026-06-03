@@ -49,15 +49,10 @@ pub async fn create_conversation(
         // through: the conversation row still gets created lazily
         // on first message save and runtime's older auto-tag path
         // handles attribution best-effort.
-        tracing::warn!(
-            "create_conversation: sqlite store unavailable, deferring insert"
-        );
+        tracing::warn!("create_conversation: sqlite store unavailable, deferring insert");
     }
 
-    Ok(CreateConversationResponse {
-        id,
-        created_at,
-    })
+    Ok(CreateConversationResponse { id, created_at })
 }
 
 #[tauri::command]
@@ -337,9 +332,8 @@ pub async fn submit_information_search(
     conversation_id: Option<String>,
 ) -> Result<SearchAugmentation, String> {
     use sovereign_tools::web::search::{
-        BraveBackendImpl, BudgetView, DuckDuckGoBackendImpl, SearchOrchestrator,
-        SearchPrivacy, SelectInputs, TavilyBackendImpl, WebSearchBackend,
-        WebSearchRegistry,
+        BraveBackendImpl, BudgetView, DuckDuckGoBackendImpl, SearchOrchestrator, SearchPrivacy,
+        SelectInputs, TavilyBackendImpl, WebSearchBackend, WebSearchRegistry,
     };
 
     let query = query.trim();
@@ -396,14 +390,10 @@ pub async fn submit_information_search(
     let preferred: Box<dyn WebSearchBackend> =
         match config_snapshot.search_backend.provider.as_str() {
             "tavily" => config_snapshot.search_backend.api_key.as_ref().map(
-                |k| -> Box<dyn WebSearchBackend> {
-                    Box::new(TavilyBackendImpl::new(k.clone()))
-                },
+                |k| -> Box<dyn WebSearchBackend> { Box::new(TavilyBackendImpl::new(k.clone())) },
             ),
             "brave" => config_snapshot.search_backend.api_key.as_ref().map(
-                |k| -> Box<dyn WebSearchBackend> {
-                    Box::new(BraveBackendImpl::new(k.clone()))
-                },
+                |k| -> Box<dyn WebSearchBackend> { Box::new(BraveBackendImpl::new(k.clone())) },
             ),
             _ => None,
         }
@@ -495,27 +485,22 @@ pub async fn submit_information_search(
             match store.get_conversation(cid).await {
                 Ok(conv) => {
                     let current_turn = conv.messages.len();
-                    let mut entries =
-                        conv.searched_sources.unwrap_or_default();
+                    let mut entries = conv.searched_sources.unwrap_or_default();
                     let mut url_seen: std::collections::HashSet<String> =
                         entries.iter().map(|e| e.url.clone()).collect();
                     for r in &out.results {
                         if url_seen.contains(&r.url) {
-                            if let Some(existing) =
-                                entries.iter_mut().find(|e| e.url == r.url)
-                            {
+                            if let Some(existing) = entries.iter_mut().find(|e| e.url == r.url) {
                                 existing.last_referenced_turn = current_turn;
                             }
                         } else {
-                            entries.push(
-                                sovereign_core::types::SearchedSourceEntry {
-                                    url: r.url.clone(),
-                                    title: r.title.clone(),
-                                    first_seen_turn: current_turn,
-                                    last_referenced_turn: current_turn,
-                                    search_query: query.to_string(),
-                                },
-                            );
+                            entries.push(sovereign_core::types::SearchedSourceEntry {
+                                url: r.url.clone(),
+                                title: r.title.clone(),
+                                first_seen_turn: current_turn,
+                                last_referenced_turn: current_turn,
+                                search_query: query.to_string(),
+                            });
                             url_seen.insert(r.url.clone());
                         }
                     }
@@ -732,4 +717,3 @@ pub async fn toggle_skill_impl(
 
     state::rebuild_runtime(state).await
 }
-

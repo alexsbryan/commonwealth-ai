@@ -57,6 +57,4 @@ pub use runner::{
     RoutingEventNarrationSink, TeamPipelineInputs, TeamPipelineOutput,
     DEFAULT_TEAM_PIPELINE_MAX_TOKENS, TEAM_PIPELINE_ENV_VAR,
 };
-pub use stages::{
-    CuratedPackage, DraftBudget, RetrievedChunk, SkeletonSection, Sufficiency,
-};
+pub use stages::{CuratedPackage, DraftBudget, RetrievedChunk, SkeletonSection, Sufficiency};

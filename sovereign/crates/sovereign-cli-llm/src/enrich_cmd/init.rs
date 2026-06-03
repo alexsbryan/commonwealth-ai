@@ -211,8 +211,9 @@ pub async fn cmd_init(args: &[String]) -> i32 {
     let min_body_words = parsed.min_section_body_words;
     let toc_markers = parsed.toc_markers.clone();
     let report = if let Some(ref tm) = toc_markers {
-        let detector =
-            corpus_engine::chunkers::sectioned::TocAnchoredDetector::with_markers(&tm.start, &tm.end);
+        let detector = corpus_engine::chunkers::sectioned::TocAnchoredDetector::with_markers(
+            &tm.start, &tm.end,
+        );
         let chunker = SectionedChunker::with_detector(detector);
         chunker.dry_run(&source)
     } else {
@@ -243,9 +244,7 @@ pub async fn cmd_init(args: &[String]) -> i32 {
             ),
         }
         eprintln!();
-        eprintln!(
-            "The first non-empty lines of the loaded text are:"
-        );
+        eprintln!("The first non-empty lines of the loaded text are:");
         eprintln!();
         for (i, line) in preview_nonempty_lines(&source, 25).iter().enumerate() {
             eprintln!("  {:>3}. {}", i + 1, line);
@@ -287,9 +286,7 @@ pub async fn cmd_init(args: &[String]) -> i32 {
         eprintln!(
             "      You can still finish init if --chat-model / --embed-model are both pinned,"
         );
-        eprintln!(
-            "      but `sovereign enrich extract` will fail until the daemon is up."
-        );
+        eprintln!("      but `sovereign enrich extract` will fail until the daemon is up.");
         if parsed.chat_model.is_none() || parsed.embed_model.is_none() {
             // Non-interactive context (pipeline driver, CI, redirected
             // stdin): never prompt — there's no human to answer, and
@@ -337,7 +334,10 @@ pub async fn cmd_init(args: &[String]) -> i32 {
         ChapterManifest::from_detected_sections(&parsed.corpus_id, &source, &report.sections);
     let manifest_path = paths::chapters_manifest_path(&parsed.corpus_id);
     if let Err(e) = manifest.save(&manifest_path) {
-        eprintln!("error: saving chapter manifest {}: {e}", manifest_path.display());
+        eprintln!(
+            "error: saving chapter manifest {}: {e}",
+            manifest_path.display()
+        );
         return 1;
     }
     println!(
@@ -521,7 +521,10 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
 
     let manifest_path = paths::chapters_manifest_path(&parsed.corpus_id);
     if let Err(e) = manifest.save(&manifest_path) {
-        eprintln!("error: saving chapter manifest {}: {e}", manifest_path.display());
+        eprintln!(
+            "error: saving chapter manifest {}: {e}",
+            manifest_path.display()
+        );
         return 1;
     }
     println!(
@@ -719,8 +722,7 @@ pub(crate) fn build_manifest_from_corpus_rows(
             .iter()
             .map(|t| corpus_engine::filters::normalize_title(t))
             .collect();
-        let mut hits: std::collections::HashSet<ArticleKey> =
-            std::collections::HashSet::new();
+        let mut hits: std::collections::HashSet<ArticleKey> = std::collections::HashSet::new();
         let mut missing_count = 0usize;
         for (key, _) in article_first_seen {
             if want_norm.contains(&corpus_engine::filters::normalize_title(&key)) {
@@ -741,8 +743,7 @@ pub(crate) fn build_manifest_from_corpus_rows(
         }
         hits
     } else if let Some(n) = limit_articles {
-        let mut articles: Vec<(ArticleKey, usize)> =
-            article_first_seen.into_iter().collect();
+        let mut articles: Vec<(ArticleKey, usize)> = article_first_seen.into_iter().collect();
         articles.sort_by_key(|(_, ord)| *ord);
         articles.into_iter().take(n).map(|(k, _)| k).collect()
     } else {
@@ -809,17 +810,19 @@ pub(crate) fn build_manifest_from_corpus_rows(
         }
         metadata.insert("ordinal".into(), chapter_ord.to_string());
 
-        manifest.chapters.push(corpus_engine::enrichment::pipeline::ChapterEntry {
-            id,
-            title,
-            part: None,
-            chapter: Some(chapter_ord),
-            first_line,
-            word_count,
-            chunk_ids: bucket.chunk_ids,
-            characters_present: Vec::new(),
-            metadata,
-        });
+        manifest
+            .chapters
+            .push(corpus_engine::enrichment::pipeline::ChapterEntry {
+                id,
+                title,
+                part: None,
+                chapter: Some(chapter_ord),
+                first_line,
+                word_count,
+                chunk_ids: bucket.chunk_ids,
+                characters_present: Vec::new(),
+                metadata,
+            });
     }
 
     Ok(manifest)
@@ -1021,9 +1024,9 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
                 let raw = args
                     .get(i + 1)
                     .ok_or("--max-output-tokens requires a value".to_string())?;
-                max_output_tokens = raw.parse::<u32>().map_err(|e| {
-                    format!("--max-output-tokens must be a positive integer: {e}")
-                })?;
+                max_output_tokens = raw
+                    .parse::<u32>()
+                    .map_err(|e| format!("--max-output-tokens must be a positive integer: {e}"))?;
                 if max_output_tokens == 0 {
                     return Err("--max-output-tokens must be > 0".into());
                 }
@@ -1053,9 +1056,7 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
 
     let corpus_id = corpus_id.ok_or_else(|| "missing <corpus-id>".to_string())?;
     if from_template.is_some() && template_path.is_some() {
-        return Err(
-            "--from-template and --template-path are mutually exclusive".to_string(),
-        );
+        return Err("--from-template and --template-path are mutually exclusive".to_string());
     }
     let template_mode = from_template.is_some() || template_path.is_some();
     let corpus_mode = from_corpus.is_some();
@@ -1079,9 +1080,7 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
         return Err("--include-articles requires --from-corpus".to_string());
     }
     if include_articles_path.is_some() && limit_articles.is_some() {
-        return Err(
-            "--include-articles and --limit-articles are mutually exclusive".to_string(),
-        );
+        return Err("--include-articles and --limit-articles are mutually exclusive".to_string());
     }
     let include_articles: Option<Vec<String>> = if let Some(path) = include_articles_path {
         let raw = std::fs::read_to_string(&path)
@@ -1118,9 +1117,7 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
                 for entry in arr {
                     if let Some(name) = entry.as_str() {
                         out.push(name.to_string());
-                    } else if let Some(name) =
-                        entry.get("name").and_then(|n| n.as_str())
-                    {
+                    } else if let Some(name) = entry.get("name").and_then(|n| n.as_str()) {
                         out.push(name.to_string());
                     }
                 }
@@ -1292,16 +1289,15 @@ mod tests {
 
     #[test]
     fn parse_args_minimal_form() {
-        let args = vec![
-            "ak".to_string(),
-            "--source".into(),
-            "/tmp/ak.txt".into(),
-        ];
+        let args = vec!["ak".to_string(), "--source".into(), "/tmp/ak.txt".into()];
         let p = parse_args(&args).unwrap();
         assert_eq!(p.corpus_id, "ak");
         assert_eq!(p.source_path, PathBuf::from("/tmp/ak.txt"));
         assert_eq!(p.pipeline_id, "literary");
-        assert_eq!(p.min_section_body_words, 40, "default should match config default");
+        assert_eq!(
+            p.min_section_body_words, 40,
+            "default should match config default"
+        );
         assert!(!p.dry_run);
         assert!(!p.force);
     }
@@ -1335,7 +1331,10 @@ mod tests {
         .map(|s| s.to_string())
         .collect();
         let err = parse_args(&args).unwrap_err();
-        assert!(err.contains("non-negative integer"), "unexpected err: {err}");
+        assert!(
+            err.contains("non-negative integer"),
+            "unexpected err: {err}"
+        );
     }
 
     #[test]

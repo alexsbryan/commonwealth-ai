@@ -235,7 +235,10 @@ pub(crate) fn synthetic_file_tools() -> Vec<ToolDefinition> {
 /// call: write_file` errors in the 2026-05-12 codex smoke when the
 /// model emitted a fourth, badly-shaped attempt after three good
 /// ones.
-pub(crate) fn rewrite_synthetic_tool_call(name: &str, arguments_json: &str) -> Option<(String, String)> {
+pub(crate) fn rewrite_synthetic_tool_call(
+    name: &str,
+    arguments_json: &str,
+) -> Option<(String, String)> {
     let is_synthetic = matches!(
         name,
         SYNTHETIC_TOOL_WRITE_FILE
@@ -262,8 +265,7 @@ pub(crate) fn rewrite_synthetic_tool_call(name: &str, arguments_json: &str) -> O
     // and the volume is bounded by the model's iteration count.
     let parsed_result: Result<serde_json::Value, _> = serde_json::from_str(arguments_json);
     let args_parsed = parsed_result.is_ok();
-    let args: serde_json::Value =
-        parsed_result.unwrap_or(serde_json::Value::Null);
+    let args: serde_json::Value = parsed_result.unwrap_or(serde_json::Value::Null);
     let raw_path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
     let path_owned = normalize_path_segments(raw_path);
     let path = path_owned.as_str();

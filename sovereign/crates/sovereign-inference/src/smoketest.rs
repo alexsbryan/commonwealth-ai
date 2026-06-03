@@ -92,23 +92,17 @@ fn parse_args(rest: &[String]) -> SmokeArgs {
             }
             "--gpu-layers" => {
                 i += 1;
-                n_gpu_layers = rest
-                    .get(i)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or_else(|| {
-                        eprintln!("smoketest: --gpu-layers requires a u32");
-                        std::process::exit(2);
-                    });
+                n_gpu_layers = rest.get(i).and_then(|s| s.parse().ok()).unwrap_or_else(|| {
+                    eprintln!("smoketest: --gpu-layers requires a u32");
+                    std::process::exit(2);
+                });
             }
             "--ctx" => {
                 i += 1;
-                n_ctx = rest
-                    .get(i)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or_else(|| {
-                        eprintln!("smoketest: --ctx requires a u32");
-                        std::process::exit(2);
-                    });
+                n_ctx = rest.get(i).and_then(|s| s.parse().ok()).unwrap_or_else(|| {
+                    eprintln!("smoketest: --ctx requires a u32");
+                    std::process::exit(2);
+                });
             }
             _ => {
                 // Unknown args are ignored (forward-compat).
@@ -151,14 +145,13 @@ fn run(args: SmokeArgs) -> ExitCode {
     let backend = Arc::new(backend);
 
     let model_params = LlamaModelParams::default().with_n_gpu_layers(args.n_gpu_layers);
-    let model =
-        match LlamaModel::load_from_file(&backend, &args.model_path, &model_params) {
-            Ok(m) => m,
-            Err(e) => {
-                eprintln!("smoketest: model load failed: {e}");
-                return ExitCode::from(1);
-            }
-        };
+    let model = match LlamaModel::load_from_file(&backend, &args.model_path, &model_params) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("smoketest: model load failed: {e}");
+            return ExitCode::from(1);
+        }
+    };
 
     // Match production `ModelSlot::load` chat-slot context params
     // so we exercise the same kernel-pipeline cache. The flags
@@ -171,9 +164,8 @@ fn run(args: SmokeArgs) -> ExitCode {
         // MIGRATION 2026-05-17: .with_n_seq_max(...) retired in llama-cpp-4 0.2.x — see crate::llama
         .with_n_batch(args.n_ctx)
         .with_n_ubatch(512)
-        .with_offload_kqv(wants_gpu)
-        ;
-        // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
+        .with_offload_kqv(wants_gpu);
+    // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
     let mut ctx = match model.new_context(&backend, ctx_params) {
         Ok(c) => c,
         Err(e) => {

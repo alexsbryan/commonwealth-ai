@@ -46,17 +46,13 @@ impl Runtime {
         // Resolve locator → (kind_filter, name_match).
         let (kind_filter, name_match): (Option<corpus_engine::CorpusKind>, Option<String>) =
             match &locator {
-                MetalingualLocator::SystemCode => {
-                    (Some(corpus_engine::CorpusKind::Code), None)
-                }
+                MetalingualLocator::SystemCode => (Some(corpus_engine::CorpusKind::Code), None),
                 MetalingualLocator::Conversation => {
                     // sovereign's conversation-history corpus is a
                     // Knowledge-kind corpus with a known id substring.
                     (None, Some("conversation".to_string()))
                 }
-                MetalingualLocator::NamedSource(name) => {
-                    (None, Some(name.clone()))
-                }
+                MetalingualLocator::NamedSource(name) => (None, Some(name.clone())),
                 MetalingualLocator::Ambient | MetalingualLocator::Unknown => {
                     // Best-effort: prefer Code if any code corpus is
                     // installed (most common ambient locator in a dev
@@ -70,12 +66,14 @@ impl Runtime {
             MetalingualLocator::SystemCode => "this codebase".to_string(),
             MetalingualLocator::Conversation => "this conversation".to_string(),
             MetalingualLocator::NamedSource(n) => n.clone(),
-            MetalingualLocator::Ambient | MetalingualLocator::Unknown => {
-                "this system".to_string()
-            }
+            MetalingualLocator::Ambient | MetalingualLocator::Unknown => "this system".to_string(),
         };
 
-        let embedding = self.inference.embed_query(message).await.unwrap_or_default();
+        let embedding = self
+            .inference
+            .embed_query(message)
+            .await
+            .unwrap_or_default();
         let mut chunks = self
             .search_corpora_filtered(
                 &embedding,
@@ -100,16 +98,22 @@ impl Runtime {
             // honestly — the alternative (parametric fallback) is
             // exactly the failure mode that motivated this carve-out.
             let empty_message = match &locator {
-                MetalingualLocator::SystemCode => "I read this as a question about *this codebase*, but I don't \
+                MetalingualLocator::SystemCode => {
+                    "I read this as a question about *this codebase*, but I don't \
                      have a code corpus indexed locally. Run `sovereign code \
                      index <path>` against the relevant repo to enable in-system \
                      vocabulary lookups, then ask again.\n\n\
                      If you meant something else by \"in this codebase\", let me \
-                     know — I can re-route to general knowledge retrieval.".to_string(),
-                MetalingualLocator::Conversation => "I read this as a question about something we discussed \
+                     know — I can re-route to general knowledge retrieval."
+                        .to_string()
+                }
+                MetalingualLocator::Conversation => {
+                    "I read this as a question about something we discussed \
                      earlier in this conversation, but I couldn't find that \
                      reference. Could you quote or paraphrase the part you're \
-                     asking about?".to_string(),
+                     asking about?"
+                        .to_string()
+                }
                 MetalingualLocator::NamedSource(n) => format!(
                     "I read this as a question about how `{n}` uses the term, \
                      but I don't have a corpus matching `{n}` indexed locally. \
@@ -118,10 +122,13 @@ impl Runtime {
                      {corpora}.",
                     corpora = context.installed_corpora_display()
                 ),
-                MetalingualLocator::Ambient | MetalingualLocator::Unknown => "I read this as a question about how *this system* uses \
+                MetalingualLocator::Ambient | MetalingualLocator::Unknown => {
+                    "I read this as a question about how *this system* uses \
                      the term, but I couldn't find a matching internal source. \
                      Could you tell me which source you meant — the codebase, \
-                     a specific corpus, our notes?".to_string(),
+                     a specific corpus, our notes?"
+                        .to_string()
+                }
             };
             let response_msg = Message {
                 id: uuid::Uuid::new_v4().to_string(),
@@ -216,12 +223,12 @@ impl Runtime {
             tool_choice: None,
             model_id: None,
             enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
 
         let completion = self.inference.complete(&request).await?;

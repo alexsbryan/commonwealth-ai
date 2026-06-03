@@ -439,7 +439,6 @@ pub struct EnrichmentConfig {
     pub enabled: bool,
 
     // ── New field model fields ──────────────────────────────
-
     /// Enrichment type: "field_model" (default), "atlas",
     /// "investigation".
     #[serde(default = "default_enrichment_type", rename = "type")]
@@ -468,7 +467,6 @@ pub struct EnrichmentConfig {
     pub fault_lines: Option<FaultLinesToml>,
 
     // ── Investigation-pipeline declarations ─────────────────
-
     /// Entity types the investigation pipeline should extract from
     /// each chunk. Listed in the LLM extraction prompt so the model
     /// canonicalizes mentions to one of these typed shapes (e.g.
@@ -524,8 +522,7 @@ pub struct ReconciliationToml {
     /// column-aware pass entirely (the multi-origin merger still
     /// runs on whatever other signals the corpus produces).
     #[serde(default)]
-    pub column_aware:
-        Option<crate::extractors::column_aware::ColumnAwareConfig>,
+    pub column_aware: Option<crate::extractors::column_aware::ColumnAwareConfig>,
 }
 
 fn default_name_similarity_threshold() -> f32 {
@@ -552,9 +549,7 @@ impl Default for ReconciliationToml {
 
 impl ReconciliationToml {
     /// Project this TOML shape onto the runtime policy struct.
-    pub fn to_policy(
-        &self,
-    ) -> crate::enrichment::reconciliation::ReconciliationPolicy {
+    pub fn to_policy(&self) -> crate::enrichment::reconciliation::ReconciliationPolicy {
         crate::enrichment::reconciliation::ReconciliationPolicy {
             name_similarity_threshold: self.name_similarity_threshold,
             cross_origin_required_signals: self.cross_origin_required_signals,
@@ -1837,11 +1832,7 @@ impl Recipe {
         // Reject unknown keys up front so misspellings surface loudly.
         for k in provided.keys() {
             if !self.parameters.contains_key(k) {
-                let declared: Vec<&str> = self
-                    .parameters
-                    .keys()
-                    .map(|s| s.as_str())
-                    .collect();
+                let declared: Vec<&str> = self.parameters.keys().map(|s| s.as_str()).collect();
                 return Err(Error::InvalidInput(format!(
                     "unknown parameter `{k}` for recipe `{}` (declared: [{}])",
                     self.corpus.id,
@@ -1852,10 +1843,7 @@ impl Recipe {
 
         let mut values = BTreeMap::new();
         for (name, spec) in &self.parameters {
-            let raw = provided
-                .get(name)
-                .cloned()
-                .or_else(|| spec.default.clone());
+            let raw = provided.get(name).cloned().or_else(|| spec.default.clone());
             let value = match (raw, spec.required) {
                 (Some(v), _) => parameter_value_from_toml(name, &spec.kind, v)?,
                 (None, true) => {
@@ -1871,8 +1859,6 @@ impl Recipe {
         Ok(ResolvedParameters { values })
     }
 }
-
-
 
 /// Returns `Recipe` definitions for well-known corpora, loaded from the
 /// `recipes/` directory at compile time via `include_str!`.
@@ -1962,7 +1948,10 @@ type = "paragraph"
 "#;
         let err = Recipe::from_toml(toml_str).unwrap_err();
         let msg = format!("{err}");
-        assert!(msg.contains("`type`"), "should name the missing field: {msg}");
+        assert!(
+            msg.contains("`type`"),
+            "should name the missing field: {msg}"
+        );
         assert!(
             msg.contains("acquirer") || msg.contains("section"),
             "should hint at which section: {msg}",
@@ -2029,8 +2018,7 @@ type = "paragraph"
 
     #[test]
     fn extract_unknown_variant_pulls_value_and_allowed_list() {
-        let raw =
-            "unknown variant `pdf`, expected one of `html`, `json`, `xml`, `plaintext`";
+        let raw = "unknown variant `pdf`, expected one of `html`, `json`, `xml`, `plaintext`";
         let (val, allowed) = extract_unknown_variant(raw).unwrap();
         assert_eq!(val, "pdf");
         assert!(allowed.contains("html"));
@@ -2081,16 +2069,11 @@ enrich_estimate_wpm = 500
         let r = Recipe::from_toml(toml_str).expect("catalog recipe must parse");
         assert_eq!(r.corpus.kind, crate::types::CorpusKind::Catalog);
         assert!(!r.corpus.on_demand);
-        assert!(matches!(
-            r.extract,
-            ExtractorConfig::GutenbergCatalog {}
-        ));
+        assert!(matches!(r.extract, ExtractorConfig::GutenbergCatalog {}));
         let cat = r.catalog.expect("[catalog] block parsed");
         assert_eq!(cat.id_field, "gutenberg_id");
         assert_eq!(cat.content_recipe, "gutenberg-work");
-        assert!(cat
-            .download_url_template
-            .contains("{id}"));
+        assert!(cat.download_url_template.contains("{id}"));
         assert_eq!(cat.ingest_estimate_wpm, Some(8000));
     }
 
@@ -2237,7 +2220,10 @@ mode = "any"
         assert_eq!(r.filters.len(), 2);
         assert_eq!(r.filter_mode.mode, ComposeMode::Any);
         match &r.filters[0] {
-            FilterConfig::PageviewRank { rank_file, max_rank } => {
+            FilterConfig::PageviewRank {
+                rank_file,
+                max_rank,
+            } => {
                 assert_eq!(rank_file, "@bundled:pageview_ranks_202311");
                 assert_eq!(*max_rank, 100_000);
             }
@@ -2363,12 +2349,12 @@ type = "paragraph"
         ];
         let recipes = builtin_recipes();
         for (recipe, expected_id) in recipes.iter().zip(expected_ids.iter()) {
-            assert_eq!(
-                &recipe.corpus.id, expected_id,
-                "unexpected id for recipe"
-            );
+            assert_eq!(&recipe.corpus.id, expected_id, "unexpected id for recipe");
             assert!(!recipe.corpus.id.is_empty(), "recipe id must not be empty");
-            assert!(!recipe.corpus.name.is_empty(), "recipe name must not be empty");
+            assert!(
+                !recipe.corpus.name.is_empty(),
+                "recipe name must not be empty"
+            );
         }
     }
 
@@ -2476,10 +2462,7 @@ type = "paragraph"
     #[test]
     fn sep_recipe_size_estimate_matches_huggingface_dataset() {
         let recipes = builtin_recipes();
-        let sep = recipes
-            .iter()
-            .find(|r| r.corpus.id == "sep")
-            .unwrap();
+        let sep = recipes.iter().find(|r| r.corpus.id == "sep").unwrap();
         // The HuggingFace parquet is roughly 1–2 GB compressed and
         // expands to several GB indexed once embeddings + claims are
         // included. The old 0.5/1.5 estimates were wildly wrong.
@@ -2566,7 +2549,9 @@ type = "paragraph"
 
         // structured_wikipedia was removed in favour of the single wikipedia recipe.
         assert!(
-            recipes.iter().all(|r| r.corpus.id != "structured_wikipedia"),
+            recipes
+                .iter()
+                .all(|r| r.corpus.id != "structured_wikipedia"),
             "structured_wikipedia recipe should have been removed"
         );
 
@@ -2591,12 +2576,21 @@ type = "paragraph"
         // time-to-grounded over atlas depth; users who promote to Full
         // can flip it on. The enrichment block is still present so the
         // settings/UX layer can preview the eventual config.
-        let enrichment = wp.enrichment.as_ref().expect("wikipedia must have enrichment block");
-        assert!(!enrichment.enabled, "Core must ship with enrichment disabled");
+        let enrichment = wp
+            .enrichment
+            .as_ref()
+            .expect("wikipedia must have enrichment block");
+        assert!(
+            !enrichment.enabled,
+            "Core must ship with enrichment disabled"
+        );
         assert_eq!(enrichment.enrichment_type, "field_model");
         assert_eq!(enrichment.domain.as_deref(), Some("multi"));
 
-        let update = wp.update.as_ref().expect("wikipedia must have update config");
+        let update = wp
+            .update
+            .as_ref()
+            .expect("wikipedia must have update config");
         assert!(update.auto_update);
         assert!(!update.manifest_url.is_empty());
 
@@ -2646,8 +2640,14 @@ type = "paragraph"
             other => panic!("expected Parquet, got {other:?}"),
         }
         // Layer 0 is intentionally unfiltered and unenriched.
-        assert!(simple.filters.is_empty(), "Simple English should not have filters");
-        let enrichment = simple.enrichment.as_ref().expect("enrichment block present");
+        assert!(
+            simple.filters.is_empty(),
+            "Simple English should not have filters"
+        );
+        let enrichment = simple
+            .enrichment
+            .as_ref()
+            .expect("enrichment block present");
         assert!(!enrichment.enabled);
     }
 
@@ -2754,7 +2754,10 @@ type = "paragraph"
         // Engineering enrichment domain declared (even if disabled).
         let enrichment = r.enrichment.as_ref().expect("enrichment block declared");
         assert_eq!(enrichment.domain.as_deref(), Some("engineering"));
-        assert!(!enrichment.enabled, "MVP keeps enrichment off until prompts land");
+        assert!(
+            !enrichment.enabled,
+            "MVP keeps enrichment off until prompts land"
+        );
     }
 
     /// The breadth/reference recipe stays simple: HuggingFace parquet
@@ -2767,9 +2770,15 @@ type = "paragraph"
             .iter()
             .find(|r| r.corpus.id == "stackexchange")
             .expect("recipe present");
-        assert!(matches!(r.acquire, AcquirerConfig::HuggingFaceDataset { .. }));
+        assert!(matches!(
+            r.acquire,
+            AcquirerConfig::HuggingFaceDataset { .. }
+        ));
         assert!(matches!(r.extract, ExtractorConfig::Parquet { .. }));
-        assert!(r.filters.is_empty(), "breadth layer takes the dataset as-is");
+        assert!(
+            r.filters.is_empty(),
+            "breadth layer takes the dataset as-is"
+        );
         assert!(
             r.enrichment.as_ref().map(|e| !e.enabled).unwrap_or(true),
             "breadth layer must not enable enrichment"
@@ -2790,8 +2799,8 @@ type = "paragraph"
         // the desktop picker can group them under the Core row instead
         // of rendering them as separate top-level entries.
         for id in ["wikipedia-simple", "wikipedia-newsworthy"] {
-            let toml = bundled_recipe_toml(id)
-                .unwrap_or_else(|| panic!("{id} must be a bundled recipe"));
+            let toml =
+                bundled_recipe_toml(id).unwrap_or_else(|| panic!("{id} must be a bundled recipe"));
             let r = Recipe::from_toml(toml)
                 .unwrap_or_else(|e| panic!("{id} recipe.toml must parse: {e}"));
             assert_eq!(
@@ -2819,8 +2828,7 @@ type = "paragraph"
         // parse the bundled TOML directly.
         let toml = bundled_recipe_toml("wikipedia-newsworthy")
             .expect("wikipedia-newsworthy must be a bundled recipe");
-        let r = Recipe::from_toml(toml)
-            .expect("wikipedia-newsworthy recipe.toml must parse");
+        let r = Recipe::from_toml(toml).expect("wikipedia-newsworthy recipe.toml must parse");
         let update = r
             .update
             .as_ref()
@@ -2849,10 +2857,7 @@ type = "paragraph"
             .iter()
             .find(|r| r.corpus.id == "wikipedia")
             .expect("wikipedia recipe must exist");
-        let driven = r
-            .update
-            .as_ref()
-            .is_some_and(|u| u.has_external_driver());
+        let driven = r.update.as_ref().is_some_and(|u| u.has_external_driver());
         assert!(
             !driven,
             "standard ingest recipes must not declare an external ingest driver"
@@ -2995,7 +3000,9 @@ type = "paragraph"
                 assert_eq!(requests[0].for_each, vec!["entities", "form_types"]);
                 assert_eq!(requests[0].method, HttpMethod::Get);
                 match pagination.expect("pagination present") {
-                    PaginationStrategy::Offset { param, page_size, .. } => {
+                    PaginationStrategy::Offset {
+                        param, page_size, ..
+                    } => {
                         assert_eq!(param, "start");
                         assert_eq!(page_size, 100);
                     }
@@ -3027,8 +3034,8 @@ type = "paragraph"
     fn federal_register_presidential_recipe_shape() {
         let toml = bundled_recipe_toml("federal-register-presidential")
             .expect("federal-register-presidential must be a bundled recipe");
-        let r = Recipe::from_toml(toml)
-            .expect("federal-register-presidential recipe.toml must parse");
+        let r =
+            Recipe::from_toml(toml).expect("federal-register-presidential recipe.toml must parse");
 
         assert_eq!(r.corpus.id, "federal-register-presidential");
 
@@ -3057,8 +3064,7 @@ type = "paragraph"
                 );
                 assert!(
                     requests.iter().any(|t| {
-                        t.url.contains("type%5D%5B%5D=RULE")
-                            && t.url.contains("significant%5D=1")
+                        t.url.contains("type%5D%5B%5D=RULE") && t.url.contains("significant%5D=1")
                     }),
                     "one request must filter to significant Final Rules"
                 );
@@ -3094,9 +3100,18 @@ type = "paragraph"
             "expected html extractor; raw_text_url's HTML envelope strips cleanly"
         );
         match &r.chunk {
-            ChunkerConfig::Paragraph { max_chars, overlap_chars } => {
-                assert!(*max_chars >= 1024, "paragraph max_chars should leave headroom for legal prose");
-                assert!(*overlap_chars > 0, "paragraph chunker should overlap for citation continuity");
+            ChunkerConfig::Paragraph {
+                max_chars,
+                overlap_chars,
+            } => {
+                assert!(
+                    *max_chars >= 1024,
+                    "paragraph max_chars should leave headroom for legal prose"
+                );
+                assert!(
+                    *overlap_chars > 0,
+                    "paragraph chunker should overlap for citation continuity"
+                );
             }
             other => panic!("expected Paragraph chunker, got {other:?}"),
         }
@@ -3115,10 +3130,7 @@ type = "paragraph"
         // Parameters: install-time year list. Each request template
         // cross-products over years via for_each so each API query
         // stays under FedReg's 2,000-result-per-query ceiling.
-        let year = r
-            .parameters
-            .get("year")
-            .expect("year parameter declared");
+        let year = r.parameters.get("year").expect("year parameter declared");
         assert_eq!(year.kind, ParameterKind::List);
         assert!(year.default.is_some(), "year should have a default list");
         if let Some(toml::Value::Array(items)) = &year.default {
@@ -3171,10 +3183,8 @@ type = "paragraph"
     /// flips enrichment on by default would all fail here.
     #[test]
     fn us_code_recipe_shape() {
-        let toml = bundled_recipe_toml("us-code")
-            .expect("us-code must be a bundled recipe");
-        let r = Recipe::from_toml(toml)
-            .expect("us-code recipe.toml must parse");
+        let toml = bundled_recipe_toml("us-code").expect("us-code must be a bundled recipe");
+        let r = Recipe::from_toml(toml).expect("us-code recipe.toml must parse");
 
         assert_eq!(r.corpus.id, "us-code");
 
@@ -3198,7 +3208,10 @@ type = "paragraph"
                     urls.iter().any(|u| u.contains("title26")),
                     "Title 26 (Internal Revenue Code) must be in the URL list"
                 );
-                assert!(*resume, "bulk_download should resume to survive partial downloads");
+                assert!(
+                    *resume,
+                    "bulk_download should resume to survive partial downloads"
+                );
             }
             other => panic!("expected BulkDownload acquirer, got {other:?}"),
         }
@@ -3206,7 +3219,10 @@ type = "paragraph"
         // Extractor: xml_sections matching USLM <section> by local
         // name with `identifier` as title.
         match &r.extract {
-            ExtractorConfig::XmlSections { element, title_attr } => {
+            ExtractorConfig::XmlSections {
+                element,
+                title_attr,
+            } => {
                 assert_eq!(element, "section");
                 assert_eq!(title_attr.as_deref(), Some("identifier"));
             }
@@ -3233,7 +3249,10 @@ type = "paragraph"
         assert!(year.default.is_some(), "year must have a default edition");
 
         // No [prebuilt] yet.
-        assert!(r.prebuilt.is_none(), "no [prebuilt] until the first build is published");
+        assert!(
+            r.prebuilt.is_none(),
+            "no [prebuilt] until the first build is published"
+        );
     }
 
     /// olc-opinions + scotus-opinions both ride on CourtListener.
@@ -3248,10 +3267,8 @@ type = "paragraph"
             ("olc-opinions", "cluster__docket__court=olc"),
             ("scotus-opinions", "cluster__docket__court=scotus"),
         ] {
-            let toml =
-                bundled_recipe_toml(id).unwrap_or_else(|| panic!("{id} is bundled"));
-            let r = Recipe::from_toml(toml)
-                .unwrap_or_else(|e| panic!("{id} recipe parses: {e}"));
+            let toml = bundled_recipe_toml(id).unwrap_or_else(|| panic!("{id} is bundled"));
+            let r = Recipe::from_toml(toml).unwrap_or_else(|e| panic!("{id} recipe parses: {e}"));
 
             assert_eq!(r.corpus.id, id);
 
@@ -3445,7 +3462,10 @@ type = "sentence"
         let err = r.resolve_parameters(&provided).unwrap_err();
         let msg = format!("{err}");
         assert!(msg.contains("entites"), "should mention typo: {msg}");
-        assert!(msg.contains("entities"), "should suggest declared param: {msg}");
+        assert!(
+            msg.contains("entities"),
+            "should suggest declared param: {msg}"
+        );
     }
 
     #[test]
@@ -3554,11 +3574,7 @@ type = "sentence"
             ParameterValue::List(items) => {
                 assert_eq!(
                     items,
-                    &vec![
-                        "NVDA".to_string(),
-                        "MSFT".into(),
-                        "GOOGL".into(),
-                    ]
+                    &vec!["NVDA".to_string(), "MSFT".into(), "GOOGL".into(),]
                 );
             }
             other => panic!("expected List, got {other:?}"),
@@ -3652,18 +3668,34 @@ comparison = "greater_than"
 
         assert_eq!(enr.patterns.len(), 3);
         match &enr.patterns[0] {
-            PatternDecl::CircularFlow { name, min_entities, edge_types, .. } => {
+            PatternDecl::CircularFlow {
+                name,
+                min_entities,
+                edge_types,
+                ..
+            } => {
                 assert_eq!(name, "money_cycles");
                 assert_eq!(*min_entities, 3);
-                assert_eq!(edge_types, &vec!["revenue".to_string(), "investment".into()]);
+                assert_eq!(
+                    edge_types,
+                    &vec!["revenue".to_string(), "investment".into()]
+                );
             }
             other => panic!("expected CircularFlow, got {other:?}"),
         }
         match &enr.patterns[1] {
-            PatternDecl::RoleOverlap { name, entity_roles, .. } => {
+            PatternDecl::RoleOverlap {
+                name, entity_roles, ..
+            } => {
                 assert_eq!(name, "invest_in_customer");
-                assert_eq!(entity_roles.get("investor").map(String::as_str), Some("investment.from"));
-                assert_eq!(entity_roles.get("customer").map(String::as_str), Some("revenue.to"));
+                assert_eq!(
+                    entity_roles.get("investor").map(String::as_str),
+                    Some("investment.from")
+                );
+                assert_eq!(
+                    entity_roles.get("customer").map(String::as_str),
+                    Some("revenue.to")
+                );
             }
             other => panic!("expected RoleOverlap, got {other:?}"),
         }
@@ -3697,9 +3729,9 @@ type = "cursor"
 param = "after"
 response_path = "$.next_cursor"
 "#,
-                Box::new(|p: PaginationStrategy| {
-                    matches!(p, PaginationStrategy::Cursor { ref param, .. } if param == "after")
-                }) as Box<dyn Fn(PaginationStrategy) -> bool>,
+                Box::new(
+                    |p: PaginationStrategy| matches!(p, PaginationStrategy::Cursor { ref param, .. } if param == "after"),
+                ) as Box<dyn Fn(PaginationStrategy) -> bool>,
             ),
             (
                 r#"
@@ -3715,9 +3747,9 @@ response_path = "$.next"
 type = "page_number"
 end = 5
 "#,
-                Box::new(|p| {
-                    matches!(p, PaginationStrategy::PageNumber { start, end, .. } if start == 1 && end == 5)
-                }),
+                Box::new(
+                    |p| matches!(p, PaginationStrategy::PageNumber { start, end, .. } if start == 1 && end == 5),
+                ),
             ),
         ] {
             let toml_str = format!(

@@ -136,8 +136,8 @@ pub struct Expected {
 /// to load M files" so an author iterating on a single scenario
 /// gets a useful signal even when a sibling file is malformed.
 pub fn load_all(dir: &Path) -> Result<Vec<Scenario>, String> {
-    let entries = std::fs::read_dir(dir)
-        .map_err(|e| format!("read scenarios dir {}: {e}", dir.display()))?;
+    let entries =
+        std::fs::read_dir(dir).map_err(|e| format!("read scenarios dir {}: {e}", dir.display()))?;
 
     let mut scenarios: Vec<Scenario> = Vec::new();
     let mut errors: Vec<String> = Vec::new();
@@ -164,10 +164,9 @@ pub fn load_all(dir: &Path) -> Result<Vec<Scenario>, String> {
 }
 
 pub fn load_one(path: &Path) -> Result<Scenario, String> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|e| format!("read {}: {e}", path.display()))?;
-    let mut scenario: Scenario =
-        toml::from_str(&content).map_err(|e| format!("parse: {e}"))?;
+    let content =
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let mut scenario: Scenario = toml::from_str(&content).map_err(|e| format!("parse: {e}"))?;
     scenario.source_path = path.to_path_buf();
     validate(&scenario)?;
     Ok(scenario)

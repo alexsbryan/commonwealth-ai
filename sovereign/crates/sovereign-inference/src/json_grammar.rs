@@ -116,10 +116,7 @@ pub fn schema_to_gbnf(schema: &Value) -> Result<String, SchemaError> {
         "string".into(),
         r#""\"" ([^"\\\x7F\x00-\x1F] | "\\" (["\\bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F]))* "\"""#.into(),
     );
-    emitter.add_rule(
-        "integer".into(),
-        r#""-"? ("0" | [1-9] [0-9]*)"#.into(),
-    );
+    emitter.add_rule("integer".into(), r#""-"? ("0" | [1-9] [0-9]*)"#.into());
     emitter.add_rule(
         "number".into(),
         r#""-"? ("0" | [1-9] [0-9]*) ("." [0-9]+)? ([eE] [-+]? [0-9]+)?"#.into(),
@@ -255,9 +252,7 @@ impl Emitter {
                 let alts: Vec<String> = arr
                     .iter()
                     .enumerate()
-                    .map(|(i, sub)| {
-                        self.compile_schema(sub, &format!("{pointer}/{key}/{i}"))
-                    })
+                    .map(|(i, sub)| self.compile_schema(sub, &format!("{pointer}/{key}/{i}")))
                     .collect::<Result<_, _>>()?;
                 return Ok(format!("({})", alts.join(" | ")));
             }
@@ -278,9 +273,7 @@ impl Emitter {
             return Ok(format!("({})", alts.join(" | ")));
         }
 
-        let ty = type_field
-            .and_then(|v| v.as_str())
-            .unwrap_or("any");
+        let ty = type_field.and_then(|v| v.as_str()).unwrap_or("any");
 
         match ty {
             "object" => self.compile_object(obj, pointer),
@@ -309,7 +302,9 @@ impl Emitter {
             })?;
 
         if !self.def_name_map.contains_key(stripped) {
-            return Err(SchemaError::UnresolvedRef { reference: r.into() });
+            return Err(SchemaError::UnresolvedRef {
+                reference: r.into(),
+            });
         }
         Ok(self.def_rule_name(stripped))
     }
@@ -357,10 +352,8 @@ impl Emitter {
         // ordering and authors structure the schema in the order
         // they want the model to think about fields.
         for (prop_name, prop_schema) in &props_map {
-            let value_rule = self.compile_schema(
-                prop_schema,
-                &format!("{pointer}/properties/{prop_name}"),
-            )?;
+            let value_rule =
+                self.compile_schema(prop_schema, &format!("{pointer}/properties/{prop_name}"))?;
             let pair = format!(
                 r#""\"{}\"" ws ":" ws {} ws"#,
                 escape_for_grammar_literal(prop_name),
@@ -409,7 +402,9 @@ impl Emitter {
             if !required_pairs.is_empty() || !optional_pairs.is_empty() {
                 parts.push(r#"("," ws string ws ":" ws value ws)*"#.into());
             } else {
-                parts.push(r#"(string ws ":" ws value ws ("," ws string ws ":" ws value ws)*)?"#.into());
+                parts.push(
+                    r#"(string ws ":" ws value ws ("," ws string ws ":" ws value ws)*)?"#.into(),
+                );
             }
         }
         parts.push(r#""}""#.into());
@@ -443,7 +438,10 @@ impl Emitter {
         ))
     }
 
-    fn compile_string(&mut self, obj: &serde_json::Map<String, Value>) -> Result<String, SchemaError> {
+    fn compile_string(
+        &mut self,
+        obj: &serde_json::Map<String, Value>,
+    ) -> Result<String, SchemaError> {
         if let Some(arr) = obj.get("enum").and_then(|v| v.as_array()) {
             let mut alts: Vec<String> = Vec::new();
             for v in arr {
@@ -596,8 +594,7 @@ mod tests {
         assert!(r.contains_key("def-question-sketch"));
         // The root rule must reference the def's rule name (not
         // inline its body) so the grammar stays compact.
-        assert!(r["root"].contains("def-question-sketch")
-                || g.contains("def-question-sketch"));
+        assert!(r["root"].contains("def-question-sketch") || g.contains("def-question-sketch"));
     }
 
     #[test]

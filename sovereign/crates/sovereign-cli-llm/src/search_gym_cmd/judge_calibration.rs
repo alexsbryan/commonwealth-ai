@@ -71,10 +71,10 @@ pub struct CaseBank {
 
 impl CaseBank {
     pub fn load(path: &Path) -> Result<Self, String> {
-        let body = std::fs::read_to_string(path)
-            .map_err(|e| format!("read {}: {e}", path.display()))?;
-        let bank: CaseBank = toml::from_str(&body)
-            .map_err(|e| format!("parse {}: {e}", path.display()))?;
+        let body =
+            std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+        let bank: CaseBank =
+            toml::from_str(&body).map_err(|e| format!("parse {}: {e}", path.display()))?;
         // Validate every case's ground_truth is PASS or FAIL.
         // Typos here would silently break the gate — fail loud.
         for c in &bank.cases {
@@ -191,8 +191,7 @@ pub async fn calibrate(
         if !passes {
             all_categories_pass = false;
         }
-        let disagreements: Vec<CaseOutcome> =
-            outcomes.into_iter().filter(|o| !o.agreed).collect();
+        let disagreements: Vec<CaseOutcome> = outcomes.into_iter().filter(|o| !o.agreed).collect();
 
         total += cat_total;
         total_agreements += agreements;
@@ -436,11 +435,7 @@ ground_truth_rationale = "fixture"
         struct OneInEightJudge;
         #[async_trait]
         impl Judge for OneInEightJudge {
-            async fn judge(
-                &self,
-                assertion: &str,
-                _subject: &str,
-            ) -> Result<Verdict, String> {
+            async fn judge(&self, assertion: &str, _subject: &str) -> Result<Verdict, String> {
                 if assertion == "DECLINE_KEY_0" {
                     Ok(Verdict {
                         passes: true,

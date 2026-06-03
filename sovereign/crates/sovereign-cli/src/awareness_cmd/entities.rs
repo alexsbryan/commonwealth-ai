@@ -121,12 +121,7 @@ pub(super) async fn cmd_entities(args: &[String]) -> i32 {
                 .get(e.id.as_str())
                 .cloned()
                 .unwrap_or_default();
-            all_entities.push(EntityRow::from_entity(
-                e,
-                kind,
-                view_id.to_string(),
-                chunks,
-            ));
+            all_entities.push(EntityRow::from_entity(e, kind, view_id.to_string(), chunks));
         }
     }
 
@@ -298,7 +293,11 @@ impl EntityRow {
             description: e.description.clone(),
             source_view,
             chunks,
-            participant_ids: e.participants.iter().map(|a| a.as_str().to_string()).collect(),
+            participant_ids: e
+                .participants
+                .iter()
+                .map(|a| a.as_str().to_string())
+                .collect(),
             participants: Vec::new(),
             commitments: 0,
             follow_ups: 0,
@@ -374,7 +373,12 @@ fn emit_text(rows: &[EntityRow], seen: &[std::path::PathBuf], missing: &[std::pa
         println!();
         println!(
             "{}{} entit{} ({}):",
-            kind_label.chars().next().unwrap().to_uppercase().collect::<String>(),
+            kind_label
+                .chars()
+                .next()
+                .unwrap()
+                .to_uppercase()
+                .collect::<String>(),
             &kind_label[1..],
             plural,
             group.len()
@@ -386,7 +390,10 @@ fn emit_text(rows: &[EntityRow], seen: &[std::path::PathBuf], missing: &[std::pa
 
     let total = rows.len();
     let person_n = rows.iter().filter(|r| r.kind == EntityKind::Person).count();
-    let org_n = rows.iter().filter(|r| r.kind == EntityKind::Organization).count();
+    let org_n = rows
+        .iter()
+        .filter(|r| r.kind == EntityKind::Organization)
+        .count();
     let init_n = rows
         .iter()
         .filter(|r| r.kind == EntityKind::Initiative)
@@ -477,21 +484,13 @@ fn print_row(r: &EntityRow) {
         } else {
             String::new()
         };
-        println!(
-            "    Source chunks: {}{}",
-            preview.join(", "),
-            suffix
-        );
+        println!("    Source chunks: {}{}", preview.join(", "), suffix);
     }
     println!("    Source view: {}", r.source_view);
     println!();
 }
 
-fn emit_json(
-    rows: &[EntityRow],
-    seen: &[std::path::PathBuf],
-    missing: &[std::path::PathBuf],
-) {
+fn emit_json(rows: &[EntityRow], seen: &[std::path::PathBuf], missing: &[std::path::PathBuf]) {
     let entities: Vec<serde_json::Value> = rows
         .iter()
         .map(|r| {
@@ -566,10 +565,10 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-                    provenance: Default::default(),
-                    concept_kind: None,
-}
-}
+            provenance: Default::default(),
+            concept_kind: None,
+        }
+    }
 
     fn involves(idx: usize, target: &AtomId, chunk_id: &str) -> Edge {
         Edge {

@@ -57,9 +57,7 @@ impl<'a> MakeWriter<'a> for CaptureWriter {
     }
 }
 
-fn capture_subscriber(
-    buf: Arc<Mutex<Vec<u8>>>,
-) -> tracing::subscriber::DefaultGuard {
+fn capture_subscriber(buf: Arc<Mutex<Vec<u8>>>) -> tracing::subscriber::DefaultGuard {
     // `set_default` scopes the subscriber to the current thread.
     // This test stays single-threaded (no `#[tokio::test]`) so the
     // guard reliably catches everything emitted by the lines below.
@@ -89,13 +87,7 @@ fn fresh_app_state() -> AppState {
     let self_id = NodeId::from_u128(0xDEAD_BEEF_CAFE_F00D);
     let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
     let app_registry = Arc::new(AppRegistry::new());
-    AppState::new_with_platform_and_engine(
-        self_id,
-        empty_mesh(),
-        mesh_store,
-        app_registry,
-        None,
-    )
+    AppState::new_with_platform_and_engine(self_id, empty_mesh(), mesh_store, app_registry, None)
 }
 
 fn captured(buf: &Arc<Mutex<Vec<u8>>>) -> String {

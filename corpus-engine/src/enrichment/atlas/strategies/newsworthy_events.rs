@@ -129,12 +129,8 @@ pub fn extract_atoms_for_portal_chunks(
         // section_id = source_doc_id so date-scoped retrieval reads
         // SectionPosition.section_id directly without parsing the
         // chunk metadata. Same value as the doc_id grouping key.
-        let event_id = AtomId::event_content_hash(
-            description,
-            &event_type,
-            source_doc_id,
-            corpus_id,
-        );
+        let event_id =
+            AtomId::event_content_hash(description, &event_type, source_doc_id, corpus_id);
 
         // Pull wikilinks out of the chunk's metadata. Missing or
         // malformed metadata isn't fatal — the bullet still becomes
@@ -186,11 +182,9 @@ pub fn extract_atoms_for_portal_chunks(
     // references them).
     let mut target_to_atom: HashMap<String, AtomId> =
         HashMap::with_capacity(placeholder_seeds.len());
-    let mut placeholder_atoms: Vec<AtomEnvelope> =
-        Vec::with_capacity(placeholder_seeds.len());
+    let mut placeholder_atoms: Vec<AtomEnvelope> = Vec::with_capacity(placeholder_seeds.len());
     for (target, (first_chunk_id, link_text)) in &placeholder_seeds {
-        let atom_id =
-            AtomId::entity_content_hash(target, &entity_type, corpus_id);
+        let atom_id = AtomId::entity_content_hash(target, &entity_type, corpus_id);
         target_to_atom.insert(target.clone(), atom_id.clone());
         placeholder_atoms.push(AtomEnvelope::Entity(Entity {
             id: atom_id,
@@ -376,7 +370,10 @@ mod tests {
             .expect("placeholders group present");
         assert_eq!(placeholders.1.len(), 2);
         assert_eq!(delta.edges.len(), 2);
-        assert!(delta.edges.iter().all(|e| e.edge_type == EdgeType::Involves));
+        assert!(delta
+            .edges
+            .iter()
+            .all(|e| e.edge_type == EdgeType::Involves));
     }
 
     #[test]

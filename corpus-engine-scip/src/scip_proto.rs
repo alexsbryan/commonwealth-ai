@@ -389,8 +389,10 @@ pub fn kind_to_str(kind: i32) -> &'static str {
     use symbol_information::Kind;
     match Kind::try_from(kind) {
         Ok(Kind::Function) | Ok(Kind::StaticMethod) => "function",
-        Ok(Kind::Method) | Ok(Kind::AbstractMethod)
-        | Ok(Kind::TraitMethod) | Ok(Kind::ProtocolMethod)
+        Ok(Kind::Method)
+        | Ok(Kind::AbstractMethod)
+        | Ok(Kind::TraitMethod)
+        | Ok(Kind::ProtocolMethod)
         | Ok(Kind::PureVirtualMethod) => "method",
         Ok(Kind::Class) | Ok(Kind::SingletonClass) => "class",
         Ok(Kind::Struct) => "struct",
@@ -441,12 +443,18 @@ mod tests {
 
     #[test]
     fn kind_to_str_maps_function() {
-        assert_eq!(kind_to_str(symbol_information::Kind::Function as i32), "function");
+        assert_eq!(
+            kind_to_str(symbol_information::Kind::Function as i32),
+            "function"
+        );
     }
 
     #[test]
     fn kind_to_str_maps_method() {
-        assert_eq!(kind_to_str(symbol_information::Kind::Method as i32), "method");
+        assert_eq!(
+            kind_to_str(symbol_information::Kind::Method as i32),
+            "method"
+        );
     }
 
     #[test]

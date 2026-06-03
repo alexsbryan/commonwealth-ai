@@ -34,7 +34,9 @@ pub fn cache_key(text: &str, prompt_version: &str, model_id: &str) -> String {
 }
 
 fn cache_path(atlas_dir: &Path, key: &str) -> PathBuf {
-    atlas_dir.join(SECTION_CACHE_DIR).join(format!("{key}.json"))
+    atlas_dir
+        .join(SECTION_CACHE_DIR)
+        .join(format!("{key}.json"))
 }
 
 /// Read cached extraction output. Returns `Ok(None)` on miss (file

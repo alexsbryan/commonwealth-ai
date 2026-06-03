@@ -7,7 +7,9 @@ use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::latency::{LatencyMatrix, LatencyRecord};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_inference::plan::MeshPlan;
-use commonwealth_inference::scheduler::adaptive::{InferenceScheduler, NodeProfile, SchedulerConfig};
+use commonwealth_inference::scheduler::adaptive::{
+    InferenceScheduler, NodeProfile, SchedulerConfig,
+};
 
 use crate::simulated_node::{SimulatedNode, SimulatedNodeBuilder};
 
@@ -130,13 +132,7 @@ impl SimulatedMesh {
     }
 
     /// Write a value into the MeshStore on the given node.
-    pub fn store_set(
-        &self,
-        node_idx: usize,
-        app_id: &str,
-        key: &str,
-        value: &[u8],
-    ) {
+    pub fn store_set(&self, node_idx: usize, app_id: &str, key: &str, value: &[u8]) {
         let origin = self.nodes[node_idx].node_id;
         self.nodes[node_idx]
             .state
@@ -264,7 +260,13 @@ impl SimulatedMesh {
         let versions: Vec<Option<u64>> = self
             .nodes
             .iter()
-            .map(|n| n.state.inner.inference_store.get_mesh_plan().map(|p| p.version))
+            .map(|n| {
+                n.state
+                    .inner
+                    .inference_store
+                    .get_mesh_plan()
+                    .map(|p| p.version)
+            })
             .collect();
 
         if versions.is_empty() {
@@ -289,7 +291,11 @@ pub fn twenty_node_hacker_collective() -> SimulatedMesh {
     // 12 x M3 Pro 36GB — the core workhorses.
     for i in 0..12 {
         let node = SimulatedNodeBuilder::new(100 + i, &format!("m3pro-36-{i}"))
-            .gpu("Apple M3 Pro", 36, commonwealth_core::capabilities::ComputeType::Metal)
+            .gpu(
+                "Apple M3 Pro",
+                36,
+                commonwealth_core::capabilities::ComputeType::Metal,
+            )
             .ram_gb(36);
         mesh.add_node(node);
     }
@@ -297,7 +303,11 @@ pub fn twenty_node_hacker_collective() -> SimulatedMesh {
     // 5 x M3 Pro 18GB — smaller machines.
     for i in 0..5 {
         let node = SimulatedNodeBuilder::new(200 + i, &format!("m3pro-18-{i}"))
-            .gpu("Apple M3 Pro", 18, commonwealth_core::capabilities::ComputeType::Metal)
+            .gpu(
+                "Apple M3 Pro",
+                18,
+                commonwealth_core::capabilities::ComputeType::Metal,
+            )
             .ram_gb(18);
         mesh.add_node(node);
     }
@@ -305,14 +315,22 @@ pub fn twenty_node_hacker_collective() -> SimulatedMesh {
     // 2 x M3 Max 48GB.
     for i in 0..2 {
         let node = SimulatedNodeBuilder::new(300 + i, &format!("m3max-48-{i}"))
-            .gpu("Apple M3 Max", 48, commonwealth_core::capabilities::ComputeType::Metal)
+            .gpu(
+                "Apple M3 Max",
+                48,
+                commonwealth_core::capabilities::ComputeType::Metal,
+            )
             .ram_gb(48);
         mesh.add_node(node);
     }
 
     // 1 x M3 Max 96GB.
     let node = SimulatedNodeBuilder::new(400, "m3max-96")
-        .gpu("Apple M3 Max", 96, commonwealth_core::capabilities::ComputeType::Metal)
+        .gpu(
+            "Apple M3 Max",
+            96,
+            commonwealth_core::capabilities::ComputeType::Metal,
+        )
         .ram_gb(96);
     mesh.add_node(node);
 

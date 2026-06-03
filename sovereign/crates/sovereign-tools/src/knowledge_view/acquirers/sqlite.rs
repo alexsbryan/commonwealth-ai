@@ -123,10 +123,7 @@ pub fn register(engine: &CorpusEngine) {
     engine.register_acquirer("sqlite", acquirer);
 }
 
-async fn acquire(
-    params_blob: serde_json::Value,
-    download_dir: PathBuf,
-) -> Result<PathBuf> {
+async fn acquire(params_blob: serde_json::Value, download_dir: PathBuf) -> Result<PathBuf> {
     let params: SqliteAcquirerParams = serde_json::from_value(params_blob)
         .map_err(|e| Error::Recipe(format!("SqliteAcquirer params invalid: {e}")))?;
 
@@ -138,10 +135,7 @@ async fn acquire(
         .map_err(|e| Error::Recipe(format!("SqliteAcquirer task panicked: {e}")))?
 }
 
-fn write_jsonl_from_sqlite(
-    params: &SqliteAcquirerParams,
-    download_dir: &Path,
-) -> Result<PathBuf> {
+fn write_jsonl_from_sqlite(params: &SqliteAcquirerParams, download_dir: &Path) -> Result<PathBuf> {
     std::fs::create_dir_all(download_dir).map_err(Error::Io)?;
     let db_path = params.resolved_db_path();
     if !db_path.exists() {
@@ -197,16 +191,15 @@ fn write_jsonl_from_sqlite(
         {
             let group_key = row_value_as_string(row, &column_names, group_col)
                 .unwrap_or_else(|| "__null__".to_string());
-            let content = row_value_as_string(row, &column_names, &params.content_column)
-                .unwrap_or_default();
+            let content =
+                row_value_as_string(row, &column_names, &params.content_column).unwrap_or_default();
             let id = row_value_as_string(row, &column_names, &params.id_column)
                 .unwrap_or_else(|| group_key.clone());
             let version = params
                 .version_column
                 .as_deref()
                 .and_then(|col| row_value_as_string(row, &column_names, col));
-            let row_metadata =
-                collect_metadata(row, &column_names, &params.metadata_columns);
+            let row_metadata = collect_metadata(row, &column_names, &params.metadata_columns);
 
             let idx = if let Some(&idx) = seen.get(&group_key) {
                 idx
@@ -240,10 +233,10 @@ fn write_jsonl_from_sqlite(
             .next()
             .map_err(|e| Error::Recipe(format!("SqliteAcquirer: row failed: {e}")))?
         {
-            let content = row_value_as_string(row, &column_names, &params.content_column)
-                .unwrap_or_default();
-            let id = row_value_as_string(row, &column_names, &params.id_column)
-                .ok_or_else(|| {
+            let content =
+                row_value_as_string(row, &column_names, &params.content_column).unwrap_or_default();
+            let id =
+                row_value_as_string(row, &column_names, &params.id_column).ok_or_else(|| {
                     Error::Recipe(format!(
                         "SqliteAcquirer: id column '{}' returned NULL for a row",
                         params.id_column
@@ -253,8 +246,7 @@ fn write_jsonl_from_sqlite(
                 .version_column
                 .as_deref()
                 .and_then(|col| row_value_as_string(row, &column_names, col));
-            let metadata =
-                collect_metadata(row, &column_names, &params.metadata_columns);
+            let metadata = collect_metadata(row, &column_names, &params.metadata_columns);
             write_doc(&mut writer, &id, &content, version.as_deref(), &metadata)?;
         }
     }
@@ -280,11 +272,7 @@ fn require_column(columns: &[String], name: &str) -> Result<()> {
 /// timestamps / floats round-trip as strings. Memories and
 /// conversations only carry text content and text ids, so this is
 /// adequate for v1.
-fn row_value_as_string(
-    row: &rusqlite::Row<'_>,
-    columns: &[String],
-    name: &str,
-) -> Option<String> {
+fn row_value_as_string(row: &rusqlite::Row<'_>, columns: &[String], name: &str) -> Option<String> {
     let idx = columns.iter().position(|c| c == name)?;
     let value: rusqlite::types::Value = row.get(idx).ok()?;
     match value {
@@ -488,7 +476,11 @@ mod tests {
         let out = write_jsonl_from_sqlite(&params, tmp.path()).unwrap();
         let body = std::fs::read_to_string(&out).unwrap();
         let lines: Vec<&str> = body.lines().collect();
-        assert_eq!(lines.len(), 1, "inner-work filtered; one conversation remains");
+        assert_eq!(
+            lines.len(),
+            1,
+            "inner-work filtered; one conversation remains"
+        );
         let parsed: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
         assert_eq!(parsed["id"], "c1");
         let content = parsed["content"].as_str().unwrap();
@@ -544,7 +536,8 @@ mod tests {
 
         let params = SqliteAcquirerParams {
             db_path: db.display().to_string(),
-            query: "SELECT id, kind, content, scope, updated_at AS version FROM notes ORDER BY id".into(),
+            query: "SELECT id, kind, content, scope, updated_at AS version FROM notes ORDER BY id"
+                .into(),
             content_column: "content".into(),
             id_column: "id".into(),
             version_column: Some("version".into()),
@@ -601,8 +594,7 @@ mod tests {
         };
         let out = write_jsonl_from_sqlite(&params, tmp.path()).unwrap();
         let body = std::fs::read_to_string(&out).unwrap();
-        let parsed: serde_json::Value =
-            serde_json::from_str(body.lines().next().unwrap()).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(body.lines().next().unwrap()).unwrap();
         assert_eq!(parsed["kind"], "decision");
         assert!(
             parsed.get("feature_id").is_none(),
@@ -642,8 +634,8 @@ mod tests {
             metadata_columns: vec![],
         };
 
-        let out = write_jsonl_from_sqlite(&params, tmp.path())
-            .expect("empty result must not error");
+        let out =
+            write_jsonl_from_sqlite(&params, tmp.path()).expect("empty result must not error");
         assert!(out.exists(), "JSONL file created even when empty");
         let body = std::fs::read_to_string(&out).unwrap();
         assert_eq!(body, "", "empty result produces empty file");
@@ -672,8 +664,7 @@ mod tests {
 
         let out = write_jsonl_from_sqlite(&params, tmp.path()).unwrap();
         let body = std::fs::read_to_string(&out).unwrap();
-        let first: serde_json::Value =
-            serde_json::from_str(body.lines().next().unwrap()).unwrap();
+        let first: serde_json::Value = serde_json::from_str(body.lines().next().unwrap()).unwrap();
         assert_eq!(first["version"], "100", "version from last_used=100");
     }
 
@@ -700,4 +691,3 @@ mod tests {
         }
     }
 }
-

@@ -41,7 +41,12 @@ impl AssetSubExtractor for XlsxSubExtractor {
         let by_ext = path
             .extension()
             .and_then(|s| s.to_str())
-            .map(|e| matches!(e.to_ascii_lowercase().as_str(), "xlsx" | "xlsm" | "xls" | "xlsb" | "ods"))
+            .map(|e| {
+                matches!(
+                    e.to_ascii_lowercase().as_str(),
+                    "xlsx" | "xlsm" | "xls" | "xlsb" | "ods"
+                )
+            })
             .unwrap_or(false);
         if by_ext {
             return true;
@@ -87,7 +92,13 @@ impl AssetSubExtractor for XlsxSubExtractor {
             let head_sample: Vec<String> = headers
                 .iter()
                 .take(8)
-                .map(|h| if h.is_empty() { "(unnamed)".to_string() } else { h.clone() })
+                .map(|h| {
+                    if h.is_empty() {
+                        "(unnamed)".to_string()
+                    } else {
+                        h.clone()
+                    }
+                })
                 .collect();
             description.push_str(&format!(
                 "Sheet '{sheet_name}': {rows} rows × {cols} cols. Headers: [{}].",
@@ -116,10 +127,8 @@ impl AssetSubExtractor for XlsxSubExtractor {
                     }
                 }
                 if !distinct.is_empty() {
-                    description.push_str(&format!(
-                        " {header} examples: [{}].",
-                        distinct.join(", ")
-                    ));
+                    description
+                        .push_str(&format!(" {header} examples: [{}].", distinct.join(", ")));
                 }
             }
             description.push('\n');
@@ -148,9 +157,7 @@ impl AssetSubExtractor for XlsxSubExtractor {
             description,
             asset_kind: "xlsx".into(),
             tier: ExtractionTier::Structural,
-            mime: Some(
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".into(),
-            ),
+            mime: Some("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".into()),
             parsed_form: parsed_path,
         })
     }
@@ -174,9 +181,7 @@ fn detect_header_row(range: &calamine::Range<Data>) -> usize {
     let (rows, cols) = range.get_size();
     for r in 0..rows.min(15) {
         let string_cells = (0..cols)
-            .filter(|&c| {
-                matches!(range.get((r, c)), Some(Data::String(s)) if !s.trim().is_empty())
-            })
+            .filter(|&c| matches!(range.get((r, c)), Some(Data::String(s)) if !s.trim().is_empty()))
             .count();
         if string_cells >= 3 {
             return r;
@@ -228,8 +233,7 @@ fn build_sheet_record_batch(
     // Schema: "_sheet_row" (string row-index as the join key Phase 4
     // uses) + one Utf8 column per header. The constant-prefix avoids
     // collisions with user-named columns.
-    let mut fields: Vec<Field> =
-        vec![Field::new("_sheet_row", DataType::Utf8, false)];
+    let mut fields: Vec<Field> = vec![Field::new("_sheet_row", DataType::Utf8, false)];
     for (i, h) in headers.iter().enumerate() {
         let name = if h.is_empty() {
             format!("col_{i}")
@@ -257,9 +261,8 @@ fn build_sheet_record_batch(
         arrays.push(Arc::new(StringArray::from(col)));
     }
 
-    let batch = RecordBatch::try_new(schema, arrays).map_err(|e| {
-        Error::Extraction(format!("xlsx: build RecordBatch: {e}"))
-    })?;
+    let batch = RecordBatch::try_new(schema, arrays)
+        .map_err(|e| Error::Extraction(format!("xlsx: build RecordBatch: {e}")))?;
     // The Float64Array import keeps this module honest about the
     // typed-column-future; touch it once so the import doesn't go
     // dead while the path is still mono-schema.
@@ -293,9 +296,8 @@ fn encode_sheets_to_parquet(sheets: &[(String, RecordBatch)]) -> Result<Vec<u8>>
         for col in batch.columns() {
             columns.push(col.clone());
         }
-        let tagged = RecordBatch::try_new(schema, columns).map_err(|e| {
-            Error::Extraction(format!("xlsx: tag-batch: {e}"))
-        })?;
+        let tagged = RecordBatch::try_new(schema, columns)
+            .map_err(|e| Error::Extraction(format!("xlsx: tag-batch: {e}")))?;
         tagged_batches.push(tagged);
     }
 
@@ -337,9 +339,10 @@ fn encode_sheets_to_parquet(sheets: &[(String, RecordBatch)]) -> Result<Vec<u8>>
                 }
             }
         }
-        aligned.push(RecordBatch::try_new(union_schema.clone(), cols).map_err(|e| {
-            Error::Extraction(format!("xlsx: union-align batch: {e}"))
-        })?);
+        aligned.push(
+            RecordBatch::try_new(union_schema.clone(), cols)
+                .map_err(|e| Error::Extraction(format!("xlsx: union-align batch: {e}")))?,
+        );
     }
 
     let buf: Vec<u8> = Vec::new();
@@ -349,9 +352,9 @@ fn encode_sheets_to_parquet(sheets: &[(String, RecordBatch)]) -> Result<Vec<u8>>
         let mut writer = ArrowWriter::try_new(&mut cursor, union_schema.clone(), Some(props))
             .map_err(|e| Error::Extraction(format!("xlsx: open parquet writer: {e}")))?;
         for batch in &aligned {
-            writer.write(batch).map_err(|e| {
-                Error::Extraction(format!("xlsx: write parquet batch: {e}"))
-            })?;
+            writer
+                .write(batch)
+                .map_err(|e| Error::Extraction(format!("xlsx: write parquet batch: {e}")))?;
         }
         writer
             .close()
@@ -456,8 +459,7 @@ mod tests {
         // First-distinct-values preview (cap 3 per header) should
         // include the cell payloads.
         assert!(
-            extraction.description.contains("Dynegy")
-                && extraction.description.contains("El Paso"),
+            extraction.description.contains("Dynegy") && extraction.description.contains("El Paso"),
             "description should preview distinct values; got: {:?}",
             extraction.description
         );
@@ -467,8 +469,7 @@ mod tests {
             .parsed_form
             .as_ref()
             .expect("parsed_form parquet path must be Some for xlsx");
-        let parquet_bytes =
-            std::fs::read(parsed_path).expect("parsed parquet must be readable");
+        let parquet_bytes = std::fs::read(parsed_path).expect("parsed parquet must be readable");
         assert!(!parquet_bytes.is_empty(), "parquet must be non-empty");
         // Magic word: parquet files start with "PAR1".
         assert_eq!(
@@ -496,7 +497,11 @@ mod tests {
         // Encoder prepends `_sheet_name` + `_sheet_row` virtual
         // columns to the user-emitted headers (counterparty / trader
         // / notional) — 2 + 3 = 5.
-        assert_eq!(batch.num_columns(), 5, "_sheet_name + _sheet_row + 3 headers");
+        assert_eq!(
+            batch.num_columns(),
+            5,
+            "_sheet_name + _sheet_row + 3 headers"
+        );
         // Header row is consumed as the schema; body rows (2 trades)
         // land as records.
         assert_eq!(batch.num_rows(), 2);
@@ -507,8 +512,7 @@ mod tests {
         // user-visible cells start at column 1 ("counterparty"
         // header).
         let schema = batch.schema();
-        let col_names: Vec<&str> =
-            schema.fields().iter().map(|f| f.name().as_str()).collect();
+        let col_names: Vec<&str> = schema.fields().iter().map(|f| f.name().as_str()).collect();
         assert!(
             col_names.contains(&"counterparty"),
             "counterparty column must survive round-trip; got {col_names:?}"
@@ -525,9 +529,7 @@ mod tests {
         // feeds column-aware the real typed columns (counterparty → Org,
         // trader → Person).
         use crate::enrichment::pipeline::atlas::EntityType;
-        use crate::extractors::column_aware::{
-            extract_entities_from_parquet, ColumnAwareConfig,
-        };
+        use crate::extractors::column_aware::{extract_entities_from_parquet, ColumnAwareConfig};
         use rust_xlsxwriter::Workbook;
 
         let mut workbook = Workbook::new();
@@ -572,12 +574,9 @@ mod tests {
         );
 
         let parsed = extraction.parsed_form.expect("parquet parsed_form");
-        let entities = extract_entities_from_parquet(
-            &parsed,
-            "exposure.xlsx",
-            &ColumnAwareConfig::default(),
-        )
-        .expect("column_aware extraction");
+        let entities =
+            extract_entities_from_parquet(&parsed, "exposure.xlsx", &ColumnAwareConfig::default())
+                .expect("column_aware extraction");
 
         let names: Vec<&str> = entities.iter().map(|e| e.canonical_name.as_str()).collect();
         assert!(
@@ -588,7 +587,10 @@ mod tests {
             names.contains(&"Jeff Skilling") && names.contains(&"Andy Fastow"),
             "trader column must yield person entities through the banner; got {names:?}"
         );
-        let dynegy = entities.iter().find(|e| e.canonical_name == "Dynegy").unwrap();
+        let dynegy = entities
+            .iter()
+            .find(|e| e.canonical_name == "Dynegy")
+            .unwrap();
         assert!(matches!(dynegy.entity_type, EntityType::Institution));
         let jeff = entities
             .iter()
@@ -603,9 +605,7 @@ mod tests {
         // column. The old bundler took sheet 1's schema as canonical and
         // dropped sheet 2 entirely; the union schema keeps both, so
         // column-aware sees the counterparty AND the employee column.
-        use crate::extractors::column_aware::{
-            extract_entities_from_parquet, ColumnAwareConfig,
-        };
+        use crate::extractors::column_aware::{extract_entities_from_parquet, ColumnAwareConfig};
         use rust_xlsxwriter::Workbook;
 
         let mut wb = Workbook::new();
@@ -628,15 +628,17 @@ mod tests {
         h.update(&bytes);
         let sha: String = h.finalize().iter().map(|b| format!("{b:02x}")).collect();
         let ext = XlsxSubExtractor
-            .extract(&std::path::PathBuf::from("/tmp/multi.xlsx"), &bytes, &sha, &store)
+            .extract(
+                &std::path::PathBuf::from("/tmp/multi.xlsx"),
+                &bytes,
+                &sha,
+                &store,
+            )
             .unwrap();
         let parsed = ext.parsed_form.expect("parsed_form");
-        let ents = extract_entities_from_parquet(
-            &parsed,
-            "multi.xlsx",
-            &ColumnAwareConfig::default(),
-        )
-        .unwrap();
+        let ents =
+            extract_entities_from_parquet(&parsed, "multi.xlsx", &ColumnAwareConfig::default())
+                .unwrap();
         let names: Vec<&str> = ents.iter().map(|e| e.canonical_name.as_str()).collect();
         assert!(
             names.contains(&"Dynegy"),

@@ -99,7 +99,9 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                 .map(|m| m.node_id)
                 .collect()
         };
-        let new_peer_appeared = current_peers.iter().any(|id| !last_known_peers.contains(id));
+        let new_peer_appeared = current_peers
+            .iter()
+            .any(|id| !last_known_peers.contains(id));
         last_known_peers = current_peers.clone();
 
         // We can't call `in_progress_ingestions()` until we have an
@@ -165,9 +167,8 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         // because the merge already consumed the partition. Surfaced
         // by conversations-personal install 2026-05-17 — 180 chunks
         // embedded, zero landed.
-        let active_for_recovery: HashSet<String> = {
-            state.inner.active_ingests.read().await.clone()
-        };
+        let active_for_recovery: HashSet<String> =
+            { state.inner.active_ingests.read().await.clone() };
         let stranded = engine.corpora_with_stranded_partitions();
         for corpus_id in &stranded {
             if active_for_recovery.contains(corpus_id) {
@@ -186,9 +187,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             // of merging locally. Avoids the case where two peers
             // each have a partial canonical and both keep merging
             // their partial state forever.
-            if let Some(lead) =
-                find_best_peer_canonical(&state, corpus_id).await
-            {
+            if let Some(lead) = find_best_peer_canonical(&state, corpus_id).await {
                 tracing::info!(
                     corpus = %corpus_id,
                     candidate_urls = ?lead.candidate_urls,
@@ -258,7 +257,10 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             )
             .await;
             match outcome {
-                commonwealth_api::auto_recover::RecoveryOutcome::Recovered { chunks, shards_covered } => {
+                commonwealth_api::auto_recover::RecoveryOutcome::Recovered {
+                    chunks,
+                    shards_covered,
+                } => {
                     tracing::info!(
                         corpus = %corpus_id,
                         chunks,
@@ -276,9 +278,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                         corpus_id,
                     );
                 }
-                commonwealth_api::auto_recover::RecoveryOutcome::IncompleteCoverage {
-                    ..
-                } => {
+                commonwealth_api::auto_recover::RecoveryOutcome::IncompleteCoverage { .. } => {
                     // auto_recover already logged the detailed WARN
                     // with covered/total/missing. Stay quiet here so
                     // the 30s tick doesn't spam logs while we wait
@@ -322,8 +322,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         // write).
         publish_local_processed_shards(&state, engine, self_id, &in_progress_vec).await;
 
-        let should_check =
-            first_iteration || new_peer_appeared || new_ingest_appeared;
+        let should_check = first_iteration || new_peer_appeared || new_ingest_appeared;
         first_iteration = false;
 
         if current_peers.is_empty() {
@@ -359,9 +358,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         // Retire cooldown entries for corpora that have since completed.
         triggered.retain(|id, _| in_progress.contains(id));
 
-        let active_ingests: HashSet<String> = {
-            state.inner.active_ingests.read().await.clone()
-        };
+        let active_ingests: HashSet<String> = { state.inner.active_ingests.read().await.clone() };
 
         // Use the ordered Vec form to keep log output stable across
         // ticks — iterating a HashSet shuffles per-run and makes
@@ -374,11 +371,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             // nodes that only receive ingest_partition assignments from a
             // coordinator have neither — they must not attempt a local
             // install, and there is nothing to coordinate from here.
-            let has_local_source = engine
-                .source_manifest(corpus_id)
-                .ok()
-                .flatten()
-                .is_some()
+            let has_local_source = engine.source_manifest(corpus_id).ok().flatten().is_some()
                 || engine.count_jsonl_articles(corpus_id).is_ok();
 
             // Peer-only node: no source data means no collaborate role here.
@@ -405,12 +398,13 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             // logs from 2026-04-21). Running corpus_collaborate first
             // lets `has_active_queue_handoff` below observe the handoff
             // we just registered and cleanly hand ownership to pull_loops.
-            let should_collab = !(active_ingests.contains(corpus_id)
-                && !new_peer_appeared
-                && !new_ingest_appeared)
-                && !(triggered.get(corpus_id).is_some_and(|t| t.elapsed() < COOLDOWN)
-                    && !new_peer_appeared
-                    && !new_ingest_appeared);
+            let should_collab =
+                !(active_ingests.contains(corpus_id) && !new_peer_appeared && !new_ingest_appeared)
+                    && !(triggered
+                        .get(corpus_id)
+                        .is_some_and(|t| t.elapsed() < COOLDOWN)
+                        && !new_peer_appeared
+                        && !new_ingest_appeared);
 
             if should_collab {
                 tracing::info!(
@@ -420,9 +414,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                     "auto_ingest: triggering collaboration"
                 );
 
-                let url = format!(
-                    "http://127.0.0.1:{daemon_port}/internal/corpus/collaborate"
-                );
+                let url = format!("http://127.0.0.1:{daemon_port}/internal/corpus/collaborate");
                 let body = serde_json::json!({ "corpus_id": corpus_id });
                 match client.post(&url).json(&body).send().await {
                     Ok(resp) if resp.status().is_success() => {
@@ -925,9 +917,10 @@ async fn pull_loop(
         // Run the ingest under a corpus-engine CancellationFlag so the
         // ingest loop (which polls it at document/batch boundaries) can
         // stop cleanly when the heartbeat tells us the lease is gone.
-        let engine = state.inner.corpus_engine.as_ref().expect(
-            "pull_loop: corpus_engine must be present — auto_ingest already checks this"
-        );
+        let engine =
+            state.inner.corpus_engine.as_ref().expect(
+                "pull_loop: corpus_engine must be present — auto_ingest already checks this",
+            );
         let engine_cancel: CancellationFlag = engine.cancel_registry().register(&corpus_id);
 
         // Bridge: spawn a watcher that flips the engine's cancel flag
@@ -1179,8 +1172,7 @@ async fn find_best_peer_canonical(
         // is updated by gossip-driven liveness probes.
         if !matches!(
             member.status,
-            commonwealth_core::mesh::NodeStatus::Online
-                | commonwealth_core::mesh::NodeStatus::Busy
+            commonwealth_core::mesh::NodeStatus::Online | commonwealth_core::mesh::NodeStatus::Busy
         ) {
             continue;
         }
@@ -1236,10 +1228,7 @@ async fn find_best_peer_canonical(
             best = Some(match best {
                 None => candidate,
                 Some(prev) => {
-                    let prev_better = match (
-                        prev.coverage_ratio,
-                        candidate.coverage_ratio,
-                    ) {
+                    let prev_better = match (prev.coverage_ratio, candidate.coverage_ratio) {
                         (Some(p), Some(c)) => p >= c,
                         (Some(_), None) => true,
                         (None, Some(_)) => false,

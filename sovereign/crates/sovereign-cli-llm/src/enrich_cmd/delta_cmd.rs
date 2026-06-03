@@ -164,7 +164,10 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
     match read_atlas_atoms(&real_atlas_dir) {
         Ok(atoms_file) => {
             let needs_migration = !atoms_file.atoms.is_empty()
-                && !atoms_file.atoms.iter().all(|env| env.id().is_content_hash());
+                && !atoms_file
+                    .atoms
+                    .iter()
+                    .all(|env| env.id().is_content_hash());
             if needs_migration {
                 if parsed.yes {
                     println!(
@@ -175,9 +178,7 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
                         Ok(s) => {
                             println!(
                                 "  ✓ migrated {} atom(s) ({} already content-hash, {} deduped)",
-                                s.atoms_migrated,
-                                s.atoms_already_content_hash,
-                                s.atoms_deduped
+                                s.atoms_migrated, s.atoms_already_content_hash, s.atoms_deduped
                             );
                             if !s.collisions_detected.is_empty() {
                                 println!(
@@ -226,7 +227,10 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
     // ── Step 2: back up the mutated files ──────────────────────
     let backup_dir = real_atlas_dir.join(format!(".delta-backup-{suffix}"));
     if let Err(e) = backup_atlas_files(&real_atlas_dir, &backup_dir) {
-        eprintln!("error: backing up atlas files to {}: {e}", backup_dir.display());
+        eprintln!(
+            "error: backing up atlas files to {}: {e}",
+            backup_dir.display()
+        );
         return 1;
     }
     println!("  ✓ backed up atlas files → {}", backup_dir.display());
@@ -241,11 +245,10 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
              cache/questions.json (promote a run file there first)."
         );
     } else {
-        let skip_list: Vec<String> =
-            ["seed", "resolve", "tensions", "gaps", "configure", "report"]
-                .iter()
-                .map(|s| s.to_string())
-                .collect();
+        let skip_list: Vec<String> = ["seed", "resolve", "tensions", "gaps", "configure", "report"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let parsed_build = match ParsedBuild::from_inputs(
             cfg.corpus_id.clone(),
             Some(parsed.chapters.clone()),
@@ -273,7 +276,9 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
         println!();
         println!(
             "  dry-run: subset Phase 1 promoted to {}. Stopping before resolve/merge.",
-            paths::cache_dir(&cfg.corpus_id).join("questions.json").display()
+            paths::cache_dir(&cfg.corpus_id)
+                .join("questions.json")
+                .display()
         );
         return 0;
     }
@@ -328,7 +333,10 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
         );
         return 1;
     }
-    println!("  · resolving subset into staging {} ...", staging_atlas_dir.display());
+    println!(
+        "  · resolving subset into staging {} ...",
+        staging_atlas_dir.display()
+    );
     if let Err(e) =
         resolve_into_dir(&cfg, &sections, &embed, &staging_atlas_dir, parsed.phase).await
     {
@@ -530,12 +538,10 @@ const MANIFEST_HELP: Help = Help {
                  their ids) without writing chapters.json.",
             ),
         ]),
-        HelpSection::Examples(&[
-            (
-                "sovereign enrich delta-manifest enron-sample-multi-wide --source-prefix symes-k",
-                "After `corpus expand` appended symes-k mailbox chunks, mint chapter ids for them.",
-            ),
-        ]),
+        HelpSection::Examples(&[(
+            "sovereign enrich delta-manifest enron-sample-multi-wide --source-prefix symes-k",
+            "After `corpus expand` appended symes-k mailbox chunks, mint chapter ids for them.",
+        )]),
         HelpSection::Notes(
             "New chapters continue the `sec_NNNNN` numbering past the \
              existing manifest length. Feed the printed ids into \
@@ -601,11 +607,7 @@ pub async fn cmd_delta_manifest(args: &[String]) -> i32 {
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| indexes_dir.clone());
     let noop_embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(Vec::<f32>::new()) }));
-    let engine = CorpusEngine::new(
-        data_dir.join("recipes"),
-        indexes_dir.clone(),
-        noop_embed,
-    );
+    let engine = CorpusEngine::new(data_dir.join("recipes"), indexes_dir.clone(), noop_embed);
     let index = match engine.open_index_for_corpus(&parsed.corpus_id).await {
         Ok(i) => i,
         Err(e) => {
@@ -684,9 +686,7 @@ pub async fn cmd_delta_manifest(args: &[String]) -> i32 {
     };
 
     if new_manifest.is_empty() {
-        println!(
-            "  · the new chunks carried no section metadata — no chapters minted."
-        );
+        println!("  · the new chunks carried no section metadata — no chapters minted.");
         return 0;
     }
 
@@ -783,9 +783,7 @@ fn parse_args(args: &[String]) -> Result<ParsedDelta, String> {
                     // surface here is just 3a|all.
                     "3b" => ResolvePhase::P3b,
                     other => {
-                        return Err(format!(
-                            "unknown phase `{other}`; expected 3a or all"
-                        ));
+                        return Err(format!("unknown phase `{other}`; expected 3a or all"));
                     }
                 };
                 i += 2;
@@ -938,12 +936,7 @@ mod tests {
 
     #[test]
     fn parse_delta_trims_and_drops_empty_chapter_tokens() {
-        let p = parse_args(&[
-            "c".into(),
-            "--chapters".into(),
-            " sec_1 , ,sec_2 ,".into(),
-        ])
-        .unwrap();
+        let p = parse_args(&["c".into(), "--chapters".into(), " sec_1 , ,sec_2 ,".into()]).unwrap();
         assert_eq!(p.chapters, vec!["sec_1", "sec_2"]);
     }
 
@@ -1000,8 +993,13 @@ mod tests {
 
     #[test]
     fn parse_delta_rejects_unknown_flag_and_extra_positional() {
-        let err = parse_args(&["c".into(), "--chapters".into(), "sec_1".into(), "--nope".into()])
-            .unwrap_err();
+        let err = parse_args(&[
+            "c".into(),
+            "--chapters".into(),
+            "sec_1".into(),
+            "--nope".into(),
+        ])
+        .unwrap_err();
         assert!(err.contains("unknown flag"), "got: {err}");
 
         let err = parse_args(&[
@@ -1030,12 +1028,8 @@ mod tests {
 
     #[test]
     fn parse_manifest_happy_path() {
-        let p = parse_manifest_args(&[
-            "enron".into(),
-            "--source-prefix".into(),
-            "symes-k".into(),
-        ])
-        .unwrap();
+        let p = parse_manifest_args(&["enron".into(), "--source-prefix".into(), "symes-k".into()])
+            .unwrap();
         assert_eq!(p.corpus_id, "enron");
         assert_eq!(p.source_prefix.as_deref(), Some("symes-k"));
         assert!(!p.dry_run);
@@ -1044,8 +1038,7 @@ mod tests {
     #[test]
     fn parse_manifest_empty_prefix_is_none() {
         // An empty --source-prefix is treated as "no filter", not an error.
-        let p = parse_manifest_args(&["c".into(), "--source-prefix".into(), "".into()])
-            .unwrap();
+        let p = parse_manifest_args(&["c".into(), "--source-prefix".into(), "".into()]).unwrap();
         assert_eq!(p.source_prefix, None);
     }
 
@@ -1169,11 +1162,7 @@ mod tests {
             // under CORPUS (mirrors a real already-migrated atlas).
             write_atoms(&live, vec![seq_entity(1, "Alice", "doc_live")]);
             migrate_atlas_ids(&live, CORPUS, false).unwrap();
-            let alice_id = AtomId::entity_content_hash(
-                "Alice",
-                &EntityType::Person,
-                CORPUS,
-            );
+            let alice_id = AtomId::entity_content_hash("Alice", &EntityType::Person, CORPUS);
             // Sanity: the live atom is the content-hash Alice.
             {
                 let live_atoms = read_atlas_atoms(&live).unwrap();
@@ -1220,10 +1209,12 @@ mod tests {
             // content-hash, Alice's id stable across the merge.
             let after = read_atlas_atoms(&live).unwrap();
             assert_eq!(after.atoms.len(), 2);
-            let bob_id =
-                AtomId::entity_content_hash("Bob", &EntityType::Person, CORPUS);
-            let ids: std::collections::HashSet<String> =
-                after.atoms.iter().map(|a| a.id().as_str().to_string()).collect();
+            let bob_id = AtomId::entity_content_hash("Bob", &EntityType::Person, CORPUS);
+            let ids: std::collections::HashSet<String> = after
+                .atoms
+                .iter()
+                .map(|a| a.id().as_str().to_string())
+                .collect();
             assert!(ids.contains(alice_id.as_str()), "Alice id preserved");
             assert!(ids.contains(bob_id.as_str()), "Bob appended");
             assert!(after.atoms.iter().all(|a| a.id().is_content_hash()));
@@ -1248,7 +1239,10 @@ mod tests {
             };
             let summary = apply_atom_delta(&live, delta).unwrap();
             assert_eq!(summary.atoms_added, 0);
-            assert!(summary.files_touched.is_empty(), "empty delta touches nothing");
+            assert!(
+                summary.files_touched.is_empty(),
+                "empty delta touches nothing"
+            );
             assert_eq!(read_atlas_atoms(&live).unwrap().atoms.len(), 1);
         }
     }

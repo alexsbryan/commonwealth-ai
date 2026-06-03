@@ -62,14 +62,22 @@ pub struct JsonRpcError {
 
 impl JsonRpcResponse {
     fn ok(id: Value, value: Value) -> Self {
-        Self { jsonrpc: "2.0", id, result: Some(value), error: None }
+        Self {
+            jsonrpc: "2.0",
+            id,
+            result: Some(value),
+            error: None,
+        }
     }
     fn err(id: Value, code: i32, message: impl Into<String>) -> Self {
         Self {
             jsonrpc: "2.0",
             id,
             result: None,
-            error: Some(JsonRpcError { code, message: message.into() }),
+            error: Some(JsonRpcError {
+                code,
+                message: message.into(),
+            }),
         }
     }
 }
@@ -143,7 +151,9 @@ impl McpNotifier {
     /// happen lazily as SSE clients connect.
     pub fn new() -> Self {
         let (sender, _) = tokio::sync::broadcast::channel(Self::BUFFER_SIZE);
-        Self { sender: std::sync::Arc::new(sender) }
+        Self {
+            sender: std::sync::Arc::new(sender),
+        }
     }
 
     /// Push a `notifications/tools/list_changed` JSON-RPC frame to
@@ -206,9 +216,9 @@ pub fn mcp_router(
     // instance per router so per-session cooldown state persists
     // across requests on the same session id. Fire-and-forget after
     // every successful tool dispatch.
-    let pattern_matcher = Arc::new(
-        sovereign_tools::notes::patterns::ToolPatternMatcher::new(Arc::clone(&logger)),
-    );
+    let pattern_matcher = Arc::new(sovereign_tools::notes::patterns::ToolPatternMatcher::new(
+        Arc::clone(&logger),
+    ));
     Router::new()
         // Both URLs accept the full JSON-RPC dispatch.
         // `POST /mcp` is the modern (2025-03-26 Streamable HTTP) entry point.
@@ -222,7 +232,9 @@ pub fn mcp_router(
         // added here even if the author forgets the per-handler
         // `is_localhost` check. The per-handler check stays for
         // defense in depth.
-        .layer(axum::middleware::from_fn(crate::loopback_guard::loopback_only))
+        .layer(axum::middleware::from_fn(
+            crate::loopback_guard::loopback_only,
+        ))
         .layer(Extension(tools))
         .layer(Extension(logger))
         .layer(Extension(Arc::new(session_id)))
@@ -305,9 +317,8 @@ async fn mcp_sse(
                 // data event so well-behaved clients refetch
                 // defensively.
                 Ok::<_, Infallible>(
-                    Event::default().data(
-                        r#"{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}"#,
-                    ),
+                    Event::default()
+                        .data(r#"{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}"#),
                 )
             }
         }
@@ -594,8 +605,7 @@ async fn handle_tool_call(
     match result {
         Ok(StepOutput::Text(text)) => JsonRpcResponse::ok(id, call_tool_text(text, false)),
         Ok(StepOutput::Json(value)) => {
-            let text = serde_json::to_string_pretty(&value)
-                .unwrap_or_else(|_| value.to_string());
+            let text = serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string());
             JsonRpcResponse::ok(id, call_tool_text(text, false))
         }
         Ok(other) => JsonRpcResponse::ok(id, call_tool_text(format!("{other:?}"), false)),

@@ -17,9 +17,7 @@ use corpus_engine::enrichment::pipeline::{
 use corpus_engine::error::{Error, Result};
 use corpus_engine::types::EmbedFn;
 
-use super::providers::{
-    parse_model_spec, ProviderKind, ProviderRegistry, ResolvedProvider,
-};
+use super::providers::{parse_model_spec, ProviderKind, ProviderRegistry, ResolvedProvider};
 use crate::util::urls::{v1_models_url, DEFAULT_CLIENT_PORT};
 
 /// Default chat request timeout. Phase 1 extract on a 27B-Q6 model
@@ -140,9 +138,7 @@ impl DaemonInferenceClient {
         chat_model: impl Into<String>,
         embed_model: impl Into<String>,
     ) -> Result<Self> {
-        let client = reqwest::Client::builder()
-            .timeout(CHAT_TIMEOUT)
-            .build()?;
+        let client = reqwest::Client::builder().timeout(CHAT_TIMEOUT).build()?;
         let base_url_str = base_url.into();
         let providers = Arc::new(ProviderRegistry::load_default(&base_url_str));
         Ok(Self {
@@ -196,10 +192,7 @@ impl DaemonInferenceClient {
     /// Recommended wiring: load `EnrichConfig`, then call
     /// `client.with_chat_models_by_phase(cfg.chat_models_by_phase_snapshot())`
     /// before handing the client off to `into_closures*`.
-    pub fn with_chat_models_by_phase(
-        mut self,
-        overrides: BTreeMap<String, String>,
-    ) -> Self {
+    pub fn with_chat_models_by_phase(mut self, overrides: BTreeMap<String, String>) -> Self {
         self.chat_models_by_phase = overrides;
         self
     }
@@ -207,10 +200,7 @@ impl DaemonInferenceClient {
     /// Install per-phase max_tokens caps. Phases not in the map fall
     /// through to the client-level `max_output_tokens`. Empty map is
     /// a no-op.
-    pub fn with_max_tokens_by_phase(
-        mut self,
-        overrides: BTreeMap<String, u32>,
-    ) -> Self {
+    pub fn with_max_tokens_by_phase(mut self, overrides: BTreeMap<String, u32>) -> Self {
         self.max_tokens_by_phase = overrides;
         self
     }
@@ -327,11 +317,7 @@ impl DaemonInferenceClient {
     /// differ only in which token cap they pass in. `None` means
     /// "let the daemon decide" (useful for tests and environments
     /// where no cap has been explicitly configured).
-    async fn complete_inner(
-        &self,
-        prompt: &ChatPrompt,
-        max_tokens: Option<u32>,
-    ) -> Result<String> {
+    async fn complete_inner(&self, prompt: &ChatPrompt, max_tokens: Option<u32>) -> Result<String> {
         // Parse `provider:model` from the resolved chat-model (or its
         // per-phase override). Bare ids → local provider; explicit
         // provider names dispatch to remote registry entries.
@@ -355,8 +341,7 @@ impl DaemonInferenceClient {
         } else {
             model_id
         };
-        let effective_max_tokens = max_tokens
-            .or(provider.default_max_tokens);
+        let effective_max_tokens = max_tokens.or(provider.default_max_tokens);
         match provider.kind {
             ProviderKind::OpenaiCompatible => {
                 self.complete_openai_compatible(
@@ -368,13 +353,8 @@ impl DaemonInferenceClient {
                 .await
             }
             ProviderKind::Anthropic => {
-                self.complete_anthropic(
-                    provider,
-                    &effective_model,
-                    prompt,
-                    effective_max_tokens,
-                )
-                .await
+                self.complete_anthropic(provider, &effective_model, prompt, effective_max_tokens)
+                    .await
             }
         }
     }
@@ -603,8 +583,9 @@ impl DaemonInferenceClient {
                 return Err(e);
             }
         };
-        let v: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|e| Error::Serialization(format!("non-JSON chat response: {e} — body: {text}")))?;
+        let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
+            Error::Serialization(format!("non-JSON chat response: {e} — body: {text}"))
+        })?;
         let content = v
             .pointer("/choices/0/message/content")
             .and_then(|s| s.as_str())
@@ -687,10 +668,7 @@ impl DaemonInferenceClient {
         prompt: &ChatPrompt,
         max_tokens: Option<u32>,
     ) -> Result<String> {
-        let url = format!(
-            "{}/messages",
-            provider.base_url.trim_end_matches('/'),
-        );
+        let url = format!("{}/messages", provider.base_url.trim_end_matches('/'),);
         // Temperature precedence: prompt → provider → 0.2 fallback.
         let temperature = prompt
             .temperature
@@ -735,10 +713,7 @@ impl DaemonInferenceClient {
                 // Trade-off: model can in principle decline to call
                 // and emit text — the response unwrapper falls
                 // through to text-block aggregation in that case.
-                obj.insert(
-                    "tool_choice".into(),
-                    serde_json::json!({"type": "auto"}),
-                );
+                obj.insert("tool_choice".into(), serde_json::json!({"type": "auto"}));
                 has_schema = true;
             }
         }
@@ -810,10 +785,7 @@ impl DaemonInferenceClient {
             "inference_client: dispatching Anthropic /v1/messages"
         );
 
-        let api_version = provider
-            .api_version
-            .as_deref()
-            .unwrap_or("2023-06-01");
+        let api_version = provider.api_version.as_deref().unwrap_or("2023-06-01");
         let mut req = self
             .client
             .post(&url)
@@ -882,11 +854,9 @@ impl DaemonInferenceClient {
                 .iter()
                 .find(|b| b.pointer("/type").and_then(|t| t.as_str()) == Some("tool_use"))
             {
-                let input = tool_use
-                    .pointer("/input")
-                    .ok_or_else(|| Error::Serialization(format!(
-                        "anthropic tool_use block missing /input: {text}"
-                    )))?;
+                let input = tool_use.pointer("/input").ok_or_else(|| {
+                    Error::Serialization(format!("anthropic tool_use block missing /input: {text}"))
+                })?;
                 serde_json::to_string(input).map_err(|e| {
                     Error::Serialization(format!("re-serialize anthropic tool input: {e}"))
                 })?
@@ -978,9 +948,7 @@ impl DaemonInferenceClient {
         });
         // Build a one-shot client with the embed timeout so callers
         // don't share the long chat timeout on what should be <1s.
-        let short_client = reqwest::Client::builder()
-            .timeout(EMBED_TIMEOUT)
-            .build()?;
+        let short_client = reqwest::Client::builder().timeout(EMBED_TIMEOUT).build()?;
         let resp = short_client.post(&url).json(&body).send().await?;
         let status = resp.status();
         let payload = resp
@@ -996,7 +964,11 @@ impl DaemonInferenceClient {
             };
             return Err(Error::Embed(format!(
                 "daemon embed error {status} at {url}: {}{}",
-                if payload.is_empty() { "<empty body>" } else { payload.as_str() },
+                if payload.is_empty() {
+                    "<empty body>"
+                } else {
+                    payload.as_str()
+                },
                 hint
             )));
         }
@@ -1133,9 +1105,7 @@ pub async fn resolve_default_models(base_url: &str) -> (Option<String>, Option<S
 /// local-only models. We pick those first, then walk the rest
 /// as a fallback (e.g. a peer-only mesh where the local slot
 /// isn't loaded, or an older daemon without the alias surface).
-fn pick_default_models_from_v1(
-    v: &serde_json::Value,
-) -> (Option<String>, Option<String>) {
+fn pick_default_models_from_v1(v: &serde_json::Value) -> (Option<String>, Option<String>) {
     let Some(arr) = v.get("data").and_then(|d| d.as_array()) else {
         return (None, None);
     };
@@ -1186,8 +1156,7 @@ mod tests {
 
     #[test]
     fn resolve_model_for_phase_falls_back_to_default_without_overrides() {
-        let c =
-            DaemonInferenceClient::new("http://localhost:9741", "qwopus-27b", "embed").unwrap();
+        let c = DaemonInferenceClient::new("http://localhost:9741", "qwopus-27b", "embed").unwrap();
         assert_eq!(c.resolve_model_for_phase(None), "qwopus-27b");
         assert_eq!(c.resolve_model_for_phase(Some("phase1")), "qwopus-27b");
         assert_eq!(c.resolve_model_for_phase(Some("anything")), "qwopus-27b");

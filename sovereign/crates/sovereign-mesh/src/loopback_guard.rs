@@ -157,19 +157,16 @@ mod tests {
         // Find a routable non-loopback IP on this machine to connect
         // from. If we can't, skip — CI boxes without a usable NIC
         // should not spuriously fail.
-        let Some(routable) = if_addrs::get_if_addrs()
-            .ok()
-            .and_then(|a| {
-                a.into_iter().find_map(|i| {
-                    let ip = i.ip();
-                    if !ip.is_loopback() && matches!(ip, IpAddr::V4(_)) {
-                        Some(ip)
-                    } else {
-                        None
-                    }
-                })
+        let Some(routable) = if_addrs::get_if_addrs().ok().and_then(|a| {
+            a.into_iter().find_map(|i| {
+                let ip = i.ip();
+                if !ip.is_loopback() && matches!(ip, IpAddr::V4(_)) {
+                    Some(ip)
+                } else {
+                    None
+                }
             })
-        else {
+        }) else {
             eprintln!("no routable non-loopback IP; skipping");
             return;
         };
@@ -232,10 +229,7 @@ mod tests {
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 7)), 9741),
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(100, 64, 0, 2)), 9741),
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 9741),
-            SocketAddr::new(
-                IpAddr::V6(Ipv6Addr::new(0x2606, 0, 0, 0, 0, 0, 0, 1)),
-                9741,
-            ),
+            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0x2606, 0, 0, 0, 0, 0, 0, 1)), 9741),
         ];
         for addr in denied {
             let Err(resp) = enforce_localhost(&addr) else {

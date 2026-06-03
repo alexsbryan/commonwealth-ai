@@ -253,10 +253,7 @@ impl AssetSubExtractor for OpaqueFallback {
             .and_then(|s| s.to_str())
             .unwrap_or("?")
             .to_string();
-        let description = format!(
-            "binary, {} bytes, ext={ext}, magic={magic}",
-            bytes.len()
-        );
+        let description = format!("binary, {} bytes, ext={ext}, magic={magic}", bytes.len());
         Ok(AssetExtraction {
             description,
             asset_kind: "opaque".into(),
@@ -414,7 +411,8 @@ impl DescribedAssetIterator {
         };
 
         if let Some(parsed_path) = extraction.parsed_form.as_deref() {
-            self.store.record_parsed_form(&receipt.sha256, parsed_path)?;
+            self.store
+                .record_parsed_form(&receipt.sha256, parsed_path)?;
         }
 
         // Build and persist the Asset atom (sidecar JSONL — picked up
@@ -482,9 +480,8 @@ fn append_asset_atom(sidecar: &Path, atom: &Asset) -> Result<()> {
         fs::create_dir_all(parent).map_err(Error::Io)?;
     }
     let envelope = AtomEnvelope::Asset(atom.clone());
-    let line = serde_json::to_string(&envelope).map_err(|e| {
-        Error::Extraction(format!("described_asset: serialise atom: {e}"))
-    })?;
+    let line = serde_json::to_string(&envelope)
+        .map_err(|e| Error::Extraction(format!("described_asset: serialise atom: {e}")))?;
     let mut f = fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -498,11 +495,12 @@ fn append_asset_atom(sidecar: &Path, atom: &Asset) -> Result<()> {
 }
 
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
-    let entries = fs::read_dir(dir)
-        .map_err(|e| Error::Extraction(format!("described_asset: read_dir {}: {e}", dir.display())))?;
+    let entries = fs::read_dir(dir).map_err(|e| {
+        Error::Extraction(format!("described_asset: read_dir {}: {e}", dir.display()))
+    })?;
     for entry in entries {
-        let entry = entry
-            .map_err(|e| Error::Extraction(format!("described_asset: dir entry: {e}")))?;
+        let entry =
+            entry.map_err(|e| Error::Extraction(format!("described_asset: dir entry: {e}")))?;
         let path = entry.path();
         // Skip macOS resource forks + Windows thumb caches without
         // commentary; they're never useful as ingest inputs.
@@ -552,10 +550,7 @@ pub fn build_asset_atom(
 /// Append a pre-built Asset atom + an `Attaches` edge to the
 /// sidecar. Used by callers that wrote bytes through the store
 /// outside the folder-walk path (the email extractor in Phase 2).
-pub fn append_asset_atom_with_edge(
-    asset_atoms_sidecar: &Path,
-    atom: &Asset,
-) -> Result<()> {
+pub fn append_asset_atom_with_edge(asset_atoms_sidecar: &Path, atom: &Asset) -> Result<()> {
     append_asset_atom(asset_atoms_sidecar, atom)
 }
 
@@ -601,8 +596,7 @@ mod tests {
         let (dir, ext) = tmp_dispatcher();
         let docs_dir = dir.path().join("docs");
         std::fs::create_dir_all(&docs_dir).unwrap();
-        std::fs::write(docs_dir.join("mystery.bin"), [0u8, 1, 2, 3, 4, 0xff, 0xfe])
-            .unwrap();
+        std::fs::write(docs_dir.join("mystery.bin"), [0u8, 1, 2, 3, 4, 0xff, 0xfe]).unwrap();
 
         let docs: Vec<_> = ext
             .extract(&docs_dir)

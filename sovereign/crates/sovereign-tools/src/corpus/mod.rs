@@ -43,9 +43,7 @@ pub fn inference_to_embed_fn(inference: Arc<dyn InferenceProvider>) -> corpus_en
 /// (`CorpusIndex::search_with_rerank`) catches that and falls back
 /// to the un-reranked fusion result — so installing this wrapper is
 /// always safe.
-pub fn inference_to_rerank_fn(
-    inference: Arc<dyn InferenceProvider>,
-) -> corpus_engine::RerankFn {
+pub fn inference_to_rerank_fn(inference: Arc<dyn InferenceProvider>) -> corpus_engine::RerankFn {
     Arc::new(move |query: &str, docs: Vec<String>| {
         let inf = Arc::clone(&inference);
         let query = query.to_string();
@@ -100,24 +98,24 @@ pub fn inference_to_inference_fn(
         let request = CompletionRequest {
             prompt: prompt.to_string(),
             system_message: None,
-            preferred_speed: Speed::Fast,  // fast model — structured extraction doesn't need 27B
-            max_tokens: Some(4096),        // dropped 2026-05-29 (evening): once grammar-constrained decoding lands via `structured_output`, the cap stops being load-bearing for JSON validity — the schema guarantees valid array close at any token count. Bigger cap (8192) just gives a rambling model more rope: observed 286s batches generating 10358 tokens after grammar lit up, dragging mean latency to 110s/batch. 4096 caps wall clock at ~80s/batch worst case while still fitting most observed valid bodies; over-cap batches end with a smaller-but-valid entity list (acceptable recall hit vs the throughput win).
-            temperature: Some(0.1),        // low temperature for consistent JSON output
-            think_budget: Some(0),         // suppress thinking — hurts JSON, wastes tokens
+            preferred_speed: Speed::Fast, // fast model — structured extraction doesn't need 27B
+            max_tokens: Some(4096), // dropped 2026-05-29 (evening): once grammar-constrained decoding lands via `structured_output`, the cap stops being load-bearing for JSON validity — the schema guarantees valid array close at any token count. Bigger cap (8192) just gives a rambling model more rope: observed 286s batches generating 10358 tokens after grammar lit up, dragging mean latency to 110s/batch. 4096 caps wall clock at ~80s/batch worst case while still fitting most observed valid bodies; over-cap batches end with a smaller-but-valid entity list (acceptable recall hit vs the throughput win).
+            temperature: Some(0.1), // low temperature for consistent JSON output
+            think_budget: Some(0),  // suppress thinking — hurts JSON, wastes tokens
             structured_output,
             top_k: None,
             top_p: None,
             oicp: None,
             tools: None,
             tool_choice: None,
-                    model_id: None,
-                    enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
         Box::pin(async move {
             let resp = inf
@@ -136,10 +134,7 @@ pub fn inference_to_inference_fn(
 /// memory. The iterator yields one `Result<DocumentChunk>` at a time so
 /// individual parse failures can be skipped without aborting the corpus.
 pub trait CorpusParser: Send + Sync {
-    fn parse(
-        &self,
-        source_path: &Path,
-    ) -> Result<Box<dyn Iterator<Item = Result<DocumentChunk>>>>;
+    fn parse(&self, source_path: &Path) -> Result<Box<dyn Iterator<Item = Result<DocumentChunk>>>>;
 }
 
 // ─── Shared Utilities ─────────────────────────────────────────
@@ -152,12 +147,7 @@ fn now() -> i64 {
 }
 
 /// Build a DocumentChunk for a corpus entry.
-fn make_chunk(
-    corpus_id: &str,
-    source: &str,
-    content: &str,
-    chunk_index: usize,
-) -> DocumentChunk {
+fn make_chunk(corpus_id: &str, source: &str, content: &str, chunk_index: usize) -> DocumentChunk {
     DocumentChunk {
         id: format!("{corpus_id}:{source}:{chunk_index}"),
         source: source.to_string(),
@@ -223,9 +213,10 @@ pub(crate) fn strip_html(html: &str) -> String {
                     } else if lower == "br" || lower == "br/" {
                         result.push('\n');
                     } else if (lower == "p" || lower == "/p" || lower == "div" || lower == "/div")
-                        && !result.ends_with('\n') {
-                            result.push('\n');
-                        }
+                        && !result.ends_with('\n')
+                    {
+                        result.push('\n');
+                    }
                 } else {
                     tag_name.push(ch);
                 }

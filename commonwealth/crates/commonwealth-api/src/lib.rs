@@ -17,9 +17,9 @@
 
 pub mod admission;
 pub mod auto_recover;
+pub mod frontdoor;
 pub mod headers;
 pub mod middleware;
-pub mod frontdoor;
 pub mod openai_types;
 pub mod reshaping;
 pub mod responses_types;

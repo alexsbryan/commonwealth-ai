@@ -42,8 +42,10 @@ pub fn parse_file(path: &Path) -> Result<ParsedDocument> {
             // its raw `println!` glyph diagnostics. Without this the
             // RAG pipeline floods stdout on the first non-trivial
             // font.
-            let content = crate::local_corpus::extract_stage::safe_extract_pdf_text(path)
-                .map_err(|e| Error::Storage(format!("Failed to extract PDF text from {source}: {e:?}")))?;
+            let content =
+                crate::local_corpus::extract_stage::safe_extract_pdf_text(path).map_err(|e| {
+                    Error::Storage(format!("Failed to extract PDF text from {source}: {e:?}"))
+                })?;
             // Clean up common PDF extraction artifacts.
             let cleaned = content
                 .lines()
@@ -71,8 +73,7 @@ pub fn list_parseable_files(dir: &Path) -> Result<Vec<std::path::PathBuf>> {
     let mut files = Vec::new();
 
     for entry in entries {
-        let entry =
-            entry.map_err(|e| Error::Storage(format!("Directory entry error: {e}")))?;
+        let entry = entry.map_err(|e| Error::Storage(format!("Directory entry error: {e}")))?;
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {

@@ -84,39 +84,29 @@ mod tests {
     #[test]
     fn first_write_does_not_kill() {
         let mut t = ThrashTracker::new();
-        assert_eq!(
-            t.observe_write(Some("src/lib.rs")),
-            ThrashSignal::Continue
-        );
+        assert_eq!(t.observe_write(Some("src/lib.rs")), ThrashSignal::Continue);
         assert_eq!(t.same_path_writes(), 1);
     }
 
     #[test]
     fn same_path_three_kills_at_threshold() {
         let mut t = ThrashTracker::new();
-        assert_eq!(
-            t.observe_write(Some("src/lib.rs")),
-            ThrashSignal::Continue
-        );
-        assert_eq!(
-            t.observe_write(Some("src/lib.rs")),
-            ThrashSignal::Continue
-        );
+        assert_eq!(t.observe_write(Some("src/lib.rs")), ThrashSignal::Continue);
+        assert_eq!(t.observe_write(Some("src/lib.rs")), ThrashSignal::Continue);
         let sig = t.observe_write(Some("src/lib.rs"));
-        assert!(matches!(sig, ThrashSignal::Kill { same_path_writes: 3 }));
+        assert!(matches!(
+            sig,
+            ThrashSignal::Kill {
+                same_path_writes: 3
+            }
+        ));
     }
 
     #[test]
     fn two_same_path_writes_does_not_kill() {
         let mut t = ThrashTracker::new();
-        assert_eq!(
-            t.observe_write(Some("src/lib.rs")),
-            ThrashSignal::Continue
-        );
-        assert_eq!(
-            t.observe_write(Some("src/lib.rs")),
-            ThrashSignal::Continue
-        );
+        assert_eq!(t.observe_write(Some("src/lib.rs")), ThrashSignal::Continue);
+        assert_eq!(t.observe_write(Some("src/lib.rs")), ThrashSignal::Continue);
         assert_eq!(t.same_path_writes(), 2);
     }
 
@@ -125,10 +115,7 @@ mod tests {
         let mut t = ThrashTracker::new();
         t.observe_write(Some("src/lib.rs"));
         t.observe_verify();
-        assert_eq!(
-            t.observe_write(Some("src/lib.rs")),
-            ThrashSignal::Continue
-        );
+        assert_eq!(t.observe_write(Some("src/lib.rs")), ThrashSignal::Continue);
         assert_eq!(t.same_path_writes(), 1);
     }
 
@@ -146,7 +133,12 @@ mod tests {
         t.observe_write(Some("src/lib.rs")); // fresh after verify
         t.observe_write(Some("src/lib.rs")); // same path, no verify
         let sig = t.observe_write(Some("src/lib.rs")); // fires
-        assert!(matches!(sig, ThrashSignal::Kill { same_path_writes: 3 }));
+        assert!(matches!(
+            sig,
+            ThrashSignal::Kill {
+                same_path_writes: 3
+            }
+        ));
     }
 
     #[test]
@@ -155,14 +147,8 @@ mod tests {
         // files before its first verify. Cross-file writes reset
         // the counter.
         let mut t = ThrashTracker::new();
-        assert_eq!(
-            t.observe_write(Some("Cargo.toml")),
-            ThrashSignal::Continue
-        );
-        assert_eq!(
-            t.observe_write(Some("src/lib.rs")),
-            ThrashSignal::Continue
-        );
+        assert_eq!(t.observe_write(Some("Cargo.toml")), ThrashSignal::Continue);
+        assert_eq!(t.observe_write(Some("src/lib.rs")), ThrashSignal::Continue);
         assert_eq!(
             t.observe_write(Some("tests/integration.rs")),
             ThrashSignal::Continue
@@ -364,10 +350,7 @@ mod cycle_tests {
     fn under_cap_continues() {
         let mut c = HandoffCycleCounter::new();
         for _ in 0..(HANDOFF_CYCLE_CAP - 1) {
-            assert_eq!(
-                c.observe_handoff_to_implementer(),
-                CycleSignal::Continue
-            );
+            assert_eq!(c.observe_handoff_to_implementer(), CycleSignal::Continue);
         }
     }
 

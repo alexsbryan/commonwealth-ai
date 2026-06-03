@@ -30,7 +30,7 @@ pub async fn build_context(
             deleted_at: None,
             skill_id: None,
             enabled_corpora: None,
-        searched_sources: None,
+            searched_sources: None,
         },
         Err(e) => return Err(e),
     };
@@ -41,9 +41,8 @@ pub async fn build_context(
     // memories. Without this, a general chat could surface a memory
     // extracted in inner-work, breaching the trust contract behind
     // the wall. See `MemoryScope` docs for the bidirectional invariant.
-    let scope = crate::traits::MemoryScope::from_conversation_skill(
-        conversation.skill_id.as_deref(),
-    );
+    let scope =
+        crate::traits::MemoryScope::from_conversation_skill(conversation.skill_id.as_deref());
     let memories = store
         .get_relevant_memories_for_scope(&scope, query, 5)
         .await
@@ -355,16 +354,16 @@ pub async fn update_topic_context(
         top_k: None,
         top_p: None,
         oicp: None,
-                tools: None,
-                tool_choice: None,
-                    model_id: None,
-                    enable_thinking: None,
-    sampling_mode: None,
-    assistant_prefix: None,
-    cmd_prefix: None,
-    url_allowlist: None,
-    evidence_id_allowlist: None,
-    lark_grammar: None,
+        tools: None,
+        tool_choice: None,
+        model_id: None,
+        enable_thinking: None,
+        sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -383,7 +382,10 @@ pub async fn update_topic_context(
 
         // Determine turn depth: increment if topic matches, reset on pivot.
         let prev_depth = previous.map(|p| p.turn_depth).unwrap_or(0);
-        let topic_matches = match (new_topic.as_deref(), previous.and_then(|p| p.topic.as_deref())) {
+        let topic_matches = match (
+            new_topic.as_deref(),
+            previous.and_then(|p| p.topic.as_deref()),
+        ) {
             (Some(new), Some(old)) => {
                 // Fuzzy match: if the new topic contains the old or vice versa.
                 let new_lower = new.to_lowercase();

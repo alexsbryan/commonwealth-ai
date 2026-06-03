@@ -52,7 +52,9 @@ pub fn latest_crash_log(crash_log_dir: &Path) -> Option<PathBuf> {
             continue;
         }
         let Ok(meta) = entry.metadata() else { continue };
-        let Ok(modified) = meta.modified() else { continue };
+        let Ok(modified) = meta.modified() else {
+            continue;
+        };
         if latest.as_ref().map(|(t, _)| modified > *t).unwrap_or(true) {
             latest = Some((modified, path));
         }
@@ -79,7 +81,9 @@ pub fn render_report(
     out.push_str("# Sovereign crash report\n\n");
     out.push_str(&format!("- App version: `{app_version}`\n"));
     out.push_str(&format!("- OS: `{os_label}`\n"));
-    out.push_str(&format!("- Generated: `{timestamp_unix}` (unix seconds)\n\n"));
+    out.push_str(&format!(
+        "- Generated: `{timestamp_unix}` (unix seconds)\n\n"
+    ));
 
     out.push_str("## Daemon config (redacted)\n\n");
     match config {
@@ -92,25 +96,19 @@ pub fn render_report(
             // otherwise tell triage that primary is doing double duty
             // so they don't go hunting for a fast-slot misconfig.
             if c.models.has_explicit_fast() {
-                out.push_str(&format!("- Fast model: `{}`\n", basename(c.models.fast_path())));
+                out.push_str(&format!(
+                    "- Fast model: `{}`\n",
+                    basename(c.models.fast_path())
+                ));
             } else {
                 out.push_str("- Fast model: <subsumed by primary>\n");
             }
-            out.push_str(&format!(
-                "- Embed model: `{}`\n",
-                basename(&c.models.embed)
-            ));
+            out.push_str(&format!("- Embed model: `{}`\n", basename(&c.models.embed)));
             if let Some(code) = &c.models.code {
                 out.push_str(&format!("- Code model: `{}`\n", basename(code)));
             }
-            out.push_str(&format!(
-                "- Client port: `{}`\n",
-                c.daemon.client_port
-            ));
-            out.push_str(&format!(
-                "- Internal port: `{}`\n",
-                c.daemon.internal_port
-            ));
+            out.push_str(&format!("- Client port: `{}`\n", c.daemon.client_port));
+            out.push_str(&format!("- Internal port: `{}`\n", c.daemon.internal_port));
             out.push_str(&format!(
                 "- Yield window (s): `{}`\n",
                 c.daemon.yield_to_foreground_secs
@@ -163,9 +161,9 @@ pub fn prepare_report(
     let crash_log_dir = data_dir.join("crash-logs");
     let crash_log_path = latest_crash_log(&crash_log_dir);
     let crash_log = match &crash_log_path {
-        Some(p) => read_truncated(p).unwrap_or_else(|e| {
-            format!("(failed to read {}: {e})", p.display())
-        }),
+        Some(p) => {
+            read_truncated(p).unwrap_or_else(|e| format!("(failed to read {}: {e})", p.display()))
+        }
         None => String::new(),
     };
 
@@ -186,8 +184,7 @@ pub fn prepare_report(
     let dest = desktop_dir()
         .ok_or_else(|| "could not resolve user Desktop directory".to_string())?
         .join(format!("sovereign-crash-{ts}.md"));
-    std::fs::write(&dest, report)
-        .map_err(|e| format!("write {}: {e}", dest.display()))?;
+    std::fs::write(&dest, report).map_err(|e| format!("write {}: {e}", dest.display()))?;
 
     Ok(PreparedReport {
         mailto_url: mailto_url(ts, &dest),
@@ -207,9 +204,7 @@ fn read_truncated(path: &Path) -> std::io::Result<String> {
         // syscalls before SEGV) lives at the bottom. Prepend a
         // marker so the receiver knows the head was elided.
         let tail = &bytes[bytes.len() - MAX_CRASH_LOG_BYTES..];
-        let mut s = String::from(
-            "_(crash log truncated; showing the trailing 256 KB)_\n\n",
-        );
+        let mut s = String::from("_(crash log truncated; showing the trailing 256 KB)_\n\n");
         s.push_str(&String::from_utf8_lossy(tail));
         Ok(s)
     } else {
@@ -271,9 +266,7 @@ fn mailto_url(ts: u64, report_path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::setup_config::{
-        DaemonSection, DataSection, ModelsSection, SetupConfig,
-    };
+    use sovereign_core::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
     use std::collections::BTreeMap;
     use tempfile::TempDir;
 
@@ -318,14 +311,7 @@ mod tests {
 
     #[test]
     fn report_handles_missing_config() {
-        let report = render_report(
-            1234567890,
-            "0.1.0",
-            "linux",
-            None,
-            None,
-            "",
-        );
+        let report = render_report(1234567890, "0.1.0", "linux", None, None, "");
         assert!(report.contains("_(no SetupConfig on disk)_"));
     }
 

@@ -15,17 +15,19 @@ use futures::Stream;
 use tokio::sync::Mutex;
 
 use crate::llama::cpp::context::params::{LlamaContextParams, LlamaContextType};
-use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::llama_backend::LlamaBackend;
 use crate::llama::cpp::llama_batch::LlamaBatch;
 use crate::llama::cpp::model::params::LlamaModelParams;
 use crate::llama::cpp::model::{AddBos, LlamaChatMessage, LlamaModel};
+use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
 use sovereign_core::error::Error;
-use sovereign_core::model_family::{EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl};
+use sovereign_core::model_family::{
+    EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
+};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::*;
 use sovereign_core::Result;
@@ -97,8 +99,8 @@ impl EmbedSlot {
         // The old `GGML_ASSERT(buf_src)` crash was fixed in
         // llama-cpp-2 0.1.141; the fallback-to-CPU path below still
         // guards against context-creation failures on any platform.
-        let gpu_default_available = cfg!(all(target_os = "macos", target_arch = "aarch64"))
-            || cfg!(target_os = "linux");
+        let gpu_default_available =
+            cfg!(all(target_os = "macos", target_arch = "aarch64")) || cfg!(target_os = "linux");
         let requested_gpu_layers = if gpu_default_available && n_gpu_layers == 0 {
             999 // every layer on GPU
         } else {
@@ -181,7 +183,7 @@ impl EmbedSlot {
                 // disables both explicitly so the scheduler keeps every
                 // tensor in main memory.
                 .with_offload_kqv(gpu)
-                // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
+            // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
         };
 
         // Try GPU first if compiled in; fall back to CPU on any
@@ -191,8 +193,7 @@ impl EmbedSlot {
         // `new_context` returns we just see `Err` here and retry.
         let (ctx, used_gpu) = match if wants_gpu {
             unsafe {
-                let model_ref: &'static LlamaModel =
-                    &*(Arc::as_ptr(&model) as *const LlamaModel);
+                let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model) as *const LlamaModel);
                 model_ref
                     .new_context(backend, build_params(true))
                     .map(|c| (c, true))
@@ -214,9 +215,7 @@ impl EmbedSlot {
                     model_ref
                         .new_context(backend, build_params(false))
                         .map_err(|e| {
-                            Error::Inference(format!(
-                                "Failed to create embed context: {e}"
-                            ))
+                            Error::Inference(format!("Failed to create embed context: {e}"))
                         })?
                 };
                 (ctx, false)
@@ -225,8 +224,8 @@ impl EmbedSlot {
 
         let quirks_pooling = match embed_quirks.as_ref().map(|q| &q.pooling) {
             Some(PoolingStrategy::Last) => "last-token",
-            Some(PoolingStrategy::Cls)  => "cls",
-            _                           => "mean",
+            Some(PoolingStrategy::Cls) => "cls",
+            _ => "mean",
         };
         // libllama-reported pooling type at runtime — sourced from the
         // gguf's `<arch>.pooling_type` after the UNSPECIFIED → hparams
@@ -257,10 +256,7 @@ impl EmbedSlot {
 
         Ok(Self {
             model: model.clone(),
-            contexts: vec![Mutex::new(EmbedSlotContext {
-                ctx,
-                _model: model,
-            })],
+            contexts: vec![Mutex::new(EmbedSlotContext { ctx, _model: model })],
             n_embd,
             max_input_tokens,
             ctx_tokens: ctx_tokens as usize,
@@ -488,11 +484,9 @@ impl EmbedSlot {
                     // to skip. We'll handle below by post-filling.
                 } else {
                     for (pos, &tok) in toks.iter().enumerate() {
-                        batch
-                            .add(tok, pos as i32, &[seq_id], true)
-                            .map_err(|e| {
-                                Error::Inference(format!("Embed batch add failed: {e}"))
-                            })?;
+                        batch.add(tok, pos as i32, &[seq_id], true).map_err(|e| {
+                            Error::Inference(format!("Embed batch add failed: {e}"))
+                        })?;
                     }
                     tokens_in_batch += next_len;
                     seqs_in_batch += 1;
@@ -527,9 +521,7 @@ impl EmbedSlot {
                     let raw = ctx_lock
                         .ctx
                         .embeddings_seq_ith(local_seq)
-                        .map_err(|e| {
-                            Error::Inference(format!("Failed to read embedding: {e}"))
-                        })?;
+                        .map_err(|e| Error::Inference(format!("Failed to read embedding: {e}")))?;
                     results.push(l2_normalize(raw.to_vec()));
                     local_seq += 1;
                 }
@@ -554,4 +546,3 @@ impl EmbedSlot {
         Ok(results)
     }
 }
-

@@ -178,63 +178,51 @@ fn catalog() -> &'static [CatalogEntry] {
         CatalogEntry {
             section_id: "system-design",
             question_id: "amend.adv.system-design.downstream",
-            prompt:
-                "Which code, tests, or documents reference the old design shape, \
+            prompt: "Which code, tests, or documents reference the old design shape, \
                  and what is your plan to update them?",
-            why:
-                "System-design changes ripple further than the charter — \
+            why: "System-design changes ripple further than the charter — \
                  if you don't enumerate the references now, drift emerges \
                  later as confused docs and stale tests.",
         },
         CatalogEntry {
             section_id: "invariants",
             question_id: "amend.adv.invariants.assumers",
-            prompt:
-                "Which callers / components assume the OLD invariant? \
+            prompt: "Which callers / components assume the OLD invariant? \
                  Are there tests that LOCK it?",
-            why:
-                "Invariants aren't just documentation — things are built \
+            why: "Invariants aren't just documentation — things are built \
                  ON TOP of them. Changing one without naming the dependents \
                  is how silent regressions happen.",
         },
         CatalogEntry {
             section_id: "invariants",
             question_id: "amend.adv.invariants.replacement",
-            prompt:
-                "What's the replacement invariant, stated as strictly as the old one was?",
-            why:
-                "A removed invariant with nothing in its place means the \
+            prompt: "What's the replacement invariant, stated as strictly as the old one was?",
+            why: "A removed invariant with nothing in its place means the \
                  constraint is still there, just undocumented. Name it.",
         },
         CatalogEntry {
             section_id: "resolved-decisions",
             question_id: "amend.adv.decisions.context-change",
-            prompt:
-                "What CONTEXT has changed since the original decision was made? \
+            prompt: "What CONTEXT has changed since the original decision was made? \
                  (Not just new preferences — what new evidence, constraint, or requirement?)",
-            why:
-                "Reversing a decision without naming what changed is how teams \
+            why: "Reversing a decision without naming what changed is how teams \
                  oscillate. Future-you should be able to read this amendment and \
                  know whether your NEXT context-shift warrants another reversal.",
         },
         CatalogEntry {
             section_id: "resolved-decisions",
             question_id: "amend.adv.decisions.deprecation",
-            prompt:
-                "Is there partially-written code or data that still assumes the old decision? \
+            prompt: "Is there partially-written code or data that still assumes the old decision? \
                  What's the migration plan?",
-            why:
-                "A flipped decision with no migration plan produces two systems \
+            why: "A flipped decision with no migration plan produces two systems \
                  running the old and the new rule. Usually one wins silently.",
         },
         CatalogEntry {
             section_id: "open-questions",
             question_id: "amend.adv.open.resolution",
-            prompt:
-                "What concrete thing resolved this open question? \
+            prompt: "What concrete thing resolved this open question? \
                  (Evidence, spike result, new constraint — not just \"we decided.\")",
-            why:
-                "An open question closing without a concrete reason \
+            why: "An open question closing without a concrete reason \
                  invites re-opening when the next person hits the same decision point.",
         },
         // ─── DESIGN.md section catalog (step 9) ─────────────────────
@@ -248,32 +236,26 @@ fn catalog() -> &'static [CatalogEntry] {
         CatalogEntry {
             section_id: "design.anchors",
             question_id: "amend.adv.design.anchors",
-            prompt:
-                "Which downstream assumption in DESIGN.md or IMPLEMENTATION_PLAN.md \
+            prompt: "Which downstream assumption in DESIGN.md or IMPLEMENTATION_PLAN.md \
                  changes if this anchor is reworded?",
-            why:
-                "Anchors are the promises the rest of the doc (and the plan) rests \
+            why: "Anchors are the promises the rest of the doc (and the plan) rests \
                  on — a quiet rewording silently invalidates them.",
         },
         CatalogEntry {
             section_id: "design.data-interfaces",
             question_id: "amend.adv.design.data-interfaces",
-            prompt:
-                "What callers already code against this data shape, \
+            prompt: "What callers already code against this data shape, \
                  and what's your migration plan?",
-            why:
-                "Data-shape drift is the #1 source of post-founding reversals. \
+            why: "Data-shape drift is the #1 source of post-founding reversals. \
                  A new column, a renamed field, a different null semantics — each \
                  is a commitment, not just a doc edit.",
         },
         CatalogEntry {
             section_id: "design.open-questions",
             question_id: "amend.adv.design.open-questions",
-            prompt:
-                "Why add this open question now instead of resolving it? \
+            prompt: "Why add this open question now instead of resolving it? \
                  What evidence is missing?",
-            why:
-                "An open question deferred without rationale will be deferred \
+            why: "An open question deferred without rationale will be deferred \
                  forever. Name the missing evidence so you know when you can close it.",
         },
     ]
@@ -326,7 +308,12 @@ impl AmendmentInterlocutor for StdinAmendmentInterlocutor {
     fn ask_adversarial(&mut self, q: &AdversarialQuestion) -> String {
         let mut stderr = io::stderr();
         let _ = writeln!(stderr);
-        let _ = writeln!(stderr, "  [{section}] {prompt}", section = q.section, prompt = q.prompt);
+        let _ = writeln!(
+            stderr,
+            "  [{section}] {prompt}",
+            section = q.section,
+            prompt = q.prompt
+        );
         let _ = writeln!(stderr, "      Why: {}", q.why);
         let _ = write!(stderr, "  > ");
         let _ = stderr.flush();
@@ -354,7 +341,10 @@ impl AmendmentInterlocutor for StdinAmendmentInterlocutor {
             stderr,
             "  \u{26a0} CHARTER.md on disk doesn't match the recorded charter_hash."
         );
-        let _ = writeln!(stderr, "    That means someone edited it outside `sovereign project amend`.");
+        let _ = writeln!(
+            stderr,
+            "    That means someone edited it outside `sovereign project amend`."
+        );
         let _ = writeln!(stderr, "    {diff_hint}");
         let _ = writeln!(stderr);
         let _ = write!(
@@ -763,7 +753,10 @@ pub fn append_design_amendment_log(md: &str, entry: &str) -> String {
         let after_heading = idx + HEADING.len();
         // Skip to end of line
         let rest = &md[after_heading..];
-        let eol = rest.find('\n').map(|n| after_heading + n + 1).unwrap_or(md.len());
+        let eol = rest
+            .find('\n')
+            .map(|n| after_heading + n + 1)
+            .unwrap_or(md.len());
         let mut out = String::with_capacity(md.len() + entry.len() + 2);
         out.push_str(&md[..eol]);
         // Ensure a blank line between the heading and the new entry.
@@ -815,14 +808,15 @@ mod design_amend_tests {
     fn changed_design_sections_detects_body_edit() {
         let old = signals("# P\n\n## Anchors\n\n- a\n\n## Data & interfaces\n\nv1\n");
         let new = signals("# P\n\n## Anchors\n\n- a\n\n## Data & interfaces\n\nv2\n");
-        assert_eq!(changed_design_sections(&old, &new), vec!["design.data-interfaces"]);
+        assert_eq!(
+            changed_design_sections(&old, &new),
+            vec!["design.data-interfaces"]
+        );
     }
 
     #[test]
     fn changed_design_sections_detects_section_removal() {
-        let old = signals(
-            "# P\n\n## Anchors\n\n- a\n\n## Open questions\n\n- tbd\n",
-        );
+        let old = signals("# P\n\n## Anchors\n\n- a\n\n## Open questions\n\n- tbd\n");
         let new = signals("# P\n\n## Anchors\n\n- a\n");
         assert_eq!(
             changed_design_sections(&old, &new),
@@ -863,8 +857,7 @@ mod design_amend_tests {
 
     #[test]
     fn render_design_amendment_entry_handles_empty_qa() {
-        let entry =
-            render_design_amendment_entry("2026-04-22", &[], "old", "new");
+        let entry = render_design_amendment_entry("2026-04-22", &[], "old", "new");
         assert!(entry.contains("No curated catalog questions fired"));
     }
 
@@ -997,7 +990,11 @@ _(Empty at founding. Amendments land here via `sovereign project amend`, each ca
     #[test]
     fn every_catalog_entry_has_non_empty_prompt_and_why() {
         for e in catalog() {
-            assert!(!e.prompt.trim().is_empty(), "empty prompt: {}", e.question_id);
+            assert!(
+                !e.prompt.trim().is_empty(),
+                "empty prompt: {}",
+                e.question_id
+            );
             assert!(!e.why.trim().is_empty(), "empty why: {}", e.question_id);
             assert!(e.question_id.starts_with("amend.adv."));
         }
@@ -1030,17 +1027,15 @@ _(Empty at founding. Amendments land here via `sovereign project amend`, each ca
             version: 2,
             date: "2026-05-01".into(),
             changed_sections: vec!["invariants".into()],
-            qa: vec![
-                (
-                    AdversarialQuestion {
-                        id: "amend.adv.invariants.assumers".into(),
-                        section: "invariants".into(),
-                        prompt: "Who assumes the old invariant?".into(),
-                        why: "tests lock it".into(),
-                    },
-                    "The schema validator. Updated in this same PR.".into(),
-                ),
-            ],
+            qa: vec![(
+                AdversarialQuestion {
+                    id: "amend.adv.invariants.assumers".into(),
+                    section: "invariants".into(),
+                    prompt: "Who assumes the old invariant?".into(),
+                    why: "tests lock it".into(),
+                },
+                "The schema validator. Updated in this same PR.".into(),
+            )],
             committer: "Yara <yara@example.test>".into(),
             new_charter_hash: "abc123def".into(),
         }
@@ -1076,7 +1071,8 @@ _(Empty at founding. Amendments land here via `sovereign project amend`, each ca
 
     #[test]
     fn apply_amendment_strips_founding_placeholder() {
-        let edited = FOUNDED_CHARTER.replace("No writes before approval.", "Writes OK when approved.");
+        let edited =
+            FOUNDED_CHARTER.replace("No writes before approval.", "Writes OK when approved.");
         let entry = sample_entry();
         let after = apply_amendment(&edited, &entry);
         assert!(
@@ -1100,8 +1096,10 @@ _(Empty at founding. Amendments land here via `sovereign project amend`, each ca
 
     #[test]
     fn apply_amendment_preserves_extras_sections() {
-        let with_extra = FOUNDED_CHARTER
-            .replace("## Amendment log", "## Context\n\nextra body\n\n## Amendment log");
+        let with_extra = FOUNDED_CHARTER.replace(
+            "## Amendment log",
+            "## Context\n\nextra body\n\n## Amendment log",
+        );
         let entry = sample_entry();
         let after = apply_amendment(&with_extra, &entry);
         assert!(after.contains("## Context"));
@@ -1186,15 +1184,16 @@ _(Empty at founding. Amendments land here via `sovereign project amend`, each ca
         // Both invariants questions fired.
         let asked = interloc.asked.borrow();
         assert!(asked.iter().any(|id| id == "amend.adv.invariants.assumers"));
-        assert!(asked.iter().any(|id| id == "amend.adv.invariants.replacement"));
+        assert!(asked
+            .iter()
+            .any(|id| id == "amend.adv.invariants.replacement"));
     }
 
     #[test]
     fn run_amend_cancel_returns_without_approved() {
         let edited =
             FOUNDED_CHARTER.replace("No writes before approval.", "Writes OK when approved.");
-        let mut interloc =
-            ScriptedAmendment::new(vec!["a", "b"], /* approve */ false);
+        let mut interloc = ScriptedAmendment::new(vec!["a", "b"], /* approve */ false);
         let outcome = run_amend(
             FOUNDED_CHARTER,
             &edited,

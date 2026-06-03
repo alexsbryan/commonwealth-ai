@@ -3,9 +3,9 @@
 #[allow(unused_imports)]
 use super::*;
 #[allow(unused_imports)]
-use serde::{Deserialize, Serialize};
-#[allow(unused_imports)]
 use crate::oicp;
+#[allow(unused_imports)]
+use serde::{Deserialize, Serialize};
 
 // ─── Routing Types ─────────────────────────────────────────────
 
@@ -62,9 +62,13 @@ pub enum Intent {
     /// loaded, the handler asks plainly what the user is working on
     /// — epistemic honesty as the natural path.
     ExpressiveQuery,
-    SimpleAction { tool: ToolId },
+    SimpleAction {
+        tool: ToolId,
+    },
     ComplexTask,
-    Continuation { task_id: TaskId },
+    Continuation {
+        task_id: TaskId,
+    },
 }
 
 // ─── Tool Types ────────────────────────────────────────────────
@@ -256,12 +260,8 @@ pub enum TrustLevel {
     Unsigned,
 }
 
-
 /// Compute trust level from signature fields.
-pub fn compute_trust_level(
-    signature: &Option<String>,
-    signed_by: &Option<String>,
-) -> TrustLevel {
+pub fn compute_trust_level(signature: &Option<String>, signed_by: &Option<String>) -> TrustLevel {
     match (signature, signed_by) {
         (Some(_), Some(s)) if s == "sovereign-community" => TrustLevel::CommunityReviewed,
         (Some(_), _) => TrustLevel::AuthorSigned,

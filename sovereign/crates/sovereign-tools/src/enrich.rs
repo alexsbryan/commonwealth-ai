@@ -44,8 +44,7 @@ use tokio::process::Command;
 /// Boxed + `Send + Sync + 'static` so a Tauri command can clone it
 /// into a spawned task and emit events on a channel without having
 /// to thread a channel sender through every internal API.
-pub type EnrichProgressFn =
-    Arc<dyn Fn(EnrichProgress) + Send + Sync + 'static>;
+pub type EnrichProgressFn = Arc<dyn Fn(EnrichProgress) + Send + Sync + 'static>;
 
 /// Shared atomic flag a caller flips to request cancellation of
 /// an in-flight build. `run_enrich_build` polls this between
@@ -157,9 +156,8 @@ pub fn resolve_sovereign_cli() -> Option<PathBuf> {
 /// executable file matching `name`. Hand-rolled rather than pulling
 /// the `which` crate just for two call sites — the loop is six lines.
 fn which_on_path(name: &str) -> std::io::Result<PathBuf> {
-    let path = std::env::var_os("PATH").ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::NotFound, "PATH unset")
-    })?;
+    let path = std::env::var_os("PATH")
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "PATH unset"))?;
     for dir in std::env::split_paths(&path) {
         let cand = dir.join(name);
         if cand.is_file() {
@@ -398,9 +396,7 @@ impl ParserState {
         }
 
         // [i/total] <chapter_id>… <n> q   (success)
-        if let Some((chapter_id, index, total, q_count)) =
-            parse_chapter_done(trimmed)
-        {
+        if let Some((chapter_id, index, total, q_count)) = parse_chapter_done(trimmed) {
             return Some(EnrichProgress::ChapterProgress {
                 corpus_id: self.corpus_id.clone(),
                 chapter_id,
@@ -588,8 +584,7 @@ mod tests {
     #[test]
     fn parse_chapter_failed_extracts_id_and_reason() {
         let (id, reason) =
-            parse_chapter_failed("    [1/3] sec_0001… FAILED: parse error: EOF")
-                .unwrap();
+            parse_chapter_failed("    [1/3] sec_0001… FAILED: parse error: EOF").unwrap();
         assert_eq!(id, "sec_0001");
         assert!(reason.starts_with("parse error"));
     }
@@ -629,7 +624,10 @@ mod tests {
         // BuildStart gets re-emitted as each planned step is
         // appended; desktop listeners treat the last one as
         // canonical. The first StepStart is the seed step.
-        assert!(matches!(events.first(), Some(EnrichProgress::BuildStart { .. })));
+        assert!(matches!(
+            events.first(),
+            Some(EnrichProgress::BuildStart { .. })
+        ));
         let step_starts: Vec<&EnrichProgress> = events
             .iter()
             .filter(|e| matches!(e, EnrichProgress::StepStart { .. }))
@@ -640,14 +638,16 @@ mod tests {
             .filter(|e| {
                 matches!(
                     e,
-                    EnrichProgress::ChapterProgress { .. }
-                        | EnrichProgress::ChapterFailed { .. }
+                    EnrichProgress::ChapterProgress { .. } | EnrichProgress::ChapterFailed { .. }
                 )
             })
             .collect();
         assert_eq!(chapter_events.len(), 3);
         // Final event is Complete.
-        assert!(matches!(events.last(), Some(EnrichProgress::Complete { .. })));
+        assert!(matches!(
+            events.last(),
+            Some(EnrichProgress::Complete { .. })
+        ));
         assert!(p.complete_emitted);
     }
 
@@ -737,8 +737,7 @@ mod tests {
         /// path eliminates the race without dropping `cargo test`'s
         /// parallelism for the rest of the file.
         fn e2e_test_lock() -> std::sync::MutexGuard<'static, ()> {
-            static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> =
-                std::sync::OnceLock::new();
+            static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
             LOCK.get_or_init(|| std::sync::Mutex::new(()))
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
@@ -747,8 +746,7 @@ mod tests {
         /// Collect every EnrichProgress callback into a shared
         /// Vec. Returns the callback + the Vec handle.
         fn event_collector() -> (EnrichProgressFn, Arc<Mutex<Vec<EnrichProgress>>>) {
-            let collected: Arc<Mutex<Vec<EnrichProgress>>> =
-                Arc::new(Mutex::new(Vec::new()));
+            let collected: Arc<Mutex<Vec<EnrichProgress>>> = Arc::new(Mutex::new(Vec::new()));
             let collected_c = collected.clone();
             let cb: EnrichProgressFn = Arc::new(move |evt: EnrichProgress| {
                 collected_c.lock().unwrap().push(evt);

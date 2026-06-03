@@ -103,9 +103,7 @@ impl Extractor for GutenbergCatalogExtractor {
         })?;
         // Reopen so we get a fresh cursor at byte 0.
         let file = File::open(source_path).map_err(|e| {
-            Error::Extraction(format!(
-                "Gutenberg catalog: reopen for read failed: {e}"
-            ))
+            Error::Extraction(format!("Gutenberg catalog: reopen for read failed: {e}"))
         })?;
 
         let reader: Box<dyn std::io::Read + Send> = if read_n == 2 && magic == [0x1f, 0x8b] {
@@ -167,8 +165,16 @@ fn build_doc(record: &csv::StringRecord, cols: &ColumnIndex) -> Option<Extracted
         return None;
     }
 
-    let authors = cols.authors.and_then(|i| record.get(i)).map(str::trim).filter(|s| !s.is_empty());
-    let issued = cols.issued.and_then(|i| record.get(i)).map(str::trim).filter(|s| !s.is_empty());
+    let authors = cols
+        .authors
+        .and_then(|i| record.get(i))
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let issued = cols
+        .issued
+        .and_then(|i| record.get(i))
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
     let language = cols
         .language
         .and_then(|i| record.get(i))
@@ -179,7 +185,11 @@ fn build_doc(record: &csv::StringRecord, cols: &ColumnIndex) -> Option<Extracted
         .and_then(|i| record.get(i))
         .map(str::trim)
         .filter(|s| !s.is_empty());
-    let locc = cols.locc.and_then(|i| record.get(i)).map(str::trim).filter(|s| !s.is_empty());
+    let locc = cols
+        .locc
+        .and_then(|i| record.get(i))
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
     let bookshelves = cols
         .bookshelves
         .and_then(|i| record.get(i))
@@ -307,7 +317,10 @@ mod tests {
         let doc = &docs[0];
         assert_eq!(doc.source_id, "2701");
         assert_eq!(doc.title.as_deref(), Some("Moby Dick; or, The Whale"));
-        assert_eq!(doc.url.as_deref(), Some("https://www.gutenberg.org/ebooks/2701"));
+        assert_eq!(
+            doc.url.as_deref(),
+            Some("https://www.gutenberg.org/ebooks/2701")
+        );
         assert!(doc.content.contains("Melville, Herman, 1819-1891"));
         assert!(doc.content.contains("Whaling -- Fiction"));
         assert!(doc.content.contains("Gutenberg ID: 2701"));

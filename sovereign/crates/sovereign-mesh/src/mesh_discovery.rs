@@ -115,8 +115,7 @@ pub fn relay_candidates(internal_port: u16) -> Vec<RelayCandidate> {
         })
         .collect();
     tagged.sort_by_key(|(tier, _)| *tier);
-    let mut out: Vec<RelayCandidate> =
-        tagged.into_iter().map(|(_, c)| c).collect();
+    let mut out: Vec<RelayCandidate> = tagged.into_iter().map(|(_, c)| c).collect();
     if let Some(first) = out.first_mut() {
         first.recommended = true;
     }
@@ -164,7 +163,9 @@ pub(crate) fn reachable_addresses(port: u16) -> Vec<SocketAddr> {
             port,
         )];
     }
-    ips.into_iter().map(|ip| SocketAddr::new(ip, port)).collect()
+    ips.into_iter()
+        .map(|ip| SocketAddr::new(ip, port))
+        .collect()
 }
 
 /// Parse `SOVEREIGN_ADVERTISE_ADDR` into one or more `SocketAddr`s.
@@ -205,7 +206,11 @@ pub(crate) fn read_advertise_addr_override(port: u16) -> Option<Vec<SocketAddr>>
         }
     }
 
-    if out.is_empty() { None } else { Some(out) }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
 }
 
 pub(crate) fn parse_advertise_entry(entry: &str, default_port: u16) -> Option<SocketAddr> {
@@ -266,12 +271,8 @@ pub fn local_ip_candidates() -> Vec<std::net::IpAddr> {
                 // wastes fan-out attempts (reqwest dials them and
                 // gets EHOSTUNREACH). Drop outright.
                 let is_link_local = match ip {
-                    std::net::IpAddr::V4(v4) => {
-                        v4.octets()[0] == 169 && v4.octets()[1] == 254
-                    }
-                    std::net::IpAddr::V6(v6) => {
-                        v6.segments()[0] & 0xffc0 == 0xfe80
-                    }
+                    std::net::IpAddr::V4(v4) => v4.octets()[0] == 169 && v4.octets()[1] == 254,
+                    std::net::IpAddr::V6(v6) => v6.segments()[0] & 0xffc0 == 0xfe80,
                 };
                 if is_link_local {
                     continue;
@@ -351,10 +352,7 @@ mod relay_tests {
             classify_ip(&IpAddr::V4(Ipv4Addr::new(192, 168, 1, 3))),
             "lan"
         );
-        assert_eq!(
-            classify_ip(&IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5))),
-            "lan"
-        );
+        assert_eq!(classify_ip(&IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5))), "lan");
     }
 
     #[test]
@@ -459,10 +457,7 @@ mod advertise_addr_tests {
     #[test]
     fn env_comma_separated_yields_each_socket() {
         let _guard = ENV_LOCK.lock().unwrap();
-        std::env::set_var(
-            "SOVEREIGN_ADVERTISE_ADDR",
-            "100.112.195.45, 10.0.0.5:9999",
-        );
+        std::env::set_var("SOVEREIGN_ADVERTISE_ADDR", "100.112.195.45, 10.0.0.5:9999");
         let got = read_advertise_addr_override(9742);
         std::env::remove_var("SOVEREIGN_ADVERTISE_ADDR");
         let got = got.expect("override should parse");
@@ -474,10 +469,7 @@ mod advertise_addr_tests {
     #[test]
     fn env_with_one_bad_entry_drops_just_that_entry() {
         let _guard = ENV_LOCK.lock().unwrap();
-        std::env::set_var(
-            "SOVEREIGN_ADVERTISE_ADDR",
-            "garbage, 100.112.195.45",
-        );
+        std::env::set_var("SOVEREIGN_ADVERTISE_ADDR", "garbage, 100.112.195.45");
         let got = read_advertise_addr_override(9742);
         std::env::remove_var("SOVEREIGN_ADVERTISE_ADDR");
         let got = got.expect("partial override should parse the good entry");

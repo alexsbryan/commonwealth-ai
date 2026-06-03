@@ -131,7 +131,10 @@ fn note_terms(n: &NoteRow) -> Vec<String> {
     let mut terms: Vec<String> = n
         .content
         .split_whitespace()
-        .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase())
+        .map(|w| {
+            w.trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase()
+        })
         .filter(|w| w.len() >= 4)
         .filter(|w| !is_stopword(w))
         .collect();
@@ -143,7 +146,10 @@ fn note_terms(n: &NoteRow) -> Vec<String> {
 fn query_overlaps(query: &str, note_terms: &[String]) -> bool {
     let qterms: Vec<String> = query
         .split_whitespace()
-        .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase())
+        .map(|w| {
+            w.trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase()
+        })
         .filter(|w| w.len() >= 4)
         .filter(|w| !is_stopword(w))
         .collect();
@@ -254,9 +260,14 @@ mod tests {
     #[test]
     fn coverage_full_when_query_overlaps() {
         let mut r1 = skel();
-        r1.notes.decisions.push(note("n1", "decision", "We picked extension hint over property because of forward compat"));
+        r1.notes.decisions.push(note(
+            "n1",
+            "decision",
+            "We picked extension hint over property because of forward compat",
+        ));
         let mut r2 = skel();
-        r2.tool_calls.push(ev("notes", r#"{"query":"extension hint forward compat"}"#));
+        r2.tool_calls
+            .push(ev("notes", r#"{"query":"extension hint forward compat"}"#));
         let r = analyze(&r1, &r2);
         assert_eq!(r.run1_substantive_notes, 1);
         assert_eq!(r.run2_notes_queries, 1);
@@ -267,7 +278,11 @@ mod tests {
     #[test]
     fn coverage_zero_when_no_queries() {
         let mut r1 = skel();
-        r1.notes.invariants.push(note("n1", "invariant", "Hard gates eliminate before scoring"));
+        r1.notes.invariants.push(note(
+            "n1",
+            "invariant",
+            "Hard gates eliminate before scoring",
+        ));
         let r2 = skel();
         let r = analyze(&r1, &r2);
         assert_eq!(r.matched_notes, 0);
@@ -277,9 +292,12 @@ mod tests {
     #[test]
     fn legacy_read_notes_alias_recognized() {
         let mut r1 = skel();
-        r1.notes.decisions.push(note("n1", "decision", "blending math uses failure rate"));
+        r1.notes
+            .decisions
+            .push(note("n1", "decision", "blending math uses failure rate"));
         let mut r2 = skel();
-        r2.tool_calls.push(ev("read_notes", r#"{"query":"blending failure"}"#));
+        r2.tool_calls
+            .push(ev("read_notes", r#"{"query":"blending failure"}"#));
         let r = analyze(&r1, &r2);
         assert_eq!(r.matched_notes, 1);
     }

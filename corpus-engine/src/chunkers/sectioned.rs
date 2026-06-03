@@ -97,8 +97,7 @@ impl ChapterRegexDetector {
         r"(?m)^\s*(Chapter|CHAPTER|Part|PART)\s+([IVXLCMivxlcm\d]+)\b.*$";
 
     pub fn new() -> Self {
-        Self::with_pattern(Self::DEFAULT_PATTERN)
-            .expect("DEFAULT_PATTERN must compile")
+        Self::with_pattern(Self::DEFAULT_PATTERN).expect("DEFAULT_PATTERN must compile")
     }
 
     pub fn with_pattern(pat: &str) -> Result<Self, regex::Error> {
@@ -327,8 +326,7 @@ fn find_line_anchored(haystack: &str, needle: &str, from: usize) -> Option<usize
     while search_start <= haystack.len() {
         let idx = haystack[search_start..].find(needle)?;
         let abs = search_start + idx;
-        let preceded_by_line_start =
-            abs == 0 || haystack.as_bytes().get(abs - 1) == Some(&b'\n');
+        let preceded_by_line_start = abs == 0 || haystack.as_bytes().get(abs - 1) == Some(&b'\n');
         let tail = &haystack[abs + needle.len()..];
         let followed_by_line_end = tail
             .chars()
@@ -361,7 +359,10 @@ pub struct SectionedChunker<D: SectionDetector> {
 
 impl<D: SectionDetector> SectionedChunker<D> {
     pub fn new(detector: D, paragraph: ParagraphChunker) -> Self {
-        Self { detector, paragraph }
+        Self {
+            detector,
+            paragraph,
+        }
     }
 
     pub fn with_detector(detector: D) -> Self {
@@ -436,10 +437,7 @@ impl SectionReport {
             out.push_str(&format!("  {:>3}. {} — {}\n", i + 1, sec.title, first_line));
         }
         if self.sections.len() > shown {
-            out.push_str(&format!(
-                "  ... and {} more\n",
-                self.sections.len() - shown
-            ));
+            out.push_str(&format!("  ... and {} more\n", self.sections.len() - shown));
         }
         out
     }
@@ -496,16 +494,30 @@ mod tests {
         text.push_str(&format!("Chapter III. Third\n\n{filler}\n\n"));
 
         let unfiltered = ChapterRegexDetector::new().detect(&text);
-        assert_eq!(unfiltered.len(), 6, "unfiltered detector must emit every match");
+        assert_eq!(
+            unfiltered.len(),
+            6,
+            "unfiltered detector must emit every match"
+        );
 
         let filtered = ChapterRegexDetector::new()
             .with_min_body_words(40)
             .detect(&text);
-        assert_eq!(filtered.len(), 3, "filter must drop the 3 body-less matches");
+        assert_eq!(
+            filtered.len(),
+            3,
+            "filter must drop the 3 body-less matches"
+        );
         assert_eq!(filtered[0].id, "sec_0001");
         assert_eq!(filtered[2].id, "sec_0003");
-        assert_eq!(filtered[0].metadata.get("ordinal").map(|s| s.as_str()), Some("1"));
-        assert_eq!(filtered[2].metadata.get("ordinal").map(|s| s.as_str()), Some("3"));
+        assert_eq!(
+            filtered[0].metadata.get("ordinal").map(|s| s.as_str()),
+            Some("1")
+        );
+        assert_eq!(
+            filtered[2].metadata.get("ordinal").map(|s| s.as_str()),
+            Some("3")
+        );
     }
 
     #[test]
@@ -545,7 +557,10 @@ The closing section has its own body prose too.
         // Body of the first section should start with the prose, not
         // the heading line itself.
         let body1 = &text[secs[0].start_byte..secs[0].end_byte];
-        assert!(body1.trim_start().starts_with("Body prose"), "got: {body1:?}");
+        assert!(
+            body1.trim_start().starts_with("Body prose"),
+            "got: {body1:?}"
+        );
     }
 
     #[test]
@@ -595,7 +610,10 @@ The real body starts here.
         let secs = det.detect(text);
         assert_eq!(secs.len(), 1);
         let body = &text[secs[0].start_byte..secs[0].end_byte];
-        assert!(body.trim_start().starts_with("The real body starts here."), "got: {body:?}");
+        assert!(
+            body.trim_start().starts_with("The real body starts here."),
+            "got: {body:?}"
+        );
     }
 
     #[test]
@@ -678,15 +696,12 @@ Body two.
     #[test]
     fn sectioned_chunker_long_chapter_splits_into_many_paragraphs() {
         // One big chapter that will force paragraph splitting.
-        let long_para =
-            "A long repeated paragraph sentence that fills a lot of bytes. ".repeat(80);
+        let long_para = "A long repeated paragraph sentence that fills a lot of bytes. ".repeat(80);
         let text = format!(
             "Chapter 1\n\n{long_para}\n\n{long_para}\n\n{long_para}\n\nChapter 2\n\ntiny body\n"
         );
-        let chunker = SectionedChunker::new(
-            ChapterRegexDetector::new(),
-            ParagraphChunker::new(512, 64),
-        );
+        let chunker =
+            SectionedChunker::new(ChapterRegexDetector::new(), ParagraphChunker::new(512, 64));
         let chunks = chunker.chunk(&text);
         let ch1: Vec<_> = chunks
             .iter()

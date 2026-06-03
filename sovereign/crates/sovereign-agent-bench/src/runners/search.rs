@@ -70,7 +70,12 @@ fn git_init_scaffold(path: &std::path::Path) -> std::io::Result<()> {
         return Ok(());
     }
     let run = |args: &[&str]| {
-        Command::new("git").arg("-C").arg(path).args(args).output().map(|_| ())
+        Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(args)
+            .output()
+            .map(|_| ())
     };
     run(&["init", "--initial-branch=main"])?;
     run(&["config", "user.email", "bench@local"])?;
@@ -137,7 +142,9 @@ impl AgentRunner for SearchRunner {
             },
             TrialStatus::Exhausted { rounds } => ExitReason::SearchExhaustedRounds { rounds },
             TrialStatus::NoBaseline { reason } | TrialStatus::Errored { reason } => {
-                ExitReason::Crashed { stderr_tail: reason }
+                ExitReason::Crashed {
+                    stderr_tail: reason,
+                }
             }
         };
 
@@ -211,14 +218,18 @@ mod tests {
 
     #[test]
     fn search_runner_default_model_is_primary() {
-        assert_eq!(SearchRunner::new().default_model_handle(), Some("commonwealth/primary"));
+        assert_eq!(
+            SearchRunner::new().default_model_handle(),
+            Some("commonwealth/primary")
+        );
     }
 
     #[test]
     fn search_runner_accepts_custom_backend() {
         use commonwealth_tdd::DeterministicChatBackend;
-        let _r = SearchRunner::with_backend(Arc::new(DeterministicChatBackend::from_strs(
-            Vec::<String>::new(),
-        )));
+        let _r = SearchRunner::with_backend(Arc::new(DeterministicChatBackend::from_strs(Vec::<
+            String,
+        >::new(
+        ))));
     }
 }

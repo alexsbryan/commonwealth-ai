@@ -229,8 +229,9 @@ impl MdnsDiscovery {
         properties.insert("app_id".to_string(), app_id.to_string());
         properties.insert("node_id".to_string(), self.instance_name.clone());
 
-        let service = ServiceInfo::new(&service_type, &instance, &host, (), app_port, properties)
-            .map_err(|e| Error::Discovery(format!("failed to create app service info: {e}")))?;
+        let service =
+            ServiceInfo::new(&service_type, &instance, &host, (), app_port, properties)
+                .map_err(|e| Error::Discovery(format!("failed to create app service info: {e}")))?;
 
         self.daemon
             .register(service)
@@ -253,7 +254,11 @@ impl MdnsDiscovery {
     }
 
     /// Browse for mesh apps of a specific app_id across the network.
-    pub fn browse_apps(&self, app_id: &str, tx: mpsc::Sender<DiscoveredApp>) -> Result<BrowseHandle> {
+    pub fn browse_apps(
+        &self,
+        app_id: &str,
+        tx: mpsc::Sender<DiscoveredApp>,
+    ) -> Result<BrowseHandle> {
         let service_type = app_service_type(app_id);
         let receiver = self
             .daemon
@@ -272,7 +277,8 @@ impl MdnsDiscovery {
                         move || receiver.recv_timeout(std::time::Duration::from_secs(5))
                     }),
                 )
-                .await {
+                .await
+                {
                     if let mdns_sd::ServiceEvent::ServiceResolved(info) = event {
                         let full_name = info.get_fullname().to_string();
                         if full_name.contains(&own_instance) {
@@ -280,8 +286,7 @@ impl MdnsDiscovery {
                         }
 
                         let props = info.get_properties();
-                        let node_id_str =
-                            props.get_property_val_str("node_id").unwrap_or_default();
+                        let node_id_str = props.get_property_val_str("node_id").unwrap_or_default();
                         let _ = node_id_str; // node_id comes from gossip handshake
 
                         let port = info.get_port();

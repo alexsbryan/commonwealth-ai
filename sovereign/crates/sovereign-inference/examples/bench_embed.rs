@@ -35,8 +35,8 @@ use llama_cpp_4::model::{AddBos, LlamaModel};
 #[derive(Clone, Copy, Debug)]
 enum Backend {
     CpuOnly,
-    MetalFull,     // offload_kqv=true, op_offload=true, n_gpu_layers=999
-    MetalOpsOnly,  // op_offload=true, kqv on CPU
+    MetalFull,    // offload_kqv=true, op_offload=true, n_gpu_layers=999
+    MetalOpsOnly, // op_offload=true, kqv on CPU
 }
 
 fn main() {
@@ -46,23 +46,17 @@ fn main() {
         "config: seqs={} tokens_per_seq~={} n_ctx={} n_seq_max={} iters={}",
         args.seqs, args.tokens_per_seq, args.n_ctx, args.n_seq_max, args.iters
     );
-    println!(
-        "thread counts to test: {:?}",
-        args.thread_counts
-    );
+    println!("thread counts to test: {:?}", args.thread_counts);
     println!();
 
-    let backend = Arc::new(
-        LlamaBackend::init().expect("LlamaBackend::init"),
-    );
+    let backend = Arc::new(LlamaBackend::init().expect("LlamaBackend::init"));
     let gpu_layers = match args.backend {
         Backend::CpuOnly => 0,
         Backend::MetalFull | Backend::MetalOpsOnly => 999,
     };
     let model_params = LlamaModelParams::default().with_n_gpu_layers(gpu_layers);
     let model = Arc::new(
-        LlamaModel::load_from_file(&backend, &args.model, &model_params)
-            .expect("load model"),
+        LlamaModel::load_from_file(&backend, &args.model, &model_params).expect("load model"),
     );
     println!("backend: {:?}", args.backend);
     let n_embd = model.n_embd() as usize;
@@ -103,8 +97,7 @@ fn main() {
             .with_n_threads(n_threads as i32)
             .with_n_threads_batch(n_threads as i32);
         let mut ctx = unsafe {
-            let model_ref: &'static LlamaModel =
-                &*(Arc::as_ptr(&model) as *const LlamaModel);
+            let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model) as *const LlamaModel);
             model_ref
                 .new_context(&backend, ctx_params)
                 .expect("new_context")
@@ -143,9 +136,7 @@ fn run_batch(
     let mut batch = LlamaBatch::new(n_ctx as usize, n_seq_max as i32);
     let mut total_tokens = 0usize;
     for (seq_id, text) in texts.iter().enumerate() {
-        let tokens = model
-            .str_to_token(text, AddBos::Always)
-            .expect("tokenize");
+        let tokens = model.str_to_token(text, AddBos::Always).expect("tokenize");
         total_tokens += tokens.len();
         for (pos, &tok) in tokens.iter().enumerate() {
             batch

@@ -14,8 +14,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::error::Result;
 use crate::health::{
-    Component, HealthCheckable, HealthIssue, HealthReport, HealthStatus,
-    PendingDecision, RepairKind, RepairOutcome, UserDecision, UserOption,
+    Component, HealthCheckable, HealthIssue, HealthReport, HealthStatus, PendingDecision,
+    RepairKind, RepairOutcome, UserDecision, UserOption,
 };
 use crate::traits::StateStore;
 
@@ -37,8 +37,8 @@ pub struct MonitorConfig {
 impl Default for MonitorConfig {
     fn default() -> Self {
         Self {
-            check_interval: Duration::from_secs(300),      // 5 min
-            repair_grace_period: Duration::from_secs(30),  // 30 s
+            check_interval: Duration::from_secs(300),     // 5 min
+            repair_grace_period: Duration::from_secs(30), // 30 s
             max_concurrent_repairs: 2,
             maintenance_window_utc: None,
         }
@@ -164,17 +164,13 @@ impl HealthMonitor {
             if checker.can_repair_autonomously(issue) {
                 self.spawn_repair(checker, issue, &key).await;
             } else {
-                self.maybe_surface_decision(checker.component(), issue).await;
+                self.maybe_surface_decision(checker.component(), issue)
+                    .await;
             }
         }
     }
 
-    async fn spawn_repair(
-        &self,
-        checker: &dyn HealthCheckable,
-        issue: &HealthIssue,
-        key: &str,
-    ) {
+    async fn spawn_repair(&self, checker: &dyn HealthCheckable, issue: &HealthIssue, key: &str) {
         // Mark as active before await to prevent race
         self.active_repairs.insert(
             key.to_string(),
@@ -186,15 +182,33 @@ impl HealthMonitor {
 
         match checker.repair(issue).await {
             Ok(RepairOutcome::Resolved) => {
-                tracing::info!(component = key, issue = issue.tag(), "repair resolved issue");
+                tracing::info!(
+                    component = key,
+                    issue = issue.tag(),
+                    "repair resolved issue"
+                );
             }
             Ok(RepairOutcome::PartialProgress { detail }) => {
-                tracing::info!(component = key, issue = issue.tag(), detail, "repair made partial progress");
+                tracing::info!(
+                    component = key,
+                    issue = issue.tag(),
+                    detail,
+                    "repair made partial progress"
+                );
             }
             Ok(RepairOutcome::Failed { reason }) => {
-                tracing::warn!(component = key, issue = issue.tag(), reason, "repair failed");
+                tracing::warn!(
+                    component = key,
+                    issue = issue.tag(),
+                    reason,
+                    "repair failed"
+                );
             }
-            Ok(RepairOutcome::NeedsUserDecision { question, options, consequence }) => {
+            Ok(RepairOutcome::NeedsUserDecision {
+                question,
+                options,
+                consequence,
+            }) => {
                 self.surface_decision(
                     checker.component().clone(),
                     issue.clone(),
@@ -215,7 +229,10 @@ impl HealthMonitor {
     async fn maybe_surface_decision(&self, component: Component, issue: &HealthIssue) {
         let pending = self.pending_queue.lock().await;
         // De-duplicate: don't re-surface if already pending for this component+issue.
-        if pending.iter().any(|d: &PendingDecision| d.matches(&component, issue)) {
+        if pending
+            .iter()
+            .any(|d: &PendingDecision| d.matches(&component, issue))
+        {
             return;
         }
         drop(pending); // release lock before async call
@@ -226,13 +243,11 @@ impl HealthMonitor {
             component.display_name(),
             issue.tag()
         );
-        let options = vec![
-            UserOption {
-                kind: RepairKind::Dismiss,
-                label: "Dismiss".into(),
-                description: "Ignore this issue for now.".into(),
-            },
-        ];
+        let options = vec![UserOption {
+            kind: RepairKind::Dismiss,
+            label: "Dismiss".into(),
+            description: "Ignore this issue for now.".into(),
+        }];
         self.surface_decision(
             component,
             issue.clone(),

@@ -66,7 +66,11 @@ fn init_repo(dir: &Path) {
         .unwrap()
         .success());
     for (k, v) in [("user.email", "alice@example.com"), ("user.name", "Alice")] {
-        Cmd::new("git").args(["config", k, v]).current_dir(dir).status().unwrap();
+        Cmd::new("git")
+            .args(["config", k, v])
+            .current_dir(dir)
+            .status()
+            .unwrap();
     }
 }
 
@@ -143,7 +147,9 @@ fn write_atlas_fixture(
 
 // ── Notes fixture helper ─────────────────────────────────────
 
-async fn make_notes_with(rows: &[(&str, &str)]) -> (tempfile::TempDir, corpus_engine_notes::NoteStore) {
+async fn make_notes_with(
+    rows: &[(&str, &str)],
+) -> (tempfile::TempDir, corpus_engine_notes::NoteStore) {
     let tmp = tempfile::tempdir().unwrap();
     let store = corpus_engine_notes::NoteStore::open(&tmp.path().join("notes.db")).unwrap();
     for (kind, content) in rows {
@@ -196,7 +202,10 @@ async fn snapshot_small_feature_branch_with_notes() {
             "decision",
             "Auth flows route through loopback_guard. RFC-0017.",
         ),
-        ("invariant", "No plaintext credentials in logs at any layer."),
+        (
+            "invariant",
+            "No plaintext credentials in logs at any layer.",
+        ),
     ])
     .await;
     let working_set = vec![
@@ -251,16 +260,8 @@ async fn snapshot_with_atlas_and_archaeology() {
     let atlas_dir = write_atlas_fixture(
         tmp.path(),
         &[
-            (
-                "entity-0001",
-                "src/auth/proxy.rs",
-                "AuthProxy",
-            ),
-            (
-                "entity-0002",
-                "src/auth/loopback_guard.rs",
-                "LoopbackGuard",
-            ),
+            ("entity-0001", "src/auth/proxy.rs", "AuthProxy"),
+            ("entity-0002", "src/auth/loopback_guard.rs", "LoopbackGuard"),
         ],
     );
     let (_notes_tmp, notes) = make_notes_with(&[]).await;
@@ -346,7 +347,9 @@ async fn snapshot_recent_activity_with_backdated_commits() {
     write_and_add(repo, "src/auth/proxy.rs", "fn proxy_v1() {}\n");
     // Recent: today (use a far-future date relative to typical CI
     // boxes so this stays "recent" for years).
-    let now_iso = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S +0000").to_string();
+    let now_iso = chrono::Utc::now()
+        .format("%Y-%m-%dT%H:%M:%S +0000")
+        .to_string();
     commit_at(repo, "feat(auth): introduce proxy", &now_iso);
     write_and_add(repo, "src/auth/proxy.rs", "fn proxy_v2() {}\n");
     commit_at(repo, "refactor(auth): widen proxy contract", &now_iso);

@@ -275,10 +275,9 @@ pub async fn run_team_pipeline<'a>(
         },
         match &package.sufficiency {
             Sufficiency::Sufficient => format!("Curated {kept} chunks; drafting now."),
-            Sufficiency::Partial { gaps } => format!(
-                "Curated {kept} chunks; gaps: {}.",
-                gaps.join(", ")
-            ),
+            Sufficiency::Partial { gaps } => {
+                format!("Curated {kept} chunks; gaps: {}.", gaps.join(", "))
+            }
             Sufficiency::Insufficient { reason, .. } => {
                 format!("Insufficient grounding: {reason}.")
             }
@@ -356,13 +355,16 @@ pub async fn run_team_pipeline<'a>(
         &session_id,
         &conversation_id,
         NarrationPhase::DraftingComplete {
-            tokens: (draft_response.tokens_used.saturating_sub(draft_response.prompt_tokens))
-                as u32,
+            tokens: (draft_response
+                .tokens_used
+                .saturating_sub(draft_response.prompt_tokens)) as u32,
             finish_reason: drafter_finish_reason.to_string(),
         },
         format!(
             "Draft complete ({} tokens) — refining for voice.",
-            draft_response.tokens_used.saturating_sub(draft_response.prompt_tokens),
+            draft_response
+                .tokens_used
+                .saturating_sub(draft_response.prompt_tokens),
         ),
     )
     .await;
@@ -398,7 +400,9 @@ pub async fn run_team_pipeline<'a>(
         elapsed_ms = started.elapsed().as_millis() as u64,
         kept_chunks = kept,
         skeleton_sections = skeleton_labels.len(),
-        drafter_tokens = draft_response.tokens_used.saturating_sub(draft_response.prompt_tokens),
+        drafter_tokens = draft_response
+            .tokens_used
+            .saturating_sub(draft_response.prompt_tokens),
         "team-pipeline: complete"
     );
 
@@ -545,8 +549,7 @@ fn build_drafter_request(
     // input to work on. For Factual we leave the Drafter's general
     // prompt — Factual responses don't need the witness frame.
     if matches!(register, SkillRegister::Relational) {
-        req.system_message =
-            Some(crate::runtime::epistemic_contract_for(register).to_string());
+        req.system_message = Some(crate::runtime::epistemic_contract_for(register).to_string());
     }
 
     // iter9: clamp Drafter max_tokens for Relational. iter8 gave
@@ -559,7 +562,10 @@ fn build_drafter_request(
     // the analytical bloat at the source. Factual untouched —
     // factual answers can be longer.
     if matches!(register, SkillRegister::Relational) {
-        let cap = req.max_tokens.unwrap_or(usize::MAX).min(DRAFTER_RELATIONAL_MAX_TOKENS);
+        let cap = req
+            .max_tokens
+            .unwrap_or(usize::MAX)
+            .min(DRAFTER_RELATIONAL_MAX_TOKENS);
         req.max_tokens = Some(cap);
     }
     // Cap to the SUM of per-section target_tokens (the Curator's

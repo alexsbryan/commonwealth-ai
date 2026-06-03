@@ -4,9 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use arrow_array::{
-    Array, Int32Array, Int64Array, RecordBatch, StringArray,
-    FixedSizeListArray,
-    types::Float32Type,
+    types::Float32Type, Array, FixedSizeListArray, Int32Array, Int64Array, RecordBatch, StringArray,
 };
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
@@ -14,8 +12,8 @@ use lancedb::query::{ExecutableQuery, QueryBase};
 use crate::error::{Error, Result};
 
 use super::{
-    CorpusIndex, DedupeReport, InsertChunk, EmbeddedChunk, StoredChunk,
-    corpus_schema, read_meta, write_meta, now_unix,
+    corpus_schema, now_unix, read_meta, write_meta, CorpusIndex, DedupeReport, EmbeddedChunk,
+    InsertChunk, StoredChunk,
 };
 
 impl CorpusIndex {
@@ -31,18 +29,10 @@ impl CorpusIndex {
             .map(|i| (base_id + i as u64 + 1) as i64)
             .collect();
         let contents: Vec<&str> = chunks.iter().map(|(c, _)| c.content.as_str()).collect();
-        let titles: Vec<Option<&str>> = chunks
-            .iter()
-            .map(|(c, _)| c.title.as_deref())
-            .collect();
-        let urls: Vec<Option<&str>> = chunks
-            .iter()
-            .map(|(c, _)| c.url.as_deref())
-            .collect();
-        let metadatas: Vec<Option<&str>> = chunks
-            .iter()
-            .map(|(c, _)| c.metadata.as_deref())
-            .collect();
+        let titles: Vec<Option<&str>> = chunks.iter().map(|(c, _)| c.title.as_deref()).collect();
+        let urls: Vec<Option<&str>> = chunks.iter().map(|(c, _)| c.url.as_deref()).collect();
+        let metadatas: Vec<Option<&str>> =
+            chunks.iter().map(|(c, _)| c.metadata.as_deref()).collect();
         let content_hashes: Vec<Option<&str>> = chunks
             .iter()
             .map(|(c, _)| c.content_hash.as_deref())
@@ -66,22 +56,13 @@ impl CorpusIndex {
             .iter()
             .map(|(c, _)| c.code.file_path.as_deref())
             .collect();
-        let line_starts: Vec<Option<i32>> = chunks
-            .iter()
-            .map(|(c, _)| c.code.line_start)
-            .collect();
-        let line_ends: Vec<Option<i32>> = chunks
-            .iter()
-            .map(|(c, _)| c.code.line_end)
-            .collect();
+        let line_starts: Vec<Option<i32>> = chunks.iter().map(|(c, _)| c.code.line_start).collect();
+        let line_ends: Vec<Option<i32>> = chunks.iter().map(|(c, _)| c.code.line_end).collect();
         let languages: Vec<Option<&str>> = chunks
             .iter()
             .map(|(c, _)| c.code.language.as_deref())
             .collect();
-        let mtimes: Vec<Option<i64>> = chunks
-            .iter()
-            .map(|(c, _)| c.code.mtime)
-            .collect();
+        let mtimes: Vec<Option<i64>> = chunks.iter().map(|(c, _)| c.code.mtime).collect();
 
         // Pull-based work queue column: `u32` cast to `i32` (Arrow has no
         // unsigned 32-bit). Unit IDs are small indices into the coordinator's
@@ -94,9 +75,7 @@ impl CorpusIndex {
         // Build the embedding FixedSizeList array.
         let dim = self.embedding_dimensions as i32;
         let embedding_array = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
-            chunks.iter().map(|(_, e)| {
-                Some(e.iter().map(|&v| Some(v)))
-            }),
+            chunks.iter().map(|(_, e)| Some(e.iter().map(|&v| Some(v)))),
             dim,
         );
 
@@ -173,11 +152,7 @@ impl CorpusIndex {
         if ids.is_empty() {
             return Ok(());
         }
-        let list: String = ids
-            .iter()
-            .map(u64::to_string)
-            .collect::<Vec<_>>()
-            .join(",");
+        let list: String = ids.iter().map(u64::to_string).collect::<Vec<_>>().join(",");
         self.table
             .delete(&format!("id IN ({list})"))
             .await
@@ -212,7 +187,7 @@ impl CorpusIndex {
             .table
             .query()
             .select(lancedb::query::Select::Columns(vec![
-                "content_hash".to_string(),
+                "content_hash".to_string()
             ]))
             .execute()
             .await
@@ -227,9 +202,7 @@ impl CorpusIndex {
             let arr = batch
                 .column_by_name("content_hash")
                 .and_then(|c| c.as_any().downcast_ref::<StringArray>())
-                .ok_or_else(|| {
-                    Error::Serialization("missing content_hash column".into())
-                })?;
+                .ok_or_else(|| Error::Serialization("missing content_hash column".into()))?;
             for i in 0..batch.num_rows() {
                 if !arr.is_null(i) {
                     with_hash += 1;
@@ -276,22 +249,14 @@ impl CorpusIndex {
             .table
             .query()
             .select(lancedb::query::Select::Columns(vec![
-                "content_hash".to_string(),
+                "content_hash".to_string()
             ]))
             .execute()
             .await
-            .map_err(|e| {
-                Error::Database(format!(
-                    "compute_canonical_fingerprint query: {e}"
-                ))
-            })?
+            .map_err(|e| Error::Database(format!("compute_canonical_fingerprint query: {e}")))?
             .try_collect()
             .await
-            .map_err(|e| {
-                Error::Database(format!(
-                    "compute_canonical_fingerprint collect: {e}"
-                ))
-            })?;
+            .map_err(|e| Error::Database(format!("compute_canonical_fingerprint collect: {e}")))?;
 
         let mut hashes: Vec<String> = Vec::new();
         let mut hashless_rows: u64 = 0;
@@ -299,9 +264,7 @@ impl CorpusIndex {
             let arr = batch
                 .column_by_name("content_hash")
                 .and_then(|c| c.as_any().downcast_ref::<StringArray>())
-                .ok_or_else(|| {
-                    Error::Serialization("missing content_hash column".into())
-                })?;
+                .ok_or_else(|| Error::Serialization("missing content_hash column".into()))?;
             for i in 0..batch.num_rows() {
                 if arr.is_null(i) {
                     hashless_rows += 1;
@@ -339,10 +302,7 @@ impl CorpusIndex {
     /// on-disk meta. Idempotent — safe to call repeatedly with the
     /// same value, or to update with a recomputed value after the
     /// chunk set legitimately changed.
-    pub fn set_canonical_fingerprint(
-        &self,
-        fingerprint: &str,
-    ) -> Result<()> {
+    pub fn set_canonical_fingerprint(&self, fingerprint: &str) -> Result<()> {
         let index_dir = std::path::Path::new(self.connection().uri());
         let mut meta = super::read_meta(index_dir)?;
         meta.canonical_fingerprint = Some(fingerprint.to_string());
@@ -372,14 +332,12 @@ impl CorpusIndex {
     /// per-batch `only_if` filter probes (cheap individually,
     /// expensive in aggregate). For the wikipedia-scale corpora
     /// driving this work, the up-front HashSet is the right shape.
-    pub async fn list_indexed_content_hashes(
-        &self,
-    ) -> Result<std::collections::HashSet<String>> {
+    pub async fn list_indexed_content_hashes(&self) -> Result<std::collections::HashSet<String>> {
         let batches: Vec<arrow_array::RecordBatch> = self
             .table
             .query()
             .select(lancedb::query::Select::Columns(vec![
-                "content_hash".to_string(),
+                "content_hash".to_string()
             ]))
             .execute()
             .await
@@ -393,9 +351,7 @@ impl CorpusIndex {
             let arr = batch
                 .column_by_name("content_hash")
                 .and_then(|c| c.as_any().downcast_ref::<StringArray>())
-                .ok_or_else(|| {
-                    Error::Serialization("missing content_hash column".into())
-                })?;
+                .ok_or_else(|| Error::Serialization("missing content_hash column".into()))?;
             for i in 0..batch.num_rows() {
                 if !arr.is_null(i) {
                     out.insert(arr.value(i).to_string());
@@ -453,8 +409,7 @@ impl CorpusIndex {
         // Map each content_hash to the minimum id we've seen.
         // Anyone with a higher id for the same hash is a duplicate
         // and goes onto the deletion list.
-        let mut winners: std::collections::HashMap<String, i64> =
-            std::collections::HashMap::new();
+        let mut winners: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
         let mut victims: Vec<i64> = Vec::new();
         let mut hashless: u64 = 0;
 
@@ -466,9 +421,7 @@ impl CorpusIndex {
             let hashes = batch
                 .column_by_name("content_hash")
                 .and_then(|c| c.as_any().downcast_ref::<StringArray>())
-                .ok_or_else(|| {
-                    Error::Serialization("missing content_hash column".into())
-                })?;
+                .ok_or_else(|| Error::Serialization("missing content_hash column".into()))?;
             for i in 0..batch.num_rows() {
                 let id = ids.value(i);
                 if hashes.is_null(i) {
@@ -549,7 +502,7 @@ impl CorpusIndex {
             .table
             .query()
             .select(lancedb::query::Select::Columns(vec![
-                "source_doc_id".to_string(),
+                "source_doc_id".to_string()
             ]))
             .execute()
             .await
@@ -563,9 +516,7 @@ impl CorpusIndex {
             let arr = batch
                 .column_by_name("source_doc_id")
                 .and_then(|c| c.as_any().downcast_ref::<StringArray>())
-                .ok_or_else(|| {
-                    Error::Serialization("missing source_doc_id column".into())
-                })?;
+                .ok_or_else(|| Error::Serialization("missing source_doc_id column".into()))?;
             for i in 0..batch.num_rows() {
                 if !arr.is_null(i) {
                     out.insert(arr.value(i).to_string());
@@ -635,7 +586,11 @@ impl CorpusIndex {
     }
 
     /// Re-embed the specified chunks with a fresh embedding call and update them in place.
-    pub async fn re_embed_chunks(&self, chunk_ids: &[u64], _embed_fn: &crate::types::EmbedFn) -> Result<()> {
+    pub async fn re_embed_chunks(
+        &self,
+        chunk_ids: &[u64],
+        _embed_fn: &crate::types::EmbedFn,
+    ) -> Result<()> {
         if chunk_ids.is_empty() {
             return Ok(());
         }

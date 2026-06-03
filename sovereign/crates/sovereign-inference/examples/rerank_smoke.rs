@@ -16,19 +16,13 @@ use std::env;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
-    let path = args
-        .get(1)
-        .cloned()
-        .unwrap_or_else(|| {
-            "/home/alexbryan/dev/commonwealth-ai/sovereign/models/jina-reranker-v3-Q6_K.gguf"
-                .to_string()
-        });
+    let path = args.get(1).cloned().unwrap_or_else(|| {
+        "/home/alexbryan/dev/commonwealth-ai/sovereign/models/jina-reranker-v3-Q6_K.gguf"
+            .to_string()
+    });
     eprintln!("loading reranker: {path}");
-    let reranker = StandaloneReranker::load(
-        std::path::Path::new(&path),
-        ModelFamily::Reranker,
-        None,
-    )?;
+    let reranker =
+        StandaloneReranker::load(std::path::Path::new(&path), ModelFamily::Reranker, None)?;
     eprintln!("loaded.\n");
 
     let cases = vec![
@@ -68,12 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut indexed: Vec<(usize, f32)> = scores.iter().copied().enumerate().collect();
         indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         for (rank, (i, score)) in indexed.iter().enumerate() {
-            println!(
-                "  #{} score={:>+8.4}  {}",
-                rank + 1,
-                score,
-                &docs[*i],
-            );
+            println!("  #{} score={:>+8.4}  {}", rank + 1, score, &docs[*i],);
         }
         println!();
     }

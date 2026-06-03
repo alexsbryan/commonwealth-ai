@@ -79,10 +79,8 @@ impl Middleware for ToolInjector {
         let existing = request.tools.get_or_insert_with(Vec::new);
 
         // Collect existing names for dedup.
-        let existing_names: std::collections::HashSet<String> = existing
-            .iter()
-            .map(|t| t.function.name.clone())
-            .collect();
+        let existing_names: std::collections::HashSet<String> =
+            existing.iter().map(|t| t.function.name.clone()).collect();
         let mut appended = 0;
         for tool in atos_tools {
             if existing_names.contains(&tool.function.name) {
@@ -118,11 +116,7 @@ fn render_descriptors(descriptors: &[ToolDescriptor]) -> Vec<ToolDefinition> {
                     .map(|o| o.keys().cloned().collect::<Vec<_>>())
                     .filter(|k| !k.is_empty())
                 {
-                    Some(keys) => format!(
-                        "{}\n\nOutput keys: {}",
-                        d.description,
-                        keys.join(", ")
-                    ),
+                    Some(keys) => format!("{}\n\nOutput keys: {}", d.description, keys.join(", ")),
                     None => d.description.clone(),
                 },
                 None => d.description.clone(),
@@ -163,12 +157,12 @@ mod tests {
             chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         }
     }
 
@@ -202,10 +196,16 @@ mod tests {
     }
 
     fn critical_set() -> Vec<ToolDescriptor> {
-        ["notes", "note", "read_note_digest", "read_note_by_id", "write_redteam_finding"]
-            .iter()
-            .map(|id| descriptor(id))
-            .collect()
+        [
+            "notes",
+            "note",
+            "read_note_digest",
+            "read_note_by_id",
+            "write_redteam_finding",
+        ]
+        .iter()
+        .map(|id| descriptor(id))
+        .collect()
     }
 
     #[tokio::test]
@@ -219,7 +219,9 @@ mod tests {
         assert!(tools.iter().any(|t| t.function.name == "note"));
         assert!(tools.iter().any(|t| t.function.name == "read_note_digest"));
         assert!(tools.iter().any(|t| t.function.name == "read_note_by_id"));
-        assert!(tools.iter().any(|t| t.function.name == "write_redteam_finding"));
+        assert!(tools
+            .iter()
+            .any(|t| t.function.name == "write_redteam_finding"));
     }
 
     #[tokio::test]

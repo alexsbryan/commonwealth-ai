@@ -181,9 +181,7 @@ mod tests {
 
     #[test]
     fn no_peers_no_advice() {
-        assert!(
-            evaluate_peer_atlas_advice(0, None, Some("e"), &[]).is_none()
-        );
+        assert!(evaluate_peer_atlas_advice(0, None, Some("e"), &[]).is_none());
     }
 
     #[test]
@@ -193,8 +191,7 @@ mod tests {
             peer("beta", Some("qwen3-embed"), 1200),
             peer("gamma", Some("qwen3-embed"), 600),
         ];
-        let advice =
-            evaluate_peer_atlas_advice(0, None, Some("qwen3-embed"), &peers).unwrap();
+        let advice = evaluate_peer_atlas_advice(0, None, Some("qwen3-embed"), &peers).unwrap();
         assert_eq!(advice.peer_name, "beta");
         assert_eq!(advice.peer_tier2_count, 1200);
     }
@@ -202,26 +199,20 @@ mod tests {
     #[test]
     fn rejects_mismatched_embed_model() {
         let peers = vec![peer("alpha", Some("nomic-embed"), 1200)];
-        assert!(
-            evaluate_peer_atlas_advice(0, None, Some("qwen3-embed"), &peers).is_none()
-        );
+        assert!(evaluate_peer_atlas_advice(0, None, Some("qwen3-embed"), &peers).is_none());
     }
 
     #[test]
     fn rejects_peer_with_no_embed_model() {
         let peers = vec![peer("alpha", None, 1200)];
-        assert!(
-            evaluate_peer_atlas_advice(0, None, Some("qwen3-embed"), &peers).is_none()
-        );
+        assert!(evaluate_peer_atlas_advice(0, None, Some("qwen3-embed"), &peers).is_none());
     }
 
     #[test]
     fn rejects_marginal_lead() {
         // We already have 1100; peer has 1150 (+50 < MIN_PEER_LEAD=100).
         let peers = vec![peer("alpha", Some("qwen3-embed"), 1150)];
-        assert!(
-            evaluate_peer_atlas_advice(1100, None, Some("qwen3-embed"), &peers).is_none()
-        );
+        assert!(evaluate_peer_atlas_advice(1100, None, Some("qwen3-embed"), &peers).is_none());
     }
 
     #[test]
@@ -267,10 +258,7 @@ mod tests {
                 atlas_fingerprint: None,
             },
         ];
-        assert!(
-            PeerAtlasView::from_member("p", Some("e".into()), "wikipedia", &hosted)
-                .is_none()
-        );
+        assert!(PeerAtlasView::from_member("p", Some("e".into()), "wikipedia", &hosted).is_none());
 
         // Add a real one.
         let mut hosted = hosted;

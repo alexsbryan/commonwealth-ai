@@ -101,10 +101,7 @@ pub struct DeltaSummary {
 ///
 /// Returns counts for observability. Empty delta is a no-op (returns
 /// `Ok` with zeros, no files touched).
-pub fn apply_atom_delta(
-    atlas_dir: &Path,
-    delta: AtomsDelta,
-) -> Result<DeltaSummary> {
+pub fn apply_atom_delta(atlas_dir: &Path, delta: AtomsDelta) -> Result<DeltaSummary> {
     let mut summary = DeltaSummary::default();
     if delta.is_empty() {
         return Ok(summary);
@@ -199,18 +196,15 @@ pub fn apply_atom_delta(
     if need_edge_pass {
         let mut edges_file = match super::writer::read_atlas_edges(atlas_dir) {
             Ok(f) => f,
-            Err(e) if missing_file(&e) => {
-                super::edges::EdgesFile::new(Vec::new())
-            }
+            Err(e) if missing_file(&e) => super::edges::EdgesFile::new(Vec::new()),
             Err(e) => {
                 return Err(Error::Serialization(format!("read edges.json: {e}")));
             }
         };
         let pre = edges_file.edges.len();
-        edges_file.edges.retain(|e| {
-            !atoms_to_drop.contains(&e.source)
-                && !atoms_to_drop.contains(&e.target)
-        });
+        edges_file
+            .edges
+            .retain(|e| !atoms_to_drop.contains(&e.source) && !atoms_to_drop.contains(&e.target));
         summary.edges_dropped = pre - edges_file.edges.len();
 
         let mut edges_added = 0usize;
@@ -219,10 +213,8 @@ pub fn apply_atom_delta(
             // Dedup by edge.id when re-inserting (delta might
             // include edges whose ids collide with surviving
             // ones — overwrite to keep the new metadata).
-            let mut by_id: std::collections::HashMap<
-                super::edges::EdgeId,
-                usize,
-            > = std::collections::HashMap::new();
+            let mut by_id: std::collections::HashMap<super::edges::EdgeId, usize> =
+                std::collections::HashMap::new();
             for (i, e) in edges_file.edges.iter().enumerate() {
                 by_id.insert(e.id.clone(), i);
             }
@@ -241,9 +233,8 @@ pub fn apply_atom_delta(
         if touched {
             write_atomic(
                 &atlas_dir.join("edges.json"),
-                &serde_json::to_vec_pretty(&edges_file).map_err(|e| {
-                    Error::Serialization(format!("serialise edges.json: {e}"))
-                })?,
+                &serde_json::to_vec_pretty(&edges_file)
+                    .map_err(|e| Error::Serialization(format!("serialise edges.json: {e}")))?,
             )?;
             summary.files_touched.push("edges.json".to_string());
         }
@@ -257,12 +248,9 @@ pub fn apply_atom_delta(
                 });
                 summary.cross_corpus_edges_dropped = pre - ccedges.edges.len();
                 if summary.cross_corpus_edges_dropped > 0 {
-                    super::writer::write_atlas_cross_corpus_edges(atlas_dir, &ccedges)
-                        .map_err(|e| {
-                            Error::Serialization(format!(
-                                "write cross_corpus_edges.json: {e}"
-                            ))
-                        })?;
+                    super::writer::write_atlas_cross_corpus_edges(atlas_dir, &ccedges).map_err(
+                        |e| Error::Serialization(format!("write cross_corpus_edges.json: {e}")),
+                    )?;
                     summary
                         .files_touched
                         .push("cross_corpus_edges.json".to_string());
@@ -295,9 +283,7 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
 mod tests {
     use super::*;
     use crate::enrichment::atlas::atoms::{AtomsFile, ChunkRef, Entity};
-    use crate::enrichment::atlas::edges::{
-        Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile,
-    };
+    use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
     use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
     use std::fs;
 

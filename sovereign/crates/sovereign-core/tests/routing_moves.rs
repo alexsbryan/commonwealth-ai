@@ -43,7 +43,13 @@ struct RecordingRoutingEventSink {
 impl RecordingRoutingEventSink {
     fn new() -> (Arc<Self>, Arc<Mutex<RecordedEvents>>) {
         let events = Arc::new(Mutex::new(RecordedEvents::default()));
-        (Self { events: Arc::clone(&events) }.into(), events)
+        (
+            Self {
+                events: Arc::clone(&events),
+            }
+            .into(),
+            events,
+        )
     }
 }
 
@@ -82,7 +88,10 @@ impl Router for FixedRouter {
     }
 }
 
-fn classification_with(confidence: f32, alternatives: Vec<IntentCandidate>) -> RouterClassification {
+fn classification_with(
+    confidence: f32,
+    alternatives: Vec<IntentCandidate>,
+) -> RouterClassification {
     RouterClassification {
         primary: IntentCandidate {
             intent: Intent::SimpleQuery,
@@ -99,10 +108,7 @@ fn classification_with(confidence: f32, alternatives: Vec<IntentCandidate>) -> R
 
 // ─── Harness ─────────────────────────────────────────────────
 
-async fn build_runtime(
-    router: Box<dyn Router>,
-    sink: Arc<dyn RoutingEventSink>,
-) -> Runtime {
+async fn build_runtime(router: Box<dyn Router>, sink: Arc<dyn RoutingEventSink>) -> Runtime {
     build_runtime_with_store(router, sink).await.0
 }
 
@@ -184,8 +190,10 @@ async fn propose_path_emits_interpretation_banner() {
         1,
         "Moderate-tier must emit exactly one interpretation-proposed"
     );
-    assert!(!rec.interpretations[0].alternatives.is_empty(),
-        "banner should carry the alternatives supplied by the classifier");
+    assert!(
+        !rec.interpretations[0].alternatives.is_empty(),
+        "banner should carry the alternatives supplied by the classifier"
+    );
     assert!(
         rec.clarifications.is_empty(),
         "Moderate-tier must NOT emit clarification-request"
@@ -362,11 +370,8 @@ async fn redirect_turn_stream_writes_structural_signal() {
             }],
         ),
     });
-    let (runtime, store) = build_runtime_with_store(
-        router,
-        sink as Arc<dyn RoutingEventSink>,
-    )
-    .await;
+    let (runtime, store) =
+        build_runtime_with_store(router, sink as Arc<dyn RoutingEventSink>).await;
 
     let conv = uuid::Uuid::new_v4().to_string();
     let user_message = "walk me through the scheduler";
@@ -412,8 +417,7 @@ async fn redirect_turn_stream_writes_structural_signal() {
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    let (was_redirected, redirect_to) =
-        found_row.expect("signal-write should land within 2s");
+    let (was_redirected, redirect_to) = found_row.expect("signal-write should land within 2s");
     assert!(was_redirected, "was_redirected must flip to true");
     assert_eq!(
         redirect_to.as_deref(),
@@ -494,7 +498,11 @@ async fn retrieval_miss_stream_emits_clarification_and_suppresses_synthesis() {
     let clar = &rec.clarifications[0];
     // Options: [Answer from general knowledge, Search the web, Rephrase].
     assert_eq!(clar.options.len(), 3, "options = {:?}", clar.options);
-    let labels: Vec<&str> = clar.options.iter().map(|o: &ClarificationOption| o.label.as_str()).collect();
+    let labels: Vec<&str> = clar
+        .options
+        .iter()
+        .map(|o: &ClarificationOption| o.label.as_str())
+        .collect();
     assert!(labels.iter().any(|l| l.contains("general knowledge")));
     assert!(labels.iter().any(|l| l.contains("web")));
     assert!(labels.iter().any(|l| l.contains("Rephrase")));
@@ -519,11 +527,7 @@ async fn retrieval_miss_omits_web_option_when_tool_absent() {
         .await
         .expect("seed turn");
     drop(handle.stream);
-    let session_id = runtime
-        .sessions
-        .latest_for_conversation(&conv)
-        .unwrap()
-        .id;
+    let session_id = runtime.sessions.latest_for_conversation(&conv).unwrap().id;
 
     let miss_shape = sovereign_core::runtime::build_test_evidence_shape(6, 5, false, 1);
     let miss_handle = runtime
@@ -540,8 +544,11 @@ async fn retrieval_miss_omits_web_option_when_tool_absent() {
 
     let rec = events.lock().await;
     assert_eq!(rec.clarifications.len(), 1);
-    let labels: Vec<&str> =
-        rec.clarifications[0].options.iter().map(|o| o.label.as_str()).collect();
+    let labels: Vec<&str> = rec.clarifications[0]
+        .options
+        .iter()
+        .map(|o| o.label.as_str())
+        .collect();
     assert_eq!(labels.len(), 2, "no web tool → 2 options, got {:?}", labels);
     assert!(!labels.iter().any(|l| l.contains("web")));
 }
@@ -566,8 +573,7 @@ async fn oversize_message_rejected_with_hint() {
         Ok(_) => panic!("oversize message must be rejected"),
         Err(sovereign_core::error::Error::InvalidInput(msg)) => {
             assert!(
-                msg.to_lowercase().contains("too long")
-                    || msg.to_lowercase().contains("attach"),
+                msg.to_lowercase().contains("too long") || msg.to_lowercase().contains("attach"),
                 "error should hint at the attach-file flow: {msg}"
             );
         }
@@ -595,10 +601,7 @@ async fn oversize_guard_also_applies_to_handle_turn() {
         .handle_turn(&huge, &conv)
         .await
         .expect_err("handle_turn must reject oversize messages too");
-    assert!(matches!(
-        err,
-        sovereign_core::error::Error::InvalidInput(_)
-    ));
+    assert!(matches!(err, sovereign_core::error::Error::InvalidInput(_)));
 }
 
 #[tokio::test]
@@ -665,11 +668,7 @@ async fn resume_session_stream_skips_router() {
     }
 
     let (sink, _events) = RecordingRoutingEventSink::new();
-    let runtime = build_runtime(
-        Box::new(PanickingRouter),
-        sink as Arc<dyn RoutingEventSink>,
-    )
-    .await;
+    let runtime = build_runtime(Box::new(PanickingRouter), sink as Arc<dyn RoutingEventSink>).await;
 
     let conv = uuid::Uuid::new_v4().to_string();
     let resume = ResumeSession {
@@ -729,8 +728,7 @@ async fn deep_query_stream_emits_retrieval_and_synthesis_narration() {
 
     let inference: Arc<dyn InferenceProvider> = Arc::new(DeterministicInference);
     let shared_store = Arc::new(SqliteStateStore::open_in_memory().unwrap());
-    let store_trait: Arc<dyn StateStore> =
-        Arc::clone(&shared_store) as Arc<dyn StateStore>;
+    let store_trait: Arc<dyn StateStore> = Arc::clone(&shared_store) as Arc<dyn StateStore>;
     let skills = Arc::new(SkillRegistry::new());
     let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
     let tools = Arc::new(ToolRegistry::new());
@@ -739,9 +737,7 @@ async fn deep_query_stream_emits_retrieval_and_synthesis_narration() {
     // Zero-elapsed gate so a stubbed turn that finishes in ms
     // doesn't have its narration emits suppressed by the
     // production threshold.
-    let sessions = Arc::new(
-        SessionStore::new().with_narration_min_elapsed(Duration::ZERO),
-    );
+    let sessions = Arc::new(SessionStore::new().with_narration_min_elapsed(Duration::ZERO));
 
     let runtime = Runtime::new(
         inference,
@@ -779,7 +775,10 @@ async fn deep_query_stream_emits_retrieval_and_synthesis_narration() {
             .any(|n| n.event.phase == NarrationPhase::PrimarySynthesisStart),
         "DeepQuery stream must emit PrimarySynthesisStart narration; \
          saw phases {:?}",
-        rec.narrations.iter().map(|n| n.event.phase.clone()).collect::<Vec<_>>()
+        rec.narrations
+            .iter()
+            .map(|n| n.event.phase.clone())
+            .collect::<Vec<_>>()
     );
     // RetrievalComplete fires only when retrieval produced
     // chunks. The harness has no corpus engine attached so this
@@ -836,10 +835,7 @@ async fn ask_path_emits_deliberation_chip_before_clarification() {
         "deliberation chip should land on the RoutingCommitted phase"
     );
     let chip_text = &rec.narrations[0].event.text;
-    assert!(
-        !chip_text.is_empty(),
-        "chip must carry user-facing text"
-    );
+    assert!(!chip_text.is_empty(), "chip must carry user-facing text");
     assert_eq!(
         rec.clarifications.len(),
         1,

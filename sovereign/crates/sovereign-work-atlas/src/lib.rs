@@ -10,8 +10,8 @@
 //! - [`gc::WorkAtlasGc`] — TTL eviction task spawned by the daemon.
 //! - [`config::WorkAtlasConfig`] — toml-backed operator settings.
 
-pub mod config;
 pub mod confidence;
+pub mod config;
 pub mod gc;
 pub mod model;
 pub mod observer;
@@ -19,9 +19,9 @@ pub mod repo_id;
 pub mod store;
 pub mod tools;
 
-pub use config::WorkAtlasConfig;
 pub use confidence::ConfidenceGrade;
-pub use observer::AtlasObserver;
+pub use config::WorkAtlasConfig;
 pub use model::{AgentKind, ClaimRecord, ObservationRecord, Privacy, SessionRecord, SymbolRef};
+pub use observer::AtlasObserver;
 pub use repo_id::{resolve_repo_id, RepoIdError};
 pub use store::{ScopeMatch, SessionIdentity, WorkAtlasError, WorkAtlasStore};

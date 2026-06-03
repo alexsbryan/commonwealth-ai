@@ -46,8 +46,8 @@ use rusqlite::{params, Connection};
 use tokio::sync::Mutex;
 
 use crate::error::{Error, Result};
-use crate::index::StoredChunkWithMetadata;
 use crate::extractors::wikipedia_types::{wiki_title_from_url, WikipediaChunkMetadata};
+use crate::index::StoredChunkWithMetadata;
 
 /// Section-path delimiter. U+203A (›) — never appears in Wikipedia
 /// titles, so split/join round-trips cleanly.
@@ -281,8 +281,11 @@ impl WikipediaGraph {
     pub async fn clear_corpus(&self) -> Result<()> {
         let conn = self.conn.lock().await;
         let corpus = self.corpus_id.clone();
-        conn.execute("DELETE FROM section_signals WHERE corpus_id = ?", params![corpus])
-            .map_err(|e| Error::Database(format!("clear sigs: {e}")))?;
+        conn.execute(
+            "DELETE FROM section_signals WHERE corpus_id = ?",
+            params![corpus],
+        )
+        .map_err(|e| Error::Database(format!("clear sigs: {e}")))?;
         conn.execute("DELETE FROM edges WHERE corpus_id = ?", params![corpus])
             .map_err(|e| Error::Database(format!("clear edges: {e}")))?;
         conn.execute("DELETE FROM articles WHERE corpus_id = ?", params![corpus])
@@ -331,18 +334,14 @@ impl WikipediaGraph {
             Ok(s) => s,
             Err(_) => return Vec::new(),
         };
-        let rows = stmt
-            .query_map(
-                params![self.corpus_id, article_id, limit as i64],
-                |row| {
-                    Ok(Neighbor {
-                        title: row.get(0)?,
-                        relationship_type: row.get(1)?,
-                        occurrence_count: row.get(2)?,
-                        in_scope: row.get::<_, i64>(3)? == 1,
-                    })
-                },
-            );
+        let rows = stmt.query_map(params![self.corpus_id, article_id, limit as i64], |row| {
+            Ok(Neighbor {
+                title: row.get(0)?,
+                relationship_type: row.get(1)?,
+                occurrence_count: row.get(2)?,
+                in_scope: row.get::<_, i64>(3)? == 1,
+            })
+        });
         let Ok(rows) = rows else {
             return Vec::new();
         };
@@ -374,9 +373,12 @@ impl WikipediaGraph {
         if terms.is_empty() {
             return Vec::new();
         }
-        let axis_clause = std::iter::repeat_n("(LOWER(e.target_title) LIKE ?1 \
+        let axis_clause = std::iter::repeat_n(
+            "(LOWER(e.target_title) LIKE ?1 \
               OR LOWER(e.link_text) LIKE ?1 \
-              OR LOWER(e.source_section_path) LIKE ?1)", terms.len())
+              OR LOWER(e.source_section_path) LIKE ?1)",
+            terms.len(),
+        )
         .enumerate()
         .map(|(i, _)| {
             format!(
@@ -415,8 +417,7 @@ impl WikipediaGraph {
         for t in &terms {
             params.push(Box::new(format!("%{t}%")));
         }
-        let param_refs: Vec<&dyn rusqlite::ToSql> =
-            params.iter().map(|p| p.as_ref()).collect();
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
         let rows = stmt.query_map(param_refs.as_slice(), |row| {
             Ok(Neighbor {
                 title: row.get(0)?,
@@ -517,8 +518,7 @@ impl WikipediaGraph {
         for t in &terms {
             params.push(Box::new(format!("%{t}%")));
         }
-        let param_refs: Vec<&dyn rusqlite::ToSql> =
-            params.iter().map(|p| p.as_ref()).collect();
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
         let rows = stmt.query_map(param_refs.as_slice(), |row| {
             Ok(Neighbor {
                 title: row.get(0)?,
@@ -555,17 +555,14 @@ impl WikipediaGraph {
             Ok(s) => s,
             Err(_) => return Vec::new(),
         };
-        let rows = stmt.query_map(
-            params![self.corpus_id, title, limit as i64],
-            |row| {
-                Ok(Neighbor {
-                    title: row.get(0)?,
-                    relationship_type: row.get(1)?,
-                    occurrence_count: row.get(2)?,
-                    in_scope: true,
-                })
-            },
-        );
+        let rows = stmt.query_map(params![self.corpus_id, title, limit as i64], |row| {
+            Ok(Neighbor {
+                title: row.get(0)?,
+                relationship_type: row.get(1)?,
+                occurrence_count: row.get(2)?,
+                in_scope: true,
+            })
+        });
         let Ok(rows) = rows else {
             return Vec::new();
         };
@@ -651,10 +648,7 @@ impl WikipediaGraph {
     /// observed max with a single `SELECT MAX(json_extract(metadata,
     /// '$.revision_id'))` so this method stays cheap (no LanceDB
     /// dependency in corpus-engine's own DB code).
-    pub async fn staleness_for(
-        &self,
-        current_max_revision_id: Option<i64>,
-    ) -> StalenessCaution {
+    pub async fn staleness_for(&self, current_max_revision_id: Option<i64>) -> StalenessCaution {
         let conn = self.conn.lock().await;
         let stored: Option<i64> = conn
             .query_row(
@@ -773,10 +767,8 @@ impl WikipediaGraph {
             // First time seeing this section: capture its counts.
             if !section.counts_seen {
                 section.pov_count = meta.pov_count.unwrap_or(0);
-                section.citation_needed_count =
-                    meta.citation_needed_count.unwrap_or(0);
-                section.clarification_needed_count =
-                    meta.clarification_needed_count.unwrap_or(0);
+                section.citation_needed_count = meta.citation_needed_count.unwrap_or(0);
+                section.clarification_needed_count = meta.clarification_needed_count.unwrap_or(0);
                 section.update_count = meta.update_count.unwrap_or(0);
                 section.section_type = meta.section_type.clone();
                 section.counts_seen = true;
@@ -874,9 +866,7 @@ impl WikipediaGraph {
         let mut title_to_id: HashMap<String, i64> = HashMap::new();
         {
             let mut stmt = conn
-                .prepare(
-                    "SELECT id, title FROM articles WHERE corpus_id = ?",
-                )
+                .prepare("SELECT id, title FROM articles WHERE corpus_id = ?")
                 .map_err(|e| Error::Database(format!("prep title map: {e}")))?;
             let rows = stmt
                 .query_map(params![corpus], |row| {
@@ -895,9 +885,8 @@ impl WikipediaGraph {
             };
             for (section_path, section) in &art.sections {
                 let outgoing_link_count = section.outgoing.len() as i64;
-                let is_contested = (section.pov_count > 0
-                    || section.section_type == "controversy")
-                    as i64;
+                let is_contested =
+                    (section.pov_count > 0 || section.section_type == "controversy") as i64;
 
                 let inserted = conn
                     .execute(
@@ -1038,10 +1027,7 @@ impl WikipediaGraph {
 
         // 2g. Stamp build metadata. revision_id_max is read by the
         //     staleness probe.
-        let max_rev: Option<i64> = articles
-            .values()
-            .filter_map(|a| a.revision_id)
-            .max();
+        let max_rev: Option<i64> = articles.values().filter_map(|a| a.revision_id).max();
         if let Some(max_rev) = max_rev {
             let _ = conn.execute(
                 "INSERT OR REPLACE INTO wiki_meta (key, value) VALUES ('revision_id_max', ?)",
@@ -1129,11 +1115,12 @@ fn join_section_path(parts: &[String]) -> String {
 /// "is" link-text), then link-text verb prefixes, then default to
 /// `topical`.
 fn classify_relationship(section_path: &[String], link_text: &str) -> String {
-    let path_lower: Vec<String> =
-        section_path.iter().map(|p| p.to_lowercase()).collect();
+    let path_lower: Vec<String> = section_path.iter().map(|p| p.to_lowercase()).collect();
     let last_path = path_lower.last().map(String::as_str).unwrap_or("");
     let any_path_contains = |needles: &[&str]| -> bool {
-        path_lower.iter().any(|p| needles.iter().any(|n| p.contains(n)))
+        path_lower
+            .iter()
+            .any(|p| needles.iter().any(|n| p.contains(n)))
     };
 
     if any_path_contains(&["criticism", "controversy", "debate", "dispute"]) {
@@ -1148,9 +1135,9 @@ fn classify_relationship(section_path: &[String], link_text: &str) -> String {
 
     let lt = link_text.trim().to_lowercase();
     let starts_with_any = |prefixes: &[&str]| -> bool {
-        prefixes.iter().any(|p| {
-            lt.starts_with(&format!("{p} ")) || lt == *p
-        })
+        prefixes
+            .iter()
+            .any(|p| lt.starts_with(&format!("{p} ")) || lt == *p)
     };
     if starts_with_any(&["led", "caused", "resulted", "prompted", "triggered"]) {
         return "causal".to_string();
@@ -1201,7 +1188,10 @@ mod tests {
         StoredChunkWithMetadata {
             id,
             title: Some(title.to_string()),
-            url: Some(format!("https://en.wikipedia.org/wiki/{}", title.replace(' ', "_"))),
+            url: Some(format!(
+                "https://en.wikipedia.org/wiki/{}",
+                title.replace(' ', "_")
+            )),
             metadata_raw: Some(metadata_raw),
         }
     }
@@ -1228,8 +1218,7 @@ mod tests {
         assert_eq!(summary.dangling_targets, 2);
 
         let neighbors = g.neighbors("Albert Einstein", 5).await;
-        let titles: Vec<&str> =
-            neighbors.iter().map(|n| n.title.as_str()).collect();
+        let titles: Vec<&str> = neighbors.iter().map(|n| n.title.as_str()).collect();
         assert!(titles.contains(&"Special relativity"));
         assert!(titles.contains(&"Photoelectric effect"));
         // Both targets are out-of-scope at Vital L5 minimum scale,
@@ -1320,23 +1309,20 @@ mod tests {
             ),
         ];
         g.ingest_from_chunks(chunks).await.unwrap();
-        assert!(g.has_contested_section("Atomic bombings of Hiroshima").await);
+        assert!(
+            g.has_contested_section("Atomic bombings of Hiroshima")
+                .await
+        );
     }
 
     #[tokio::test]
     async fn relationship_classifier_picks_contested_via_section() {
         assert_eq!(
-            classify_relationship(
-                &["Criticism".to_string()],
-                "John Smith",
-            ),
+            classify_relationship(&["Criticism".to_string()], "John Smith",),
             "contested",
         );
         assert_eq!(
-            classify_relationship(
-                &["Origins".to_string()],
-                "Industrial Revolution",
-            ),
+            classify_relationship(&["Origins".to_string()], "Industrial Revolution",),
             "causal",
         );
         assert_eq!(
@@ -1368,12 +1354,7 @@ mod tests {
         );
         g.ingest_from_chunks(vec![chunk(1, "X", m1)]).await.unwrap();
         // Run again without clear — should be idempotent.
-        let m2 = meta_with(
-            vec!["Lead"],
-            "lead",
-            None,
-            vec![("Black hole", "BH")],
-        );
+        let m2 = meta_with(vec!["Lead"], "lead", None, vec![("Black hole", "BH")]);
         g.ingest_from_chunks(vec![chunk(1, "X", m2)]).await.unwrap();
         assert_eq!(g.article_count().await, 1);
         // Edge count — single triple, link_text refreshed.
@@ -1383,13 +1364,10 @@ mod tests {
     #[tokio::test]
     async fn clear_corpus_wipes_rows() {
         let g = WikipediaGraph::open_in_memory("test").unwrap();
-        let m = meta_with(
-            vec!["Lead"],
-            "lead",
-            None,
-            vec![("X", "x")],
-        );
-        g.ingest_from_chunks(vec![chunk(1, "Source", m)]).await.unwrap();
+        let m = meta_with(vec!["Lead"], "lead", None, vec![("X", "x")]);
+        g.ingest_from_chunks(vec![chunk(1, "Source", m)])
+            .await
+            .unwrap();
         assert!(g.article_count().await > 0);
         g.clear_corpus().await.unwrap();
         assert_eq!(g.article_count().await, 0);

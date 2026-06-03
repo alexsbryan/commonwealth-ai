@@ -2,8 +2,6 @@
 //! against the local DocumentStore. Synthesis-free; the operation
 //! itself is the response.
 
-
-
 use crate::error::Result;
 use crate::traits::*;
 
@@ -41,9 +39,16 @@ impl Runtime {
         );
 
         // Get chunk count for the prompt.
-        let chunks = self.store.get_chunks_by_source(&resolved_source).await.unwrap_or_default();
+        let chunks = self
+            .store
+            .get_chunks_by_source(&resolved_source)
+            .await
+            .unwrap_or_default();
         let chunk_count = chunks.len();
-        let word_count: usize = chunks.iter().map(|c| c.content.split_whitespace().count()).sum();
+        let word_count: usize = chunks
+            .iter()
+            .map(|c| c.content.split_whitespace().count())
+            .sum();
         drop(chunks);
 
         if chunk_count == 0 {
@@ -65,7 +70,11 @@ impl Runtime {
             };
             self.store.save_message(&assistant_msg).await?;
             self.spawn_auto_title(conversation_id);
-            return Ok(Response { message: assistant_msg, task: None, metrics: None });
+            return Ok(Response {
+                message: assistant_msg,
+                task: None,
+                metrics: None,
+            });
         }
 
         tracing::info!(
@@ -144,7 +153,7 @@ impl Runtime {
                     .split("</think>")
                     .last()
                     .unwrap_or(prompt_text)
-                    .trim()
+                    .trim(),
             )
             .trim();
 
@@ -153,9 +162,11 @@ impl Runtime {
                 let mp = v.get("map_prompt").and_then(|v| v.as_str()).unwrap_or(
                     "Extract key information relevant to the user's question from this passage."
                 ).to_string();
-                let rp = v.get("reduce_prompt").and_then(|v| v.as_str()).unwrap_or(
-                    "Synthesize all extracted information into a comprehensive answer."
-                ).to_string();
+                let rp = v
+                    .get("reduce_prompt")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Synthesize all extracted information into a comprehensive answer.")
+                    .to_string();
                 (mp, rp)
             }
             Err(e) => {
@@ -256,9 +267,7 @@ impl Runtime {
             Ok(out) => {
                 let chars = match out {
                     StepOutput::Text(t) => t.len(),
-                    StepOutput::Json(v) => {
-                        serde_json::to_string(v).map(|s| s.len()).unwrap_or(0)
-                    }
+                    StepOutput::Json(v) => serde_json::to_string(v).map(|s| s.len()).unwrap_or(0),
                     _ => 0,
                 };
                 (

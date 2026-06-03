@@ -24,12 +24,12 @@
 //! sibling test that runs always and catches our backend's
 //! request/response shape regressions without burning real credits.
 
-use std::time::Duration;
 use std::sync::Arc;
+use std::time::Duration;
 
 use sovereign_tools::web::search::{
-    BudgetView, SearchOrchestrator, SearchPrivacy, SelectInputs,
-    TavilyBackendImpl, WebSearchRegistry,
+    BudgetView, SearchOrchestrator, SearchPrivacy, SelectInputs, TavilyBackendImpl,
+    WebSearchRegistry,
 };
 
 const ENV_KEY: &str = "SOVEREIGN_TAVILY_API_KEY";
@@ -50,9 +50,7 @@ async fn tavily_real_query_returns_citable_results() {
             // a subscriber; an operator who *expected* to test
             // against real Tavily can see they're not via `cargo
             // test -- --nocapture`.
-            eprintln!(
-                "tavily_real_query_returns_citable_results: SKIPPED (no {ENV_KEY})"
-            );
+            eprintln!("tavily_real_query_returns_citable_results: SKIPPED (no {ENV_KEY})");
             return;
         }
     };
@@ -107,11 +105,7 @@ async fn tavily_real_query_returns_citable_results() {
             "result url is not http(s): {}",
             r.url
         );
-        assert!(
-            !r.title.trim().is_empty(),
-            "result title is empty: {:?}",
-            r
-        );
+        assert!(!r.title.trim().is_empty(), "result title is empty: {:?}", r);
         assert!(
             !r.snippet.trim().is_empty(),
             "result snippet is empty: {:?}",
@@ -142,9 +136,7 @@ async fn tavily_invalid_key_degrades_gracefully() {
         .map(|k| k.trim().is_empty())
         .unwrap_or(true)
     {
-        eprintln!(
-            "tavily_invalid_key_degrades_gracefully: SKIPPED (no {ENV_KEY})"
-        );
+        eprintln!("tavily_invalid_key_degrades_gracefully: SKIPPED (no {ENV_KEY})");
         return;
     }
     eprintln!("tavily_invalid_key_degrades_gracefully: RUNNING");
@@ -153,9 +145,7 @@ async fn tavily_invalid_key_degrades_gracefully() {
         .timeout(Duration::from_secs(30))
         .build()
         .expect("reqwest client");
-    let backend = TavilyBackendImpl::new(
-        "tvly-DEFINITELY-NOT-A-REAL-KEY-1234567890".into(),
-    );
+    let backend = TavilyBackendImpl::new("tvly-DEFINITELY-NOT-A-REAL-KEY-1234567890".into());
 
     let mut registry = WebSearchRegistry::new();
     registry.register(Arc::new(backend));

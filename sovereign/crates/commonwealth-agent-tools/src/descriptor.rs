@@ -142,7 +142,11 @@ pub fn descriptor_for(kind: PrimitiveKind) -> Value {
 /// native runner passes to the daemon's chat completion request as
 /// `tools`.
 pub fn descriptors() -> Vec<Value> {
-    PrimitiveKind::all().iter().copied().map(descriptor_for).collect()
+    PrimitiveKind::all()
+        .iter()
+        .copied()
+        .map(descriptor_for)
+        .collect()
 }
 
 #[cfg(test)]

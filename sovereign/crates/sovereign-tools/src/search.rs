@@ -45,10 +45,7 @@ impl SearchTool {
         backend: SearchBackend,
     ) -> Self {
         Self {
-            web: Some(WebSearchTool::with_backend(
-                Arc::clone(&inference),
-                backend,
-            )),
+            web: Some(WebSearchTool::with_backend(Arc::clone(&inference), backend)),
             store,
             inference,
         }
@@ -82,8 +79,7 @@ impl SearchTool {
 /// the search-gym after any edit catches regressions in tool-call
 /// judiciousness or citation faithfulness before production users
 /// see drift.
-pub const SEARCH_TOOL_DESCRIPTION: &str =
-    include_str!("../assets/search_tool_description.md");
+pub const SEARCH_TOOL_DESCRIPTION: &str = include_str!("../assets/search_tool_description.md");
 
 /// Canonical system prompt for chats where the search tool is
 /// enabled. Mirrors SEARCH_TOOL_DESCRIPTION's rules but framed as a
@@ -91,8 +87,7 @@ pub const SEARCH_TOOL_DESCRIPTION: &str =
 /// Models anchor more heavily on the system message than on tool
 /// metadata, so the same shape rules need to appear in both — kept
 /// in lockstep via the gym's alignment test.
-pub const SEARCH_SYSTEM_PROMPT: &str =
-    include_str!("../assets/search_system_prompt.md");
+pub const SEARCH_SYSTEM_PROMPT: &str = include_str!("../assets/search_system_prompt.md");
 
 #[async_trait]
 impl Tool for SearchTool {
@@ -145,11 +140,7 @@ impl Tool for SearchTool {
         Ok(())
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -163,8 +154,7 @@ impl Tool for SearchTool {
 
         // Stage 3: Web fallback (if needed).
         let web_sources = match &decision {
-            CoverageDecision::SupplementWithWeb { .. }
-            | CoverageDecision::RequiresWeb { .. } => {
+            CoverageDecision::SupplementWithWeb { .. } | CoverageDecision::RequiresWeb { .. } => {
                 self.web_search(query).await
             }
             CoverageDecision::Sufficient => Vec::new(),
@@ -347,14 +337,14 @@ impl SearchTool {
             oicp: None,
             tools: None,
             tool_choice: None,
-                    model_id: None,
-                    enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
 
         let response = self.inference.complete(&request).await?;
@@ -443,11 +433,7 @@ fn source_origin(chunk: &DocumentChunk) -> SourceOrigin {
         },
         SourceType::WebSearch { url } => SourceOrigin::Web {
             url: url.clone(),
-            domain: url
-                .split('/')
-                .nth(2)
-                .unwrap_or("unknown")
-                .to_string(),
+            domain: url.split('/').nth(2).unwrap_or("unknown").to_string(),
         },
         SourceType::UserDocument => SourceOrigin::UserDocument {
             filename: chunk.source.clone(),

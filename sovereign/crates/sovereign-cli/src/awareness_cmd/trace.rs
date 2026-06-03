@@ -107,9 +107,7 @@ pub(super) async fn cmd_trace(args: &[String]) -> i32 {
         }
         1 => matches[0],
         n => {
-            eprintln!(
-                "awareness trace: \"{name}\" matched {n} entities; tracing the first."
-            );
+            eprintln!("awareness trace: \"{name}\" matched {n} entities; tracing the first.");
             matches[0]
         }
     };
@@ -171,7 +169,9 @@ pub(super) async fn cmd_trace(args: &[String]) -> i32 {
         print_digest_line(tl, &linked_notes);
     } else {
         println!();
-        println!("(timeline assembly produced no entry for this entity — atlas may be inconsistent)");
+        println!(
+            "(timeline assembly produced no entry for this entity — atlas may be inconsistent)"
+        );
     }
     println!();
     0
@@ -203,7 +203,10 @@ fn print_extraction(target: &Entity, source_view: &str, edges_by_view: &[(String
         println!("Description: {}", target.description);
     }
     println!("Source view: {source_view}");
-    println!("First appearance: chunk {}", target.first_appearance.chunk_id);
+    println!(
+        "First appearance: chunk {}",
+        target.first_appearance.chunk_id
+    );
 
     // Count edges across all views.
     let mut total_edges = 0usize;
@@ -399,7 +402,10 @@ fn print_digest_line(
         head.push_str(&format!(" ({a})"));
     }
     let n = tl.interactions.len();
-    head.push_str(&format!(" — {n} interaction{}", if n == 1 { "" } else { "s" }));
+    head.push_str(&format!(
+        " — {n} interaction{}",
+        if n == 1 { "" } else { "s" }
+    ));
     if let Some(last) = sovereign_tools::knowledge_view::timeline::last_seen_at(tl) {
         let date = chrono::DateTime::<chrono::Utc>::from_timestamp(last, 0)
             .map(|d| d.format("%b %d").to_string())
@@ -418,9 +424,15 @@ fn print_digest_line(
         let summary: Vec<String> = linked_notes
             .iter()
             .map(|n| match n.kind {
-                sovereign_tools::knowledge_view::relational::RelationalNoteKind::Commitment => "commitment".to_string(),
-                sovereign_tools::knowledge_view::relational::RelationalNoteKind::FollowUp => "follow-up".to_string(),
-                sovereign_tools::knowledge_view::relational::RelationalNoteKind::Goal => "goal".to_string(),
+                sovereign_tools::knowledge_view::relational::RelationalNoteKind::Commitment => {
+                    "commitment".to_string()
+                }
+                sovereign_tools::knowledge_view::relational::RelationalNoteKind::FollowUp => {
+                    "follow-up".to_string()
+                }
+                sovereign_tools::knowledge_view::relational::RelationalNoteKind::Goal => {
+                    "goal".to_string()
+                }
             })
             .collect();
         head.push_str(&format!("; {}", summary.join(", ")));

@@ -43,8 +43,8 @@ use async_trait::async_trait;
 use futures::Stream;
 use sovereign_core::error::Result;
 use sovereign_core::oicp::{
-    ExtensionRegistry, ExtensionStats, NodeLocality, NodeObservations,
-    ProviderManifest, ShardingPrivacy,
+    ExtensionRegistry, ExtensionStats, NodeLocality, NodeObservations, ProviderManifest,
+    ShardingPrivacy,
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities, Speed};
@@ -328,8 +328,7 @@ pub struct MeshInferenceProvider {
     /// identity `peer_cache` uses). Updated from the outside via
     /// `record_peer_*` helpers; consumed during `select_peer`
     /// ranking so repeatedly-failing peers fall out of rotation.
-    peer_observations:
-        Arc<RwLock<std::collections::HashMap<String, NodeObservations>>>,
+    peer_observations: Arc<RwLock<std::collections::HashMap<String, NodeObservations>>>,
     /// Our own (local) observations. Currently only load (in_flight)
     /// is interesting for the local side; samples start at a high
     /// constant so the cold-start ramp never applies to `self` —
@@ -348,8 +347,7 @@ pub struct MeshInferenceProvider {
     /// before the probe completes — the scheduler then falls back to
     /// observation-only scoring, which is safe because local
     /// observations accumulate fast.
-    local_benchmark:
-        Arc<RwLock<Option<sovereign_core::oicp::BenchmarkResult>>>,
+    local_benchmark: Arc<RwLock<Option<sovereign_core::oicp::BenchmarkResult>>>,
     /// Per-peer consecutive-failure tracker. Peers that fail
     /// `FAILURE_THRESHOLD` requests in a row are quarantined for a
     /// linearly-backed-off cooldown. Filtered out of routing
@@ -370,8 +368,7 @@ pub struct MeshInferenceProvider {
     /// drop). `std::sync::Mutex` (not `tokio::sync::RwLock`) so the
     /// stream-completion guard can decrement in a synchronous Drop
     /// without spawning a task.
-    local_inflight_by_model:
-        Arc<std::sync::Mutex<std::collections::HashMap<String, u32>>>,
+    local_inflight_by_model: Arc<std::sync::Mutex<std::collections::HashMap<String, u32>>>,
     /// Slot-alias map mirrored from the daemon's `AppState`. Keyed by
     /// the alias name a caller might send (`commonwealth/primary`,
     /// `primary`, `fast`, …), valued at the GGUF stem currently bound
@@ -474,9 +471,7 @@ impl MeshInferenceProvider {
             self_manifest: arc_swap::ArcSwap::from_pointee(self_manifest),
             peer_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
             http,
-            peer_observations: Arc::new(RwLock::new(
-                std::collections::HashMap::new(),
-            )),
+            peer_observations: Arc::new(RwLock::new(std::collections::HashMap::new())),
             local_observations: Arc::new(RwLock::new(local_obs)),
             extension_registry: Arc::new(RwLock::new(ExtensionRegistry::new())),
             local_benchmark: Arc::new(RwLock::new(None)),
@@ -484,9 +479,7 @@ impl MeshInferenceProvider {
             local_inflight_by_model: Arc::new(std::sync::Mutex::new(
                 std::collections::HashMap::new(),
             )),
-            slot_aliases: arc_swap::ArcSwap::from_pointee(
-                std::collections::HashMap::new(),
-            ),
+            slot_aliases: arc_swap::ArcSwap::from_pointee(std::collections::HashMap::new()),
             in_flight_publisher: Arc::new(AtomicU32::new(0)),
         }
     }
@@ -542,10 +535,7 @@ impl MeshInferenceProvider {
     /// locally. Safe to call multiple times — each call atomically
     /// swaps in the new map, so a runtime model swap can publish a
     /// new mapping without restarting the daemon.
-    pub fn set_slot_aliases(
-        &self,
-        aliases: std::collections::HashMap<String, String>,
-    ) {
+    pub fn set_slot_aliases(&self, aliases: std::collections::HashMap<String, String>) {
         self.slot_aliases.store(Arc::new(aliases));
     }
 
@@ -558,10 +548,7 @@ impl MeshInferenceProvider {
     /// daemon's startup probe after the bundled model has been
     /// measured. Idempotent — calling twice with the same result is
     /// a no-op for downstream scoring.
-    pub async fn set_local_benchmark(
-        &self,
-        bench: sovereign_core::oicp::BenchmarkResult,
-    ) {
+    pub async fn set_local_benchmark(&self, bench: sovereign_core::oicp::BenchmarkResult) {
         tracing::info!(
             model = %bench.baseline_model_id,
             pp_tok_s = bench.pp_tok_s,
@@ -574,9 +561,7 @@ impl MeshInferenceProvider {
 
     /// Read-only access to the local benchmark for components that
     /// need to advertise it (manifest construction, gossip).
-    pub async fn local_benchmark(
-        &self,
-    ) -> Option<sovereign_core::oicp::BenchmarkResult> {
+    pub async fn local_benchmark(&self) -> Option<sovereign_core::oicp::BenchmarkResult> {
         self.local_benchmark.read().await.clone()
     }
 
@@ -615,8 +600,7 @@ impl MeshInferenceProvider {
             }
             Some(name) => {
                 let mut obs = self.peer_observations.write().await;
-                let entry =
-                    obs.entry(name.to_string()).or_default();
+                let entry = obs.entry(name.to_string()).or_default();
                 entry.in_flight = entry.in_flight.saturating_add(1);
                 entry.samples = entry.samples.saturating_add(1);
             }
@@ -636,14 +620,12 @@ impl MeshInferenceProvider {
                     .or_insert_with(NodeObservations::default);
                 entry.in_flight = entry.in_flight.saturating_sub(1);
                 // Drift failure rate toward zero on every success.
-                entry.recent_failure_rate =
-                    (entry.recent_failure_rate * 0.9).max(0.0);
+                entry.recent_failure_rate = (entry.recent_failure_rate * 0.9).max(0.0);
                 return;
             }
         };
         obs_ref.in_flight = obs_ref.in_flight.saturating_sub(1);
-        obs_ref.recent_failure_rate =
-            (obs_ref.recent_failure_rate * 0.9).max(0.0);
+        obs_ref.recent_failure_rate = (obs_ref.recent_failure_rate * 0.9).max(0.0);
     }
 
     /// Record that a dispatched request failed. Decrements in-flight
@@ -659,14 +641,12 @@ impl MeshInferenceProvider {
                 entry.in_flight = entry.in_flight.saturating_sub(1);
                 // Rolling-window failure rate: EMA toward 1.0 with
                 // alpha 0.1 — 10 consecutive failures settle near 0.65.
-                entry.recent_failure_rate =
-                    (entry.recent_failure_rate * 0.9 + 0.1).min(1.0);
+                entry.recent_failure_rate = (entry.recent_failure_rate * 0.9 + 0.1).min(1.0);
                 return;
             }
         };
         obs_ref.in_flight = obs_ref.in_flight.saturating_sub(1);
-        obs_ref.recent_failure_rate =
-            (obs_ref.recent_failure_rate * 0.9 + 0.1).min(1.0);
+        obs_ref.recent_failure_rate = (obs_ref.recent_failure_rate * 0.9 + 0.1).min(1.0);
     }
 
     /// Returns `true` when the request carries any v0.3 routing
@@ -788,8 +768,7 @@ impl MeshInferenceProvider {
                     // Lock the RTT in before the JSON parse — we
                     // want the network round-trip, not the parse
                     // time, to classify the peer's locality.
-                    let rtt_ms = started.elapsed().as_millis().min(u128::from(u32::MAX))
-                        as u32;
+                    let rtt_ms = started.elapsed().as_millis().min(u128::from(u32::MAX)) as u32;
                     match resp.json::<ProviderManifest>().await {
                         Ok(m) => {
                             tracing::info!(
@@ -805,14 +784,10 @@ impl MeshInferenceProvider {
                             // observed advertisement.
                             {
                                 let now = Self::now_unix_secs();
-                                let mut registry =
-                                    self.extension_registry.write().await;
+                                let mut registry = self.extension_registry.write().await;
                                 for model in &m.models {
                                     for claim in &model.claims {
-                                        registry.observe_advertisement(
-                                            &claim.hint,
-                                            now,
-                                        );
+                                        registry.observe_advertisement(&claim.hint, now);
                                     }
                                 }
                             }
@@ -921,15 +896,9 @@ impl MeshInferenceProvider {
         let local_obs = self.local_observations.read().await.clone();
         let local_bench = self.local_benchmark.read().await.clone();
         let self_manifest = self.self_manifest.load();
-        let local_cand = score_manifest_for_request(&self_manifest, req_oicp)
-            .map(|c| {
-                adjust_for_observations(
-                    c,
-                    &local_obs,
-                    NodeLocality::Local,
-                    local_bench.as_ref(),
-                )
-            });
+        let local_cand = score_manifest_for_request(&self_manifest, req_oicp).map(|c| {
+            adjust_for_observations(c, &local_obs, NodeLocality::Local, local_bench.as_ref())
+        });
         tracing::info!(
             local_models = self_manifest.models.len(),
             local_scores = local_cand.is_some(),
@@ -1097,7 +1066,10 @@ impl MeshInferenceProvider {
             }
             None => {
                 tracing::debug!(
-                    local_pick = local_cand.as_ref().map(|c| c.model_id.as_str()).unwrap_or("<none>"),
+                    local_pick = local_cand
+                        .as_ref()
+                        .map(|c| c.model_id.as_str())
+                        .unwrap_or("<none>"),
                     "mesh-inference: no peer manifests scored, staying local"
                 );
                 None
@@ -1312,8 +1284,7 @@ impl MeshInferenceProvider {
                     .get(&peer.name)
                     .map(|o| o.in_flight)
                     .unwrap_or(0);
-                let peer_inflight =
-                    effective_peer_in_flight(self_observed, peer.current_in_flight);
+                let peer_inflight = effective_peer_in_flight(self_observed, peer.current_in_flight);
                 let health = self.peer_health.health_weight(&peer.name);
                 let effective = effective_inflight(peer_inflight, health);
                 peer_candidates.push((
@@ -1361,10 +1332,7 @@ impl MeshInferenceProvider {
     /// follow-up of "if peer failed, try local" has to be expressible
     /// in one return value so the caller can iterate without
     /// re-running `select_peer` (which is non-idempotent).
-    async fn select_route(
-        &self,
-        request: &CompletionRequest,
-    ) -> Result<Vec<RouteDecision>> {
+    async fn select_route(&self, request: &CompletionRequest) -> Result<Vec<RouteDecision>> {
         if let Some(model_id) = explicit_model_id(request) {
             match self.locate_named_model(model_id).await {
                 NamedModelLocation::Local => {
@@ -1387,11 +1355,7 @@ impl MeshInferenceProvider {
                     );
                     let ledger = self
                         .mesh
-                        .ledger_emission_for(
-                            &peer.node_id,
-                            &peer_cand.model_id,
-                            &peer.name,
-                        )
+                        .ledger_emission_for(&peer.node_id, &peer_cand.model_id, &peer.name)
                         .await;
                     Ok(vec![RouteDecision::Peer {
                         peer,
@@ -1450,10 +1414,7 @@ impl MeshInferenceProvider {
     /// by composition: the returned guard *contains* a
     /// `LocalTotalGuard` whose Drop runs alongside the HashMap
     /// decrement.
-    fn enter_local_inflight(
-        &self,
-        model_id: &str,
-    ) -> LocalInflightGuard {
+    fn enter_local_inflight(&self, model_id: &str) -> LocalInflightGuard {
         let total = self.enter_local_total();
         let mut map = self
             .local_inflight_by_model
@@ -1504,7 +1465,9 @@ struct LocalInflightGuard {
 
 impl Drop for LocalInflightGuard {
     fn drop(&mut self) {
-        let Ok(mut map) = self.counter.lock() else { return };
+        let Ok(mut map) = self.counter.lock() else {
+            return;
+        };
         if let Some(v) = map.get_mut(&self.model_id) {
             *v = v.saturating_sub(1);
             if *v == 0 {
@@ -1597,9 +1560,7 @@ enum RouteDecision {
     },
     /// Local fallback — total-counter guard (no per-model accounting
     /// because the request didn't name a model).
-    LocalFallback {
-        total: LocalTotalGuard,
-    },
+    LocalFallback { total: LocalTotalGuard },
 }
 
 /// Returned by [`MeshInferenceProvider::locate_named_model`]; see
@@ -1850,15 +1811,14 @@ impl InferenceProvider for MeshInferenceProvider {
             match step {
                 RouteDecision::LocalNamed { attribution, guard } => {
                     let stream = self.local.complete_stream(request).await?;
-                    let observed: Pin<
-                        Box<dyn Stream<Item = Result<String>> + Send>,
-                    > = Box::pin(InflightGuardedStream::new(
-                        ThroughputObservedStream::new(
-                            stream,
-                            ThroughputTarget::Local(Arc::clone(&self.local_observations)),
-                        ),
-                        guard,
-                    ));
+                    let observed: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
+                        Box::pin(InflightGuardedStream::new(
+                            ThroughputObservedStream::new(
+                                stream,
+                                ThroughputTarget::Local(Arc::clone(&self.local_observations)),
+                            ),
+                            guard,
+                        ));
                     return Ok((observed, attribution));
                 }
                 RouteDecision::Peer {
@@ -1872,9 +1832,8 @@ impl InferenceProvider for MeshInferenceProvider {
                         let rp = provider_for_peer(&peer, url);
                         match rp.complete_stream(request).await {
                             Ok(stream) => {
-                                let attribution = format!(
-                                    "{} @ peer {}", peer_cand.model_id, peer.name
-                                );
+                                let attribution =
+                                    format!("{} @ peer {}", peer_cand.model_id, peer.name);
                                 let mut wrapper = ThroughputObservedStream::new(
                                     stream,
                                     ThroughputTarget::Peer {
@@ -1885,9 +1844,8 @@ impl InferenceProvider for MeshInferenceProvider {
                                 if let Some(em) = ledger.clone() {
                                     wrapper = wrapper.with_ledger_emission(em);
                                 }
-                                let observed: Pin<
-                                    Box<dyn Stream<Item = Result<String>> + Send>,
-                                > = Box::pin(wrapper);
+                                let observed: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
+                                    Box::pin(wrapper);
                                 self.peer_health.record_success(&peer.name);
                                 return Ok((observed, attribution));
                             }
@@ -1921,28 +1879,23 @@ impl InferenceProvider for MeshInferenceProvider {
                             // Record err for diagnostic if even the
                             // local fallback subsequently fails; not
                             // surfaced unless cascade exhausts.
-                            last_err = last_transport_err.map(
-                                sovereign_core::error::Error::Inference,
-                            );
+                            last_err =
+                                last_transport_err.map(sovereign_core::error::Error::Inference);
                             continue;
                         }
                     }
                 }
                 RouteDecision::LocalFallback { total } => {
                     let stream = self.local.complete_stream(request).await?;
-                    let observed: Pin<
-                        Box<dyn Stream<Item = Result<String>> + Send>,
-                    > = Box::pin(TotalGuardedStream::new(
-                        ThroughputObservedStream::new(
-                            stream,
-                            ThroughputTarget::Local(Arc::clone(&self.local_observations)),
-                        ),
-                        total,
-                    ));
-                    return Ok((
-                        observed,
-                        self.local.model_id_for(request.preferred_speed),
-                    ));
+                    let observed: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
+                        Box::pin(TotalGuardedStream::new(
+                            ThroughputObservedStream::new(
+                                stream,
+                                ThroughputTarget::Local(Arc::clone(&self.local_observations)),
+                            ),
+                            total,
+                        ));
+                    return Ok((observed, self.local.model_id_for(request.preferred_speed)));
                 }
             }
         }
@@ -1995,9 +1948,8 @@ impl InferenceProvider for MeshInferenceProvider {
                         let rp = provider_for_peer(&peer, url);
                         match rp.complete_stream_with_finish(request).await {
                             Ok(stream) => {
-                                let attribution = format!(
-                                    "{} @ peer {}", peer_cand.model_id, peer.name
-                                );
+                                let attribution =
+                                    format!("{} @ peer {}", peer_cand.model_id, peer.name);
                                 let mut wrapper = ThroughputObservedStream::new(
                                     stream,
                                     ThroughputTarget::Peer {
@@ -2008,9 +1960,8 @@ impl InferenceProvider for MeshInferenceProvider {
                                 if let Some(em) = ledger.clone() {
                                     wrapper = wrapper.with_ledger_emission(em);
                                 }
-                                let observed: Pin<
-                                    Box<dyn Stream<Item = StreamFrame> + Send>,
-                                > = Box::pin(wrapper);
+                                let observed: Pin<Box<dyn Stream<Item = StreamFrame> + Send>> =
+                                    Box::pin(wrapper);
                                 self.peer_health.record_success(&peer.name);
                                 return Ok((observed, attribution));
                             }
@@ -2041,9 +1992,8 @@ impl InferenceProvider for MeshInferenceProvider {
                                 peer = %peer.name,
                                 "mesh-inference: typed peer failed, falling through to next route"
                             );
-                            last_err = last_transport_err.map(
-                                sovereign_core::error::Error::Inference,
-                            );
+                            last_err =
+                                last_transport_err.map(sovereign_core::error::Error::Inference);
                             continue;
                         }
                     }
@@ -2058,10 +2008,7 @@ impl InferenceProvider for MeshInferenceProvider {
                             ),
                             total,
                         ));
-                    return Ok((
-                        observed,
-                        self.local.model_id_for(request.preferred_speed),
-                    ));
+                    return Ok((observed, self.local.model_id_for(request.preferred_speed)));
                 }
             }
         }
@@ -2178,7 +2125,10 @@ struct InflightGuardedStream<S> {
 
 impl<S> InflightGuardedStream<S> {
     fn new(inner: S, guard: LocalInflightGuard) -> Self {
-        Self { inner, _guard: guard }
+        Self {
+            inner,
+            _guard: guard,
+        }
     }
 }
 
@@ -2188,10 +2138,7 @@ where
 {
     type Item = S::Item;
 
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         Pin::new(&mut self.inner).poll_next(cx)
     }
 }
@@ -2209,7 +2156,10 @@ struct TotalGuardedStream<S> {
 
 impl<S> TotalGuardedStream<S> {
     fn new(inner: S, guard: LocalTotalGuard) -> Self {
-        Self { inner, _guard: guard }
+        Self {
+            inner,
+            _guard: guard,
+        }
     }
 }
 
@@ -2219,10 +2169,7 @@ where
 {
     type Item = S::Item;
 
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         Pin::new(&mut self.inner).poll_next(cx)
     }
 }
@@ -2290,9 +2237,15 @@ mod tests {
             assert_eq!(publisher.load(Ordering::Relaxed), 3);
             // Build three guards pointing at the same Arc — they
             // each decrement on drop.
-            let g1 = LocalTotalGuard { publisher: Arc::clone(&publisher) };
-            let g2 = LocalTotalGuard { publisher: Arc::clone(&publisher) };
-            let g3 = LocalTotalGuard { publisher: Arc::clone(&publisher) };
+            let g1 = LocalTotalGuard {
+                publisher: Arc::clone(&publisher),
+            };
+            let g2 = LocalTotalGuard {
+                publisher: Arc::clone(&publisher),
+            };
+            let g3 = LocalTotalGuard {
+                publisher: Arc::clone(&publisher),
+            };
             drop(g1);
             assert_eq!(publisher.load(Ordering::Relaxed), 2);
             drop(g2);
@@ -2303,7 +2256,9 @@ mod tests {
         // A spurious drop on an already-zero counter must NOT
         // underflow — saturating subtract is the correctness
         // invariant for the publisher.
-        let g_extra = LocalTotalGuard { publisher: Arc::clone(&publisher) };
+        let g_extra = LocalTotalGuard {
+            publisher: Arc::clone(&publisher),
+        };
         drop(g_extra);
         assert_eq!(
             publisher.load(Ordering::Relaxed),

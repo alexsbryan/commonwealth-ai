@@ -153,9 +153,7 @@ mod tests {
     fn parse_ignores_version_line_past_the_header_window() {
         // Marker only honored in the first 5 lines — prevents a
         // rogue comment deep in the file from faking a version.
-        let body = format!(
-            "line1\nline2\nline3\nline4\nline5\n// sovereign-atos-version: 9.9.9\n"
-        );
+        let body = format!("line1\nline2\nline3\nline4\nline5\n// sovereign-atos-version: 9.9.9\n");
         assert!(parse_installed_version(&body).is_none());
     }
 
@@ -180,8 +178,14 @@ mod tests {
     #[test]
     fn install_plugin_second_run_is_up_to_date() {
         let tmp = tempdir().unwrap();
-        assert_eq!(install_plugin(tmp.path()).unwrap(), InstallOutcome::Installed);
-        assert_eq!(install_plugin(tmp.path()).unwrap(), InstallOutcome::UpToDate);
+        assert_eq!(
+            install_plugin(tmp.path()).unwrap(),
+            InstallOutcome::Installed
+        );
+        assert_eq!(
+            install_plugin(tmp.path()).unwrap(),
+            InstallOutcome::UpToDate
+        );
     }
 
     #[test]
@@ -216,7 +220,9 @@ mod tests {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, "// hand-authored plugin, no version\n").unwrap();
         match install_plugin(tmp.path()).unwrap() {
-            InstallOutcome::Replaced { prior_version: None } => {}
+            InstallOutcome::Replaced {
+                prior_version: None,
+            } => {}
             other => panic!("expected Replaced{{None}}, got {other:?}"),
         }
     }
@@ -227,8 +233,7 @@ mod tests {
         // this catches it before ship.
         assert!(PLUGIN_SRC.contains("sovereign-atos"));
         assert!(
-            PLUGIN_SRC.contains("SOVEREIGN_FEATURE_ID")
-                || PLUGIN_SRC.contains("X-Feature-Id"),
+            PLUGIN_SRC.contains("SOVEREIGN_FEATURE_ID") || PLUGIN_SRC.contains("X-Feature-Id"),
             "plugin must integrate the ATOS session surface"
         );
     }

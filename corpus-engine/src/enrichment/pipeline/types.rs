@@ -755,9 +755,7 @@ impl SectionClassificationVector {
                     DiscourseMode::Argumentative
                 }
                 SectionType::Journal => DiscourseMode::Reflective,
-                SectionType::MeetingRecord | SectionType::Reference => {
-                    DiscourseMode::Descriptive
-                }
+                SectionType::MeetingRecord | SectionType::Reference => DiscourseMode::Descriptive,
                 SectionType::ProjectNote => DiscourseMode::Procedural,
                 SectionType::Poetry => DiscourseMode::Lyric,
                 SectionType::Mixed | SectionType::Unknown => DiscourseMode::Descriptive,
@@ -1264,7 +1262,6 @@ impl Phase1Output {
     pub const SCHEMA_VERSION: u32 = 1;
 }
 
-
 // ── Phase 2: question clustering ──────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1757,11 +1754,9 @@ mod tests {
         };
         let claims: Vec<&AtlasCluster> = output.clusters_by_facet(Facet::Claim).collect();
         assert_eq!(claims.len(), 2);
-        let questions: Vec<&AtlasCluster> =
-            output.clusters_by_facet(Facet::Question).collect();
+        let questions: Vec<&AtlasCluster> = output.clusters_by_facet(Facet::Question).collect();
         assert_eq!(questions.len(), 1);
-        let states: Vec<&AtlasCluster> =
-            output.clusters_by_facet(Facet::EntityState).collect();
+        let states: Vec<&AtlasCluster> = output.clusters_by_facet(Facet::EntityState).collect();
         assert!(states.is_empty());
     }
 
@@ -1805,8 +1800,7 @@ mod tests {
 
     #[test]
     fn phase_ids_are_unique() {
-        let ids: std::collections::HashSet<_> =
-            PipelinePhase::ALL.iter().map(|p| p.id()).collect();
+        let ids: std::collections::HashSet<_> = PipelinePhase::ALL.iter().map(|p| p.id()).collect();
         assert_eq!(ids.len(), PipelinePhase::ALL.len());
     }
 
@@ -1826,12 +1820,18 @@ mod tests {
 
     #[test]
     fn phase_from_str_accepts_aliases() {
-        assert_eq!("extract".parse::<PipelinePhase>().unwrap(), PipelinePhase::Questions);
+        assert_eq!(
+            "extract".parse::<PipelinePhase>().unwrap(),
+            PipelinePhase::Questions
+        );
         assert_eq!(
             "cluster-questions".parse::<PipelinePhase>().unwrap(),
             PipelinePhase::QuestionClusters
         );
-        assert_eq!("positions".parse::<PipelinePhase>().unwrap(), PipelinePhase::Positions);
+        assert_eq!(
+            "positions".parse::<PipelinePhase>().unwrap(),
+            PipelinePhase::Positions
+        );
         assert!("nonsense".parse::<PipelinePhase>().is_err());
     }
 
@@ -1940,14 +1940,18 @@ mod tests {
 
     #[test]
     fn is_truncated_thinking_response_fires_whenever_think_is_unclosed() {
-        assert!(is_truncated_thinking_response("<think>long reasoning without closure"));
+        assert!(is_truncated_thinking_response(
+            "<think>long reasoning without closure"
+        ));
         // A `{` inside the reasoning trace is a red herring; the
         // answer we care about is after </think>, which is missing.
         assert!(is_truncated_thinking_response(
             "<think>drafting {\"position_text\": …} but never closing"
         ));
         // Closed thinking tag + JSON → not truncated.
-        assert!(!is_truncated_thinking_response("<think>done</think>{\"q\":1}"));
+        assert!(!is_truncated_thinking_response(
+            "<think>done</think>{\"q\":1}"
+        ));
         // No think tag at all → not truncated.
         assert!(!is_truncated_thinking_response("{\"q\":1}"));
     }
@@ -1983,10 +1987,19 @@ mod tests {
         let parsed: Phase1Output = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.questions_by_chapter.len(), 1);
         assert_eq!(parsed.pipeline_id, "literary");
-        assert_eq!(parsed.questions_by_chapter[0].setting.as_deref(), Some("Moscow drawing-room, 1870s"));
-        assert_eq!(parsed.questions_by_chapter[0].plot.as_deref(), Some("A letter arrives and is read aloud."));
+        assert_eq!(
+            parsed.questions_by_chapter[0].setting.as_deref(),
+            Some("Moscow drawing-room, 1870s")
+        );
+        assert_eq!(
+            parsed.questions_by_chapter[0].plot.as_deref(),
+            Some("A letter arrives and is read aloud.")
+        );
         assert_eq!(parsed.failures.len(), 1);
-        assert_eq!(parsed.failures[0].raw_response_head.as_deref(), Some("I cannot help with that."));
+        assert_eq!(
+            parsed.failures[0].raw_response_head.as_deref(),
+            Some("I cannot help with that.")
+        );
     }
 
     #[test]
@@ -2025,6 +2038,9 @@ mod tests {
             written_at: "2026-04-22T00:00:00Z".into(),
         };
         let json = serde_json::to_string(&out).unwrap();
-        assert!(!json.contains("failures"), "empty failures should be skipped; got {json}");
+        assert!(
+            !json.contains("failures"),
+            "empty failures should be skipped; got {json}"
+        );
     }
 }

@@ -169,10 +169,7 @@ where
 {
     type Item = S::Item;
 
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match Pin::new(&mut self.inner).poll_next(cx) {
             Poll::Ready(Some(item)) => {
                 if item.is_data_frame() {
@@ -213,8 +210,7 @@ where
 
         tokio::spawn(async move {
             let now = Instant::now();
-            let ttft_ms = first_chunk
-                .map(|t| t.duration_since(dispatched).as_secs_f64() * 1000.0);
+            let ttft_ms = first_chunk.map(|t| t.duration_since(dispatched).as_secs_f64() * 1000.0);
             let tg_tok_s = first_chunk.and_then(|fc| {
                 let gen_secs = now.duration_since(fc).as_secs_f64();
                 if gen_secs > 0.0 && count > 0 {
@@ -227,17 +223,12 @@ where
             match target {
                 ThroughputTarget::Local(obs) => {
                     let mut o = obs.write().await;
-                    apply_throughput_observation(
-                        &mut o, ttft_ms, tg_tok_s,
-                    );
+                    apply_throughput_observation(&mut o, ttft_ms, tg_tok_s);
                 }
                 ThroughputTarget::Peer { name, map } => {
                     let mut m = map.write().await;
-                    let entry =
-                        m.entry(name).or_insert_with(NodeObservations::default);
-                    apply_throughput_observation(
-                        entry, ttft_ms, tg_tok_s,
-                    );
+                    let entry = m.entry(name).or_insert_with(NodeObservations::default);
+                    apply_throughput_observation(entry, ttft_ms, tg_tok_s);
                 }
             }
 

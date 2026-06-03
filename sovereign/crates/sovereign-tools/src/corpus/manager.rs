@@ -337,9 +337,7 @@ impl CorpusManager {
 
         // Check for partial download (resume support).
         let existing_len = if part_path.exists() {
-            std::fs::metadata(&part_path)
-                .map(|m| m.len())
-                .unwrap_or(0)
+            std::fs::metadata(&part_path).map(|m| m.len()).unwrap_or(0)
         } else {
             0
         };
@@ -365,13 +363,10 @@ impl CorpusManager {
         // If server returned 200 (not 206) when we requested a range,
         // the server doesn't support resume — start fresh.
         let should_append = response.status().as_u16() == 206;
-        let total_size = response.content_length().map(|cl| {
-            if should_append {
-                cl + existing_len
-            } else {
-                cl
-            }
-        });
+        let total_size =
+            response
+                .content_length()
+                .map(|cl| if should_append { cl + existing_len } else { cl });
 
         use std::io::Write;
         let mut file = if should_append {
@@ -417,7 +412,6 @@ impl CorpusManager {
 
         Ok(final_path)
     }
-
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -461,11 +455,7 @@ fn extract_extension(url: &str) -> String {
     } else if filename.ends_with(".tar.gz") {
         "tar.gz".to_string()
     } else {
-        filename
-            .rsplit('.')
-            .next()
-            .unwrap_or("dat")
-            .to_string()
+        filename.rsplit('.').next().unwrap_or("dat").to_string()
     }
 }
 
@@ -533,12 +523,7 @@ corpora = ["gutenberg"]
 
         let store = Arc::new(InMemoryStateStore::new());
         let registry = test_registry();
-        let manager = CorpusManager::new(
-            registry,
-            store.clone(),
-            None,
-            dir.path().to_path_buf(),
-        );
+        let manager = CorpusManager::new(registry, store.clone(), None, dir.path().to_path_buf());
 
         // Install from local path.
         let state = manager
@@ -572,12 +557,7 @@ corpora = ["gutenberg"]
 
         let store = Arc::new(InMemoryStateStore::new());
         let registry = test_registry();
-        let manager = CorpusManager::new(
-            registry,
-            store,
-            None,
-            dir.path().to_path_buf(),
-        );
+        let manager = CorpusManager::new(registry, store, None, dir.path().to_path_buf());
 
         let call_count = Arc::new(AtomicUsize::new(0));
         let cc = call_count.clone();
@@ -603,12 +583,7 @@ corpora = ["gutenberg"]
 
         let store = Arc::new(InMemoryStateStore::new());
         let registry = test_registry();
-        let manager = CorpusManager::new(
-            registry,
-            store.clone(),
-            None,
-            dir.path().to_path_buf(),
-        );
+        let manager = CorpusManager::new(registry, store.clone(), None, dir.path().to_path_buf());
 
         // Install first.
         let state1 = manager
@@ -649,10 +624,7 @@ corpora = ["gutenberg"]
             extract_extension("https://example.com/data.tar.gz"),
             "tar.gz"
         );
-        assert_eq!(
-            extract_extension("https://example.com/file.jsonl"),
-            "jsonl"
-        );
+        assert_eq!(extract_extension("https://example.com/file.jsonl"), "jsonl");
         assert_eq!(
             extract_extension("https://example.com/file.jsonl?v=2"),
             "jsonl"

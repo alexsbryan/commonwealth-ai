@@ -187,17 +187,29 @@ impl Tool for ReadNotesTool {
         let symbols: Vec<String> = params
             .get("symbols")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
             .unwrap_or_default();
         let files: Vec<String> = params
             .get("files")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
             .unwrap_or_default();
         let kinds: Vec<String> = params
             .get("kinds")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
             .unwrap_or_default();
         let limit = params
             .get("limit")
@@ -277,10 +289,7 @@ impl Tool for ReadNotesTool {
         } else {
             None
         };
-        let filter = ScopeFilter {
-            scopes,
-            feature_id,
-        };
+        let filter = ScopeFilter { scopes, feature_id };
         let notes = self
             .store
             .read_notes_scoped_semantic(

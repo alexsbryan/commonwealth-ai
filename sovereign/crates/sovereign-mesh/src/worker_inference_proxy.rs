@@ -126,7 +126,10 @@ impl InferenceProxyConfig {
     /// client with sensible defaults (no proxy, modest connect
     /// timeout, generous overall request timeout to match
     /// long-running enrichment calls).
-    pub fn for_local_child(child_base_url: impl Into<String>, child_ready: Arc<AtomicBool>) -> Self {
+    pub fn for_local_child(
+        child_base_url: impl Into<String>,
+        child_ready: Arc<AtomicBool>,
+    ) -> Self {
         let client = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(1800))
@@ -134,10 +137,7 @@ impl InferenceProxyConfig {
             .build()
             .expect("reqwest builds with localhost-only config");
         Self {
-            child_base_url: child_base_url
-                .into()
-                .trim_end_matches('/')
-                .to_string(),
+            child_base_url: child_base_url.into().trim_end_matches('/').to_string(),
             child_ready,
             client,
         }
@@ -161,7 +161,14 @@ async fn chat_completions_proxy(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    forward(state, Method::POST, "/v1/chat/completions", headers, Some(body)).await
+    forward(
+        state,
+        Method::POST,
+        "/v1/chat/completions",
+        headers,
+        Some(body),
+    )
+    .await
 }
 
 async fn embeddings_proxy(
@@ -172,10 +179,7 @@ async fn embeddings_proxy(
     forward(state, Method::POST, "/v1/embeddings", headers, Some(body)).await
 }
 
-async fn models_proxy(
-    State(state): State<Arc<WorkerState>>,
-    headers: HeaderMap,
-) -> Response {
+async fn models_proxy(State(state): State<Arc<WorkerState>>, headers: HeaderMap) -> Response {
     forward(state, Method::GET, "/v1/models", headers, None).await
 }
 
@@ -242,11 +246,7 @@ async fn forward(
     let req_method = match ReqMethod::from_bytes(method.as_str().as_bytes()) {
         Ok(m) => m,
         Err(e) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                format!("invalid method: {e}"),
-            )
-                .into_response();
+            return (StatusCode::BAD_REQUEST, format!("invalid method: {e}")).into_response();
         }
     };
     let mut req = proxy.client.request(req_method, &url);
@@ -307,32 +307,25 @@ async fn forward(
 
     // Stream the body. `bytes_stream` yields `Result<Bytes, reqwest::Error>`;
     // axum's `Body::from_stream` wants `Result<Bytes, BoxError>`.
-    let stream = response.bytes_stream().map(|chunk| {
-        chunk.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
-    });
+    let stream = response
+        .bytes_stream()
+        .map(|chunk| chunk.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>));
     let body = Body::from_stream(stream);
 
     let mut resp = Response::builder().status(status);
     if let Some(h) = resp.headers_mut() {
         h.extend(owner_headers);
     }
-    resp.body(body)
-        .unwrap_or_else(|e| {
-            tracing::error!(error = %e, "worker_inference_proxy: response build failed");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "response build failed",
-            )
-                .into_response()
-        })
+    resp.body(body).unwrap_or_else(|e| {
+        tracing::error!(error = %e, "worker_inference_proxy: response build failed");
+        (StatusCode::INTERNAL_SERVER_ERROR, "response build failed").into_response()
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::worker_http::{
-        worker_router, EmitCompletedFn, JobManifest, WorkerRunner,
-    };
+    use crate::worker_http::{worker_router, EmitCompletedFn, JobManifest, WorkerRunner};
     use crate::worker_pod::{mint_bootstrap, BootstrapInputs};
     use axum::body::Body as AxumBody;
     use axum::http::{header::AUTHORIZATION, Request};
@@ -447,7 +440,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(response.into_body(), 1024).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
         assert!(
             std::str::from_utf8(&body).unwrap().contains("qwen3.5-2b"),
             "proxied body must echo the child's response"
@@ -471,7 +466,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(response.into_body(), 4096).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
         let text = std::str::from_utf8(&body).unwrap();
         assert!(text.contains("hi"), "got {text:?}");
     }

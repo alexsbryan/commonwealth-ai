@@ -107,7 +107,10 @@ pub async fn cmd_atlas_reconcile(args: &[String]) -> i32 {
         .collect();
     let input_atom_count = entities.len();
     if input_atom_count == 0 {
-        eprintln!("error: 0 Entity atoms in {} — nothing to reconcile.", atoms_path.display());
+        eprintln!(
+            "error: 0 Entity atoms in {} — nothing to reconcile.",
+            atoms_path.display()
+        );
         return 2;
     }
 

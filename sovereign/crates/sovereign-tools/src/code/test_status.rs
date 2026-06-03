@@ -11,8 +11,8 @@
 //! - Before committing. `stale` status means files changed since the last run.
 //! - Constantly during active editing — this call costs microseconds.
 
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::time::SystemTime;
 
 use async_trait::async_trait;
@@ -22,8 +22,8 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::WatcherHeartbeat;
 use corpus_engine::test_results::TestResultStore;
+use corpus_engine::WatcherHeartbeat;
 
 use super::watcher_health::{
     apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs,
@@ -426,9 +426,7 @@ mod tests {
     #[tokio::test]
     async fn running_branch_surfaces_compile_failed_previous_run() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Arc::new(
-            TestResultStore::open(&dir.path().join("test.db")).unwrap(),
-        );
+        let store = Arc::new(TestResultStore::open(&dir.path().join("test.db")).unwrap());
 
         // Run 1: completed, compile-failure shape (no test results,
         // non-zero exit).
@@ -467,9 +465,7 @@ mod tests {
     #[tokio::test]
     async fn running_branch_with_no_prior_run_returns_null_previous() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Arc::new(
-            TestResultStore::open(&dir.path().join("test.db")).unwrap(),
-        );
+        let store = Arc::new(TestResultStore::open(&dir.path().join("test.db")).unwrap());
 
         // Only an in-flight run; no completed history.
         let _r = store.begin_run().await.unwrap();
@@ -497,9 +493,7 @@ mod tests {
     #[tokio::test]
     async fn dead_watcher_demotes_completed_run_to_watcher_down() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Arc::new(
-            TestResultStore::open(&dir.path().join("test.db")).unwrap(),
-        );
+        let store = Arc::new(TestResultStore::open(&dir.path().join("test.db")).unwrap());
         // A completed failing run, like the 3.4-day-old run 3048.
         let r1 = store.begin_run().await.unwrap();
         store
@@ -537,9 +531,7 @@ mod tests {
     #[tokio::test]
     async fn live_watcher_keeps_fresh_failing() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Arc::new(
-            TestResultStore::open(&dir.path().join("test.db")).unwrap(),
-        );
+        let store = Arc::new(TestResultStore::open(&dir.path().join("test.db")).unwrap());
         let r1 = store.begin_run().await.unwrap();
         store
             .record_result(r1, TestResultKind::Fail, "demo::boom", Some("boom"))
@@ -568,9 +560,7 @@ mod tests {
     #[tokio::test]
     async fn not_configured_reports_reason_on_never_run() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Arc::new(
-            TestResultStore::open(&dir.path().join("test.db")).unwrap(),
-        );
+        let store = Arc::new(TestResultStore::open(&dir.path().join("test.db")).unwrap());
         // Heartbeat wired (daemon mode) but no scope == this tool has no
         // test_runner configured.
         let hb = WatcherHeartbeat::new();
@@ -593,9 +583,7 @@ mod tests {
     #[tokio::test]
     async fn running_branch_passing_prior_does_not_flag_compile_failure() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Arc::new(
-            TestResultStore::open(&dir.path().join("test.db")).unwrap(),
-        );
+        let store = Arc::new(TestResultStore::open(&dir.path().join("test.db")).unwrap());
 
         // Completed run: one passing test, exit_code 0.
         let r1 = store.begin_run().await.unwrap();

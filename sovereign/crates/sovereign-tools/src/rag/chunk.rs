@@ -19,7 +19,7 @@
 /// dense; the chunker still keeps paragraph boundaries when they
 /// fit, so semantic coherence isn't sacrificed for short paragraphs.
 const MAX_CHUNK_CHARS: usize = 700; // ~175 tokens at ~4 chars/token
-const OVERLAP_CHARS: usize = 120;   // ~30 tokens overlap
+const OVERLAP_CHARS: usize = 120; // ~30 tokens overlap
 
 /// A text chunk with its index in the source document.
 #[derive(Debug, Clone)]
@@ -111,11 +111,7 @@ fn split_into_segments(text: &str) -> Vec<&str> {
 }
 
 /// Break an oversized segment into chunks at sentence or word boundaries.
-fn split_oversized_segment(
-    text: &str,
-    chunks: &mut Vec<TextChunk>,
-    chunk_index: &mut usize,
-) {
+fn split_oversized_segment(text: &str, chunks: &mut Vec<TextChunk>, chunk_index: &mut usize) {
     let mut remaining = text;
 
     while !remaining.is_empty() {

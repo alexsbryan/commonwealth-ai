@@ -19,8 +19,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use bytes::Bytes;
 
 use commonwealth_core::contributions::{
-    aggregate, LedgerEvent, LedgerEventKind, NodeContributions,
-    DEFAULT_WINDOW_DAYS,
+    aggregate, LedgerEvent, LedgerEventKind, NodeContributions, DEFAULT_WINDOW_DAYS,
 };
 use commonwealth_core::ids::NodeId;
 use std::collections::HashMap;
@@ -90,12 +89,10 @@ impl ContributionEmitter {
             }
         };
         let key = self.unique_key(now);
-        if let Err(e) = self.store.set(
-            CONTRIBUTIONS_APP_ID,
-            &key,
-            payload,
-            self.self_node_id,
-        ) {
+        if let Err(e) = self
+            .store
+            .set(CONTRIBUTIONS_APP_ID, &key, payload, self.self_node_id)
+        {
             tracing::warn!(
                 error = %e,
                 key = %key,
@@ -108,8 +105,7 @@ impl ContributionEmitter {
     /// the aggregator and by `commonwealth balance` to render the
     /// dimensional summary.
     pub fn events(&self) -> Result<Vec<LedgerEvent>> {
-        let entries =
-            self.store.scan(CONTRIBUTIONS_APP_ID, "")?;
+        let entries = self.store.scan(CONTRIBUTIONS_APP_ID, "")?;
         let mut events = Vec::with_capacity(entries.len());
         for entry in entries {
             match serde_json::from_slice::<LedgerEvent>(entry.value.as_ref()) {
@@ -136,10 +132,7 @@ impl ContributionEmitter {
         // deterministically by node then time. The `seq` suffix
         // breaks ties at sub-nanosecond resolution.
         let id_bytes = self.self_node_id.as_bytes();
-        let id_hex: String = id_bytes
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect();
+        let id_hex: String = id_bytes.iter().map(|b| format!("{b:02x}")).collect();
         format!("{id_hex}:{now_secs:020}:{nanos:010}:{seq:016}")
     }
 }
@@ -149,10 +142,7 @@ impl ContributionEmitter {
 /// that pulls the event stream out of `MeshStore` first.
 pub fn current_contributions(
     store: &MeshStore,
-    peer_capabilities: &HashMap<
-        NodeId,
-        commonwealth_core::capabilities::NodeCapabilities,
-    >,
+    peer_capabilities: &HashMap<NodeId, commonwealth_core::capabilities::NodeCapabilities>,
     window_days: u32,
 ) -> Result<HashMap<NodeId, NodeContributions>> {
     let entries = store.scan(CONTRIBUTIONS_APP_ID, "")?;
@@ -176,8 +166,7 @@ pub fn default_window_days() -> u32 {
 /// Default cadence for the hourly `StorageSnapshot` background
 /// task. Aligned with `RetentionGc::DEFAULT_INTERVAL` so a single
 /// daemon clock tick handles both rollups.
-pub const STORAGE_SNAPSHOT_INTERVAL: std::time::Duration =
-    std::time::Duration::from_secs(3_600);
+pub const STORAGE_SNAPSHOT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3_600);
 
 /// Long-running background task that emits one `StorageSnapshot`
 /// event per [`STORAGE_SNAPSHOT_INTERVAL`] tick. Consumes a
@@ -300,8 +289,7 @@ fn emit_tracing_event(kind: &LedgerEventKind) {
 /// leaking the full id into logs).
 fn fmt_node(id: &NodeId) -> String {
     let bytes = id.as_bytes();
-    let prefix: String =
-        bytes.iter().take(6).map(|b| format!("{b:02x}")).collect();
+    let prefix: String = bytes.iter().take(6).map(|b| format!("{b:02x}")).collect();
     prefix
 }
 
@@ -368,11 +356,8 @@ mod tests {
         // off the ledger.
         let store = MeshStore::in_memory().unwrap();
         let emitter = ContributionEmitter::new(store.clone(), nid(1));
-        let (shutdown_tx, shutdown_rx) =
-            tokio::sync::watch::channel(false);
-        let walker = || async {
-            vec![("wikipedia".to_string(), 12.5_f64)]
-        };
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        let walker = || async { vec![("wikipedia".to_string(), 12.5_f64)] };
         let handle = tokio::spawn(run_storage_snapshot_loop(
             emitter.clone(),
             walker,
@@ -404,8 +389,7 @@ mod tests {
         // the loop unconditionally without polluting the ledger.
         let store = MeshStore::in_memory().unwrap();
         let emitter = ContributionEmitter::new(store.clone(), nid(1));
-        let (shutdown_tx, shutdown_rx) =
-            tokio::sync::watch::channel(false);
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
         let walker = || async { Vec::<(String, f64)>::new() };
         let handle = tokio::spawn(run_storage_snapshot_loop(
             emitter.clone(),
@@ -427,8 +411,7 @@ mod tests {
     #[test]
     fn current_contributions_aggregates_emitted_events() {
         let store = MeshStore::in_memory().unwrap();
-        let emitter =
-            ContributionEmitter::new(store.clone(), nid(7));
+        let emitter = ContributionEmitter::new(store.clone(), nid(7));
         emitter.record(LedgerEventKind::InferenceServed {
             for_node: nid(8),
             model_id: "qwen-9b".into(),
@@ -441,20 +424,9 @@ mod tests {
             tokens_generated: 200,
             wall_seconds: 5.0,
         });
-        let result = current_contributions(
-            &store,
-            &HashMap::new(),
-            DEFAULT_WINDOW_DAYS,
-        )
-        .unwrap();
+        let result = current_contributions(&store, &HashMap::new(), DEFAULT_WINDOW_DAYS).unwrap();
         assert_eq!(result[&nid(7)].inference_served.requests, 2);
-        assert_eq!(
-            result[&nid(7)].inference_served.total_tokens_generated,
-            300
-        );
-        assert!(
-            (result[&nid(7)].inference_served.wall_seconds - 7.5).abs()
-                < 1e-6
-        );
+        assert_eq!(result[&nid(7)].inference_served.total_tokens_generated, 300);
+        assert!((result[&nid(7)].inference_served.wall_seconds - 7.5).abs() < 1e-6);
     }
 }

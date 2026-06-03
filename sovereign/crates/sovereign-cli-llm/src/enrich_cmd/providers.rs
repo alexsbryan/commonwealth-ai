@@ -163,7 +163,6 @@ pub enum StructuredOutputMode {
     ToolUseForced,
 }
 
-
 /// Parse a model spec of the form `provider:model_id` or bare
 /// `model_id`. Bare resolves to provider=`local`. Empty model id is
 /// allowed when the resolved provider has a `default_model` set.
@@ -256,16 +255,16 @@ impl ProviderRegistry {
                                     default_thinking_tokens: cfg.default_thinking_tokens,
                                     api_version: cfg.api_version,
                                     extra_params: cfg.extra_params,
-                                    structured_output_mode: cfg
-                                        .structured_output_mode
-                                        .unwrap_or(match cfg.kind {
+                                    structured_output_mode: cfg.structured_output_mode.unwrap_or(
+                                        match cfg.kind {
                                             ProviderKind::OpenaiCompatible => {
                                                 StructuredOutputMode::JsonSchema
                                             }
                                             ProviderKind::Anthropic => {
                                                 StructuredOutputMode::ToolUseAuto
                                             }
-                                        }),
+                                        },
+                                    ),
                                 },
                             );
                         }
@@ -296,19 +295,21 @@ impl ProviderRegistry {
         } else {
             format!("{}/v1", local_base_url.trim_end_matches('/'))
         };
-        providers.entry("local".to_string()).or_insert_with(|| ResolvedProvider {
-            name: "local".to_string(),
-            kind: ProviderKind::OpenaiCompatible,
-            base_url: local_base,
-            auth_secret: None,
-            default_model: None,
-            default_temperature: Some(0.2),
-            default_max_tokens: None,
-            default_thinking_tokens: Some(0),
-            api_version: None,
-            extra_params: None,
-            structured_output_mode: StructuredOutputMode::JsonSchema,
-        });
+        providers
+            .entry("local".to_string())
+            .or_insert_with(|| ResolvedProvider {
+                name: "local".to_string(),
+                kind: ProviderKind::OpenaiCompatible,
+                base_url: local_base,
+                auth_secret: None,
+                default_model: None,
+                default_temperature: Some(0.2),
+                default_max_tokens: None,
+                default_thinking_tokens: Some(0),
+                api_version: None,
+                extra_params: None,
+                structured_output_mode: StructuredOutputMode::JsonSchema,
+            });
 
         Self { providers }
     }

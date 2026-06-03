@@ -79,9 +79,8 @@ fn make_sep_like_parquet(path: &Path) {
          agent's own character and values in producing the action.",
     ]);
 
-    let batch =
-        RecordBatch::try_new(schema.clone(), vec![Arc::new(titles), Arc::new(texts)])
-            .expect("build record batch");
+    let batch = RecordBatch::try_new(schema.clone(), vec![Arc::new(titles), Arc::new(texts)])
+        .expect("build record batch");
 
     let file = std::fs::File::create(path).expect("create parquet file");
     let mut writer = ArrowWriter::try_new(file, schema, None).expect("arrow writer");
@@ -144,11 +143,7 @@ fn mock_inference_fn() -> InferenceFn {
 /// Write a recipe TOML to disk pointing at the given local parquet
 /// file. The recipe form is the same one a user would author by hand
 /// for a custom corpus.
-fn write_recipe_toml(
-    recipes_dir: &Path,
-    parquet_path: &Path,
-    enable_enrichment: bool,
-) -> PathBuf {
+fn write_recipe_toml(recipes_dir: &Path, parquet_path: &Path, enable_enrichment: bool) -> PathBuf {
     let recipe_path = recipes_dir.join("test_corpus.toml");
     let parquet_str = parquet_path.to_string_lossy();
     let enrichment_block = if enable_enrichment {
@@ -255,7 +250,10 @@ async fn parquet_ingest_creates_searchable_index() {
     // return at least one result. We use the embed_fn directly so the
     // test stays self-contained.
     let query_embedding = engine.embed("compatibilism").await.unwrap();
-    let results = index.search(&query_embedding, "compatibilism", 5).await.unwrap();
+    let results = index
+        .search(&query_embedding, "compatibilism", 5)
+        .await
+        .unwrap();
     assert!(
         !results.is_empty(),
         "search on a populated index should return at least one chunk"
@@ -326,7 +324,10 @@ async fn parquet_ingest_with_enrichment_creates_field_model() {
     // The skeleton JSON should be valid — round-trip test.
     let json = serde_json::to_string_pretty(&skeleton).unwrap();
     let reparsed: corpus_engine::FieldSkeleton = serde_json::from_str(&json).unwrap();
-    assert_eq!(reparsed.canonical_questions.len(), skeleton.canonical_questions.len());
+    assert_eq!(
+        reparsed.canonical_questions.len(),
+        skeleton.canonical_questions.len()
+    );
 }
 
 /// Verify that the enrichment checkpoint is cleared after successful completion.

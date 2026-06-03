@@ -132,9 +132,9 @@ pub fn detect_atom_spans(
     // desc (longest match wins on ties). Walk and skip any span that
     // overlaps a previously-accepted span.
     hits.sort_by(|a, b| {
-        a.span_start.cmp(&b.span_start).then_with(|| {
-            (b.span_end - b.span_start).cmp(&(a.span_end - a.span_start))
-        })
+        a.span_start
+            .cmp(&b.span_start)
+            .then_with(|| (b.span_end - b.span_start).cmp(&(a.span_end - a.span_start)))
     });
     let mut accepted: Vec<AtomSpan> = Vec::with_capacity(hits.len());
     let mut cursor: usize = 0;
@@ -180,9 +180,7 @@ fn atom_anchored_at(atom: &AtomEnvelope, section: &str) -> bool {
         AtomEnvelope::Relation(r) => r.evidence.iter().any(|c| c.chunk_id == section),
         AtomEnvelope::Claim(c) => c.evidence.iter().any(|cr| cr.chunk_id == section),
         AtomEnvelope::Question(q) => q.raised_at.iter().any(|c| c.chunk_id == section),
-        AtomEnvelope::Configuration(c) => {
-            c.evidence.iter().any(|cr| cr.chunk_id == section)
-        }
+        AtomEnvelope::Configuration(c) => c.evidence.iter().any(|cr| cr.chunk_id == section),
         AtomEnvelope::ArgumentReconstruction(a) => {
             a.section_position.section_id == section
                 || a.evidence.iter().any(|c| c.chunk_id == section)
@@ -298,7 +296,11 @@ fn find_whole_word_byte_ranges(haystack: &str, needle: &str) -> Vec<(usize, usiz
                 .map(is_boundary)
                 .unwrap_or(true);
         let after_ok = end == haystack.len()
-            || haystack[end..].chars().next().map(is_boundary).unwrap_or(true);
+            || haystack[end..]
+                .chars()
+                .next()
+                .map(is_boundary)
+                .unwrap_or(true);
         if before_ok && after_ok {
             hits.push((pos, end));
         }
@@ -314,14 +316,9 @@ fn find_whole_word_byte_ranges(haystack: &str, needle: &str) -> Vec<(usize, usiz
 mod tests {
     use super::*;
     use crate::enrichment::atlas::{AtomId, ChunkRef, Entity, SectionRange, State};
-    use crate::enrichment::pipeline::{EntityType, EnrichmentDepth, StateType};
+    use crate::enrichment::pipeline::{EnrichmentDepth, EntityType, StateType};
 
-    fn entity_atom(
-        idx: usize,
-        canonical: &str,
-        aliases: &[&str],
-        section: &str,
-    ) -> AtomEnvelope {
+    fn entity_atom(idx: usize, canonical: &str, aliases: &[&str], section: &str) -> AtomEnvelope {
         AtomEnvelope::Entity(Entity {
             id: AtomId::entity(idx),
             canonical_name: canonical.into(),
@@ -335,9 +332,9 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-                    provenance: Default::default(),
-                    concept_kind: None,
-})
+            provenance: Default::default(),
+            concept_kind: None,
+        })
     }
 
     #[test]

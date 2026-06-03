@@ -93,10 +93,7 @@ async fn install_one_chunk_corpus(
     // (CorpusIndex doesn't expose `all_chunk_ids` directly, but a
     // search with a zero vector returns rows ordered by relevance
     // and surfaces their ids.)
-    let results = index
-        .search(&[0.0_f32; EMBED_DIM], "", 1)
-        .await
-        .unwrap();
+    let results = index.search(&[0.0_f32; EMBED_DIM], "", 1).await.unwrap();
     results[0].chunk_id.unwrap_or(0)
 }
 
@@ -162,7 +159,9 @@ async fn get_chunk_returns_404_for_unknown_corpus() {
     let addr = spawn_router(reading_router(Arc::clone(&daemon))).await;
 
     let resp = reqwest::Client::new()
-        .get(format!("http://{addr}/internal/corpus/nonexistent/chunks/0"))
+        .get(format!(
+            "http://{addr}/internal/corpus/nonexistent/chunks/0"
+        ))
         .send()
         .await
         .expect("reading_router reachable");

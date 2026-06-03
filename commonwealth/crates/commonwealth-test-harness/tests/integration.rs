@@ -457,25 +457,23 @@ async fn inference_e2e_with_mock_llama_server() {
     let model = coding_model(1);
     let model_id = model.id;
     mesh.nodes[0].register_model(model.clone());
-    mesh.nodes[0]
-        .set_llama_server_address(model_id, mock_addr);
+    mesh.nodes[0].set_llama_server_address(model_id, mock_addr);
 
     // Set an inference plan so the model is "loaded".
-    mesh.nodes[0]
-        .set_inference_plan(InferencePlan {
-            model_plans: vec![ShardPlan {
-                model: model_id,
-                entry_node: NodeId::from_u128(1),
-                assignments: vec![ShardAssignment {
-                    node_id: NodeId::from_u128(1),
-                    layers: LayerRange::new(0, 64),
-                    gpu_index: 0,
-                    rpc_address: "127.0.0.1:50051".parse().unwrap(),
-                }],
-                estimated_tokens_per_sec: 45.0,
-                estimated_ttft_ms: 1100,
+    mesh.nodes[0].set_inference_plan(InferencePlan {
+        model_plans: vec![ShardPlan {
+            model: model_id,
+            entry_node: NodeId::from_u128(1),
+            assignments: vec![ShardAssignment {
+                node_id: NodeId::from_u128(1),
+                layers: LayerRange::new(0, 64),
+                gpu_index: 0,
+                rpc_address: "127.0.0.1:50051".parse().unwrap(),
             }],
-        });
+            estimated_tokens_per_sec: 45.0,
+            estimated_ttft_ms: 1100,
+        }],
+    });
 
     // Give server a moment to start.
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -591,7 +589,7 @@ async fn internal_gossip_endpoint_accepts_payload() {
 
     // GossipRequest wraps a MeshWire — send a valid mesh with matching id/hash.
     // MeshId::from_u128(1) serialises as 16-byte big-endian array.
-    let mesh_id_bytes: Vec<u8> = vec![0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1];
+    let mesh_id_bytes: Vec<u8> = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
     let hash_bytes: Vec<u8> = vec![0u8; 32];
     let (status, _) = http_post(
         internal_addr,
@@ -695,7 +693,10 @@ fn fault_detection_recovery_on_heartbeat() {
     // a heartbeat recovers it from any non-Healthy state.
     let pre_status = fd.node_status(id);
     assert!(
-        matches!(pre_status, Some(FaultStatus::Suspected) | Some(FaultStatus::Away)),
+        matches!(
+            pre_status,
+            Some(FaultStatus::Suspected) | Some(FaultStatus::Away)
+        ),
         "expected Suspected or Away after timeout, got {pre_status:?}"
     );
 
@@ -753,23 +754,21 @@ async fn inference_503_retry_after_on_backend_failure() {
     let model = coding_model(1);
     let model_id = model.id;
     mesh.nodes[0].register_model(model);
-    mesh.nodes[0]
-        .set_llama_server_address(model_id, "127.0.0.1:1".into()); // Nothing listening.
-    mesh.nodes[0]
-        .set_inference_plan(InferencePlan {
-            model_plans: vec![ShardPlan {
-                model: model_id,
-                entry_node: NodeId::from_u128(1),
-                assignments: vec![ShardAssignment {
-                    node_id: NodeId::from_u128(1),
-                    layers: LayerRange::new(0, 64),
-                    gpu_index: 0,
-                    rpc_address: "127.0.0.1:50051".parse().unwrap(),
-                }],
-                estimated_tokens_per_sec: 40.0,
-                estimated_ttft_ms: 1000,
+    mesh.nodes[0].set_llama_server_address(model_id, "127.0.0.1:1".into()); // Nothing listening.
+    mesh.nodes[0].set_inference_plan(InferencePlan {
+        model_plans: vec![ShardPlan {
+            model: model_id,
+            entry_node: NodeId::from_u128(1),
+            assignments: vec![ShardAssignment {
+                node_id: NodeId::from_u128(1),
+                layers: LayerRange::new(0, 64),
+                gpu_index: 0,
+                rpc_address: "127.0.0.1:50051".parse().unwrap(),
             }],
-        });
+            estimated_tokens_per_sec: 40.0,
+            estimated_ttft_ms: 1000,
+        }],
+    });
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -815,41 +814,38 @@ async fn oicp_routing_selects_correct_model() {
     mesh.nodes[0].register_model(general);
 
     // Point each to its own mock server.
-    mesh.nodes[0]
-        .set_llama_server_address(coder_id, mock_coder.address_string());
-    mesh.nodes[0]
-        .set_llama_server_address(general_id, mock_general.address_string());
+    mesh.nodes[0].set_llama_server_address(coder_id, mock_coder.address_string());
+    mesh.nodes[0].set_llama_server_address(general_id, mock_general.address_string());
 
     // Set inference plan with both models.
-    mesh.nodes[0]
-        .set_inference_plan(InferencePlan {
-            model_plans: vec![
-                ShardPlan {
-                    model: coder_id,
-                    entry_node: NodeId::from_u128(1),
-                    assignments: vec![ShardAssignment {
-                        node_id: NodeId::from_u128(1),
-                        layers: LayerRange::new(0, 64),
-                        gpu_index: 0,
-                        rpc_address: "127.0.0.1:50051".parse().unwrap(),
-                    }],
-                    estimated_tokens_per_sec: 45.0,
-                    estimated_ttft_ms: 1100,
-                },
-                ShardPlan {
-                    model: general_id,
-                    entry_node: NodeId::from_u128(1),
-                    assignments: vec![ShardAssignment {
-                        node_id: NodeId::from_u128(1),
-                        layers: LayerRange::new(0, 64),
-                        gpu_index: 0,
-                        rpc_address: "127.0.0.1:50052".parse().unwrap(),
-                    }],
-                    estimated_tokens_per_sec: 38.0,
-                    estimated_ttft_ms: 1300,
-                },
-            ],
-        });
+    mesh.nodes[0].set_inference_plan(InferencePlan {
+        model_plans: vec![
+            ShardPlan {
+                model: coder_id,
+                entry_node: NodeId::from_u128(1),
+                assignments: vec![ShardAssignment {
+                    node_id: NodeId::from_u128(1),
+                    layers: LayerRange::new(0, 64),
+                    gpu_index: 0,
+                    rpc_address: "127.0.0.1:50051".parse().unwrap(),
+                }],
+                estimated_tokens_per_sec: 45.0,
+                estimated_ttft_ms: 1100,
+            },
+            ShardPlan {
+                model: general_id,
+                entry_node: NodeId::from_u128(1),
+                assignments: vec![ShardAssignment {
+                    node_id: NodeId::from_u128(1),
+                    layers: LayerRange::new(0, 64),
+                    gpu_index: 0,
+                    rpc_address: "127.0.0.1:50052".parse().unwrap(),
+                }],
+                estimated_tokens_per_sec: 38.0,
+                estimated_ttft_ms: 1300,
+            },
+        ],
+    });
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -1230,41 +1226,38 @@ async fn omo_model_alias_routes_to_coding_model() {
 
     mesh.nodes[0].register_model(coder);
     mesh.nodes[0].register_model(general);
-    mesh.nodes[0]
-        .set_llama_server_address(coder_id, mock_coder.address_string());
-    mesh.nodes[0]
-        .set_llama_server_address(general_id, mock_general.address_string());
+    mesh.nodes[0].set_llama_server_address(coder_id, mock_coder.address_string());
+    mesh.nodes[0].set_llama_server_address(general_id, mock_general.address_string());
 
     // Set inference plan with both models.
-    mesh.nodes[0]
-        .set_inference_plan(InferencePlan {
-            model_plans: vec![
-                ShardPlan {
-                    model: coder_id,
-                    entry_node: NodeId::from_u128(1),
-                    assignments: vec![ShardAssignment {
-                        node_id: NodeId::from_u128(1),
-                        layers: LayerRange::new(0, 64),
-                        gpu_index: 0,
-                        rpc_address: "127.0.0.1:50051".parse().unwrap(),
-                    }],
-                    estimated_tokens_per_sec: 45.0,
-                    estimated_ttft_ms: 1100,
-                },
-                ShardPlan {
-                    model: general_id,
-                    entry_node: NodeId::from_u128(1),
-                    assignments: vec![ShardAssignment {
-                        node_id: NodeId::from_u128(1),
-                        layers: LayerRange::new(0, 64),
-                        gpu_index: 0,
-                        rpc_address: "127.0.0.1:50052".parse().unwrap(),
-                    }],
-                    estimated_tokens_per_sec: 38.0,
-                    estimated_ttft_ms: 1300,
-                },
-            ],
-        });
+    mesh.nodes[0].set_inference_plan(InferencePlan {
+        model_plans: vec![
+            ShardPlan {
+                model: coder_id,
+                entry_node: NodeId::from_u128(1),
+                assignments: vec![ShardAssignment {
+                    node_id: NodeId::from_u128(1),
+                    layers: LayerRange::new(0, 64),
+                    gpu_index: 0,
+                    rpc_address: "127.0.0.1:50051".parse().unwrap(),
+                }],
+                estimated_tokens_per_sec: 45.0,
+                estimated_ttft_ms: 1100,
+            },
+            ShardPlan {
+                model: general_id,
+                entry_node: NodeId::from_u128(1),
+                assignments: vec![ShardAssignment {
+                    node_id: NodeId::from_u128(1),
+                    layers: LayerRange::new(0, 64),
+                    gpu_index: 0,
+                    rpc_address: "127.0.0.1:50052".parse().unwrap(),
+                }],
+                estimated_tokens_per_sec: 38.0,
+                estimated_ttft_ms: 1300,
+            },
+        ],
+    });
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -1324,23 +1317,21 @@ async fn unknown_model_name_falls_through_to_default() {
     let model = general_model(1);
     let model_id = model.id;
     mesh.nodes[0].register_model(model);
-    mesh.nodes[0]
-        .set_llama_server_address(model_id, mock.address_string());
-    mesh.nodes[0]
-        .set_inference_plan(InferencePlan {
-            model_plans: vec![ShardPlan {
-                model: model_id,
-                entry_node: NodeId::from_u128(1),
-                assignments: vec![ShardAssignment {
-                    node_id: NodeId::from_u128(1),
-                    layers: LayerRange::new(0, 64),
-                    gpu_index: 0,
-                    rpc_address: "127.0.0.1:50051".parse().unwrap(),
-                }],
-                estimated_tokens_per_sec: 38.0,
-                estimated_ttft_ms: 1300,
+    mesh.nodes[0].set_llama_server_address(model_id, mock.address_string());
+    mesh.nodes[0].set_inference_plan(InferencePlan {
+        model_plans: vec![ShardPlan {
+            model: model_id,
+            entry_node: NodeId::from_u128(1),
+            assignments: vec![ShardAssignment {
+                node_id: NodeId::from_u128(1),
+                layers: LayerRange::new(0, 64),
+                gpu_index: 0,
+                rpc_address: "127.0.0.1:50051".parse().unwrap(),
             }],
-        });
+            estimated_tokens_per_sec: 38.0,
+            estimated_ttft_ms: 1300,
+        }],
+    });
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -1421,7 +1412,10 @@ async fn node_activity_hot_then_idle_reflected_in_gossip_response() {
         }),
     )
     .await;
-    assert_eq!(gossip_status, 200, "gossip must succeed after activity update");
+    assert_eq!(
+        gossip_status, 200,
+        "gossip must succeed after activity update"
+    );
 
     // Now set back to idle — verifies the state machine transitions bidirectionally.
     let (status, _) = http_post(
@@ -1430,5 +1424,8 @@ async fn node_activity_hot_then_idle_reflected_in_gossip_response() {
         &serde_json::json!({ "level": "idle", "reason": "tests_finished" }),
     )
     .await;
-    assert_eq!(status, 204, "transitioning back to idle must also return 204");
+    assert_eq!(
+        status, 204,
+        "transitioning back to idle must also return 204"
+    );
 }

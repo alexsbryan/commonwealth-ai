@@ -18,7 +18,11 @@ pub struct RetentionGc {
 
 impl RetentionGc {
     pub fn new(store: Arc<MeshStore>, ttl_seconds: u64, interval: Duration) -> Self {
-        Self { store, ttl_seconds, interval }
+        Self {
+            store,
+            ttl_seconds,
+            interval,
+        }
     }
 
     /// Run until the shutdown watch fires `true`.

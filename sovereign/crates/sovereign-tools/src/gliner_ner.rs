@@ -55,13 +55,7 @@ pub const DEFAULT_THRESHOLD: f32 = 0.6;
 /// `Concept` deliberately omitted (high noise rate; see module
 /// docstring). The remaining labels cover the entity types the
 /// conv corpus actually contains in production data.
-pub const DEFAULT_LABELS: &[&str] = &[
-    "Person",
-    "Organization",
-    "Work",
-    "Location",
-    "Event",
-];
+pub const DEFAULT_LABELS: &[&str] = &["Person", "Organization", "Work", "Location", "Event"];
 
 /// Default model id. Maps to a directory inside `MODELS_ROOT`
 /// containing `tokenizer.json` + `onnx/model.onnx`.
@@ -292,10 +286,7 @@ impl GlinerExtractor {
         if raw_chunks.is_empty() {
             return Ok(Vec::new());
         }
-        let processed: Vec<String> = raw_chunks
-            .iter()
-            .map(|s| self.preprocess(s))
-            .collect();
+        let processed: Vec<String> = raw_chunks.iter().map(|s| self.preprocess(s)).collect();
         let processed_refs: Vec<&str> = processed.iter().map(|s| s.as_str()).collect();
         let labels_ref: Vec<&str> = self.labels.iter().map(|s| s.as_str()).collect();
         let input = TextInput::from_str(&processed_refs, &labels_ref)
@@ -420,14 +411,8 @@ pub async fn download_model(
         .map_err(|e| Error::Storage(format!("create_dir_all {}: {e}", root.display())))?;
 
     let files = [
-        (
-            "tokenizer.json",
-            root.join("tokenizer.json"),
-        ),
-        (
-            "onnx/model.onnx",
-            root.join("onnx").join("model.onnx"),
-        ),
+        ("tokenizer.json", root.join("tokenizer.json")),
+        ("onnx/model.onnx", root.join("onnx").join("model.onnx")),
     ];
 
     let client = reqwest::Client::builder()
@@ -441,9 +426,8 @@ pub async fn download_model(
             on_progress(remote_rel, 0, 0);
             continue;
         }
-        let url = format!(
-            "https://huggingface.co/onnx-community/{model_id}/resolve/main/{remote_rel}"
-        );
+        let url =
+            format!("https://huggingface.co/onnx-community/{model_id}/resolve/main/{remote_rel}");
         let mut resp = client
             .get(&url)
             .send()

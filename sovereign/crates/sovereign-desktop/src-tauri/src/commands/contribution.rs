@@ -153,9 +153,7 @@ pub async fn resume_contributions() -> Result<ContributionStatus, String> {
 }
 
 #[tauri::command]
-pub async fn get_recent_contributions(
-    limit: Option<usize>,
-) -> Result<Vec<LedgerEventDto>, String> {
+pub async fn get_recent_contributions(limit: Option<usize>) -> Result<Vec<LedgerEventDto>, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -195,9 +193,7 @@ pub async fn get_recent_contributions(
 // The first two return raw JSON; the Svelte side owns the typed shape.
 
 #[tauri::command]
-pub async fn get_activity_summary(
-    window_days: Option<u32>,
-) -> Result<serde_json::Value, String> {
+pub async fn get_activity_summary(window_days: Option<u32>) -> Result<serde_json::Value, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -224,9 +220,7 @@ pub async fn get_activity_summary(
 }
 
 #[tauri::command]
-pub async fn get_activity_recent(
-    limit: Option<usize>,
-) -> Result<Vec<serde_json::Value>, String> {
+pub async fn get_activity_recent(limit: Option<usize>) -> Result<Vec<serde_json::Value>, String> {
     #[derive(serde::Deserialize)]
     struct Resp {
         events: Vec<serde_json::Value>,
@@ -274,8 +268,7 @@ pub async fn get_chat_activity(
         .summarize_chat_activity(window_secs)
         .await
         .map_err(|e| format!("summarize_chat_activity: {e}"))?;
-    serde_json::to_value(summary)
-        .map_err(|e| format!("serialize chat activity: {e}"))
+    serde_json::to_value(summary).map_err(|e| format!("serialize chat activity: {e}"))
 }
 
 // ─── First-mesh consent (W4) ─────────────────────────────────
@@ -321,7 +314,8 @@ pub async fn record_first_mesh_consent(
     {
         let mut cfg = state.config.write().await;
         cfg.first_mesh_consent = Some(decision.clone());
-        cfg.save().map_err(|e| format!("save desktop config: {e}"))?;
+        cfg.save()
+            .map_err(|e| format!("save desktop config: {e}"))?;
     }
 
     // Apply the ceiling at the daemon. Best-effort: if the daemon
@@ -366,11 +360,9 @@ pub async fn prepare_crash_report() -> Result<CrashReportInfo, String> {
         .map(|c| c.data.dir.clone())
         .or_else(|| dirs::home_dir().map(|h| h.join(".sovereign")))
         .ok_or_else(|| "could not resolve data dir".to_string())?;
-    let prepared =
-        crate::crash_bundle::prepare_report(&data_dir, cfg.as_ref(), app_version)?;
+    let prepared = crate::crash_bundle::prepare_report(&data_dir, cfg.as_ref(), app_version)?;
     Ok(CrashReportInfo {
         report_path: prepared.report_path.to_string_lossy().into_owned(),
         mailto_url: prepared.mailto_url,
     })
 }
-

@@ -44,8 +44,7 @@ enum SelfAssessment {
     NeedsWebSearch,
 }
 
-const SELF_ASSESSMENT_PROMPT: &str =
-    include_str!("../assets/self_assessment_prompt.md");
+const SELF_ASSESSMENT_PROMPT: &str = include_str!("../assets/self_assessment_prompt.md");
 
 /// Compute the `routing_log.message_hash` for a given user input.
 /// Stable across router + runtime so PR4 redirect-signal updates
@@ -83,9 +82,7 @@ const SELF_ASSESSMENT_PROMPT: &str =
 ///
 /// Surfaced by sovereign/bench/wikipedia_learn 2026-05-17 marathon
 /// (v9→v10).
-fn inherits_prior_knowledge_intent(
-    context: &ConversationContext,
-) -> Option<Intent> {
+fn inherits_prior_knowledge_intent(context: &ConversationContext) -> Option<Intent> {
     let prior_assistant = context
         .conversation
         .messages
@@ -145,8 +142,17 @@ pub(crate) fn suggest_alternatives(
 
     // Temporal / recency signal → offer web search.
     let wants_current = [
-        "latest", "today", "current", "recent", "this week", "this month",
-        "right now", "news", "price", "score", "weather",
+        "latest",
+        "today",
+        "current",
+        "recent",
+        "this week",
+        "this month",
+        "right now",
+        "news",
+        "price",
+        "score",
+        "weather",
     ]
     .iter()
     .any(|k| lower.contains(k));
@@ -160,9 +166,7 @@ pub(crate) fn suggest_alternatives(
                 "router:web_search_candidate — temporal signal + web tool present, offering web_search"
             );
             out.push(IntentCandidate {
-                intent: Intent::SimpleAction {
-                    tool: t.id.clone(),
-                },
+                intent: Intent::SimpleAction { tool: t.id.clone() },
                 confidence: 0.6,
             });
         }
@@ -170,8 +174,16 @@ pub(crate) fn suggest_alternatives(
 
     // Deep-reasoning signal → DeepQuery.
     let wants_deep = [
-        "how does", "explain", "walk me through", "compare", "contrast",
-        "why does", "analyze", "analyse", "relationship between", "difference between",
+        "how does",
+        "explain",
+        "walk me through",
+        "compare",
+        "contrast",
+        "why does",
+        "analyze",
+        "analyse",
+        "relationship between",
+        "difference between",
     ]
     .iter()
     .any(|k| lower.contains(k));
@@ -184,8 +196,16 @@ pub(crate) fn suggest_alternatives(
 
     // Corpus-lookup-y signal → KnowledgeQuery.
     let wants_lookup = [
-        "according to", "in the", "from the", "the document", "chapter",
-        "paper", "book", "find", "lookup", "look up",
+        "according to",
+        "in the",
+        "from the",
+        "the document",
+        "chapter",
+        "paper",
+        "book",
+        "find",
+        "lookup",
+        "look up",
     ]
     .iter()
     .any(|k| lower.contains(k));
@@ -320,9 +340,7 @@ impl LlmRouter {
                 .map(|c| format!("- A message was wrongly classified as {}", c.classified_as))
                 .collect::<Vec<_>>()
                 .join("\n");
-            format!(
-                "\n\nPrevious classification mistakes (avoid these):\n{examples}"
-            )
+            format!("\n\nPrevious classification mistakes (avoid these):\n{examples}")
         };
 
         let corpus_list = context.installed_corpora_display();
@@ -502,7 +520,13 @@ Reply with JSON only:
                 parts.push(format!("Current goal: {goal}"));
             }
             if !wm.facts.is_empty() {
-                let facts = wm.facts.iter().take(5).cloned().collect::<Vec<_>>().join("; ");
+                let facts = wm
+                    .facts
+                    .iter()
+                    .take(5)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join("; ");
                 parts.push(format!("Known facts: {facts}"));
             }
         }
@@ -583,50 +607,96 @@ Reply with JSON only:
         // ("is contested today", "shape the", "shaped the") were
         // explicitly NOT added — those were teaching to the test.
         let analysis_markers = [
-            "compare", "contrast", "analyze", "analyse",
-            "explain how", "explain why", "explain the difference",
-            "what are the arguments", "what are the implications",
-            "evaluate", "critically", "assess",
-            "discuss", "debate",
-            "reconcile", "how does", "why does", "in what ways",
-            "pros and cons", "advantages and disadvantages",
+            "compare",
+            "contrast",
+            "analyze",
+            "analyse",
+            "explain how",
+            "explain why",
+            "explain the difference",
+            "what are the arguments",
+            "what are the implications",
+            "evaluate",
+            "critically",
+            "assess",
+            "discuss",
+            "debate",
+            "reconcile",
+            "how does",
+            "why does",
+            "in what ways",
+            "pros and cons",
+            "advantages and disadvantages",
             // "relationship between" / "difference between" removed
             // 2026-05-21: those are bounded-comparison signals, not
             // deep-reasoning. The embed router's comparison_query
             // cluster catches them faster + more accurately than
             // forcing them to deep_query here.
-            "summarize the", "summarise the",
-            "history of", "overview of", "evolution of",
-            "how have", "how has",
+            "summarize the",
+            "summarise the",
+            "history of",
+            "overview of",
+            "evolution of",
+            "how have",
+            "how has",
             // Structural causal patterns (general — any causal-shape
             // question, not bank-specific):
-            "how did", "why did",
-            "what were the consequences", "what were the effects",
-            "what were the causes", "what were the implications",
-            "what led to", "what caused",
-            "contribute to", "contributed to",
-            "influence on", "influenced the",
+            "how did",
+            "why did",
+            "what were the consequences",
+            "what were the effects",
+            "what were the causes",
+            "what were the implications",
+            "what led to",
+            "what caused",
+            "contribute to",
+            "contributed to",
+            "influence on",
+            "influenced the",
         ];
 
         // Complex conceptual domains where even short questions require reasoning.
         let complex_domains = [
-            "free will", "determinism", "compatibilism", "incompatibilism",
-            "consciousness", "qualia", "hard problem",
-            "epistemology", "ontology", "metaphysics", "phenomenology",
-            "moral realism", "ethics", "morality", "normative",
-            "political philosophy", "social contract", "justice",
-            "dialectic", "existentialism", "absurdism",
-            "artificial general intelligence", "alignment problem",
-            "philosophy of mind", "philosophy of language",
-            "emergence", "supervenience", "reduction",
+            "free will",
+            "determinism",
+            "compatibilism",
+            "incompatibilism",
+            "consciousness",
+            "qualia",
+            "hard problem",
+            "epistemology",
+            "ontology",
+            "metaphysics",
+            "phenomenology",
+            "moral realism",
+            "ethics",
+            "morality",
+            "normative",
+            "political philosophy",
+            "social contract",
+            "justice",
+            "dialectic",
+            "existentialism",
+            "absurdism",
+            "artificial general intelligence",
+            "alignment problem",
+            "philosophy of mind",
+            "philosophy of language",
+            "emergence",
+            "supervenience",
+            "reduction",
         ];
 
         // Compatibility/tension questions — always require reasoning regardless of domain.
         let tension_markers = [
-            "compatible", "incompatible",
-            "consistent with", "inconsistent with",
-            "reconcile", "tension between",
-            "can both", "are both",
+            "compatible",
+            "incompatible",
+            "consistent with",
+            "inconsistent with",
+            "reconcile",
+            "tension between",
+            "can both",
+            "are both",
         ];
 
         let word_count = message.split_whitespace().count();
@@ -697,7 +767,6 @@ Reply with JSON only:
         has_recent_year || has_temporal || has_search_request
     }
 
-
     /// Heuristic check: is this message a metalingual query — asking
     /// about how a *specific source* uses a term, rather than asking
     /// about the term's general meaning in the world?
@@ -718,23 +787,23 @@ Reply with JSON only:
     /// - **Ambient**: "here", "this" + definitional → resolves from
     ///   conversation context.
     fn looks_like_personal_recall(_message: &str) -> bool {
-    // Retired (2026-05-21): vocabulary-list pre-check replaced
-    // by the embed router's cluster centroid + Pass 1 prompt
-    // category description. See exemplars.toml for the
-    // semantic coverage. Tombstoned (not deleted) so
-    // downstream `force_*` guards compile unchanged; follow-up
-    // PR can delete the guards and the stub together.
-    false
+        // Retired (2026-05-21): vocabulary-list pre-check replaced
+        // by the embed router's cluster centroid + Pass 1 prompt
+        // category description. See exemplars.toml for the
+        // semantic coverage. Tombstoned (not deleted) so
+        // downstream `force_*` guards compile unchanged; follow-up
+        // PR can delete the guards and the stub together.
+        false
     }
 
     fn looks_like_metalingual(_message: &str) -> bool {
-    // Retired (2026-05-21): vocabulary-list pre-check replaced
-    // by the embed router's cluster centroid + Pass 1 prompt
-    // category description. See exemplars.toml for the
-    // semantic coverage. Tombstoned (not deleted) so
-    // downstream `force_*` guards compile unchanged; follow-up
-    // PR can delete the guards and the stub together.
-    false
+        // Retired (2026-05-21): vocabulary-list pre-check replaced
+        // by the embed router's cluster centroid + Pass 1 prompt
+        // category description. See exemplars.toml for the
+        // semantic coverage. Tombstoned (not deleted) so
+        // downstream `force_*` guards compile unchanged; follow-up
+        // PR can delete the guards and the stub together.
+        false
     }
 
     /// Retired (2026-05-21): the substring-based conation
@@ -768,13 +837,13 @@ Reply with JSON only:
     /// commitment marker AND no question mark AND no memory-reference
     /// opener — see `looks_like_memory_reference` for the latter.
     fn looks_like_commissive(_message: &str) -> bool {
-    // Retired (2026-05-21): vocabulary-list pre-check replaced
-    // by the embed router's cluster centroid + Pass 1 prompt
-    // category description. See exemplars.toml for the
-    // semantic coverage. Tombstoned (not deleted) so
-    // downstream `force_*` guards compile unchanged; follow-up
-    // PR can delete the guards and the stub together.
-    false
+        // Retired (2026-05-21): vocabulary-list pre-check replaced
+        // by the embed router's cluster centroid + Pass 1 prompt
+        // category description. See exemplars.toml for the
+        // semantic coverage. Tombstoned (not deleted) so
+        // downstream `force_*` guards compile unchanged; follow-up
+        // PR can delete the guards and the stub together.
+        false
     }
 
     /// Heuristic check: factual-lookup shape — the message opens
@@ -793,16 +862,16 @@ Reply with JSON only:
     ///   message, the more likely it embeds a multi-clause shape
     ///   the LLM should resolve.
     fn looks_like_factual_lookup(_message: &str) -> bool {
-    // Retired (2026-05-21): "what is X" / "who was X" opener
-    // detection had a substring-exclusion list (" differ " /
-    // " consequences " / etc.) that drifted from real phrasings
-    // — e.g. "difference between X and Y" misclassified because
-    // the exclusion list had " differ " but not " difference ".
-    // Same architectural debt as the other retired vocabulary
-    // heuristics. Embed router's knowledge_query cluster +
-    // Pass 1 LOOKUP category cover the same shapes without the
-    // substring-mismatch failure mode.
-    false
+        // Retired (2026-05-21): "what is X" / "who was X" opener
+        // detection had a substring-exclusion list (" differ " /
+        // " consequences " / etc.) that drifted from real phrasings
+        // — e.g. "difference between X and Y" misclassified because
+        // the exclusion list had " differ " but not " difference ".
+        // Same architectural debt as the other retired vocabulary
+        // heuristics. Embed router's knowledge_query cluster +
+        // Pass 1 LOOKUP category cover the same shapes without the
+        // substring-mismatch failure mode.
+        false
     }
 
     /// Heuristic check: does this message lead with (or contain) a
@@ -816,13 +885,13 @@ Reply with JSON only:
     /// the lead. High-precision floor: substring match on phrases
     /// that don't appear inside other words.
     fn looks_like_memory_reference(_message: &str) -> bool {
-    // Retired (2026-05-21): vocabulary-list pre-check replaced
-    // by the embed router's cluster centroid + Pass 1 prompt
-    // category description. See exemplars.toml for the
-    // semantic coverage. Tombstoned (not deleted) so
-    // downstream `force_*` guards compile unchanged; follow-up
-    // PR can delete the guards and the stub together.
-    false
+        // Retired (2026-05-21): vocabulary-list pre-check replaced
+        // by the embed router's cluster centroid + Pass 1 prompt
+        // category description. See exemplars.toml for the
+        // semantic coverage. Tombstoned (not deleted) so
+        // downstream `force_*` guards compile unchanged; follow-up
+        // PR can delete the guards and the stub together.
+        false
     }
 
     /// Heuristic check: is this message an expressive move — user
@@ -835,13 +904,13 @@ Reply with JSON only:
     /// mark AND short message length, because longer messages tend to
     /// embed a real question that the LLM should classify.
     fn looks_like_expressive(_message: &str) -> bool {
-    // Retired (2026-05-21): vocabulary-list pre-check replaced
-    // by the embed router's cluster centroid + Pass 1 prompt
-    // category description. See exemplars.toml for the
-    // semantic coverage. Tombstoned (not deleted) so
-    // downstream `force_*` guards compile unchanged; follow-up
-    // PR can delete the guards and the stub together.
-    false
+        // Retired (2026-05-21): vocabulary-list pre-check replaced
+        // by the embed router's cluster centroid + Pass 1 prompt
+        // category description. See exemplars.toml for the
+        // semantic coverage. Tombstoned (not deleted) so
+        // downstream `force_*` guards compile unchanged; follow-up
+        // PR can delete the guards and the stub together.
+        false
     }
 
     /// Heuristic check: is this message a two-entity comparison shape
@@ -851,13 +920,13 @@ Reply with JSON only:
     /// markers ("this", "these", "the passage", etc.) so it doesn't
     /// poach `looks_like_content_processing`'s territory.
     fn looks_like_comparison(_message: &str) -> bool {
-    // Retired (2026-05-21): vocabulary-list pre-check replaced
-    // by the embed router's cluster centroid + Pass 1 prompt
-    // category description. See exemplars.toml for the
-    // semantic coverage. Tombstoned (not deleted) so
-    // downstream `force_*` guards compile unchanged; follow-up
-    // PR can delete the guards and the stub together.
-    false
+        // Retired (2026-05-21): vocabulary-list pre-check replaced
+        // by the embed router's cluster centroid + Pass 1 prompt
+        // category description. See exemplars.toml for the
+        // semantic coverage. Tombstoned (not deleted) so
+        // downstream `force_*` guards compile unchanged; follow-up
+        // PR can delete the guards and the stub together.
+        false
     }
 
     /// Heuristic check: is this message asking the model to *process* content
@@ -911,20 +980,20 @@ Reply with JSON only:
             max_tokens: Some(5),
             temperature: Some(0.0),
             structured_output: None,
-            think_budget: Some(0),  // suppress thinking — prevents Qwen <think> consuming the 5-token budget
+            think_budget: Some(0), // suppress thinking — prevents Qwen <think> consuming the 5-token budget
             top_k: None,
             top_p: None,
             oicp: None,
-                tools: None,
-                tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            tools: None,
+            tool_choice: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
         let response = self.inference.complete(&request).await?;
         eprintln!("[router] classify raw output: {:?}", response.text);
@@ -982,16 +1051,16 @@ Reply with JSON only:
             top_k: None,
             top_p: None,
             oicp: None,
-                tools: None,
-                tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            tools: None,
+            tool_choice: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
         let response = self.inference.complete(&request).await?;
         eprintln!("[router] classify_json raw output: {:?}", response.text);
@@ -1001,11 +1070,7 @@ Reply with JSON only:
     /// Schema-constrained call for Pass 2.5 tool selection. The
     /// schema's `tool` enum is the set of registered tool ids — the
     /// constraint enforcer mathematically can't emit anything else.
-    async fn classify_call_tool_json(
-        &self,
-        prompt: String,
-        tool_ids: &[String],
-    ) -> Result<String> {
+    async fn classify_call_tool_json(&self, prompt: String, tool_ids: &[String]) -> Result<String> {
         let schema = serde_json::json!({
             "type": "object",
             "properties": {
@@ -1029,16 +1094,16 @@ Reply with JSON only:
             top_k: None,
             top_p: None,
             oicp: None,
-                tools: None,
-                tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            tools: None,
+            tool_choice: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
         let response = self.inference.complete(&request).await?;
         eprintln!("[router] tool_select raw output: {:?}", response.text);
@@ -1111,10 +1176,8 @@ Reply with JSON only:
             // No selection to make.
             return Ok(available_tools[0].id.clone());
         }
-        let prompt =
-            Self::build_pass2_tool_selection_prompt(message, context, available_tools);
-        let tool_ids: Vec<String> =
-            available_tools.iter().map(|t| t.id.clone()).collect();
+        let prompt = Self::build_pass2_tool_selection_prompt(message, context, available_tools);
+        let tool_ids: Vec<String> = available_tools.iter().map(|t| t.id.clone()).collect();
         let raw = self.classify_call_tool_json(prompt, &tool_ids).await?;
         Ok(Self::parse_tool_selection(&raw, &tool_ids)
             .unwrap_or_else(|| available_tools[0].id.clone()))
@@ -1163,15 +1226,16 @@ Reply with JSON only:
     /// Parse a JSON coarse-classification response: `{"intent": "SIMPLE|...", "confidence": 0.9}`.
     fn parse_coarse(raw: &str) -> CoarseClassification {
         // Strip <think>...</think> blocks that Qwen3 emits even with think_budget=0.
-        let after_think = if let (Some(start), Some(end)) = (raw.find("<think>"), raw.find("</think>")) {
-            if end > start {
-                &raw[end + "</think>".len()..]
+        let after_think =
+            if let (Some(start), Some(end)) = (raw.find("<think>"), raw.find("</think>")) {
+                if end > start {
+                    &raw[end + "</think>".len()..]
+                } else {
+                    raw
+                }
             } else {
                 raw
-            }
-        } else {
-            raw
-        };
+            };
         // Strip markdown code fences if present.
         let cleaned = after_think
             .trim()
@@ -1188,17 +1252,16 @@ Reply with JSON only:
     /// the rare case the schema constraint is bypassed (e.g. legacy
     /// providers without `JsonConstraint` wired in).
     fn parse_tool_selection(raw: &str, valid_ids: &[String]) -> Option<String> {
-        let after_think = if let (Some(start), Some(end)) =
-            (raw.find("<think>"), raw.find("</think>"))
-        {
-            if end > start {
-                &raw[end + "</think>".len()..]
+        let after_think =
+            if let (Some(start), Some(end)) = (raw.find("<think>"), raw.find("</think>")) {
+                if end > start {
+                    &raw[end + "</think>".len()..]
+                } else {
+                    raw
+                }
             } else {
                 raw
-            }
-        } else {
-            raw
-        };
+            };
         let cleaned = after_think
             .trim()
             .trim_start_matches("```json")
@@ -1249,12 +1312,7 @@ Reply with JSON only:
             .find(|w| {
                 matches!(
                     *w,
-                    "simple"
-                        | "deep"
-                        | "knowledge"
-                        | "action"
-                        | "complex"
-                        | "continuation"
+                    "simple" | "deep" | "knowledge" | "action" | "complex" | "continuation"
                 )
             })
             .unwrap_or("simple");
@@ -1301,9 +1359,16 @@ Reply with JSON only:
         // let normal routing handle it — it's a document query.
         if tc.anchored_source.is_some() {
             let doc_reference_patterns = [
-                "the document", "the paper", "the article", "the book",
-                "chapter", "page", "paragraph", "section",
-                "the author writes", "according to the text",
+                "the document",
+                "the paper",
+                "the article",
+                "the book",
+                "chapter",
+                "page",
+                "paragraph",
+                "section",
+                "the author writes",
+                "according to the text",
             ];
             if doc_reference_patterns.iter().any(|p| msg_lower.contains(p)) {
                 return None;
@@ -1315,10 +1380,19 @@ Reply with JSON only:
         // These use domain terms but not document-specific references.
         let general_knowledge_signals = [
             // Question words + broad domain terms suggest general knowledge.
-            "what are the", "what is the", "how does", "how do",
-            "core differences", "main differences", "key differences",
-            "compare", "contrast", "relationship between",
-            "explain", "define", "describe",
+            "what are the",
+            "what is the",
+            "how does",
+            "how do",
+            "core differences",
+            "main differences",
+            "key differences",
+            "compare",
+            "contrast",
+            "relationship between",
+            "explain",
+            "define",
+            "describe",
         ];
 
         let is_general = general_knowledge_signals
@@ -1327,7 +1401,9 @@ Reply with JSON only:
 
         // Pronoun-heavy short follow-ups in an established conversation
         // are likely continuations that can be answered from general knowledge.
-        let pronoun_patterns = ["he ", "she ", "they ", "it ", "his ", "her ", "their ", "that "];
+        let pronoun_patterns = [
+            "he ", "she ", "they ", "it ", "his ", "her ", "their ", "that ",
+        ];
         let has_pronouns = pronoun_patterns.iter().any(|p| msg_lower.starts_with(p));
         let is_short = message.split_whitespace().count() <= 12;
 
@@ -1391,7 +1467,10 @@ impl Router for LlmRouter {
         if Self::looks_like_personal_recall(message) {
             let latency_ms = start.elapsed().as_millis() as i64;
             let hash = message_hash(message);
-            let _ = self.store.log_routing(&hash, "KnowledgeQuery", latency_ms).await;
+            let _ = self
+                .store
+                .log_routing(&hash, "KnowledgeQuery", latency_ms)
+                .await;
             let _ = self
                 .store
                 .log_routing_meta(&hash, "PERSONAL_RECALL", None)
@@ -1570,7 +1649,10 @@ impl Router for LlmRouter {
             let hash = message_hash(message);
             let intent_str = format!("{override_intent:?}");
             let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
-            let _ = self.store.log_routing_meta(&hash, "TOPIC_CONTINUITY", None).await;
+            let _ = self
+                .store
+                .log_routing_meta(&hash, "TOPIC_CONTINUITY", None)
+                .await;
 
             eprintln!(
                 "[router] \"{}\" → {:?} (topic continuity override)",
@@ -1613,9 +1695,7 @@ impl Router for LlmRouter {
         // Pre-check 1: temporal/current-info → force ACTION (search).
         // Small models are unreliable at detecting these.
         let has_search = available_tools.iter().any(|t| t.name.contains("search"));
-        let force_action = !force_conation
-            && has_search
-            && Self::needs_current_info(message);
+        let force_action = !force_conation && has_search && Self::needs_current_info(message);
 
         // Pre-check 1a: personal-recall content question → force
         // LOOKUP. First-person + content-discourse verb without a
@@ -1627,9 +1707,8 @@ impl Router for LlmRouter {
         // for the heuristic. Pairs with the centroid scope classifier
         // (`scope_classifier.rs`) which marks these queries personal
         // for retrieval-time corpus restriction.
-        let force_personal_recall = !force_conation
-            && !force_action
-            && Self::looks_like_personal_recall(message);
+        let force_personal_recall =
+            !force_conation && !force_action && Self::looks_like_personal_recall(message);
 
         // Pre-check 1b: metalingual shape → force METALINGUAL. Question
         // about the system's own vocabulary ("what does X mean in this
@@ -1814,15 +1893,13 @@ impl Router for LlmRouter {
             CoarseClassification {
                 intent: "LOOKUP".to_string(),
                 confidence: 1.0,
-                rationale: Some("factual-lookup shape (what/who/when/where) → knowledge query".to_string()),
+                rationale: Some(
+                    "factual-lookup shape (what/who/when/where) → knowledge query".to_string(),
+                ),
             }
         } else {
-            let pass1_prompt = Self::build_pass1_prompt(
-                message,
-                context,
-                available_tools,
-                &corrections,
-            );
+            let pass1_prompt =
+                Self::build_pass1_prompt(message, context, available_tools, &corrections);
             // 60-token budget: JSON + confidence + short rationale clause.
             // 60-token budget: gemma-4-E4B writes terse rationales
             // ("one short clause" per the prompt) and 60 fits the
@@ -1852,9 +1929,13 @@ impl Router for LlmRouter {
             "COMMISSION" => (Intent::CommissiveQuery, None),
             "EXPRESSIVE" => (Intent::ExpressiveQuery, None),
             "REASONING" => (Intent::DeepQuery, None),
-            "ACTION" => (self.pass2_refine(message, context, available_tools).await?, None),
+            "ACTION" => (
+                self.pass2_refine(message, context, available_tools).await?,
+                None,
+            ),
             "SIMPLE" => {
-                self.assess_simple_query(message, context, coarse.confidence).await?
+                self.assess_simple_query(message, context, coarse.confidence)
+                    .await?
             }
             _ => {
                 // Parse failure or unknown intent — default to local search (never confabulate).
@@ -1872,11 +1953,10 @@ impl Router for LlmRouter {
         let hash = message_hash(message);
         let intent_str = format!("{intent:?}");
         let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
-        let _ = self.store.log_routing_meta(
-            &hash,
-            &coarse.intent,
-            self_assessment_outcome.as_deref(),
-        ).await;
+        let _ = self
+            .store
+            .log_routing_meta(&hash, &coarse.intent, self_assessment_outcome.as_deref())
+            .await;
 
         eprintln!(
             "[router] \"{}\" → {:?} (coarse={}, confidence={:.2})",
@@ -2076,7 +2156,7 @@ mod tests {
                 deleted_at: None,
                 skill_id: None,
                 enabled_corpora: None,
-            searched_sources: None,
+                searched_sources: None,
             },
             memories: vec![],
             working_memory: Some(WorkingMemory {
@@ -2121,7 +2201,7 @@ mod tests {
                 deleted_at: None,
                 skill_id: None,
                 enabled_corpora: None,
-            searched_sources: None,
+                searched_sources: None,
             },
             memories: vec![],
             working_memory: None,
@@ -2142,7 +2222,9 @@ mod tests {
 
     #[test]
     fn needs_current_info_recent_year() {
-        assert!(LlmRouter::needs_current_info("Who won the Nobel Prize in 2025?"));
+        assert!(LlmRouter::needs_current_info(
+            "Who won the Nobel Prize in 2025?"
+        ));
         assert!(LlmRouter::needs_current_info("What happened in 2024?"));
         assert!(!LlmRouter::needs_current_info("What happened in 1969?"));
     }
@@ -2150,7 +2232,9 @@ mod tests {
     #[test]
     fn needs_current_info_temporal_keywords() {
         assert!(LlmRouter::needs_current_info("What is the latest news?"));
-        assert!(LlmRouter::needs_current_info("What's the current price of Bitcoin?"));
+        assert!(LlmRouter::needs_current_info(
+            "What's the current price of Bitcoin?"
+        ));
         assert!(LlmRouter::needs_current_info("Who won the game today?"));
         assert!(LlmRouter::needs_current_info("What's the weather like?"));
         assert!(LlmRouter::needs_current_info("Who won the election?"));
@@ -2158,8 +2242,12 @@ mod tests {
 
     #[test]
     fn needs_current_info_search_requests() {
-        assert!(LlmRouter::needs_current_info("Search for restaurants near me"));
-        assert!(LlmRouter::needs_current_info("Can you look up flight prices?"));
+        assert!(LlmRouter::needs_current_info(
+            "Search for restaurants near me"
+        ));
+        assert!(LlmRouter::needs_current_info(
+            "Can you look up flight prices?"
+        ));
         assert!(LlmRouter::needs_current_info("Google the EU AI Act"));
     }
 
@@ -2168,7 +2256,9 @@ mod tests {
         assert!(!LlmRouter::needs_current_info("What is recursion?"));
         assert!(!LlmRouter::needs_current_info("Explain photosynthesis"));
         assert!(!LlmRouter::needs_current_info("Hello, how are you?"));
-        assert!(!LlmRouter::needs_current_info("Write a poem about the ocean"));
+        assert!(!LlmRouter::needs_current_info(
+            "Write a poem about the ocean"
+        ));
     }
 
     // ── looks_like_content_processing ───────────────────────────
@@ -2229,7 +2319,8 @@ mod tests {
 
     #[test]
     fn parse_coarse_with_markdown_fences() {
-        let c = LlmRouter::parse_coarse("```json\n{\"intent\":\"SIMPLE\",\"confidence\":0.95}\n```");
+        let c =
+            LlmRouter::parse_coarse("```json\n{\"intent\":\"SIMPLE\",\"confidence\":0.95}\n```");
         assert_eq!(c.intent, "SIMPLE");
     }
 
@@ -2244,25 +2335,43 @@ mod tests {
 
     #[test]
     fn parse_self_assessment_uncertain() {
-        assert!(matches!(parse_self_assessment("UNCERTAIN"), SelfAssessment::Uncertain));
-        assert!(matches!(parse_self_assessment("uncertain"), SelfAssessment::Uncertain));
+        assert!(matches!(
+            parse_self_assessment("UNCERTAIN"),
+            SelfAssessment::Uncertain
+        ));
+        assert!(matches!(
+            parse_self_assessment("uncertain"),
+            SelfAssessment::Uncertain
+        ));
     }
 
     #[test]
     fn parse_self_assessment_web() {
-        assert!(matches!(parse_self_assessment("WEB"), SelfAssessment::NeedsWebSearch));
+        assert!(matches!(
+            parse_self_assessment("WEB"),
+            SelfAssessment::NeedsWebSearch
+        ));
     }
 
     #[test]
     fn parse_self_assessment_confident() {
-        assert!(matches!(parse_self_assessment("CONFIDENT"), SelfAssessment::Confident));
+        assert!(matches!(
+            parse_self_assessment("CONFIDENT"),
+            SelfAssessment::Confident
+        ));
     }
 
     #[test]
     fn parse_self_assessment_garbage_defaults_to_uncertain() {
         // Safe fallback — prefer local search over confabulation.
-        assert!(matches!(parse_self_assessment("???"), SelfAssessment::Uncertain));
-        assert!(matches!(parse_self_assessment(""), SelfAssessment::Uncertain));
+        assert!(matches!(
+            parse_self_assessment("???"),
+            SelfAssessment::Uncertain
+        ));
+        assert!(matches!(
+            parse_self_assessment(""),
+            SelfAssessment::Uncertain
+        ));
     }
 
     // ── suggest_alternatives (Ask-move heuristic) ───────────────
@@ -2289,8 +2398,13 @@ mod tests {
             &Intent::DeepQuery,
             &[web_search_tool()],
         );
-        let has_web = alts.iter().any(|c| matches!(&c.intent, Intent::SimpleAction { tool } if tool == "web_search"));
-        assert!(has_web, "temporal + web tool should surface SimpleAction: {alts:?}");
+        let has_web = alts
+            .iter()
+            .any(|c| matches!(&c.intent, Intent::SimpleAction { tool } if tool == "web_search"));
+        assert!(
+            has_web,
+            "temporal + web tool should surface SimpleAction: {alts:?}"
+        );
     }
 
     #[test]
@@ -2300,17 +2414,15 @@ mod tests {
             &Intent::DeepQuery,
             &[],
         );
-        let has_web = alts.iter().any(|c| matches!(&c.intent, Intent::SimpleAction { .. }));
+        let has_web = alts
+            .iter()
+            .any(|c| matches!(&c.intent, Intent::SimpleAction { .. }));
         assert!(!has_web, "no web tool → no SimpleAction alternative");
     }
 
     #[test]
     fn alternatives_how_does_suggests_deep() {
-        let alts = suggest_alternatives(
-            "how does the scheduler work?",
-            &Intent::SimpleQuery,
-            &[],
-        );
+        let alts = suggest_alternatives("how does the scheduler work?", &Intent::SimpleQuery, &[]);
         assert!(alts.iter().any(|c| matches!(c.intent, Intent::DeepQuery)));
     }
 
@@ -2319,11 +2431,7 @@ mod tests {
         // Primary is DeepQuery; even though the message carries a
         // "how does" signal, the DeepQuery alternative must be
         // omitted because it equals the primary.
-        let alts = suggest_alternatives(
-            "how does the scheduler work?",
-            &Intent::DeepQuery,
-            &[],
-        );
+        let alts = suggest_alternatives("how does the scheduler work?", &Intent::DeepQuery, &[]);
         assert!(!alts.iter().any(|c| matches!(c.intent, Intent::DeepQuery)));
     }
 
@@ -2352,6 +2460,9 @@ mod tests {
             &Intent::SimpleQuery,
             &[web_search_tool()],
         );
-        assert!(alts.is_empty(), "nothing matched → no alternatives: {alts:?}");
+        assert!(
+            alts.is_empty(),
+            "nothing matched → no alternatives: {alts:?}"
+        );
     }
 }

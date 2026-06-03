@@ -133,10 +133,7 @@ pub(crate) fn extract_items(view_id: &str, skeleton: &FieldSkeleton) -> Vec<Cros
 /// item do NOT abort the whole batch — the item is skipped via an
 /// all-zero vector (which cosine_similarity correctly reports as 0
 /// against any other vector, so it matches nothing).
-pub(crate) async fn embed_items(
-    items: &[CrossViewItem],
-    embed: &EmbedFn,
-) -> Vec<Vec<f32>> {
+pub(crate) async fn embed_items(items: &[CrossViewItem], embed: &EmbedFn) -> Vec<Vec<f32>> {
     let mut out = Vec::with_capacity(items.len());
     for item in items {
         match (embed)(&item.text).await {
@@ -436,10 +433,7 @@ mod tests {
 
     #[test]
     fn cosine_similarity_rejects_mismatched_lengths() {
-        assert_eq!(
-            cosine_similarity(&[0.1f32, 0.2], &[0.1f32, 0.2, 0.3]),
-            0.0
-        );
+        assert_eq!(cosine_similarity(&[0.1f32, 0.2], &[0.1f32, 0.2, 0.3]), 0.0);
     }
 
     #[test]
@@ -493,7 +487,7 @@ mod tests {
         ];
         let embeddings = vec![
             vec![1.0, 0.0, 0.0],
-            vec![0.8, 0.6, 0.0], // sim with A0 ≈ 0.8
+            vec![0.8, 0.6, 0.0],   // sim with A0 ≈ 0.8
             vec![0.99, 0.14, 0.0], // sim with A0 ≈ 0.99
         ];
         let matches = find_matches(&items, &embeddings, 0.5);
@@ -538,8 +532,8 @@ mod tests {
             },
             similarity: 0.88,
         }];
-        let body = format_digest(&matches, 300, |s| s.split_whitespace().count())
-            .expect("match formats");
+        let body =
+            format_digest(&matches, 300, |s| s.split_whitespace().count()).expect("match formats");
         assert!(body.contains("Cross-view connections"));
         assert!(body.contains("possible connected inquiries"));
         assert!(body.contains("may resonate with"));

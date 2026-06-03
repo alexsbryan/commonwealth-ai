@@ -44,14 +44,12 @@ use corpus_engine_scip::ScipGraph;
 
 /// Tunables for the code-walk pass. Surfaces on the CLI as
 /// `--include-functions` / `--include-private` flags.
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct CodeWalkConfig {
     pub source_corpus_id: String,
     pub include_functions: bool,
     pub include_private: bool,
 }
-
 
 // ── Chunk metadata shape ────────────────────────────────────
 
@@ -361,7 +359,9 @@ fn module_path_for(file_path: &Path, crate_rel_root: &Path) -> Option<(String, b
     // Strip the crate root + `src/` prefix.
     let rest = file_path.strip_prefix(crate_rel_root).ok()?;
     let rest = rest.strip_prefix("src").unwrap_or(rest);
-    let rest = rest.strip_prefix(std::path::MAIN_SEPARATOR.to_string()).unwrap_or(rest);
+    let rest = rest
+        .strip_prefix(std::path::MAIN_SEPARATOR.to_string())
+        .unwrap_or(rest);
 
     let components: Vec<String> = rest
         .components()
@@ -373,9 +373,17 @@ fn module_path_for(file_path: &Path, crate_rel_root: &Path) -> Option<(String, b
     let last = components.last().cloned().unwrap_or_default();
     let is_root = matches!(last.as_str(), "mod.rs" | "lib.rs" | "main.rs");
     let mut parts: Vec<String> = if is_root {
-        components.iter().take(components.len() - 1).cloned().collect()
+        components
+            .iter()
+            .take(components.len() - 1)
+            .cloned()
+            .collect()
     } else {
-        let mut p: Vec<String> = components.iter().take(components.len() - 1).cloned().collect();
+        let mut p: Vec<String> = components
+            .iter()
+            .take(components.len() - 1)
+            .cloned()
+            .collect();
         if let Some(stem) = Path::new(&last).file_stem().and_then(|s| s.to_str()) {
             p.push(stem.to_string());
         }
@@ -647,9 +655,9 @@ fn emit_entities(
             affiliation: None,
             role: None,
             participants: Vec::new(),
-                    provenance: Default::default(),
-                    concept_kind: None,
-});
+            provenance: Default::default(),
+            concept_kind: None,
+        });
     }
 
     // Modules.
@@ -680,9 +688,9 @@ fn emit_entities(
             affiliation: None,
             role: None,
             participants: Vec::new(),
-                    provenance: Default::default(),
-                    concept_kind: None,
-});
+            provenance: Default::default(),
+            concept_kind: None,
+        });
     }
 
     // Items.
@@ -712,9 +720,9 @@ fn emit_entities(
             affiliation: None,
             role: None,
             participants: Vec::new(),
-                    provenance: Default::default(),
-                    concept_kind: None,
-});
+            provenance: Default::default(),
+            concept_kind: None,
+        });
     }
 
     // Externals (placeholders). Match the Wikipedia off-corpus pattern:
@@ -739,9 +747,9 @@ fn emit_entities(
             affiliation: None,
             role: None,
             participants: Vec::new(),
-                    provenance: Default::default(),
-                    concept_kind: None,
-});
+            provenance: Default::default(),
+            concept_kind: None,
+        });
     }
 
     (entities, idx)
@@ -763,7 +771,9 @@ async fn emit_edges(
     for (crate_name, module_path) in groups.by_module.keys() {
         let (Some(crate_atom), Some(module_atom)) = (
             atom_index.crates.get(crate_name),
-            atom_index.modules.get(&(crate_name.clone(), module_path.clone())),
+            atom_index
+                .modules
+                .get(&(crate_name.clone(), module_path.clone())),
         ) else {
             continue;
         };
@@ -924,10 +934,7 @@ async fn emit_edges(
 /// SCIP `symbols` table has both, and `(file, name)` is unique
 /// enough in practice. Returns the count of items that picked up
 /// a qualified_name.
-async fn attach_qualified_names(
-    scip: &ScipGraph,
-    groups: &mut ChunkGroups,
-) -> Result<usize> {
+async fn attach_qualified_names(scip: &ScipGraph, groups: &mut ChunkGroups) -> Result<usize> {
     // Build a per-file cache so we hit SCIP once per file rather
     // than once per item (~10× fewer queries for typical files).
     let mut file_cache: HashMap<String, Vec<corpus_engine_scip::SymbolRow>> = HashMap::new();
@@ -936,7 +943,10 @@ async fn attach_qualified_names(
         let rows = if let Some(cached) = file_cache.get(&item.file_path) {
             cached
         } else {
-            let rows = scip.symbols_in_file(&item.file_path).await.unwrap_or_default();
+            let rows = scip
+                .symbols_in_file(&item.file_path)
+                .await
+                .unwrap_or_default();
             file_cache.entry(item.file_path.clone()).or_insert(rows)
         };
         if let Some(row) = rows.iter().find(|r| r.name == key.symbol_name) {
@@ -1015,10 +1025,7 @@ async fn collect_externals_from_scip(
             let pkg_dash = pkg.replace('_', "-");
             let in_workspace = workspace.crates.contains_key(pkg)
                 || workspace.crates.contains_key(&pkg_dash)
-                || workspace
-                    .crates
-                    .keys()
-                    .any(|k| k.replace('-', "_") == pkg);
+                || workspace.crates.keys().any(|k| k.replace('-', "_") == pkg);
             if !in_workspace {
                 out.insert(pkg.to_string());
             }
@@ -1104,7 +1111,10 @@ pub async fn extract_code_corpus(
         "code_walk: discovering workspace"
     );
     let workspace = discover_workspace(&source_root)?;
-    tracing::info!(crates = workspace.crates.len(), "code_walk: workspace discovered");
+    tracing::info!(
+        crates = workspace.crates.len(),
+        "code_walk: workspace discovered"
+    );
 
     // Phase 2: aggregate chunks into crate / module / item groups.
     let mut groups = aggregate_chunks(&corpus, &workspace, cfg).await?;
@@ -1197,7 +1207,10 @@ pub async fn extract_code_corpus(
 
     // Phase 5: emit entities.
     let (entities, atom_index) = emit_entities(&workspace, &groups, &referenced_externals);
-    tracing::info!(total_entities = entities.len(), "code_walk: entities emitted");
+    tracing::info!(
+        total_entities = entities.len(),
+        "code_walk: entities emitted"
+    );
 
     // Phase 6: emit edges.
     let (edges, edge_stats) = emit_edges(&workspace, &groups, &atom_index, scip.as_ref()).await?;
@@ -1218,7 +1231,8 @@ pub async fn extract_code_corpus(
     });
 
     // ── Compose AtlasData ───────────────────────────────────
-    let atom_envelopes: Vec<AtomEnvelope> = entities.into_iter().map(AtomEnvelope::Entity).collect();
+    let atom_envelopes: Vec<AtomEnvelope> =
+        entities.into_iter().map(AtomEnvelope::Entity).collect();
     let atoms_file = AtomsFile::new(atom_envelopes);
     let edges_file = EdgesFile::new(edges);
 

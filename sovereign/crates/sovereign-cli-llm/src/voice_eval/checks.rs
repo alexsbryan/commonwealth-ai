@@ -323,10 +323,7 @@ fn code_identifier_check(scenario: &Scenario, response: &str) -> CodeIdentifierC
             }
         }
     }
-    if !current.is_empty()
-        && is_codeish_identifier(&current)
-        && seen.insert(current.clone())
-    {
+    if !current.is_empty() && is_codeish_identifier(&current) && seen.insert(current.clone()) {
         total += 1;
         if ordered.len() < CODE_IDENTIFIER_REPORT_CAP {
             ordered.push(current);
@@ -452,10 +449,7 @@ mod tests {
     #[test]
     fn banned_phrase_check_clean_when_phrases_absent() {
         let s = fixture(Expected {
-            must_not_include_phrases: vec![
-                "As an AI".into(),
-                "great question".into(),
-            ],
+            must_not_include_phrases: vec!["As an AI".into(), "great question".into()],
             ..Expected::default()
         });
         let r = run_checks(&s, "Honest, specific answer.");
@@ -466,10 +460,7 @@ mod tests {
     #[test]
     fn required_content_passes_on_first_match() {
         let s = fixture(Expected {
-            must_include_one_of: vec![
-                "you mentioned Mark".into(),
-                "you described Mark".into(),
-            ],
+            must_include_one_of: vec!["you mentioned Mark".into(), "you described Mark".into()],
             ..Expected::default()
         });
         let r = run_checks(&s, "You described Mark differently last month.");
@@ -543,8 +534,14 @@ mod tests {
         );
         assert!(!r.code_identifier.passed);
         assert_eq!(r.code_identifier.count, 2);
-        assert!(r.code_identifier.matches.contains(&"make_sep_like_parquet".to_string()));
-        assert!(r.code_identifier.matches.contains(&"skeleton_extraction_prompt".to_string()));
+        assert!(r
+            .code_identifier
+            .matches
+            .contains(&"make_sep_like_parquet".to_string()));
+        assert!(r
+            .code_identifier
+            .matches
+            .contains(&"skeleton_extraction_prompt".to_string()));
     }
 
     #[test]

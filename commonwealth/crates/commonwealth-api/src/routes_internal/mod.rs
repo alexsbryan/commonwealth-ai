@@ -28,10 +28,6 @@ mod newsworthy_status;
 mod pipeline_pause;
 
 pub use atlas_status::{atlas_status, AtlasStatusResponse};
-pub use enrichment_status::{enrichment_status, EnrichmentStatusResponse};
-pub use newsworthy_status::{
-    newsworthy_status, newsworthy_tick, NewsworthyStatusResponse, NewsworthyTickResponse,
-};
 pub use corpus_collaborate::{corpus_collaborate, CollaborateRequest};
 pub use corpus_ingest::{
     corpus_cancel, corpus_canonical_stream, corpus_expand, corpus_install, corpus_pause,
@@ -46,32 +42,34 @@ pub use corpus_queue::{
     NextUnitRequest, NextUnitResponse,
 };
 pub use corpus_sync::{index_serve, index_transfer, model_transfer};
-pub use model_files::{
-    list_model_files, serve_model_file, ListResponse as ModelFileListResponse, ModelFileInfo,
-};
+pub use enrichment_status::{enrichment_status, EnrichmentStatusResponse};
 pub use gossip::{
     gossip, scheduling_intent, scheduling_plan, GossipRejection, GossipRequest, GossipResponse,
     SchedulingIntent, SchedulingIntentResponse,
 };
 pub use knowledge::{knowledge_search, latency_probe};
+pub use mesh_admin::{
+    activity_recent, activity_summary, contribution_ceiling_set, contribution_pause,
+    contribution_recent, contribution_resume, contribution_status, contribution_view,
+    foreground_state, inference_warmup, ingest_budget_get, ingest_budget_set, join,
+    mesh_quiesce_get, mesh_quiesce_set, models_inventory, models_load, models_unload,
+    node_activity, recommended_storage_budget_bytes, storage_budget_get, storage_budget_set,
+    ContributionStatusResponse, CorpusHostingView, ForegroundStateResponse, IngestBudgetState,
+    InventoryEntry, InventoryResponse, JoinRejection, JoinRequest, JoinResponse, LoadModelRequest,
+    LoadModelResponse, MeshQuiesceState, MeshWire, NodeActivityPayload, NodeContributionsView,
+    PauseContributionsRequest, RecentContributionsParams, RecentContributionsResponse,
+    SetContributionCeilingRequest, SetIngestBudgetRequest, SetMeshQuiesceRequest,
+    SetStorageBudgetRequest, StorageBudgetState, UnloadModelRequest, UnloadModelResponse,
+    WarmupResponse,
+};
+pub use model_files::{
+    list_model_files, serve_model_file, ListResponse as ModelFileListResponse, ModelFileInfo,
+};
+pub use newsworthy_status::{
+    newsworthy_status, newsworthy_tick, NewsworthyStatusResponse, NewsworthyTickResponse,
+};
 pub use pipeline_pause::{
     pipeline_pause, NodePauseResult, PipelinePauseRequest, PipelinePauseResponse,
-};
-pub use mesh_admin::{
-    activity_recent, activity_summary, contribution_ceiling_set,
-    contribution_pause, contribution_recent,
-    contribution_resume, contribution_status, contribution_view, foreground_state,
-    inference_warmup, ingest_budget_get, ingest_budget_set, join, mesh_quiesce_get,
-    mesh_quiesce_set, models_inventory, models_load, models_unload, node_activity,
-    recommended_storage_budget_bytes, storage_budget_get, storage_budget_set,
-    ContributionStatusResponse, CorpusHostingView, ForegroundStateResponse,
-    IngestBudgetState, InventoryEntry, InventoryResponse, JoinRejection, JoinRequest,
-    JoinResponse, LoadModelRequest, LoadModelResponse, MeshQuiesceState, MeshWire,
-    NodeActivityPayload, NodeContributionsView, PauseContributionsRequest,
-    RecentContributionsParams, RecentContributionsResponse,
-    SetContributionCeilingRequest, SetIngestBudgetRequest, SetMeshQuiesceRequest,
-    SetStorageBudgetRequest, StorageBudgetState, UnloadModelRequest,
-    UnloadModelResponse, WarmupResponse,
 };
 
 // Queue helpers re-exported intra-module so `corpus_collaborate` can keep

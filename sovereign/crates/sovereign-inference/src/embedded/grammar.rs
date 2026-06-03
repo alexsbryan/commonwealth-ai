@@ -15,17 +15,19 @@ use futures::Stream;
 use tokio::sync::Mutex;
 
 use crate::llama::cpp::context::params::{LlamaContextParams, LlamaContextType};
-use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::llama_backend::LlamaBackend;
 use crate::llama::cpp::llama_batch::LlamaBatch;
 use crate::llama::cpp::model::params::LlamaModelParams;
 use crate::llama::cpp::model::{AddBos, LlamaChatMessage, LlamaModel};
+use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
 use sovereign_core::error::Error;
-use sovereign_core::model_family::{EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl};
+use sovereign_core::model_family::{
+    EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
+};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::*;
 use sovereign_core::Result;
@@ -121,9 +123,7 @@ fn find_balanced_json_end(s: &str) -> Option<usize> {
 ///
 /// Returns the original string if nothing needed escaping (no
 /// allocation), otherwise a normalized copy.
-pub fn escape_unescaped_control_chars_in_string_values(
-    body: &str,
-) -> std::borrow::Cow<'_, str> {
+pub fn escape_unescaped_control_chars_in_string_values(body: &str) -> std::borrow::Cow<'_, str> {
     let needs_fix = {
         let mut in_string = false;
         let mut escape = false;
@@ -224,14 +224,12 @@ pub fn parse_tool_calls_from_text(text: &str) -> Vec<ParsedToolCall> {
         // a string value), retry on a control-char-normalized copy.
         let parsed = serde_json::from_str::<serde_json::Value>(&body)
             .or_else(|_| {
-                let fixed =
-                    escape_unescaped_control_chars_in_string_values(&body);
+                let fixed = escape_unescaped_control_chars_in_string_values(&body);
                 serde_json::from_str::<serde_json::Value>(&fixed)
             })
             .or_else(|_| {
                 let stripped = strip_orphan_close_brackets(&body);
-                let fixed =
-                    escape_unescaped_control_chars_in_string_values(&stripped);
+                let fixed = escape_unescaped_control_chars_in_string_values(&stripped);
                 serde_json::from_str::<serde_json::Value>(&fixed)
             });
         match parsed {
@@ -299,14 +297,12 @@ pub fn parse_tool_calls_with_errors(text: &str) -> (Vec<ParsedToolCall>, Vec<Str
         // tail, breaking serde.
         let parsed = serde_json::from_str::<serde_json::Value>(body)
             .or_else(|_| {
-                let fixed =
-                    escape_unescaped_control_chars_in_string_values(body);
+                let fixed = escape_unescaped_control_chars_in_string_values(body);
                 serde_json::from_str::<serde_json::Value>(&fixed)
             })
             .or_else(|_| {
                 let stripped = strip_orphan_close_brackets(body);
-                let fixed =
-                    escape_unescaped_control_chars_in_string_values(&stripped);
+                let fixed = escape_unescaped_control_chars_in_string_values(&stripped);
                 serde_json::from_str::<serde_json::Value>(&fixed)
             });
         match parsed {
@@ -436,10 +432,7 @@ pub fn json_schema_to_gbnf(schema: &serde_json::Value) -> String {
                 for key in &required {
                     if let Some(prop_schema) = props.get(key) {
                         let type_rule = prop_type_rule(prop_schema);
-                        field_parts.push(format!(
-                            r#"ws "\"{}\"" ws ":" ws {}"#,
-                            key, type_rule
-                        ));
+                        field_parts.push(format!(r#"ws "\"{}\"" ws ":" ws {}"#, key, type_rule));
                     }
                 }
 
@@ -546,7 +539,8 @@ mod parse_tool_calls_tests {
 
     #[test]
     fn closed_tag_extracts_one_call() {
-        let text = r#"prelude <tool_call>{"name":"write","arguments":{"path":"a.rs"}}</tool_call> tail"#;
+        let text =
+            r#"prelude <tool_call>{"name":"write","arguments":{"path":"a.rs"}}</tool_call> tail"#;
         let calls = parse_tool_calls_from_text(text);
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "write");
@@ -734,10 +728,7 @@ mod pick_slot_tests {
         // the original Fast slot — no regression vs pre-rework.
         let mut r = req(Speed::Fast, None);
         r.max_tokens = Some(256);
-        assert_eq!(
-            pick_slot(&r, true, false, false, None),
-            SlotTarget::Fast
-        );
+        assert_eq!(pick_slot(&r, true, false, false, None), SlotTarget::Fast);
     }
 
     #[test]
@@ -749,10 +740,7 @@ mod pick_slot_tests {
         // overflow on a long chapter.
         let mut r = req(Speed::Fast, None);
         r.max_tokens = Some(8192);
-        assert_eq!(
-            pick_slot(&r, true, false, true, None),
-            SlotTarget::Fast
-        );
+        assert_eq!(pick_slot(&r, true, false, true, None), SlotTarget::Fast);
     }
 
     #[test]
@@ -796,10 +784,7 @@ mod pick_slot_tests {
         // FastShort is for the Fast-slot model only.
         let mut r = req(Speed::Slow, None);
         r.max_tokens = Some(256);
-        assert_eq!(
-            pick_slot(&r, true, false, true, None),
-            SlotTarget::Primary
-        );
+        assert_eq!(pick_slot(&r, true, false, true, None), SlotTarget::Primary);
     }
 
     #[test]
@@ -834,10 +819,16 @@ mod pick_slot_tests {
         // mesh scheduler is responsible for routing the hint to a
         // better-matched peer; locally we do what we can.
         let r_fast = req(Speed::Fast, Some(CapabilityHint::code()));
-        assert_eq!(pick_slot(&r_fast, true, false, false, None), SlotTarget::Fast);
+        assert_eq!(
+            pick_slot(&r_fast, true, false, false, None),
+            SlotTarget::Fast
+        );
 
         let r_slow = req(Speed::Slow, Some(CapabilityHint::code()));
-        assert_eq!(pick_slot(&r_slow, true, false, false, None), SlotTarget::Primary);
+        assert_eq!(
+            pick_slot(&r_slow, true, false, false, None),
+            SlotTarget::Primary
+        );
     }
 
     #[test]
@@ -903,7 +894,12 @@ mod eviction_tests {
     fn fits_returns_no_eviction_needed() {
         // current 5 GB + new 3 GB = 8 GB ≤ 12 GB budget → Fits.
         let c = vec![cand("warm", 1000, 5 * 1024)];
-        let plan = pick_evictions(&c, 5 * 1024 * 1024 * 1024, 3 * 1024 * 1024 * 1024, 12 * 1024 * 1024 * 1024);
+        let plan = pick_evictions(
+            &c,
+            5 * 1024 * 1024 * 1024,
+            3 * 1024 * 1024 * 1024,
+            12 * 1024 * 1024 * 1024,
+        );
         assert_eq!(plan, EvictionPlan::Fits);
     }
 
@@ -913,10 +909,7 @@ mod eviction_tests {
         // Need to free 1 MB. Algorithm picks the colder one ("old")
         // even though "fresh" alone would also free enough — the
         // ordering is the contract.
-        let c = vec![
-            cand("fresh", 999, 5),
-            cand("old", 100, 5),
-        ];
+        let c = vec![cand("fresh", 999, 5), cand("old", 100, 5)];
         // current 10 MB + new 4 MB = 14, budget 12 → need to free 2 MB
         let plan = pick_evictions(&c, 10 * 1024 * 1024, 4 * 1024 * 1024, 12 * 1024 * 1024);
         match plan {
@@ -931,16 +924,15 @@ mod eviction_tests {
     fn evicts_multiple_when_one_isnt_enough() {
         // Three cold slots, all 1 MB. Need to free 3 MB. Walks LRU
         // order ("a" → "b" → "c"). Stops once enough freed.
-        let c = vec![
-            cand("c", 300, 1),
-            cand("b", 200, 1),
-            cand("a", 100, 1),
-        ];
+        let c = vec![cand("c", 300, 1), cand("b", 200, 1), cand("a", 100, 1)];
         // current 3 MB + new 5 MB = 8, budget 5 → need 3 MB
         let plan = pick_evictions(&c, 3 * 1024 * 1024, 5 * 1024 * 1024, 5 * 1024 * 1024);
         match plan {
             EvictionPlan::Evict(names) => {
-                assert_eq!(names, vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+                assert_eq!(
+                    names,
+                    vec!["a".to_string(), "b".to_string(), "c".to_string()]
+                );
             }
             other => panic!("expected Evict, got {other:?}"),
         }
@@ -1012,10 +1004,7 @@ mod eviction_tests {
         // sorts by last_used; for equal keys, sort_by_key is
         // stable, so input order wins. Lock the contract — a
         // future change to unstable sort would surface here.
-        let c = vec![
-            cand("first", 100, 1),
-            cand("second", 100, 1),
-        ];
+        let c = vec![cand("first", 100, 1), cand("second", 100, 1)];
         // current 2 MB + new 1 MB = 3, budget 1 → need 2 MB.
         let plan = pick_evictions(&c, 2 * 1024 * 1024, 1024 * 1024, 1024 * 1024);
         match plan {
@@ -1039,10 +1028,7 @@ mod clamp_tests {
 
     #[test]
     fn passes_through_when_request_fits() {
-        assert_eq!(
-            clamp_max_tokens(Some(2000), 1000, 8192).unwrap(),
-            2000
-        );
+        assert_eq!(clamp_max_tokens(Some(2000), 1000, 8192).unwrap(), 2000);
     }
 
     #[test]
@@ -1050,10 +1036,7 @@ mod clamp_tests {
         // Coding-agent worst case: opencode asks for 4096 on a tight
         // window. Pre-fix: returned Err. Post-fix: emits as much as
         // fits.
-        assert_eq!(
-            clamp_max_tokens(Some(4096), 30000, 32768).unwrap(),
-            2768
-        );
+        assert_eq!(clamp_max_tokens(Some(4096), 30000, 32768).unwrap(), 2768);
     }
 
     #[test]

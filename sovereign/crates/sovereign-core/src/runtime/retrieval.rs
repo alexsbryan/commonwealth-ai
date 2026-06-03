@@ -12,7 +12,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-
 use crate::traits::*;
 
 use super::*;
@@ -43,15 +42,17 @@ impl Runtime {
         message: &str,
         enabled_corpora: Option<&[String]>,
     ) -> Option<Vec<corpus_engine::ScoredChunk>> {
-        if std::env::var("SOVEREIGN_GRAPH_NEIGHBOR_EXPAND").ok().as_deref() != Some("1") {
+        if std::env::var("SOVEREIGN_GRAPH_NEIGHBOR_EXPAND")
+            .ok()
+            .as_deref()
+            != Some("1")
+        {
             return None;
         }
         let graph = self.wikipedia_graph.as_ref()?;
 
-        let already_present: std::collections::HashSet<String> = chunks
-            .iter()
-            .filter_map(|c| c.title.clone())
-            .collect();
+        let already_present: std::collections::HashSet<String> =
+            chunks.iter().filter_map(|c| c.title.clone()).collect();
 
         // Pull entities + axis from the question. The comparison
         // extractor is broader than the proper-noun one (catches
@@ -70,7 +71,8 @@ impl Runtime {
                 let t = tok
                     .trim_matches(|c: char| !c.is_alphanumeric())
                     .to_lowercase();
-                if t.len() >= 4 && !["with", "their", "from", "into", "onto"].contains(&t.as_str()) {
+                if t.len() >= 4 && !["with", "their", "from", "into", "onto"].contains(&t.as_str())
+                {
                     v.push(t);
                 }
             }
@@ -194,8 +196,7 @@ impl Runtime {
         let Some(graph) = self.wikipedia_graph.as_ref() else {
             return out;
         };
-        let mut seen: std::collections::HashSet<String> =
-            std::collections::HashSet::new();
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         for c in chunks {
             let Some(title) = c.title.clone() else {
                 continue;
@@ -749,9 +750,9 @@ impl Runtime {
             prominence: (usize, usize), // (degree, alias_count)
             salience: f32,
             corpus: String,
-            chunk_id: String,        // first_appearance.chunk_id (numeric OR "sec_NNNN")
+            chunk_id: String, // first_appearance.chunk_id (numeric OR "sec_NNNN")
             preview: Option<String>, // passage_preview — FTS key for section-shaped ids
-            embed_text: String,      // "name. description" — relevance-rank key
+            embed_text: String, // "name. description" — relevance-rank key
         }
         let outranks = |a: &Candidate, b: &Candidate| -> bool {
             a.prominence.cmp(&b.prominence) == std::cmp::Ordering::Greater
@@ -761,12 +762,16 @@ impl Runtime {
         // keeping the most-prominent record. The cap then bounds the
         // injection regardless of how many atoms of a type the corpus
         // holds (4,525 institutions here, most address-book noise).
-        let filter_disabled =
-            std::env::var("SOVEREIGN_ATOM_ENUM_NOFILTER").ok().as_deref() == Some("1");
+        let filter_disabled = std::env::var("SOVEREIGN_ATOM_ENUM_NOFILTER")
+            .ok()
+            .as_deref()
+            == Some("1");
         // Relation-evidence candidates (default on; SOVEREIGN_ATOM_ENUM_RELATIONS=0
         // to ablate). See the relation loop below for the rationale.
-        let include_relations =
-            std::env::var("SOVEREIGN_ATOM_ENUM_RELATIONS").ok().as_deref() != Some("0");
+        let include_relations = std::env::var("SOVEREIGN_ATOM_ENUM_RELATIONS")
+            .ok()
+            .as_deref()
+            != Some("0");
         let mut best: HashMap<String, Candidate> = HashMap::new();
         for id in &corpus_ids {
             let Some(graph) = provider.graph(id) else {
@@ -987,13 +992,11 @@ impl Runtime {
         // atoms.embeddings.bin). Env hatch SOVEREIGN_ATOM_ENUM_RANK ∈
         // {rrf (default), relevance, degree}; any embedder failure falls
         // back to degree order.
-        let rank_mode =
-            std::env::var("SOVEREIGN_ATOM_ENUM_RANK").unwrap_or_else(|_| "rrf".into());
+        let rank_mode = std::env::var("SOVEREIGN_ATOM_ENUM_RANK").unwrap_or_else(|_| "rrf".into());
         let mut ranked_by = "degree";
         if rank_mode != "degree" && !ranked.is_empty() {
             // `ranked` is already degree-sorted, so position == degree rank.
-            let texts: Vec<String> =
-                ranked.iter().map(|(_, c)| c.embed_text.clone()).collect();
+            let texts: Vec<String> = ranked.iter().map(|(_, c)| c.embed_text.clone()).collect();
             match (
                 self.inference.embed_query(message).await,
                 self.inference.embed_batch(&texts).await,
@@ -1316,16 +1319,20 @@ impl Runtime {
         // stays stable.
         let conv_indices: Vec<usize> = convs.values().flatten().copied().collect();
         let (cosine_min, cosine_max) =
-            conv_indices.iter().fold((f32::INFINITY, f32::NEG_INFINITY), |(lo, hi), &i| {
-                let s = chunks[i].score;
-                (lo.min(s), hi.max(s))
-            });
+            conv_indices
+                .iter()
+                .fold((f32::INFINITY, f32::NEG_INFINITY), |(lo, hi), &i| {
+                    let s = chunks[i].score;
+                    (lo.min(s), hi.max(s))
+                });
         let cosine_range = (cosine_max - cosine_min).max(1e-6);
 
-        let (mass_min, mass_max) = idx_to_mass.values().copied().fold(
-            (f32::INFINITY, f32::NEG_INFINITY),
-            |(lo, hi), v| (lo.min(v), hi.max(v)),
-        );
+        let (mass_min, mass_max) = idx_to_mass
+            .values()
+            .copied()
+            .fold((f32::INFINITY, f32::NEG_INFINITY), |(lo, hi), v| {
+                (lo.min(v), hi.max(v))
+            });
         let mass_range = (mass_max - mass_min).max(1e-6);
 
         for &i in &conv_indices {
@@ -1347,10 +1354,9 @@ impl Runtime {
             // `ppr_mass_norm > 0.5` render the badge. Other conv
             // chunks (cosine-only ranked, mass=0) stay unbadged.
             if idx_to_mass.contains_key(&i) {
-                chunks[i].metadata.insert(
-                    "ppr_mass_norm".to_string(),
-                    format!("{:.3}", entity_norm),
-                );
+                chunks[i]
+                    .metadata
+                    .insert("ppr_mass_norm".to_string(), format!("{:.3}", entity_norm));
             }
         }
 
@@ -1400,10 +1406,8 @@ impl Runtime {
         } else {
             Some(display_categories)
         };
-        let payload = crate::conv_briefing::build_conv_tiered_briefings(
-            reader, chunks, cats_opt,
-        )
-        .await;
+        let payload =
+            crate::conv_briefing::build_conv_tiered_briefings(reader, chunks, cats_opt).await;
         if !payload.rendered.is_empty() {
             tracing::debug!(
                 mode = payload.mode.label(),
@@ -1411,10 +1415,8 @@ impl Runtime {
                 "conv_briefing: surfaced tiered context"
             );
         }
-        let vault_block = crate::conv_briefing::build_vault_synthesis_briefings(
-            reader, chunks, cats_opt,
-        )
-        .await;
+        let vault_block =
+            crate::conv_briefing::build_vault_synthesis_briefings(reader, chunks, cats_opt).await;
         if !vault_block.is_empty() {
             tracing::debug!(
                 bytes = vault_block.len(),
@@ -1531,9 +1533,7 @@ impl Runtime {
             const PERSONAL_CORPUS_PREFIXES: &[&str] =
                 &["conversations-", "personal-", "journal-", "inner-work-"];
             let before = corpus_ids.len();
-            corpus_ids.retain(|id| {
-                PERSONAL_CORPUS_PREFIXES.iter().any(|p| id.starts_with(p))
-            });
+            corpus_ids.retain(|id| PERSONAL_CORPUS_PREFIXES.iter().any(|p| id.starts_with(p)));
             if before != corpus_ids.len() {
                 tracing::info!(
                     label,
@@ -1544,10 +1544,14 @@ impl Runtime {
                 );
             }
         }
-        let ctxs: Vec<Arc<crate::atlas_context::AtlasContext>> =
-            corpus_ids.iter().filter_map(|id| provider.get(id)).collect();
-        let graphs: Vec<Arc<crate::atlas_context::AtlasGraph>> =
-            corpus_ids.iter().filter_map(|id| provider.graph(id)).collect();
+        let ctxs: Vec<Arc<crate::atlas_context::AtlasContext>> = corpus_ids
+            .iter()
+            .filter_map(|id| provider.get(id))
+            .collect();
+        let graphs: Vec<Arc<crate::atlas_context::AtlasGraph>> = corpus_ids
+            .iter()
+            .filter_map(|id| provider.graph(id))
+            .collect();
 
         if !graphs.is_empty() {
             // Graph-walk: cosine seeds → BFS expand 1-2 hops over
@@ -1579,8 +1583,7 @@ impl Runtime {
             // unfetched even when their atlas was loaded.
             let fetch_budget = ((KQ_PER_CORPUS_LIMIT as f32) * 0.6).ceil() as usize;
             let mut graph_added = 0usize;
-            let mut seen: std::collections::HashSet<String> =
-                std::collections::HashSet::new();
+            let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
             for req in requests.iter().take(fetch_budget * 2) {
                 if graph_added >= fetch_budget {
                     break;
@@ -1603,8 +1606,9 @@ impl Runtime {
                 // atlas_navigate but the FTS-fetch path produced
                 // graph_added=0.
                 if let Ok(chunk_id_num) = req.chunk_id.parse::<u64>() {
-                    if let Some(mut boosted) =
-                        self.fetch_chunk_by_id(&req.article_slug, chunk_id_num).await
+                    if let Some(mut boosted) = self
+                        .fetch_chunk_by_id(&req.article_slug, chunk_id_num)
+                        .await
                     {
                         let key = format!(
                             "{}|{}",
@@ -1623,9 +1627,8 @@ impl Runtime {
                             // cross-corpus sort then keeps atlas
                             // chunks above lance fillers when
                             // truncating to KQ_MERGED_LIMIT.
-                            boosted.vector_distance = Some(
-                                (1.0_f32 - (req.score / 2.0).min(1.0)).max(0.0),
-                            );
+                            boosted.vector_distance =
+                                Some((1.0_f32 - (req.score / 2.0).min(1.0)).max(0.0));
                             if !req.verbatim_excerpts.is_empty() {
                                 let mut head = String::from("[Atlas highlights]\n");
                                 for ex in &req.verbatim_excerpts {
@@ -1734,8 +1737,7 @@ impl Runtime {
             let mut bag_added = 0usize;
             for corpus_id in &corpus_ids {
                 if let Some(ctx) = provider.get(corpus_id) {
-                    let virt =
-                        crate::atlas_context::atlas_top_k_as_chunks(embedding, &ctx);
+                    let virt = crate::atlas_context::atlas_top_k_as_chunks(embedding, &ctx);
                     for chunk in &virt {
                         if let Some(name) = chunk.title.as_deref() {
                             provider.record_match(corpus_id, name);
@@ -1820,8 +1822,7 @@ impl Runtime {
             .filter(|info| {
                 if matches!(
                     info.kind,
-                    corpus_engine::CorpusKind::Knowledge
-                        | corpus_engine::CorpusKind::Catalog
+                    corpus_engine::CorpusKind::Knowledge | corpus_engine::CorpusKind::Catalog
                 ) {
                     true
                 } else {
@@ -1994,12 +1995,7 @@ impl Runtime {
                     let top3: Vec<(String, f32)> = scored
                         .iter()
                         .take(3)
-                        .map(|c| {
-                            (
-                                c.title.clone().unwrap_or_default(),
-                                c.score,
-                            )
-                        })
+                        .map(|c| (c.title.clone().unwrap_or_default(), c.score))
                         .collect();
                     tracing::info!(
                         target: "retrieval_audit",
@@ -2248,12 +2244,12 @@ impl Runtime {
                 continue;
             }
 
-            for axis in
-                corpus_engine::stream_axes::Articulation::ALL.iter()
-            {
-                let anchor = match corpus_engine::meta_atlas::MetaAtlasIndex
-                    ::top_anchor_for_axis(&atom, *axis, MIN_AXIS_WEIGHT)
-                {
+            for axis in corpus_engine::stream_axes::Articulation::ALL.iter() {
+                let anchor = match corpus_engine::meta_atlas::MetaAtlasIndex::top_anchor_for_axis(
+                    &atom,
+                    *axis,
+                    MIN_AXIS_WEIGHT,
+                ) {
                     Some(a) => a,
                     None => continue,
                 };
@@ -2268,9 +2264,7 @@ impl Runtime {
                         enabled_corpora,
                     )
                     .await;
-                let stability_tag = anchor
-                    .stability
-                    .map(|s| s.as_str().to_string());
+                let stability_tag = anchor.stability.map(|s| s.as_str().to_string());
                 let added = inject_meta_atlas_hits(
                     chunks,
                     hits,
@@ -2424,10 +2418,7 @@ impl Runtime {
         let mut dropped_conversation_history = 0usize;
         let mut dropped_untitled = 0usize;
         for c in &initial {
-            let key = (
-                c.corpus_id.clone(),
-                c.title.clone().unwrap_or_default(),
-            );
+            let key = (c.corpus_id.clone(), c.title.clone().unwrap_or_default());
             if key == dominant_key {
                 continue; // already expanded
             }
@@ -2725,8 +2716,11 @@ impl Runtime {
                     "retrieval: expanded follow-up query with prior user turns"
                 );
             }
-            let corpus_embedding =
-                self.inference.embed_query(&retrieval_query).await.unwrap_or_default();
+            let corpus_embedding = self
+                .inference
+                .embed_query(&retrieval_query)
+                .await
+                .unwrap_or_default();
             let label = format!("{intent:?}");
 
             // Run the local corpus search and the mesh fan-out
@@ -2757,7 +2751,10 @@ impl Runtime {
             );
             let mesh_fut = async {
                 match &self.mesh_knowledge {
-                    Some(m) => m.search(message, &corpus_embedding, KQ_PER_CORPUS_LIMIT).await,
+                    Some(m) => {
+                        m.search(message, &corpus_embedding, KQ_PER_CORPUS_LIMIT)
+                            .await
+                    }
                     None => Vec::new(),
                 }
             };
@@ -2801,14 +2798,9 @@ impl Runtime {
             // we're missing. If both are 0 with a live mesh, the
             // handler on :9741 is either not running or returning
             // empty. Reading this line is how you tell.
-            let peer_tagged = mesh_scored
-                .iter()
-                .filter(|h| h.peer_name.is_some())
-                .count();
-            let mesh_corpora: std::collections::BTreeSet<&str> = mesh_scored
-                .iter()
-                .map(|h| h.corpus_id.as_str())
-                .collect();
+            let peer_tagged = mesh_scored.iter().filter(|h| h.peer_name.is_some()).count();
+            let mesh_corpora: std::collections::BTreeSet<&str> =
+                mesh_scored.iter().map(|h| h.corpus_id.as_str()).collect();
             tracing::info!(
                 local_hits = local_scored.len(),
                 mesh_hits = mesh_scored.len(),
@@ -2918,11 +2910,7 @@ impl Runtime {
             let initial_count = all_chunks.len();
             let mut entity_added = 0usize;
             for entity in entities.iter().take(MAX_ENTITY_QUERIES) {
-                let entity_emb = self
-                    .inference
-                    .embed_query(entity)
-                    .await
-                    .unwrap_or_default();
+                let entity_emb = self.inference.embed_query(entity).await.unwrap_or_default();
                 let entity_chunks = self
                     .search_corpus_indexes_with_overrides(
                         &entity_emb,
@@ -3024,10 +3012,7 @@ impl Runtime {
         // overlap floor would drop). Mirrors the KnowledgeQuery wiring.
         // See `enumerate_typed_atom_chunks`.
         if let Some(atom_chunks) = self
-            .enumerate_typed_atom_chunks(
-                message,
-                context.conversation.enabled_corpora.as_deref(),
-            )
+            .enumerate_typed_atom_chunks(message, context.conversation.enabled_corpora.as_deref())
             .await
         {
             tracing::info!(
@@ -3089,11 +3074,8 @@ impl Runtime {
         // can't displace them by picking a different dominant article.
         if let Some(titles) = &title_expand_titles_dq {
             if !titles.is_empty() {
-                all_chunks = reserve_chunks_per_entity(
-                    all_chunks,
-                    titles,
-                    COMPARISON_PER_ENTITY_RESERVE,
-                );
+                all_chunks =
+                    reserve_chunks_per_entity(all_chunks, titles, COMPARISON_PER_ENTITY_RESERVE);
             }
         }
         // Atlas-directed reservation — mirrors the KnowledgeQuery
@@ -3147,7 +3129,10 @@ impl Runtime {
             let atom_enum_survived = all_chunks
                 .iter()
                 .filter(|c| {
-                    c.metadata.get("source").map(|s| s == "atom-enum").unwrap_or(false)
+                    c.metadata
+                        .get("source")
+                        .map(|s| s == "atom-enum")
+                        .unwrap_or(false)
                 })
                 .count();
             let query_preview: String = message.chars().take(80).collect();
@@ -3174,11 +3159,7 @@ impl Runtime {
             .count();
 
         // 4. Provenance metadata.
-        let installed_corpora = self
-            .store
-            .list_corpus_states()
-            .await
-            .unwrap_or_default();
+        let installed_corpora = self.store.list_corpus_states().await.unwrap_or_default();
         let corpora_searched = !installed_corpora.is_empty() || self.corpus_engine.is_some();
 
         // Compose a human-readable label that describes *where* the
@@ -3277,10 +3258,9 @@ impl Runtime {
             // `sovereign/docs/specs/CONV_TIERED_PORT.md`.
             self.rerank_conv_chunks_via_ppr(message, &mut all_chunks, &display_categories)
                 .await;
-            let conv_briefing = self.build_conv_briefing_block(
-                &all_chunks,
-                &display_categories,
-            ).await;
+            let conv_briefing = self
+                .build_conv_briefing_block(&all_chunks, &display_categories)
+                .await;
             let doc_context = format_scored_chunks_with_kinds(
                 &all_chunks,
                 EXPANDED_KNOWLEDGE_CHARS,
@@ -3307,14 +3287,10 @@ impl Runtime {
                 format!("{conv_briefing}\n{doc_context}")
             };
             if history.is_empty() {
-                format!(
-                    "Relevant knowledge:\n{knowledge_block}\n\nUser: {message}\n\nAssistant:"
-                )
+                format!("Relevant knowledge:\n{knowledge_block}\n\nUser: {message}\n\nAssistant:")
             } else {
                 let short_history = format_history_as_prompt(context, 4);
-                format!(
-                    "{short_history}\n\nRelevant knowledge:\n{knowledge_block}\n\nAssistant:"
-                )
+                format!("{short_history}\n\nRelevant knowledge:\n{knowledge_block}\n\nAssistant:")
             }
         } else if history.is_empty() {
             message.to_string()
@@ -3336,14 +3312,11 @@ impl Runtime {
         // budget instead of opening a multi-section essay that gets
         // cut off mid-paragraph (the bug the cutoff chip surfaces on
         // the desktop side).
-        let budget_note = crate::runtime::build_response_length_directive(
-            self.inference_config.max_tokens,
-        );
+        let budget_note =
+            crate::runtime::build_response_length_directive(self.inference_config.max_tokens);
         let system = if !all_chunks.is_empty() {
             let base = if gap_note.is_empty() {
-                format!(
-                    "{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{THINKING_DIRECTIVE}\n\n{budget_note}"
-                )
+                format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{THINKING_DIRECTIVE}\n\n{budget_note}")
             } else {
                 format!(
                     "{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{gap_note}\n\n{THINKING_DIRECTIVE}\n\n{budget_note}"
@@ -3446,7 +3419,11 @@ impl Runtime {
         // compaction arm fights it (adds a re-summarised preamble
         // that competes with the retrieval block). Env-var off lets
         // bench A/B the two cleanly.
-        if std::env::var("SOVEREIGN_COMPACTION_DISABLE").ok().as_deref() == Some("1") {
+        if std::env::var("SOVEREIGN_COMPACTION_DISABLE")
+            .ok()
+            .as_deref()
+            == Some("1")
+        {
             tracing::debug!(conversation_id, "runtime:compaction.disabled_via_env");
             let _ = session_id;
             return;
@@ -3502,12 +3479,7 @@ impl Runtime {
             );
         }
 
-        match crate::context::summarize_dropped_history(
-            self.inference.as_ref(),
-            dropped,
-        )
-        .await
-        {
+        match crate::context::summarize_dropped_history(self.inference.as_ref(), dropped).await {
             Ok(summary @ Some(_)) => {
                 context.compacted_history = summary;
                 // Glassbox the compaction so the user sees why their
@@ -3586,10 +3558,7 @@ impl Runtime {
     /// full-prompt sensor that takes (system_estimate,
     /// retrieval_estimate, history_estimate, response_reserve) —
     /// captured as a kind=todo note for the next iteration cycle.
-    fn estimate_compaction_pressure(
-        &self,
-        context: &ConversationContext,
-    ) -> (bool, u32, u32) {
+    fn estimate_compaction_pressure(&self, context: &ConversationContext) -> (bool, u32, u32) {
         let Some(ctx_size) = self.inference.effective_context_size() else {
             return (false, 0, 0);
         };
@@ -3665,7 +3634,9 @@ impl Runtime {
         if messages.len() <= crate::runtime::CONV_HISTORY_TURNS + 1 {
             return;
         }
-        let dropped_end = messages.len().saturating_sub(crate::runtime::CONV_HISTORY_TURNS + 1);
+        let dropped_end = messages
+            .len()
+            .saturating_sub(crate::runtime::CONV_HISTORY_TURNS + 1);
         let dropped = &messages[..dropped_end];
 
         // Build pair-shaped indexable units. Walk in (user, assistant)
@@ -3685,7 +3656,11 @@ impl Runtime {
                     truncate_with_ellipsis(&follow.content, 600),
                 )
             } else {
-                format!("[{:?}] {}", lead.role, truncate_with_ellipsis(&lead.content, 600))
+                format!(
+                    "[{:?}] {}",
+                    lead.role,
+                    truncate_with_ellipsis(&lead.content, 600)
+                )
             };
             units.push((i, body));
             i += 2;
@@ -3752,11 +3727,12 @@ impl Runtime {
         // → behaves exactly like v6 (pure cosine + MMR).
         const HYBRID_COSINE_WEIGHT: f32 = 0.6;
         const HYBRID_JACCARD_WEIGHT: f32 = 0.4;
-        let query_entities: std::collections::HashSet<String> = if let Some(g) = self.gliner.as_ref() {
-            g.extract_entities(&query_text).into_iter().collect()
-        } else {
-            std::collections::HashSet::new()
-        };
+        let query_entities: std::collections::HashSet<String> =
+            if let Some(g) = self.gliner.as_ref() {
+                g.extract_entities(&query_text).into_iter().collect()
+            } else {
+                std::collections::HashSet::new()
+            };
         if !query_entities.is_empty() {
             tracing::debug!(
                 entities = ?query_entities,
@@ -3764,14 +3740,19 @@ impl Runtime {
             );
         }
 
-        let jaccard = |a: &std::collections::HashSet<String>, b: &std::collections::HashSet<String>| -> f32 {
-            if a.is_empty() || b.is_empty() {
-                return 0.0;
-            }
-            let inter = a.intersection(b).count() as f32;
-            let union = a.union(b).count() as f32;
-            if union == 0.0 { 0.0 } else { inter / union }
-        };
+        let jaccard =
+            |a: &std::collections::HashSet<String>, b: &std::collections::HashSet<String>| -> f32 {
+                if a.is_empty() || b.is_empty() {
+                    return 0.0;
+                }
+                let inter = a.intersection(b).count() as f32;
+                let union = a.union(b).count() as f32;
+                if union == 0.0 {
+                    0.0
+                } else {
+                    inter / union
+                }
+            };
 
         let gliner = self.gliner.clone();
         let scored: Vec<(usize, String, f32, Vec<f32>)> = unit_embeds
@@ -3804,8 +3785,10 @@ impl Runtime {
         const HISTORY_RETRIEVAL_SIM_FLOOR: f32 = 0.30;
         const HISTORY_RETRIEVAL_MMR_LAMBDA: f32 = 0.5;
 
-        let mut candidates: Vec<(usize, String, f32, Vec<f32>)> =
-            scored.into_iter().filter(|(_, _, s, _)| *s >= HISTORY_RETRIEVAL_SIM_FLOOR).collect();
+        let mut candidates: Vec<(usize, String, f32, Vec<f32>)> = scored
+            .into_iter()
+            .filter(|(_, _, s, _)| *s >= HISTORY_RETRIEVAL_SIM_FLOOR)
+            .collect();
         // Sort once descending by relevance for stable MMR seeding.
         candidates.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
 
@@ -3834,11 +3817,13 @@ impl Runtime {
 
         let hits: Vec<crate::types::HistoryRetrievalHit> = selected
             .into_iter()
-            .map(|(turn_index, content, similarity)| crate::types::HistoryRetrievalHit {
-                turn_index,
-                content,
-                similarity,
-            })
+            .map(
+                |(turn_index, content, similarity)| crate::types::HistoryRetrievalHit {
+                    turn_index,
+                    content,
+                    similarity,
+                },
+            )
             .collect();
 
         if hits.is_empty() {
@@ -3878,13 +3863,11 @@ impl Runtime {
         conversation_id: &str,
     ) -> Option<Vec<String>> {
         let notes = self.note_store.as_ref()?;
-        let payloads =
-            crate::memory::read_recent_tool_decisions(notes, Some(conversation_id), 32)
-                .await
-                .ok()?;
+        let payloads = crate::memory::read_recent_tool_decisions(notes, Some(conversation_id), 32)
+            .await
+            .ok()?;
         let mut ids: Vec<String> = Vec::new();
-        let mut seen: std::collections::HashSet<String> =
-            std::collections::HashSet::new();
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         for p in payloads {
             for id in p.evidence_ids {
                 if seen.insert(id.clone()) {
@@ -4044,8 +4027,7 @@ fn apply_corpus_allow_list(
     let Some(allow) = allow else {
         return indexes;
     };
-    let allow_set: std::collections::HashSet<&str> =
-        allow.iter().map(String::as_str).collect();
+    let allow_set: std::collections::HashSet<&str> = allow.iter().map(String::as_str).collect();
     indexes
         .into_iter()
         .filter(|info| {
@@ -4105,7 +4087,11 @@ mod allow_list_tests {
 
     #[test]
     fn allow_list_filters_to_subset() {
-        let pool = vec![idx("wikipedia", None), idx("sep", None), idx("gutenberg", None)];
+        let pool = vec![
+            idx("wikipedia", None),
+            idx("sep", None),
+            idx("gutenberg", None),
+        ];
         let allow = vec!["sep".to_string()];
         let out = apply_corpus_allow_list(pool, Some(&allow));
         assert_eq!(out.len(), 1);

@@ -446,10 +446,7 @@ mod tests {
     fn idempotent_under_repeat_scrub() {
         let mut map = EntityMap::new();
         map.register_person("Alex Bryan");
-        let once = scrub_pii(
-            "Alex Bryan at alex@example.com on 2025-08-14",
-            &mut map,
-        );
+        let once = scrub_pii("Alex Bryan at alex@example.com on 2025-08-14", &mut map);
         let twice = scrub_pii(&once.text, &mut map);
         assert_eq!(
             once.text, twice.text,
@@ -468,8 +465,14 @@ mod tests {
         map.save(&path).unwrap();
 
         let loaded = EntityMap::load(&path).unwrap();
-        assert_eq!(loaded.token_for_person("alex bryan").as_deref(), Some("[[person-1]]"));
-        assert_eq!(loaded.token_for_org("ACME CORP").as_deref(), Some("[[org-1]]"));
+        assert_eq!(
+            loaded.token_for_person("alex bryan").as_deref(),
+            Some("[[person-1]]")
+        );
+        assert_eq!(
+            loaded.token_for_org("ACME CORP").as_deref(),
+            Some("[[org-1]]")
+        );
         assert_eq!(loaded.person_count(), 1);
     }
 

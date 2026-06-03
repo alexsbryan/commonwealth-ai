@@ -56,10 +56,8 @@ fn code_extractor_captures_visibility_and_docs() {
     let chunks = ex
         .extract_file(RUST_FIXTURE, "src/lib.rs", 1_700_000_000)
         .expect("extract_file");
-    let by_name: std::collections::HashMap<_, _> = chunks
-        .iter()
-        .map(|c| (c.symbol_name.as_str(), c))
-        .collect();
+    let by_name: std::collections::HashMap<_, _> =
+        chunks.iter().map(|c| (c.symbol_name.as_str(), c)).collect();
 
     let documented = by_name.get("documented_fn").expect("documented_fn missing");
     assert!(documented.is_public, "documented_fn must be flagged pub");
@@ -69,10 +67,7 @@ fn code_extractor_captures_visibility_and_docs() {
     );
 
     let private = by_name.get("private_fn").expect("private_fn missing");
-    assert!(
-        !private.is_public,
-        "private_fn must not be flagged pub"
-    );
+    assert!(!private.is_public, "private_fn must not be flagged pub");
     assert!(private.doc_comment.is_none());
 
     let documented_struct = by_name.get("Documented").expect("Documented missing");
@@ -117,16 +112,12 @@ fn metadata_json_round_trips_visibility_and_docs() {
         obj.get("symbol_name").and_then(|v| v.as_str()),
         Some("documented_fn")
     );
-    assert_eq!(
-        obj.get("language").and_then(|v| v.as_str()),
-        Some("rust")
-    );
+    assert_eq!(obj.get("language").and_then(|v| v.as_str()), Some("rust"));
 }
 
 #[test]
 fn metadata_dispatch_signature_distinguishes_corpus_kinds() {
-    let code_meta =
-        r#"{"symbol_name":"foo","symbol_kind":"function","file_path":"src/lib.rs","language":"rust","is_public":true}"#;
+    let code_meta = r#"{"symbol_name":"foo","symbol_kind":"function","file_path":"src/lib.rs","language":"rust","is_public":true}"#;
     assert!(
         metadata_looks_like_code(code_meta),
         "code chunk metadata should be recognised"
@@ -134,7 +125,8 @@ fn metadata_dispatch_signature_distinguishes_corpus_kinds() {
 
     // Wikipedia-style metadata uses section_path + section_type +
     // outgoing_links — none of the code-specific keys.
-    let wiki_meta = r#"{"section_path":["Lead"],"section_type":"lead","outgoing_links":[],"section_depth":0}"#;
+    let wiki_meta =
+        r#"{"section_path":["Lead"],"section_type":"lead","outgoing_links":[],"section_depth":0}"#;
     assert!(
         !metadata_looks_like_code(wiki_meta),
         "Wikipedia chunk metadata should not be misrouted"

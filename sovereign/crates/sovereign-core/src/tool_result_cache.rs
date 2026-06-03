@@ -65,11 +65,7 @@ impl CacheKey {
     /// whitespace / ordering produce the same hash because
     /// `serde_json` emits objects with sorted keys when using
     /// the canonical `to_value`/`to_string` path.
-    pub fn new(
-        tool_id: &str,
-        conversation_id: &str,
-        args: &serde_json::Value,
-    ) -> Self {
+    pub fn new(tool_id: &str, conversation_id: &str, args: &serde_json::Value) -> Self {
         let canonical = serde_json::to_string(args).unwrap_or_default();
         let mut hasher = Sha256::new();
         hasher.update(canonical.as_bytes());
@@ -242,10 +238,7 @@ mod tests {
         cache.put(k.clone(), json!({"evidence": []}), 3);
         // Turn 3 + max_age 5 → reachable through turn 8.
         for turn in 3..=8 {
-            assert!(
-                cache.get(&k, turn).is_some(),
-                "should hit at turn {turn}"
-            );
+            assert!(cache.get(&k, turn).is_some(), "should hit at turn {turn}");
         }
     }
 

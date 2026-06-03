@@ -22,7 +22,9 @@ pub struct RunOutputWriter {
 
 impl RunOutputWriter {
     pub fn new(runs_dir: impl AsRef<Path>) -> Self {
-        Self { runs_dir: runs_dir.as_ref().to_path_buf() }
+        Self {
+            runs_dir: runs_dir.as_ref().to_path_buf(),
+        }
     }
 
     pub fn runs_dir(&self) -> &Path {
@@ -70,8 +72,8 @@ impl RunOutputWriter {
         let ordinal = self.next_ordinal(phase, mode)?;
         let file_name = format!("{}-{}-{:03}.json", phase.id(), mode, ordinal);
         let path = self.runs_dir.join(file_name);
-        let json = serde_json::to_string_pretty(value)
-            .map_err(|e| Error::Serialization(e.to_string()))?;
+        let json =
+            serde_json::to_string_pretty(value).map_err(|e| Error::Serialization(e.to_string()))?;
         fs::write(&path, json)?;
         Ok(path)
     }
@@ -100,9 +102,15 @@ mod tests {
     fn write_creates_dir_and_returns_path() {
         let dir = tempdir().unwrap();
         let w = RunOutputWriter::new(dir.path().join("runs"));
-        let path = w.write(PipelinePhase::Questions, "subset", &Dummy { a: 1 }).unwrap();
+        let path = w
+            .write(PipelinePhase::Questions, "subset", &Dummy { a: 1 })
+            .unwrap();
         assert!(path.exists());
-        assert!(path.file_name().unwrap().to_string_lossy().starts_with("questions-subset-001"));
+        assert!(path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("questions-subset-001"));
     }
 
     #[test]
@@ -110,7 +118,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let w = RunOutputWriter::new(dir.path().join("runs"));
         for i in 1..=3 {
-            let path = w.write(PipelinePhase::Questions, "subset", &Dummy { a: i }).unwrap();
+            let path = w
+                .write(PipelinePhase::Questions, "subset", &Dummy { a: i })
+                .unwrap();
             let expected = format!("questions-subset-{:03}.json", i);
             assert_eq!(path.file_name().unwrap().to_string_lossy(), expected);
         }
@@ -120,9 +130,13 @@ mod tests {
     fn ordinals_are_per_mode() {
         let dir = tempdir().unwrap();
         let w = RunOutputWriter::new(dir.path().join("runs"));
-        w.write(PipelinePhase::Questions, "subset", &Dummy { a: 1 }).unwrap();
-        w.write(PipelinePhase::Questions, "subset", &Dummy { a: 2 }).unwrap();
-        let full_path = w.write(PipelinePhase::Questions, "full", &Dummy { a: 3 }).unwrap();
+        w.write(PipelinePhase::Questions, "subset", &Dummy { a: 1 })
+            .unwrap();
+        w.write(PipelinePhase::Questions, "subset", &Dummy { a: 2 })
+            .unwrap();
+        let full_path = w
+            .write(PipelinePhase::Questions, "full", &Dummy { a: 3 })
+            .unwrap();
         assert!(full_path
             .file_name()
             .unwrap()
@@ -134,8 +148,11 @@ mod tests {
     fn ordinals_are_per_phase() {
         let dir = tempdir().unwrap();
         let w = RunOutputWriter::new(dir.path().join("runs"));
-        w.write(PipelinePhase::Questions, "subset", &Dummy { a: 1 }).unwrap();
-        let p5 = w.write(PipelinePhase::Positions, "subset", &Dummy { a: 2 }).unwrap();
+        w.write(PipelinePhase::Questions, "subset", &Dummy { a: 1 })
+            .unwrap();
+        let p5 = w
+            .write(PipelinePhase::Positions, "subset", &Dummy { a: 2 })
+            .unwrap();
         assert!(p5
             .file_name()
             .unwrap()

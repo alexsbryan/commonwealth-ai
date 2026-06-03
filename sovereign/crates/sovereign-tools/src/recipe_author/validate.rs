@@ -42,13 +42,12 @@ impl Tool for RecipeValidateTool {
         ToolDescriptor {
             id: "recipe_validate".into(),
             name: "RecipeValidate".into(),
-            description:
-                "Validate a recipe TOML at ~/.sovereign/recipes/<id>/recipe.toml \
+            description: "Validate a recipe TOML at ~/.sovereign/recipes/<id>/recipe.toml \
                  — schema, regex compile, URL-template placeholder cross-reference, \
                  for_each parameter resolution. Returns structured \
                  `{errors, warnings, passed}` so you can iterate on broken patterns \
                  without re-reading the file."
-                    .into(),
+                .into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -61,9 +60,8 @@ impl Tool for RecipeValidateTool {
                 "required": ["path"],
             }),
             examples: vec![ToolExample {
-                situation:
-                    "Validate the SEC investigation recipe before testing extraction."
-                        .into(),
+                situation: "Validate the SEC investigation recipe before testing extraction."
+                    .into(),
                 call: serde_json::json!({"path": "sec-ai-investigation"}),
             }],
             effect: Effect::Read,
@@ -85,17 +83,11 @@ impl Tool for RecipeValidateTool {
         vec![Permission::RecipeAuthoring]
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let raw_path = params
             .get("path")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::InvalidInput("RecipeValidateTool requires `path`".into())
-            })?;
+            .ok_or_else(|| Error::InvalidInput("RecipeValidateTool requires `path`".into()))?;
         let resolved = resolve_recipe_path(raw_path, self.recipes_dir.as_ref())?;
         if !resolved.is_file() {
             return Err(Error::InvalidInput(format!(
@@ -129,8 +121,7 @@ impl Tool for RecipeValidateTool {
 /// touches embeddings, but the engine constructor requires an
 /// EmbedFn.
 fn build_stub_engine() -> CorpusEngine {
-    let stub_embed: EmbedFn =
-        Arc::new(|_text| Box::pin(async { Ok(vec![0f32; 768]) }));
+    let stub_embed: EmbedFn = Arc::new(|_text| Box::pin(async { Ok(vec![0f32; 768]) }));
     let tmp = std::env::temp_dir().join("sovereign-recipe-author-validate");
     CorpusEngine::new(tmp.clone(), tmp, stub_embed)
 }

@@ -42,7 +42,9 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         // the per-handler `enforce_localhost` checks. Adding a new
         // route to this module inherits the guard for free; the
         // per-handler check stays as a secondary barrier.
-        .layer(axum::middleware::from_fn(crate::loopback_guard::loopback_only))
+        .layer(axum::middleware::from_fn(
+            crate::loopback_guard::loopback_only,
+        ))
         .layer(Extension(daemon))
 }
 
@@ -155,15 +157,18 @@ async fn mesh_status(
         // keeps the UI's empty-state rendering happy.
         return (
             StatusCode::OK,
-            Json(serde_json::to_value(StatusResponse {
-                running,
-                mesh_name: None,
-                members_online: 0,
-                members_total: 0,
-                members: vec![],
-                join_key: None,
-                join_link: None,
-            }).unwrap()),
+            Json(
+                serde_json::to_value(StatusResponse {
+                    running,
+                    mesh_name: None,
+                    members_online: 0,
+                    members_total: 0,
+                    members: vec![],
+                    join_key: None,
+                    join_link: None,
+                })
+                .unwrap(),
+            ),
         )
             .into_response();
     };
@@ -196,15 +201,18 @@ async fn mesh_status(
 
     (
         StatusCode::OK,
-        Json(serde_json::to_value(StatusResponse {
-            running,
-            mesh_name: Some(s.status.name),
-            members_online: s.status.members_online,
-            members_total: s.status.members_total,
-            members,
-            join_key,
-            join_link,
-        }).unwrap()),
+        Json(
+            serde_json::to_value(StatusResponse {
+                running,
+                mesh_name: Some(s.status.name),
+                members_online: s.status.members_online,
+                members_total: s.status.members_total,
+                members,
+                join_key,
+                join_link,
+            })
+            .unwrap(),
+        ),
     )
         .into_response()
 }
@@ -221,18 +229,19 @@ async fn mesh_create(
     }
     let req = body.map(|Json(b)| b).unwrap_or_default();
     let node_name = default_node_name(req.node_name);
-    let mesh_name = req
-        .name
-        .unwrap_or_else(|| format!("{node_name}'s Mesh"));
+    let mesh_name = req.name.unwrap_or_else(|| format!("{node_name}'s Mesh"));
 
     match daemon.create_mesh(&mesh_name, &node_name).await {
         Ok(result) => (
             StatusCode::OK,
-            Json(serde_json::to_value(CreateResponse {
-                mesh_name: result.mesh_name,
-                join_key: result.join_key,
-                join_link: result.join_link,
-            }).unwrap()),
+            Json(
+                serde_json::to_value(CreateResponse {
+                    mesh_name: result.mesh_name,
+                    join_key: result.join_key,
+                    join_link: result.join_link,
+                })
+                .unwrap(),
+            ),
         )
             .into_response(),
         Err(e) => (
@@ -271,10 +280,13 @@ async fn mesh_join(
     match daemon.join_mesh(&link, &node_name).await {
         Ok(result) => (
             StatusCode::OK,
-            Json(serde_json::to_value(JoinResponse {
-                mesh_name: result.mesh_name,
-                node_id: result.node_id,
-            }).unwrap()),
+            Json(
+                serde_json::to_value(JoinResponse {
+                    mesh_name: result.mesh_name,
+                    node_id: result.node_id,
+                })
+                .unwrap(),
+            ),
         )
             .into_response(),
         Err(e) => (
@@ -311,10 +323,13 @@ async fn mesh_rotate(
             daemon.set_join_key(rotated.join_key.clone()).await;
             (
                 StatusCode::OK,
-                Json(serde_json::to_value(RotateResponse {
-                    mesh_name: rotated.mesh_name,
-                    join_key: rotated.join_key,
-                }).unwrap()),
+                Json(
+                    serde_json::to_value(RotateResponse {
+                        mesh_name: rotated.mesh_name,
+                        join_key: rotated.join_key,
+                    })
+                    .unwrap(),
+                ),
             )
                 .into_response()
         }
@@ -336,9 +351,7 @@ async fn mesh_rotate(
 /// query param when sharing the invite. Doesn't require a running
 /// mesh — the candidates are interface-derived and a user might
 /// want to look at them before deciding to create a mesh.
-async fn mesh_relay_candidates(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-) -> impl IntoResponse {
+async fn mesh_relay_candidates(ConnectInfo(peer): ConnectInfo<SocketAddr>) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
         return r;
     }
@@ -347,7 +360,10 @@ async fn mesh_relay_candidates(
     // Plumbing this through config is a follow-up; for now the
     // single source of truth lives next to the binder.
     let candidates = crate::mesh_discovery::relay_candidates(9742);
-    (StatusCode::OK, Json(serde_json::json!({ "candidates": candidates })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "candidates": candidates })),
+    )
         .into_response()
 }
 
@@ -401,7 +417,11 @@ mod tests {
     async fn status_returns_empty_when_no_mesh() {
         let (_daemon, base, _tmp) = spawn_test_router().await;
         let client = reqwest::Client::new();
-        let resp = client.get(format!("{base}/v1/mesh/status")).send().await.unwrap();
+        let resp = client
+            .get(format!("{base}/v1/mesh/status"))
+            .send()
+            .await
+            .unwrap();
         assert_eq!(resp.status(), 200);
         let body: serde_json::Value = resp.json().await.unwrap();
         assert_eq!(body["running"], false);
@@ -426,7 +446,11 @@ mod tests {
         assert!(body["join_link"].as_str().unwrap().contains("sovereign://"));
 
         // Status should now report running + one member.
-        let resp = client.get(format!("{base}/v1/mesh/status")).send().await.unwrap();
+        let resp = client
+            .get(format!("{base}/v1/mesh/status"))
+            .send()
+            .await
+            .unwrap();
         let body: serde_json::Value = resp.json().await.unwrap();
         assert_eq!(body["running"], true);
         assert_eq!(body["mesh_name"], "test mesh");
@@ -485,7 +509,11 @@ mod tests {
     async fn rotate_without_mesh_returns_404() {
         let (_daemon, base, _tmp) = spawn_test_router().await;
         let client = reqwest::Client::new();
-        let resp = client.post(format!("{base}/v1/mesh/rotate")).send().await.unwrap();
+        let resp = client
+            .post(format!("{base}/v1/mesh/rotate"))
+            .send()
+            .await
+            .unwrap();
         assert_eq!(resp.status(), 404);
     }
 
@@ -545,18 +573,33 @@ mod tests {
         let create: serde_json::Value = client
             .post(format!("{base}/v1/mesh/create"))
             .json(&serde_json::json!({ "name": "m" }))
-            .send().await.unwrap().json().await.unwrap();
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
         let pre_key = create["join_key"].as_str().unwrap().to_string();
 
         let rotate: serde_json::Value = client
             .post(format!("{base}/v1/mesh/rotate"))
-            .send().await.unwrap().json().await.unwrap();
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
         let new_key = rotate["join_key"].as_str().unwrap().to_string();
         assert_ne!(pre_key, new_key);
 
         let status: serde_json::Value = client
             .get(format!("{base}/v1/mesh/status"))
-            .send().await.unwrap().json().await.unwrap();
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
         assert_eq!(status["join_key"].as_str().unwrap(), new_key);
         assert!(status["join_link"].as_str().unwrap().contains(&new_key));
     }
@@ -568,7 +611,9 @@ mod tests {
         let client = reqwest::Client::new();
         let resp = client
             .get(format!("{base}/v1/mesh/relay-candidates"))
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(resp.status(), 200);
         let body: serde_json::Value = resp.json().await.unwrap();
         let arr = body["candidates"].as_array().expect("candidates is array");
@@ -587,7 +632,10 @@ mod tests {
             .iter()
             .filter(|c| c["recommended"].as_bool().unwrap_or(false))
             .count();
-        assert!(recommended_count <= 1, "got {recommended_count} recommended");
+        assert!(
+            recommended_count <= 1,
+            "got {recommended_count} recommended"
+        );
     }
 
     #[tokio::test]
@@ -603,4 +651,3 @@ mod tests {
         assert_eq!(resp.status(), 400);
     }
 }
-

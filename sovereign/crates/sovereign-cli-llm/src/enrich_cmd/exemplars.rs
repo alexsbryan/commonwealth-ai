@@ -70,7 +70,13 @@ pub async fn cmd_exemplars(args: &[String]) -> i32 {
         match ExemplarBank::open(&path, *phase) {
             Ok(bank) => {
                 let (p, c, n) = bank.counts_by_kind();
-                print!(" {} total — {} positive, {} corrected, {} negative", bank.len(), p, c, n);
+                print!(
+                    " {} total — {} positive, {} corrected, {} negative",
+                    bank.len(),
+                    p,
+                    c,
+                    n
+                );
                 let lints = bank.lint();
                 if lints.is_empty() {
                     println!();

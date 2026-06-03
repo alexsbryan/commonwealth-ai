@@ -25,9 +25,7 @@ use std::sync::Arc;
 use corpus_engine::recipe::CatalogConfig;
 use corpus_engine::types::CorpusKind;
 use corpus_engine::{CorpusEngine, EmbedFn, ScoredChunk};
-use sovereign_tools::catalog::{
-    partition_hits_by_kind, CatalogResolutionContext,
-};
+use sovereign_tools::catalog::{partition_hits_by_kind, CatalogResolutionContext};
 use sovereign_tools::catalog_ingest::{
     run_catalog_ingest, CatalogIngestEvent, CatalogIngestRequest,
 };
@@ -205,10 +203,7 @@ struct QueryReport {
     catalogs_present: Vec<String>,
 }
 
-async fn search_catalog(
-    engine: &CorpusEngine,
-    query: &str,
-) -> Result<QueryReport, i32> {
+async fn search_catalog(engine: &CorpusEngine, query: &str) -> Result<QueryReport, i32> {
     let indexes = match engine.installed_indexes().await {
         Ok(ix) => ix,
         Err(e) => {
@@ -240,9 +235,7 @@ async fn search_catalog(
     for info in &indexes {
         if info.kind == CorpusKind::Catalog {
             catalogs_present.push(info.corpus_id.clone());
-            if let Ok(recipe) =
-                engine.registry().fetch_recipe(&info.corpus_id).await
-            {
+            if let Ok(recipe) = engine.registry().fetch_recipe(&info.corpus_id).await {
                 if let Some(cat) = recipe.catalog {
                     catalog_configs.insert(info.corpus_id.clone(), cat);
                 }
@@ -292,10 +285,7 @@ async fn search_catalog(
 fn print_query_report(query: &str, report: &QueryReport) {
     println!("Query: {query:?}");
     if !report.catalogs_present.is_empty() {
-        println!(
-            "Catalogs available: {}",
-            report.catalogs_present.join(", ")
-        );
+        println!("Catalogs available: {}", report.catalogs_present.join(", "));
     }
     println!();
     if report.full_text.is_empty() && report.catalog_hits.is_empty() {
@@ -305,18 +295,9 @@ fn print_query_report(query: &str, report: &QueryReport) {
     if !report.full_text.is_empty() {
         println!("FULL-TEXT HITS:");
         for (i, h) in report.full_text.iter().take(5).enumerate() {
-            let title = h
-                .title
-                .clone()
-                .unwrap_or_else(|| h.corpus_id.clone());
+            let title = h.title.clone().unwrap_or_else(|| h.corpus_id.clone());
             let preview = &h.content[..h.content.len().min(160)].replace('\n', " ");
-            println!(
-                "  [{}] [{:.2}] {} :: {}",
-                i + 1,
-                h.score,
-                title,
-                preview
-            );
+            println!("  [{}] [{:.2}] {} :: {}", i + 1, h.score, title, preview);
         }
         println!();
     }
@@ -333,7 +314,10 @@ fn print_query_report(query: &str, report: &QueryReport) {
             if let Some(corpus_id) = &h.already_ingested_corpus_id {
                 line.push_str(&format!("\n         ALREADY INGESTED → {corpus_id}"));
             } else if let Some(mins) = h.estimated_ingest_minutes {
-                line.push_str(&format!("\n         Ingest estimate: ~{mins} min · download: {}", h.download_url));
+                line.push_str(&format!(
+                    "\n         Ingest estimate: ~{mins} min · download: {}",
+                    h.download_url
+                ));
             } else {
                 line.push_str(&format!("\n         download: {}", h.download_url));
             }
@@ -349,10 +333,17 @@ fn print_query_report(query: &str, report: &QueryReport) {
 fn print_ingest_event(evt: &CatalogIngestEvent) {
     use corpus_engine::progress::IngestProgress;
     match evt {
-        CatalogIngestEvent::Resolving { catalog_corpus_id, work_id } => {
+        CatalogIngestEvent::Resolving {
+            catalog_corpus_id,
+            work_id,
+        } => {
             println!("  ↳ resolving {work_id} in {catalog_corpus_id}…");
         }
-        CatalogIngestEvent::Resolved { title, download_url, new_corpus_id } => {
+        CatalogIngestEvent::Resolved {
+            title,
+            download_url,
+            new_corpus_id,
+        } => {
             println!("  ↳ resolved: \"{title}\"");
             println!("     download: {download_url}");
             println!("     target corpus: {new_corpus_id}");
@@ -363,7 +354,9 @@ fn print_ingest_event(evt: &CatalogIngestEvent) {
                 use std::io::Write;
                 let _ = std::io::stdout().flush();
             }
-            IngestProgress::Extracting { documents_processed } => {
+            IngestProgress::Extracting {
+                documents_processed,
+            } => {
                 println!("\n  ↳ extract: {documents_processed} docs");
             }
             IngestProgress::Chunking { chunks_created } => {
@@ -378,22 +371,26 @@ fn print_ingest_event(evt: &CatalogIngestEvent) {
                 use std::io::Write;
                 let _ = std::io::stdout().flush();
             }
-            IngestProgress::Indexing { chunks_indexed, total } => {
+            IngestProgress::Indexing {
+                chunks_indexed,
+                total,
+            } => {
                 println!("\n  ↳ index: {chunks_indexed}/{total}");
             }
             IngestProgress::OptimizingIndex { current_chunks } => {
                 println!("  ↳ optimize ({current_chunks} chunks)…");
             }
-            IngestProgress::Enriching { detail, fraction, .. } => {
-                match fraction {
-                    Some(f) => println!("  ↳ enrich: {detail} ({:.0}%)", f * 100.0),
-                    None => println!("  ↳ enrich: {detail}"),
-                }
-            }
-            IngestProgress::Complete { total_chunks, duration_secs } => {
-                println!(
-                    "  ↳ complete: {total_chunks} chunks in {duration_secs}s"
-                );
+            IngestProgress::Enriching {
+                detail, fraction, ..
+            } => match fraction {
+                Some(f) => println!("  ↳ enrich: {detail} ({:.0}%)", f * 100.0),
+                None => println!("  ↳ enrich: {detail}"),
+            },
+            IngestProgress::Complete {
+                total_chunks,
+                duration_secs,
+            } => {
+                println!("  ↳ complete: {total_chunks} chunks in {duration_secs}s");
             }
         },
         CatalogIngestEvent::Enrich(_) => {
@@ -405,9 +402,7 @@ fn print_ingest_event(evt: &CatalogIngestEvent) {
             atlas_summary,
         } => {
             println!();
-            println!(
-                "  ✓ {new_corpus_id} ({chunks_created} chunks indexed)"
-            );
+            println!("  ✓ {new_corpus_id} ({chunks_created} chunks indexed)");
             if let Some(a) = atlas_summary {
                 println!(
                     "  ✓ atlas: {atoms} atoms, {edges} edges, {themes} themes, {q} questions",

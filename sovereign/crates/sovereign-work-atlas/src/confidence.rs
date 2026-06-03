@@ -44,8 +44,8 @@ impl ConfidenceGrade {
 /// Spec §8 thresholds. Read at query time so the same Observation
 /// gracefully degrades Active → Recent → (dropped) as time passes,
 /// without the writer having to refresh records.
-pub const ACTIVE_WINDOW_SECS: u64 = 300;     // 5 min
-pub const RECENT_WINDOW_SECS: u64 = 1_800;   // 30 min
+pub const ACTIVE_WINDOW_SECS: u64 = 300; // 5 min
+pub const RECENT_WINDOW_SECS: u64 = 1_800; // 30 min
 
 /// Map `(now, last_observed_at, source)` → grade per spec §8.
 /// Returns `None` when the observation is too old to qualify even

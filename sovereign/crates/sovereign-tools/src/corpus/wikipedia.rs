@@ -25,16 +25,12 @@ impl WikimediaDumpParser {
 }
 
 impl CorpusParser for WikimediaDumpParser {
-    fn parse(
-        &self,
-        source_path: &Path,
-    ) -> Result<Box<dyn Iterator<Item = Result<DocumentChunk>>>> {
-        let file = File::open(source_path)
-            .map_err(|e| Error::Storage(format!("Failed to open {}: {e}", source_path.display())))?;
+    fn parse(&self, source_path: &Path) -> Result<Box<dyn Iterator<Item = Result<DocumentChunk>>>> {
+        let file = File::open(source_path).map_err(|e| {
+            Error::Storage(format!("Failed to open {}: {e}", source_path.display()))
+        })?;
 
-        let is_bz2 = source_path
-            .extension()
-            .and_then(|e| e.to_str()) == Some("bz2");
+        let is_bz2 = source_path.extension().and_then(|e| e.to_str()) == Some("bz2");
 
         let reader: Box<dyn std::io::Read> = if is_bz2 {
             Box::new(BzDecoder::new(BufReader::new(file)))
@@ -286,17 +282,19 @@ fn strip_mediawiki(text: &str) -> String {
                     is_closing = true;
                     tag = tag[1..].to_string();
                 }
-                let tag_name = tag
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or("")
-                    .to_lowercase();
+                let tag_name = tag.split_whitespace().next().unwrap_or("").to_lowercase();
                 // For ref, nowiki, gallery, etc. — skip content until closing tag.
                 if !is_closing
                     && !tag.ends_with('/')
                     && matches!(
                         tag_name.as_str(),
-                        "ref" | "nowiki" | "gallery" | "math" | "source" | "syntaxhighlight" | "code"
+                        "ref"
+                            | "nowiki"
+                            | "gallery"
+                            | "math"
+                            | "source"
+                            | "syntaxhighlight"
+                            | "code"
                     )
                 {
                     let close = format!("</{tag_name}>");
@@ -353,10 +351,7 @@ fn split_sections(text: &str) -> Vec<(String, String)> {
             if !current_text.is_empty() || sections.is_empty() {
                 sections.push((current_name, current_text));
             }
-            current_name = trimmed
-                .trim_matches('=')
-                .trim()
-                .to_string();
+            current_name = trimmed.trim_matches('=').trim().to_string();
             current_text = String::new();
         } else {
             current_text.push_str(line);

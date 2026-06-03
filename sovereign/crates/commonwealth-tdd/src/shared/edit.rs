@@ -11,9 +11,16 @@ use regex::Regex;
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum EditAction {
-    RewriteFunction { name: String },
-    PatchLines { start: u32, end: u32 },
-    InsertBefore { line: u32 },
+    RewriteFunction {
+        name: String,
+    },
+    PatchLines {
+        start: u32,
+        end: u32,
+    },
+    InsertBefore {
+        line: u32,
+    },
     /// Replace the entire file contents. `path` is optional — when
     /// the model knows where the file lands (Red writes a test
     /// file, multi-file extract writes a new module), it emits the
@@ -109,7 +116,10 @@ def tokenize(source):
     return 42
 ```"#;
         let r = parse_response(content).unwrap();
-        assert!(matches!(r.action, EditAction::PatchLines { start: 12, end: 18 }));
+        assert!(matches!(
+            r.action,
+            EditAction::PatchLines { start: 12, end: 18 }
+        ));
     }
 
     #[test]

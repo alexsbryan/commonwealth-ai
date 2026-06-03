@@ -86,8 +86,8 @@ pub struct InstallWithParametersRequest {
 /// `--offline` mode so the import isn't gated on network reach.
 #[tauri::command]
 pub async fn corpus_import_recipe(toml_text: String) -> Result<ImportRecipeResult, String> {
-    let recipe = Recipe::from_toml(&toml_text)
-        .map_err(|e| format!("recipe TOML parse failed: {e}"))?;
+    let recipe =
+        Recipe::from_toml(&toml_text).map_err(|e| format!("recipe TOML parse failed: {e}"))?;
     let corpus_id = recipe.corpus.id.clone();
     if corpus_id.is_empty() {
         return Err("recipe `[corpus] id` must not be empty".into());
@@ -130,8 +130,7 @@ pub async fn corpus_import_recipe(toml_text: String) -> Result<ImportRecipeResul
     let part = recipe_path.with_extension("toml.part");
     std::fs::write(&part, toml_text.as_bytes())
         .map_err(|e| format!("failed to stage recipe at {}: {e}", part.display()))?;
-    std::fs::rename(&part, &recipe_path)
-        .map_err(|e| format!("failed to commit recipe: {e}"))?;
+    std::fs::rename(&part, &recipe_path).map_err(|e| format!("failed to commit recipe: {e}"))?;
 
     upsert_local_registry(&local_root, &recipe, toml_text.as_bytes())?;
 
@@ -253,9 +252,7 @@ fn toml_to_json(v: &toml::Value) -> serde_json::Value {
         toml::Value::Integer(i) => serde_json::json!(*i),
         toml::Value::Float(f) => serde_json::json!(*f),
         toml::Value::Boolean(b) => serde_json::Value::Bool(*b),
-        toml::Value::Array(arr) => {
-            serde_json::Value::Array(arr.iter().map(toml_to_json).collect())
-        }
+        toml::Value::Array(arr) => serde_json::Value::Array(arr.iter().map(toml_to_json).collect()),
         toml::Value::Table(table) => {
             let mut map = serde_json::Map::new();
             for (k, vv) in table {
@@ -331,20 +328,17 @@ fn upsert_local_registry(
         catalog_status: None,
     });
     snapshot.generated_at = rfc3339_now();
-    let serialized = toml::to_string_pretty(&snapshot)
-        .map_err(|e| format!("serialize local registry: {e}"))?;
+    let serialized =
+        toml::to_string_pretty(&snapshot).map_err(|e| format!("serialize local registry: {e}"))?;
     let part = registry_path.with_extension("toml.part");
     std::fs::write(&part, serialized.as_bytes())
         .map_err(|e| format!("write local registry: {e}"))?;
-    std::fs::rename(&part, &registry_path)
-        .map_err(|e| format!("commit local registry: {e}"))?;
+    std::fs::rename(&part, &registry_path).map_err(|e| format!("commit local registry: {e}"))?;
     Ok(())
 }
 
 fn rfc3339_now() -> String {
-    chrono::Utc::now()
-        .format("%Y-%m-%dT%H:%M:%SZ")
-        .to_string()
+    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
 #[cfg(test)]
@@ -366,9 +360,6 @@ mod tests {
             toml::Value::String("MSFT".into()),
         ]);
         let json = toml_to_json(&v);
-        assert_eq!(
-            json,
-            serde_json::json!(["NVDA", "MSFT"]),
-        );
+        assert_eq!(json, serde_json::json!(["NVDA", "MSFT"]),);
     }
 }

@@ -214,9 +214,7 @@ impl Judge for FastInferenceJudge {
         // Plain "Assertion: …\n\nText: …" mirrors the production
         // distiller's classifier shape and keeps the model focused
         // on the task.
-        let user_msg = format!(
-            "Assertion: {assertion}\n\nText:\n{subject}"
-        );
+        let user_msg = format!("Assertion: {assertion}\n\nText:\n{subject}");
 
         // Classifier settings, restored to the deterministic profile
         // the Judge trait's contract promises ("temperature pinned at
@@ -464,11 +462,7 @@ trailing junk"#;
 
     #[async_trait]
     impl Judge for FixedVerdictJudge {
-        async fn judge(
-            &self,
-            _assertion: &str,
-            _subject: &str,
-        ) -> Result<Verdict, String> {
+        async fn judge(&self, _assertion: &str, _subject: &str) -> Result<Verdict, String> {
             Ok(self.verdict.clone())
         }
     }
@@ -481,11 +475,7 @@ trailing junk"#;
 
     #[async_trait]
     impl Judge for ScriptedJudge {
-        async fn judge(
-            &self,
-            assertion: &str,
-            _subject: &str,
-        ) -> Result<Verdict, String> {
+        async fn judge(&self, assertion: &str, _subject: &str) -> Result<Verdict, String> {
             for (key, passes, rationale) in &self.script {
                 if assertion.contains(key) {
                     return Ok(Verdict {

@@ -57,8 +57,13 @@ fn main() {
     println!("bench_decode_batch: model={}", args.model.display());
     println!(
         "config: K={} prompt_tokens~={} gen_tokens={} backend={:?} threads={} n_ubatch={} iters={}",
-        args.k, args.prompt_tokens, args.gen_tokens,
-        args.backend, args.threads, args.n_ubatch, args.iters
+        args.k,
+        args.prompt_tokens,
+        args.gen_tokens,
+        args.backend,
+        args.threads,
+        args.n_ubatch,
+        args.iters
     );
     println!("sweep (constant total_ctx={}):", args.total_ctx);
     for cfg in &args.sweep {
@@ -92,8 +97,7 @@ fn main() {
     };
     let model_params = LlamaModelParams::default().with_n_gpu_layers(gpu_layers);
     let model = Arc::new(
-        LlamaModel::load_from_file(&backend, &args.model, &model_params)
-            .expect("load model"),
+        LlamaModel::load_from_file(&backend, &args.model, &model_params).expect("load model"),
     );
     println!(
         "model loaded: layers={} size_mb={}",
@@ -109,9 +113,7 @@ fn main() {
 
     println!(
         "{:>6}  {:>10}  {:>4}  {:>11}  {:>11}  {:>11}  {:>13}  {:>13}",
-        "n_seq", "ctx_perseq", "it",
-        "prefill_ms", "decode_ms", "wall_ms",
-        "calls/s", "total_tok/s"
+        "n_seq", "ctx_perseq", "it", "prefill_ms", "decode_ms", "wall_ms", "calls/s", "total_tok/s"
     );
 
     for cfg in &args.sweep {
@@ -129,8 +131,7 @@ fn main() {
             .with_n_threads_batch(args.threads as i32)
             .with_offload_kqv(offload_kqv);
         let mut ctx = unsafe {
-            let model_ref: &'static LlamaModel =
-                &*(Arc::as_ptr(&model) as *const LlamaModel);
+            let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model) as *const LlamaModel);
             model_ref
                 .new_context(&backend, ctx_params)
                 .expect("new_context")
@@ -161,9 +162,14 @@ fn main() {
             let tok_per_s = total_tok as f64 / secs;
             println!(
                 "{:>6}  {:>10}  {:>4}  {:>11}  {:>11}  {:>11}  {:>13.2}  {:>13.1}",
-                cfg.n_seq, cfg.n_ctx_per_seq, it,
-                r.prefill_ms, r.decode_ms, r.wall_ms,
-                calls_per_s, tok_per_s
+                cfg.n_seq,
+                cfg.n_ctx_per_seq,
+                it,
+                r.prefill_ms,
+                r.decode_ms,
+                r.wall_ms,
+                calls_per_s,
+                tok_per_s
             );
         }
         println!();

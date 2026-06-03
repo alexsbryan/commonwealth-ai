@@ -37,14 +37,22 @@ failed regulatory attempts to control the cartel.
     for m in &mentions {
         eprintln!(
             "  {:14} | {:18} | {:.1}% | [{}..{}]",
-            m.label, m.text, m.score * 100.0, m.char_start, m.char_end
+            m.label,
+            m.text,
+            m.score * 100.0,
+            m.char_start,
+            m.char_end
         );
     }
 
     // Assertion checks: must NOT tag "user" or "assistant" as
     // Person (role markers stripped); MUST find Swift + Jonathan
     // Swift + Volcker Rule + Glass-Steagall + Modest Proposal.
-    let has = |needle: &str| mentions.iter().any(|m| m.text.to_lowercase().contains(needle));
+    let has = |needle: &str| {
+        mentions
+            .iter()
+            .any(|m| m.text.to_lowercase().contains(needle))
+    };
     let none = |needle: &str| !mentions.iter().any(|m| m.text.to_lowercase() == needle);
     eprintln!();
     eprintln!("Sanity checks:");

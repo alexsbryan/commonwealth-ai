@@ -53,8 +53,11 @@ pub enum Articulation {
 }
 
 impl Articulation {
-    pub const ALL: [Articulation; 3] =
-        [Articulation::Inventory, Articulation::Argument, Articulation::Trace];
+    pub const ALL: [Articulation; 3] = [
+        Articulation::Inventory,
+        Articulation::Argument,
+        Articulation::Trace,
+    ];
 
     /// Lowercase string form for metadata keys / prompt headers.
     pub fn as_str(&self) -> &'static str {
@@ -141,7 +144,11 @@ impl ArticulationVector {
     /// the meta-atlas builder's anomaly bucket).
     pub fn balanced() -> Self {
         let third = 1.0 / 3.0;
-        Self { inventory: third, argument: third, trace: third }
+        Self {
+            inventory: third,
+            argument: third,
+            trace: third,
+        }
     }
 
     /// Dominant axis = the component with the largest weight. Ties
@@ -260,9 +267,7 @@ pub fn derive_stability(
         );
     }
     let (stability, acquire_label) = match acquire {
-        AcquirerConfig::BulkDownload { .. } => {
-            (Stability::Frozen, "acquire=bulk_download")
-        }
+        AcquirerConfig::BulkDownload { .. } => (Stability::Frozen, "acquire=bulk_download"),
         AcquirerConfig::HuggingFaceDataset { .. } => {
             (Stability::Frozen, "acquire=huggingface_dataset")
         }
@@ -309,20 +314,14 @@ pub fn timestamp_now() -> u64 {
 pub fn derive_stability_from_info(info: &crate::types::IndexInfo) -> (Stability, String) {
     if let Some(parent) = info.parent_corpus_id.as_deref() {
         if parent.contains("newsworthy") {
-            return (
-                Stability::Rolling,
-                format!("parent_corpus_id={parent}"),
-            );
+            return (Stability::Rolling, format!("parent_corpus_id={parent}"));
         }
     }
     if info.corpus_id.starts_with("conversation")
         || info.corpus_id.contains("history")
         || info.corpus_id.contains("codex-session")
     {
-        return (
-            Stability::Rolling,
-            format!("corpus_id={}", info.corpus_id),
-        );
+        return (Stability::Rolling, format!("corpus_id={}", info.corpus_id));
     }
     // Watched-folder corpora: ids stamped by the watcher tooling
     // (`watched-<hex>`, `folder-<hex>`). Live local-file content; the
@@ -334,12 +333,8 @@ pub fn derive_stability_from_info(info: &crate::types::IndexInfo) -> (Stability,
         );
     }
     match info.kind {
-        crate::types::CorpusKind::Catalog => {
-            (Stability::Frozen, "kind=catalog".to_string())
-        }
-        crate::types::CorpusKind::Code => {
-            (Stability::Versioned, "kind=code".to_string())
-        }
+        crate::types::CorpusKind::Catalog => (Stability::Frozen, "kind=catalog".to_string()),
+        crate::types::CorpusKind::Code => (Stability::Versioned, "kind=code".to_string()),
         crate::types::CorpusKind::Knowledge => {
             if info.update_manifest_url.is_some() {
                 (
@@ -453,7 +448,9 @@ mod tests {
         }
 
         fn local() -> AcquirerConfig {
-            AcquirerConfig::LocalFile { path: "/tmp/x".into() }
+            AcquirerConfig::LocalFile {
+                path: "/tmp/x".into(),
+            }
         }
 
         fn http_api() -> AcquirerConfig {

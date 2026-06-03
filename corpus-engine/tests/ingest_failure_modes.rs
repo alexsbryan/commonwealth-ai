@@ -38,11 +38,8 @@ fn make_tiny_parquet(path: &Path) {
         "First entry with enough text to make a chunk.",
         "Second entry with enough text to make a chunk.",
     ]);
-    let batch = RecordBatch::try_new(
-        schema.clone(),
-        vec![Arc::new(titles), Arc::new(texts)],
-    )
-    .unwrap();
+    let batch =
+        RecordBatch::try_new(schema.clone(), vec![Arc::new(titles), Arc::new(texts)]).unwrap();
     let file = std::fs::File::create(path).unwrap();
     let mut writer = ArrowWriter::try_new(file, schema, None).unwrap();
     writer.write(&batch).unwrap();
@@ -56,22 +53,15 @@ fn make_empty_parquet(path: &Path) {
     ]));
     let titles: StringArray = StringArray::from(Vec::<&str>::new());
     let texts: StringArray = StringArray::from(Vec::<&str>::new());
-    let batch = RecordBatch::try_new(
-        schema.clone(),
-        vec![Arc::new(titles), Arc::new(texts)],
-    )
-    .unwrap();
+    let batch =
+        RecordBatch::try_new(schema.clone(), vec![Arc::new(titles), Arc::new(texts)]).unwrap();
     let file = std::fs::File::create(path).unwrap();
     let mut writer = ArrowWriter::try_new(file, schema, None).unwrap();
     writer.write(&batch).unwrap();
     writer.close().unwrap();
 }
 
-fn write_recipe(
-    recipes_dir: &Path,
-    parquet_path: &Path,
-    embedding_dimensions: usize,
-) -> PathBuf {
+fn write_recipe(recipes_dir: &Path, parquet_path: &Path, embedding_dimensions: usize) -> PathBuf {
     let recipe_path = recipes_dir.join("test_corpus.toml");
     let parquet_str = parquet_path.to_string_lossy();
     let toml = format!(
@@ -162,11 +152,7 @@ async fn ingest_fails_fast_when_embed_function_is_unavailable() {
 
     let recipe_path = write_recipe(&recipes_dir, &parquet_path, 8);
 
-    let engine = build_engine(
-        always_failing_embed_fn(),
-        recipes_dir,
-        indexes_dir.clone(),
-    );
+    let engine = build_engine(always_failing_embed_fn(), recipes_dir, indexes_dir.clone());
 
     let result = engine
         .ingest(&CorpusSpec::RecipePath(recipe_path), None)
@@ -213,11 +199,7 @@ async fn ingest_adapts_to_actual_embedding_dimensions() {
     // Recipe says 8-dim but the embedder returns 4 — engine should adapt.
     let recipe_path = write_recipe(&recipes_dir, &parquet_path, 8);
 
-    let engine = build_engine(
-        wrong_dim_embed_fn(),
-        recipes_dir,
-        indexes_dir.clone(),
-    );
+    let engine = build_engine(wrong_dim_embed_fn(), recipes_dir, indexes_dir.clone());
 
     let result = engine
         .ingest(&CorpusSpec::RecipePath(recipe_path), None)
@@ -256,8 +238,7 @@ async fn ingest_cleans_up_partial_index_when_pipeline_fails_midway() {
         .expect_err("ingest should fail when embed errors mid-loop");
     let msg = err.to_string();
     assert!(
-        msg.contains("Simulated mid-pipeline failure")
-            || msg.contains("Embedding"),
+        msg.contains("Simulated mid-pipeline failure") || msg.contains("Embedding"),
         "error should describe the mid-pipeline failure, got: {msg}"
     );
 
@@ -292,8 +273,7 @@ async fn ingest_fails_when_no_chunks_are_produced() {
     let recipe_path = write_recipe(&recipes_dir, &parquet_path, 8);
 
     // A working embedder — the failure here is upstream of embedding.
-    let embed_fn: EmbedFn =
-        Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.1_f32; 8]) }));
+    let embed_fn: EmbedFn = Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.1_f32; 8]) }));
     let engine = build_engine(embed_fn, recipes_dir, indexes_dir.clone());
 
     let err = engine
@@ -338,8 +318,7 @@ async fn reinstalling_after_failure_works() {
     assert!(!indexes_dir.join("test_corpus").exists());
 
     // Second attempt: working embedder, same recipe.
-    let working_embed: EmbedFn =
-        Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.1_f32; 8]) }));
+    let working_embed: EmbedFn = Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.1_f32; 8]) }));
     let engine_good = build_engine(working_embed, recipes_dir, indexes_dir.clone());
     let result = engine_good
         .ingest(&CorpusSpec::RecipePath(recipe_path), None)

@@ -271,7 +271,9 @@ mod tests {
     #[test]
     fn empty_text_yields_no_chunks() {
         assert!(PortalEventBulletChunker::default().chunk("").is_empty());
-        assert!(PortalEventBulletChunker::default().chunk("\n\n  \n").is_empty());
+        assert!(PortalEventBulletChunker::default()
+            .chunk("\n\n  \n")
+            .is_empty());
     }
 
     #[test]
@@ -316,7 +318,8 @@ mod tests {
 
     #[test]
     fn dedupes_repeated_targets() {
-        let links = extract_bullet_links("[[Russia]] and [[Russia]] again [[Russia|Russian state]]");
+        let links =
+            extract_bullet_links("[[Russia]] and [[Russia]] again [[Russia|Russian state]]");
         assert_eq!(links, vec!["Russia".to_string()]);
     }
 

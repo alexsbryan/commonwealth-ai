@@ -66,10 +66,10 @@ fn load_phase1(path: &Path) -> Result<Phase1Output, String> {
 
 #[derive(Debug, Default)]
 struct Phase1Diff {
-    only_left: Vec<String>,           // chapter ids present in a, missing in b
-    only_right: Vec<String>,          // chapter ids present in b, missing in a
-    changed: Vec<ChangedChapter>,     // chapters present in both but diverge
-    unchanged: Vec<String>,           // identical
+    only_left: Vec<String>,       // chapter ids present in a, missing in b
+    only_right: Vec<String>,      // chapter ids present in b, missing in a
+    changed: Vec<ChangedChapter>, // chapters present in both but diverge
+    unchanged: Vec<String>,       // identical
 }
 
 #[derive(Debug)]
@@ -102,8 +102,7 @@ fn diff_phase1(a: &Phase1Output, b: &Phase1Output) -> Phase1Diff {
                     ae.questions.iter().map(|s| s.as_str()).collect();
                 let b_qs: std::collections::BTreeSet<&str> =
                     be.questions.iter().map(|s| s.as_str()).collect();
-                let added: Vec<String> =
-                    b_qs.difference(&a_qs).map(|s| (*s).to_string()).collect();
+                let added: Vec<String> = b_qs.difference(&a_qs).map(|s| (*s).to_string()).collect();
                 let removed: Vec<String> =
                     a_qs.difference(&b_qs).map(|s| (*s).to_string()).collect();
                 let reveals_changed = ae.reveals != be.reveals;
@@ -114,11 +113,7 @@ fn diff_phase1(a: &Phase1Output, b: &Phase1Output) -> Phase1Diff {
                         be.thematic_carriers.iter().map(|s| s.as_str()).collect();
                     a_c != b_c
                 };
-                if added.is_empty()
-                    && removed.is_empty()
-                    && !reveals_changed
-                    && !carriers_changed
-                {
+                if added.is_empty() && removed.is_empty() && !reveals_changed && !carriers_changed {
                     out.unchanged.push((*id).to_string());
                 } else {
                     out.changed.push(ChangedChapter {

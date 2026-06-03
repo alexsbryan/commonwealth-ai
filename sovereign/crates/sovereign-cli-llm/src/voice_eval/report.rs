@@ -110,11 +110,7 @@ impl VoiceEvalRun {
     /// Stamp the run with the chat / judge model ids. Optional —
     /// the dry-run (`--canned-response`) path leaves both `None`
     /// since no inference happened.
-    pub fn with_models(
-        mut self,
-        chat_model: Option<String>,
-        judge_model: Option<String>,
-    ) -> Self {
+    pub fn with_models(mut self, chat_model: Option<String>, judge_model: Option<String>) -> Self {
         self.chat_model = chat_model;
         self.judge_model = judge_model;
         self
@@ -148,11 +144,7 @@ impl VoiceEvalRun {
         }
 
         for probe in &result.probes {
-            let entry = self
-                .aggregate
-                .by_probe
-                .entry(probe.clone())
-                .or_default();
+            let entry = self.aggregate.by_probe.entry(probe.clone()).or_default();
             entry.total += 1;
             if result.passed {
                 entry.passed += 1;
@@ -243,9 +235,7 @@ pub fn print_text_report(run: &VoiceEvalRun) {
         if !r.question_density.passed && r.question_density.enabled {
             println!(
                 "      question density: {} (min {:?}, max {:?})",
-                r.question_density.question_count,
-                r.question_density.min,
-                r.question_density.max
+                r.question_density.question_count, r.question_density.min, r.question_density.max
             );
         }
         if !r.banned_phrases.passed {
@@ -304,15 +294,19 @@ pub fn print_text_report(run: &VoiceEvalRun) {
         let stats = LatencyStats::compute(&runtimes);
         println!();
         println!("Latency (runtime turn):");
-        println!("  median {:>5} ms   p95 {:>5} ms   max {:>5} ms   n={}",
-            stats.median, stats.p95, stats.max, stats.n);
+        println!(
+            "  median {:>5} ms   p95 {:>5} ms   max {:>5} ms   n={}",
+            stats.median, stats.p95, stats.max, stats.n
+        );
     }
     let judges: Vec<u64> = run.judge_ms.iter().filter_map(|m| *m).collect();
     if !judges.is_empty() {
         let stats = LatencyStats::compute(&judges);
         println!("Latency (judge):");
-        println!("  median {:>5} ms   p95 {:>5} ms   max {:>5} ms   n={}",
-            stats.median, stats.p95, stats.max, stats.n);
+        println!(
+            "  median {:>5} ms   p95 {:>5} ms   max {:>5} ms   n={}",
+            stats.median, stats.p95, stats.max, stats.n
+        );
     }
 
     // Iter5: per-stage waterfall. Median + max across all witness-
@@ -330,7 +324,11 @@ pub fn print_text_report(run: &VoiceEvalRun) {
         println!("Per-stage latency (witness path, n={}):", stages.len());
         let stage_stat = |get: fn(&sovereign_core::types::RuntimeMetrics) -> Option<u64>| {
             let xs: Vec<u64> = stages.iter().filter_map(|m| get(m)).collect();
-            if xs.is_empty() { None } else { Some(LatencyStats::compute(&xs)) }
+            if xs.is_empty() {
+                None
+            } else {
+                Some(LatencyStats::compute(&xs))
+            }
         };
         let print_stage = |name: &str, s: Option<LatencyStats>| {
             if let Some(s) = s {
@@ -340,14 +338,14 @@ pub fn print_text_report(run: &VoiceEvalRun) {
                 );
             }
         };
-        print_stage("routing",        stage_stat(|m| m.routing_ms));
-        print_stage("memory_recall",  stage_stat(|m| m.memory_recall_ms));
+        print_stage("routing", stage_stat(|m| m.routing_ms));
+        print_stage("memory_recall", stage_stat(|m| m.memory_recall_ms));
         print_stage("working_memory", stage_stat(|m| m.working_memory_ms));
-        print_stage("topic_context",  stage_stat(|m| m.topic_context_ms));
-        print_stage("pass_a",         stage_stat(|m| m.pass_a_ms));
-        print_stage("tensions",       stage_stat(|m| m.tensions_ms));
-        print_stage("synthesis",      stage_stat(|m| m.synthesis_ms));
-        print_stage("total_turn",     stage_stat(|m| m.total_turn_ms));
+        print_stage("topic_context", stage_stat(|m| m.topic_context_ms));
+        print_stage("pass_a", stage_stat(|m| m.pass_a_ms));
+        print_stage("tensions", stage_stat(|m| m.tensions_ms));
+        print_stage("synthesis", stage_stat(|m| m.synthesis_ms));
+        print_stage("total_turn", stage_stat(|m| m.total_turn_ms));
 
         // Iter6: routing internals breakdown — when the LLM Pass 1
         // fired vs. when a pre-check short-circuited it. The 14% /
@@ -362,14 +360,16 @@ pub fn print_text_report(run: &VoiceEvalRun) {
             let llm_skipped = routings.len() - llm_used;
             println!();
             println!("Routing internals (n={}):", routings.len());
-            println!(
-                "  LLM Pass 1 fired: {llm_used} | precheck short-circuited: {llm_skipped}"
-            );
+            println!("  LLM Pass 1 fired: {llm_used} | precheck short-circuited: {llm_skipped}");
             let precheck_xs: Vec<u64> = routings.iter().map(|t| t.precheck_ms).collect();
-            let llm_xs: Vec<u64> =
-                routings.iter().filter_map(|t| if t.used_llm { Some(t.llm_ms) } else { None }).collect();
-            let parse_xs: Vec<u64> =
-                routings.iter().filter_map(|t| if t.used_llm { Some(t.parse_ms) } else { None }).collect();
+            let llm_xs: Vec<u64> = routings
+                .iter()
+                .filter_map(|t| if t.used_llm { Some(t.llm_ms) } else { None })
+                .collect();
+            let parse_xs: Vec<u64> = routings
+                .iter()
+                .filter_map(|t| if t.used_llm { Some(t.parse_ms) } else { None })
+                .collect();
             let s = LatencyStats::compute(&precheck_xs);
             println!(
                 "  precheck_ms      median {:>5} ms   max {:>5} ms   n={}",
@@ -429,19 +429,14 @@ pub struct AxisMeans {
 
 impl AxisMeans {
     pub fn from_run(run: &VoiceEvalRun) -> Option<Self> {
-        let scored: Vec<&JudgeScore> = run
-            .judge_scores
-            .iter()
-            .filter_map(|s| s.as_ref())
-            .collect();
+        let scored: Vec<&JudgeScore> = run.judge_scores.iter().filter_map(|s| s.as_ref()).collect();
         if scored.is_empty() {
             return None;
         }
         let n = scored.len();
         let denom = n as f64;
-        let mean = |get: fn(&JudgeScore) -> u8| {
-            scored.iter().map(|s| get(s) as f64).sum::<f64>() / denom
-        };
+        let mean =
+            |get: fn(&JudgeScore) -> u8| scored.iter().map(|s| get(s) as f64).sum::<f64>() / denom;
         Some(Self {
             n,
             right_attention: mean(|s| s.right_attention),
@@ -462,9 +457,15 @@ impl AxisMeans {
         println!("{indent}right_calibration    {:.2}", self.right_calibration);
         println!("{indent}right_question       {:.2}", self.right_question);
         println!("{indent}right_silence        {:.2}", self.right_silence);
-        println!("{indent}right_disagreement   {:.2}", self.right_disagreement);
+        println!(
+            "{indent}right_disagreement   {:.2}",
+            self.right_disagreement
+        );
         println!("{indent}right_edge           {:.2}", self.right_edge);
-        println!("{indent}right_self_honesty   {:.2}", self.right_self_honesty);
+        println!(
+            "{indent}right_self_honesty   {:.2}",
+            self.right_self_honesty
+        );
         println!(
             "{indent}avoid_list_penalty   {:.2}  (lower is better)",
             self.avoid_list_penalty
@@ -571,10 +572,17 @@ impl LatencyStats {
         // terms. For n=12 that's idx 11 → max value, which is
         // honest given the small sample size; with more samples
         // the percentile separates from the max naturally.
-        let idx = ((n as f64 * 0.95).ceil() as usize).saturating_sub(1).min(n - 1);
+        let idx = ((n as f64 * 0.95).ceil() as usize)
+            .saturating_sub(1)
+            .min(n - 1);
         let p95 = sorted[idx];
         let max = *sorted.last().unwrap();
-        Self { median, p95, max, n }
+        Self {
+            median,
+            p95,
+            max,
+            n,
+        }
     }
 }
 

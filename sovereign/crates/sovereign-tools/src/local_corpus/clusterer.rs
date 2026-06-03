@@ -168,8 +168,7 @@ impl Clusterer {
         on_progress(LocalCorpusProgress::Clustering {
             stage: ClusterStage::EmbeddingMatrix,
         });
-        let bridge_cb: Arc<dyn Fn(LocalCorpusProgress) + Send + Sync> =
-            Arc::clone(&on_progress);
+        let bridge_cb: Arc<dyn Fn(LocalCorpusProgress) + Send + Sync> = Arc::clone(&on_progress);
         let stage_cb = move |p: EnrichmentProgress| {
             if let EnrichmentProgress::ClusteringStep { step, .. } = &p {
                 match *step {
@@ -213,8 +212,7 @@ impl Clusterer {
                         id: cluster.id,
                         tag_path: format!("uncategorized/cluster-{}", cluster.id),
                         display_name: format!("Cluster {}", cluster.id),
-                        description: "Label could not be generated."
-                            .into(),
+                        description: "Label could not be generated.".into(),
                         note_count: cluster.size,
                         centroid_chunk_ids: cluster.central_chunks.clone(),
                     });
@@ -236,8 +234,7 @@ impl Clusterer {
         // ── 4: per-chunk confidences (centroid cosine) ───────────────
         // Fetch all chunk embeddings once and compute against every
         // cluster centroid. For each chunk, pick the best match.
-        let (confidences, noise_best) =
-            compute_confidences(&index, &cluster_result).await?;
+        let (confidences, noise_best) = compute_confidences(&index, &cluster_result).await?;
 
         let noise_chunks: Vec<u64> = cluster_result
             .assignments
@@ -466,7 +463,10 @@ mod tests {
 
     #[test]
     fn normalise_basic() {
-        assert_eq!(normalise_tag_component("Philosophy Of Mind"), "philosophy-of-mind");
+        assert_eq!(
+            normalise_tag_component("Philosophy Of Mind"),
+            "philosophy-of-mind"
+        );
         assert_eq!(normalise_tag_component("writing!!"), "writing");
         assert_eq!(normalise_tag_component("  spaces  "), "spaces");
     }
@@ -551,6 +551,9 @@ mod tests {
         assert_eq!(c.min_cluster_size, 5);
         assert!((c.min_confidence - 0.4).abs() < 1e-6);
         assert!((c.multi_tag_threshold - 0.6).abs() < 1e-6);
-        assert!(matches!(c.multi_cluster_strategy, MultiClusterStrategy::Dominant));
+        assert!(matches!(
+            c.multi_cluster_strategy,
+            MultiClusterStrategy::Dominant
+        ));
     }
 }

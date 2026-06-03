@@ -172,7 +172,10 @@ impl FileAtlasReader {
             found = detail.is_some(),
             related_count = detail.as_ref().map(|d| d.related.len()).unwrap_or(0),
             cross_corpus_count = detail.as_ref().map(|d| d.cross_corpus.len()).unwrap_or(0),
-            evidence_count = detail.as_ref().map(|d| d.evidence_excerpts.len()).unwrap_or(0),
+            evidence_count = detail
+                .as_ref()
+                .map(|d| d.evidence_excerpts.len())
+                .unwrap_or(0),
             "atlas_view:get_atom_detail",
         );
         Ok(detail)
@@ -477,7 +480,11 @@ fn display_name_of(atom: &AtomEnvelope) -> String {
         AtomEnvelope::Opposition(a) => a.canonical_label.clone(),
         AtomEnvelope::Asset(a) => {
             if a.original_filename.is_empty() {
-                format!("{} asset {}", a.asset_kind, &a.sha256[..12.min(a.sha256.len())])
+                format!(
+                    "{} asset {}",
+                    a.asset_kind,
+                    &a.sha256[..12.min(a.sha256.len())]
+                )
             } else {
                 a.original_filename.clone()
             }
@@ -528,9 +535,9 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![],
-                    provenance: Default::default(),
-                    concept_kind: None,
-})
+            provenance: Default::default(),
+            concept_kind: None,
+        })
     }
 
     fn claim_with_evidence(id: usize, content: &str, chunks: &[&str]) -> AtomEnvelope {
@@ -549,10 +556,10 @@ mod tests {
             confidence: Some(0.8),
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-                    claim_kind: None,
+            claim_kind: None,
             concession_outcome: None,
             evidence_kind: None,
-})
+        })
     }
 
     fn write_atoms(atlas_dir: &Path, atoms: Vec<AtomEnvelope>) {
@@ -599,8 +606,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_atom_detail_returns_entity_with_full_atom_envelope() {
-        let (_tmp, reader, _) =
-            make_reader_with_atoms(vec![entity(1, "Knowledge", 0.9)]);
+        let (_tmp, reader, _) = make_reader_with_atoms(vec![entity(1, "Knowledge", 0.9)]);
         let detail = reader
             .get_atom_detail("wiki", "entity-0001")
             .await
@@ -625,19 +631,14 @@ mod tests {
 
     #[tokio::test]
     async fn get_atom_detail_returns_none_for_unknown_atom() {
-        let (_tmp, reader, _) =
-            make_reader_with_atoms(vec![entity(1, "Knowledge", 0.9)]);
-        let detail = reader
-            .get_atom_detail("wiki", "entity-9999")
-            .await
-            .unwrap();
+        let (_tmp, reader, _) = make_reader_with_atoms(vec![entity(1, "Knowledge", 0.9)]);
+        let detail = reader.get_atom_detail("wiki", "entity-9999").await.unwrap();
         assert!(detail.is_none());
     }
 
     #[tokio::test]
     async fn get_atom_detail_errors_for_unknown_corpus() {
-        let (_tmp, reader, _) =
-            make_reader_with_atoms(vec![entity(1, "Knowledge", 0.9)]);
+        let (_tmp, reader, _) = make_reader_with_atoms(vec![entity(1, "Knowledge", 0.9)]);
         let err = reader
             .get_atom_detail("nonexistent", "entity-0001")
             .await
@@ -668,8 +669,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_atom_detail_evidence_for_entity_uses_first_appearance() {
-        let (_tmp, reader, _) =
-            make_reader_with_atoms(vec![entity(1, "Knowledge", 0.9)]);
+        let (_tmp, reader, _) = make_reader_with_atoms(vec![entity(1, "Knowledge", 0.9)]);
         let detail = reader
             .get_atom_detail("wiki", "entity-0001")
             .await
@@ -752,8 +752,7 @@ mod tests {
     async fn get_atom_detail_handles_missing_edges_file() {
         // No edges.json on disk — detail still works, related list
         // is just empty. (Fresh corpora before any edge extraction.)
-        let (_tmp, reader, _) =
-            make_reader_with_atoms(vec![entity(1, "Knowledge", 0.9)]);
+        let (_tmp, reader, _) = make_reader_with_atoms(vec![entity(1, "Knowledge", 0.9)]);
         let detail = reader
             .get_atom_detail("wiki", "entity-0001")
             .await
@@ -790,10 +789,10 @@ mod tests {
             confidence: None,
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-                    claim_kind: None,
+            claim_kind: None,
             concession_outcome: None,
             evidence_kind: None,
-});
+        });
         // Drop unused Initiative-style fields on the entity so the
         // serde round-trip stays clean.
         if let AtomEnvelope::Entity(ref mut e) = hume {
@@ -834,10 +833,10 @@ mod tests {
             confidence: None,
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-                    claim_kind: None,
+            claim_kind: None,
             concession_outcome: None,
             evidence_kind: None,
-});
+        });
         write_atoms(&atlas_dir, vec![dangling_claim]);
         let reader = FileAtlasReader::new(tmp.path().to_path_buf());
         let detail = reader
@@ -890,7 +889,10 @@ mod tests {
             .unwrap();
         assert_eq!(detail.cross_corpus.len(), 1);
         assert_eq!(detail.cross_corpus[0].peer_corpus_id, "sep-epistemology");
-        assert_eq!(detail.cross_corpus[0].peer_canonical_name, "Knowledge (SEP)");
+        assert_eq!(
+            detail.cross_corpus[0].peer_canonical_name,
+            "Knowledge (SEP)"
+        );
         assert_eq!(detail.cross_corpus[0].edge_type, EdgeType::Grounding);
         assert_eq!(detail.cross_corpus[0].signal, "canonical_exact");
     }

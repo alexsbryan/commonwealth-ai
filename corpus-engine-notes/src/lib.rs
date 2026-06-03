@@ -44,8 +44,8 @@ pub mod project_docs;
 
 pub use error::{Error, Result};
 pub use notes::{
-    BackfillReport, EmbedFn, ExportedNoteEmbedding, ExportedNoteEntity, ExportedNoteRow,
-    GlinerFn, IngestRemoteReport, NotePropagationEvent, NoteRow, NoteScope, NoteSource,
-    NoteStore, PropagationSinkFn, ScopeFilter, ToolCallLogRow,
+    BackfillReport, EmbedFn, ExportedNoteEmbedding, ExportedNoteEntity, ExportedNoteRow, GlinerFn,
+    IngestRemoteReport, NotePropagationEvent, NoteRow, NoteScope, NoteSource, NoteStore,
+    PropagationSinkFn, ScopeFilter, ToolCallLogRow,
 };
 pub use project_docs::{find_markdown_files, DocResult, ProjectDocsStore};

@@ -144,7 +144,9 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
             eprintln!("✗ chat-model probe failed: {msg}");
             eprintln!();
             eprintln!("  Remediation: confirm `sovereign daemon status` is running and");
-            eprintln!("  at least one chat slot is loaded. Try: curl http://localhost:9741/v1/models");
+            eprintln!(
+                "  at least one chat slot is loaded. Try: curl http://localhost:9741/v1/models"
+            );
             return 1;
         }
     };
@@ -161,7 +163,11 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
             warn!(project_id = %project_id, "drift_orchestrator:step_code_index_failed");
             eprintln!("✗ `sovereign code index` failed after retry.");
             eprintln!("  Remediation: re-run manually:");
-            eprintln!("    sovereign code index {} --corpus-id {}", code_path.display(), project_id);
+            eprintln!(
+                "    sovereign code index {} --corpus-id {}",
+                code_path.display(),
+                project_id
+            );
             return 1;
         }
         info!(project_id = %project_id, "drift_orchestrator:step_code_index_done");
@@ -190,7 +196,17 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         // cached after first build; flipping this on requires
         // `rm -rf ~/.sovereign/indexes/<project>-self-atlas/` to
         // force a fresh ingest.
-        if !run_step(&sovereign_bin_str, &["enrich", "ingest", &structural_atlas_id, "--source-corpus", &source_corpus, "--include-functions"]) {
+        if !run_step(
+            &sovereign_bin_str,
+            &[
+                "enrich",
+                "ingest",
+                &structural_atlas_id,
+                "--source-corpus",
+                &source_corpus,
+                "--include-functions",
+            ],
+        ) {
             warn!(atlas_id = %structural_atlas_id, "drift_orchestrator:step_structural_atlas_failed");
             eprintln!("✗ structural atlas ingest failed.");
             eprintln!("  Remediation: try `sovereign enrich ingest {} --source-corpus {} --include-functions` and inspect the error.",
@@ -240,8 +256,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
     // ── Step 4: per-narrative pipeline ───────────────────────
     let mut narrative_atlas_ids: Vec<String> = Vec::new();
     for narrative_path in &parsed.narrative_paths {
-        let nid = basename_id(narrative_path)
-            .unwrap_or_else(|| "narrative".into());
+        let nid = basename_id(narrative_path).unwrap_or_else(|| "narrative".into());
         let nid = format!("{project_id}-{nid}");
         info!(narrative_id = %nid, narrative_path = %narrative_path.display(), "drift_orchestrator:narrative_start");
         println!();
@@ -288,7 +303,18 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
             // the renderer discarded and the LLM cost ~30 min/document.
             // See `pipelines/engineering_atlas.rs` for the schema and
             // eval calibration.
-            if !run_step(&sovereign_bin_str, &["enrich", "init", &nid, "--from-corpus", &nid, "--pipeline", "engineering_atlas"]) {
+            if !run_step(
+                &sovereign_bin_str,
+                &[
+                    "enrich",
+                    "init",
+                    &nid,
+                    "--from-corpus",
+                    &nid,
+                    "--pipeline",
+                    "engineering_atlas",
+                ],
+            ) {
                 warn!(narrative_id = %nid, "drift_orchestrator:narrative_enrich_init_failed");
                 eprintln!("✗ enrich init failed.");
                 return 1;
@@ -307,9 +333,19 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         if !atlas_has_content(&nid) {
             info!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_start");
             println!("    → building narrative atlas (LLM, ~5-30 min)…");
-            let build_status = run_step_capture(&sovereign_bin_str, &[
-                "enrich", "build", &nid, "--full", "--skip", "seed", "--skip", "configure",
-            ]);
+            let build_status = run_step_capture(
+                &sovereign_bin_str,
+                &[
+                    "enrich",
+                    "build",
+                    &nid,
+                    "--full",
+                    "--skip",
+                    "seed",
+                    "--skip",
+                    "configure",
+                ],
+            );
             if !build_status.success {
                 // Two failure modes share the "step `extract` exited"
                 // signature:
@@ -331,16 +367,24 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
                     eprintln!("    sovereign drift detect ...");
                     return 1;
                 }
-                if build_status.stdout_combined.contains("step `extract` exited") {
+                if build_status
+                    .stdout_combined
+                    .contains("step `extract` exited")
+                {
                     info!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_recovery_start");
                     println!("    ⚠ build halted on partial extract — recovering via cluster + name + resolve…");
                     if !run_step(&sovereign_bin_str, &["enrich", "cluster", &nid])
                         || !run_step(&sovereign_bin_str, &["enrich", "name", &nid])
-                        || !run_step(&sovereign_bin_str, &["enrich", "resolve", &nid, "--phase", "all"])
+                        || !run_step(
+                            &sovereign_bin_str,
+                            &["enrich", "resolve", &nid, "--phase", "all"],
+                        )
                     {
                         warn!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_recovery_failed");
                         eprintln!("✗ recovery from partial extract failed.");
-                        eprintln!("  Remediation: `sovereign enrich errors {nid}` for diagnostics.");
+                        eprintln!(
+                            "  Remediation: `sovereign enrich errors {nid}` for diagnostics."
+                        );
                         return 1;
                     }
                     info!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_recovery_done");
@@ -364,7 +408,10 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         if !cross_path.exists() {
             info!(narrative_id = %nid, structural_atlas_id = %structural_atlas_id, "drift_orchestrator:narrative_cross_corpus_start");
             println!("    → matching '{nid}' ↔ '{structural_atlas_id}'…");
-            if !run_step(&sovereign_bin_str, &["enrich", "atlas-cross-corpus", &nid, &structural_atlas_id]) {
+            if !run_step(
+                &sovereign_bin_str,
+                &["enrich", "atlas-cross-corpus", &nid, &structural_atlas_id],
+            ) {
                 warn!(narrative_id = %nid, "drift_orchestrator:narrative_cross_corpus_partial");
                 eprintln!("⚠ cross-corpus match returned non-zero — drift report will continue with whatever edges landed.");
             } else {
@@ -510,7 +557,9 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
                 "⚠ failed to mirror drift report to {}: {e}",
                 canonical_dir.display()
             );
-            eprintln!("   (drift_posture / drift_findings will only see the explicit --output copy)");
+            eprintln!(
+                "   (drift_posture / drift_findings will only see the explicit --output copy)"
+            );
         }
     }
 
@@ -729,10 +778,19 @@ fn ensure_structural_enrich_config(atlas_id: &str) {
 }
 
 fn patch_chat_model_in_config(cfg_path: &Path, chat_model: &str) {
-    let Ok(raw) = std::fs::read_to_string(cfg_path) else { return };
-    let Ok(mut value): Result<serde_json::Value, _> = serde_json::from_str(&raw) else { return };
-    let Some(obj) = value.as_object_mut() else { return };
-    obj.insert("chat_model".into(), serde_json::Value::String(chat_model.to_string()));
+    let Ok(raw) = std::fs::read_to_string(cfg_path) else {
+        return;
+    };
+    let Ok(mut value): Result<serde_json::Value, _> = serde_json::from_str(&raw) else {
+        return;
+    };
+    let Some(obj) = value.as_object_mut() else {
+        return;
+    };
+    obj.insert(
+        "chat_model".into(),
+        serde_json::Value::String(chat_model.to_string()),
+    );
     if let Ok(out) = serde_json::to_string_pretty(&value) {
         let _ = std::fs::write(cfg_path, out);
     }
@@ -888,7 +946,10 @@ fn run_code_index_with_retry(sovereign_bin: &str, code_path: &Path, project_id: 
     let mut attempt: u32 = 0;
     loop {
         attempt += 1;
-        let r = run_step_capture(sovereign_bin, &[args[0], args[1], args[2], args[3], project_id]);
+        let r = run_step_capture(
+            sovereign_bin,
+            &[args[0], args[1], args[2], args[3], project_id],
+        );
         if r.success {
             return true;
         }
@@ -1029,10 +1090,7 @@ fn run_step_capture(bin: &str, args: &[&str]) -> StepResult {
     let _ = h_stdout.join();
     let _ = h_stderr.join();
 
-    let success = child
-        .wait()
-        .map(|s| s.success())
-        .unwrap_or(false);
+    let success = child.wait().map(|s| s.success()).unwrap_or(false);
 
     StepResult {
         success,

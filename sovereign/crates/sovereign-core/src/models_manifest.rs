@@ -566,10 +566,19 @@ analysis = 4
         let m = ModelsManifest::from_toml_str(src).unwrap();
         let nine = m.info_for_file("Qwen3.5-9B.Q4_K_M.gguf").unwrap();
         assert_eq!(nine.size_gb, Some(5.5));
-        assert_eq!(nine.capabilities.get(&Capability::Analysis).copied(), Some(3));
+        assert_eq!(
+            nine.capabilities.get(&Capability::Analysis).copied(),
+            Some(3)
+        );
         let twenty_seven = m.info_for_file("Qwen3.5-27B.Q8_0.gguf").unwrap();
         assert_eq!(twenty_seven.size_gb, Some(16.5));
-        assert_eq!(twenty_seven.capabilities.get(&Capability::Analysis).copied(), Some(4));
+        assert_eq!(
+            twenty_seven
+                .capabilities
+                .get(&Capability::Analysis)
+                .copied(),
+            Some(4)
+        );
     }
 
     #[test]

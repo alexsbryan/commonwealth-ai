@@ -3,9 +3,9 @@
 #[allow(unused_imports)]
 use super::*;
 #[allow(unused_imports)]
-use serde::{Deserialize, Serialize};
-#[allow(unused_imports)]
 use crate::oicp;
+#[allow(unused_imports)]
+use serde::{Deserialize, Serialize};
 
 /// A single (intent, confidence) candidate. The classifier emits one
 /// primary plus up to a few alternatives.
@@ -221,25 +221,17 @@ pub enum NarrationPhase {
     /// `finish_reason` is the OpenAI-style `stop` / `length` /
     /// `cancelled` / `error`, sourced from the typed
     /// `StreamFrame::Finish` introduced in the Phase 1.1 plumbing.
-    DraftingComplete {
-        tokens: u32,
-        finish_reason: String,
-    },
+    DraftingComplete { tokens: u32, finish_reason: String },
     /// Presenter began (Fast slot, voice-shaping pass).
     PresentationStart,
     /// Presenter finished. `judge_score` is the optional
     /// post-presentation voice-judge score (None when register
     /// is Factual or the judge is disabled). Arrives on a
     /// delayed narration frame from the async judge task.
-    PresentationComplete {
-        judge_score: Option<u8>,
-    },
+    PresentationComplete { judge_score: Option<u8> },
     /// Any stage emitted an error. The pipeline records this for
     /// telemetry; user-facing messaging is decided per stage.
-    StageError {
-        stage: String,
-        error: String,
-    },
+    StageError { stage: String, error: String },
 
     // ── Tool-invocation frames (table-stakes "Searching for X…" UX) ──
     //
@@ -492,9 +484,7 @@ pub fn build_next_step_offers(ctx: &OfferContext<'_>) -> Vec<NextStepOffer> {
         offers.push(NextStepOffer {
             label: format!("Tell me about \"{secondary_title}\""),
             description: Some("Drawn from your retrieval".to_string()),
-            follow_up_query: format!(
-                "Tell me what \"{secondary_title}\" says about this."
-            ),
+            follow_up_query: format!("Tell me what \"{secondary_title}\" says about this."),
             session_ref: Some(ctx.session_id.to_string()),
             intent_hint: Some("knowledge_query".to_string()),
         });

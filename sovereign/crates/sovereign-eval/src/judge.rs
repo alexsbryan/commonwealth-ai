@@ -26,7 +26,7 @@
 //! Either way the concatenator caps total bytes at `MAX_SOURCE_BYTES`
 //! and inserts file headers so the judge can attribute citations.
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -112,8 +112,12 @@ pub fn run(daemon_url: &str, inputs: JudgeInputs<'_>) -> Result<JudgeReport> {
 }
 
 fn build_prompt(inputs: &JudgeInputs<'_>) -> String {
-    let arch = inputs.architecture_md.unwrap_or("(no ARCHITECTURE.md provided)");
-    let feature = inputs.feature_spec_md.unwrap_or("(no per-feature spec provided)");
+    let arch = inputs
+        .architecture_md
+        .unwrap_or("(no ARCHITECTURE.md provided)");
+    let feature = inputs
+        .feature_spec_md
+        .unwrap_or("(no per-feature spec provided)");
     format!(
         "{rubric}\n\n\
          === {label} (authoritative contract) ===\n{spec}\n\n\
@@ -136,8 +140,7 @@ fn build_prompt(inputs: &JudgeInputs<'_>) -> String {
     )
 }
 
-const JUDGE_SYSTEM_PROMPT: &str =
-    include_str!("../assets/judge_system_prompt.md");
+const JUDGE_SYSTEM_PROMPT: &str = include_str!("../assets/judge_system_prompt.md");
 
 fn call_chat_completions(
     daemon_url: &str,
@@ -171,7 +174,11 @@ fn call_chat_completions(
         .timeout(std::time::Duration::from_secs(600))
         .build()
         .context("building reqwest client")?;
-    let resp = client.post(&url).json(&body).send().context("POST /v1/chat/completions")?;
+    let resp = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .context("POST /v1/chat/completions")?;
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().unwrap_or_default();
@@ -191,8 +198,7 @@ fn call_chat_completions(
 
 fn parse_report(raw: &str, inputs: &JudgeInputs<'_>) -> Result<JudgeReport> {
     let trimmed = strip_fences(raw);
-    let value: serde_json::Value =
-        serde_json::from_str(&trimmed).context("parsing judge JSON")?;
+    let value: serde_json::Value = serde_json::from_str(&trimmed).context("parsing judge JSON")?;
     let axes_v = value.get("axes").context("missing 'axes'")?;
     let axes: Axes = serde_json::from_value(axes_v.clone()).context("parsing axes")?;
     let total_from_axes = axes.spec_fidelity.score
@@ -373,11 +379,7 @@ pub fn select_files_from_diff(experiment_repo: &Path, baseline_ref: &str) -> Res
     Ok(files)
 }
 
-fn concat_with_headers(
-    base: &Path,
-    files: &[PathBuf],
-    max_bytes: usize,
-) -> (String, Vec<String>) {
+fn concat_with_headers(base: &Path, files: &[PathBuf], max_bytes: usize) -> (String, Vec<String>) {
     let mut buf = String::new();
     let mut included: Vec<String> = Vec::new();
     let mut bytes_used = 0;
@@ -468,8 +470,7 @@ mod tests {
         let b = tmp.path().join("b.rs");
         std::fs::write(&a, "x".repeat(500)).unwrap();
         std::fs::write(&b, "y".repeat(500)).unwrap();
-        let (buf, included) =
-            concat_with_headers(tmp.path(), &[a.clone(), b.clone()], 600);
+        let (buf, included) = concat_with_headers(tmp.path(), &[a.clone(), b.clone()], 600);
         assert!(included.contains(&"a.rs".to_string()));
         assert!(!included.contains(&"b.rs".to_string()));
         assert!(buf.contains("truncated"));

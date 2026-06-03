@@ -20,7 +20,6 @@ pub struct ModelInfo {
     pub quantization: String,
 
     // ── Deployment constraints (used by the adaptive mesh scheduler) ──
-
     /// Minimum unified/VRAM memory required to load this model at all.
     /// Nodes below this threshold are never assigned this model.
     #[serde(default)]

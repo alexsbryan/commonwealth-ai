@@ -65,11 +65,7 @@ impl Registry {
 
     /// Convenience: dispatch a parsed `Primitive`. Errors with
     /// `InvalidArguments` if the registry doesn't recognize it.
-    pub async fn dispatch(
-        &self,
-        ctx: &ExecCtx,
-        prim: &Primitive,
-    ) -> Result<ToolResult, ToolError> {
+    pub async fn dispatch(&self, ctx: &ExecCtx, prim: &Primitive) -> Result<ToolResult, ToolError> {
         let id = prim.kind().id();
         if !self.allows(id) {
             return Err(ToolError::InvalidArguments {

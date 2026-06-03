@@ -16,10 +16,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use corpus_engine_atos::{AtosRunRow, FeatureRow, FeatureState, FeatureStore, MilestoneRow};
 use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
-use corpus_engine_atos::{
-    AtosRunRow, FeatureRow, FeatureState, FeatureStore, MilestoneRow,
-};
 
 use super::helpers;
 use crate::{
@@ -244,7 +242,10 @@ impl AtosOrchestrator for LocalAtosOrchestrator {
         // run. Previous state transitions (provisioned / paused) all
         // flow into active the moment work resumes — easier than
         // asking the CLI to remember.
-        let _ = self.features.set_state(feature_id, FeatureState::Active).await;
+        let _ = self
+            .features
+            .set_state(feature_id, FeatureState::Active)
+            .await;
 
         // Lookup the milestone once here so the returned context
         // carries an ordinal for the CLI to print.
@@ -292,11 +293,7 @@ impl AtosOrchestrator for LocalAtosOrchestrator {
         self.run_shell_command(&feature.stop_condition).await
     }
 
-    async fn render_report(
-        &self,
-        feature_id: &str,
-        section: ReportSection,
-    ) -> Result<String> {
+    async fn render_report(&self, feature_id: &str, section: ReportSection) -> Result<String> {
         let Some(feature) = self.features.get(feature_id).await? else {
             return Err(Error::FeatureNotFound(feature_id.to_string()));
         };
@@ -359,9 +356,13 @@ impl AtosOrchestrator for LocalAtosOrchestrator {
         }
         // Freeze the feature. M3.7 will also write the
         // epistemic-report.md to disk — for M3.1 we just set state.
-        let _ = self.features.set_state(feature_id, FeatureState::Completed).await?;
-        report.epistemic_report_md =
-            self.render_report(feature_id, ReportSection::Epistemic).await?;
+        let _ = self
+            .features
+            .set_state(feature_id, FeatureState::Completed)
+            .await?;
+        report.epistemic_report_md = self
+            .render_report(feature_id, ReportSection::Epistemic)
+            .await?;
         Ok(report)
     }
 
@@ -796,7 +797,12 @@ Add a CLI test.
         let milestones = orc.list_milestones("atos-version-flag").await.unwrap();
         // Close out milestone 1 as passing.
         let ctx = orc
-            .begin_run("atos-version-flag", &milestones[0].id, "claude", RunMode::Normal)
+            .begin_run(
+                "atos-version-flag",
+                &milestones[0].id,
+                "claude",
+                RunMode::Normal,
+            )
             .await
             .unwrap();
         orc.close_run(&ctx.run_id, 0, true, Some("stdout"))
@@ -818,7 +824,12 @@ Add a CLI test.
         let milestones = orc.list_milestones("atos-version-flag").await.unwrap();
         // Close out milestone 1 as FAILED.
         let ctx = orc
-            .begin_run("atos-version-flag", &milestones[0].id, "claude", RunMode::Normal)
+            .begin_run(
+                "atos-version-flag",
+                &milestones[0].id,
+                "claude",
+                RunMode::Normal,
+            )
             .await
             .unwrap();
         orc.close_run(&ctx.run_id, 1, false, Some("failed"))
@@ -943,7 +954,9 @@ Add a CLI test.
             .begin_run("permafrost", &m.id, "claude", RunMode::Normal)
             .await
             .unwrap();
-        orc.close_run(&ctx.run_id, 0, true, Some("ok")).await.unwrap();
+        orc.close_run(&ctx.run_id, 0, true, Some("ok"))
+            .await
+            .unwrap();
 
         // The test runs with CWD = workspace, not the scratch repo.
         // render_and_write_report uses `feature_dir(feature_id)`

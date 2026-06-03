@@ -39,10 +39,7 @@ pub fn resolve_tenant(auth: &AuthState, api_key: &str) -> Option<String> {
 /// Axum middleware that validates API keys.
 /// Extracts the key from `Authorization: Bearer <key>` or `X-API-Key: <key>`.
 /// Sets the tenant_id as a request extension.
-pub async fn auth_middleware(
-    request: Request,
-    next: Next,
-) -> Result<Response, StatusCode> {
+pub async fn auth_middleware(request: Request, next: Next) -> Result<Response, StatusCode> {
     let auth = request
         .extensions()
         .get::<AuthState>()
@@ -52,7 +49,9 @@ pub async fn auth_middleware(
     if !auth.is_enabled() {
         // Auth disabled — use default tenant.
         let mut request = request;
-        request.extensions_mut().insert(TenantId("default".to_string()));
+        request
+            .extensions_mut()
+            .insert(TenantId("default".to_string()));
         return Ok(next.run(request).await);
     }
 

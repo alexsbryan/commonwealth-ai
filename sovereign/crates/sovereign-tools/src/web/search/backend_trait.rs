@@ -31,9 +31,7 @@ use async_trait::async_trait;
 
 use sovereign_core::error::Error;
 
-use super::{
-    search as legacy_dispatch, SearchBackend as LegacyBackend, SearchResult,
-};
+use super::{search as legacy_dispatch, SearchBackend as LegacyBackend, SearchResult};
 
 /// Privacy posture for a search backend. Drives orchestrator-side
 /// filtering: a request with OICP `LocalOnly` privacy must only see
@@ -130,7 +128,9 @@ pub struct WebSearchRegistry {
 
 impl WebSearchRegistry {
     pub fn new() -> Self {
-        Self { by_id: HashMap::new() }
+        Self {
+            by_id: HashMap::new(),
+        }
     }
 
     /// Register a backend. Per ARCH §4.3 unknown-id handling is
@@ -254,15 +254,16 @@ impl WebSearchBackend for DuckDuckGoBackendImpl {
         query: &str,
         max_results: usize,
     ) -> Result<Vec<SearchResult>, Error> {
-        legacy_dispatch(client, &LegacyBackend::DuckDuckGo, query, max_results)
-            .await
+        legacy_dispatch(client, &LegacyBackend::DuckDuckGo, query, max_results).await
     }
 
     fn id(&self) -> &'static str {
         "duckduckgo"
     }
     fn privacy(&self) -> SearchPrivacy {
-        SearchPrivacy::External { provider: "duckduckgo" }
+        SearchPrivacy::External {
+            provider: "duckduckgo",
+        }
     }
     fn cost_estimate(&self) -> Option<SearchCost> {
         // DDG is free at the scraping endpoint we use — no budget
@@ -378,8 +379,7 @@ mod tests {
     #[test]
     fn privacy_rank_is_total_order() {
         assert!(SearchPrivacy::Local.rank() < SearchPrivacy::Mesh.rank());
-        assert!(SearchPrivacy::Mesh.rank()
-            < SearchPrivacy::External { provider: "x" }.rank());
+        assert!(SearchPrivacy::Mesh.rank() < SearchPrivacy::External { provider: "x" }.rank());
     }
 
     #[test]
@@ -402,7 +402,9 @@ mod tests {
         assert_eq!(d.id(), "duckduckgo");
         assert!(matches!(
             d.privacy(),
-            SearchPrivacy::External { provider: "duckduckgo" }
+            SearchPrivacy::External {
+                provider: "duckduckgo"
+            }
         ));
     }
 
@@ -441,7 +443,10 @@ mod tests {
             !dbg.contains("secret-key-12345"),
             "api key leaked in Debug: {dbg}"
         );
-        assert!(dbg.contains("<redacted>"), "Debug should mark redaction: {dbg}");
+        assert!(
+            dbg.contains("<redacted>"),
+            "Debug should mark redaction: {dbg}"
+        );
 
         let b = BraveBackendImpl::new("secret-key-12345".into());
         let dbg = format!("{:?}", b);

@@ -106,9 +106,10 @@ pub fn read_atlas_embeddings(
         return Ok(None);
     }
     let mut cursor = MAGIC.len();
-    let header_len = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().map_err(|e| {
-        io::Error::new(io::ErrorKind::InvalidData, format!("header_len read: {e}"))
-    })?) as usize;
+    let header_len =
+        u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().map_err(|e| {
+            io::Error::new(io::ErrorKind::InvalidData, format!("header_len read: {e}"))
+        })?) as usize;
     cursor += 4;
     if bytes.len() < cursor + header_len {
         return Err(io::Error::new(
@@ -240,8 +241,15 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let dir = tmp.path();
         let entries = vec![entry("Alice", 4, 1.0), entry("Bob", 4, 2.0)];
-        write_atlas_embeddings(dir, "test-model", 4, "sha256:aaa", "depth=extracted", &entries)
-            .unwrap();
+        write_atlas_embeddings(
+            dir,
+            "test-model",
+            4,
+            "sha256:aaa",
+            "depth=extracted",
+            &entries,
+        )
+        .unwrap();
         let read = read_atlas_embeddings(dir, "test-model", "sha256:aaa", "depth=extracted")
             .unwrap()
             .unwrap();

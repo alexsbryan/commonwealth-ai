@@ -95,8 +95,10 @@ mod tests {
     fn pi_and_native_expose_the_same_canonical_set() {
         let native_set: HashSet<PrimitiveKind> =
             native::Adapter.canonical_coverage().into_iter().collect();
-        let pi_set: HashSet<PrimitiveKind> =
-            pi::Adapter::default().canonical_coverage().into_iter().collect();
+        let pi_set: HashSet<PrimitiveKind> = pi::Adapter::default()
+            .canonical_coverage()
+            .into_iter()
+            .collect();
         assert_eq!(
             native_set, pi_set,
             "native and pi adapter canonical coverage drifted apart"

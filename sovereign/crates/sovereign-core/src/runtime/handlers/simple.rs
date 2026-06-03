@@ -2,8 +2,6 @@
 //! entry. Builds the (relational or factual) system message, splices
 //! recalled memories, and emits a single non-streaming synthesis call.
 
-
-
 use crate::error::Result;
 use crate::traits::*;
 
@@ -50,8 +48,8 @@ impl Runtime {
         // untouched — their existing prompt is already brief and
         // doesn't need the witness scaffolding.
         let register = context.turn_register();
-        let want_witness_path = register == SkillRegister::Relational
-            && matches!(intent, Intent::DeepQuery);
+        let want_witness_path =
+            register == SkillRegister::Relational && matches!(intent, Intent::DeepQuery);
         let mut metrics = RuntimeMetrics::default();
         let (final_max_tokens, final_enable_thinking) = if want_witness_path {
             // Glassbox: name the memory and tension count entering the
@@ -61,14 +59,15 @@ impl Runtime {
             tracing::info!(
                 memories = context.memories.len(),
                 tensions = context.temporal_tensions.len(),
-                first_memory_chars =
-                    context.memories.first().map(|m| m.content.len()).unwrap_or(0),
+                first_memory_chars = context
+                    .memories
+                    .first()
+                    .map(|m| m.content.len())
+                    .unwrap_or(0),
                 "witness:handle_simple deep_query relational entry"
             );
             let pass_a_start = std::time::Instant::now();
-            let contradiction = self
-                .detect_contradiction(message, &context.memories)
-                .await;
+            let contradiction = self.detect_contradiction(message, &context.memories).await;
             metrics.pass_a_ms = Some(pass_a_start.elapsed().as_millis() as u64);
             tracing::info!(
                 contradiction_present = contradiction.is_some(),
@@ -108,8 +107,7 @@ impl Runtime {
             // model knows the budget it actually has, not the larger
             // configured one.
             let witness_budget = 2048usize;
-            let budget_note =
-                crate::runtime::build_response_length_directive(witness_budget);
+            let budget_note = crate::runtime::build_response_length_directive(witness_budget);
             s.push_str(&format!("\n\n{budget_note}"));
             kc.system = s;
             // Mirror the Expressive relational budget: 2048 tokens
@@ -130,8 +128,7 @@ impl Runtime {
         // Tier 2: same evidence_id_allowlist gather as the
         // streaming KQ path — see the comment block at the
         // streaming dispatch site for the rationale.
-        let evidence_id_allowlist =
-            self.gather_evidence_id_allowlist(conversation_id).await;
+        let evidence_id_allowlist = self.gather_evidence_id_allowlist(conversation_id).await;
         let request = CompletionRequest {
             prompt: kc.prompt,
             system_message: Some(kc.system),
@@ -143,16 +140,16 @@ impl Runtime {
             top_k: self.inference_config.top_k,
             top_p: None,
             oicp,
-                    tools: None,
-                    tool_choice: None,
-                            model_id: None,
-                            enable_thinking: final_enable_thinking,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist,
-        lark_grammar: None,
+            tools: None,
+            tool_choice: None,
+            model_id: None,
+            enable_thinking: final_enable_thinking,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist,
+            lark_grammar: None,
         };
 
         let synth_start = std::time::Instant::now();

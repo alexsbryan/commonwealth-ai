@@ -149,7 +149,11 @@ impl WorkAtlasStore {
         Ok(None)
     }
 
-    pub fn delete_session(&self, session_id: Uuid, privacy: Privacy) -> Result<bool, WorkAtlasError> {
+    pub fn delete_session(
+        &self,
+        session_id: Uuid,
+        privacy: Privacy,
+    ) -> Result<bool, WorkAtlasError> {
         let key = format!("session:{session_id}");
         Ok(self.store.delete(privacy.app_id(), &key)?)
     }
@@ -179,13 +183,16 @@ impl WorkAtlasStore {
             return Err(WorkAtlasError::EmptyIntent);
         }
         let key = format!("claim:{}", rec.claim_id);
-        write_record(&self.store, parent_privacy.app_id(), &key, rec, self.node_id)
+        write_record(
+            &self.store,
+            parent_privacy.app_id(),
+            &key,
+            rec,
+            self.node_id,
+        )
     }
 
-    pub fn release_claim(
-        &self,
-        claim_id: Uuid,
-    ) -> Result<bool, WorkAtlasError> {
+    pub fn release_claim(&self, claim_id: Uuid) -> Result<bool, WorkAtlasError> {
         // Try both namespaces; the claim could be in either.
         let key = format!("claim:{claim_id}");
         let mut removed = false;
@@ -198,7 +205,10 @@ impl WorkAtlasStore {
     }
 
     /// Find the claim and its app_id without consuming.
-    pub fn get_claim(&self, claim_id: Uuid) -> Result<Option<(Privacy, ClaimRecord)>, WorkAtlasError> {
+    pub fn get_claim(
+        &self,
+        claim_id: Uuid,
+    ) -> Result<Option<(Privacy, ClaimRecord)>, WorkAtlasError> {
         for (privacy, app_id) in [
             (Privacy::Public, Privacy::Public.app_id()),
             (Privacy::Private, Privacy::Private.app_id()),
@@ -235,7 +245,11 @@ impl WorkAtlasStore {
         let mut out = Vec::new();
         for entry in self.store.scan(Privacy::Public.app_id(), "claim:")? {
             let rec: ClaimRecord = serde_json::from_slice(&entry.value)?;
-            if rec.symbol_refs.iter().any(|sr| matches_scope(sr, scope, match_mode)) {
+            if rec
+                .symbol_refs
+                .iter()
+                .any(|sr| matches_scope(sr, scope, match_mode))
+            {
                 out.push(rec);
             }
         }
@@ -261,7 +275,13 @@ impl WorkAtlasStore {
         rec: &ObservationRecord,
     ) -> Result<(), WorkAtlasError> {
         let key = Self::observation_key(rec.session_id, &rec.file_path);
-        write_record(&self.store, parent_privacy.app_id(), &key, rec, self.node_id)
+        write_record(
+            &self.store,
+            parent_privacy.app_id(),
+            &key,
+            rec,
+            self.node_id,
+        )
     }
 
     /// Fetch a single observation. Tries both privacy namespaces.
@@ -420,7 +440,10 @@ mod tests {
 
         // Public namespace must NOT contain the private record.
         let public_hits = s.store.scan("work-atlas", "session:").unwrap();
-        assert!(public_hits.is_empty(), "private record leaked to public namespace");
+        assert!(
+            public_hits.is_empty(),
+            "private record leaked to public namespace"
+        );
 
         // Private namespace MUST contain it.
         let private_hits = s.store.scan("work-atlas-private", "session:").unwrap();
@@ -460,20 +483,24 @@ mod tests {
             agent_session_token: Some("conn:a".into()),
             repo_id: "r".repeat(64),
         };
-        let first = s.ensure_session(
-            identity.clone(),
-            Privacy::Public,
-            AgentKind::Agent,
-            PathBuf::from("/tmp/x"),
-            None,
-        ).unwrap();
-        let second = s.ensure_session(
-            identity,
-            Privacy::Public,
-            AgentKind::Agent,
-            PathBuf::from("/tmp/x"),
-            None,
-        ).unwrap();
+        let first = s
+            .ensure_session(
+                identity.clone(),
+                Privacy::Public,
+                AgentKind::Agent,
+                PathBuf::from("/tmp/x"),
+                None,
+            )
+            .unwrap();
+        let second = s
+            .ensure_session(
+                identity,
+                Privacy::Public,
+                AgentKind::Agent,
+                PathBuf::from("/tmp/x"),
+                None,
+            )
+            .unwrap();
         assert_eq!(first.session_id, second.session_id);
     }
 
@@ -511,9 +538,13 @@ mod tests {
             ttl_expires_at: u64::MAX,
         };
         s.put_claim(Privacy::Public, &claim).unwrap();
-        let hits = s.list_claims_for_scope("Module::ingest", ScopeMatch::Symbol).unwrap();
+        let hits = s
+            .list_claims_for_scope("Module::ingest", ScopeMatch::Symbol)
+            .unwrap();
         assert_eq!(hits.len(), 1);
-        let misses = s.list_claims_for_scope("Module::other", ScopeMatch::Symbol).unwrap();
+        let misses = s
+            .list_claims_for_scope("Module::other", ScopeMatch::Symbol)
+            .unwrap();
         assert!(misses.is_empty());
     }
 }

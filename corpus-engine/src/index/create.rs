@@ -15,7 +15,9 @@ fn optimal_partitions(num_chunks: u64) -> u32 {
 /// Read the embedding column's fixed-list dimension from the table schema.
 async fn detect_vector_dims(table: &lancedb::Table) -> Result<usize> {
     use arrow::datatypes::DataType;
-    let schema = table.schema().await
+    let schema = table
+        .schema()
+        .await
         .map_err(|e| Error::Database(format!("schema: {e}")))?;
     for field in schema.fields() {
         if field.name() == "embedding" {
@@ -24,7 +26,9 @@ async fn detect_vector_dims(table: &lancedb::Table) -> Result<usize> {
             }
         }
     }
-    Err(Error::Database("embedding column not found or not FixedSizeList".into()))
+    Err(Error::Database(
+        "embedding column not found or not FixedSizeList".into(),
+    ))
 }
 
 /// Sum file sizes in a directory (flat, non-recursive).
@@ -101,8 +105,8 @@ async fn build_vector_index_with_progress(
                 }
             } else {
                 // Phase B: vector encoding — files are growing.
-                let pct = ((dir_bytes as f64 / estimated_bytes as f64) * 100.0)
-                    .clamp(0.0, 99.0) as i32;
+                let pct =
+                    ((dir_bytes as f64 / estimated_bytes as f64) * 100.0).clamp(0.0, 99.0) as i32;
                 if pct >= last_pct + 5 {
                     eprintln!("[{id}] ↳ Encoding vectors → {pct}%");
                     last_pct = pct;
@@ -316,9 +320,7 @@ impl CorpusIndex {
         if path.exists() {
             match Self::open(path).await {
                 Ok(index) => {
-                    let iter_pos = read_meta(path)
-                        .map(|m| m.committed_iter_pos)
-                        .unwrap_or(0);
+                    let iter_pos = read_meta(path).map(|m| m.committed_iter_pos).unwrap_or(0);
                     let existing = index.chunk_count().await.unwrap_or(0);
                     eprintln!(
                         "[corpus] Resuming '{}' — skipping first {iter_pos} source docs ({existing} chunks already indexed)",
@@ -558,9 +560,7 @@ impl CorpusIndex {
     /// previous run. A resume can skip `build_indexes()` entirely when this is
     /// true, jumping straight to `mark_ingestion_complete()`.
     pub fn indexes_are_built(path: &Path) -> bool {
-        read_meta(path)
-            .map(|m| m.indexes_built)
-            .unwrap_or(false)
+        read_meta(path).map(|m| m.indexes_built).unwrap_or(false)
     }
 
     /// Reset the meta flags so a subsequent `ingest()` treats this
@@ -693,9 +693,7 @@ impl CorpusIndex {
     /// `build_indexes()` call (no-op if already clean).
     pub fn is_chunks_deduped(&self) -> bool {
         let dir = Path::new(self.db.uri());
-        read_meta(dir)
-            .map(|m| m.chunks_deduped)
-            .unwrap_or(false)
+        read_meta(dir).map(|m| m.chunks_deduped).unwrap_or(false)
     }
 
     /// Build vector + FTS indexes for efficient search.
@@ -742,7 +740,10 @@ impl CorpusIndex {
                             report.duplicates_deleted, report.rows_after,
                         );
                     } else {
-                        eprintln!("[{id}] Dedupe: no duplicates found ({} rows)", report.rows_after);
+                        eprintln!(
+                            "[{id}] Dedupe: no duplicates found ({} rows)",
+                            report.rows_after
+                        );
                     }
                     if report.hashless_rows_preserved > 0 {
                         eprintln!(
@@ -764,17 +765,23 @@ impl CorpusIndex {
         }
 
         // (1/3) IVF-PQ vector index.
-        let vector_done = read_meta(&dir).map(|m| m.vector_index_built).unwrap_or(false);
+        let vector_done = read_meta(&dir)
+            .map(|m| m.vector_index_built)
+            .unwrap_or(false);
         if !build_vector {
-            if !vector_done { let _ = self.mark_vector_index_built(); }
+            if !vector_done {
+                let _ = self.mark_vector_index_built();
+            }
             eprintln!("[{id}] Vector index disabled in recipe — skipping (1/3)");
         } else if vector_done {
             eprintln!("[{id}] Vector index already built — skipping (1/3)");
         } else if count >= 256 {
             // Secondary runtime check: list_indices() only returns complete indexes.
             // Catches the case where the meta-flag was lost but the index is intact.
-            let already_complete = self.table
-                .list_indices().await
+            let already_complete = self
+                .table
+                .list_indices()
+                .await
                 .unwrap_or_default()
                 .iter()
                 .any(|idx| idx.columns.iter().any(|c| c == "embedding"));
@@ -787,8 +794,14 @@ impl CorpusIndex {
                 let indices_dir = dir.join(format!("{CHUNKS_TABLE}.lance/_indices"));
                 eprintln!("[{id}] Building vector index (1/3)...");
                 build_vector_index_with_progress(
-                    &self.table, &indices_dir, count, num_partitions, dims, id,
-                ).await?;
+                    &self.table,
+                    &indices_dir,
+                    count,
+                    num_partitions,
+                    dims,
+                    id,
+                )
+                .await?;
                 let _ = self.mark_vector_index_built();
                 eprintln!("[{id}] Vector index done");
             }
@@ -796,10 +809,14 @@ impl CorpusIndex {
             eprintln!("[{id}] Skipping vector index — fewer than 256 rows (1/3)");
             let _ = self.mark_vector_index_built();
         }
-        if let Some(cb) = on_sub_phase_complete { cb(1, 3); }
+        if let Some(cb) = on_sub_phase_complete {
+            cb(1, 3);
+        }
 
         // (2/3) Tantivy FTS index on content.
-        let content_done = read_meta(&dir).map(|m| m.content_fts_built).unwrap_or(false);
+        let content_done = read_meta(&dir)
+            .map(|m| m.content_fts_built)
+            .unwrap_or(false);
         if !build_fts {
             // Do NOT mark FTS as built when skipping — that would corrupt
             // metadata and prevent a future build_indexes(true, true) from
@@ -812,9 +829,7 @@ impl CorpusIndex {
             self.table
                 .create_index(
                     &["content"],
-                    lancedb::index::Index::FTS(
-                        lancedb::index::scalar::FtsIndexBuilder::default(),
-                    ),
+                    lancedb::index::Index::FTS(lancedb::index::scalar::FtsIndexBuilder::default()),
                 )
                 .execute()
                 .await
@@ -822,7 +837,9 @@ impl CorpusIndex {
             let _ = self.mark_content_fts_built();
             eprintln!("[{id}] FTS content index done");
         }
-        if let Some(cb) = on_sub_phase_complete { cb(2, 3); }
+        if let Some(cb) = on_sub_phase_complete {
+            cb(2, 3);
+        }
 
         // (3/3) Tantivy FTS index on title.
         let title_done = read_meta(&dir).map(|m| m.title_fts_built).unwrap_or(false);
@@ -835,9 +852,7 @@ impl CorpusIndex {
             self.table
                 .create_index(
                     &["title"],
-                    lancedb::index::Index::FTS(
-                        lancedb::index::scalar::FtsIndexBuilder::default(),
-                    ),
+                    lancedb::index::Index::FTS(lancedb::index::scalar::FtsIndexBuilder::default()),
                 )
                 .execute()
                 .await
@@ -845,7 +860,9 @@ impl CorpusIndex {
             let _ = self.mark_title_fts_built();
             eprintln!("[{id}] FTS title index done");
         }
-        if let Some(cb) = on_sub_phase_complete { cb(3, 3); }
+        if let Some(cb) = on_sub_phase_complete {
+            cb(3, 3);
+        }
 
         Ok(())
     }

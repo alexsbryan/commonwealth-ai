@@ -216,30 +216,28 @@ impl RecipeRegistry {
         };
 
         match fetch_text(&url).await {
-            Ok(text) => {
-                match toml::from_str::<RegistrySnapshot>(&text) {
-                    Ok(live) => {
-                        if live.schema_version > self.snapshot.schema_version {
-                            tracing::warn!(
+            Ok(text) => match toml::from_str::<RegistrySnapshot>(&text) {
+                Ok(live) => {
+                    if live.schema_version > self.snapshot.schema_version {
+                        tracing::warn!(
                                 live_version = live.schema_version,
                                 snapshot_version = self.snapshot.schema_version,
                                 "Live registry schema is newer than bundled snapshot — \
                                  falling back to bundled. Run `cargo xtask update-registry-snapshot`."
                             );
-                        } else {
-                            tracing::debug!(
-                                entries = live.entries.len(),
-                                generated_at = %live.generated_at,
-                                "Registry refreshed from live URL"
-                            );
-                            self.live = Some(live);
-                        }
-                    }
-                    Err(e) => {
-                        tracing::debug!("Failed to parse live registry: {e}");
+                    } else {
+                        tracing::debug!(
+                            entries = live.entries.len(),
+                            generated_at = %live.generated_at,
+                            "Registry refreshed from live URL"
+                        );
+                        self.live = Some(live);
                     }
                 }
-            }
+                Err(e) => {
+                    tracing::debug!("Failed to parse live registry: {e}");
+                }
+            },
             Err(e) => {
                 tracing::debug!("Failed to fetch live registry: {e}");
             }
@@ -500,7 +498,10 @@ mod tests {
         for entry in registry.list_entries() {
             assert!(!entry.id.is_empty(), "entry id must not be empty");
             assert!(!entry.name.is_empty(), "entry name must not be empty");
-            assert!(!entry.toml_url.is_empty(), "entry toml_url must not be empty");
+            assert!(
+                !entry.toml_url.is_empty(),
+                "entry toml_url must not be empty"
+            );
         }
     }
 
@@ -530,8 +531,7 @@ sha256 = ""
 "#;
         std::fs::write(&local_path, local_toml).unwrap();
 
-        let registry =
-            RecipeRegistry::from_bundled(None).with_local_registry(&local_path);
+        let registry = RecipeRegistry::from_bundled(None).with_local_registry(&local_path);
 
         // Local override wins on id
         let wiki = registry.find_entry("wikipedia").expect("wikipedia present");
@@ -555,8 +555,7 @@ sha256 = ""
     fn missing_local_registry_is_silent() {
         let dir = tempfile::tempdir().unwrap();
         let nonexistent = dir.path().join("does-not-exist.toml");
-        let registry =
-            RecipeRegistry::from_bundled(None).with_local_registry(&nonexistent);
+        let registry = RecipeRegistry::from_bundled(None).with_local_registry(&nonexistent);
         // Same number of entries as the bundled-only registry.
         assert!(!registry.list_entries().is_empty());
         assert!(!registry.is_local_entry("wikipedia"));
@@ -566,7 +565,10 @@ sha256 = ""
     fn sep_is_not_mesh_sharing() {
         let registry = RecipeRegistry::from_bundled(None);
         let sep = registry.find_entry("sep").expect("sep must be in snapshot");
-        assert!(!sep.mesh_sharing, "SEP is license-restricted and must not be mesh-shared");
+        assert!(
+            !sep.mesh_sharing,
+            "SEP is license-restricted and must not be mesh-shared"
+        );
     }
 
     #[test]
@@ -576,9 +578,14 @@ sha256 = ""
         // depth). Only SEP enables enrichment by default in v1.
         let registry = RecipeRegistry::from_bundled(None);
         let sep = registry.find_entry("sep").expect("sep must be in snapshot");
-        assert!(sep.enrichment_enabled, "sep should have enrichment_enabled = true");
+        assert!(
+            sep.enrichment_enabled,
+            "sep should have enrichment_enabled = true"
+        );
 
-        let wp = registry.find_entry("wikipedia").expect("wikipedia must be in snapshot");
+        let wp = registry
+            .find_entry("wikipedia")
+            .expect("wikipedia must be in snapshot");
         assert!(
             !wp.enrichment_enabled,
             "Wikipedia Core ships with enrichment disabled (Layer 1 design)"
@@ -632,9 +639,10 @@ sha256 = ""
     async fn fetch_recipe_falls_back_to_bundled_on_url_failure() {
         // No overrides_dir → forces the URL → bundled fallback path.
         let registry = RecipeRegistry::from_bundled(None);
-        let r = registry.fetch_recipe("wikipedia-simple").await.expect(
-            "wikipedia-simple should resolve via bundled fallback even when URL 404s",
-        );
+        let r = registry
+            .fetch_recipe("wikipedia-simple")
+            .await
+            .expect("wikipedia-simple should resolve via bundled fallback even when URL 404s");
         assert_eq!(r.corpus.id, "wikipedia-simple");
     }
 }

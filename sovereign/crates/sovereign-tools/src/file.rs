@@ -43,7 +43,8 @@ impl Tool for FileTool {
         ToolDescriptor {
             id: "file".to_string(),
             name: "File".to_string(),
-            description: "Read, write, list, and search files within allowed directories".to_string(),
+            description: "Read, write, list, and search files within allowed directories"
+                .to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -79,11 +80,7 @@ impl Tool for FileTool {
         vec![Permission::FileRead, Permission::FileWrite]
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let action = params
             .get("action")
             .and_then(|v| v.as_str())
@@ -118,7 +115,9 @@ impl Tool for FileTool {
                 let content = params
                     .get("content")
                     .and_then(|v| v.as_str())
-                    .ok_or_else(|| Error::InvalidInput("Missing 'content' for write".to_string()))?;
+                    .ok_or_else(|| {
+                        Error::InvalidInput("Missing 'content' for write".to_string())
+                    })?;
 
                 // Validate parent directory exists within roots.
                 if let Some(parent) = path.parent() {
@@ -136,16 +135,20 @@ impl Tool for FileTool {
                 }
 
                 if let Some(parent) = path.parent() {
-                    tokio::fs::create_dir_all(parent)
-                        .await
-                        .map_err(|e| Error::Execution(format!("Failed to create directories: {e}")))?;
+                    tokio::fs::create_dir_all(parent).await.map_err(|e| {
+                        Error::Execution(format!("Failed to create directories: {e}"))
+                    })?;
                 }
 
                 tokio::fs::write(&path, content)
                     .await
                     .map_err(|e| Error::Execution(format!("Failed to write file: {e}")))?;
 
-                Ok(StepOutput::Text(format!("Written {} bytes to {}", content.len(), path.display())))
+                Ok(StepOutput::Text(format!(
+                    "Written {} bytes to {}",
+                    content.len(),
+                    path.display()
+                )))
             }
             "list" => {
                 let validated = self.validate_path(&path)?;
@@ -157,11 +160,7 @@ impl Tool for FileTool {
                 while let Ok(Some(entry)) = reader.next_entry().await {
                     let name = entry.file_name().to_string_lossy().to_string();
                     let is_dir = entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false);
-                    entries.push(if is_dir {
-                        format!("{name}/")
-                    } else {
-                        name
-                    });
+                    entries.push(if is_dir { format!("{name}/") } else { name });
                 }
 
                 entries.sort();
@@ -171,7 +170,9 @@ impl Tool for FileTool {
                 let pattern = params
                     .get("pattern")
                     .and_then(|v| v.as_str())
-                    .ok_or_else(|| Error::InvalidInput("Missing 'pattern' for search".to_string()))?;
+                    .ok_or_else(|| {
+                        Error::InvalidInput("Missing 'pattern' for search".to_string())
+                    })?;
 
                 let validated = self.validate_path(&path)?;
                 let glob_pattern = format!("{}/{pattern}", validated.display());
@@ -183,7 +184,9 @@ impl Tool for FileTool {
                     .collect();
 
                 if matches.is_empty() {
-                    Ok(StepOutput::Text("No files matched the pattern.".to_string()))
+                    Ok(StepOutput::Text(
+                        "No files matched the pattern.".to_string(),
+                    ))
                 } else {
                     Ok(StepOutput::Text(matches.join("\n")))
                 }

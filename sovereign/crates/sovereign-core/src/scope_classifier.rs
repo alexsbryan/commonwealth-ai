@@ -91,10 +91,7 @@ impl PersonalScopeClassifier {
     /// Load examples from `path`, embed each one, compute per-class
     /// centroids. Sequential embedding (small example counts; the
     /// embedding slot serialises anyway).
-    pub async fn load(
-        path: &Path,
-        inference: Arc<dyn InferenceProvider>,
-    ) -> Result<Self> {
+    pub async fn load(path: &Path, inference: Arc<dyn InferenceProvider>) -> Result<Self> {
         let raw = std::fs::read_to_string(path).map_err(|e| {
             Error::InvalidInput(format!("read scope examples {}: {e}", path.display()))
         })?;
@@ -108,10 +105,8 @@ impl PersonalScopeClassifier {
             ));
         }
 
-        let centroid_personal =
-            compute_centroid(&parsed.personal.examples, &*inference).await?;
-        let centroid_external =
-            compute_centroid(&parsed.external.examples, &*inference).await?;
+        let centroid_personal = compute_centroid(&parsed.personal.examples, &*inference).await?;
+        let centroid_external = compute_centroid(&parsed.external.examples, &*inference).await?;
 
         if centroid_personal.len() != centroid_external.len() {
             return Err(Error::InvalidInput(format!(
@@ -229,9 +224,8 @@ async fn compute_centroid(
             None => sum = Some(emb),
         }
     }
-    let mut c = sum.ok_or_else(|| {
-        Error::InvalidInput("compute_centroid: empty example set".into())
-    })?;
+    let mut c =
+        sum.ok_or_else(|| Error::InvalidInput("compute_centroid: empty example set".into()))?;
     normalize(&mut c);
     Ok(c)
 }

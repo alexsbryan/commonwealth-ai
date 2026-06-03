@@ -262,7 +262,11 @@ pub fn detect_grounding(input: CrossCorpusInput<'_>) -> CrossCorpusReport {
         let signal_result = try_grounding_signals(local, &peer_name_index, &peer_token_index);
 
         match signal_result {
-            GroundingSignal::CanonicalExact { peer, local_form, peer_form } => {
+            GroundingSignal::CanonicalExact {
+                peer,
+                local_form,
+                peer_form,
+            } => {
                 accepted.push(build_edge(
                     next_edge_ordinal,
                     input.local_corpus_id,
@@ -277,7 +281,11 @@ pub fn detect_grounding(input: CrossCorpusInput<'_>) -> CrossCorpusReport {
                 ));
                 next_edge_ordinal += 1;
             }
-            GroundingSignal::AliasExact { peer, local_form, peer_form } => {
+            GroundingSignal::AliasExact {
+                peer,
+                local_form,
+                peer_form,
+            } => {
                 accepted.push(build_edge(
                     next_edge_ordinal,
                     input.local_corpus_id,
@@ -312,7 +320,11 @@ pub fn detect_grounding(input: CrossCorpusInput<'_>) -> CrossCorpusReport {
                 ));
                 next_edge_ordinal += 1;
             }
-            GroundingSignal::Ambiguous { sample_peer, local_form, peer_form } => {
+            GroundingSignal::Ambiguous {
+                sample_peer,
+                local_form,
+                peer_form,
+            } => {
                 let reason = "ambiguous_token_match";
                 *rejections_by_reason.entry(reason).or_insert(0) += 1;
                 if sample_rejections.len() < MAX_SAMPLE_REJECTIONS {
@@ -512,10 +524,10 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-}
-}
+            provenance: Default::default(),
+            concept_kind: None,
+        }
+    }
 
     #[test]
     fn grounding_matches_canonical_exact() {
@@ -593,10 +605,7 @@ mod tests {
             peer_entities: &b,
         });
         assert_eq!(rep.accepted_edges.len(), 1);
-        assert_eq!(
-            rep.accepted_edges[0].trace.signal,
-            "canonical_token_unique"
-        );
+        assert_eq!(rep.accepted_edges[0].trace.signal, "canonical_token_unique");
     }
 
     #[test]
@@ -613,10 +622,7 @@ mod tests {
             peer_entities: &b,
         });
         assert_eq!(rep.accepted_edges.len(), 1);
-        assert_eq!(
-            rep.accepted_edges[0].trace.signal,
-            "canonical_token_unique"
-        );
+        assert_eq!(rep.accepted_edges[0].trace.signal, "canonical_token_unique");
         assert!((rep.accepted_edges[0].trace.confidence - 0.8).abs() < 1e-6);
     }
 

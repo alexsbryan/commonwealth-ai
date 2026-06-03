@@ -3,9 +3,9 @@
 #[allow(unused_imports)]
 use super::*;
 #[allow(unused_imports)]
-use serde::{Deserialize, Serialize};
-#[allow(unused_imports)]
 use crate::oicp;
+#[allow(unused_imports)]
+use serde::{Deserialize, Serialize};
 
 // ─── Conversation Types ────────────────────────────────────────
 

@@ -24,8 +24,8 @@
 
 use std::collections::BTreeMap;
 
-use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
 use corpus_engine_atos::{AtosRunRow, FeatureRow, MilestoneRow};
+use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
 
 use crate::{Error, ReportSection, Result};
 
@@ -40,9 +40,13 @@ pub async fn render(
 ) -> Result<String> {
     let feature_notes = fetch_feature_notes(notes, &feature.id).await?;
     match section {
-        ReportSection::Milestone(ordinal) => {
-            Ok(render_milestone(feature, milestones, runs, ordinal, &feature_notes))
-        }
+        ReportSection::Milestone(ordinal) => Ok(render_milestone(
+            feature,
+            milestones,
+            runs,
+            ordinal,
+            &feature_notes,
+        )),
         ReportSection::RedTeam => Ok(render_red_team(feature, runs, &feature_notes)),
         ReportSection::Epistemic | ReportSection::All => {
             Ok(render_full(feature, milestones, runs, &feature_notes))
@@ -70,14 +74,21 @@ fn render_milestone(
         "# {} — milestone {} report\n\n",
         feature.id, ordinal
     ));
-    out.push_str(&format!("**Title:** {}\n\n", derive_title(&milestone.brief_md)));
+    out.push_str(&format!(
+        "**Title:** {}\n\n",
+        derive_title(&milestone.brief_md)
+    ));
 
     out.push_str("## Stop condition\n\n");
     let stop = extract_stop_condition(&milestone.brief_md);
     let (verdict, latest_run) = milestone_verdict(runs, &milestone.id);
     out.push_str(&format!(
         "`{}` — **{}**\n\n",
-        if stop.is_empty() { "(manual review)".into() } else { stop },
+        if stop.is_empty() {
+            "(manual review)".into()
+        } else {
+            stop
+        },
         verdict
     ));
     if let Some(run) = latest_run.as_ref() {
@@ -230,10 +241,7 @@ fn render_full(
 // ─── Section renderers ───────────────────────────────────────────────────────
 
 fn render_uncertainty(out: &mut String, notes: &[&NoteRow]) {
-    let items: Vec<&&NoteRow> = notes
-        .iter()
-        .filter(|n| n.kind == "uncertainty")
-        .collect();
+    let items: Vec<&&NoteRow> = notes.iter().filter(|n| n.kind == "uncertainty").collect();
     if items.is_empty() {
         return;
     }
@@ -350,7 +358,10 @@ fn render_decision_log_summary(out: &mut String, notes: &[&NoteRow]) {
     let invariants = notes.iter().filter(|n| n.kind == "invariant").count();
     let attempts = notes.iter().filter(|n| n.kind == "attempt").count();
     let uncertainties = notes.iter().filter(|n| n.kind == "uncertainty").count();
-    let pointers = notes.iter().filter(|n| n.kind == "postmortem_pointer").count();
+    let pointers = notes
+        .iter()
+        .filter(|n| n.kind == "postmortem_pointer")
+        .count();
     let findings = notes.iter().filter(|n| n.kind == "redteam_finding").count();
     out.push_str("## Decision log summary\n\n");
     out.push_str(&format!(
@@ -413,7 +424,11 @@ fn derive_title(brief_md: &str) -> String {
 }
 
 fn short_id(s: &str) -> &str {
-    if s.len() > 8 { &s[..8] } else { s }
+    if s.len() > 8 {
+        &s[..8]
+    } else {
+        s
+    }
 }
 
 // ─── Red-team decode ─────────────────────────────────────────────────────────
@@ -434,15 +449,31 @@ fn decode_redteam_finding(content: &str) -> RedteamFinding {
         };
     };
     RedteamFinding {
-        invariant: v.get("invariant").and_then(|x| x.as_str()).unwrap_or("").to_string(),
-        status: v.get("status").and_then(|x| x.as_str()).unwrap_or("unknown").to_string(),
-        evidence: v.get("evidence").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+        invariant: v
+            .get("invariant")
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .to_string(),
+        status: v
+            .get("status")
+            .and_then(|x| x.as_str())
+            .unwrap_or("unknown")
+            .to_string(),
+        evidence: v
+            .get("evidence")
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .to_string(),
     }
 }
 
 fn decode_redteam_confidence(content: &str) -> String {
     serde_json::from_str::<serde_json::Value>(content)
         .ok()
-        .and_then(|v| v.get("confidence").and_then(|x| x.as_str()).map(String::from))
+        .and_then(|v| {
+            v.get("confidence")
+                .and_then(|x| x.as_str())
+                .map(String::from)
+        })
         .unwrap_or_else(|| "low".into())
 }

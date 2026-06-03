@@ -73,9 +73,15 @@ impl Default for WatchedFolderConfigWire {
     }
 }
 
-fn default_follow_symlinks() -> bool { false }
-fn default_sweep_interval() -> u64 { 120 }
-fn default_grace() -> u64 { 7 * 86_400 }
+fn default_follow_symlinks() -> bool {
+    false
+}
+fn default_sweep_interval() -> u64 {
+    120
+}
+fn default_grace() -> u64 {
+    7 * 86_400
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeletionGuardConfigWire {
@@ -162,9 +168,7 @@ pub async fn lc_watch_register(
 }
 
 #[tauri::command]
-pub async fn lc_watch_list(
-    state: State<'_, Arc<AppState>>,
-) -> Result<ListResponse, String> {
+pub async fn lc_watch_list(state: State<'_, Arc<AppState>>) -> Result<ListResponse, String> {
     let url = format!("{}/internal/corpus/watch/list", base_url(&state));
     get_json(&url).await
 }
@@ -376,10 +380,7 @@ pub async fn lc_watch_remove(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
 ) -> Result<AckResponse, String> {
-    let url = format!(
-        "{}/internal/corpus/watch/{corpus_id}",
-        base_url(&state)
-    );
+    let url = format!("{}/internal/corpus/watch/{corpus_id}", base_url(&state));
     delete_json(&url).await
 }
 
@@ -387,10 +388,7 @@ pub async fn lc_watch_remove(
 pub async fn lc_watch_incomplete_jobs(
     state: State<'_, Arc<AppState>>,
 ) -> Result<IncompleteJobsResponse, String> {
-    let url = format!(
-        "{}/internal/corpus/watch/incomplete-jobs",
-        base_url(&state)
-    );
+    let url = format!("{}/internal/corpus/watch/incomplete-jobs", base_url(&state));
     get_json(&url).await
 }
 

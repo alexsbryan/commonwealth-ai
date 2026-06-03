@@ -178,7 +178,8 @@ mod tests {
 
     #[test]
     fn parses_csv_and_filters_by_rank() {
-        let csv = "title,rank\nAlbert Einstein,1\nPhotosynthesis,2\nMain Page,3\nObscure_Article,500\n";
+        let csv =
+            "title,rank\nAlbert Einstein,1\nPhotosynthesis,2\nMain Page,3\nObscure_Article,500\n";
         let f = PageviewRankFilter::from_csv_bytes(csv.as_bytes(), 3).unwrap();
         assert!(f.accept(&make_doc("Albert Einstein")));
         assert!(f.accept(&make_doc("Photosynthesis")));

@@ -26,7 +26,10 @@ fn sovereign() -> Command {
 }
 
 fn run(args: &[&str]) -> Output {
-    sovereign().args(args).output().expect("spawn sovereign-cli")
+    sovereign()
+        .args(args)
+        .output()
+        .expect("spawn sovereign-cli")
 }
 
 fn stdout(out: &Output) -> String {
@@ -44,7 +47,11 @@ fn stderr(out: &Output) -> String {
 #[test]
 fn serve_help_documents_background_flag() {
     let out = run(&["serve", "--help"]);
-    assert!(out.status.success(), "serve --help exit: {:?}", out.status.code());
+    assert!(
+        out.status.success(),
+        "serve --help exit: {:?}",
+        out.status.code()
+    );
     let combined = format!("{}{}", stdout(&out), stderr(&out));
     assert!(
         combined.contains("--background"),
@@ -62,7 +69,11 @@ fn serve_help_documents_background_flag() {
 #[test]
 fn stop_help_documents_pid_file() {
     let out = run(&["stop", "--help"]);
-    assert!(out.status.success(), "stop --help exit: {:?}", out.status.code());
+    assert!(
+        out.status.success(),
+        "stop --help exit: {:?}",
+        out.status.code()
+    );
     let combined = format!("{}{}", stdout(&out), stderr(&out));
     assert!(
         combined.contains(".sovereign/server.pid") || combined.contains("server.pid"),

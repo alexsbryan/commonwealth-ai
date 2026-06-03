@@ -135,16 +135,16 @@ pub async fn identify_gap(
             top_k: None,
             top_p: None,
             oicp: None,
-                tools: None,
-                tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            tools: None,
+            tool_choice: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         })
         .await?;
 
@@ -163,12 +163,20 @@ fn parse_gap_response(raw: &str) -> Option<InformationRequest> {
 
     let val: serde_json::Value = serde_json::from_str(candidate).ok()?;
 
-    let has_gap = val.get("has_gap").and_then(|v| v.as_bool()).unwrap_or(false);
+    let has_gap = val
+        .get("has_gap")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     if !has_gap {
         return None;
     }
 
-    let gap = val.get("gap").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let gap = val
+        .get("gap")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if gap.is_empty() {
         // Model said "yes there's a gap" but didn't specify it. Treat as
         // no gap rather than surfacing an empty card.

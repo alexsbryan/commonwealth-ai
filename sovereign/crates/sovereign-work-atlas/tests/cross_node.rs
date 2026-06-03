@@ -168,10 +168,7 @@ fn public_observation_propagates_via_gossip() {
     replicate(&store_a, &store_b);
 
     let hits = atlas_b
-        .list_observations_for_scope(
-            "corpus-engine/src/engine/ingest.rs",
-            ScopeMatch::File,
-        )
+        .list_observations_for_scope("corpus-engine/src/engine/ingest.rs", ScopeMatch::File)
         .unwrap();
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].event_count, 4);
@@ -204,7 +201,10 @@ fn private_observation_never_propagates() {
     replicate(&store_a, &store_b);
 
     let leaked = store_b.scan("work-atlas-private", "observation:").unwrap();
-    assert!(leaked.is_empty(), "private observation reached peer's store");
+    assert!(
+        leaked.is_empty(),
+        "private observation reached peer's store"
+    );
     let hits = atlas_b
         .list_observations_for_scope("Secret.rs", ScopeMatch::File)
         .unwrap();

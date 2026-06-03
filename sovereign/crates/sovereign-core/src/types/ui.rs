@@ -202,8 +202,5 @@ pub enum InsightSinkState {
         synced_at: chrono::DateTime<chrono::Utc>,
     },
     /// Sync attempted but failed.
-    SyncFailed {
-        sink_id: String,
-        error: String,
-    },
+    SyncFailed { sink_id: String, error: String },
 }

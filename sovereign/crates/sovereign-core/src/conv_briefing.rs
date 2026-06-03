@@ -49,9 +49,7 @@ use std::sync::Arc;
 
 use corpus_engine::ScoredChunk;
 
-use crate::conv_tiered::{
-    ConvRaptorNodeRow, ConvSkeletonRow, ConvTieredReader, VaultThemeRow,
-};
+use crate::conv_tiered::{ConvRaptorNodeRow, ConvSkeletonRow, ConvTieredReader, VaultThemeRow};
 
 /// Display-category strings that route through the tiered (RAPTOR +
 /// chunk_entities + PPR) retrieval path. Watched folders join
@@ -203,11 +201,8 @@ pub async fn build_conv_tiered_briefings(
         if !is_tiered_category(category) {
             continue;
         }
-        let Some(conv_uuid) = tiered_group_key(
-            category,
-            &c.corpus_id,
-            c.source_doc_id.as_deref(),
-        ) else {
+        let Some(conv_uuid) = tiered_group_key(category, &c.corpus_id, c.source_doc_id.as_deref())
+        else {
             continue;
         };
         *hits
@@ -241,8 +236,7 @@ pub async fn build_conv_tiered_briefings(
         BriefingMode::Shallow => 8,
         BriefingMode::Empty => 0,
     };
-    let selected: Vec<((String, String), usize)> =
-        ranked.iter().take(cap).cloned().collect();
+    let selected: Vec<((String, String), usize)> = ranked.iter().take(cap).cloned().collect();
 
     // ── 4. Bulk fetch conv_skeletons by corpus. ────────────────
     // Group selected by corpus so the IN-list per corpus stays tight.
@@ -355,8 +349,7 @@ pub async fn build_vault_synthesis_briefings(
     };
 
     // Collect (corpus_id -> set<source_doc_id>) for vault-category hits.
-    let mut vault_hits: HashMap<String, std::collections::HashSet<String>> =
-        HashMap::new();
+    let mut vault_hits: HashMap<String, std::collections::HashSet<String>> = HashMap::new();
     for c in chunks {
         let Some(category) = display.get(&c.corpus_id) else {
             continue;
@@ -387,8 +380,7 @@ pub async fn build_vault_synthesis_briefings(
         let mut taken = 0usize;
         for theme in themes {
             let members: Vec<String> =
-                serde_json::from_str(&theme.member_source_doc_ids_json)
-                    .unwrap_or_default();
+                serde_json::from_str(&theme.member_source_doc_ids_json).unwrap_or_default();
             let hit_overlap = members.iter().filter(|m| hit_notes.contains(*m)).count();
             if hit_overlap == 0 {
                 continue;
@@ -408,9 +400,11 @@ pub async fn build_vault_synthesis_briefings(
     // query lit up most strongly come first, ties broken by store
     // ordering's coherence rank.
     matched.sort_by(|a, b| {
-        b.2.cmp(&a.2)
-            .then_with(|| b.1.cluster_coherence.partial_cmp(&a.1.cluster_coherence)
-                .unwrap_or(std::cmp::Ordering::Equal))
+        b.2.cmp(&a.2).then_with(|| {
+            b.1.cluster_coherence
+                .partial_cmp(&a.1.cluster_coherence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
     });
 
     let mut out = String::from("## Vault themes\n");
@@ -420,11 +414,9 @@ pub async fn build_vault_synthesis_briefings(
          the specific notes hit:\n\n",
     );
     for (_corpus, theme, hit_overlap) in matched {
-        let member_count = serde_json::from_str::<Vec<String>>(
-            &theme.member_source_doc_ids_json,
-        )
-        .map(|v| v.len())
-        .unwrap_or(0);
+        let member_count = serde_json::from_str::<Vec<String>>(&theme.member_source_doc_ids_json)
+            .map(|v| v.len())
+            .unwrap_or(0);
         out.push_str(&format!(
             "- **{}** — {} hit note{} of {} member{}\n",
             sanitize_overview(theme.summary.trim()),
@@ -455,8 +447,7 @@ async fn fetch_signposts(
     // node IS the synthetic node which has empty primary_entities
     // and cluster_coherence = 1.0 — render code dedupes it against
     // the overview.
-    let mut leaves: Vec<&ConvRaptorNodeRow> =
-        nodes.iter().filter(|n| n.level == 0).collect();
+    let mut leaves: Vec<&ConvRaptorNodeRow> = nodes.iter().filter(|n| n.level == 0).collect();
     leaves.sort_by(|a, b| {
         b.cluster_coherence
             .partial_cmp(&a.cluster_coherence)
@@ -467,10 +458,8 @@ async fn fetch_signposts(
         .take(4)
         .map(|row| ClusterSignpost {
             summary: row.summary.clone(),
-            primary_entities: serde_json::from_str::<Vec<String>>(
-                &row.primary_entities_json,
-            )
-            .unwrap_or_default(),
+            primary_entities: serde_json::from_str::<Vec<String>>(&row.primary_entities_json)
+                .unwrap_or_default(),
             cluster_coherence: row.cluster_coherence as f32,
         })
         .collect()
@@ -782,16 +771,13 @@ mod tests {
             &self,
             _corpus_id: &str,
             _conv_uuid: &str,
-        ) -> crate::error::Result<Vec<crate::conv_tiered::ChunkEntityRow>>
-        {
+        ) -> crate::error::Result<Vec<crate::conv_tiered::ChunkEntityRow>> {
             Ok(Vec::new())
         }
         async fn get_chunk_entity_progress(
             &self,
             _corpus_id: &str,
-        ) -> crate::error::Result<
-            Option<crate::conv_tiered::ChunkEntityProgressRow>,
-        > {
+        ) -> crate::error::Result<Option<crate::conv_tiered::ChunkEntityProgressRow>> {
             Ok(None)
         }
         async fn list_vault_themes_for_corpus(
@@ -806,7 +792,13 @@ mod tests {
         mk_chunk(corpus, Some(note))
     }
 
-    fn mk_theme(corpus: &str, theme_id: &str, summary: &str, members: &[&str], coherence: f32) -> VaultThemeRow {
+    fn mk_theme(
+        corpus: &str,
+        theme_id: &str,
+        summary: &str,
+        members: &[&str],
+        coherence: f32,
+    ) -> VaultThemeRow {
         VaultThemeRow {
             corpus_id: corpus.into(),
             theme_id: theme_id.into(),
@@ -827,7 +819,13 @@ mod tests {
         themes.insert(
             "vault-1".to_string(),
             vec![
-                mk_theme("vault-1", "t0", "Markets vs commons", &["note-a", "note-b"], 0.9),
+                mk_theme(
+                    "vault-1",
+                    "t0",
+                    "Markets vs commons",
+                    &["note-a", "note-b"],
+                    0.9,
+                ),
                 mk_theme("vault-1", "t1", "Unrelated theme", &["note-z"], 0.85),
             ],
         );
@@ -835,8 +833,7 @@ mod tests {
         let mut cats = HashMap::new();
         cats.insert("vault-1".to_string(), "vault".to_string());
         let chunks = vec![mk_vault_chunk("vault-1", "note-a")];
-        let out =
-            build_vault_synthesis_briefings(&reader, &chunks, Some(&cats)).await;
+        let out = build_vault_synthesis_briefings(&reader, &chunks, Some(&cats)).await;
         assert!(out.contains("## Vault themes"), "header missing: {out}");
         assert!(out.contains("Markets vs commons"), "theme missing: {out}");
         assert!(
@@ -852,7 +849,10 @@ mod tests {
         cats.insert("conv-1".to_string(), "conversation".to_string());
         let chunks = vec![mk_chunk("conv-1", Some("uuid"))];
         let out = build_vault_synthesis_briefings(&reader, &chunks, Some(&cats)).await;
-        assert!(out.is_empty(), "non-vault hits should render nothing: {out}");
+        assert!(
+            out.is_empty(),
+            "non-vault hits should render nothing: {out}"
+        );
     }
 
     // Module-internal helper: deciding hit concentration given a chunk
@@ -876,13 +876,19 @@ mod tests {
     #[test]
     fn deep_mode_when_top3_dominate() {
         // 90% of hits in top 3.
-        assert_eq!(mode_for_distribution(&[10, 8, 7, 1, 1, 1, 1, 1]), BriefingMode::Deep);
+        assert_eq!(
+            mode_for_distribution(&[10, 8, 7, 1, 1, 1, 1, 1]),
+            BriefingMode::Deep
+        );
     }
 
     #[test]
     fn shallow_mode_when_diffuse() {
         // Even spread across 10 convs — top-3 at 30%.
-        assert_eq!(mode_for_distribution(&[3, 3, 3, 2, 2, 2, 2, 1, 1, 1]), BriefingMode::Shallow);
+        assert_eq!(
+            mode_for_distribution(&[3, 3, 3, 2, 2, 2, 2, 1, 1, 1]),
+            BriefingMode::Shallow
+        );
     }
 
     #[test]

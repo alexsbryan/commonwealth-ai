@@ -17,12 +17,10 @@ pub use assets::{
     DEFAULT_BACKENDS_TOML, SYSTEM_PROMPT, TOOL_DESCRIPTION,
 };
 pub use backend_trait::{
-    BraveBackendImpl, DuckDuckGoBackendImpl, MockBackendImpl, SearchCost,
-    SearchPrivacy, TavilyBackendImpl, WebSearchBackend, WebSearchRegistry,
+    BraveBackendImpl, DuckDuckGoBackendImpl, MockBackendImpl, SearchCost, SearchPrivacy,
+    TavilyBackendImpl, WebSearchBackend, WebSearchRegistry,
 };
-pub use orchestrator::{
-    BudgetView, OrchestratedSearch, SearchOrchestrator, SelectInputs,
-};
+pub use orchestrator::{BudgetView, OrchestratedSearch, SearchOrchestrator, SelectInputs};
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -82,15 +80,11 @@ pub async fn search(
 ) -> Result<Vec<SearchResult>> {
     match backend {
         SearchBackend::DuckDuckGo => search_duckduckgo(client, query, max_results).await,
-        SearchBackend::Brave { api_key } => {
-            search_brave(client, api_key, query, max_results).await
-        }
+        SearchBackend::Brave { api_key } => search_brave(client, api_key, query, max_results).await,
         SearchBackend::Tavily { api_key } => {
             search_tavily(client, api_key, query, max_results).await
         }
-        SearchBackend::Mock { corpus_path } => {
-            search_mock(corpus_path, query, max_results)
-        }
+        SearchBackend::Mock { corpus_path } => search_mock(corpus_path, query, max_results),
     }
 }
 
@@ -174,10 +168,7 @@ struct MockAliasIndex {
 ///
 /// Per-call file read is fine: aliases.toml is small (~KB) and the
 /// gym's search rate is bounded by replay count, not throughput.
-fn lookup_alias(
-    corpus_path: &std::path::Path,
-    normalized_query: &str,
-) -> Result<Option<String>> {
+fn lookup_alias(corpus_path: &std::path::Path, normalized_query: &str) -> Result<Option<String>> {
     let index_path = corpus_path.join("aliases.toml");
     let body = match std::fs::read_to_string(&index_path) {
         Ok(b) => b,
@@ -276,7 +267,10 @@ async fn search_duckduckgo(
     let response = client
         .post("https://html.duckduckgo.com/html/")
         .header("User-Agent", BROWSER_UA)
-        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .header(
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        )
         .header("Accept-Language", "en-US,en;q=0.9")
         .header("Content-Type", "application/x-www-form-urlencoded")
         .header("Origin", "https://html.duckduckgo.com")
@@ -301,7 +295,9 @@ async fn search_duckduckgo(
 
     // If DDG returns a bot-detection page (status 202 or no results markers),
     // skip straight to the fallback API approach.
-    if status.as_u16() == 202 || (!html.contains("result__a") && !html.contains("result__url") && html.len() < 20000) {
+    if status.as_u16() == 202
+        || (!html.contains("result__a") && !html.contains("result__url") && html.len() < 20000)
+    {
         eprintln!("[web] DDG appears to be blocking automated requests, using API fallback");
         return search_duckduckgo_api(client, query, max_results).await;
     }
@@ -318,7 +314,10 @@ async fn search_duckduckgo(
     let lite_response = client
         .post("https://lite.duckduckgo.com/lite/")
         .header("User-Agent", BROWSER_UA)
-        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .header(
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        )
         .header("Accept-Language", "en-US,en;q=0.9")
         .header("Content-Type", "application/x-www-form-urlencoded")
         .header("Origin", "https://lite.duckduckgo.com")
@@ -530,7 +529,10 @@ async fn search_duckduckgo_api(
     let response = client
         .get(&url)
         .header("User-Agent", BROWSER_UA)
-        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .header(
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        )
         .header("Accept-Language", "en-US,en;q=0.9")
         .send()
         .await
@@ -571,7 +573,8 @@ fn parse_google_results(html: &str, max_results: usize) -> Vec<SearchResult> {
         let url = urldecoded(&html[url_start..url_end]);
 
         // Skip Google's own links and non-http URLs.
-        if !url.starts_with("http") || url.contains("google.com") || url.contains("accounts.google") {
+        if !url.starts_with("http") || url.contains("google.com") || url.contains("accounts.google")
+        {
             pos = url_end;
             continue;
         }
@@ -819,10 +822,8 @@ fn urldecoded(s: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(byte) = u8::from_str_radix(
-                &String::from_utf8_lossy(&bytes[i + 1..i + 3]),
-                16,
-            ) {
+            if let Ok(byte) = u8::from_str_radix(&String::from_utf8_lossy(&bytes[i + 1..i + 3]), 16)
+            {
                 result.push(byte);
                 i += 3;
                 continue;
@@ -951,7 +952,10 @@ mod tests {
     #[test]
     fn mock_normalize_lowercases_and_collapses_whitespace() {
         assert_eq!(normalize_query("Hello  World"), "hello world");
-        assert_eq!(normalize_query("  leading and trailing  "), "leading and trailing");
+        assert_eq!(
+            normalize_query("  leading and trailing  "),
+            "leading and trailing"
+        );
         assert_eq!(normalize_query("Tabs\tand\nnewlines"), "tabs and newlines");
     }
 
@@ -1036,7 +1040,7 @@ aliases = [
 
         for q in &[
             "spacex starship test launch",
-            "Latest SpaceX Starship Flight",  // case + whitespace normalized
+            "Latest SpaceX Starship Flight", // case + whitespace normalized
             "  spacex   starship  ",
         ] {
             let out = search_mock(tmp.path(), q, 10).unwrap();
@@ -1069,9 +1073,9 @@ aliases = ["nvda stock price"]
         .unwrap();
 
         for q in &[
-            "NVDA stock price",                    // exact
-            "NVDA stock price today",              // suffix
-            "current NVDA stock price",            // prefix
+            "NVDA stock price",                      // exact
+            "NVDA stock price today",                // suffix
+            "current NVDA stock price",              // prefix
             "what's the NVDA stock price right now", // both
         ] {
             let out = search_mock(tmp.path(), q, 10).unwrap();
@@ -1152,13 +1156,15 @@ aliases = ["completely different"]
     #[test]
     fn mock_malformed_aliases_toml_is_loud_error() {
         let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join("aliases.toml"), "this is not valid toml [[[").unwrap();
-        let err = search_mock(tmp.path(), "anything", 10).expect_err("malformed aliases must error");
+        std::fs::write(
+            tmp.path().join("aliases.toml"),
+            "this is not valid toml [[[",
+        )
+        .unwrap();
+        let err =
+            search_mock(tmp.path(), "anything", 10).expect_err("malformed aliases must error");
         let msg = format!("{err}");
-        assert!(
-            msg.contains("aliases index malformed"),
-            "msg={msg}"
-        );
+        assert!(msg.contains("aliases index malformed"), "msg={msg}");
     }
 
     #[test]
@@ -1175,8 +1181,7 @@ aliasses = ["whatever"]
 "#,
         )
         .unwrap();
-        let err = search_mock(tmp.path(), "anything", 10)
-            .expect_err("unknown field must error");
+        let err = search_mock(tmp.path(), "anything", 10).expect_err("unknown field must error");
         let msg = format!("{err}");
         assert!(msg.contains("aliases index malformed"), "msg={msg}");
     }

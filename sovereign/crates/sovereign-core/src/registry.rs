@@ -52,10 +52,7 @@ impl ToolRegistry {
             })
             .map(|t| t.as_ref())
             .ok_or_else(|| {
-                let available: Vec<String> = self.tools
-                    .iter()
-                    .map(|t| t.descriptor().id)
-                    .collect();
+                let available: Vec<String> = self.tools.iter().map(|t| t.descriptor().id).collect();
                 tracing::warn!(
                     requested = tool_id,
                     available = ?available,
@@ -84,10 +81,7 @@ impl ToolRegistry {
     /// Snapshot of call counts since server start, sorted by count descending.
     pub fn call_counts(&self) -> Vec<(String, u64)> {
         let counts = self.call_counts.lock().unwrap_or_else(|e| e.into_inner());
-        let mut v: Vec<(String, u64)> = counts
-            .iter()
-            .map(|(k, v)| (k.clone(), *v))
-            .collect();
+        let mut v: Vec<(String, u64)> = counts.iter().map(|(k, v)| (k.clone(), *v)).collect();
         v.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         v
     }
@@ -95,7 +89,8 @@ impl ToolRegistry {
     /// Remove all tools whose ID starts with the given prefix.
     /// Used when reconnecting an MCP server to replace old tool registrations.
     pub fn remove_by_prefix(&mut self, prefix: &str) {
-        self.tools.retain(|t| !t.descriptor().id.starts_with(prefix));
+        self.tools
+            .retain(|t| !t.descriptor().id.starts_with(prefix));
     }
 
     /// Tier 4 cache-aware dispatch. Consults the wired

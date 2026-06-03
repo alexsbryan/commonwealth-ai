@@ -203,7 +203,10 @@ impl Recipe {
         }
         if let Some(sched) = &self.schedule {
             parse_window(&sched.active_hours).map_err(|e| {
-                RecipeError::Invalid(self.recipe.id.clone(), format!("schedule.active_hours: {e}"))
+                RecipeError::Invalid(
+                    self.recipe.id.clone(),
+                    format!("schedule.active_hours: {e}"),
+                )
             })?;
         }
         for rule in &self.enrich.failure_classifier {
@@ -432,8 +435,14 @@ command = "echo {key}"
         let r = Recipe::from_toml(toml).unwrap();
         let err = r.load_keys().unwrap_err();
         let msg = format!("{err}");
-        assert!(msg.contains("exit 7") || msg.contains("Some(7)"), "got: {msg}");
-        assert!(msg.contains("--slugs") || msg.contains("--key"), "got: {msg}");
+        assert!(
+            msg.contains("exit 7") || msg.contains("Some(7)"),
+            "got: {msg}"
+        );
+        assert!(
+            msg.contains("--slugs") || msg.contains("--key"),
+            "got: {msg}"
+        );
     }
 
     #[test]

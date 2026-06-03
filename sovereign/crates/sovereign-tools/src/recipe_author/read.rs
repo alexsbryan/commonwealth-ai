@@ -40,12 +40,11 @@ impl Tool for RecipeReadTool {
         ToolDescriptor {
             id: "recipe_read".into(),
             name: "RecipeRead".into(),
-            description:
-                "Read a recipe TOML file from ~/.sovereign/recipes/. Use this to \
+            description: "Read a recipe TOML file from ~/.sovereign/recipes/. Use this to \
                  survey an existing recipe's shape before drafting a new one. \
                  Pass the recipe id (e.g. \"sec-investigation\") or a relative \
                  path under ~/.sovereign/recipes/."
-                    .into(),
+                .into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -58,15 +57,12 @@ impl Tool for RecipeReadTool {
                 },
                 "required": ["path"],
             }),
-            examples: vec![
-                ToolExample {
-                    situation:
-                        "Survey the existing SEC investigation recipe before \
+            examples: vec![ToolExample {
+                situation: "Survey the existing SEC investigation recipe before \
                          drafting one for CourtListener."
-                            .into(),
-                    call: serde_json::json!({"path": "sec-investigation"}),
-                },
-            ],
+                    .into(),
+                call: serde_json::json!({"path": "sec-investigation"}),
+            }],
             effect: Effect::Read,
             idempotency: Idempotency::Idempotent,
             latency: Latency::Instant,
@@ -86,26 +82,17 @@ impl Tool for RecipeReadTool {
         vec![Permission::RecipeAuthoring]
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
-        let raw_path = params
-            .get("path")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                sovereign_core::error::Error::InvalidInput(
-                    "RecipeReadTool requires a `path` parameter".into(),
-                )
-            })?;
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+        let raw_path = params.get("path").and_then(|v| v.as_str()).ok_or_else(|| {
+            sovereign_core::error::Error::InvalidInput(
+                "RecipeReadTool requires a `path` parameter".into(),
+            )
+        })?;
         let resolved = resolve_recipe_path(raw_path, self.recipes_dir.as_ref())?;
 
         let (exists, content) = match std::fs::read_to_string(&resolved) {
             Ok(s) => (true, s),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                (false, String::new())
-            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => (false, String::new()),
             Err(e) => {
                 return Err(sovereign_core::error::Error::InvalidInput(format!(
                     "failed to read {}: {e}",
@@ -188,10 +175,7 @@ mod tests {
         let root = make_root(home.path());
         let tool = RecipeReadTool::with_recipes_dir(root);
         let err = tool
-            .execute(
-                &serde_json::json!({"path": "../etc/passwd"}),
-                &ctx(),
-            )
+            .execute(&serde_json::json!({"path": "../etc/passwd"}), &ctx())
             .await
             .unwrap_err();
         assert!(format!("{err}").contains(".."));

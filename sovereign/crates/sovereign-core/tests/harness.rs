@@ -52,9 +52,12 @@ impl InferenceProvider for DeterministicInference {
             std::iter::repeat_n("Test Entity", batch_size)
                 .collect::<Vec<_>>()
                 .join("\n")
-        } else if prompt_lower.contains("write a single paragraph") && prompt_lower.contains("overview") {
+        } else if prompt_lower.contains("write a single paragraph")
+            && prompt_lower.contains("overview")
+        {
             // generate_overview — short deterministic paragraph.
-            "This is a deterministic test overview covering the document's main concept.".to_string()
+            "This is a deterministic test overview covering the document's main concept."
+                .to_string()
         } else if prompt_lower.contains("a, b, or c")
             || prompt_lower.contains("a) simple")
             || prompt_lower.contains("categories:")
@@ -72,10 +75,13 @@ impl InferenceProvider for DeterministicInference {
         } else if prompt_lower.contains("\"steps\"") && prompt_lower.contains("\"edges\"") {
             // Plan generation
             r#"{"goal":"test","steps":[{"id":0,"description":"answer","kind":"reason","prompt":"Answer the question","speed":"slow"}],"edges":[]}"#.to_string()
-        } else if prompt_lower.contains("how to search") && prompt_lower.contains("[search results for") {
+        } else if prompt_lower.contains("how to search")
+            && prompt_lower.contains("[search results for")
+        {
             // ReasonWithTools: has search results — synthesize now
             "Based on what I found, here is the answer. [Source: sep] The knowledge base confirms this.".to_string()
-        } else if prompt_lower.contains("how to search") && prompt_lower.contains("available tools") {
+        } else if prompt_lower.contains("how to search") && prompt_lower.contains("available tools")
+        {
             // ReasonWithTools: first iteration — emit a tool call
             r#"Let me search for relevant information. <tool_call>{"tool":"search","query":"Bergson laughter humor"}</tool_call>"#.to_string()
         } else if prompt_lower.contains("you have used all available searches") {
@@ -85,7 +91,8 @@ impl InferenceProvider for DeterministicInference {
             // Synthesis with knowledge context
             "Based on the provided knowledge, here is the answer. [Source: local knowledge] The sources indicate this is correct.".to_string()
         } else if prompt_lower.contains("search results") {
-            "Based on the sources provided, [1] indicates the answer. [2] supports this.".to_string()
+            "Based on the sources provided, [1] indicates the answer. [2] supports this."
+                .to_string()
         } else if prompt_lower.contains("\"pass\"") && prompt_lower.contains("feedback") {
             r#"{"pass": true}"#.to_string()
         } else if prompt_lower.contains("select the best") {
@@ -110,22 +117,34 @@ impl InferenceProvider for DeterministicInference {
             "Test conversation title".to_string()
         } else if prompt_lower.contains("extract the topic and domain") {
             // Topic context extraction — derive topic and domain from message content.
-            let topic = if prompt_lower.contains("schrödinger") || prompt_lower.contains("schrodinger") {
-                "Schrödinger"
-            } else if prompt_lower.contains("buddhis") || prompt_lower.contains("theravada") || prompt_lower.contains("zen") {
-                "Buddhist philosophy"
-            } else {
-                "general topic"
-            };
-            let domain = if prompt_lower.contains("buddhis") || prompt_lower.contains("theravada") || prompt_lower.contains("zen") {
+            let topic =
+                if prompt_lower.contains("schrödinger") || prompt_lower.contains("schrodinger") {
+                    "Schrödinger"
+                } else if prompt_lower.contains("buddhis")
+                    || prompt_lower.contains("theravada")
+                    || prompt_lower.contains("zen")
+                {
+                    "Buddhist philosophy"
+                } else {
+                    "general topic"
+                };
+            let domain = if prompt_lower.contains("buddhis")
+                || prompt_lower.contains("theravada")
+                || prompt_lower.contains("zen")
+            {
                 "buddhism"
-            } else if prompt_lower.contains("schrödinger") || prompt_lower.contains("schrodinger") || prompt_lower.contains("quantum") {
+            } else if prompt_lower.contains("schrödinger")
+                || prompt_lower.contains("schrodinger")
+                || prompt_lower.contains("quantum")
+            {
                 "physics"
             } else {
                 "general"
             };
             format!(r#"{{"topic": "{topic}", "domain": "{domain}"}}"#)
-        } else if prompt_lower.contains("no relevant results") || prompt_lower.contains("no corpus results") {
+        } else if prompt_lower.contains("no relevant results")
+            || prompt_lower.contains("no corpus results")
+        {
             // Empty-results path — answer from parametric knowledge (new layered confidence behavior)
             "While no corpus results were found, from general knowledge: this topic is well-studied. Here is a substantive answer based on established knowledge.".to_string()
         } else {
@@ -146,14 +165,17 @@ impl InferenceProvider for DeterministicInference {
             latency_ms: 1,
             oicp_meta: None,
             finish_reason: None,
-            completion_tokens: None,        })
+            completion_tokens: None,
+        })
     }
 
     async fn complete_stream(
         &self,
         _request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        Err(Error::NotImplemented("Streaming not supported in deterministic inference".to_string()))
+        Err(Error::NotImplemented(
+            "Streaming not supported in deterministic inference".to_string(),
+        ))
     }
 
     async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
@@ -184,7 +206,8 @@ impl InferenceProvider for AlwaysSearchInference {
         let text = if prompt_lower.contains("you have used all available searches") {
             "Forced synthesis after cap.".to_string()
         } else if prompt_lower.contains("how to search") {
-            r#"Searching again. <tool_call>{"tool":"search","query":"more results"}</tool_call>"#.to_string()
+            r#"Searching again. <tool_call>{"tool":"search","query":"more results"}</tool_call>"#
+                .to_string()
         } else {
             "fallback".to_string()
         };
@@ -196,7 +219,8 @@ impl InferenceProvider for AlwaysSearchInference {
             latency_ms: 1,
             oicp_meta: None,
             finish_reason: None,
-            completion_tokens: None,        })
+            completion_tokens: None,
+        })
     }
 
     async fn complete_stream(
@@ -248,8 +272,7 @@ impl TestHarness {
         let store_trait: Arc<dyn StateStore> = Arc::clone(&shared_store) as Arc<dyn StateStore>;
 
         let skills = Arc::new(skills);
-        let router: Box<dyn sovereign_core::traits::Router> =
-            Box::new(PassthroughRouter);
+        let router: Box<dyn sovereign_core::traits::Router> = Box::new(PassthroughRouter);
         let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
         let tools = Arc::new(ToolRegistry::new());
         let approval: Arc<dyn sovereign_core::traits::ApprovalChannel> =
@@ -297,8 +320,7 @@ impl TestHarness {
         let prov_value = metadata
             .get("provenance")
             .expect("Metadata should contain provenance");
-        serde_json::from_value(prov_value.clone())
-            .expect("Provenance should deserialize")
+        serde_json::from_value(prov_value.clone()).expect("Provenance should deserialize")
     }
 
     /// Get the number of messages in a conversation.
@@ -324,8 +346,7 @@ impl TestHarness {
         let store_trait: Arc<dyn StateStore> = Arc::clone(&shared_store) as Arc<dyn StateStore>;
 
         let skills = Arc::new(SkillRegistry::new());
-        let router: Box<dyn sovereign_core::traits::Router> =
-            Box::new(PassthroughRouter);
+        let router: Box<dyn sovereign_core::traits::Router> = Box::new(PassthroughRouter);
         let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
         let tools = Arc::new(ToolRegistry::new());
         let scripted_approval = Arc::new(ScriptedApprovalChannel::new(info_response));
@@ -480,7 +501,8 @@ impl InferenceProvider for ScriptableInference {
                     latency_ms: 1,
                     oicp_meta: None,
                     finish_reason: None,
-                    completion_tokens: None,                }),
+                    completion_tokens: None,
+                }),
                 GapScript::Gap { gap } => {
                     let body = format!(
                         r#"{{"has_gap": true, "current_understanding": "cu", "gap": "{gap}", "relevance": "r", "satisfying_source": "s", "search_hints": ["h"]}}"#,
@@ -494,11 +516,10 @@ impl InferenceProvider for ScriptableInference {
                         latency_ms: 1,
                         oicp_meta: None,
                         finish_reason: None,
-                        completion_tokens: None,                    })
+                        completion_tokens: None,
+                    })
                 }
-                GapScript::Error => Err(Error::Inference(
-                    "scripted gap-check failure".to_string(),
-                )),
+                GapScript::Error => Err(Error::Inference("scripted gap-check failure".to_string())),
             };
         }
 
@@ -513,13 +534,14 @@ impl InferenceProvider for ScriptableInference {
                     latency_ms: 1,
                     oicp_meta: None,
                     finish_reason: None,
-                    completion_tokens: None,                }),
-                RefineScript::Error => Err(Error::Inference(
-                    "scripted refinement failure".to_string(),
-                )),
-                RefineScript::Unused => panic!(
-                    "refinement invoked unexpectedly; test configured RefineScript::Unused"
-                ),
+                    completion_tokens: None,
+                }),
+                RefineScript::Error => {
+                    Err(Error::Inference("scripted refinement failure".to_string()))
+                }
+                RefineScript::Unused => {
+                    panic!("refinement invoked unexpectedly; test configured RefineScript::Unused")
+                }
             };
         }
 
@@ -578,11 +600,7 @@ impl ScriptedApprovalChannel {
 
 #[async_trait]
 impl ApprovalChannel for ScriptedApprovalChannel {
-    async fn request_approval(
-        &self,
-        _step: &Step,
-        _preview: &ActionPreview,
-    ) -> Result<bool> {
+    async fn request_approval(&self, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
         Ok(true)
     }
 

@@ -4,9 +4,9 @@
 #[allow(unused_imports)]
 use super::*;
 #[allow(unused_imports)]
-use serde::{Deserialize, Serialize};
-#[allow(unused_imports)]
 use crate::oicp;
+#[allow(unused_imports)]
+use serde::{Deserialize, Serialize};
 
 // A persistent document that has been ingested once and can be
 // queried many times. Lives in the document library alongside
@@ -144,9 +144,7 @@ impl AssetState {
             AssetState::BuildingSkeleton {
                 chunks_done,
                 chunks_total,
-            } if *chunks_total > 0 => {
-                Some(0.5 + *chunks_done as f32 / *chunks_total as f32 * 0.5)
-            }
+            } if *chunks_total > 0 => Some(0.5 + *chunks_done as f32 / *chunks_total as f32 * 0.5),
             AssetState::MultiHopReady => Some(0.7),
             AssetState::Ready => Some(1.0),
             _ => None,
@@ -157,8 +155,7 @@ impl AssetState {
 /// Coarse classification of a document's genre/type. Influences
 /// which skeleton extraction prompts are used and which starter
 /// chips are shown in the conversation view.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum DocumentTypeTag {
     /// Novels, memoirs, literary non-fiction.
     Narrative,
@@ -187,7 +184,6 @@ impl DocumentTypeTag {
         }
     }
 }
-
 
 // ─── Document Skeleton ────────────────────────────────────────
 //
@@ -521,4 +517,3 @@ impl DocumentAssetOperation {
         }
     }
 }
-

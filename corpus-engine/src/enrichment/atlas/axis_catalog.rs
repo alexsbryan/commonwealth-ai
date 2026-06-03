@@ -145,7 +145,8 @@ pub const AXIS_CATALOG: &[TypedAxis] = &[
         atom_kind: AtomKind::ClaimWithKind("evidence"),
         gating_fields: &[GatingField::Name, GatingField::Kind],
         informational_fields: &["content_contains_any", "supports_contains_any"],
-        description: "Evidence invocation (study / figure / example); `supports` edge-walk deferred.",
+        description:
+            "Evidence invocation (study / figure / example); `supports` edge-walk deferred.",
     },
     TypedAxis {
         key: "opposition",
@@ -173,7 +174,9 @@ pub fn axis_by_key(key: &str) -> Option<&'static TypedAxis> {
 /// Iterate catalog entries belonging to a discourse mode, preserving
 /// catalog order.
 pub fn axes_for_mode(mode: DiscourseMode) -> impl Iterator<Item = &'static TypedAxis> {
-    AXIS_CATALOG.iter().filter(move |a| a.discourse_mode == mode)
+    AXIS_CATALOG
+        .iter()
+        .filter(move |a| a.discourse_mode == mode)
 }
 
 /// Iterate every catalog entry, preserving catalog order.
@@ -192,7 +195,13 @@ mod tests {
             .collect();
         assert_eq!(
             keys,
-            vec!["mechanism", "named_position", "evidence", "opposition", "concession"],
+            vec![
+                "mechanism",
+                "named_position",
+                "evidence",
+                "opposition",
+                "concession"
+            ],
             "v1 catalog must ship exactly these five argumentative axes in this order"
         );
     }
@@ -200,8 +209,9 @@ mod tests {
     #[test]
     fn axis_by_key_roundtrip() {
         for axis in AXIS_CATALOG {
-            let looked_up = axis_by_key(axis.key)
-                .unwrap_or_else(|| panic!("axis {:?} must be retrievable by its own key", axis.key));
+            let looked_up = axis_by_key(axis.key).unwrap_or_else(|| {
+                panic!("axis {:?} must be retrievable by its own key", axis.key)
+            });
             assert_eq!(looked_up.key, axis.key);
         }
     }

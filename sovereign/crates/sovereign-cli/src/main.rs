@@ -27,12 +27,12 @@
 mod amend_cmd;
 mod archaeology_eval_cmd;
 mod audit_cmd;
-mod daemon_bin;
-mod dev_bin;
 #[cfg(feature = "dev-tools")]
 mod awareness_cmd;
 mod charter_cmd;
+mod daemon_bin;
 mod design_cmd;
+mod dev_bin;
 mod drift_cmd;
 mod git_archaeology_cmd;
 mod init;
@@ -41,8 +41,8 @@ mod memory_cmd;
 mod milestone_cmd;
 mod notes_cmd;
 mod plan_cmd;
-mod refresh_cmd;
 mod reflect_cmd;
+mod refresh_cmd;
 mod rough_edges_cmd;
 mod serve_cmd;
 mod status_cmd;
@@ -123,7 +123,9 @@ impl ApprovalChannel for CliApprovalChannel {
 
     fn emit_progress(&self, step: &Step, output: &StepOutput) {
         let status = match output {
-            StepOutput::Text(_) | StepOutput::Json(_) | StepOutput::ReasonWithToolsResult { .. } => "done",
+            StepOutput::Text(_)
+            | StepOutput::Json(_)
+            | StepOutput::ReasonWithToolsResult { .. } => "done",
             StepOutput::Jump(t) => {
                 eprintln!("  [step {}] {} → jump to {t}", step.id, step.description);
                 return;
@@ -169,37 +171,88 @@ const HELP: Help = Help {
              sovereign --model <path.gguf> [options]   (legacy interactive REPL)",
         ),
         HelpSection::Subcommands(&[
-            ("setup",   "First-run: detect hardware, download models, start daemon"),
-            ("chat",    "CLI mirror of the desktop chat flow (ask / session / inspect)"),
-            ("project", "Per-project code intelligence (init / serve / status / refresh)"),
-            ("mesh",    "Mesh management (create / join / rotate / status)"),
-            ("alignment", "Mesh-replicated workspace migrate / status (~/.claude + notes.db)"),
-            ("corpus",  "Knowledge corpus install / remove / status"),
-            ("code",    "Code intelligence tooling (index / watch / mcp-status)"),
-            ("doctor",  "Diagnose setup and daemon health"),
+            (
+                "setup",
+                "First-run: detect hardware, download models, start daemon",
+            ),
+            (
+                "chat",
+                "CLI mirror of the desktop chat flow (ask / session / inspect)",
+            ),
+            (
+                "project",
+                "Per-project code intelligence (init / serve / status / refresh)",
+            ),
+            ("mesh", "Mesh management (create / join / rotate / status)"),
+            (
+                "alignment",
+                "Mesh-replicated workspace migrate / status (~/.claude + notes.db)",
+            ),
+            ("corpus", "Knowledge corpus install / remove / status"),
+            (
+                "code",
+                "Code intelligence tooling (index / watch / mcp-status)",
+            ),
+            ("doctor", "Diagnose setup and daemon health"),
             ("reflect", "Review session reflections; retire fixed ones"),
-            ("recipe",  "Run a corpus ingestion recipe"),
-            ("pipeline", "Generic ingestion driver — durable worklist + retry + pause-resume"),
-            ("bench",   "Throughput + correctness benchmarks for enrichment LLM tasks"),
-            ("search-gym", "Correctness harness for web-search-during-inference (mock-replay)"),
-            ("knowledge-gym", "Correctness harness for the unified knowledge_lookup tool (mock-replay)"),
-            ("atlas",   "Atlas-style structural enrichment (Wikipedia link graph today)"),
-            ("eval",    "Run a question bank against a corpus; measure retrieval quality"),
-            ("tools",   "Invoke code-intelligence tools from the CLI (list / describe / call)"),
-            ("mcp",     "MCP server diagnostics (list tools, proxy)"),
-            ("daemon",  "(internal) Long-running service managed by launchd/systemd"),
+            ("recipe", "Run a corpus ingestion recipe"),
+            (
+                "pipeline",
+                "Generic ingestion driver — durable worklist + retry + pause-resume",
+            ),
+            (
+                "bench",
+                "Throughput + correctness benchmarks for enrichment LLM tasks",
+            ),
+            (
+                "search-gym",
+                "Correctness harness for web-search-during-inference (mock-replay)",
+            ),
+            (
+                "knowledge-gym",
+                "Correctness harness for the unified knowledge_lookup tool (mock-replay)",
+            ),
+            (
+                "atlas",
+                "Atlas-style structural enrichment (Wikipedia link graph today)",
+            ),
+            (
+                "eval",
+                "Run a question bank against a corpus; measure retrieval quality",
+            ),
+            (
+                "tools",
+                "Invoke code-intelligence tools from the CLI (list / describe / call)",
+            ),
+            ("mcp", "MCP server diagnostics (list tools, proxy)"),
+            (
+                "daemon",
+                "(internal) Long-running service managed by launchd/systemd",
+            ),
         ]),
         HelpSection::Flags(&[
-            ("--model <path>",         "Quick responder GGUF (REPL mode only)"),
-            ("--primary-model <path>", "Main responder GGUF (REPL, lazy-loaded)"),
-            ("--data-dir <path>",      "Database directory (default: data)"),
-            ("--skills-dir <path>",    "Skills directory (default: ~/.sovereign/skills)"),
-            ("--ingest <path>",        "Ingest documents from directory before REPL"),
-            ("--router",               "Enable LLM-based intent routing"),
-            ("--no-knowledge-view",    "Disable KnowledgeView landscape digests (default: enabled)"),
-            ("--brave-api-key <key>",  "Brave Search key (optional)"),
+            ("--model <path>", "Quick responder GGUF (REPL mode only)"),
+            (
+                "--primary-model <path>",
+                "Main responder GGUF (REPL, lazy-loaded)",
+            ),
+            ("--data-dir <path>", "Database directory (default: data)"),
+            (
+                "--skills-dir <path>",
+                "Skills directory (default: ~/.sovereign/skills)",
+            ),
+            (
+                "--ingest <path>",
+                "Ingest documents from directory before REPL",
+            ),
+            ("--router", "Enable LLM-based intent routing"),
+            (
+                "--no-knowledge-view",
+                "Disable KnowledgeView landscape digests (default: enabled)",
+            ),
+            ("--brave-api-key <key>", "Brave Search key (optional)"),
             ("--tavily-api-key <key>", "Tavily Search key (optional)"),
-            ("--help, -h",             "Show this message"),
+            ("--help, -h", "Show this message"),
         ]),
         HelpSection::Notes(
             "Run `sovereign <subcommand> --help` for detail on any specific subcommand.",
@@ -398,9 +451,7 @@ fn main() {
             "<non-string panic payload>"
         };
         // eprintln first — survives before/after tracing setup.
-        eprintln!(
-            "sovereign panic at {location}: {payload}\nbacktrace:\n{backtrace}"
-        );
+        eprintln!("sovereign panic at {location}: {payload}\nbacktrace:\n{backtrace}");
         tracing::error!(
             location = %location,
             payload = %payload,
@@ -447,8 +498,8 @@ async fn async_main() {
             // execs into it without setting up a tracing subscriber —
             // the sibling's main() installs the appropriate filter for
             // each verb.
-            "mesh" | "alignment" | "corpus" | "meta-atlas" | "mcp" | "recipe"
-            | "pipeline" | "recipe-agent" | "maintainer" => {
+            "mesh" | "alignment" | "corpus" | "meta-atlas" | "mcp" | "recipe" | "pipeline"
+            | "recipe-agent" | "maintainer" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }
@@ -582,8 +633,8 @@ async fn async_main() {
                 std::process::exit(code);
             }
             // ── LLM cluster (continued) → sovereign-cli-llm ──
-            "enrich" | "atlas" | "eval" | "voice" | "bench" | "search-gym"
-            | "knowledge-gym" | "chat" | "reading-diag" | "newsworthy" => {
+            "enrich" | "atlas" | "eval" | "voice" | "bench" | "search-gym" | "knowledge-gym"
+            | "chat" | "reading-diag" | "newsworthy" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }

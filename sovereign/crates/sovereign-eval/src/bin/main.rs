@@ -6,16 +6,20 @@
 //!   diff <run-id-a> <run-id-b>         text diff across the two runs
 //!   audit <run1-id> <run2-id>          audit-trail-only (run #1's notes vs run #2's queries)
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, Subcommand};
-use std::path::{Path, PathBuf};
 use sovereign_eval::{
     audit_trail, cognitive, diff as diff_mod, finalize, judge, manifest, mechanical, regression,
     scope, tool_grader, workflow,
 };
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
-#[command(name = "sovereign-eval", version, about = "Tool-efficacy self-host harness")]
+#[command(
+    name = "sovereign-eval",
+    version,
+    about = "Tool-efficacy self-host harness"
+)]
 struct Cli {
     /// Override the Sovereign data directory. Defaults to `$SOVEREIGN_DATA_DIR`,
     /// then `~/.sovereign/`.
@@ -252,7 +256,10 @@ struct ScoreArgs {
     #[arg(long, help = "Run ID of an earlier run; enables audit-trail analysis")]
     against: Option<String>,
 
-    #[arg(long, help = "Skip the LLM-judge call; only mechanical + workflow + audit")]
+    #[arg(
+        long,
+        help = "Skip the LLM-judge call; only mechanical + workflow + audit"
+    )]
     no_judge: bool,
     #[arg(long, help = "Skip the mechanical (cargo test) call")]
     no_mechanical: bool,
@@ -263,22 +270,41 @@ struct ScoreArgs {
     #[arg(long, help = "Skip the replay-based tool grader")]
     no_grade_tools: bool,
 
-    #[arg(long, help = "Git ref representing pre-session state for diff-scope analysis (e.g. main, HEAD~5, abc123)")]
+    #[arg(
+        long,
+        help = "Git ref representing pre-session state for diff-scope analysis (e.g. main, HEAD~5, abc123)"
+    )]
     baseline_ref: Option<String>,
-    #[arg(long, help = "Semicolon-separated globs of in-scope paths (e.g. 'src/**;.sovereign/features/oicp-core/**'). Default: '**/*' (everything except scorer/, runs/, .git/).")]
+    #[arg(
+        long,
+        help = "Semicolon-separated globs of in-scope paths (e.g. 'src/**;.sovereign/features/oicp-core/**'). Default: '**/*' (everything except scorer/, runs/, .git/)."
+    )]
     allowed_paths: Option<String>,
 
-    #[arg(long, help = "Path to a baseline mechanical.json captured before the session; enables regression analysis")]
+    #[arg(
+        long,
+        help = "Path to a baseline mechanical.json captured before the session; enables regression analysis"
+    )]
     baseline_mechanical: Option<PathBuf>,
 
-    #[arg(long, help = "Comma-separated explicit list of source files for the judge prompt (defaults: src/**/*.rs + Cargo.toml; or git-diff scope when --baseline-ref is set)")]
+    #[arg(
+        long,
+        help = "Comma-separated explicit list of source files for the judge prompt (defaults: src/**/*.rs + Cargo.toml; or git-diff scope when --baseline-ref is set)"
+    )]
     judge_files: Option<String>,
-    #[arg(long, help = "Path to the authoritative spec for the judge to read (defaults: oicp-v0.3.md / spec.md / SPEC.md / PROTOCOL.md at the experiment-repo root)")]
+    #[arg(
+        long,
+        help = "Path to the authoritative spec for the judge to read (defaults: oicp-v0.3.md / spec.md / SPEC.md / PROTOCOL.md at the experiment-repo root)"
+    )]
     contract_path: Option<PathBuf>,
     #[arg(long, help = "Max bytes of source the judge sees (default: 200KB)")]
     judge_max_bytes: Option<usize>,
 
-    #[arg(long, default_value = "http://localhost:9741/mcp/message", help = "MCP message endpoint for tool-call replay")]
+    #[arg(
+        long,
+        default_value = "http://localhost:9741/mcp/message",
+        help = "MCP message endpoint for tool-call replay"
+    )]
     mcp_url: String,
 }
 
@@ -303,7 +329,11 @@ fn cmd_finalize_run(
         }
     }
 
-    let daemon_url_opt = if daemon_url == "skip" { None } else { Some(daemon_url) };
+    let daemon_url_opt = if daemon_url == "skip" {
+        None
+    } else {
+        Some(daemon_url)
+    };
 
     let m = manifest::build(manifest::BuildOpts {
         features_db: &features_db,
@@ -360,12 +390,13 @@ fn cmd_score_impl(data_dir: &Path, args: ScoreArgs) -> Result<()> {
     let mech = if args.no_mechanical {
         None
     } else {
-        let golden = mechanical::discover_golden_manifest(&args.experiment_repo).ok_or_else(|| {
-            anyhow::anyhow!(
-                "scorer/golden/Cargo.toml not found under {}",
-                args.experiment_repo.display()
-            )
-        })?;
+        let golden =
+            mechanical::discover_golden_manifest(&args.experiment_repo).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "scorer/golden/Cargo.toml not found under {}",
+                    args.experiment_repo.display()
+                )
+            })?;
         let report = mechanical::run(&golden).context("mechanical scorer")?;
         write_pretty_json(&target_dir.join("mechanical.json"), &report)?;
         tracing::info!(
@@ -395,8 +426,10 @@ fn cmd_score_impl(data_dir: &Path, args: ScoreArgs) -> Result<()> {
                 None => {
                     let existing = target_dir.join("mechanical.json");
                     if existing.exists() {
-                        Some(serde_json::from_str(&std::fs::read_to_string(&existing)?)
-                            .context("parsing existing mechanical.json")?)
+                        Some(
+                            serde_json::from_str(&std::fs::read_to_string(&existing)?)
+                                .context("parsing existing mechanical.json")?,
+                        )
                     } else {
                         None
                     }
@@ -462,10 +495,7 @@ fn cmd_score_impl(data_dir: &Path, args: ScoreArgs) -> Result<()> {
     // Seam #4 — judge with parameterized inputs
     if !args.no_judge {
         let feature_id = &m.run.feature_id;
-        let source_files = args
-            .judge_files
-            .as_deref()
-            .map(parse_judge_files);
+        let source_files = args.judge_files.as_deref().map(parse_judge_files);
         let inputs = judge::read_inputs(judge::ReadOpts {
             experiment_repo: &args.experiment_repo,
             feature_id,
@@ -611,8 +641,7 @@ fn run_dir(data_dir: &Path, override_dir: Option<&Path>, run_id: &str) -> PathBu
 
 fn write_pretty_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<()> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("mkdir {}", parent.display()))?;
+        std::fs::create_dir_all(parent).with_context(|| format!("mkdir {}", parent.display()))?;
     }
     let json = serde_json::to_string_pretty(value).context("serializing")?;
     std::fs::write(path, json).with_context(|| format!("writing {}", path.display()))?;

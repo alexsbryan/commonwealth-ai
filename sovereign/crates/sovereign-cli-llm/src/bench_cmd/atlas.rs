@@ -123,16 +123,11 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         match args[i].as_str() {
             "--corpus" => {
                 i += 1;
-                out.corpus = args
-                    .get(i)
-                    .ok_or("--corpus expects a value")?
-                    .clone();
+                out.corpus = args.get(i).ok_or("--corpus expects a value")?.clone();
             }
             "--output" => {
                 i += 1;
-                out.output = Some(PathBuf::from(
-                    args.get(i).ok_or("--output expects a path")?,
-                ));
+                out.output = Some(PathBuf::from(args.get(i).ok_or("--output expects a path")?));
             }
             "--tasks" => {
                 i += 1;
@@ -273,7 +268,10 @@ pub async fn cmd_atlas(args: &[String]) -> i32 {
     let cfg = match EnrichConfig::require(&parsed.corpus) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("error: loading enrichment config for `{}`: {e}", parsed.corpus);
+            eprintln!(
+                "error: loading enrichment config for `{}`: {e}",
+                parsed.corpus
+            );
             eprintln!("hint: run `sovereign enrich init {}` first", parsed.corpus);
             return 1;
         }
@@ -305,7 +303,11 @@ pub async fn cmd_atlas(args: &[String]) -> i32 {
         if pool.is_empty() {
             eprintln!(
                 "error: --tasks filter matched zero tasks. Available: {}",
-                tasks.iter().map(|t| t.id.as_str()).collect::<Vec<_>>().join(", ")
+                tasks
+                    .iter()
+                    .map(|t| t.id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             );
             return 2;
         }
@@ -317,7 +319,14 @@ pub async fn cmd_atlas(args: &[String]) -> i32 {
     println!("=== sovereign bench atlas ===");
     println!("  daemon:   {}", cfg.base_url);
     println!("  corpus:   {}", parsed.corpus);
-    println!("  tasks:    {}", selected.iter().map(|t| t.id.as_str()).collect::<Vec<_>>().join(", "));
+    println!(
+        "  tasks:    {}",
+        selected
+            .iter()
+            .map(|t| t.id.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
     println!();
 
     let client = reqwest::Client::builder()
@@ -349,13 +358,7 @@ pub async fn cmd_atlas(args: &[String]) -> i32 {
 
     for task in &selected {
         let start = Instant::now();
-        let raw = run_chat(
-            &client,
-            &cfg.base_url,
-            &task.prompt,
-            task.max_tokens,
-        )
-        .await;
+        let raw = run_chat(&client, &cfg.base_url, &task.prompt, task.max_tokens).await;
         let elapsed = start.elapsed();
 
         let result = match raw {
@@ -363,8 +366,7 @@ pub async fn cmd_atlas(args: &[String]) -> i32 {
                 if model_id.is_none() {
                     model_id = Some(resp.model.clone());
                 }
-                let (success, error, atoms) =
-                    validate(task, &resp.content, pipeline.as_ref());
+                let (success, error, atoms) = validate(task, &resp.content, pipeline.as_ref());
                 let secs = elapsed.as_secs_f64();
                 let tps = if secs > 0.0 {
                     resp.usage.completion_tokens as f64 / secs
@@ -387,7 +389,11 @@ pub async fn cmd_atlas(args: &[String]) -> i32 {
                     // not in the first 500 chars (see Darwin-9B's
                     // missing-quote at byte 11409). Drop on success
                     // to keep result files small.
-                    response_head: if success { None } else { Some(resp.content.clone()) },
+                    response_head: if success {
+                        None
+                    } else {
+                        Some(resp.content.clone())
+                    },
                 }
             }
             Err(e) => BenchTaskResult {
@@ -550,8 +556,7 @@ fn build_tasks(chapters: &[ChapterInput], max_tokens_cap: u32) -> Vec<BenchTask>
         BenchTask {
             id: "cluster_name_synth".into(),
             description:
-                "Synthetic Phase 3-style cluster naming (small input, single-object output)"
-                    .into(),
+                "Synthetic Phase 3-style cluster naming (small input, single-object output)".into(),
             prompt: cluster_name_prompt(),
             // Cluster naming outputs are tiny in production. Cap
             // smaller so a runaway response (model that ignores the
@@ -592,8 +597,7 @@ fn cluster_name_prompt() -> ChatPrompt {
         "required": ["label", "rationale"],
         "additionalProperties": false
     });
-    ChatPrompt::new(system, user)
-        .with_response_schema("cluster_label", schema)
+    ChatPrompt::new(system, user).with_response_schema("cluster_label", schema)
 }
 
 // ─── HTTP + response shape ─────────────────────────────────────
@@ -767,11 +771,7 @@ fn summarize(results: &[BenchTaskResult]) -> BenchSummary {
 
     let decode_tps_mean = mean(successful.iter().map(|r| r.decode_tokens_per_sec));
     let phase1_decode_tps_mean = mean(phase1_ok.iter().map(|r| r.decode_tokens_per_sec));
-    let phase1_secs_mean = mean(
-        phase1_ok
-            .iter()
-            .map(|r| r.latency_ms as f64 / 1000.0),
-    );
+    let phase1_secs_mean = mean(phase1_ok.iter().map(|r| r.latency_ms as f64 / 1000.0));
     let phase1_success_rate = if phase1_all.is_empty() {
         0.0
     } else {
@@ -825,4 +825,3 @@ fn chrono_format_now() -> String {
         .unwrap_or(0);
     format!("unix-{secs}")
 }
-

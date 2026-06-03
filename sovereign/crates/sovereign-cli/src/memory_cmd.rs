@@ -22,9 +22,9 @@
 
 use std::path::PathBuf;
 
+use sovereign_core::traits::MemoryStore;
 use sovereign_core::types::{Memory, MemoryKind};
 use sovereign_store::sqlite::SqliteStateStore;
-use sovereign_core::traits::MemoryStore;
 
 pub async fn run_memory(args: &[String]) -> i32 {
     let Some(first) = args.first() else {
@@ -183,10 +183,7 @@ async fn cmd_expand(args: &[String]) -> i32 {
 /// Uses a small ad-hoc query directly against the connection so we
 /// don't have to add a new trait method for the rare provenance-walk
 /// case.
-async fn read_superseded(
-    _store: &SqliteStateStore,
-    id: &str,
-) -> Result<Option<Memory>, String> {
+async fn read_superseded(_store: &SqliteStateStore, id: &str) -> Result<Option<Memory>, String> {
     // The trait surface deliberately excludes superseded rows. For
     // this CLI surface we need the raw provenance, so we issue a
     // direct sqlite query through the same db file. Open a fresh

@@ -96,7 +96,10 @@ impl CleanupError {
                 format!("could not reach inference daemon: {e}")
             }
             CleanupError::Http { status, body } => {
-                format!("daemon rejected cleanup request ({status}): {}", body.trim())
+                format!(
+                    "daemon rejected cleanup request ({status}): {}",
+                    body.trim()
+                )
             }
             CleanupError::Malformed(e) => format!("daemon response malformed: {e}"),
             CleanupError::Timeout => "cleanup request timed out".to_string(),
@@ -258,7 +261,8 @@ mod tests {
 
     #[tokio::test]
     async fn round_trip_ok_response() {
-        let canned = r#"{"choices":[{"message":{"role":"assistant","content":"Cleaned **text**."}}]}"#;
+        let canned =
+            r#"{"choices":[{"message":{"role":"assistant","content":"Cleaned **text**."}}]}"#;
         let (url, _captured) = spawn_one_shot(canned).await;
         let ctx = OcrCtx::for_test(
             PathBuf::from("/bin/true"),

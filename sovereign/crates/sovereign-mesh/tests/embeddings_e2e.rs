@@ -56,13 +56,8 @@ fn build_app_state(with_embed: bool) -> AppState {
     };
     let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
     let app_registry = Arc::new(AppRegistry::new());
-    let app_state = AppState::new_with_platform_and_engine(
-        self_id,
-        mesh,
-        mesh_store,
-        app_registry,
-        None,
-    );
+    let app_state =
+        AppState::new_with_platform_and_engine(self_id, mesh, mesh_store, app_registry, None);
     if !with_embed {
         return app_state;
     }

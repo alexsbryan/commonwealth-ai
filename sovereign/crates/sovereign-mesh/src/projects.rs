@@ -250,9 +250,15 @@ impl Default for WatcherToggles {
     }
 }
 
-fn default_true() -> bool { true }
-fn default_scip_debounce_ms() -> u64 { 2000 }
-fn default_git_poll_secs() -> u64 { 30 }
+fn default_true() -> bool {
+    true
+}
+fn default_scip_debounce_ms() -> u64 {
+    2000
+}
+fn default_git_poll_secs() -> u64 {
+    30
+}
 /// Default ignore_paths seeded at project registration. `.sovereign/`
 /// is the daemon's project-local state directory (notes.db, mesh.db,
 /// features.db + their SQLite WAL/SHM sidecars) — including it by
@@ -295,13 +301,12 @@ impl Registry {
         if !path.exists() {
             return Ok(Self::default());
         }
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("read {}: {e}", path.display()))?;
+        let content =
+            std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
         if content.trim().is_empty() {
             return Ok(Self::default());
         }
-        serde_json::from_str(&content)
-            .map_err(|e| format!("parse {}: {e}", path.display()))
+        serde_json::from_str(&content).map_err(|e| format!("parse {}: {e}", path.display()))
     }
 
     /// Atomic save: write to `projects.json.new`, then rename over.
@@ -323,10 +328,8 @@ impl Registry {
                 .unwrap_or("projects.json")
         );
         let tmp = path.with_file_name(tmp_name);
-        let json = serde_json::to_string_pretty(self)
-            .map_err(|e| format!("serialize: {e}"))?;
-        std::fs::write(&tmp, json)
-            .map_err(|e| format!("write {}: {e}", tmp.display()))?;
+        let json = serde_json::to_string_pretty(self).map_err(|e| format!("serialize: {e}"))?;
+        std::fs::write(&tmp, json).map_err(|e| format!("write {}: {e}", tmp.display()))?;
         std::fs::rename(&tmp, path)
             .map_err(|e| format!("rename {} → {}: {e}", tmp.display(), path.display()))?;
         Ok(())
@@ -344,7 +347,11 @@ impl Registry {
     /// (preserving `registered_at` so we don't reset the timestamp
     /// on a re-register). Returns `true` iff this was a new entry.
     pub fn upsert(&mut self, mut entry: ProjectEntry) -> bool {
-        if let Some(existing) = self.entries.iter_mut().find(|e| e.corpus_id == entry.corpus_id) {
+        if let Some(existing) = self
+            .entries
+            .iter_mut()
+            .find(|e| e.corpus_id == entry.corpus_id)
+        {
             entry.registered_at = existing.registered_at.clone();
             *existing = entry;
             false
@@ -495,7 +502,8 @@ mod tests {
     fn registry_deserializes_missing_watchers_with_defaults() {
         // Hand-written JSON without the `watchers` field — simulates
         // a registry written by an older sovereign build.
-        let json = r#"[{"corpus_id":"old","root":"/tmp/old","registered_at":"2020-01-01T00:00:00Z"}]"#;
+        let json =
+            r#"[{"corpus_id":"old","root":"/tmp/old","registered_at":"2020-01-01T00:00:00Z"}]"#;
         let reg: Registry = serde_json::from_str(json).unwrap();
         let entry = reg.find("old").unwrap();
         assert!(entry.watchers.scip);
@@ -504,7 +512,10 @@ mod tests {
 
     #[test]
     fn watcher_status_serializes_with_state_tag() {
-        let s = WatcherStatus::Crashed { reason: "panic".into(), count: 3 };
+        let s = WatcherStatus::Crashed {
+            reason: "panic".into(),
+            count: 3,
+        };
         let json = serde_json::to_string(&s).unwrap();
         assert!(json.contains("\"state\":\"crashed\""));
         assert!(json.contains("\"reason\":\"panic\""));

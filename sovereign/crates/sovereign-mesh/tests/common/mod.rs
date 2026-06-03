@@ -25,16 +25,13 @@ use async_trait::async_trait;
 use axum::Router;
 use futures::Stream;
 
-use commonwealth_core::capabilities::{
-    AvailableResources, HardwareProfile, NodeCapabilities,
-};
+use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use sovereign_core::error::{Error, Result as SovResult};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{
-    CompletionRequest, CompletionResponse, ProviderCapabilities, Speed,
-    StreamFrame,
+    CompletionRequest, CompletionResponse, ProviderCapabilities, Speed, StreamFrame,
 };
 
 // ── Capabilities + member helpers ───────────────────────────────
@@ -253,7 +250,8 @@ impl InferenceProvider for TestProvider {
                 latency_ms: 0,
                 oicp_meta: None,
                 finish_reason: None,
-                completion_tokens: None,            }),
+                completion_tokens: None,
+            }),
             None => Err(Error::NotImplemented(
                 "TestProvider::complete not configured — \
                  call .with_complete_text(...) on the builder"
@@ -268,8 +266,7 @@ impl InferenceProvider for TestProvider {
     ) -> SovResult<Pin<Box<dyn Stream<Item = SovResult<String>> + Send>>> {
         match self.stream_chunks.as_ref() {
             Some(chunks) => {
-                let items: Vec<SovResult<String>> =
-                    chunks.iter().cloned().map(Ok).collect();
+                let items: Vec<SovResult<String>> = chunks.iter().cloned().map(Ok).collect();
                 Ok(Box::pin(futures::stream::iter(items)))
             }
             None => Err(Error::NotImplemented(
@@ -306,9 +303,7 @@ impl InferenceProvider for TestProvider {
                 Err(e) => {
                     body_flag.store(true, Ordering::Relaxed);
                     vec![StreamFrame::Finish {
-                        reason: sovereign_core::types::FinishReason::Error(
-                            format!("{e}"),
-                        ),
+                        reason: sovereign_core::types::FinishReason::Error(format!("{e}")),
                         usage: None,
                     }]
                 }

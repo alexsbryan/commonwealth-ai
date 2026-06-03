@@ -23,10 +23,7 @@ pub fn client_router(state: AppState) -> Router {
     // and 503 with structured body + Retry-After when gated. See
     // `crate::admission`.
     let admission = || {
-        axum::middleware::from_fn_with_state(
-            state.clone(),
-            crate::admission::peer_admission_layer,
-        )
+        axum::middleware::from_fn_with_state(state.clone(), crate::admission::peer_admission_layer)
     };
 
     Router::new()
@@ -68,10 +65,7 @@ pub fn internal_router(state: AppState) -> Router {
     // searches from peers rather than starving local chat. See
     // `crate::admission`.
     let admission = || {
-        axum::middleware::from_fn_with_state(
-            state.clone(),
-            crate::admission::peer_admission_layer,
-        )
+        axum::middleware::from_fn_with_state(state.clone(), crate::admission::peer_admission_layer)
     };
 
     Router::new()
@@ -102,18 +96,12 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/index/transfer",
             post(routes_internal::index_transfer),
         )
-        .route(
-            "/internal/index/serve",
-            get(routes_internal::index_serve),
-        )
+        .route("/internal/index/serve", get(routes_internal::index_serve))
         .route(
             "/internal/knowledge/search",
             post(routes_internal::knowledge_search).layer(admission()),
         )
-        .route(
-            "/internal/atlas/status",
-            get(routes_internal::atlas_status),
-        )
+        .route("/internal/atlas/status", get(routes_internal::atlas_status))
         .route(
             "/internal/latency/probe",
             get(routes_internal::latency_probe),
@@ -210,15 +198,27 @@ pub fn internal_router(state: AppState) -> Router {
             post(routes_internal::node_activity),
         )
         // App gossip endpoints.
-        .route("/internal/app/state", post(routes_app_internal::recv_app_state))
-        .route("/internal/app/registry", post(routes_app_internal::recv_app_registry))
+        .route(
+            "/internal/app/state",
+            post(routes_app_internal::recv_app_state),
+        )
+        .route(
+            "/internal/app/registry",
+            post(routes_app_internal::recv_app_registry),
+        )
         // Runtime slot management — load/unload extras chat slots
         // without daemon restart. Complements the static
         // `[models.extra]` config table (loaded at startup) by
         // letting operators swap models mid-session.
         .route("/internal/models/load", post(routes_internal::models_load))
-        .route("/internal/models/unload", post(routes_internal::models_unload))
-        .route("/internal/models/inventory", get(routes_internal::models_inventory))
+        .route(
+            "/internal/models/unload",
+            post(routes_internal::models_unload),
+        )
+        .route(
+            "/internal/models/inventory",
+            get(routes_internal::models_inventory),
+        )
         // Eagerly warm the primary chat slot. Desktop fires this on
         // window-focus / chat-mount so the first turn after a
         // resume doesn't pay the 10–90s lazy-load tax.

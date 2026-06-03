@@ -65,7 +65,10 @@ pub async fn run_command(args: &[String]) -> Result<(), String> {
     apply_overrides(&mut body, &parsed);
     if parsed.dump_request {
         println!("--- request (after overrides) ---");
-        println!("{}", serde_json::to_string_pretty(&body).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&body).unwrap_or_default()
+        );
     }
     let url = format!("{}/chat/completions", parsed.base_url.trim_end_matches('/'));
     let client = reqwest::Client::builder()
@@ -87,10 +90,14 @@ pub async fn run_command(args: &[String]) -> Result<(), String> {
         eprintln!("{}", text.chars().take(2000).collect::<String>());
         return Err(format!("HTTP {status}"));
     }
-    let new_resp: Value = serde_json::from_str(&text)
-        .map_err(|e| format!("parse response: {e}"))?;
+    let new_resp: Value =
+        serde_json::from_str(&text).map_err(|e| format!("parse response: {e}"))?;
     if parsed.print_original {
-        println!("--- original response (turn {}, role={}) ---", record.turn, record.role.as_deref().unwrap_or("-"));
+        println!(
+            "--- original response (turn {}, role={}) ---",
+            record.turn,
+            record.role.as_deref().unwrap_or("-")
+        );
         print_response_summary(&record.response);
         println!();
     }
@@ -98,7 +105,10 @@ pub async fn run_command(args: &[String]) -> Result<(), String> {
     print_response_summary(&new_resp);
     println!();
     println!("--- full new response (json) ---");
-    println!("{}", serde_json::to_string_pretty(&new_resp).unwrap_or_default());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&new_resp).unwrap_or_default()
+    );
     Ok(())
 }
 
@@ -112,23 +122,38 @@ fn parse_args(args: &[String]) -> Result<ReplayArgs, String> {
         match a.as_str() {
             "--turn" => {
                 i += 1;
-                out.turn = args.get(i).ok_or("--turn requires value")?.parse()
+                out.turn = args
+                    .get(i)
+                    .ok_or("--turn requires value")?
+                    .parse()
                     .map_err(|e| format!("--turn: {e}"))?;
             }
             "--temperature" => {
                 i += 1;
-                out.temperature = Some(args.get(i).ok_or("--temperature requires value")?.parse()
-                    .map_err(|e| format!("--temperature: {e}"))?);
+                out.temperature = Some(
+                    args.get(i)
+                        .ok_or("--temperature requires value")?
+                        .parse()
+                        .map_err(|e| format!("--temperature: {e}"))?,
+                );
             }
             "--top-p" => {
                 i += 1;
-                out.top_p = Some(args.get(i).ok_or("--top-p requires value")?.parse()
-                    .map_err(|e| format!("--top-p: {e}"))?);
+                out.top_p = Some(
+                    args.get(i)
+                        .ok_or("--top-p requires value")?
+                        .parse()
+                        .map_err(|e| format!("--top-p: {e}"))?,
+                );
             }
             "--max-tokens" => {
                 i += 1;
-                out.max_tokens = Some(args.get(i).ok_or("--max-tokens requires value")?.parse()
-                    .map_err(|e| format!("--max-tokens: {e}"))?);
+                out.max_tokens = Some(
+                    args.get(i)
+                        .ok_or("--max-tokens requires value")?
+                        .parse()
+                        .map_err(|e| format!("--max-tokens: {e}"))?,
+                );
             }
             "--tool-choice" => {
                 i += 1;
@@ -200,22 +225,25 @@ Output:
 
 fn load_record(artifact_dir: &Path, turn: u32) -> Result<ChatRequestRecord, String> {
     let path = artifact_dir.join("requests.jsonl");
-    let body = fs::read_to_string(&path)
-        .map_err(|e| format!("read {}: {e}", path.display()))?;
+    let body = fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
     for line in body.lines() {
         let line = line.trim();
         if line.is_empty() {
             continue;
         }
-        let rec: ChatRequestRecord = serde_json::from_str(line)
-            .map_err(|e| format!("parse record: {e}"))?;
+        let rec: ChatRequestRecord =
+            serde_json::from_str(line).map_err(|e| format!("parse record: {e}"))?;
         if rec.turn == turn {
             return Ok(rec);
         }
     }
     let turns: Vec<u32> = body
         .lines()
-        .filter_map(|l| serde_json::from_str::<ChatRequestRecord>(l).ok().map(|r| r.turn))
+        .filter_map(|l| {
+            serde_json::from_str::<ChatRequestRecord>(l)
+                .ok()
+                .map(|r| r.turn)
+        })
         .collect();
     Err(format!(
         "no record with --turn {turn} in {}; available turns: {:?}",
@@ -304,7 +332,10 @@ fn print_response_summary(resp: &Value) {
     let usage = resp.get("usage");
     if let Some(u) = usage {
         let pt = u.get("prompt_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-        let ct = u.get("completion_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+        let ct = u
+            .get("completion_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
         println!("usage: prompt={pt} completion={ct}");
     }
     if !content.is_empty() {

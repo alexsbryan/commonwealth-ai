@@ -102,10 +102,7 @@ pub async fn run(args: &[String]) -> i32 {
     let atoms_file = match read_atlas_atoms(&atlas_dir) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!(
-                "✗ read {}: {e}",
-                atlas_dir.join("atoms.json").display()
-            );
+            eprintln!("✗ read {}: {e}", atlas_dir.join("atoms.json").display());
             eprintln!(
                 "  hint: build the structural atlas first via `sovereign enrich ingest \
                  {} --source-corpus {}`.",
@@ -151,8 +148,7 @@ pub async fn run(args: &[String]) -> i32 {
     );
 
     // ── Step 5: co-evolution edges ─────────────────────────────
-    let co_evolution =
-        compute_co_evolution(&history, parsed.threshold, parsed.min_joint_commits);
+    let co_evolution = compute_co_evolution(&history, parsed.threshold, parsed.min_joint_commits);
     println!(
         "  · {} co-evolution pairs (threshold={:.2}, min_joint={})",
         co_evolution.len(),
@@ -256,16 +252,12 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
     while i < args.len() {
         match args[i].as_str() {
             "--source-corpus" => {
-                let v = args
-                    .get(i + 1)
-                    .ok_or("--source-corpus requires a value")?;
+                let v = args.get(i + 1).ok_or("--source-corpus requires a value")?;
                 out.source_corpus_id = Some(v.clone());
                 i += 2;
             }
             "--source-path" => {
-                let v = args
-                    .get(i + 1)
-                    .ok_or("--source-path requires a value")?;
+                let v = args.get(i + 1).ok_or("--source-path requires a value")?;
                 out.source_path = Some(PathBuf::from(v));
                 i += 2;
             }
@@ -324,10 +316,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
 fn resolve_source_path(args: &Args, source_corpus_id: &str) -> Result<PathBuf, String> {
     if let Some(p) = &args.source_path {
         if !p.exists() {
-            return Err(format!(
-                "--source-path {} does not exist",
-                p.display()
-            ));
+            return Err(format!("--source-path {} does not exist", p.display()));
         }
         return Ok(p.clone());
     }
@@ -353,8 +342,8 @@ fn resolve_source_path(args: &Args, source_corpus_id: &str) -> Result<PathBuf, S
     };
     let raw = std::fs::read_to_string(&meta_path)
         .map_err(|e| format!("read {}: {e}", meta_path.display()))?;
-    let v: serde_json::Value = serde_json::from_str(&raw)
-        .map_err(|e| format!("parse {}: {e}", meta_path.display()))?;
+    let v: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", meta_path.display()))?;
     let s = v
         .get("source_path")
         .and_then(|x| x.as_str())
@@ -499,10 +488,7 @@ fn format_iso_date(ts: i64) -> String {
 
 fn render_markdown(report: &GitArchaeologyReport) -> String {
     let mut out = String::new();
-    out.push_str(&format!(
-        "# Git Archaeology — `{}`\n\n",
-        report.corpus_id
-    ));
+    out.push_str(&format!("# Git Archaeology — `{}`\n\n", report.corpus_id));
     out.push_str(&format!(
         "*{} of {} atoms enriched · {} fresh / {} moved · {} co-evolution pairs*\n\n",
         report.atoms_with_history,
@@ -553,9 +539,7 @@ fn render_markdown(report: &GitArchaeologyReport) -> String {
 
     // ── Recent volatility ──────────────────────────────────────
     out.push_str("## Recent volatility\n\n");
-    out.push_str(
-        "_Most-recently-modified atoms — currently active surfaces in the codebase._\n\n",
-    );
+    out.push_str("_Most-recently-modified atoms — currently active surfaces in the codebase._\n\n");
     let mut by_recency: Vec<&AtomProvenance> = report.provenance.iter().collect();
     by_recency.sort_by(|a, b| b.last_modified.date_iso.cmp(&a.last_modified.date_iso));
     if by_recency.is_empty() {

@@ -304,10 +304,9 @@ impl Default for NewsworthyConfig {
             // we point at the repo. Without this, our requests were
             // treated as generic browser traffic and rate-limited
             // more aggressively.
-            user_agent:
-                "commonwealth-ai-newsworthy/0.1 (https://github.com/alexsbryan/sovereign; \
+            user_agent: "commonwealth-ai-newsworthy/0.1 (https://github.com/alexsbryan/sovereign; \
                  ops@commonwealth.ai) reqwest/0.12"
-                    .to_string(),
+                .to_string(),
         }
     }
 }
@@ -723,14 +722,11 @@ impl WikipediaNewsworthyWatcher {
                     report.portal_ingested = portal_date.is_some();
                     if let Some(date_iso) = portal_date {
                         report.portal_doc_ids.push(date_iso);
-                        report.stale_marked = self
-                            .sweep_window(now)
-                            .await
-                            .unwrap_or_else(|e| {
-                                tracing::warn!(error = %e, "newsworthy.window_sweep_failed");
-                                report.errors += 1;
-                                0
-                            });
+                        report.stale_marked = self.sweep_window(now).await.unwrap_or_else(|e| {
+                            tracing::warn!(error = %e, "newsworthy.window_sweep_failed");
+                            report.errors += 1;
+                            0
+                        });
                     }
                 }
                 Err(e) => {
@@ -745,7 +741,10 @@ impl WikipediaNewsworthyWatcher {
         report.tracked_total = tracked.len();
 
         let mut owned: Vec<TrackedArticle> = Vec::new();
-        for t in tracked.into_iter().filter(|t| t.lifecycle != Lifecycle::Stale) {
+        for t in tracked
+            .into_iter()
+            .filter(|t| t.lifecycle != Lifecycle::Stale)
+        {
             if self.host.is_owner_of(&t.title).await {
                 owned.push(t);
             }
@@ -922,7 +921,9 @@ impl WikipediaNewsworthyWatcher {
         };
         match serde_json::to_vec(&snapshot) {
             Ok(bytes) => {
-                if let Err(e) = self.host.store_set(APP_ID_STATUS, STATUS_KEY_LAST_TICK, bytes)
+                if let Err(e) = self
+                    .host
+                    .store_set(APP_ID_STATUS, STATUS_KEY_LAST_TICK, bytes)
                 {
                     tracing::warn!(
                         error = %e,
@@ -940,10 +941,7 @@ impl WikipediaNewsworthyWatcher {
     async fn run_leader_step(&self, now: DateTime<Utc>) -> Result<Option<String>> {
         let yesterday = (now - chrono::Duration::days(1)).date_naive();
         let date_iso = yesterday.format("%Y-%m-%d").to_string();
-        let portal_page = format!(
-            "Portal:Current_events/{}",
-            format_yyyy_month_dd(yesterday)
-        );
+        let portal_page = format!("Portal:Current_events/{}", format_yyyy_month_dd(yesterday));
 
         let body = self.media_wiki.fetch_parse(&portal_page).await?;
         let parsed: serde_json::Value = serde_json::from_str(&body)
@@ -958,8 +956,7 @@ impl WikipediaNewsworthyWatcher {
             .host
             .store_get(APP_ID_PORTAL, &marker_key)?
             .and_then(|bytes| serde_json::from_slice(&bytes).ok());
-        if prev.as_ref().map(|m| m.last_fetched_revid) == Some(observed_revid)
-            && observed_revid > 0
+        if prev.as_ref().map(|m| m.last_fetched_revid) == Some(observed_revid) && observed_revid > 0
         {
             tracing::debug!(
                 date = %date_iso,
@@ -1386,7 +1383,8 @@ fn parse_iso_date(date_iso: &str) -> Option<NaiveDate> {
 #[allow(dead_code)]
 fn iso_to_utc_midnight(date_iso: &str) -> Option<DateTime<Utc>> {
     let date = parse_iso_date(date_iso)?;
-    Utc.from_local_datetime(&date.and_hms_opt(0, 0, 0)?).single()
+    Utc.from_local_datetime(&date.and_hms_opt(0, 0, 0)?)
+        .single()
 }
 
 #[cfg(test)]
@@ -1435,7 +1433,12 @@ mod tests {
             self.owned_keys.is_empty() || self.owned_keys.contains(key)
         }
         fn store_get(&self, app_id: &str, key: &str) -> Result<Option<Vec<u8>>> {
-            Ok(self.store.lock().unwrap().get(&(app_id.to_string(), key.to_string())).cloned())
+            Ok(self
+                .store
+                .lock()
+                .unwrap()
+                .get(&(app_id.to_string(), key.to_string()))
+                .cloned())
         }
         fn store_set(&self, app_id: &str, key: &str, value: Vec<u8>) -> Result<()> {
             self.store
@@ -1466,7 +1469,10 @@ mod tests {
     fn normalise_title_collapses_whitespace_and_substitutes_underscore() {
         assert_eq!(normalise_title("Donald Trump"), "Donald_Trump");
         assert_eq!(normalise_title("  Trailing  spaces  "), "Trailing_spaces");
-        assert_eq!(normalise_title("Already_Underscored"), "Already_Underscored");
+        assert_eq!(
+            normalise_title("Already_Underscored"),
+            "Already_Underscored"
+        );
     }
 
     #[test]
@@ -1546,10 +1552,7 @@ mod tests {
 
         let now = Utc.with_ymd_and_hms(2026, 5, 9, 12, 0, 0).unwrap();
         let added = watcher
-            .upsert_tracked(
-                &["Kyiv".to_string(), "Donald Trump".to_string()],
-                now,
-            )
+            .upsert_tracked(&["Kyiv".to_string(), "Donald Trump".to_string()], now)
             .unwrap();
         assert_eq!(added, 2);
 

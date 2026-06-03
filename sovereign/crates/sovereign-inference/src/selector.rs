@@ -4,10 +4,9 @@ use async_trait::async_trait;
 use tokio::sync::RwLock;
 
 use sovereign_core::oicp::{
-    self, cold_start_weight, effective_affinity, load_penalty, locality_bonus,
-    throughput_factor, throughput_factor_source, BenchmarkResult,
-    InferenceRequirements, NodeLocality, NodeObservations, ProviderManifest,
-    ShardingPrivacy,
+    self, cold_start_weight, effective_affinity, load_penalty, locality_bonus, throughput_factor,
+    throughput_factor_source, BenchmarkResult, InferenceRequirements, NodeLocality,
+    NodeObservations, ProviderManifest, ShardingPrivacy,
 };
 use sovereign_core::types::CompletionRequest;
 use sovereign_core::Result;
@@ -94,11 +93,8 @@ impl BackendEntry {
 /// Internal to HybridProvider — not exposed on the Runtime.
 #[async_trait]
 pub trait BackendSelector: Send + Sync {
-    async fn select(
-        &self,
-        request: &CompletionRequest,
-        backends: &[BackendEntry],
-    ) -> Result<usize>;
+    async fn select(&self, request: &CompletionRequest, backends: &[BackendEntry])
+        -> Result<usize>;
 }
 
 /// Use the highest-priority healthy backend. Fall through on failure.
@@ -143,7 +139,9 @@ impl BackendSelector for CostMinimizingSelector {
             .min_by(|(_, a), (_, b)| {
                 let cost_a = a.cost_per_token.unwrap_or(0.0);
                 let cost_b = b.cost_per_token.unwrap_or(0.0);
-                cost_a.partial_cmp(&cost_b).unwrap_or(std::cmp::Ordering::Equal)
+                cost_a
+                    .partial_cmp(&cost_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
             .map(|(i, _)| i)
             .ok_or_else(|| {
@@ -280,8 +278,7 @@ impl BackendSelector for CapabilityAwareSelector {
             let benchmark_guard = backend.benchmark.read().await;
             let bench_ref = benchmark_guard.as_ref();
             let candidate_size = model_size_gb.unwrap_or(0.0);
-            let throughput =
-                throughput_factor(&obs, candidate_size, bench_ref);
+            let throughput = throughput_factor(&obs, candidate_size, bench_ref);
             tracing::debug!(
                 backend = %backend.name,
                 idx,
@@ -333,17 +330,13 @@ fn best_score_for_manifest(
     let mut best: Option<(f32, f32, Option<f32>)> = None;
     for model in manifest.models.iter().filter(|m| m.status.available) {
         for claim in &model.claims {
-            let Some(score) =
-                oicp::score_claim_for_request(claim, requirements)
-            else {
+            let Some(score) = oicp::score_claim_for_request(claim, requirements) else {
                 continue;
             };
             let claim_affinity = claim.effective_affinity();
             let candidate = (score, claim_affinity, model.size_gb);
             best = Some(match best {
-                Some((best_score, _, _)) if best_score >= score => {
-                    best.unwrap()
-                }
+                Some((best_score, _, _)) if best_score >= score => best.unwrap(),
                 _ => candidate,
             });
         }
@@ -358,8 +351,8 @@ mod tests {
     use super::*;
     use crate::health::HealthTracker;
     use sovereign_core::oicp::{
-        CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass,
-        ModelStatus, ProviderManifest, ProviderModel,
+        CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass, ModelStatus,
+        ProviderManifest, ProviderModel,
     };
     use sovereign_core::types::CompletionRequest;
 
@@ -380,17 +373,27 @@ mod tests {
         let high_prio = BackendEntry::new_local("high", Arc::new(HealthTracker::new()), 1);
         let low_prio = BackendEntry::new_local("low", Arc::new(HealthTracker::new()), 2);
 
-        let selector = CapabilityAwareSelector { fallback: Box::new(PrioritySelector) };
+        let selector = CapabilityAwareSelector {
+            fallback: Box::new(PrioritySelector),
+        };
         let request = CompletionRequest::new("no oicp");
-        let selected = selector.select(&request, &[high_prio, low_prio]).await.unwrap();
-        assert_eq!(selected, 0, "without OICP requirements, PrioritySelector must pick priority=1");
+        let selected = selector
+            .select(&request, &[high_prio, low_prio])
+            .await
+            .unwrap();
+        assert_eq!(
+            selected, 0,
+            "without OICP requirements, PrioritySelector must pick priority=1"
+        );
     }
 
     #[tokio::test]
     async fn falls_back_to_priority_when_no_backend_has_manifest() {
         let high_prio = BackendEntry::new_local("high", Arc::new(HealthTracker::new()), 1);
         let low_prio = BackendEntry::new_local("low", Arc::new(HealthTracker::new()), 2);
-        let selector = CapabilityAwareSelector { fallback: Box::new(PrioritySelector) };
+        let selector = CapabilityAwareSelector {
+            fallback: Box::new(PrioritySelector),
+        };
         let reqs = InferenceRequirements::new()
             .with_sharding(ShardingPrivacy::MeshAllowed)
             .with_hint(CapabilityHint::general())
@@ -400,7 +403,10 @@ mod tests {
             .select(&request, &[high_prio, low_prio])
             .await
             .unwrap();
-        assert_eq!(selected, 0, "when no backend has a manifest, PrioritySelector must win");
+        assert_eq!(
+            selected, 0,
+            "when no backend has a manifest, PrioritySelector must win"
+        );
     }
 
     // -----------------------------------------------------------
@@ -457,20 +463,10 @@ mod tests {
             4_000,
             0.85,
         )]);
-        let general_peer = entry_with_manifest_and_availability(
-            "llama", 1, 1.0, llama_70b,
-        )
-        .await;
-        let coder_peer = entry_with_manifest_and_availability(
-            "qwen-coder", 2, 1.0, qwen_coder,
-        )
-        .await;
-        let request = v03_request(
-            CapabilityHint::code(),
-            LatencyClass::Normal,
-            16_000,
-            2_000,
-        );
+        let general_peer = entry_with_manifest_and_availability("llama", 1, 1.0, llama_70b).await;
+        let coder_peer =
+            entry_with_manifest_and_availability("qwen-coder", 2, 1.0, qwen_coder).await;
+        let request = v03_request(CapabilityHint::code(), LatencyClass::Normal, 16_000, 2_000);
         let selector = CapabilityAwareSelector {
             fallback: Box::new(PrioritySelector),
         };
@@ -500,14 +496,8 @@ mod tests {
             4_000,
             0.75,
         )]);
-        let small_entry = entry_with_manifest_and_availability(
-            "local", 1, 1.0, local_small,
-        )
-        .await;
-        let large_entry = entry_with_manifest_and_availability(
-            "peer", 2, 1.0, peer_large,
-        )
-        .await;
+        let small_entry = entry_with_manifest_and_availability("local", 1, 1.0, local_small).await;
+        let large_entry = entry_with_manifest_and_availability("peer", 2, 1.0, peer_large).await;
         let request = v03_request(
             CapabilityHint::general(),
             LatencyClass::Normal,
@@ -538,10 +528,7 @@ mod tests {
             2_000,
             0.7,
         )]);
-        let entry = entry_with_manifest_and_availability(
-            "claims-only", 1, 1.0, only_claims,
-        )
-        .await;
+        let entry = entry_with_manifest_and_availability("claims-only", 1, 1.0, only_claims).await;
         let request = v03_request(
             CapabilityHint::general(),
             LatencyClass::Normal,
@@ -551,8 +538,7 @@ mod tests {
         let selector = CapabilityAwareSelector {
             fallback: Box::new(PrioritySelector),
         };
-        let selected =
-            selector.select(&request, &[entry]).await.unwrap();
+        let selected = selector.select(&request, &[entry]).await.unwrap();
         assert_eq!(selected, 0);
     }
 }

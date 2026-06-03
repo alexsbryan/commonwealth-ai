@@ -188,15 +188,12 @@ impl SessionStore {
             );
             return;
         };
-        if let Err(e) = self
-            .mesh
-            .set(
-                ATOS_SESSIONS_APP_ID,
-                &state.session_id,
-                Bytes::from(bytes),
-                self.origin,
-            )
-        {
+        if let Err(e) = self.mesh.set(
+            ATOS_SESSIONS_APP_ID,
+            &state.session_id,
+            Bytes::from(bytes),
+            self.origin,
+        ) {
             tracing::warn!(
                 session_id = %state.session_id,
                 err = %e,
@@ -407,7 +404,10 @@ mod tests {
         // survives too — that's correct behavior; save is the
         // liveness ping.
         let evicted = store.gc_expired(3600).await;
-        assert!(evicted >= 1, "expected at least one eviction, got {evicted}");
+        assert!(
+            evicted >= 1,
+            "expected at least one eviction, got {evicted}"
+        );
 
         // Fresh row still decodes normally.
         let fresh = store.load_and_lock("fresh").await;

@@ -30,8 +30,7 @@ use std::sync::Arc;
 
 use corpus_engine::atlas_traversal::{detect_atom_spans, AtomSpan};
 use corpus_engine::enrichment::atlas::{
-    read_atlas_atoms, read_atlas_cross_corpus_edges, read_atlas_edges, AtomEnvelope, AtomId,
-    Edge,
+    read_atlas_atoms, read_atlas_cross_corpus_edges, read_atlas_edges, AtomEnvelope, AtomId, Edge,
 };
 use corpus_engine::{CorpusEngine, ScoredChunk};
 
@@ -230,9 +229,8 @@ fn parse_query_args(args: &[String]) -> DiagResult<CmdArgs> {
         i += 1;
     }
 
-    let question = question.ok_or_else(|| {
-        "missing question. Usage: reading-diag query \"<text>\"".to_string()
-    })?;
+    let question = question
+        .ok_or_else(|| "missing question. Usage: reading-diag query \"<text>\"".to_string())?;
     Ok(CmdArgs {
         question,
         corpus_filter,
@@ -390,10 +388,11 @@ async fn run_diag(session: &ChatSession, args: &CmdArgs) -> DiagResult<DiagRepor
 
     let mut per_corpus: Vec<CorpusBucket> = Vec::new();
     let mut all_hits: Vec<(String, ScoredChunk)> = Vec::new();
-    for info in indexes
-        .iter()
-        .filter(|i| args.corpus_filter.as_deref().is_none_or(|f| i.corpus_id == f))
-    {
+    for info in indexes.iter().filter(|i| {
+        args.corpus_filter
+            .as_deref()
+            .is_none_or(|f| i.corpus_id == f)
+    }) {
         let dim_match = info.embedding_dimensions == embedding.len();
         // Mirror Runtime::search_corpus_indexes: drop Code-kind
         // corpora before any chat-style merge. Catalog stays
@@ -492,24 +491,21 @@ async fn run_diag(session: &ChatSession, args: &CmdArgs) -> DiagResult<DiagRepor
         let av = a.1.vector_distance;
         let bv = b.1.vector_distance;
         match (av, bv) {
-            (Some(ad), Some(bd)) => ad
-                .partial_cmp(&bd)
-                .unwrap_or(std::cmp::Ordering::Equal),
+            (Some(ad), Some(bd)) => ad.partial_cmp(&bd).unwrap_or(std::cmp::Ordering::Equal),
             (Some(_), None) => std::cmp::Ordering::Less,
             (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => b
-                .1
-                .score
-                .partial_cmp(&a.1.score)
-                .unwrap_or(std::cmp::Ordering::Equal),
+            (None, None) => {
+                b.1.score
+                    .partial_cmp(&a.1.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            }
         }
     });
     all_hits.truncate(args.limit);
 
     let mut citations: Vec<CitationDeref> = Vec::new();
     for (rank, (corpus_id, chunk)) in all_hits.into_iter().enumerate() {
-        let deref =
-            walk_citation(rank + 1, &corpus_id, &chunk, &session.corpus_engine, args).await;
+        let deref = walk_citation(rank + 1, &corpus_id, &chunk, &session.corpus_engine, args).await;
         citations.push(deref);
     }
 
@@ -734,7 +730,9 @@ async fn compute_atom_card(
     let atoms = read_atlas_atoms(&atlas_dir).ok()?.atoms;
     let target = AtomId::from_raw(atom_id.to_string());
     let atom = atoms.iter().find(|a| *a.id() == target)?;
-    let edges = read_atlas_edges(&atlas_dir).map(|f| f.edges).unwrap_or_default();
+    let edges = read_atlas_edges(&atlas_dir)
+        .map(|f| f.edges)
+        .unwrap_or_default();
     let cross = read_atlas_cross_corpus_edges(&atlas_dir)
         .map(|f| f.edges)
         .unwrap_or_default();
@@ -750,15 +748,16 @@ async fn compute_atom_card(
         .count();
 
     let mut sample_related: Vec<RelatedSummary> = Vec::new();
-    let by_id: HashMap<&AtomId, &AtomEnvelope> =
-        atoms.iter().map(|a| (a.id(), a)).collect();
+    let by_id: HashMap<&AtomId, &AtomEnvelope> = atoms.iter().map(|a| (a.id(), a)).collect();
     for e in related.iter().take(args.max_related) {
         let (other_id, role) = if e.source == target {
             (&e.target, "source")
         } else {
             (&e.source, "target")
         };
-        let Some(other) = by_id.get(other_id) else { continue };
+        let Some(other) = by_id.get(other_id) else {
+            continue;
+        };
         let (other_type, other_name, _) = atom_brief(other);
         sample_related.push(RelatedSummary {
             atom_id: other_id.as_str().to_string(),
@@ -844,11 +843,7 @@ async fn atlas_dir_for_corpus(
 
 fn atom_brief(atom: &AtomEnvelope) -> (&'static str, String, String) {
     match atom {
-        AtomEnvelope::Entity(e) => (
-            "entity",
-            e.canonical_name.clone(),
-            e.description.clone(),
-        ),
+        AtomEnvelope::Entity(e) => ("entity", e.canonical_name.clone(), e.description.clone()),
         AtomEnvelope::Event(e) => ("event", e.description.clone(), e.description.clone()),
         AtomEnvelope::State(s) => (
             "state",
@@ -858,9 +853,7 @@ fn atom_brief(atom: &AtomEnvelope) -> (&'static str, String, String) {
         AtomEnvelope::Relation(r) => ("relation", r.label.clone(), r.label.clone()),
         AtomEnvelope::Claim(c) => ("claim", c.content.clone(), c.content.clone()),
         AtomEnvelope::Question(q) => ("question", q.content.clone(), q.content.clone()),
-        AtomEnvelope::Configuration(c) => {
-            ("configuration", c.label.clone(), c.description.clone())
-        }
+        AtomEnvelope::Configuration(c) => ("configuration", c.label.clone(), c.description.clone()),
         AtomEnvelope::ArgumentReconstruction(a) => (
             "argument",
             a.name.clone(),
@@ -871,11 +864,7 @@ fn atom_brief(atom: &AtomEnvelope) -> (&'static str, String, String) {
                 !a.conclusion.is_empty()
             ),
         ),
-        AtomEnvelope::Position(p) => (
-            "position",
-            p.canonical_name.clone(),
-            p.content.clone(),
-        ),
+        AtomEnvelope::Position(p) => ("position", p.canonical_name.clone(), p.content.clone()),
         AtomEnvelope::Opposition(o) => (
             "opposition",
             o.canonical_label.clone(),
@@ -892,7 +881,11 @@ fn atom_brief(atom: &AtomEnvelope) -> (&'static str, String, String) {
             } else {
                 a.original_filename.clone()
             },
-            format!("{} bytes, sha256:{}", a.size, &a.sha256[..16.min(a.sha256.len())]),
+            format!(
+                "{} bytes, sha256:{}",
+                a.size,
+                &a.sha256[..16.min(a.sha256.len())]
+            ),
         ),
     }
 }
@@ -909,15 +902,15 @@ fn atom_evidence_section_ids(atom: &AtomEnvelope) -> Vec<String> {
         AtomEnvelope::Relation(r) => r.evidence.iter().map(|c| c.chunk_id.clone()).collect(),
         AtomEnvelope::Claim(c) => c.evidence.iter().map(|cr| cr.chunk_id.clone()).collect(),
         AtomEnvelope::Question(q) => q.raised_at.iter().map(|c| c.chunk_id.clone()).collect(),
-        AtomEnvelope::Configuration(c) => {
-            c.evidence.iter().map(|cr| cr.chunk_id.clone()).collect()
-        }
+        AtomEnvelope::Configuration(c) => c.evidence.iter().map(|cr| cr.chunk_id.clone()).collect(),
         AtomEnvelope::ArgumentReconstruction(a) => {
             let mut out = vec![a.section_position.section_id.clone()];
             out.extend(a.evidence.iter().map(|c| c.chunk_id.clone()));
             out
         }
-        AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => unreachable!("typed atoms wired in Gap B Stage 4"),
+        AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => {
+            unreachable!("typed atoms wired in Gap B Stage 4")
+        }
         AtomEnvelope::Asset(_) => Vec::new(),
     }
 }
@@ -1004,7 +997,10 @@ fn print_text(report: &DiagReport) {
     }
     println!();
 
-    println!("DEREF CHAIN (top {} citations after merge)", report.summary.citations_total);
+    println!(
+        "DEREF CHAIN (top {} citations after merge)",
+        report.summary.citations_total
+    );
     if report.citations.is_empty() {
         println!("  (no citations to walk)");
         return;
@@ -1139,10 +1135,7 @@ fn print_text(report: &DiagReport) {
         }
     );
     if let Some(rate) = s.avg_elsewhere_resolution {
-        println!(
-            "  avg elsewhere rate:  {:.0}%",
-            rate * 100.0
-        );
+        println!("  avg elsewhere rate:  {:.0}%", rate * 100.0);
     }
 }
 
@@ -1221,5 +1214,8 @@ fn print_json(report: &DiagReport) {
             "avg_elsewhere_resolution": report.summary.avg_elsewhere_resolution,
         },
     });
-    println!("{}", serde_json::to_string_pretty(&payload).unwrap_or_default());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&payload).unwrap_or_default()
+    );
 }

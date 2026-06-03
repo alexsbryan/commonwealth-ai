@@ -4,9 +4,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::process::{Child, Command};
 use tracing::{info, warn};
 
+use crate::inference_plan::{ShardAssignment, ShardPlan};
 use commonwealth_core::capabilities::ProcessKind;
 use commonwealth_core::ids::ProcessId;
-use crate::inference_plan::{ShardAssignment, ShardPlan};
 use commonwealth_core::Error;
 
 /// A process managed by the orchestrator.

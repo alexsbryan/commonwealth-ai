@@ -162,7 +162,9 @@ impl ExitOutcome {
             Self::ChildExited { code: Some(c) } => format!("daemon exited with code {c}"),
             Self::ChildExited { code: None } => "daemon exited by signal".into(),
             Self::WaitError(e) => format!("wait error: {e}"),
-            Self::HeartbeatFailed { consecutive_failures } => {
+            Self::HeartbeatFailed {
+                consecutive_failures,
+            } => {
                 format!("daemon stopped responding ({consecutive_failures} failed heartbeats)")
             }
             Self::ManualReconnect => "manual reconnect".into(),
@@ -262,14 +264,15 @@ impl Supervisor {
                     // Spawn failure counts toward the ceiling — usually
                     // it's a missing binary path or a permissions
                     // problem and shouldn't be retried forever.
-                    if !self.handle_crash(
-                        &mut attempt,
-                        &mut crash_times,
-                        ExitOutcome::WaitError(reason.clone()),
-                        None,
-                        &mut reconnect_rx,
-                    )
-                    .await
+                    if !self
+                        .handle_crash(
+                            &mut attempt,
+                            &mut crash_times,
+                            ExitOutcome::WaitError(reason.clone()),
+                            None,
+                            &mut reconnect_rx,
+                        )
+                        .await
                     {
                         return;
                     }
@@ -280,7 +283,9 @@ impl Supervisor {
             let pid = child.id().unwrap_or(0);
             info!(pid, binary = %self.config.binary_path.display(), "supervisor: child spawned");
 
-            let outcome = self.supervise_until_exit(&mut child, pid, &http, &mut reconnect_rx).await;
+            let outcome = self
+                .supervise_until_exit(&mut child, pid, &http, &mut reconnect_rx)
+                .await;
             let crash_log = self.persist_crash_log(pid, &outcome).await;
 
             match outcome {
@@ -296,14 +301,15 @@ impl Supervisor {
                     // Loop back to Starting immediately.
                 }
                 _ => {
-                    if !self.handle_crash(
-                        &mut attempt,
-                        &mut crash_times,
-                        outcome,
-                        crash_log,
-                        &mut reconnect_rx,
-                    )
-                    .await
+                    if !self
+                        .handle_crash(
+                            &mut attempt,
+                            &mut crash_times,
+                            outcome,
+                            crash_log,
+                            &mut reconnect_rx,
+                        )
+                        .await
                     {
                         return;
                     }
@@ -497,7 +503,10 @@ impl Supervisor {
     }
 
     async fn persist_crash_log(&self, pid: u32, outcome: &ExitOutcome) -> Option<PathBuf> {
-        if matches!(outcome, ExitOutcome::ManualReconnect | ExitOutcome::Shutdown) {
+        if matches!(
+            outcome,
+            ExitOutcome::ManualReconnect | ExitOutcome::Shutdown
+        ) {
             return None;
         }
         let ts = SystemTime::now()
@@ -740,9 +749,7 @@ mod tests {
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
         let tail = loop {
             let current = supervisor.stderr_tail();
-            if current.iter().any(|l| l == "line-1")
-                || std::time::Instant::now() > deadline
-            {
+            if current.iter().any(|l| l == "line-1") || std::time::Instant::now() > deadline {
                 break current;
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
@@ -793,8 +800,7 @@ mod tests {
         // Wait until we see Failed.
         let mut got_failed = false;
         for _ in 0..30 {
-            if let Ok(Ok(s)) =
-                tokio::time::timeout(Duration::from_millis(150), states.recv()).await
+            if let Ok(Ok(s)) = tokio::time::timeout(Duration::from_millis(150), states.recv()).await
             {
                 if matches!(s, SupervisorState::Failed { .. }) {
                     got_failed = true;
@@ -808,8 +814,7 @@ mod tests {
         assert!(supervisor.request_reconnect());
         let mut got_starting = false;
         for _ in 0..30 {
-            if let Ok(Ok(s)) =
-                tokio::time::timeout(Duration::from_millis(150), states.recv()).await
+            if let Ok(Ok(s)) = tokio::time::timeout(Duration::from_millis(150), states.recv()).await
             {
                 if matches!(s, SupervisorState::Starting) {
                     got_starting = true;

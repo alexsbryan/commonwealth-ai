@@ -289,7 +289,12 @@ fn assemble_trajectory(result: &TraversalResult) -> Brief {
                 .and_then(|tid| result.events.iter().find(|ev| &ev.id == tid))
                 .map(|ev| format!(" (triggered by: {})", ev.description))
                 .unwrap_or_else(|| " (no explicit trigger)".to_string());
-            body.push_str(&format!("- {} → {}{}\n", e.source.as_str(), e.target.as_str(), trigger));
+            body.push_str(&format!(
+                "- {} → {}{}\n",
+                e.source.as_str(),
+                e.target.as_str(),
+                trigger
+            ));
         }
     }
 
@@ -313,10 +318,7 @@ fn assemble_relation_lookup(result: &TraversalResult) -> Brief {
     if !result.states.is_empty() {
         body.push_str("\n**Relation states:**\n");
         for s in &result.states {
-            body.push_str(&format!(
-                "- `{}` {}\n",
-                s.section_range.start, s.label
-            ));
+            body.push_str(&format!("- `{}` {}\n", s.section_range.start, s.label));
         }
     }
     Brief {
@@ -511,10 +513,10 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-}
-}
+            provenance: Default::default(),
+            concept_kind: None,
+        }
+    }
 
     #[test]
     fn brief_calibrates_extracted_atoms_with_interpretive_framing() {
@@ -649,4 +651,3 @@ mod tests {
         assert!(brief.body.contains("divided soul"));
     }
 }
-

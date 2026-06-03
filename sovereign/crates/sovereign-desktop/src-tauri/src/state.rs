@@ -5,13 +5,15 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use corpus_engine::{CorpusEngine};
-use corpus_engine_notes::{NoteStore};
-use corpus_engine_atos::{FeatureStore};
+use corpus_engine::CorpusEngine;
+use corpus_engine_atos::FeatureStore;
+use corpus_engine_notes::NoteStore;
 
 use sovereign_core::health_monitor::{HealthMonitor, MonitorConfig};
 use sovereign_core::insight::{InsightService, InsightSinkRegistry};
-use sovereign_core::model_family::{EmbedModelInfo, ModelFamily, NormalizationStrategy, PoolingStrategy};
+use sovereign_core::model_family::{
+    EmbedModelInfo, ModelFamily, NormalizationStrategy, PoolingStrategy,
+};
 use sovereign_core::planner::LlmPlanner;
 use sovereign_core::router::LlmRouter;
 use sovereign_core::runtime::Runtime;
@@ -490,15 +492,11 @@ impl DesktopConfig {
             // Errors here are non-fatal — the in-memory config is
             // still good for this session.
             if let Err(e) = config.save() {
-                tracing::warn!(
-                    "failed to persist first-launch node name: {e}"
-                );
+                tracing::warn!("failed to persist first-launch node name: {e}");
             } else if let Some(parent) = sentinel.parent() {
                 let _ = std::fs::create_dir_all(parent);
                 if let Err(e) = std::fs::write(&sentinel, b"1") {
-                    tracing::warn!(
-                        "failed to write friendly-name sentinel: {e}"
-                    );
+                    tracing::warn!("failed to write friendly-name sentinel: {e}");
                 }
             }
         }
@@ -574,8 +572,7 @@ pub struct AppState {
     /// stops the dispatcher loop. `None` in Attach mode (the
     /// standalone daemon owns the scheduler) and before the embedded
     /// daemon's wire-up completes in Local mode.
-    pub watched_subsystem:
-        RwLock<Option<sovereign_mesh::watched_folder_setup::WatchedSubsystem>>,
+    pub watched_subsystem: RwLock<Option<sovereign_mesh::watched_folder_setup::WatchedSubsystem>>,
     /// Recipe-author project layer needs both notes (decision log,
     /// research findings, capability requests, checkpoints) and
     /// features (RecipeAuthoring-state FeatureRow per project).
@@ -642,9 +639,9 @@ impl AppState {
         // approval channel uses. Constructing it here (rather than
         // plumbing a second AppHandle through the constructor) keeps
         // the call sites tight and reuses the handle clone.
-        let routing_events = Arc::new(
-            crate::routing_events::TauriRoutingEventSink::new(approval.app_handle()),
-        );
+        let routing_events = Arc::new(crate::routing_events::TauriRoutingEventSink::new(
+            approval.app_handle(),
+        ));
 
         Self {
             runtime: RwLock::new(None),
@@ -695,8 +692,7 @@ pub enum BootstrapPhase {
 /// Optional progress callback for `bootstrap_with_progress`. The
 /// callback is invoked once per phase, in the order the phases
 /// occur (smoke test → model load → DB open).
-pub type BootstrapProgressCb =
-    Box<dyn Fn(BootstrapPhase) + Send + Sync + 'static>;
+pub type BootstrapProgressCb = Box<dyn Fn(BootstrapPhase) + Send + Sync + 'static>;
 
 /// Bootstrap the Runtime from the current config. Thin wrapper
 /// over `bootstrap_with_progress` for callers that don't need
@@ -800,8 +796,8 @@ pub async fn bootstrap_with_progress(
                 .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
                 .unwrap_or(false);
             if !env_force_cpu {
-                let smoke_gpu_layers = sovereign_inference::hardware::HardwareProfile::detect()
-                    .recommended_gpu_layers;
+                let smoke_gpu_layers =
+                    sovereign_inference::hardware::HardwareProfile::detect().recommended_gpu_layers;
                 if smoke_gpu_layers > 0 {
                     emit(BootstrapPhase::SmokeTesting);
                     let smoke_ctx = effective_ctx.min(2048);
@@ -855,10 +851,10 @@ pub async fn bootstrap_with_progress(
                     config.code_model_path.as_deref(),
                     effective_ctx,
                     None,
-                    ModelFamily::Unknown,               // fast slot
-                    ModelFamily::Unknown,               // primary slot (lazy-loaded)
-                    config.embed_family.clone(),        // embed slot — drives pooling/instructions
-                    config.code_family.clone(),         // code slot (lazy, hot-swaps with primary)
+                    ModelFamily::Unknown,        // fast slot
+                    ModelFamily::Unknown,        // primary slot (lazy-loaded)
+                    config.embed_family.clone(), // embed slot — drives pooling/instructions
+                    config.code_family.clone(),  // code slot (lazy, hot-swaps with primary)
                 )
                 .map_err(|e| format!("Failed to load model: {e}"))?,
             );
@@ -890,12 +886,10 @@ pub async fn bootstrap_with_progress(
     // best and misleading at worst, so we just hand the raw provider
     // through.
     let inference: Arc<dyn InferenceProvider> = match state.mesh.as_ref() {
-        Some(mesh) => Arc::new(
-            sovereign_mesh::peer_inference::MeshInferenceProvider::new(
-                Arc::clone(&raw_inference),
-                Arc::clone(mesh),
-            ),
-        ),
+        Some(mesh) => Arc::new(sovereign_mesh::peer_inference::MeshInferenceProvider::new(
+            Arc::clone(&raw_inference),
+            Arc::clone(mesh),
+        )),
         None => Arc::clone(&raw_inference),
     };
 
@@ -1036,9 +1030,7 @@ pub async fn bootstrap_with_progress(
     // every follow-up. Cache TTL defaults to 5 turns (configurable
     // via `with_max_age`); per-conversation scoping walls
     // inner-work / default-chat slices apart by `conversation_id`.
-    let tool_cache = Arc::new(
-        sovereign_core::tool_result_cache::ToolResultCache::new(),
-    );
+    let tool_cache = Arc::new(sovereign_core::tool_result_cache::ToolResultCache::new());
     let mut tools = ToolRegistry::new().with_cache(Arc::clone(&tool_cache));
     let enabled = &config.enabled_tools;
 
@@ -1052,16 +1044,16 @@ pub async fn bootstrap_with_progress(
         )));
         let approval_for_doc = Arc::clone(&state.approval);
         tools.register(Box::new(
-            sovereign_tools::DocumentOperationTool::new(
-                Arc::clone(&store),
-                Arc::clone(&inference),
-            )
-            .with_progress(Arc::new(move |p| {
-                approval_for_doc.emit_event("document-progress", &p);
-            })),
+            sovereign_tools::DocumentOperationTool::new(Arc::clone(&store), Arc::clone(&inference))
+                .with_progress(Arc::new(move |p| {
+                    approval_for_doc.emit_event("document-progress", &p);
+                })),
         ));
     }
-    if enabled.iter().any(|t| t == "search" || t == "knowledge" || t == "web_search") {
+    if enabled
+        .iter()
+        .any(|t| t == "search" || t == "knowledge" || t == "web_search")
+    {
         // Phase 6 of PRODUCTION_SEARCH_INTEGRATION.md: build a
         // WebSearchRegistry from operator config + a SearchOrchestrator,
         // and hand it to SearchTool. The orchestrator path applies the
@@ -1070,8 +1062,8 @@ pub async fn bootstrap_with_progress(
         // available via SearchTool::with_web for the seven other call
         // sites still using it.
         use sovereign_tools::web::search::{
-            BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator,
-            TavilyBackendImpl, WebSearchBackend, WebSearchRegistry,
+            BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator, TavilyBackendImpl,
+            WebSearchBackend, WebSearchRegistry,
         };
 
         let mut registry = WebSearchRegistry::new();
@@ -1081,21 +1073,28 @@ pub async fn bootstrap_with_progress(
         // alongside. Both stay in the registry; the orchestrator
         // picks via the operator preference order (Tavily/Brave
         // first when configured, DuckDuckGo as the fallback).
-        let preferred: Box<dyn WebSearchBackend> =
-            match config.search_backend.provider.as_str() {
-                "tavily" => config.search_backend.api_key.as_ref().map(
-                    |key| -> Box<dyn WebSearchBackend> {
+        let preferred: Box<dyn WebSearchBackend> = match config.search_backend.provider.as_str() {
+            "tavily" => {
+                config
+                    .search_backend
+                    .api_key
+                    .as_ref()
+                    .map(|key| -> Box<dyn WebSearchBackend> {
                         Box::new(TavilyBackendImpl::new(key.clone()))
-                    },
-                ),
-                "brave" => config.search_backend.api_key.as_ref().map(
-                    |key| -> Box<dyn WebSearchBackend> {
-                        Box::new(BraveBackendImpl::new(key.clone()))
-                    },
-                ),
-                _ => None,
+                    })
             }
-            .unwrap_or_else(|| Box::new(DuckDuckGoBackendImpl::new()));
+            "brave" => {
+                config
+                    .search_backend
+                    .api_key
+                    .as_ref()
+                    .map(|key| -> Box<dyn WebSearchBackend> {
+                        Box::new(BraveBackendImpl::new(key.clone()))
+                    })
+            }
+            _ => None,
+        }
+        .unwrap_or_else(|| Box::new(DuckDuckGoBackendImpl::new()));
         // Convert the Box to Arc so the registry's Arc-of-trait
         // shape is happy. DuckDuckGo's `register` above sets up the
         // fallback; this `register` may replace it with the same id
@@ -1105,11 +1104,13 @@ pub async fn bootstrap_with_progress(
         registry.register(Arc::from(preferred));
 
         let orchestrator = Arc::new(SearchOrchestrator::new(Arc::new(registry)));
-        tools.register(Box::new(sovereign_tools::search::SearchTool::with_orchestrator(
-            Arc::clone(&store),
-            Arc::clone(&inference),
-            orchestrator,
-        )));
+        tools.register(Box::new(
+            sovereign_tools::search::SearchTool::with_orchestrator(
+                Arc::clone(&store),
+                Arc::clone(&inference),
+                orchestrator,
+            ),
+        ));
     }
     if enabled.iter().any(|t| t == "web_fetch") {
         tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
@@ -1121,10 +1122,8 @@ pub async fn bootstrap_with_progress(
         // earlier in bootstrap; that's the same store the
         // dossier write hook reads/writes, so chat-side outcome
         // history and notes-channel evidence are coherent.
-        let mut tool = sovereign_tools::KnowledgeLookupTool::new(
-            Arc::clone(&store),
-            Arc::clone(&inference),
-        );
+        let mut tool =
+            sovereign_tools::KnowledgeLookupTool::new(Arc::clone(&store), Arc::clone(&inference));
         if let Some(ref ns) = *state.notes.read().await {
             tool = tool.with_notes(Arc::clone(ns));
         }
@@ -1137,8 +1136,8 @@ pub async fn bootstrap_with_progress(
         // (the search-tool block above is its own gated branch).
         if config.auto_escalate_to_web {
             use sovereign_tools::web::search::{
-                BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator,
-                TavilyBackendImpl, WebSearchBackend, WebSearchRegistry,
+                BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator, TavilyBackendImpl,
+                WebSearchBackend, WebSearchRegistry,
             };
             let mut registry = WebSearchRegistry::new();
             registry.register(Arc::new(DuckDuckGoBackendImpl::new()));
@@ -1158,8 +1157,7 @@ pub async fn bootstrap_with_progress(
                 }
                 .unwrap_or_else(|| Box::new(DuckDuckGoBackendImpl::new()));
             registry.register(Arc::from(preferred));
-            let orchestrator =
-                Arc::new(SearchOrchestrator::new(Arc::new(registry)));
+            let orchestrator = Arc::new(SearchOrchestrator::new(Arc::new(registry)));
             tool = tool
                 .with_web_orchestrator(orchestrator)
                 .with_auto_escalate(true);
@@ -1185,8 +1183,7 @@ pub async fn bootstrap_with_progress(
     let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference));
     let batch_embed_fn =
         sovereign_tools::corpus::inference_to_batch_embed_fn(Arc::clone(&inference));
-    let inference_fn =
-        sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference));
+    let inference_fn = sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference));
     // Derive the embedding model identifier from the configured file path
     // so `_corpus_meta.json` records the actual model rather than the
     // hardcoded `"qwen3-embedding-0.6b"` default. We use the filename
@@ -1383,9 +1380,8 @@ pub async fn bootstrap_with_progress(
         }
         let mgr = Arc::new(mgr);
         if let Some(concrete) = state.sqlite_store.read().await.as_ref() {
-            concrete.set_observer(
-                mgr.clone() as sovereign_core::observer::SharedStateStoreObserver,
-            );
+            concrete
+                .set_observer(mgr.clone() as sovereign_core::observer::SharedStateStoreObserver);
         } else {
             tracing::warn!(
                 "KnowledgeView: desktop store was not SQLite-backed; \
@@ -1439,8 +1435,7 @@ pub async fn bootstrap_with_progress(
         // conversation (title, updated_at). Cheap (one Arc clone)
         // and only used by the reading surface; without it
         // conversation citations render with no title.
-        let store_for_daemon: Arc<dyn sovereign_core::traits::StateStore> =
-            Arc::clone(&store);
+        let store_for_daemon: Arc<dyn sovereign_core::traits::StateStore> = Arc::clone(&store);
         mesh.set_state_store(store_for_daemon).await;
     }
 
@@ -1465,7 +1460,8 @@ pub async fn bootstrap_with_progress(
     // Founder, the Founder's daemon invokes THIS adapter, which
     // runs inference locally and returns.
     if let Some(mesh) = state.mesh.as_ref() {
-        mesh.set_inference_provider(Arc::clone(&raw_inference)).await;
+        mesh.set_inference_provider(Arc::clone(&raw_inference))
+            .await;
     }
 
     // ── Wire the embedded daemon's full HTTP surface for CLI-setup mode ────────
@@ -1548,15 +1544,15 @@ pub async fn bootstrap_with_progress(
                     Arc::clone(&corpus_engine),
                     Arc::clone(&graph_handle),
                 )));
-                mcp_tools.register(Box::new(sovereign_tools::CodeSearchTool::new(
-                    Arc::clone(&corpus_engine),
-                )));
+                mcp_tools.register(Box::new(sovereign_tools::CodeSearchTool::new(Arc::clone(
+                    &corpus_engine,
+                ))));
                 mcp_tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
                     Arc::clone(&corpus_engine),
                 )));
-                let hc = Arc::new(sovereign_tools::IndexHealthChecker::new(
-                    Arc::clone(&graph_handle),
-                ));
+                let hc = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(
+                    &graph_handle,
+                )));
                 mcp_tools.register(Box::new(
                     sovereign_tools::FindCallersTool::new(
                         Arc::clone(&corpus_engine),
@@ -1576,15 +1572,15 @@ pub async fn bootstrap_with_progress(
                         .with_health_checker(Arc::clone(&hc)),
                 ));
                 // Notes tools.
-                mcp_tools.register(Box::new(sovereign_tools::WriteNoteTool::new(
-                    Arc::clone(&notes),
-                )));
-                mcp_tools.register(Box::new(sovereign_tools::ReadNotesTool::new(
-                    Arc::clone(&notes),
-                )));
-                mcp_tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(
-                    Arc::clone(&notes),
-                )));
+                mcp_tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
+                    &notes,
+                ))));
+                mcp_tools.register(Box::new(sovereign_tools::ReadNotesTool::new(Arc::clone(
+                    &notes,
+                ))));
+                mcp_tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(Arc::clone(
+                    &notes,
+                ))));
                 mcp_tools.register(Box::new(sovereign_tools::SessionReflectionTool::new(
                     Arc::clone(&notes),
                 )));
@@ -1605,21 +1601,21 @@ pub async fn bootstrap_with_progress(
 
         // 3. Mesh HTTP + admin HTTP API (enables /v1/mesh/* and /v1/admin/reload).
         daemon_arc
-            .install_mesh_http_router(sovereign_mesh::mesh_http::mesh_router(
-                Arc::clone(&daemon_arc),
-            ))
+            .install_mesh_http_router(sovereign_mesh::mesh_http::mesh_router(Arc::clone(
+                &daemon_arc,
+            )))
             .await;
         daemon_arc
-            .install_admin_http_router(sovereign_mesh::admin_http::admin_router(
-                Arc::clone(&daemon_arc),
-            ))
+            .install_admin_http_router(sovereign_mesh::admin_http::admin_router(Arc::clone(
+                &daemon_arc,
+            )))
             .await;
         // Reading-surface routes (/internal/corpus/{c}/chunks/...) —
         // backs the desktop's glass-box reading UI. Loopback-only.
         daemon_arc
-            .install_reading_http_router(
-                sovereign_mesh::reading_http::reading_router(Arc::clone(&daemon_arc)),
-            )
+            .install_reading_http_router(sovereign_mesh::reading_http::reading_router(Arc::clone(
+                &daemon_arc,
+            )))
             .await;
 
         // 4. /v1/projects — project freshness pipeline.
@@ -1627,10 +1623,8 @@ pub async fn bootstrap_with_progress(
             .expect("in-memory ScipGraph for project pipeline");
         let merged_handle: sovereign_mesh::reindexer::ScipGraphHandle =
             Arc::new(arc_swap::ArcSwap::from_pointee(merged_for_indexer));
-        let mut reindexer = sovereign_mesh::reindexer::Reindexer::new(
-            indexes_dir.clone(),
-            merged_handle,
-        );
+        let mut reindexer =
+            sovereign_mesh::reindexer::Reindexer::new(indexes_dir.clone(), merged_handle);
         // Phase 7.1: hook the commit-message harvester so the
         // desktop daemon's git-HEAD poll persists committed-source
         // notes alongside the SCIP rebuild. The harvester opens
@@ -1644,9 +1638,9 @@ pub async fn bootstrap_with_progress(
             );
         }
         daemon_arc
-            .install_project_http_router(sovereign_mesh::project_http::project_router(
-                Arc::clone(&reindexer),
-            ))
+            .install_project_http_router(sovereign_mesh::project_http::project_router(Arc::clone(
+                &reindexer,
+            )))
             .await;
         // Resume any previously-registered projects so FS watchers restart.
         let registry = sovereign_mesh::projects::Registry::load().unwrap_or_else(|e| {
@@ -1762,21 +1756,28 @@ pub async fn bootstrap_with_progress(
             output_dims: embed_dims,
         }));
 
-        let monitor = Arc::new(HealthMonitor::new(MonitorConfig::default(), Arc::clone(&store)));
+        let monitor = Arc::new(HealthMonitor::new(
+            MonitorConfig::default(),
+            Arc::clone(&store),
+        ));
 
         // Register CorpusIndexChecker.
         monitor
-            .register(Arc::new(sovereign_tools::index_validator::CorpusIndexChecker::new(
-                Arc::clone(&corpus_engine),
-                Arc::clone(&embed_slot),
-            )))
+            .register(Arc::new(
+                sovereign_tools::index_validator::CorpusIndexChecker::new(
+                    Arc::clone(&corpus_engine),
+                    Arc::clone(&embed_slot),
+                ),
+            ))
             .await;
 
         // Register EnrichmentChecker.
         monitor
-            .register(Arc::new(sovereign_tools::enrichment_checker::EnrichmentChecker::new(
-                Arc::clone(&corpus_engine),
-            )))
+            .register(Arc::new(
+                sovereign_tools::enrichment_checker::EnrichmentChecker::new(Arc::clone(
+                    &corpus_engine,
+                )),
+            ))
             .await;
 
         // Register StateStoreChecker (SQLite only).
@@ -1816,9 +1817,9 @@ pub async fn bootstrap_with_progress(
         tracing::info!("HealthMonitor started");
     }
 
-    tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(
-        Arc::clone(&corpus_engine),
-    )));
+    tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(Arc::clone(
+        &corpus_engine,
+    ))));
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
@@ -1877,8 +1878,7 @@ pub async fn bootstrap_with_progress(
         use sovereign_tools::recipe_author::{
             maintainer_inbox_dir, CapabilityRequestTool, CheckpointTool, DecisionLogTool,
             ProbeUrlTool, RecipeReadTool, RecipeTestTool, RecipeValidateTool,
-            RecipeWriteStructuredTool, RecipeWriteTool, RegistryBrowseTool,
-            ResearchFindingTool,
+            RecipeWriteStructuredTool, RecipeWriteTool, RegistryBrowseTool, ResearchFindingTool,
         };
         tools.register(Box::new(RegistryBrowseTool));
         tools.register(Box::new(RecipeReadTool::new()));
@@ -1907,8 +1907,7 @@ pub async fn bootstrap_with_progress(
                 Arc::clone(ns),
                 Arc::clone(fs),
             )));
-            let mut cap_tool =
-                CapabilityRequestTool::with_stores(Arc::clone(ns), Arc::clone(fs));
+            let mut cap_tool = CapabilityRequestTool::with_stores(Arc::clone(ns), Arc::clone(fs));
             // Wire the inbox directory so submitted capability requests
             // land where `sovereign maintainer inbox` reads them — same
             // path the live-trial harness uses.
@@ -1950,22 +1949,17 @@ pub async fn bootstrap_with_progress(
     // errors on TLS config, which doesn't apply to localhost HTTP);
     // if something truly goes wrong, skip mesh injection and log —
     // the local-only retrieval path is still functional.
-    let mesh_knowledge: Option<
-        Arc<dyn sovereign_core::traits::MeshKnowledgeSource>,
-    > = match sovereign_mesh::knowledge_client::MeshKnowledgeClient::new(
-        "http://127.0.0.1:9741",
-    ) {
-        Ok(c) => {
-            tracing::info!(
-                "mesh knowledge client: wired to http://127.0.0.1:9741"
-            );
-            Some(Arc::new(c))
-        }
-        Err(e) => {
-            tracing::warn!(error = %e, "mesh knowledge client build failed; local-only retrieval");
-            None
-        }
-    };
+    let mesh_knowledge: Option<Arc<dyn sovereign_core::traits::MeshKnowledgeSource>> =
+        match sovereign_mesh::knowledge_client::MeshKnowledgeClient::new("http://127.0.0.1:9741") {
+            Ok(c) => {
+                tracing::info!("mesh knowledge client: wired to http://127.0.0.1:9741");
+                Some(Arc::new(c))
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "mesh knowledge client build failed; local-only retrieval");
+                None
+            }
+        };
 
     // Snapshot the local-only skill ids BEFORE the registry is
     // consumed by `Runtime::new`. The attach-mode landscape-digest
@@ -2029,8 +2023,7 @@ pub async fn bootstrap_with_progress(
     // operator sets `[memory.compaction] mode = "disabled"`.
     {
         let worker = sovereign_core::memory_compaction::CompactionWorker::spawn(
-            Arc::clone(&store)
-                as Arc<dyn sovereign_core::traits::MemoryStore>,
+            Arc::clone(&store) as Arc<dyn sovereign_core::traits::MemoryStore>,
             Arc::clone(&runtime.inference),
             compaction_config_for_runtime.clone(),
         );
@@ -2042,8 +2035,7 @@ pub async fn bootstrap_with_progress(
     // surface per-conversation RAPTOR signposts beside raw chunks.
     if let Some(ss) = state.sqlite_store.read().await.as_ref() {
         runtime = runtime.with_conv_tiered_reader(
-            Arc::clone(ss)
-                as Arc<dyn sovereign_store::sqlite::ConvTieredReader>,
+            Arc::clone(ss) as Arc<dyn sovereign_store::sqlite::ConvTieredReader>
         );
     }
     // Landscape-digest provider wiring. Three branches:
@@ -2060,8 +2052,7 @@ pub async fn bootstrap_with_progress(
     //    pre-KnowledgeView behaviour).
     if let Some(ref mgr) = knowledge_view_manager {
         runtime = runtime.with_landscape_digests(
-            Arc::clone(mgr)
-                as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>,
+            Arc::clone(mgr) as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>
         );
     } else if state.is_attach_mode() && config.knowledge_view_enabled {
         match sovereign_mesh::landscape_digest_client::MeshLandscapeDigestClient::new(
@@ -2073,10 +2064,9 @@ pub async fn bootstrap_with_progress(
                     "knowledge_view: attach mode — landscape digest client wired \
                      to http://127.0.0.1:9741/v1/knowledge/landscape_digest"
                 );
-                runtime = runtime.with_landscape_digests(
-                    Arc::new(client)
-                        as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>,
-                );
+                runtime = runtime
+                    .with_landscape_digests(Arc::new(client)
+                        as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>);
             }
             Err(e) => tracing::warn!(
                 error = %e,
@@ -2098,21 +2088,19 @@ pub async fn bootstrap_with_progress(
     // landscape-digest wiring above.
     if let Some(mgr) = state.local_corpus.read().await.as_ref() {
         runtime = runtime.with_sensitive_corpora(
-            Arc::clone(mgr)
-                as Arc<dyn sovereign_core::traits::SensitiveCorpusOracle>,
+            Arc::clone(mgr) as Arc<dyn sovereign_core::traits::SensitiveCorpusOracle>
         );
         runtime = runtime.with_folder_metadata(
-            Arc::clone(mgr)
-                as Arc<dyn sovereign_core::traits::FolderMetadataOracle>,
+            Arc::clone(mgr) as Arc<dyn sovereign_core::traits::FolderMetadataOracle>
         );
     }
     // PR2 — install the Tauri routing-events sink so the runtime can
     // fire interpretation-proposed / clarification-request /
     // turn-narration back to the desktop UI.
-    runtime = runtime.with_routing_events(
-        Arc::clone(&state.routing_events)
-            as Arc<dyn sovereign_core::traits::RoutingEventSink>,
-    );
+    runtime =
+        runtime
+            .with_routing_events(Arc::clone(&state.routing_events)
+                as Arc<dyn sovereign_core::traits::RoutingEventSink>);
 
     *state.runtime.write().await = Some(Arc::new(runtime));
 
@@ -2143,11 +2131,15 @@ pub async fn bootstrap_with_progress(
         tokio::spawn(async move {
             let corpora = verify_store.list_corpus_states().await.unwrap_or_default();
             for cs in corpora {
-                let Ok(indexes) = verify_engine.installed_indexes().await else { continue };
-                let Some(info) = indexes.iter().find(|i| i.corpus_id == cs.corpus_id) else {
-                    continue
+                let Ok(indexes) = verify_engine.installed_indexes().await else {
+                    continue;
                 };
-                let Ok(idx) = verify_engine.open_index(&info.path).await else { continue };
+                let Some(info) = indexes.iter().find(|i| i.corpus_id == cs.corpus_id) else {
+                    continue;
+                };
+                let Ok(idx) = verify_engine.open_index(&info.path).await else {
+                    continue;
+                };
                 let ready = idx.is_vector_index_ready().await;
                 let _ = verify_store
                     .set_vector_index_ready(&cs.corpus_id, ready)
@@ -2250,8 +2242,7 @@ think_budget = 512
 [search_backend]
 provider = "duckduckgo"
 "#;
-        let cfg: DesktopConfig = toml::from_str(legacy)
-            .expect("legacy config should deserialize");
+        let cfg: DesktopConfig = toml::from_str(legacy).expect("legacy config should deserialize");
         assert!(
             cfg.auto_collaborate,
             "legacy config (no auto_collaborate field) must upgrade to true"

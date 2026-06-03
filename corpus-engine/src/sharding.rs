@@ -8,8 +8,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use arrow_array::{Array, ArrayRef, BooleanArray, Int64Array, RecordBatch, StringArray};
 use arrow::compute::filter_record_batch;
+use arrow_array::{Array, ArrayRef, BooleanArray, Int64Array, RecordBatch, StringArray};
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase, Select};
 
@@ -121,8 +121,8 @@ pub fn promote_single_shard(source: &Path, output: &Path) -> Result<()> {
 
     // Rewrite meta to drop partition-specific fields and mark complete.
     let raw = std::fs::read_to_string(output.join("_corpus_meta.json"))?;
-    let mut meta: serde_json::Value = serde_json::from_str(&raw)
-        .map_err(|e| Error::Serialization(format!("read meta: {e}")))?;
+    let mut meta: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| Error::Serialization(format!("read meta: {e}")))?;
     if let Some(obj) = meta.as_object_mut() {
         obj.insert("is_shard".into(), serde_json::Value::Bool(false));
         obj.insert("chunk_range_start".into(), serde_json::Value::Null);
@@ -281,10 +281,7 @@ pub async fn extract_shard(
 ///
 /// Chunks with both keys NULL are always included (conservative: cannot
 /// deduplicate without any signal).
-pub async fn merge_shards(
-    shard_paths: &[PathBuf],
-    output_path: &Path,
-) -> Result<IndexInfo> {
+pub async fn merge_shards(shard_paths: &[PathBuf], output_path: &Path) -> Result<IndexInfo> {
     if shard_paths.is_empty() {
         return Err(Error::NoShardsFound("no shard paths provided".into()));
     }
@@ -304,10 +301,7 @@ pub async fn merge_shards(
         let output_has_data = output_path.join("_corpus_meta.json").exists();
         if !output_has_data && source != output_path {
             promote_single_shard(source, output_path)?;
-            return CorpusIndex::open(output_path)
-                .await?
-                .info()
-                .await;
+            return CorpusIndex::open(output_path).await?.info().await;
         }
     }
 
@@ -342,7 +336,10 @@ pub async fn merge_shards(
         drop(shard);
 
         // Resolve embedding_model across the shards.
-        match (resolved_model.is_empty(), shard_info.embedding_model.is_empty()) {
+        match (
+            resolved_model.is_empty(),
+            shard_info.embedding_model.is_empty(),
+        ) {
             (true, false) => {
                 tracing::info!(
                     shard = %shard_path.display(),
@@ -450,13 +447,8 @@ pub async fn merge_shards(
         first_info.mutable_merge,
         Some(crate::recipe::MutableMergePolicy::SourceDocIdNewestMtime)
     ) {
-        let dedup_count = merge_shards_source_doc_id_newest_mtime(
-            &merged,
-            shard_paths,
-            dim,
-            output_path,
-        )
-        .await?;
+        let dedup_count =
+            merge_shards_source_doc_id_newest_mtime(&merged, shard_paths, dim, output_path).await?;
         let result = merged.info().await?;
         tracing::info!(
             corpus_id = %result.corpus_id,
@@ -474,8 +466,7 @@ pub async fn merge_shards(
     // Track seen content_hashes (primary key) and (unit_id, source_doc_id)
     // pairs (secondary key for rows with NULL content_hash).
     let mut seen_hashes: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut seen_units: std::collections::HashSet<(i32, String)> =
-        std::collections::HashSet::new();
+    let mut seen_units: std::collections::HashSet<(i32, String)> = std::collections::HashSet::new();
     let mut dedup_count: u64 = 0;
 
     for shard_path in shard_paths {
@@ -554,23 +545,20 @@ pub async fn merge_shards(
             }
 
             // Renumber IDs for kept rows only.
-            let new_ids: Vec<i64> = (0..keep_count)
-                .map(|i| next_id + i as i64)
-                .collect();
+            let new_ids: Vec<i64> = (0..keep_count).map(|i| next_id + i as i64).collect();
             next_id += keep_count as i64;
 
             // Rebuild batch with new IDs and filtered rows.
             // Column order must match corpus_schema() exactly.
             let schema = crate::index::corpus_schema(dim);
-            let null_str_col: ArrayRef = Arc::new(
-                StringArray::from(vec![Option::<String>::None; keep_count]),
-            );
-            let null_i32_col: ArrayRef = Arc::new(
-                arrow_array::Int32Array::from(vec![Option::<i32>::None; keep_count]),
-            );
-            let null_i64_col: ArrayRef = Arc::new(
-                Int64Array::from(vec![Option::<i64>::None; keep_count]),
-            );
+            let null_str_col: ArrayRef =
+                Arc::new(StringArray::from(vec![Option::<String>::None; keep_count]));
+            let null_i32_col: ArrayRef = Arc::new(arrow_array::Int32Array::from(vec![
+                    Option::<i32>::None;
+                    keep_count
+                ]));
+            let null_i64_col: ArrayRef =
+                Arc::new(Int64Array::from(vec![Option::<i64>::None; keep_count]));
             let col_or_null_str = |name: &str| {
                 filtered
                     .column_by_name(name)
@@ -727,7 +715,13 @@ async fn merge_shards_source_doc_id_newest_mtime(
 
                 if let Some(doc_id) = doc_id_opt {
                     let row_mtime = mtime_col
-                        .and_then(|c| if c.is_null(row_idx) { None } else { Some(c.value(row_idx)) })
+                        .and_then(|c| {
+                            if c.is_null(row_idx) {
+                                None
+                            } else {
+                                Some(c.value(row_idx))
+                            }
+                        })
                         .unwrap_or(0);
                     let candidate = WinnerKey {
                         shard_idx,
@@ -802,15 +796,14 @@ async fn merge_shards_source_doc_id_newest_mtime(
             let new_ids: Vec<i64> = (0..keep_count).map(|i| next_id + i as i64).collect();
             next_id += keep_count as i64;
 
-            let null_str_col: ArrayRef = Arc::new(
-                StringArray::from(vec![Option::<String>::None; keep_count]),
-            );
-            let null_i32_col: ArrayRef = Arc::new(
-                arrow_array::Int32Array::from(vec![Option::<i32>::None; keep_count]),
-            );
-            let null_i64_col: ArrayRef = Arc::new(
-                Int64Array::from(vec![Option::<i64>::None; keep_count]),
-            );
+            let null_str_col: ArrayRef =
+                Arc::new(StringArray::from(vec![Option::<String>::None; keep_count]));
+            let null_i32_col: ArrayRef = Arc::new(arrow_array::Int32Array::from(vec![
+                    Option::<i32>::None;
+                    keep_count
+                ]));
+            let null_i64_col: ArrayRef =
+                Arc::new(Int64Array::from(vec![Option::<i64>::None; keep_count]));
             let col_or_null_str = |name: &str| {
                 filtered
                     .column_by_name(name)
@@ -884,7 +877,10 @@ pub enum MergePhaseProgress {
     DiscoveryComplete { partition_count: usize },
     /// Chunk merge phase finished (the `merge_shards` call). Reports
     /// the deduplication that happened during merge.
-    MergeComplete { chunks_merged: u64, chunks_deduped: u64 },
+    MergeComplete {
+        chunks_merged: u64,
+        chunks_deduped: u64,
+    },
     /// Meta-stamping phase finished (scope, processed_shards,
     /// total_shards, provenance).
     MetaStamped,
@@ -999,8 +995,7 @@ pub async fn merge_partitions_into_canonical(
     // processed_shards, total_shards, scope. Used both for the
     // canonical post-merge stamp and for assembling the report.
     let mut chunks_input: u64 = 0;
-    let mut shard_union: std::collections::BTreeSet<usize> =
-        std::collections::BTreeSet::new();
+    let mut shard_union: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
     let mut total_shards_max: Option<usize> = None;
     let mut scope: Option<crate::index::ScopeMeta> = None;
     let mut embedding_model: Option<String> = None;
@@ -1032,8 +1027,7 @@ pub async fn merge_partitions_into_canonical(
 
         // Read total_shards directly from the meta JSON since it's
         // not exposed via IndexInfo.
-        let raw = std::fs::read_to_string(path.join("_corpus_meta.json"))
-            .unwrap_or_default();
+        let raw = std::fs::read_to_string(path.join("_corpus_meta.json")).unwrap_or_default();
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
             if let Some(n) = v["total_shards"].as_u64() {
                 let n = n as usize;
@@ -1042,9 +1036,8 @@ pub async fn merge_partitions_into_canonical(
         }
     }
 
-    let total_shards = total_shards_max.or_else(|| {
-        shard_union.iter().last().copied().map(|m| m + 1)
-    });
+    let total_shards =
+        total_shards_max.or_else(|| shard_union.iter().last().copied().map(|m| m + 1));
 
     if let Some(cb) = &progress {
         cb(MergePhaseProgress::DiscoveryComplete {
@@ -1219,8 +1212,7 @@ pub async fn append_partition_to_canonical(
         .list_indexed_content_hashes()
         .await
         .unwrap_or_default();
-    let mut seen_units: std::collections::HashSet<(i32, String)> =
-        std::collections::HashSet::new();
+    let mut seen_units: std::collections::HashSet<(i32, String)> = std::collections::HashSet::new();
 
     let source = CorpusIndex::open(source_path).await?;
     let source_info = source.info().await?;
@@ -1296,21 +1288,18 @@ pub async fn append_partition_to_canonical(
             continue;
         }
 
-        let new_ids: Vec<i64> = (0..keep_count)
-            .map(|i| next_id + i as i64)
-            .collect();
+        let new_ids: Vec<i64> = (0..keep_count).map(|i| next_id + i as i64).collect();
         next_id += keep_count as i64;
 
         let schema = crate::index::corpus_schema(dim);
-        let null_str_col: ArrayRef = Arc::new(
-            StringArray::from(vec![Option::<String>::None; keep_count]),
-        );
-        let null_i32_col: ArrayRef = Arc::new(
-            arrow_array::Int32Array::from(vec![Option::<i32>::None; keep_count]),
-        );
-        let null_i64_col: ArrayRef = Arc::new(
-            Int64Array::from(vec![Option::<i64>::None; keep_count]),
-        );
+        let null_str_col: ArrayRef =
+            Arc::new(StringArray::from(vec![Option::<String>::None; keep_count]));
+        let null_i32_col: ArrayRef = Arc::new(arrow_array::Int32Array::from(vec![
+                Option::<i32>::None;
+                keep_count
+            ]));
+        let null_i64_col: ArrayRef =
+            Arc::new(Int64Array::from(vec![Option::<i64>::None; keep_count]));
         let col_or_null_str = |name: &str| {
             filtered
                 .column_by_name(name)
@@ -1399,11 +1388,9 @@ mod tests {
     }
 
     async fn create_test_index(path: &Path, chunk_count: u64) -> CorpusIndex {
-        let index = CorpusIndex::create(
-            path, "test", "Test Corpus", "test-model", 8, true, "MIT",
-        )
-        .await
-        .unwrap();
+        let index = CorpusIndex::create(path, "test", "Test Corpus", "test-model", 8, true, "MIT")
+            .await
+            .unwrap();
 
         let chunks: Vec<_> = (0..chunk_count)
             .map(|i| {
@@ -1417,7 +1404,7 @@ mod tests {
                         source_doc_id: None,
                         source_file: None,
                         code: crate::index::InsertCodeMeta::default(),
-                            unit_id: None,
+                        unit_id: None,
                     },
                     make_test_embedding(i as f32),
                 )
@@ -1495,12 +1482,9 @@ mod tests {
         .unwrap();
 
         let merged_path = dir.path().join("merged");
-        let merged_info = merge_shards(
-            &[shard1_path, shard2_path],
-            &merged_path,
-        )
-        .await
-        .unwrap();
+        let merged_info = merge_shards(&[shard1_path, shard2_path], &merged_path)
+            .await
+            .unwrap();
 
         assert_eq!(merged_info.chunk_count, 10);
         assert!(!merged_info.is_shard);
@@ -1719,14 +1703,14 @@ mod tests {
         assert_eq!(report.embedding_model, "test-model");
 
         // Canonical meta should be ingestion-complete + indexes-built.
-        let raw = std::fs::read_to_string(
-            report.canonical_path.join("_corpus_meta.json"),
-        )
-        .unwrap();
+        let raw = std::fs::read_to_string(report.canonical_path.join("_corpus_meta.json")).unwrap();
         let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(v["ingestion_in_progress"], serde_json::Value::Bool(false));
         assert_eq!(v["indexes_built"], serde_json::Value::Bool(true));
-        assert_eq!(v["provenance"], serde_json::Value::String("self_initiated".into()));
+        assert_eq!(
+            v["provenance"],
+            serde_json::Value::String("self_initiated".into())
+        );
         assert_eq!(v["total_shards"], serde_json::Value::Number(5.into()));
         // Scope replayed from i1 (first non-None scope wins).
         assert_eq!(v["scope"]["filter_signature"], "abcdef");
@@ -1863,13 +1847,9 @@ mod tests {
                 start + chunk_size
             };
             let shard_path = dir.path().join(format!("shard{i}"));
-            extract_shard(
-                &source_path,
-                ChunkRange::new(start, end),
-                &shard_path,
-            )
-            .await
-            .unwrap();
+            extract_shard(&source_path, ChunkRange::new(start, end), &shard_path)
+                .await
+                .unwrap();
             shard_paths.push(shard_path);
             start = end;
         }
@@ -1895,7 +1875,13 @@ mod tests {
     ) -> PathBuf {
         let path = dir.join(name);
         let index = CorpusIndex::create(
-            &path, "alignment", "Alignment", "test-model", 8, true, "private",
+            &path,
+            "alignment",
+            "Alignment",
+            "test-model",
+            8,
+            true,
+            "private",
         )
         .await
         .unwrap();
@@ -1935,14 +1921,20 @@ mod tests {
         let s1 = make_mutable_shard(
             dir.path(),
             "shard1",
-            &[("plans/foo.md", 100, "old body"), ("memory/keep.md", 50, "kept")],
+            &[
+                ("plans/foo.md", 100, "old body"),
+                ("memory/keep.md", 50, "kept"),
+            ],
             policy,
         )
         .await;
         let s2 = make_mutable_shard(
             dir.path(),
             "shard2",
-            &[("plans/foo.md", 200, "new body"), ("plans/bar.md", 75, "new file")],
+            &[
+                ("plans/foo.md", 200, "new body"),
+                ("plans/bar.md", 75, "new file"),
+            ],
             policy,
         )
         .await;
@@ -1955,7 +1947,10 @@ mod tests {
         let merged = CorpusIndex::open(&merged_path).await.unwrap();
         assert_eq!(merged.mutable_merge(), policy);
         // Search the foo content — only the newer body should be present.
-        let results = merged.search(&make_test_embedding(200.0), "new body", 5).await.unwrap();
+        let results = merged
+            .search(&make_test_embedding(200.0), "new body", 5)
+            .await
+            .unwrap();
         assert!(
             results.iter().any(|c| c.content.contains("new body")),
             "newest-mtime body present"

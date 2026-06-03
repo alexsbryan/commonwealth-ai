@@ -127,7 +127,9 @@ pub async fn cmd_triage(args: &[String]) -> i32 {
     let mut inbound: HashMap<String, u32> = HashMap::with_capacity(entities.len());
     let mut outbound: HashMap<String, u32> = HashMap::with_capacity(entities.len());
     for edge in &edges_file.edges {
-        *outbound.entry(edge.source.as_str().to_string()).or_insert(0) += 1;
+        *outbound
+            .entry(edge.source.as_str().to_string())
+            .or_insert(0) += 1;
         *inbound.entry(edge.target.as_str().to_string()).or_insert(0) += 1;
     }
 
@@ -255,7 +257,9 @@ pub async fn cmd_triage(args: &[String]) -> i32 {
 }
 
 fn print_hist(hist: &HashMap<&'static str, u64>, total: u64) {
-    let order = ["0", "1", "2-5", "6-10", "11-50", "51-100", "101-500", "501+"];
+    let order = [
+        "0", "1", "2-5", "6-10", "11-50", "51-100", "101-500", "501+",
+    ];
     let max = hist.values().copied().max().unwrap_or(0).max(1);
     for bucket in order {
         let count = hist.get(bucket).copied().unwrap_or(0);
@@ -266,17 +270,14 @@ fn print_hist(hist: &HashMap<&'static str, u64>, total: u64) {
         };
         let bar_len = ((count as f64) / (max as f64) * 40.0).round() as usize;
         let bar = "█".repeat(bar_len);
-        println!(
-            "  {:>8}  {:>9}  {:>5.1}%  {}",
-            bucket, count, pct, bar
-        );
+        println!("  {:>8}  {:>9}  {:>5.1}%  {}", bucket, count, pct, bar);
     }
 }
 
-fn bucket_sorted(
-    hist: &HashMap<&'static str, u64>,
-) -> Vec<serde_json::Value> {
-    let order = ["0", "1", "2-5", "6-10", "11-50", "51-100", "101-500", "501+"];
+fn bucket_sorted(hist: &HashMap<&'static str, u64>) -> Vec<serde_json::Value> {
+    let order = [
+        "0", "1", "2-5", "6-10", "11-50", "51-100", "101-500", "501+",
+    ];
     order
         .iter()
         .map(|b| serde_json::json!({"bucket": *b, "count": hist.get(*b).copied().unwrap_or(0)}))

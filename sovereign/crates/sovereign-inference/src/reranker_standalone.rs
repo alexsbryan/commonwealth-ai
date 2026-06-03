@@ -26,9 +26,9 @@ use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use crate::llama::cpp::llama_backend::LlamaBackend;
 use async_trait::async_trait;
 use futures::Stream;
-use crate::llama::cpp::llama_backend::LlamaBackend;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::model_family::ModelFamily;
@@ -66,8 +66,8 @@ impl StandaloneReranker {
         family: ModelFamily,
         gpu_layers: Option<u32>,
     ) -> Result<Self> {
-        let mut backend = LlamaBackend::init()
-            .map_err(|e| Error::Inference(format!("init backend: {e}")))?;
+        let mut backend =
+            LlamaBackend::init().map_err(|e| Error::Inference(format!("init backend: {e}")))?;
         // Honour the same llama.cpp-log-suppression policy the host
         // daemon uses — set SOVEREIGN_LLAMA_LOGS=1 to see ggml output.
         if std::env::var("SOVEREIGN_LLAMA_LOGS").ok().as_deref() != Some("1") {

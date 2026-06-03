@@ -127,9 +127,8 @@ impl HttpApiAcquirer {
                     templated_headers.push((name, v.clone()));
                     continue;
                 }
-                let value = reqwest::header::HeaderValue::from_str(v).map_err(|e| {
-                    Error::Recipe(format!("invalid header value for `{k}`: {e}"))
-                })?;
+                let value = reqwest::header::HeaderValue::from_str(v)
+                    .map_err(|e| Error::Recipe(format!("invalid header value for `{k}`: {e}")))?;
                 default_headers.insert(name, value);
             }
             if !default_headers.is_empty() {
@@ -263,7 +262,8 @@ impl HttpApiAcquirer {
                     .await?;
                 }
                 None => {
-                    let path = document_path(docs_dir, &current_url, crate::recipe::DocFormat::Json);
+                    let path =
+                        document_path(docs_dir, &current_url, crate::recipe::DocFormat::Json);
                     if !path.exists() {
                         let bytes = serde_json::to_vec_pretty(&response_value)
                             .map_err(|e| Error::Serialization(e.to_string()))?;
@@ -325,11 +325,9 @@ impl HttpApiAcquirer {
             // (status detail / API error message) is always at the
             // start; long bodies are usually HTML error pages and
             // not useful here.
-            let excerpt = String::from_utf8_lossy(
-                &body[..body.len().min(400)],
-            )
-            .trim()
-            .to_string();
+            let excerpt = String::from_utf8_lossy(&body[..body.len().min(400)])
+                .trim()
+                .to_string();
             let body_suffix = if excerpt.is_empty() {
                 String::new()
             } else {
@@ -516,11 +514,7 @@ mod tests {
                 ParameterValue::List(vec!["10-K".into(), "10-Q".into()]),
             ),
         ]);
-        let bindings = for_each_bindings(
-            &["entity".into(), "form_type".into()],
-            &p,
-        )
-        .unwrap();
+        let bindings = for_each_bindings(&["entity".into(), "form_type".into()], &p).unwrap();
         assert_eq!(bindings.len(), 4);
     }
 }

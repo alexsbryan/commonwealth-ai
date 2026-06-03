@@ -111,10 +111,8 @@ pub trait DecisionExtractorBackend: Send + Sync {
     /// context. Errors are returned as a string so the caller
     /// (audit assembly) can log without dragging error types
     /// across crate boundaries.
-    async fn extract(
-        &self,
-        request: &ExtractionRequest,
-    ) -> Result<Vec<DecisionExtraction>, String>;
+    async fn extract(&self, request: &ExtractionRequest)
+        -> Result<Vec<DecisionExtraction>, String>;
 }
 
 /// Build the focused-extraction prompt that the backend feeds to
@@ -167,12 +165,7 @@ pub fn build_prompt(req: &ExtractionRequest) -> String {
             s.push_str(": ");
             // Trim multi-paragraph bodies down to the first line so
             // the prompt stays scannable.
-            let first_line = n
-                .content
-                .lines()
-                .next()
-                .unwrap_or("")
-                .trim();
+            let first_line = n.content.lines().next().unwrap_or("").trim();
             s.push_str(first_line);
             s.push('\n');
         }

@@ -258,9 +258,7 @@ impl SessionStore {
                 let candidate = entry.clone();
                 best = match best {
                     None => Some(candidate),
-                    Some(existing) if candidate.created_at > existing.created_at => {
-                        Some(candidate)
-                    }
+                    Some(existing) if candidate.created_at > existing.created_at => Some(candidate),
                     other => other,
                 };
             }
@@ -390,11 +388,8 @@ mod tests {
                 .is_some());
         }
         // One more must be dropped.
-        let overflow = store.try_emit_narration(
-            &id,
-            NarrationPhase::GapCheckFired,
-            "too many".into(),
-        );
+        let overflow =
+            store.try_emit_narration(&id, NarrationPhase::GapCheckFired, "too many".into());
         assert!(overflow.is_none());
         assert_eq!(
             store.get(&id).unwrap().narration.len(),

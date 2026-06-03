@@ -67,9 +67,7 @@ pub struct NewsworthyStatusResponse {
     pub self_in_pool: bool,
 }
 
-pub async fn newsworthy_status(
-    State(state): State<AppState>,
-) -> Json<NewsworthyStatusResponse> {
+pub async fn newsworthy_status(State(state): State<AppState>) -> Json<NewsworthyStatusResponse> {
     let last_tick = read_last_tick(&state);
     let local_corpus_installed = local_corpus_installed(&state).await;
     let (leader_node_id, installed_peer_count) = compute_leader(&state).await;
@@ -109,9 +107,7 @@ pub async fn newsworthy_tick(
             StatusCode::SERVICE_UNAVAILABLE,
             Json(NewsworthyTickResponse {
                 queued: false,
-                reason: Some(
-                    "watcher not running on this daemon — no corpus engine wired".into(),
-                ),
+                reason: Some("watcher not running on this daemon — no corpus engine wired".into()),
             }),
         );
     };
@@ -127,18 +123,14 @@ pub async fn newsworthy_tick(
             StatusCode::ACCEPTED,
             Json(NewsworthyTickResponse {
                 queued: false,
-                reason: Some(
-                    "a tick is already queued — coalescing per design".into(),
-                ),
+                reason: Some("a tick is already queued — coalescing per design".into()),
             }),
         ),
         Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(NewsworthyTickResponse {
                 queued: false,
-                reason: Some(
-                    "watcher tick channel closed (watcher shut down)".into(),
-                ),
+                reason: Some("watcher tick channel closed (watcher shut down)".into()),
             }),
         ),
     }

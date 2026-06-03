@@ -140,8 +140,8 @@ pub(super) fn load_builtin(name: &str) -> Result<Template, String> {
 }
 
 pub(super) fn load_from_path(path: &std::path::Path) -> Result<Template, String> {
-    let body = std::fs::read_to_string(path)
-        .map_err(|e| format!("read {}: {e}", path.display()))?;
+    let body =
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     parse_template(&body).map_err(|e| format!("parse {}: {e}", path.display()))
 }
 

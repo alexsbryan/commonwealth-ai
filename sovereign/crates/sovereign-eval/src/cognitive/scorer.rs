@@ -60,7 +60,12 @@ pub fn score(item: &Item, result: &ItemResult) -> Outcome {
         Scoring::ExactMatch {
             expected_substring,
             case_sensitive,
-        } => score_exact_match(base, &result.response_raw, expected_substring, *case_sensitive),
+        } => score_exact_match(
+            base,
+            &result.response_raw,
+            expected_substring,
+            *case_sensitive,
+        ),
         Scoring::MultiChoice {
             expected_choice,
             choice_field,
@@ -139,12 +144,7 @@ fn score_exact_match(
     finish(base, hit, reason)
 }
 
-fn score_multi_choice(
-    base: OutcomeBase,
-    response: &str,
-    expected: &str,
-    field: &str,
-) -> Outcome {
+fn score_multi_choice(base: OutcomeBase, response: &str, expected: &str, field: &str) -> Outcome {
     let parsed = match parse_json(response) {
         Ok(v) => v,
         Err(e) => return finish(base, false, format!("JSON parse failed: {e}")),
@@ -201,9 +201,7 @@ fn score_calibration(
             Some(serde_json::Value::Number(n)) => format!(" (confidence={n})"),
             _ => String::new(),
         };
-        let reason = format!(
-            "claim_is_true={v} expected={expected_truth}{conf_str}"
-        );
+        let reason = format!("claim_is_true={v} expected={expected_truth}{conf_str}");
         return finish(base, hit, reason);
     }
     let conf = match parsed.get(field) {
@@ -277,13 +275,11 @@ fn score_tool_use(
             Some(arr) => arr
                 .iter()
                 .filter_map(|v| {
-                    v.as_str()
-                        .map(str::to_string)
-                        .or_else(|| {
-                            v.get("tool")
-                                .and_then(serde_json::Value::as_str)
-                                .map(str::to_string)
-                        })
+                    v.as_str().map(str::to_string).or_else(|| {
+                        v.get("tool")
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_string)
+                    })
                 })
                 .collect::<Vec<_>>(),
             None => {
@@ -301,13 +297,7 @@ fn score_tool_use(
 
     let chosen = match parsed.get("tool").and_then(serde_json::Value::as_str) {
         Some(s) => s.trim().to_string(),
-        None => {
-            return finish(
-                base,
-                false,
-                "missing `tool` field in response".into(),
-            )
-        }
+        None => return finish(base, false, "missing `tool` field in response".into()),
     };
 
     let Some(expected) = expected_tool else {
@@ -327,9 +317,7 @@ fn score_tool_use(
         return finish(
             base,
             false,
-            format!(
-                "expected tool one of {acceptable:?} (or `none`), got `{chosen}`"
-            ),
+            format!("expected tool one of {acceptable:?} (or `none`), got `{chosen}`"),
         );
     }
 
@@ -338,7 +326,10 @@ fn score_tool_use(
         return finish(base, true, "correctly chose no-tool".into());
     }
 
-    let actual_args = parsed.get("args").cloned().unwrap_or(serde_json::Value::Null);
+    let actual_args = parsed
+        .get("args")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
 
     // Fuzzy path takes precedence when set: every listed substring must
     // appear (case-insensitive) anywhere in the JSON-encoded args. The
@@ -369,7 +360,11 @@ fn score_tool_use(
     }
 
     let Some(expected_args) = expected_args else {
-        return finish(base, true, format!("correct tool `{chosen}` (no args required)"));
+        return finish(
+            base,
+            true,
+            format!("correct tool `{chosen}` (no args required)"),
+        );
     };
 
     let mut missing: Vec<String> = Vec::new();
@@ -449,12 +444,7 @@ mod tests {
 
     #[test]
     fn multi_choice_handles_fenced_json() {
-        let r = score_multi_choice(
-            base(),
-            "```json\n{\"choice\": \"B\"}\n```",
-            "B",
-            "choice",
-        );
+        let r = score_multi_choice(base(), "```json\n{\"choice\": \"B\"}\n```", "B", "choice");
         assert!(r.passed);
     }
 
@@ -506,7 +496,10 @@ mod tests {
             "confidence": 5
         }"#;
         let r = score_calibration(base(), response, false, "confidence", 4, 2);
-        assert!(r.passed, "claim_is_true=false matches expected_truth=false, must pass despite high confidence");
+        assert!(
+            r.passed,
+            "claim_is_true=false matches expected_truth=false, must pass despite high confidence"
+        );
     }
 
     #[test]
@@ -545,7 +538,10 @@ mod tests {
     }
 
     fn args_map(pairs: &[(&str, &str)]) -> std::collections::BTreeMap<String, String> {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     #[test]

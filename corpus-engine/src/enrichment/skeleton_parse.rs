@@ -44,7 +44,10 @@ pub(crate) fn parse_skeleton_response(
     if let Ok(passages) = serde_json::from_str::<Vec<serde_json::Value>>(&with_quotes) {
         let count = passages.len();
         let questions = extract_questions_from_passages(&passages);
-        tracing::info!(batch = batch_idx, "Repaired unquoted strings — salvaged {count} passages");
+        tracing::info!(
+            batch = batch_idx,
+            "Repaired unquoted strings — salvaged {count} passages"
+        );
         return ParseResult::Repaired(questions, count);
     }
 
@@ -53,7 +56,10 @@ pub(crate) fn parse_skeleton_response(
         if let Ok(passages) = serde_json::from_str::<Vec<serde_json::Value>>(&repaired) {
             let count = passages.len();
             let questions = extract_questions_from_passages(&passages);
-            tracing::info!(batch = batch_idx, "Repaired unquoted strings + truncation — salvaged {count} passages");
+            tracing::info!(
+                batch = batch_idx,
+                "Repaired unquoted strings + truncation — salvaged {count} passages"
+            );
             return ParseResult::Repaired(questions, count);
         }
     }
@@ -101,12 +107,17 @@ pub(crate) fn repair_unquoted_strings(s: &str) -> String {
             // Check if the next char starts an unquoted string value:
             // - It's a letter (but not the start of null/true/false)
             // - It's not a quote, bracket, brace, or digit
-            let is_json_keyword = i + 3 + 4 <= len && (
-                &s[i+3..i+3+4] == "null" || &s[i+3..i+3+4] == "true"
-            ) || (i + 3 + 5 <= len && &s[i+3..i+3+5] == "false");
+            let is_json_keyword = i + 3 + 4 <= len
+                && (&s[i + 3..i + 3 + 4] == "null" || &s[i + 3..i + 3 + 4] == "true")
+                || (i + 3 + 5 <= len && &s[i + 3..i + 3 + 5] == "false");
 
-            if next.is_ascii_alphabetic() && !is_json_keyword
-                && next != b'"' && next != b'[' && next != b'{' && next != b']' && next != b'}'
+            if next.is_ascii_alphabetic()
+                && !is_json_keyword
+                && next != b'"'
+                && next != b'['
+                && next != b'{'
+                && next != b']'
+                && next != b'}'
             {
                 // Found an unquoted value — insert the missing opening quote
                 result.push('"'); // the key's closing quote
@@ -206,7 +217,10 @@ pub(crate) const MIN_CLAIM_LENGTH: usize = 20;
 ///   (signals a definitional/survey passage, not a genuine debate)
 /// - Questions left with zero positions after filtering (unless they
 ///   had an explicit canonical question from the LLM)
-pub(crate) fn filter_low_quality(questions: &mut Vec<SkeletonQuestion>, had_explicit_question: &[bool]) {
+pub(crate) fn filter_low_quality(
+    questions: &mut Vec<SkeletonQuestion>,
+    had_explicit_question: &[bool],
+) {
     let mut filtered_positions = 0_usize;
     let mut filtered_questions = 0_usize;
 
@@ -257,7 +271,9 @@ pub(crate) fn filter_low_quality(questions: &mut Vec<SkeletonQuestion>, had_expl
 /// the positions are preserved under a synthesized question derived from the
 /// first position's name. This prevents data loss from passages where the LLM
 /// identified positions but couldn't frame them under a single question.
-pub(crate) fn extract_questions_from_passages(passages: &[serde_json::Value]) -> Vec<SkeletonQuestion> {
+pub(crate) fn extract_questions_from_passages(
+    passages: &[serde_json::Value],
+) -> Vec<SkeletonQuestion> {
     let mut questions = Vec::new();
     let mut had_explicit = Vec::new();
     let mut null_question_with_positions = 0_usize;
@@ -516,10 +532,7 @@ mod tests {
     #[test]
     fn extract_json_from_generic_code_fence() {
         let response = "Result:\n```\n{\"key\": \"value\"}\n```";
-        assert_eq!(
-            extract_json_from_response(response),
-            "{\"key\": \"value\"}"
-        );
+        assert_eq!(extract_json_from_response(response), "{\"key\": \"value\"}");
     }
 
     #[test]
@@ -541,16 +554,12 @@ mod tests {
     #[test]
     fn extract_json_case_insensitive_fence() {
         let response = "```JSON\n{\"key\": \"value\"}\n```";
-        assert_eq!(
-            extract_json_from_response(response),
-            "{\"key\": \"value\"}"
-        );
+        assert_eq!(extract_json_from_response(response), "{\"key\": \"value\"}");
     }
 
     #[test]
     fn extract_json_from_prose_with_array() {
-        let response =
-            "Here are the results:\n\n[{\"a\": 1}, {\"b\": 2}]\n\nThat's all.";
+        let response = "Here are the results:\n\n[{\"a\": 1}, {\"b\": 2}]\n\nThat's all.";
         let json = extract_json_from_response(response);
         let parsed: Vec<serde_json::Value> = serde_json::from_str(json).unwrap();
         assert_eq!(parsed.len(), 2);
@@ -576,7 +585,8 @@ mod tests {
 
     #[test]
     fn extract_questions_from_null_canonical_question_with_positions() {
-        let passages: Vec<serde_json::Value> = serde_json::from_str(r#"[
+        let passages: Vec<serde_json::Value> = serde_json::from_str(
+            r#"[
             {
                 "passage_index": 0,
                 "canonical_question": null,
@@ -590,9 +600,15 @@ mod tests {
                     }
                 ]
             }
-        ]"#).unwrap();
+        ]"#,
+        )
+        .unwrap();
         let questions = extract_questions_from_passages(&passages);
-        assert_eq!(questions.len(), 1, "should synthesize a question for null canonical_question with positions");
+        assert_eq!(
+            questions.len(),
+            1,
+            "should synthesize a question for null canonical_question with positions"
+        );
         assert!(questions[0].question.contains("Kantian autonomy"));
         assert_eq!(questions[0].positions.len(), 1);
         assert_eq!(questions[0].positions[0].name, "Kantian autonomy");
@@ -600,21 +616,29 @@ mod tests {
 
     #[test]
     fn extract_questions_skips_null_canonical_question_without_positions() {
-        let passages: Vec<serde_json::Value> = serde_json::from_str(r#"[
+        let passages: Vec<serde_json::Value> = serde_json::from_str(
+            r#"[
             {
                 "passage_index": 0,
                 "canonical_question": null,
                 "question_type": "factual",
                 "positions": []
             }
-        ]"#).unwrap();
+        ]"#,
+        )
+        .unwrap();
         let questions = extract_questions_from_passages(&passages);
-        assert_eq!(questions.len(), 0, "should skip passages with no question and no positions");
+        assert_eq!(
+            questions.len(),
+            0,
+            "should skip passages with no question and no positions"
+        );
     }
 
     #[test]
     fn extract_questions_prefers_explicit_canonical_question() {
-        let passages: Vec<serde_json::Value> = serde_json::from_str(r#"[
+        let passages: Vec<serde_json::Value> = serde_json::from_str(
+            r#"[
             {
                 "passage_index": 0,
                 "canonical_question": "Is free will compatible with determinism?",
@@ -628,10 +652,15 @@ mod tests {
                     }
                 ]
             }
-        ]"#).unwrap();
+        ]"#,
+        )
+        .unwrap();
         let questions = extract_questions_from_passages(&passages);
         assert_eq!(questions.len(), 1);
-        assert_eq!(questions[0].question, "Is free will compatible with determinism?");
+        assert_eq!(
+            questions[0].question,
+            "Is free will compatible with determinism?"
+        );
     }
 
     // ── Unquoted string repair tests ────────────────────────
@@ -783,7 +812,11 @@ mod tests {
         }];
         let explicit = vec![true];
         filter_low_quality(&mut questions, &explicit);
-        assert_eq!(questions.len(), 1, "explicit questions survive even with no positions");
+        assert_eq!(
+            questions.len(),
+            1,
+            "explicit questions survive even with no positions"
+        );
     }
 
     // ── Truncated JSON repair tests ─────────────────────────
@@ -816,7 +849,8 @@ mod tests {
     #[test]
     fn repair_truncated_mid_string() {
         // Truncated inside a string value — the complete first element should survive.
-        let truncated = r#"[{"question": "What is X?", "type": "conceptual"}, {"question": "Is Y compat"#;
+        let truncated =
+            r#"[{"question": "What is X?", "type": "conceptual"}, {"question": "Is Y compat"#;
         let repaired = try_repair_truncated_json(truncated).unwrap();
         let parsed: Vec<serde_json::Value> = serde_json::from_str(&repaired).unwrap();
         assert_eq!(parsed.len(), 1);

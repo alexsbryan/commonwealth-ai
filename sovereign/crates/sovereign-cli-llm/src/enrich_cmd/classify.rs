@@ -362,8 +362,7 @@ pub async fn cmd_classify(args: &[String]) -> i32 {
     }
 
     // Reassemble + persist.
-    let mut classifications: Vec<SectionClassificationVector> =
-        by_section.into_values().collect();
+    let mut classifications: Vec<SectionClassificationVector> = by_section.into_values().collect();
     classifications.sort_by(|a, b| a.section_id.cmp(&b.section_id));
     let out = SectionClassificationsFile {
         schema_version: SectionClassificationsFile::SCHEMA_VERSION,

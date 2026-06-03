@@ -10,9 +10,9 @@ const HELP: Help = Help {
     sections: &[
         HelpSection::Usage("sovereign chat list [--limit N] [--offset N]"),
         HelpSection::Flags(&[
-            ("--limit <N>",  "Max conversations to show (default: 20)."),
+            ("--limit <N>", "Max conversations to show (default: 20)."),
             ("--offset <N>", "Skip the first N (default: 0)."),
-            ("--help, -h",   "Show this message."),
+            ("--help, -h", "Show this message."),
         ]),
     ],
 };

@@ -147,10 +147,15 @@ impl CodeWatcher {
 
         let task = tokio::spawn(async move {
             run_debouncer(
-                rx, engine, corpus_id, root, debounce,
+                rx,
+                engine,
+                corpus_id,
+                root,
+                debounce,
                 #[cfg(feature = "treesitter")]
                 scip_graph,
-            ).await;
+            )
+            .await;
         });
 
         Ok(WatcherHandle {
@@ -168,8 +173,7 @@ async fn run_debouncer(
     corpus_id: String,
     root: PathBuf,
     debounce: Duration,
-    #[cfg(feature = "treesitter")]
-    scip_graph: Option<Arc<corpus_engine_scip::ScipGraph>>,
+    #[cfg(feature = "treesitter")] scip_graph: Option<Arc<corpus_engine_scip::ScipGraph>>,
 ) {
     // `pending` maps absolute path → (last_event_at, is_delete). We
     // track the last event time so we can flush only after idle; we
@@ -257,8 +261,7 @@ async fn flush_ready(
     corpus_id: &str,
     root: &Path,
     debounce: Duration,
-    #[cfg(feature = "treesitter")]
-    scip_graph: &Option<Arc<corpus_engine_scip::ScipGraph>>,
+    #[cfg(feature = "treesitter")] scip_graph: &Option<Arc<corpus_engine_scip::ScipGraph>>,
 ) {
     let now = Instant::now();
     let ready: Vec<PathBuf> = pending

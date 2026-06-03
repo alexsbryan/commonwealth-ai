@@ -144,7 +144,9 @@ pub(crate) fn ingest_progress_to_payload(
             // milestones). Otherwise 0% — the UI is expected to
             // show a spinner-mode rendering when phase is
             // `enriching_*`.
-            percent: fraction.map(|f| (f * 100.0).clamp(0.0, 100.0)).unwrap_or(0.0),
+            percent: fraction
+                .map(|f| (f * 100.0).clamp(0.0, 100.0))
+                .unwrap_or(0.0),
             chunks_processed: 0,
             message: Some(detail.clone()),
         },
@@ -168,9 +170,7 @@ pub(crate) fn ingest_progress_to_payload(
 /// Built-in entries that are also installed get their `status` set to
 /// "installed" with the live chunk count from the on-disk index.
 #[tauri::command]
-pub async fn list_corpora(
-    state: State<'_, Arc<AppState>>,
-) -> Result<Vec<CorpusEntry>, String> {
+pub async fn list_corpora(state: State<'_, Arc<AppState>>) -> Result<Vec<CorpusEntry>, String> {
     let engine_guard = state.corpus_engine.read().await;
     let engine = match engine_guard.as_ref() {
         Some(e) => Arc::clone(e),
@@ -262,7 +262,9 @@ pub async fn list_corpora(
             tiers: tiers_for(&b.id),
             status: status.to_string(),
             chunks_count: installed_info.map(|i| i.chunk_count),
-            enrichment_enabled: registry_entry.map(|e| e.enrichment_enabled).unwrap_or(false),
+            enrichment_enabled: registry_entry
+                .map(|e| e.enrichment_enabled)
+                .unwrap_or(false),
             indexed_at: installed_info.map(|i| i.created_at),
             embedding_model: installed_info.map(|i| i.embedding_model.clone()),
             embedding_dimensions: installed_info.map(|i| i.embedding_dimensions),
@@ -288,7 +290,10 @@ pub async fn build_corpus_index(
 ) -> Result<(), String> {
     let engine = {
         let guard = state.corpus_engine.read().await;
-        guard.as_ref().map(Arc::clone).ok_or("Corpus engine not ready")?
+        guard
+            .as_ref()
+            .map(Arc::clone)
+            .ok_or("Corpus engine not ready")?
     };
     let store = {
         let guard = state.store.read().await;
@@ -405,4 +410,3 @@ pub async fn ingest_document(
         chunks_created,
     })
 }
-

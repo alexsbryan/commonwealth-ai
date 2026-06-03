@@ -47,8 +47,7 @@ const PEER_TIMEOUT: Duration = Duration::from_secs(3);
 /// cleared implicitly on daemon restart. The two caches converge
 /// quickly in practice (gossip pings every 10s; fan-out runs per
 /// question), so the duplicate state is bounded.
-fn last_working_address_cache(
-) -> &'static std::sync::Mutex<HashMap<NodeId, SocketAddr>> {
+fn last_working_address_cache() -> &'static std::sync::Mutex<HashMap<NodeId, SocketAddr>> {
     static CACHE: std::sync::OnceLock<std::sync::Mutex<HashMap<NodeId, SocketAddr>>> =
         std::sync::OnceLock::new();
     CACHE.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
@@ -172,17 +171,15 @@ pub async fn knowledge_search(
                     {
                         Ok(results) => {
                             corpora_searched.insert(corpus_id.clone());
-                            all_results.extend(results.into_iter().map(|r| {
-                                KnowledgeResult {
-                                    content: r.content,
-                                    title: r.title,
-                                    corpus_id: corpus_id.clone(),
-                                    url: r.url,
-                                    score: r.score,
-                                    metadata: HashMap::new(),
-                                    chunk_id: r.chunk_id,
-                                    source_doc_id: r.source_doc_id,
-                                }
+                            all_results.extend(results.into_iter().map(|r| KnowledgeResult {
+                                content: r.content,
+                                title: r.title,
+                                corpus_id: corpus_id.clone(),
+                                url: r.url,
+                                score: r.score,
+                                metadata: HashMap::new(),
+                                chunk_id: r.chunk_id,
+                                source_doc_id: r.source_doc_id,
                             }));
                         }
                         Err(e) => {
@@ -212,8 +209,7 @@ pub async fn knowledge_search(
     // locally OR want to broaden the hit set — for v1 we only fan
     // out for corpora WE DON'T HAVE. Broadening to replicas is a
     // future refinement once the merge-dedupe is proven.
-    let mut fanout_jobs: HashMap<NodeId, (String, Vec<SocketAddr>, Vec<String>)> =
-        HashMap::new();
+    let mut fanout_jobs: HashMap<NodeId, (String, Vec<SocketAddr>, Vec<String>)> = HashMap::new();
     for offering in &peer_offerings {
         let relevant: Vec<String> = offering
             .corpora
@@ -242,12 +238,7 @@ pub async fn knowledge_search(
                 tracing::warn!(error = %e, "knowledge: HTTP client build failed");
                 // Return what we have locally; don't fail the whole
                 // request over a transport construction error.
-                return build_response(
-                    all_results,
-                    corpora_searched,
-                    corpora_unavailable,
-                    limit,
-                );
+                return build_response(all_results, corpora_searched, corpora_unavailable, limit);
             }
         };
 
@@ -434,8 +425,7 @@ async fn fanout_one_peer(
                             .map(|mut r| {
                                 r.metadata
                                     .insert("peer_node_id".into(), peer_tag_id.clone());
-                                r.metadata
-                                    .insert("peer_name".into(), peer_tag_name.clone());
+                                r.metadata.insert("peer_name".into(), peer_tag_name.clone());
                                 r
                             })
                             .collect();
@@ -525,6 +515,5 @@ fn build_response(
 /// permissive with `Busy` (a node serving inference still answers
 /// knowledge search cheaply) and strict with `Offline`.
 fn is_queryable(m: &MemberRecord) -> bool {
-    matches!(m.status, NodeStatus::Online | NodeStatus::Busy)
-        && !m.addresses.is_empty()
+    matches!(m.status, NodeStatus::Online | NodeStatus::Busy) && !m.addresses.is_empty()
 }

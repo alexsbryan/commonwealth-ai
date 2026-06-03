@@ -192,9 +192,7 @@ pub async fn cmd_obsidian(args: &[String]) -> i32 {
             "error: golden TOML not found at {}",
             parsed.golden.display()
         );
-        eprintln!(
-            "hint: invoke from the workspace root, or pass --golden <absolute-path>"
-        );
+        eprintln!("hint: invoke from the workspace root, or pass --golden <absolute-path>");
         return 2;
     }
 

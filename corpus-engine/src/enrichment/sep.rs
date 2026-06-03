@@ -116,35 +116,30 @@ pub fn load_article(path: &Path, slug: &str) -> Result<SepArticle> {
             format!("opening SEP parquet {}: {e}", path.display()),
         ))
     })?;
-    let builder = ParquetRecordBatchReaderBuilder::try_new(file).map_err(|e| {
-        Error::InvalidInput(format!("reading SEP parquet metadata: {e}"))
-    })?;
-    let reader = builder.build().map_err(|e| {
-        Error::InvalidInput(format!("building SEP parquet reader: {e}"))
-    })?;
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file)
+        .map_err(|e| Error::InvalidInput(format!("reading SEP parquet metadata: {e}")))?;
+    let reader = builder
+        .build()
+        .map_err(|e| Error::InvalidInput(format!("building SEP parquet reader: {e}")))?;
 
     let mut paragraphs: Vec<String> = Vec::new();
     let mut url: Option<String> = None;
 
     for batch in reader {
-        let batch = batch
-            .map_err(|e| Error::InvalidInput(format!("reading SEP parquet batch: {e}")))?;
+        let batch =
+            batch.map_err(|e| Error::InvalidInput(format!("reading SEP parquet batch: {e}")))?;
 
         let text_col = batch
             .column_by_name("text")
             .and_then(|c| c.as_any().downcast_ref::<StringArray>())
             .ok_or_else(|| {
-                Error::InvalidInput(
-                    "SEP parquet is missing a string `text` column".into(),
-                )
+                Error::InvalidInput("SEP parquet is missing a string `text` column".into())
             })?;
         let category_col = batch
             .column_by_name("category")
             .and_then(|c| c.as_any().downcast_ref::<StringArray>())
             .ok_or_else(|| {
-                Error::InvalidInput(
-                    "SEP parquet is missing a string `category` column".into(),
-                )
+                Error::InvalidInput("SEP parquet is missing a string `category` column".into())
             })?;
         // metadata column is optional — recipes say it's URLs, but
         // a parquet produced by a different mirror might omit it.
@@ -205,31 +200,30 @@ pub fn list_categories(path: &Path) -> Result<Vec<(String, usize)>> {
             format!("opening SEP parquet {}: {e}", path.display()),
         ))
     })?;
-    let builder = ParquetRecordBatchReaderBuilder::try_new(file).map_err(|e| {
-        Error::InvalidInput(format!("reading SEP parquet metadata: {e}"))
-    })?;
-    let reader = builder.build().map_err(|e| {
-        Error::InvalidInput(format!("building SEP parquet reader: {e}"))
-    })?;
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file)
+        .map_err(|e| Error::InvalidInput(format!("reading SEP parquet metadata: {e}")))?;
+    let reader = builder
+        .build()
+        .map_err(|e| Error::InvalidInput(format!("building SEP parquet reader: {e}")))?;
 
     use std::collections::BTreeMap;
     let mut counts: BTreeMap<String, usize> = BTreeMap::new();
     for batch in reader {
-        let batch = batch
-            .map_err(|e| Error::InvalidInput(format!("reading SEP parquet batch: {e}")))?;
+        let batch =
+            batch.map_err(|e| Error::InvalidInput(format!("reading SEP parquet batch: {e}")))?;
         let category_col = batch
             .column_by_name("category")
             .and_then(|c| c.as_any().downcast_ref::<StringArray>())
             .ok_or_else(|| {
-                Error::InvalidInput(
-                    "SEP parquet is missing a string `category` column".into(),
-                )
+                Error::InvalidInput("SEP parquet is missing a string `category` column".into())
             })?;
         for row in 0..batch.num_rows() {
             if category_col.is_null(row) {
                 continue;
             }
-            *counts.entry(category_col.value(row).to_string()).or_insert(0) += 1;
+            *counts
+                .entry(category_col.value(row).to_string())
+                .or_insert(0) += 1;
         }
     }
     Ok(counts.into_iter().collect())

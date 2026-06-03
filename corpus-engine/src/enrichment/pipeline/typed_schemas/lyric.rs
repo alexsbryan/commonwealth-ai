@@ -81,7 +81,10 @@ pub fn phase1_lyric_schema() -> serde_json::Value {
 }
 
 fn str_field(v: &serde_json::Value, key: &str) -> String {
-    v.get(key).and_then(|x| x.as_str()).unwrap_or("").to_string()
+    v.get(key)
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string()
 }
 
 fn required_str(v: &serde_json::Value, key: &str) -> Option<String> {

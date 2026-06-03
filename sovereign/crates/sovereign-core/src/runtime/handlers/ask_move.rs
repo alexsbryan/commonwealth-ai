@@ -3,8 +3,6 @@
 //! clarification" path. Fires when classification confidence is too
 //! low to commit silently. Cost is one saved message + one event.
 
-
-
 use crate::error::Result;
 use crate::traits::*;
 
@@ -41,10 +39,8 @@ impl Runtime {
         .await;
 
         let message_id = uuid::Uuid::new_v4().to_string();
-        let question = build_clarification_question(
-            original_message,
-            &classification.primary.intent,
-        );
+        let question =
+            build_clarification_question(original_message, &classification.primary.intent);
         let options: Vec<ClarificationOption> = classification
             .alternatives
             .iter()
@@ -153,10 +149,8 @@ impl Runtime {
         // Build clarification payload from the classifier's
         // alternatives. If the heuristic surfaced fewer than two, pad
         // with a free-text prompt so the user always has a way forward.
-        let question = build_clarification_question(
-            original_message,
-            &classification.primary.intent,
-        );
+        let question =
+            build_clarification_question(original_message, &classification.primary.intent);
         let options: Vec<ClarificationOption> = classification
             .alternatives
             .iter()

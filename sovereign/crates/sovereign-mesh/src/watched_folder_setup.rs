@@ -152,19 +152,14 @@ impl WatchedSubsystem {
         // the second installer's `set` call returns `Err`, leaving
         // the first installer's handles in place. Production
         // expectation: install once.
-        crate::watched_folder_runtime::install(
-            Arc::clone(&manager),
-            Arc::clone(&registry),
-        );
+        crate::watched_folder_runtime::install(Arc::clone(&manager), Arc::clone(&registry));
         crate::watched_folder_runtime::set_cancel(cancel_tx);
 
         // Mount the watched-folder HTTP routes on the daemon's
         // loopback-only listener. Reads the singleton internally,
         // so no Arc threading.
         daemon
-            .install_corpus_watch_http_router(
-                crate::corpus_watch_http::corpus_watch_router(),
-            )
+            .install_corpus_watch_http_router(crate::corpus_watch_http::corpus_watch_router())
             .await;
 
         let handle = Scheduler::spawn(registry, worker, cancel_token, scheduler_cfg);

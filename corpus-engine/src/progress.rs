@@ -22,7 +22,11 @@ pub struct SourceFileManifest {
 
 impl SourceFileManifest {
     /// Construct an initial manifest with all files in `Pending` state.
-    pub fn new(corpus_id: impl Into<String>, recipe_id: impl Into<String>, files: Vec<SourceFileRecord>) -> Self {
+    pub fn new(
+        corpus_id: impl Into<String>,
+        recipe_id: impl Into<String>,
+        files: Vec<SourceFileRecord>,
+    ) -> Self {
         Self {
             corpus_id: corpus_id.into(),
             recipe_id: recipe_id.into(),
@@ -38,8 +42,7 @@ impl SourceFileManifest {
         if !manifest_path.exists() {
             return Ok(None);
         }
-        let raw = std::fs::read_to_string(&manifest_path)
-            .map_err(crate::error::Error::Io)?;
+        let raw = std::fs::read_to_string(&manifest_path).map_err(crate::error::Error::Io)?;
         let manifest = serde_json::from_str::<Self>(&raw)
             .map_err(|e| crate::error::Error::Serialization(e.to_string()))?;
         Ok(Some(manifest))
@@ -50,8 +53,7 @@ impl SourceFileManifest {
         let manifest_path = index_path.join("_source_manifest.json");
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| crate::error::Error::Serialization(e.to_string()))?;
-        std::fs::write(&manifest_path, json)
-            .map_err(crate::error::Error::Io)?;
+        std::fs::write(&manifest_path, json).map_err(crate::error::Error::Io)?;
         Ok(())
     }
 }

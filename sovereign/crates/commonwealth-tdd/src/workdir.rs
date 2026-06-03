@@ -102,14 +102,26 @@ fn is_system_path(path: &Path) -> bool {
     // their descendants. Match either the bare path or a `/`-prefixed
     // subpath so `/etc/foo` is caught but `/var-of-mine` is not.
     const ROOTS: &[&str] = &[
-        "/", "/etc", "/usr", "/var", "/bin", "/sbin", "/lib",
-        "/lib64", "/boot", "/root", "/sys", "/proc", "/dev",
+        "/",
+        "/etc",
+        "/usr",
+        "/var",
+        "/bin",
+        "/sbin",
+        "/lib",
+        "/lib64",
+        "/boot",
+        "/root",
+        "/sys",
+        "/proc",
+        "/dev",
         // macOS firmlinks /etc → /private/etc and /tmp → /private/tmp,
         // so `canonicalize()` rewrites a bare `/etc` to `/private/etc`
         // and the guard above would miss it. Include the resolved forms.
         // Deliberately NOT `/private/var`: macOS tempdirs live under
         // `/private/var/folders/...` and must stay usable as workdirs.
-        "/private/etc", "/private/tmp",
+        "/private/etc",
+        "/private/tmp",
     ];
     if normalized == "/" {
         return true;
@@ -146,7 +158,9 @@ fn is_system_path(path: &Path) -> bool {
 }
 
 fn home_dir_string() -> Option<String> {
-    std::env::var("HOME").ok().or_else(|| std::env::var("USERPROFILE").ok())
+    std::env::var("HOME")
+        .ok()
+        .or_else(|| std::env::var("USERPROFILE").ok())
 }
 
 fn is_git_repo(path: &Path) -> bool {
@@ -191,10 +205,27 @@ mod tests {
     fn git_init(path: &Path) {
         // Minimal git init for tests — set user identity locally so
         // `git commit` works on CI machines without a global config.
-        let _ = Command::new("git").arg("-C").arg(path).arg("init").arg("--initial-branch=main").output();
-        let _ = Command::new("git").arg("-C").arg(path).args(["config", "user.email", "t@t.t"]).output();
-        let _ = Command::new("git").arg("-C").arg(path).args(["config", "user.name", "t"]).output();
-        let _ = Command::new("git").arg("-C").arg(path).args(["commit", "--allow-empty", "-m", "init"]).output();
+        let _ = Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .arg("init")
+            .arg("--initial-branch=main")
+            .output();
+        let _ = Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(["config", "user.email", "t@t.t"])
+            .output();
+        let _ = Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(["config", "user.name", "t"])
+            .output();
+        let _ = Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(["commit", "--allow-empty", "-m", "init"])
+            .output();
     }
 
     #[test]
@@ -254,7 +285,10 @@ mod tests {
         // want — the solver would clobber them on candidate restore.
         std::fs::write(tmp.path().join("scratch.txt"), "wip").unwrap();
         let result = Workdir::check_safe(tmp.path().to_path_buf(), false);
-        assert!(matches!(result, Err(DirtyWorkdir::UncommittedChanges { .. })));
+        assert!(matches!(
+            result,
+            Err(DirtyWorkdir::UncommittedChanges { .. })
+        ));
     }
 
     #[test]

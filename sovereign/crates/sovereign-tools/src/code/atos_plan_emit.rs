@@ -187,7 +187,9 @@ impl Tool for AtosPlanEmitTool {
             .and_then(Value::as_array)
             .ok_or_else(|| Error::InvalidInput("atos_plan_emit needs array `steps`".into()))?;
         if steps.is_empty() {
-            return Err(Error::InvalidInput("atos_plan_emit `steps` is empty".into()));
+            return Err(Error::InvalidInput(
+                "atos_plan_emit `steps` is empty".into(),
+            ));
         }
         if steps.len() > 32 {
             return Err(Error::InvalidInput(format!(
@@ -197,9 +199,9 @@ impl Tool for AtosPlanEmitTool {
         }
         let mut seen = std::collections::HashSet::new();
         for (i, step) in steps.iter().enumerate() {
-            let obj = step.as_object().ok_or_else(|| {
-                Error::InvalidInput(format!("step {i} is not an object"))
-            })?;
+            let obj = step
+                .as_object()
+                .ok_or_else(|| Error::InvalidInput(format!("step {i} is not an object")))?;
             for required in ["id", "goal", "verify_cmd"] {
                 let v = obj
                     .get(required)
@@ -252,11 +254,23 @@ impl Tool for AtosPlanEmitTool {
         // state by default; the runner's merge step copies execution
         // state from the prior plan when it reads the file.
         let now = chrono::Utc::now().to_rfc3339();
-        let in_steps = params.get("steps").and_then(Value::as_array).cloned().unwrap_or_default();
+        let in_steps = params
+            .get("steps")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
         let mut out_steps: Vec<Value> = Vec::with_capacity(in_steps.len());
         for s in in_steps {
-            let id = s.get("id").and_then(Value::as_str).unwrap_or("").to_string();
-            let goal = s.get("goal").and_then(Value::as_str).unwrap_or("").to_string();
+            let id = s
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let goal = s
+                .get("goal")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
             let verify_cmd = s
                 .get("verify_cmd")
                 .and_then(Value::as_str)
@@ -327,10 +341,7 @@ fn read_prior_plan_meta(plan_path: &Path) -> (Option<u32>, Option<String>) {
     let Ok(v) = serde_json::from_str::<Value>(&body) else {
         return (None, None);
     };
-    let rev = v
-        .get("revision")
-        .and_then(Value::as_u64)
-        .map(|n| n as u32);
+    let rev = v.get("revision").and_then(Value::as_u64).map(|n| n as u32);
     let fid = v
         .get("feature_id")
         .and_then(Value::as_str)

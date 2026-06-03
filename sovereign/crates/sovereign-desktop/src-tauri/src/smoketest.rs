@@ -59,10 +59,7 @@ impl SmokeResult {
     /// `Ok`, plain `Failed` (Rust error — won't help to retry),
     /// and `Skipped` (we don't know).
     pub fn suggests_cpu_fallback(&self) -> bool {
-        matches!(
-            self,
-            SmokeResult::Crashed { .. } | SmokeResult::Timeout
-        )
+        matches!(self, SmokeResult::Crashed { .. } | SmokeResult::Timeout)
     }
 }
 
@@ -108,7 +105,11 @@ pub fn run_in_subprocess(
 
     let exe = match std::env::current_exe() {
         Ok(p) => p,
-        Err(e) => return SmokeResult::Skipped { reason: format!("current_exe: {e}") },
+        Err(e) => {
+            return SmokeResult::Skipped {
+                reason: format!("current_exe: {e}"),
+            }
+        }
     };
 
     let mut child = match Command::new(&exe)
@@ -124,7 +125,11 @@ pub fn run_in_subprocess(
         .spawn()
     {
         Ok(c) => c,
-        Err(e) => return SmokeResult::Skipped { reason: format!("spawn: {e}") },
+        Err(e) => {
+            return SmokeResult::Skipped {
+                reason: format!("spawn: {e}"),
+            }
+        }
     };
 
     let started = Instant::now();
@@ -155,7 +160,9 @@ pub fn run_in_subprocess(
                 std::thread::sleep(Duration::from_millis(100));
             }
             Err(e) => {
-                return SmokeResult::Skipped { reason: format!("wait: {e}") };
+                return SmokeResult::Skipped {
+                    reason: format!("wait: {e}"),
+                };
             }
         }
     }

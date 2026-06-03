@@ -22,8 +22,8 @@
 //! ceiling and reduces latency (one event path, not N).
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
@@ -207,9 +207,7 @@ fn read_heartbeat_file(path: &std::path::Path) -> Option<u64> {
 /// The extension list mirrors `extractors::code::all_languages()`'s
 /// `extensions` arrays; a test in that module pins the two in sync.
 fn is_source_file(path: &std::path::Path) -> bool {
-    const TRACKED_EXTS: &[&str] = &[
-        "rs", "ts", "tsx", "js", "jsx", "mjs", "cjs", "go", "py",
-    ];
+    const TRACKED_EXTS: &[&str] = &["rs", "ts", "tsx", "js", "jsx", "mjs", "cjs", "go", "py"];
     path.extension()
         .and_then(|e| e.to_str())
         .map(|e| TRACKED_EXTS.contains(&e))
@@ -415,10 +413,7 @@ impl WatcherCoordinator {
             run_coordinator_loop(rx, watchers, roots, debounce, activity, heartbeat).await;
         });
 
-        tracing::info!(
-            debounce_ms = self.debounce_ms,
-            "WatcherCoordinator started"
-        );
+        tracing::info!(debounce_ms = self.debounce_ms, "WatcherCoordinator started");
 
         Ok(CoordinatorHandle {
             _watcher: watcher,
@@ -468,7 +463,10 @@ impl CoordinatorHandle {
     /// Query the current status of all plugins. Calls each plugin's
     /// `current_status()` concurrently and returns results in registration
     /// order.
-    pub async fn status(&self, watchers: &[Arc<dyn BackgroundWatcher>]) -> Vec<(String, WatcherStatus)> {
+    pub async fn status(
+        &self,
+        watchers: &[Arc<dyn BackgroundWatcher>],
+    ) -> Vec<(String, WatcherStatus)> {
         let futs: Vec<_> = watchers
             .iter()
             .map(|w| {
@@ -721,9 +719,11 @@ mod tests {
         // Call flush_coordinator directly, bypassing the notify watcher.
         let paths = [PathBuf::from("/tmp/foo.rs")];
         let watchers = vec![Arc::clone(&wa), Arc::clone(&wb)];
-        let mut pending: std::collections::HashMap<PathBuf, (Instant, bool)> =
-            [(paths[0].clone(), (Instant::now() - Duration::from_secs(10), false))]
-                .into();
+        let mut pending: std::collections::HashMap<PathBuf, (Instant, bool)> = [(
+            paths[0].clone(),
+            (Instant::now() - Duration::from_secs(10), false),
+        )]
+        .into();
 
         flush_coordinator(&mut pending, &watchers, Duration::from_millis(800), None).await;
 
@@ -747,7 +747,11 @@ mod tests {
 
         flush_coordinator(&mut pending, &[w], Duration::from_millis(800), None).await;
 
-        assert_eq!(counter.load(Ordering::SeqCst), 0, "should not have been called");
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            0,
+            "should not have been called"
+        );
         assert_eq!(pending.len(), 1, "pending should not be drained");
     }
 
@@ -776,10 +780,7 @@ mod tests {
     /// `is_live` immediately and `is_alive` (task running) is true.
     #[tokio::test]
     async fn started_coordinator_is_live_via_heartbeat() {
-        let tmp = std::env::temp_dir().join(format!(
-            "wc_hb_live_{}",
-            std::process::id()
-        ));
+        let tmp = std::env::temp_dir().join(format!("wc_hb_live_{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
         let hb = WatcherHeartbeat::new();
         let coordinator = WatcherCoordinator::new(200).with_heartbeat(Arc::clone(&hb));
@@ -803,10 +804,7 @@ mod tests {
     /// so a liveness window eventually lapses too.
     #[tokio::test]
     async fn aborted_loop_reports_not_alive() {
-        let tmp = std::env::temp_dir().join(format!(
-            "wc_hb_abort_{}",
-            std::process::id()
-        ));
+        let tmp = std::env::temp_dir().join(format!("wc_hb_abort_{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
         let hb = WatcherHeartbeat::new();
         let coordinator = WatcherCoordinator::new(200).with_heartbeat(Arc::clone(&hb));
@@ -840,7 +838,10 @@ mod tests {
         // A fresh reader over the same path now sees a live heartbeat.
         let reader2 = WatcherHeartbeat::reader(path.clone());
         assert!(reader2.last_tick_unix().is_some());
-        assert!(reader2.is_live(30), "reader must see the writer's stamp as live");
+        assert!(
+            reader2.is_live(30),
+            "reader must see the writer's stamp as live"
+        );
         assert!(matches!(reader2.age_secs(), Some(a) if a <= 1));
 
         // `reader` mode never writes, even on stamp.

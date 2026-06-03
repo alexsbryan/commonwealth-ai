@@ -65,11 +65,7 @@ pub async fn index_serve(
             ));
         }
     };
-    let self_node_id = *state
-        .inner
-        .self_node_id_swap
-        .load_full()
-        .as_ref();
+    let self_node_id = *state.inner.self_node_id_swap.load_full().as_ref();
     let partition_path = engine
         .index_dir()
         .join(format!("{corpus_id}-partition-{self_node_id}"));
@@ -222,7 +218,12 @@ pub async fn index_transfer(
         );
     }
     let tar_status = std::process::Command::new("tar")
-        .args(["xf", &tarball_path.to_string_lossy(), "-C", &unpack_path.to_string_lossy()])
+        .args([
+            "xf",
+            &tarball_path.to_string_lossy(),
+            "-C",
+            &unpack_path.to_string_lossy(),
+        ])
         .status();
     let _ = std::fs::remove_file(&tarball_path);
     match tar_status {
@@ -288,10 +289,9 @@ pub async fn index_transfer(
     // pulled atoms_content_hash or embed_model differs.
     let atlas_dir = final_path.join("atlas");
     let _ = std::fs::remove_file(atlas_dir.join("_summary.json"));
-    let atlas_summary =
-        corpus_engine::enrichment::atlas::read_or_compute_atlas_summary(&atlas_dir)
-            .ok()
-            .flatten();
+    let atlas_summary = corpus_engine::enrichment::atlas::read_or_compute_atlas_summary(&atlas_dir)
+        .ok()
+        .flatten();
     let atlas_meta = match atlas_summary {
         Some(s) => serde_json::json!({
             "atom_count": s.atom_count,

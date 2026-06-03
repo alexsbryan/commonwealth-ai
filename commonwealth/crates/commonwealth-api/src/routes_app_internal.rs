@@ -94,5 +94,7 @@ fn hex_to_node_id(hex: &str) -> Option<commonwealth_core::ids::NodeId> {
     }
     let mut arr = [0u8; 16];
     arr.copy_from_slice(&bytes);
-    Some(commonwealth_core::ids::NodeId::from_u128(u128::from_le_bytes(arr)))
+    Some(commonwealth_core::ids::NodeId::from_u128(
+        u128::from_le_bytes(arr),
+    ))
 }

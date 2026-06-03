@@ -410,8 +410,7 @@ type = "plaintext"
 [chunk]
 type = "sentence"
 "#;
-    let err = Recipe::from_toml(toml)
-        .expect_err("api_paginated must NOT parse silently");
+    let err = Recipe::from_toml(toml).expect_err("api_paginated must NOT parse silently");
     let msg = format!("{err}");
     // The error must mention both the deprecated name (so the user
     // recognises their recipe) and the replacement (so they know
@@ -453,8 +452,7 @@ type = "plaintext"
 [chunk]
 type = "sentence"
 "#;
-    let err = Recipe::from_toml(toml)
-        .expect_err("future schema_version must be refused");
+    let err = Recipe::from_toml(toml).expect_err("future schema_version must be refused");
     let msg = format!("{err}");
     assert!(
         msg.contains("schema_version") && msg.contains("99"),

@@ -117,25 +117,15 @@ pub fn render_holistic_user_body(atoms: &AtomsFile) -> String {
         lines.push("(none)".to_string());
     }
     for c in &concepts {
-        lines.push(format!(
-            "- {}: {}",
-            c.canonical_name,
-            c.description.trim()
-        ));
+        lines.push(format!("- {}: {}", c.canonical_name, c.description.trim()));
     }
     lines.push(String::new());
-    lines.push(
-        "# Lexicon — proponents (use only if no school label fits)".to_string(),
-    );
+    lines.push("# Lexicon — proponents (use only if no school label fits)".to_string());
     if persons.is_empty() {
         lines.push("(none)".to_string());
     }
     for p in &persons {
-        lines.push(format!(
-            "- {}: {}",
-            p.canonical_name,
-            p.description.trim()
-        ));
+        lines.push(format!("- {}: {}", p.canonical_name, p.description.trim()));
     }
     lines.push(String::new());
     lines.push("# Claims grouped by who they're attributed to".to_string());
@@ -166,14 +156,17 @@ pub fn render_holistic_user_body(atoms: &AtomsFile) -> String {
     keys.sort_by(|a, b| {
         let rank_a = kind_rank(a, &entity_lookup);
         let rank_b = kind_rank(b, &entity_lookup);
-        rank_a.cmp(&rank_b).then_with(|| {
-            // Within a kind: larger bucket first.
-            by_attr
-                .get(*b)
-                .map(Vec::len)
-                .unwrap_or(0)
-                .cmp(&by_attr.get(*a).map(Vec::len).unwrap_or(0))
-        }).then_with(|| a.cmp(b))  // tie-breaker: lex on id for stability
+        rank_a
+            .cmp(&rank_b)
+            .then_with(|| {
+                // Within a kind: larger bucket first.
+                by_attr
+                    .get(*b)
+                    .map(Vec::len)
+                    .unwrap_or(0)
+                    .cmp(&by_attr.get(*a).map(Vec::len).unwrap_or(0))
+            })
+            .then_with(|| a.cmp(b)) // tie-breaker: lex on id for stability
     });
 
     for k in keys {

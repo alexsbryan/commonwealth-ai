@@ -64,7 +64,9 @@ impl Tool for WorkInFlightTool {
                 "required": ["scope"]
             }),
             examples: vec![ToolExample {
-                situation: "About to refactor a function — check whether anyone else has claimed it.".into(),
+                situation:
+                    "About to refactor a function — check whether anyone else has claimed it."
+                        .into(),
                 call: json!({ "scope": "CorpusEngine::ingest" }),
             }],
             effect: Effect::Read,
@@ -210,7 +212,9 @@ impl Tool for WorkInFlightTool {
                 message: e.to_string(),
             })?
             .into_iter()
-            .filter(|s| s.node_id == caller_node && s.agent_session_token.as_deref() == caller_token)
+            .filter(|s| {
+                s.node_id == caller_node && s.agent_session_token.as_deref() == caller_token
+            })
             .map(|s| s.session_id)
             .collect();
 

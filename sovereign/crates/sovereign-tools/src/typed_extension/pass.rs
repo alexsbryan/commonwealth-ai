@@ -144,10 +144,7 @@ pub(super) async fn pass_b_one_theme_with_excerpts(
         );
         return Ok(None);
     }
-    let citation = citation_from_quote_spans(
-        &format!("theme:{}", theme.theme_id),
-        member_quotes,
-    );
+    let citation = citation_from_quote_spans(&format!("theme:{}", theme.theme_id), member_quotes);
     let section_id = citation.section_id.clone();
     let section = synth_section(section_id, TypeExtension::Argumentative(trimmed));
     Ok(Some((section, citation)))
@@ -406,8 +403,7 @@ mod tests {
         // (e.g. when the orchestrator can't reach the underlying
         // RAPTOR rows). The body must still parse and carry the
         // axis-constraint instructions.
-        let body =
-            build_pass_b_user_body("Theme summary text without any verbatim excerpts.", &[]);
+        let body = build_pass_b_user_body("Theme summary text without any verbatim excerpts.", &[]);
         assert!(body.contains("CROSS-NOTE"));
         assert!(!body.contains("Verbatim source excerpts"));
     }
@@ -442,10 +438,10 @@ mod tests {
         assert!(parse_quote_spans("not json").is_empty());
         assert!(parse_quote_spans("[]").is_empty());
         // Empty text fields are filtered.
-        assert!(parse_quote_spans(
-            r#"[{"chunk_id":1,"char_start":0,"char_end":0,"text":"  "}]"#
-        )
-        .is_empty());
+        assert!(
+            parse_quote_spans(r#"[{"chunk_id":1,"char_start":0,"char_end":0,"text":"  "}]"#)
+                .is_empty()
+        );
     }
 
     #[test]

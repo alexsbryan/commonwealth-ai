@@ -326,7 +326,10 @@ mod tests {
 
         let rows = store.list_all().await.unwrap();
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].created_at, 1000, "created_at must be immutable across upserts");
+        assert_eq!(
+            rows[0].created_at, 1000,
+            "created_at must be immutable across upserts"
+        );
         assert_eq!(rows[0].updated_at, 2000);
         assert_eq!(rows[0].title, "new title");
     }
@@ -340,7 +343,10 @@ mod tests {
         store.upsert(&make_item("c", 1, 300)).await.unwrap();
 
         let phase_1 = store.list_phase(1).await.unwrap();
-        assert_eq!(phase_1.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), vec!["b", "c"]);
+        assert_eq!(
+            phase_1.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(),
+            vec!["b", "c"]
+        );
     }
 
     #[tokio::test]
@@ -348,7 +354,10 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let store = PlanStore::open(&tmp.path().join("plan.db")).unwrap();
         store.upsert(&make_item("x", 0, 100)).await.unwrap();
-        store.set_state("x", PlanItemState::Done, 500).await.unwrap();
+        store
+            .set_state("x", PlanItemState::Done, 500)
+            .await
+            .unwrap();
         let rows = store.list_all().await.unwrap();
         assert_eq!(rows[0].state, PlanItemState::Done);
         assert_eq!(rows[0].updated_at, 500);
@@ -374,13 +383,20 @@ mod tests {
         store.upsert(&new_open).await.unwrap();
 
         let deferred = store.defer_stale("hash-abc", 999).await.unwrap();
-        assert_eq!(deferred, 1, "only the stale open item should defer; done stays done");
+        assert_eq!(
+            deferred, 1,
+            "only the stale open item should defer; done stays done"
+        );
 
         let rows = store.list_all().await.unwrap();
         let by_id: std::collections::HashMap<_, _> =
             rows.iter().map(|r| (r.id.as_str(), r)).collect();
         assert_eq!(by_id["old-open"].state, PlanItemState::Deferred);
-        assert_eq!(by_id["old-done"].state, PlanItemState::Done, "done stays done");
+        assert_eq!(
+            by_id["old-done"].state,
+            PlanItemState::Done,
+            "done stays done"
+        );
         assert_eq!(by_id["new-open"].state, PlanItemState::Open);
     }
 

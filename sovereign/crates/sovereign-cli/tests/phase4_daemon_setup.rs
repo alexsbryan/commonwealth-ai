@@ -23,7 +23,10 @@ fn sovereign() -> Command {
 }
 
 fn run(args: &[&str]) -> Output {
-    sovereign().args(args).output().expect("spawn sovereign-cli")
+    sovereign()
+        .args(args)
+        .output()
+        .expect("spawn sovereign-cli")
 }
 
 /// `daemon` / `setup` / `install-service` delegate into the
@@ -35,9 +38,13 @@ fn siblings_built() -> bool {
     let dir = std::path::Path::new(env!("CARGO_BIN_EXE_sovereign-cli"))
         .parent()
         .expect("CARGO_BIN_EXE_sovereign-cli has a parent dir");
-    ["sovereign-cli-dev", "sovereign-cli-daemon", "sovereign-cli-llm"]
-        .iter()
-        .all(|b| dir.join(b).is_file())
+    [
+        "sovereign-cli-dev",
+        "sovereign-cli-daemon",
+        "sovereign-cli-llm",
+    ]
+    .iter()
+    .all(|b| dir.join(b).is_file())
 }
 
 macro_rules! require_siblings {
@@ -68,7 +75,11 @@ fn combined(out: &Output) -> String {
 fn daemon_help_documents_setup_only_and_bare_invocation() {
     require_siblings!();
     let out = run(&["daemon", "--help"]);
-    assert!(out.status.success(), "daemon --help exit: {:?}", out.status.code());
+    assert!(
+        out.status.success(),
+        "daemon --help exit: {:?}",
+        out.status.code()
+    );
     let text = combined(&out);
     assert!(
         text.contains("--setup-only"),
@@ -93,8 +104,7 @@ fn install_service_help_documents_purpose() {
     );
     let text = combined(&out);
     assert!(
-        text.to_lowercase().contains("launchd")
-            || text.to_lowercase().contains("systemd"),
+        text.to_lowercase().contains("launchd") || text.to_lowercase().contains("systemd"),
         "install-service --help missing platform mention:\n{text}"
     );
     assert!(
@@ -154,17 +164,18 @@ fn daemon_status_does_not_panic() {
 fn setup_help_still_works_after_phase4_shim() {
     require_siblings!();
     let out = run(&["setup", "--help"]);
-    assert!(out.status.success(), "setup --help exit: {:?}", out.status.code());
+    assert!(
+        out.status.success(),
+        "setup --help exit: {:?}",
+        out.status.code()
+    );
     let text = combined(&out);
     // The HELP block in setup_cmd.rs still says "registers the
     // daemon with launchd/systemd" — which is now outdated for the
     // wizard-only path. We don't fail the test on that; we just
     // make sure --help renders without crashing. The help-text
     // truth-up is its own follow-up.
-    assert!(
-        !text.is_empty(),
-        "setup --help produced no output"
-    );
+    assert!(!text.is_empty(), "setup --help produced no output");
 }
 
 /// `sovereign daemon` with an unknown subcommand still surfaces an

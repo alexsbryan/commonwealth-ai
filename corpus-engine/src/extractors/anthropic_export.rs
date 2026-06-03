@@ -109,20 +109,19 @@ impl Extractor for AnthropicExportExtractor {
         source_path: &Path,
     ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send>> {
         let file = File::open(source_path).map_err(|e| {
-            Error::Extraction(format!(
-                "Failed to open {}: {e}",
-                source_path.display()
-            ))
+            Error::Extraction(format!("Failed to open {}: {e}", source_path.display()))
         })?;
-        let convs: Vec<RawConversation> = serde_json::from_reader(BufReader::new(file))
-            .map_err(|e| {
+        let convs: Vec<RawConversation> =
+            serde_json::from_reader(BufReader::new(file)).map_err(|e| {
                 Error::Extraction(format!(
                     "Failed to parse Anthropic export at {}: {e}",
                     source_path.display()
                 ))
             })?;
 
-        let iter = convs.into_iter().filter_map(|c| convert_conversation(c).transpose());
+        let iter = convs
+            .into_iter()
+            .filter_map(|c| convert_conversation(c).transpose());
         Ok(Box::new(iter))
     }
 }
@@ -318,7 +317,11 @@ mod tests {
             .collect::<Result<Vec<_>>>()
             .unwrap();
         let body = &docs[0].content;
-        assert!(body.contains("### [2025-09-04 18:01] user"), "first turn header missing: {}", body);
+        assert!(
+            body.contains("### [2025-09-04 18:01] user"),
+            "first turn header missing: {}",
+            body
+        );
         assert!(body.contains("### [2025-09-04 18:02] assistant"));
         assert!(body.contains("What was our burn rate last month?"));
         assert!(body.contains("$312k"));
@@ -345,7 +348,11 @@ mod tests {
         let body = &docs[0].content;
         let first_pos = body.find("first").unwrap();
         let second_pos = body.find("second").unwrap();
-        assert!(first_pos < second_pos, "chronological order broken: {}", body);
+        assert!(
+            first_pos < second_pos,
+            "chronological order broken: {}",
+            body
+        );
     }
 
     #[test]
@@ -399,7 +406,11 @@ mod tests {
             .collect::<Result<Vec<_>>>()
             .unwrap();
         let body = &docs[0].content;
-        assert!(body.contains("first block\n\nsecond block"), "body: {}", body);
+        assert!(
+            body.contains("first block\n\nsecond block"),
+            "body: {}",
+            body
+        );
     }
 
     #[test]

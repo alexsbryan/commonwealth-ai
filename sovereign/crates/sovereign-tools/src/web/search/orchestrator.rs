@@ -33,10 +33,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-
-use super::backend_trait::{
-    SearchPrivacy, WebSearchBackend, WebSearchRegistry,
-};
+use super::backend_trait::{SearchPrivacy, WebSearchBackend, WebSearchRegistry};
 use super::SearchResult;
 
 /// Per-backend remaining budget. Keys are backend ids
@@ -133,8 +130,7 @@ impl SearchOrchestrator {
         inputs: SelectInputs<'_>,
     ) -> OrchestratedSearch {
         let candidates = self.candidates(&inputs);
-        let candidate_ids: Vec<&'static str> =
-            candidates.iter().map(|b| b.id()).collect();
+        let candidate_ids: Vec<&'static str> = candidates.iter().map(|b| b.id()).collect();
 
         if candidates.is_empty() {
             tracing::warn!(
@@ -157,7 +153,10 @@ impl SearchOrchestrator {
                 max_privacy = ?inputs.max_privacy,
                 "search: backend selected"
             );
-            match backend.search(client, inputs.query, inputs.max_results).await {
+            match backend
+                .search(client, inputs.query, inputs.max_results)
+                .await
+            {
                 Ok(results) => {
                     return OrchestratedSearch {
                         backend_id: chosen_id.to_string(),
@@ -188,10 +187,7 @@ impl SearchOrchestrator {
     /// Filter + order the registry's backends for the given inputs.
     /// Exposed for testing the selection-policy invariants without
     /// running the actual `search()` HTTP path.
-    pub fn candidates(
-        &self,
-        inputs: &SelectInputs<'_>,
-    ) -> Vec<Arc<dyn WebSearchBackend>> {
+    pub fn candidates(&self, inputs: &SelectInputs<'_>) -> Vec<Arc<dyn WebSearchBackend>> {
         let max_rank = inputs.max_privacy.rank();
         let mut surviving: Vec<Arc<dyn WebSearchBackend>> = self
             .registry
@@ -237,12 +233,9 @@ fn budget_allows(backend: &dyn WebSearchBackend, budget: &BudgetView) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::error::Error;
-    use crate::web::search::backend_trait::{
-        MockBackendImpl, SearchCost,
-    };
+    use crate::web::search::backend_trait::{MockBackendImpl, SearchCost};
     use async_trait::async_trait;
-    
+    use sovereign_core::error::Error;
 
     /// Test stub: a configurable backend. Returns a fixed result
     /// set on success, or a tagged error string. Doesn't hit the
@@ -293,9 +286,7 @@ mod tests {
         }
     }
 
-    fn registry_with(
-        backends: Vec<Arc<dyn WebSearchBackend>>,
-    ) -> Arc<WebSearchRegistry> {
+    fn registry_with(backends: Vec<Arc<dyn WebSearchBackend>>) -> Arc<WebSearchRegistry> {
         let mut r = WebSearchRegistry::new();
         for b in backends {
             r.register(b);
@@ -441,8 +432,7 @@ mod tests {
             }),
             outcome: StubOutcome::Ok(vec![]),
         };
-        let registry =
-            registry_with(vec![Arc::new(brave), Arc::new(tavily)]);
+        let registry = registry_with(vec![Arc::new(brave), Arc::new(tavily)]);
         let orch = SearchOrchestrator::new(registry);
 
         let budget = BudgetView::new();

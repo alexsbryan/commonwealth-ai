@@ -60,8 +60,10 @@ async fn join_key_persists_across_restart_and_current_invite_returns_same_key() 
         // Also confirm the on-disk file holds the same content.
         let on_disk = persist::load_join_key(&data_dir)
             .expect("load_join_key must not error after create_mesh")
-            .expect("join_key.secret MUST be on disk after create_mesh — \
-                     otherwise the next process restart loses the invite forever");
+            .expect(
+                "join_key.secret MUST be on disk after create_mesh — \
+                     otherwise the next process restart loses the invite forever",
+            );
         assert_eq!(
             on_disk, create.join_key,
             "on-disk join_key.secret MUST match the in-memory key"
@@ -85,14 +87,11 @@ async fn join_key_persists_across_restart_and_current_invite_returns_same_key() 
          + node_id all exist on disk"
     );
 
-    let invite_after = daemon
-        .current_invite()
-        .await
-        .expect(
-            "current_invite must be Some after try_resume restored a \
+    let invite_after = daemon.current_invite().await.expect(
+        "current_invite must be Some after try_resume restored a \
              cached join_key — a None here means the share UI would \
              silently go blank after a routine restart",
-        );
+    );
     assert_eq!(
         invite_after.0, key_before,
         "plaintext join_key MUST round-trip across restart — \
@@ -181,11 +180,10 @@ async fn resume_with_missing_join_key_secret_is_non_fatal() {
 
     // Resume should succeed, current_invite should return None.
     let daemon = EmbeddedDaemon::new(data_dir);
-    let resumed = daemon
-        .try_resume()
-        .await
-        .expect("try_resume MUST succeed even when join_key.secret is missing — \
-                 panicking here would brick every pre-feature backup");
+    let resumed = daemon.try_resume().await.expect(
+        "try_resume MUST succeed even when join_key.secret is missing — \
+                 panicking here would brick every pre-feature backup",
+    );
     assert!(resumed, "try_resume must still return true");
     assert!(
         daemon.current_invite().await.is_none(),

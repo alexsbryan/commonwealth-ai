@@ -35,11 +35,10 @@ pub struct HardwareInfo {
 
 #[tauri::command]
 pub async fn detect_hardware() -> Result<HardwareInfo, String> {
-    let profile = tokio::task::spawn_blocking(|| {
-        sovereign_inference::hardware::HardwareProfile::detect()
-    })
-    .await
-    .map_err(|e| format!("Hardware detection failed: {e}"))?;
+    let profile =
+        tokio::task::spawn_blocking(|| sovereign_inference::hardware::HardwareProfile::detect())
+            .await
+            .map_err(|e| format!("Hardware detection failed: {e}"))?;
 
     let gpu_memory_gb = profile
         .gpu_memory_bytes
@@ -84,9 +83,7 @@ fn profile_name_str(p: &sovereign_inference::hardware::ProfileName) -> &'static 
     }
 }
 
-fn parse_profile_name(
-    s: &str,
-) -> Result<sovereign_inference::hardware::ProfileName, String> {
+fn parse_profile_name(s: &str) -> Result<sovereign_inference::hardware::ProfileName, String> {
     use sovereign_inference::hardware::ProfileName;
     match s {
         "cpu_only" => Ok(ProfileName::CpuOnly),
@@ -157,11 +154,10 @@ impl From<&sovereign_core::models_manifest::SlotConfig> for SlotConfigDto {
 /// RAM otherwise — matching `HardwareProfile::effective_vram_gb`.
 #[tauri::command]
 pub async fn recommended_profile() -> Result<RecommendedProfileDto, String> {
-    let profile = tokio::task::spawn_blocking(|| {
-        sovereign_inference::hardware::HardwareProfile::detect()
-    })
-    .await
-    .map_err(|e| format!("Hardware detection failed: {e}"))?;
+    let profile =
+        tokio::task::spawn_blocking(|| sovereign_inference::hardware::HardwareProfile::detect())
+            .await
+            .map_err(|e| format!("Hardware detection failed: {e}"))?;
 
     let pname = sovereign_inference::hardware::select_profile(&profile);
     let effective_memory_gb = profile.effective_vram_gb() as f64;
@@ -177,9 +173,7 @@ pub async fn recommended_profile() -> Result<RecommendedProfileDto, String> {
 /// so a single Rust function decides which models qualify for the user's
 /// tier — the desktop just renders the result.
 #[tauri::command]
-pub async fn primary_catalog(
-    profile: Option<String>,
-) -> Result<Vec<PrimaryOptionDto>, String> {
+pub async fn primary_catalog(profile: Option<String>) -> Result<Vec<PrimaryOptionDto>, String> {
     let pname = match profile {
         Some(s) => parse_profile_name(&s)?,
         None => {
@@ -326,4 +320,3 @@ pub async fn warmup_primary_slot(state: State<'_, Arc<AppState>>) -> Result<(), 
     });
     Ok(())
 }
-

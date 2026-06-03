@@ -99,8 +99,7 @@ impl EntityGraph {
         let mut entity_chunks: Vec<Vec<u32>> = vec![Vec::new(); n];
         for (name, app) in &skeleton.entity_index {
             if let Some(&id) = name_to_id.get(name) {
-                let mut chunks: Vec<u32> =
-                    app.chunk_indices.iter().map(|i| *i as u32).collect();
+                let mut chunks: Vec<u32> = app.chunk_indices.iter().map(|i| *i as u32).collect();
                 chunks.sort_unstable();
                 chunks.dedup();
                 entity_chunks[id as usize] = chunks;
@@ -154,7 +153,11 @@ impl EntityGraph {
                         continue;
                     }
                     if object_lower.contains(other_lower.as_str()) {
-                        let key = if a_id < b_id { (a_id, b_id) } else { (b_id, a_id) };
+                        let key = if a_id < b_id {
+                            (a_id, b_id)
+                        } else {
+                            (b_id, a_id)
+                        };
                         *edge_weights.entry(key).or_insert(0.0) += TRIPLE_BONUS_WEIGHT;
                     }
                 }
@@ -314,9 +317,7 @@ impl EntityGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::types::{
-        ActionAtom, DocumentSkeleton, EntityAppearances,
-    };
+    use sovereign_core::types::{ActionAtom, DocumentSkeleton, EntityAppearances};
 
     fn skel() -> DocumentSkeleton {
         // 4 entities, 5 chunks. Designed so Winnie and Ossipon do
@@ -441,7 +442,10 @@ mod tests {
     fn seeds_from_query_returns_multiple_when_query_names_multiple() {
         let g = EntityGraph::build(&skel());
         let seeds = g.seeds_from_query("Verloc and Stevie in the kitchen");
-        let names: Vec<&str> = seeds.iter().map(|i| g.id_to_name[*i as usize].as_str()).collect();
+        let names: Vec<&str> = seeds
+            .iter()
+            .map(|i| g.id_to_name[*i as usize].as_str())
+            .collect();
         assert!(names.contains(&"Verloc"));
         assert!(names.contains(&"Stevie"));
     }
@@ -455,7 +459,10 @@ mod tests {
         assert_eq!(ppr.len(), 4);
         // Sum should be ~1.0 (probability conservation).
         let sum: f32 = ppr.iter().sum();
-        assert!((sum - 1.0).abs() < 0.01, "PPR sum should be ~1.0, got {sum}");
+        assert!(
+            (sum - 1.0).abs() < 0.01,
+            "PPR sum should be ~1.0, got {sum}"
+        );
         // Winnie self should be the highest (seed).
         let winnie_score = ppr[winnie_id as usize];
         let ossipon_score = ppr[ossipon_id as usize];
@@ -479,7 +486,10 @@ mod tests {
             .find(|(n, _)| *n == ossipon_id)
             .map(|(_, w)| *w)
             .unwrap_or(0.0);
-        assert_eq!(direct_w_to_o, 0.0, "Winnie should have NO direct edge to Ossipon");
+        assert_eq!(
+            direct_w_to_o, 0.0,
+            "Winnie should have NO direct edge to Ossipon"
+        );
         // But PPR should still surface Ossipon via Verloc.
         let ppr = g.personalized_pagerank(&[winnie_id], 0.85, 30, 1e-4);
         let ossipon_score = ppr[ossipon_id as usize];

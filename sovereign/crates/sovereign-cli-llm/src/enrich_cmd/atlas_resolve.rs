@@ -35,9 +35,7 @@ const HELP: Help = Help {
     command: "sovereign enrich atlas-resolve",
     summary: "Resolve atlas atoms + edges from Phase 1 sketches.",
     sections: &[
-        HelpSection::Usage(
-            "sovereign enrich atlas-resolve <corpus-id> [--phase 3a|3b|all]",
-        ),
+        HelpSection::Usage("sovereign enrich atlas-resolve <corpus-id> [--phase 3a|3b|all]"),
         HelpSection::Flags(&[
             (
                 "--phase 3a",
@@ -225,9 +223,8 @@ pub(crate) async fn resolve_into_dir(
     // Collect structured drops across both resolution phases so the
     // aggregator (`sovereign enrich errors`) can surface them grouped
     // by kind. Empty in the clean-run case.
-    let mut resolution_failures: Vec<
-        corpus_engine::enrichment::pipeline::PhaseFailure,
-    > = Vec::new();
+    let mut resolution_failures: Vec<corpus_engine::enrichment::pipeline::PhaseFailure> =
+        Vec::new();
     resolution_failures.extend(step_3a.failures.iter().cloned());
 
     let written = if want_3b {
@@ -308,10 +305,7 @@ pub(crate) async fn resolve_into_dir(
                 println!("  ✓ {} position atom(s)", typed.new_positions.len());
                 println!("  ✓ {} opposition atom(s)", typed.new_oppositions.len());
                 println!("  ✓ {} edge(s) total", edges.len());
-                println!(
-                    "  ✓ {} trajectory chain(s)",
-                    step_3b.trajectories.len()
-                );
+                println!("  ✓ {} trajectory chain(s)", step_3b.trajectories.len());
                 w
             }
             Err(e) => {
@@ -353,10 +347,7 @@ pub(crate) async fn resolve_into_dir(
     // aggregator knows "ran cleanly" vs. "hasn't run yet" by whether
     // the file exists. The schema-versioned file is atomic-safe so
     // a mid-run interrupt leaves the prior state intact.
-    match corpus_engine::enrichment::atlas::write_atlas_failures(
-        atlas_dir,
-        &resolution_failures,
-    ) {
+    match corpus_engine::enrichment::atlas::write_atlas_failures(atlas_dir, &resolution_failures) {
         Ok(path) => {
             if resolution_failures.is_empty() {
                 println!("  ✓ {} (no resolution drops)", path.display());
@@ -463,12 +454,7 @@ mod tests {
 
     #[test]
     fn parse_args_accepts_explicit_phase_3a() {
-        let p = parse_args(&[
-            "bk".into(),
-            "--phase".into(),
-            "3a".into(),
-        ])
-        .unwrap();
+        let p = parse_args(&["bk".into(), "--phase".into(), "3a".into()]).unwrap();
         assert_eq!(p.phase, ResolvePhase::P3a);
     }
 

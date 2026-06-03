@@ -234,7 +234,9 @@ fn inject_audit_trail(request: &mut ChatCompletionRequest, snippet: &str) {
         }
         sys.content.push_str(&line);
     } else {
-        request.messages.insert(0, ChatMessage::new("system", &line));
+        request
+            .messages
+            .insert(0, ChatMessage::new("system", &line));
     }
 }
 
@@ -297,12 +299,12 @@ mod tests {
             chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         }
     }
 
@@ -333,11 +335,7 @@ mod tests {
         let extractor = DecisionExtractor::new();
         let mut session = MiddlewareSession::default();
         let ctx = ctx();
-        for content in &[
-            "",
-            "Looking at the code now.",
-            "The function returns 42.",
-        ] {
+        for content in &["", "Looking at the code now.", "The function returns 42."] {
             let view = ResponseView {
                 content,
                 finish_reason: Some("stop"),
@@ -362,9 +360,10 @@ mod tests {
         let mut session = MiddlewareSession::default();
         session.pending_decision = Some("I'll use BTreeMap".into());
         let ctx = ctx();
-        let mut req = req_with(&[
-            ("user", "Actually no, that's not a decision; I was thinking aloud."),
-        ]);
+        let mut req = req_with(&[(
+            "user",
+            "Actually no, that's not a decision; I was thinking aloud.",
+        )]);
         extractor
             .process(&mut req, &mut session, &ctx)
             .await
@@ -374,8 +373,10 @@ mod tests {
             "candidate should have been dropped"
         );
         // No system-prompt injection occurred.
-        assert!(req.messages.iter().all(|m| m.role != "system"
-            || !m.content.contains("Noted:")));
+        assert!(req
+            .messages
+            .iter()
+            .all(|m| m.role != "system" || !m.content.contains("Noted:")));
     }
 
     /// `process` without a correction phrase persists the note AND
@@ -386,9 +387,7 @@ mod tests {
         let extractor = DecisionExtractor::new();
         let mut session = MiddlewareSession {
             feature_id: Some("foo".into()),
-            pending_decision: Some(
-                "I'll use BTreeMap because ordered iteration matters.".into(),
-            ),
+            pending_decision: Some("I'll use BTreeMap because ordered iteration matters.".into()),
             ..Default::default()
         };
         let mut ctx = ctx();

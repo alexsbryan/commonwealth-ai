@@ -29,11 +29,20 @@ const HELP: Help = Help {
     sections: &[
         HelpSection::Usage("sovereign chat inspect \"<question>\" [flags]"),
         HelpSection::Flags(&[
-            ("--limit <N>",    "Top-N chunks per corpus to display (default: 5)."),
-            ("--corpus <id>",  "Restrict the search to a single corpus_id (default: every installed)."),
-            ("--snippet <N>",  "Max chars of chunk content to show inline (default: 200)."),
+            (
+                "--limit <N>",
+                "Top-N chunks per corpus to display (default: 5).",
+            ),
+            (
+                "--corpus <id>",
+                "Restrict the search to a single corpus_id (default: every installed).",
+            ),
+            (
+                "--snippet <N>",
+                "Max chars of chunk content to show inline (default: 200).",
+            ),
             ("--format text|json", "Output format (default: text)."),
-            ("--help, -h",     "Show this message."),
+            ("--help, -h", "Show this message."),
         ]),
         HelpSection::Notes(
             "Does NOT invoke /v1/chat/completions — only /v1/embeddings. \
@@ -67,10 +76,7 @@ pub async fn cmd_inspect(args: &[String]) -> i32 {
         match rest[i].as_str() {
             "--limit" => {
                 i += 1;
-                limit = rest
-                    .get(i)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(limit);
+                limit = rest.get(i).and_then(|s| s.parse().ok()).unwrap_or(limit);
             }
             "--corpus" => {
                 i += 1;
@@ -179,8 +185,13 @@ async fn run_inspect(
     };
 
     if indexes.is_empty() {
-        eprintln!("no corpora installed under {}", session_indexes_dir(session));
-        eprintln!("install one via `sovereign corpus install <id>` or the desktop folder-drop flow.");
+        eprintln!(
+            "no corpora installed under {}",
+            session_indexes_dir(session)
+        );
+        eprintln!(
+            "install one via `sovereign corpus install <id>` or the desktop folder-drop flow."
+        );
         return 0;
     }
 
@@ -304,7 +315,10 @@ fn print_json(per_corpus: &[CorpusHits], question: &str) {
             })).collect::<Vec<_>>(),
         })).collect::<Vec<_>>(),
     });
-    println!("{}", serde_json::to_string_pretty(&payload).unwrap_or_default());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&payload).unwrap_or_default()
+    );
 }
 
 fn truncate(s: &str, max: usize) -> String {

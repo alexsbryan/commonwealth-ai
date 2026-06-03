@@ -41,9 +41,7 @@ use corpus_engine::enrichment::atlas::atoms::{
     AtomEnvelope, AtomId, AtomsFile, Configuration, Entity, Event, Opposition, Position, Question,
     Relation, State,
 };
-use corpus_engine::enrichment::atlas::axis_catalog::{
-    all_axes, AtomKind, GatingField, TypedAxis,
-};
+use corpus_engine::enrichment::atlas::axis_catalog::{all_axes, AtomKind, GatingField, TypedAxis};
 use corpus_engine::enrichment::atlas::edges::{Edge, EdgeType, EdgesFile};
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 use corpus_engine::enrichment::pipeline::atlas::EntityType;
@@ -318,8 +316,8 @@ struct GoldenSet {
 
 impl GoldenSet {
     fn load(path: &Path) -> Result<Self, String> {
-        let raw = std::fs::read_to_string(path)
-            .map_err(|e| format!("read {}: {e}", path.display()))?;
+        let raw =
+            std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
         toml::from_str::<Self>(&raw).map_err(|e| format!("parse {}: {e}", path.display()))
     }
 }
@@ -620,9 +618,10 @@ impl AtlasSnapshot {
         let skeleton = if skeleton_path.exists() {
             let raw = std::fs::read_to_string(skeleton_path)
                 .map_err(|e| format!("read {}: {e}", skeleton_path.display()))?;
-            Some(serde_json::from_str::<FieldSkeleton>(&raw).map_err(|e| {
-                format!("parse {}: {e}", skeleton_path.display())
-            })?)
+            Some(
+                serde_json::from_str::<FieldSkeleton>(&raw)
+                    .map_err(|e| format!("parse {}: {e}", skeleton_path.display()))?,
+            )
         } else {
             None
         };
@@ -820,8 +819,7 @@ impl AtlasSnapshot {
 }
 
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
-    let raw =
-        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let raw = std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     serde_json::from_str::<T>(&raw).map_err(|e| format!("parse {}: {e}", path.display()))
 }
 
@@ -909,9 +907,7 @@ fn matches_any_with_morphology(haystack: &str, needles: &[String]) -> bool {
         let n_lower = normalize_for_match(n);
         // Restrict to single-token needles ≥ MIN_PREFIX chars long;
         // multi-token needles already get the token-presence path.
-        if n_lower.len() < MIN_PREFIX
-            || n_lower.chars().any(|c| !c.is_alphanumeric())
-        {
+        if n_lower.len() < MIN_PREFIX || n_lower.chars().any(|c| !c.is_alphanumeric()) {
             return false;
         }
         h_tokens.iter().any(|t| {
@@ -1172,10 +1168,7 @@ impl<'a> AxisCandidate<'a> {
 /// Collect candidate atoms for an axis. Filters by qualifier when
 /// the catalog's `AtomKind` is `EntityWithConceptKind` /
 /// `ClaimWithKind`. Returns an empty Vec when atoms.json is absent.
-fn collect_axis_atoms<'a>(
-    axis: &TypedAxis,
-    snap: &'a AtlasSnapshot,
-) -> Vec<AxisCandidate<'a>> {
+fn collect_axis_atoms<'a>(axis: &TypedAxis, snap: &'a AtlasSnapshot) -> Vec<AxisCandidate<'a>> {
     let Some(file) = snap.atoms.as_ref() else {
         return Vec::new();
     };
@@ -1302,11 +1295,7 @@ fn axis_expectations<'a>(
 /// the candidate satisfies every gate. Informational fields are
 /// NOT checked here — they produce notes after a positive name hit
 /// (see `emit_informational_notes`).
-fn matches_axis(
-    axis: &TypedAxis,
-    candidate: &AxisCandidate,
-    expect: &AxisExpectation,
-) -> bool {
+fn matches_axis(axis: &TypedAxis, candidate: &AxisCandidate, expect: &AxisExpectation) -> bool {
     for gate in axis.gating_fields {
         match gate {
             GatingField::Name => {
@@ -1588,8 +1577,7 @@ fn score(golden: &GoldenSet, snap: &AtlasSnapshot, phase: PhaseFilter) -> EvalRe
         if !golden.expected_state_atoms.is_empty() {
             report.state_atoms = Some(score_state_atoms(golden, snap));
         }
-        if !golden.expected_relation_atoms.is_empty()
-            || !golden.forbidden_relation_atoms.is_empty()
+        if !golden.expected_relation_atoms.is_empty() || !golden.forbidden_relation_atoms.is_empty()
         {
             report.relation_atoms = Some(score_relation_atoms(golden, snap));
         }
@@ -1665,7 +1653,8 @@ fn score_positions(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
         if hit.is_some() {
             s.matched += 1;
         } else {
-            s.misses.push(ep.name_contains_any.first().cloned().unwrap_or_default());
+            s.misses
+                .push(ep.name_contains_any.first().cloned().unwrap_or_default());
         }
     }
     for fp in &golden.forbidden_positions {
@@ -1707,11 +1696,14 @@ fn score_entity_atoms(
         .all_entities()
         .into_iter()
         .filter(|e| {
-            matches!(e.entity_type, EntityType::Other(_))
-                && !typed.iter().any(|t| t.id == e.id)
+            matches!(e.entity_type, EntityType::Other(_)) && !typed.iter().any(|t| t.id == e.id)
         })
         .collect();
-    let entities: Vec<&Entity> = typed.iter().copied().chain(untyped.iter().copied()).collect();
+    let entities: Vec<&Entity> = typed
+        .iter()
+        .copied()
+        .chain(untyped.iter().copied())
+        .collect();
     if snap.atoms.is_none() {
         s.notes
             .push("atoms.json not present — skipping entity scoring".to_string());
@@ -1729,9 +1721,9 @@ fn score_entity_atoms(
     // without measuring anything the pipeline can act on.
     let mut name_only_hits = 0usize;
     for ee in expected {
-        let by_name = entities.iter().find(|e| {
-            matches_any(&e.canonical_name, &ee.canonical_name_contains_any)
-        });
+        let by_name = entities
+            .iter()
+            .find(|e| matches_any(&e.canonical_name, &ee.canonical_name_contains_any));
         match by_name {
             Some(e) => {
                 s.matched += 1;
@@ -1742,8 +1734,12 @@ fn score_entity_atoms(
                 }
             }
             None => {
-                s.misses
-                    .push(ee.canonical_name_contains_any.first().cloned().unwrap_or_default());
+                s.misses.push(
+                    ee.canonical_name_contains_any
+                        .first()
+                        .cloned()
+                        .unwrap_or_default(),
+                );
             }
         }
     }
@@ -1805,8 +1801,12 @@ fn score_event_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
         if hit.is_some() {
             s.matched += 1;
         } else {
-            s.misses
-                .push(ee.description_contains_any.first().cloned().unwrap_or_default());
+            s.misses.push(
+                ee.description_contains_any
+                    .first()
+                    .cloned()
+                    .unwrap_or_default(),
+            );
         }
     }
     for fb in &golden.forbidden_event_atoms {
@@ -1845,7 +1845,11 @@ fn score_state_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
         } else {
             // Report as "<entity>: <label>" so a miss in the table tells
             // the reader which axis failed to land.
-            let ent = es.entity_name_contains_any.first().cloned().unwrap_or_default();
+            let ent = es
+                .entity_name_contains_any
+                .first()
+                .cloned()
+                .unwrap_or_default();
             let lab = es.label_contains_any.first().cloned().unwrap_or_default();
             s.misses.push(format!("{ent}: {lab}"));
         }
@@ -1896,14 +1900,17 @@ fn score_relation_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore 
                 any_match(&er.participants_a_any)
             } else {
                 name_sets.iter().enumerate().any(|(i, names_i)| {
-                    let a_here =
-                        names_i.iter().any(|n| matches_any(n, &er.participants_a_any));
+                    let a_here = names_i
+                        .iter()
+                        .any(|n| matches_any(n, &er.participants_a_any));
                     if !a_here {
                         return false;
                     }
                     name_sets.iter().enumerate().any(|(j, names_j)| {
                         i != j
-                            && names_j.iter().any(|n| matches_any(n, &er.participants_b_any))
+                            && names_j
+                                .iter()
+                                .any(|n| matches_any(n, &er.participants_b_any))
                     })
                 })
             };
@@ -1914,7 +1921,11 @@ fn score_relation_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore 
             s.matched += 1;
         } else {
             let pa = er.participants_a_any.first().cloned().unwrap_or_default();
-            let pb = er.participants_b_any.first().cloned().unwrap_or_else(|| "*".into());
+            let pb = er
+                .participants_b_any
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "*".into());
             s.misses.push(format!("{pa} ↔ {pb}"));
         }
     }
@@ -1950,9 +1961,9 @@ fn score_question_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore 
                 true
             } else {
                 let q_status = match &q.resolution_status {
-                    corpus_engine::enrichment::atlas::atoms::ResolutionStatus::Resolved { .. } => {
-                        "resolved"
-                    }
+                    corpus_engine::enrichment::atlas::atoms::ResolutionStatus::Resolved {
+                        ..
+                    } => "resolved",
                     corpus_engine::enrichment::atlas::atoms::ResolutionStatus::Contested {
                         ..
                     } => "contested",
@@ -1961,7 +1972,9 @@ fn score_question_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore 
                         "dissolved"
                     }
                 };
-                eq.status_any.iter().any(|s| s.eq_ignore_ascii_case(q_status))
+                eq.status_any
+                    .iter()
+                    .any(|s| s.eq_ignore_ascii_case(q_status))
             };
             content_ok && status_ok
         });
@@ -2037,10 +2050,8 @@ fn score_discourse_acts(golden: &GoldenSet, snap: &AtlasSnapshot) -> DiscourseAc
         .iter()
         .flat_map(|d| d.required_acts_any.iter().cloned())
         .collect();
-    report.required_satisfied = required.is_empty()
-        || required
-            .iter()
-            .any(|act| counts.contains_key(act.as_str()));
+    report.required_satisfied =
+        required.is_empty() || required.iter().any(|act| counts.contains_key(act.as_str()));
 
     for d in &golden.expected_discourse_act_distribution {
         if let Some(uniform) = &d.forbidden_uniform_act {
@@ -2145,7 +2156,7 @@ fn score_fault_lines(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
         let hit = tension_edges.iter().find(|e| {
             let a = lookup_name(&e.source);
             let b = lookup_name(&e.target);
-            
+
             (matches_any_with_morphology(&a, &ef.position_a_contains_any)
                 && matches_any_with_morphology(&b, &ef.position_b_contains_any))
                 || (matches_any_with_morphology(&a, &ef.position_b_contains_any)
@@ -2162,8 +2173,16 @@ fn score_fault_lines(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
                 }
             }
             None => {
-                let pa = ef.position_a_contains_any.first().cloned().unwrap_or_default();
-                let pb = ef.position_b_contains_any.first().cloned().unwrap_or_default();
+                let pa = ef
+                    .position_a_contains_any
+                    .first()
+                    .cloned()
+                    .unwrap_or_default();
+                let pb = ef
+                    .position_b_contains_any
+                    .first()
+                    .cloned()
+                    .unwrap_or_default();
                 s.misses.push(format!("{pa} vs {pb}"));
             }
         }
@@ -2178,15 +2197,23 @@ fn score_fault_lines(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
         if tension_edges.iter().any(|e| {
             let a = lookup_name(&e.source);
             let b = lookup_name(&e.target);
-            
+
             (matches_any_with_morphology(&a, &fb.position_a_contains_any)
                 && matches_any_with_morphology(&b, &fb.position_b_contains_any))
                 || (matches_any_with_morphology(&a, &fb.position_b_contains_any)
                     && matches_any_with_morphology(&b, &fb.position_a_contains_any))
         }) {
             s.forbidden_hit += 1;
-            let pa = fb.position_a_contains_any.first().cloned().unwrap_or_default();
-            let pb = fb.position_b_contains_any.first().cloned().unwrap_or_default();
+            let pa = fb
+                .position_a_contains_any
+                .first()
+                .cloned()
+                .unwrap_or_default();
+            let pb = fb
+                .position_b_contains_any
+                .first()
+                .cloned()
+                .unwrap_or_default();
             s.forbidden_hits.push(format!("{pa} vs {pb}"));
         }
     }
@@ -2325,7 +2352,10 @@ fn print_phase_row(label: &str, score: Option<&PhaseScore>) {
         } else {
             String::new()
         };
-        println!("                          misses: {}{suffix}", preview.join(", "));
+        println!(
+            "                          misses: {}{suffix}",
+            preview.join(", ")
+        );
     }
     if !s.forbidden_hits.is_empty() {
         println!(
@@ -2450,10 +2480,16 @@ mod tests {
     fn morphology_bridges_ism_needle_to_underlying_stem() {
         // golden writes "situationism", corpus has "situational variables".
         let needles = vec!["situationism".to_string()];
-        assert!(matches_any_with_morphology("situational variables", &needles));
+        assert!(matches_any_with_morphology(
+            "situational variables",
+            &needles
+        ));
         // -ist variant shares the same stem.
         let needles = vec!["situationist".to_string()];
-        assert!(matches_any_with_morphology("situational variables", &needles));
+        assert!(matches_any_with_morphology(
+            "situational variables",
+            &needles
+        ));
     }
 
     #[test]
@@ -2481,7 +2517,10 @@ mod tests {
         // Multi-token needles route through token-presence; morphology
         // path doesn't try to prefix-match across spaces.
         let needles = vec!["hard incompatibilism".to_string()];
-        assert!(matches_any_with_morphology("incompatibilism (hard)", &needles));
+        assert!(matches_any_with_morphology(
+            "incompatibilism (hard)",
+            &needles
+        ));
         // But a multi-token needle that isn't substring-matchable and
         // doesn't have all tokens present must not slip through via
         // morphology of one token.
@@ -2512,7 +2551,10 @@ mod tests {
             PhaseFilter::parse("fault_lines").unwrap(),
             PhaseFilter::FaultLines
         );
-        assert_eq!(PhaseFilter::parse("config").unwrap(), PhaseFilter::Configurations);
+        assert_eq!(
+            PhaseFilter::parse("config").unwrap(),
+            PhaseFilter::Configurations
+        );
         assert!(PhaseFilter::parse("bogus").is_err());
     }
 
@@ -2526,7 +2568,10 @@ mod tests {
 
     #[test]
     fn parse_args_minimal_form() {
-        let args: Vec<String> = ["fwd", "/tmp/g.toml"].iter().map(|s| s.to_string()).collect();
+        let args: Vec<String> = ["fwd", "/tmp/g.toml"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let p = parse_args(&args).unwrap();
         assert_eq!(p.corpus_id, "fwd");
         assert_eq!(p.golden_path, PathBuf::from("/tmp/g.toml"));

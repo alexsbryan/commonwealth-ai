@@ -69,8 +69,7 @@ impl TokenBucket {
                 let mut inner = self.inner.lock().await;
                 let now = Instant::now();
                 let elapsed = (now - inner.last_refill).as_secs_f32();
-                inner.tokens =
-                    (inner.tokens + elapsed * self.rate_per_second).min(self.capacity);
+                inner.tokens = (inner.tokens + elapsed * self.rate_per_second).min(self.capacity);
                 inner.last_refill = now;
                 if inner.tokens >= 1.0 {
                     inner.tokens -= 1.0;

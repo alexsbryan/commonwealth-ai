@@ -24,8 +24,8 @@
 use std::collections::BTreeMap;
 
 use corpus_engine::{
-    DocFormat, FollowConfig, HttpMethod, PaginationStrategy, ParameterValue,
-    RequestTemplate, ResolvedParameters,
+    DocFormat, FollowConfig, HttpMethod, PaginationStrategy, ParameterValue, RequestTemplate,
+    ResolvedParameters,
 };
 use serde_json::json;
 use tempfile::TempDir;
@@ -171,12 +171,7 @@ async fn follow_persists_one_document_per_url_in_index_response() {
     let html_count = std::fs::read_dir(&docs)
         .unwrap()
         .filter_map(|r| r.ok())
-        .filter(|e| {
-            e.path()
-                .extension()
-                .and_then(|s| s.to_str())
-                == Some("html")
-        })
+        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("html"))
         .count();
     assert_eq!(
         html_count, 2,
@@ -205,9 +200,7 @@ async fn for_each_cartesian_product_one_request_per_binding() {
                 .and(path("/search"))
                 .and(query_param("q", entity))
                 .and(query_param("forms", form))
-                .respond_with(
-                    ResponseTemplate::new(200).set_body_json(json!({"items": []})),
-                )
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"items": []})))
                 .mount(&server)
                 .await;
         }
@@ -254,12 +247,7 @@ async fn for_each_cartesian_product_one_request_per_binding() {
     let json_count = std::fs::read_dir(&docs)
         .unwrap()
         .filter_map(|r| r.ok())
-        .filter(|e| {
-            e.path()
-                .extension()
-                .and_then(|s| s.to_str())
-                == Some("json")
-        })
+        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("json"))
         .count();
     assert_eq!(json_count, 4, "expected 4 page JSONs, got {json_count}");
 }

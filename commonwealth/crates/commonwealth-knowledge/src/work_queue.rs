@@ -75,7 +75,9 @@ pub enum QueueError {
 /// Result of a heartbeat — either the lease was renewed, or it was gone.
 #[derive(Debug, Clone, PartialEq)]
 pub enum HeartbeatResult {
-    Renewed { expires_at_ms: u64 },
+    Renewed {
+        expires_at_ms: u64,
+    },
     /// Peer must abort the in-flight unit; reaper gave the lease to someone
     /// else (or the handoff finished). HTTP handler returns 410.
     Reclaimed,
@@ -136,12 +138,9 @@ impl HandoffQueue {
 
     /// True when no unit is still Queued or Leased.
     pub fn all_terminal(&self) -> bool {
-        self.units.iter().all(|(_u, s)| {
-            matches!(
-                s,
-                UnitStatus::Complete { .. } | UnitStatus::Failed { .. }
-            )
-        })
+        self.units
+            .iter()
+            .all(|(_u, s)| matches!(s, UnitStatus::Complete { .. } | UnitStatus::Failed { .. }))
     }
 
     /// True when the queue has no more work to hand out but some leases
@@ -546,7 +545,10 @@ mod tests {
         let first_expiry = leased.lease_expires_at_ms;
         // Force a visible delta.
         tokio::time::sleep(Duration::from_millis(5)).await;
-        let hb = mgr.heartbeat(&handoff, peer(2), leased.unit_id).await.unwrap();
+        let hb = mgr
+            .heartbeat(&handoff, peer(2), leased.unit_id)
+            .await
+            .unwrap();
         match hb {
             HeartbeatResult::Renewed { expires_at_ms } => assert!(expires_at_ms > first_expiry),
             HeartbeatResult::Reclaimed => panic!("lease was still valid"),
@@ -557,7 +559,10 @@ mod tests {
     async fn heartbeat_from_wrong_peer_is_reclaimed() {
         let (mgr, handoff) = fixture(1).await;
         let leased = mgr.next_unit(&handoff, peer(2)).await.unwrap().unwrap();
-        let hb = mgr.heartbeat(&handoff, peer(999), leased.unit_id).await.unwrap();
+        let hb = mgr
+            .heartbeat(&handoff, peer(999), leased.unit_id)
+            .await
+            .unwrap();
         assert_eq!(hb, HeartbeatResult::Reclaimed);
     }
 
@@ -568,14 +573,26 @@ mod tests {
         let b = mgr.next_unit(&handoff, peer(3)).await.unwrap().unwrap();
 
         let phase_after_a = mgr
-            .complete_unit(&handoff, peer(2), a.unit_id, CompleteOutcome::Complete, None)
+            .complete_unit(
+                &handoff,
+                peer(2),
+                a.unit_id,
+                CompleteOutcome::Complete,
+                None,
+            )
             .await
             .unwrap();
         // One unit still Leased → phase is Open (queued is empty) → Draining.
         assert_eq!(phase_after_a, HandoffPhase::Draining);
 
         let phase_after_b = mgr
-            .complete_unit(&handoff, peer(3), b.unit_id, CompleteOutcome::Complete, None)
+            .complete_unit(
+                &handoff,
+                peer(3),
+                b.unit_id,
+                CompleteOutcome::Complete,
+                None,
+            )
             .await
             .unwrap();
         // All terminal → Merging.
@@ -611,10 +628,7 @@ mod tests {
                 // Terminal Failed after final attempt.
                 assert_eq!(phase, HandoffPhase::Merging);
                 let final_snap = mgr.snapshot(&handoff).await.unwrap();
-                assert!(matches!(
-                    final_snap.units[0].1,
-                    UnitStatus::Failed { .. }
-                ));
+                assert!(matches!(final_snap.units[0].1, UnitStatus::Failed { .. }));
             }
         }
     }

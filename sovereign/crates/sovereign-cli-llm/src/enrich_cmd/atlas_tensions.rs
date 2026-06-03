@@ -22,9 +22,7 @@
 use std::path::PathBuf;
 
 use corpus_engine::enrichment::atlas::{
-    analysis::tensions::{
-        select_candidates, CandidateSelectionInput, TensionCandidatesOutput,
-    },
+    analysis::tensions::{select_candidates, CandidateSelectionInput, TensionCandidatesOutput},
     read_atlas_atoms, write_tension_candidates, AtomEnvelope, ATLAS_DIRNAME,
 };
 

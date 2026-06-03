@@ -13,10 +13,27 @@ use commonwealth_tdd::{
 };
 
 fn init_git(path: &Path) {
-    let _ = Command::new("git").arg("-C").arg(path).arg("init").arg("--initial-branch=main").output();
-    let _ = Command::new("git").arg("-C").arg(path).args(["config", "user.email", "t@t.t"]).output();
-    let _ = Command::new("git").arg("-C").arg(path).args(["config", "user.name", "t"]).output();
-    let _ = Command::new("git").arg("-C").arg(path).args(["commit", "--allow-empty", "-m", "init"]).output();
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .arg("init")
+        .arg("--initial-branch=main")
+        .output();
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["config", "user.email", "t@t.t"])
+        .output();
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["config", "user.name", "t"])
+        .output();
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["commit", "--allow-empty", "-m", "init"])
+        .output();
 }
 
 fn write_committed(path: &Path, name: &str, content: &str) {
@@ -25,8 +42,16 @@ fn write_committed(path: &Path, name: &str, content: &str) {
         std::fs::create_dir_all(p).unwrap();
     }
     std::fs::write(&full, content).unwrap();
-    let _ = Command::new("git").arg("-C").arg(path).args(["add", name]).output();
-    let _ = Command::new("git").arg("-C").arg(path).args(["commit", "-m", &format!("add {name}")]).output();
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["add", name])
+        .output();
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["commit", "-m", &format!("add {name}")])
+        .output();
 }
 
 fn pytest_available() -> bool {
@@ -59,7 +84,11 @@ async fn maximize_passing_short_circuits_when_baseline_already_green() {
     }
     let tmp = tempfile::tempdir().unwrap();
     init_git(tmp.path());
-    write_committed(tmp.path(), "evaluator.py", "def add(a, b):\n    return a + b\n");
+    write_committed(
+        tmp.path(),
+        "evaluator.py",
+        "def add(a, b):\n    return a + b\n",
+    );
     write_committed(
         tmp.path(),
         "tests/test_evaluator.py",
@@ -169,7 +198,11 @@ def add(a, b):
         syntax_validator: None,
     };
     let r = run_trial(trial, Arc::clone(&backend) as Arc<_>).await;
-    assert!(matches!(r.status, TrialStatus::Stalled { .. }), "{:?}", r.status);
+    assert!(
+        matches!(r.status, TrialStatus::Stalled { .. }),
+        "{:?}",
+        r.status
+    );
     assert_eq!(r.tests_after.passed, 0);
 }
 
@@ -189,8 +222,16 @@ async fn maximize_passing_no_baseline_when_no_tests_in_workdir() {
         syntax_validator: None,
     };
     let r = run_trial(trial, Arc::clone(&backend) as Arc<_>).await;
-    assert!(matches!(r.status, TrialStatus::NoBaseline { .. }), "{:?}", r.status);
-    assert_eq!(backend.call_count(), 0, "must not call backend without baseline");
+    assert!(
+        matches!(r.status, TrialStatus::NoBaseline { .. }),
+        "{:?}",
+        r.status
+    );
+    assert_eq!(
+        backend.call_count(),
+        0,
+        "must not call backend without baseline"
+    );
 }
 
 // ── GenerateOneFailing — Red polarity ────────────────────────────────
@@ -234,14 +275,16 @@ def test_add_negative_numbers():
     assert add(-1, -2) == -3
 "#;
     let backend = Arc::new(DeterministicChatBackend::from_strs(vec![
-        failing_test.to_string(),
+        failing_test.to_string()
     ]));
     let trial = Trial {
         workdir,
         model: "test".into(),
         prompt: "write a test for add() preserving signs on negatives".into(),
         test_command: "pytest -q tests/".into(),
-        polarity: Polarity::GenerateOneFailing { test_name_hint: None },
+        polarity: Polarity::GenerateOneFailing {
+            test_name_hint: None,
+        },
         config: tight_config(1, 2, 1),
         syntax_validator: None,
     };
@@ -289,7 +332,9 @@ def value():
         model: "test".into(),
         prompt: "add a failing test".into(),
         test_command: "pytest -q tests/test_calc.py".into(),
-        polarity: Polarity::GenerateOneFailing { test_name_hint: None },
+        polarity: Polarity::GenerateOneFailing {
+            test_name_hint: None,
+        },
         config: tight_config(1, 2, 1),
         syntax_validator: None,
     };

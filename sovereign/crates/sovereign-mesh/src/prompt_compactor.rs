@@ -181,7 +181,9 @@ impl PromptCompactor {
         let cap_tool_result_bytes = get("SOVEREIGN_TOOL_RESULT_MAX_BYTES")
             .and_then(|v| v.parse::<usize>().ok())
             .filter(|&n| n > 0);
-        Self { cap_tool_result_bytes }
+        Self {
+            cap_tool_result_bytes,
+        }
     }
 
     /// True if any transformation is active. Used by the call-site
@@ -239,9 +241,7 @@ fn truncate_middle(s: &str, cap: usize) -> String {
     let removed = tail_start.saturating_sub(head_end);
     let head = &s[..head_end];
     let tail = &s[tail_start..];
-    format!(
-        "{head}\n[...sovereign prompt_compactor truncated {removed} bytes...]\n{tail}"
-    )
+    format!("{head}\n[...sovereign prompt_compactor truncated {removed} bytes...]\n{tail}")
 }
 
 /// Stable char-boundary helpers. `str::floor_char_boundary` and
@@ -290,7 +290,10 @@ mod tests {
         }
     }
 
-    fn req_with(messages: Vec<ChatMessage>, tools: Option<Vec<ToolDefinition>>) -> ChatCompletionRequest {
+    fn req_with(
+        messages: Vec<ChatMessage>,
+        tools: Option<Vec<ToolDefinition>>,
+    ) -> ChatCompletionRequest {
         ChatCompletionRequest {
             model: None,
             messages,
@@ -308,12 +311,12 @@ mod tests {
             chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         }
     }
 
@@ -323,11 +326,11 @@ mod tests {
     fn report_per_role_accounting() {
         let req = req_with(
             vec![
-                msg("system", "sys"),                 // 3
-                msg("user", "user-msg"),              // 8
-                msg("assistant", "ass!"),             // 4
-                msg("tool", "tool-result"),           // 11
-                msg("function", "legacy"),            // 6 → "other"
+                msg("system", "sys"),       // 3
+                msg("user", "user-msg"),    // 8
+                msg("assistant", "ass!"),   // 4
+                msg("tool", "tool-result"), // 11
+                msg("function", "legacy"),  // 6 → "other"
             ],
             None,
         );
@@ -397,7 +400,11 @@ mod tests {
 
         let big = "a".repeat(10_000);
         let mut req = req_with(
-            vec![msg("system", "keep"), msg("tool", &big), msg("user", "keep")],
+            vec![
+                msg("system", "keep"),
+                msg("tool", &big),
+                msg("user", "keep"),
+            ],
             None,
         );
         pc.compact(&mut req);
@@ -444,17 +451,13 @@ mod tests {
         };
         let big = "X".repeat(500);
         let mut req = req_with(
-            vec![
-                msg("user", &big),
-                msg("assistant", &big),
-                msg("tool", &big),
-            ],
+            vec![msg("user", &big), msg("assistant", &big), msg("tool", &big)],
             None,
         );
         pc.compact(&mut req);
         assert_eq!(req.messages[0].content.len(), 500); // user untouched
         assert_eq!(req.messages[1].content.len(), 500); // assistant untouched
-        assert!(req.messages[2].content.len() < 500);    // tool capped
+        assert!(req.messages[2].content.len() < 500); // tool capped
     }
 
     #[test]
@@ -478,10 +481,8 @@ mod tests {
 
     #[test]
     fn compactor_from_env_unset_inactive() {
-        let pc = PromptCompactor::from_env_lookup(fake_env(
-            "SOVEREIGN_TOOL_RESULT_MAX_BYTES",
-            None,
-        ));
+        let pc =
+            PromptCompactor::from_env_lookup(fake_env("SOVEREIGN_TOOL_RESULT_MAX_BYTES", None));
         assert!(!pc.is_active());
     }
 

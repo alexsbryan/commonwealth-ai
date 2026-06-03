@@ -165,12 +165,8 @@ pub async fn cluster_embeddings(
 
     // ── Assign non-sampled points to nearest centroid ─────────────────
     let labels: Vec<i32> = if use_sampling {
-        let sampled_set: std::collections::HashSet<usize> = sample_indices
-            .as_ref()
-            .unwrap()
-            .iter()
-            .copied()
-            .collect();
+        let sampled_set: std::collections::HashSet<usize> =
+            sample_indices.as_ref().unwrap().iter().copied().collect();
         let mut full_labels = vec![-1i32; total];
 
         // Copy sample labels.
@@ -190,7 +186,10 @@ pub async fn cluster_embeddings(
             assigned += 1;
         }
 
-        tracing::info!(assigned = assigned, "Assigned non-sampled points to nearest centroid");
+        tracing::info!(
+            assigned = assigned,
+            "Assigned non-sampled points to nearest centroid"
+        );
         progress(EnrichmentProgress::ClusteringStep {
             step: "Assignment complete",
             detail: format!("Assigned {assigned} remaining points to nearest cluster"),
@@ -214,8 +213,12 @@ pub async fn cluster_embeddings(
         .iter()
         .map(|(&id, indices)| {
             let centroid = centroids.get(&id).cloned().unwrap_or_default();
-            let central_chunks =
-                indices_nearest_to_centroid(&embeddings, indices, &chunk_ids, config.label_sample_size);
+            let central_chunks = indices_nearest_to_centroid(
+                &embeddings,
+                indices,
+                &chunk_ids,
+                config.label_sample_size,
+            );
             ClusterInfo {
                 id,
                 size: indices.len(),
@@ -247,7 +250,9 @@ pub async fn cluster_embeddings(
         .map(|(&id, &label)| (id, label))
         .collect();
 
-    index.bulk_update_i32_column("cluster_id", &assignments).await?;
+    index
+        .bulk_update_i32_column("cluster_id", &assignments)
+        .await?;
 
     Ok(ClusterResult {
         assignments,
@@ -310,8 +315,14 @@ fn random_projection(embeddings: &[Vec<f32>], target_dims: usize) -> Vec<Vec<f32
     for row in projection.iter_mut() {
         for val in row.iter_mut() {
             // LCG: x_{n+1} = (a*x_n + c) mod m
-            rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-            *val = if (rng_state >> 33) & 1 == 0 { scale } else { -scale };
+            rng_state = rng_state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            *val = if (rng_state >> 33) & 1 == 0 {
+                scale
+            } else {
+                -scale
+            };
         }
     }
 
@@ -490,7 +501,10 @@ mod tests {
     fn cosine_distance_identical_vectors() {
         let a = vec![1.0, 0.0, 0.0];
         let dist = cosine_distance(&a, &a);
-        assert!(dist.abs() < 1e-5, "identical vectors should have distance ~0");
+        assert!(
+            dist.abs() < 1e-5,
+            "identical vectors should have distance ~0"
+        );
     }
 
     #[test]
@@ -524,8 +538,7 @@ mod tests {
             vec![0.0, 1.0],
         ];
         let chunk_ids: Vec<u64> = vec![100, 200, 300, 400];
-        let nearest =
-            indices_nearest_to_centroid(&embeddings, &[0, 1, 2, 3], &chunk_ids, 2);
+        let nearest = indices_nearest_to_centroid(&embeddings, &[0, 1, 2, 3], &chunk_ids, 2);
         assert_eq!(nearest.len(), 2, "should return exactly n results");
     }
 
@@ -533,8 +546,7 @@ mod tests {
     fn indices_nearest_to_centroid_single_element() {
         let embeddings = vec![vec![1.0, 0.0]];
         let chunk_ids: Vec<u64> = vec![42];
-        let nearest =
-            indices_nearest_to_centroid(&embeddings, &[0], &chunk_ids, 5);
+        let nearest = indices_nearest_to_centroid(&embeddings, &[0], &chunk_ids, 5);
         assert_eq!(nearest.len(), 1, "can't return more than available");
         assert_eq!(nearest[0], 42);
     }

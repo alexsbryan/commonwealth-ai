@@ -18,8 +18,8 @@ use sovereign_agent_bench::cli::run::run_one_problem;
 use sovereign_agent_bench::judge::{JudgeClient, JudgeError, JudgeRequest, JudgeTrialOutcome};
 use sovereign_agent_bench::problem::load_problem;
 use sovereign_agent_bench::report::BenchReport;
-use sovereign_agent_bench::runners::mock::{MockAgentRunner, MockFileWrite, MockScript};
 use sovereign_agent_bench::runner::{ExitReason, TokenCounts};
+use sovereign_agent_bench::runners::mock::{MockAgentRunner, MockFileWrite, MockScript};
 
 /// Deterministic judge for integration tests. Hands out anchor values
 /// from a pre-seeded queue; rationale is the dimension name.
@@ -42,7 +42,10 @@ impl JudgeClient for StubJudge {
         let anchor = q.remove(0);
         Ok(JudgeTrialOutcome {
             anchor,
-            rationale: format!("stub-rationale-for-{}-anchor-{}", req.dimension_name, anchor),
+            rationale: format!(
+                "stub-rationale-for-{}-anchor-{}",
+                req.dimension_name, anchor
+            ),
         })
     }
 }
@@ -90,7 +93,11 @@ rubric_id = "dim_c"
 "#,
     )
     .unwrap();
-    std::fs::write(problem_dir.join("prompt.md"), "Solve the synthetic test problem.\n").unwrap();
+    std::fs::write(
+        problem_dir.join("prompt.md"),
+        "Solve the synthetic test problem.\n",
+    )
+    .unwrap();
     std::fs::write(
         problem_dir.join("rubric.md"),
         "## dim_a\n### 0\nwrong\n### 1\nok\n### 2\ngood\n### 3\noptimal\n\n## dim_b\n### 0\nwrong\n### 1\nok\n### 2\ngood\n### 3\noptimal\n\n## dim_c\n### 0\nwrong\n### 1\nok\n### 2\ngood\n### 3\noptimal\n",

@@ -27,18 +27,15 @@ pub fn register_pdf_extractor(engine: &CorpusEngine) {
                 "pdf is encrypted/password-protected: {}",
                 path.display()
             )),
-            SafeExtractError::Parse(msg) => Error::Extraction(format!(
-                "pdf parse error in {}: {msg}",
-                path.display()
-            )),
-            SafeExtractError::Panic(msg) => Error::Extraction(format!(
-                "pdf-extract panicked on {}: {msg}",
-                path.display()
-            )),
-            SafeExtractError::Other(msg) => Error::Extraction(format!(
-                "pdf extract error on {}: {msg}",
-                path.display()
-            )),
+            SafeExtractError::Parse(msg) => {
+                Error::Extraction(format!("pdf parse error in {}: {msg}", path.display()))
+            }
+            SafeExtractError::Panic(msg) => {
+                Error::Extraction(format!("pdf-extract panicked on {}: {msg}", path.display()))
+            }
+            SafeExtractError::Other(msg) => {
+                Error::Extraction(format!("pdf extract error on {}: {msg}", path.display()))
+            }
         }) as Result<String>
     });
     engine.register_extractor("pdf", extractor);

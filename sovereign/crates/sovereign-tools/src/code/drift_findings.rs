@@ -468,17 +468,23 @@ mod tests {
         write_report(tmp.path(), &sample_report());
         let tool = DriftFindingsTool::new().with_drift_dir(tmp.path().to_path_buf());
         let out = tool
-            .execute(&json!({"query": "open_index"}), &ToolContext {
-                conversation_id: "t".into(),
-                task_id: None,
-                working_directory: None,
-                in_reasoning_loop: false,
-                agent_session_token: None,
-                turn_index: 0,
-            })
+            .execute(
+                &json!({"query": "open_index"}),
+                &ToolContext {
+                    conversation_id: "t".into(),
+                    task_id: None,
+                    working_directory: None,
+                    in_reasoning_loop: false,
+                    agent_session_token: None,
+                    turn_index: 0,
+                },
+            )
             .await
             .unwrap();
-        let payload = match &out { StepOutput::Json(v) => v, other => panic!("expected Json, got {:?}", other) };
+        let payload = match &out {
+            StepOutput::Json(v) => v,
+            other => panic!("expected Json, got {:?}", other),
+        };
         assert_eq!(payload["status"], "ok");
         assert_eq!(payload["match_count"], 1);
         let f0 = &payload["findings"][0];
@@ -491,18 +497,33 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let tool = DriftFindingsTool::new().with_drift_dir(tmp.path().to_path_buf());
         let out = tool
-            .execute(&json!({"query": "anything"}), &ToolContext {
-                conversation_id: "t".into(),
-                task_id: None,
-                working_directory: None,
-                in_reasoning_loop: false,
-                agent_session_token: None,
-                turn_index: 0,
-            })
+            .execute(
+                &json!({"query": "anything"}),
+                &ToolContext {
+                    conversation_id: "t".into(),
+                    task_id: None,
+                    working_directory: None,
+                    in_reasoning_loop: false,
+                    agent_session_token: None,
+                    turn_index: 0,
+                },
+            )
             .await
             .unwrap();
-        assert_eq!(match &out { StepOutput::Json(v) => v, other => panic!("expected Json, got {:?}", other) }["status"], "never_run");
-        assert_eq!(match &out { StepOutput::Json(v) => v, other => panic!("expected Json, got {:?}", other) }["match_count"], 0);
+        assert_eq!(
+            match &out {
+                StepOutput::Json(v) => v,
+                other => panic!("expected Json, got {:?}", other),
+            }["status"],
+            "never_run"
+        );
+        assert_eq!(
+            match &out {
+                StepOutput::Json(v) => v,
+                other => panic!("expected Json, got {:?}", other),
+            }["match_count"],
+            0
+        );
     }
 
     #[tokio::test]
@@ -525,8 +546,20 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(match &out { StepOutput::Json(v) => v, other => panic!("expected Json, got {:?}", other) }["match_count"], 1);
-        assert_eq!(match &out { StepOutput::Json(v) => v, other => panic!("expected Json, got {:?}", other) }["findings"][0]["anchor"], "Recipe");
+        assert_eq!(
+            match &out {
+                StepOutput::Json(v) => v,
+                other => panic!("expected Json, got {:?}", other),
+            }["match_count"],
+            1
+        );
+        assert_eq!(
+            match &out {
+                StepOutput::Json(v) => v,
+                other => panic!("expected Json, got {:?}", other),
+            }["findings"][0]["anchor"],
+            "Recipe"
+        );
     }
 
     #[tokio::test]
@@ -548,8 +581,20 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(match &out { StepOutput::Json(v) => v, other => panic!("expected Json, got {:?}", other) }["status"], "no_matches");
-        assert_eq!(match &out { StepOutput::Json(v) => v, other => panic!("expected Json, got {:?}", other) }["match_count"], 0);
+        assert_eq!(
+            match &out {
+                StepOutput::Json(v) => v,
+                other => panic!("expected Json, got {:?}", other),
+            }["status"],
+            "no_matches"
+        );
+        assert_eq!(
+            match &out {
+                StepOutput::Json(v) => v,
+                other => panic!("expected Json, got {:?}", other),
+            }["match_count"],
+            0
+        );
     }
 
     #[tokio::test]
@@ -557,14 +602,17 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let tool = DriftFindingsTool::new().with_drift_dir(tmp.path().to_path_buf());
         let err = tool
-            .execute(&json!({"query": "   "}), &ToolContext {
-                conversation_id: "t".into(),
-                task_id: None,
-                working_directory: None,
-                in_reasoning_loop: false,
-                agent_session_token: None,
-                turn_index: 0,
-            })
+            .execute(
+                &json!({"query": "   "}),
+                &ToolContext {
+                    conversation_id: "t".into(),
+                    task_id: None,
+                    working_directory: None,
+                    in_reasoning_loop: false,
+                    agent_session_token: None,
+                    turn_index: 0,
+                },
+            )
             .await
             .unwrap_err();
         assert!(format!("{err}").contains("must not be empty"));

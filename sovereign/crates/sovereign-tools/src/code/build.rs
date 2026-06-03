@@ -25,8 +25,8 @@
 //! `LintStatusTool` and reuses its query primitives — there is no
 //! second copy of the watcher logic.
 
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::time::SystemTime;
 
 use async_trait::async_trait;
@@ -36,8 +36,8 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::WatcherHeartbeat;
 use corpus_engine::lint_results::LintResultStore;
+use corpus_engine::WatcherHeartbeat;
 
 use super::watcher_health::{
     apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs,
@@ -71,7 +71,12 @@ pub struct BuildTool {
 
 impl BuildTool {
     pub fn new(store: Arc<LintResultStore>) -> Self {
-        Self { store, watched_scope: None, watcher_active: None, heartbeat: None }
+        Self {
+            store,
+            watched_scope: None,
+            watcher_active: None,
+            heartbeat: None,
+        }
     }
 
     pub fn with_watched_scope(mut self, scope: String) -> Self {
@@ -246,7 +251,11 @@ impl Tool for BuildTool {
             .unwrap_or_default()
             .as_secs();
 
-        let stale = self.store.stale_files_since_last_run().await.unwrap_or_default();
+        let stale = self
+            .store
+            .stale_files_since_last_run()
+            .await
+            .unwrap_or_default();
 
         let raw_status = if !stale.is_empty() {
             "stale"
@@ -280,8 +289,7 @@ impl Tool for BuildTool {
             .into_iter()
             .map(|f| {
                 let raw_output = f.output.unwrap_or_default();
-                let needs_truncation = !full
-                    && raw_output.len() > DEFAULT_OUTPUT_BYTES_PER_ERROR;
+                let needs_truncation = !full && raw_output.len() > DEFAULT_OUTPUT_BYTES_PER_ERROR;
                 let output = if needs_truncation {
                     let cut = byte_truncate(&raw_output, DEFAULT_OUTPUT_BYTES_PER_ERROR);
                     format!("{cut}…")

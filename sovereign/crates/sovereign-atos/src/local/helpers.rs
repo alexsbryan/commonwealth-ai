@@ -188,10 +188,7 @@ pub(super) async fn global_invariants_rows(notes: &NoteStore) -> Result<Vec<Note
 /// the handoff flow is testable without an inference provider; a
 /// future Fast-slot summarizer can swap in here without touching the
 /// caller.
-pub(super) async fn compose_prior_digest(
-    notes: &NoteStore,
-    feature_id: &str,
-) -> Result<String> {
+pub(super) async fn compose_prior_digest(notes: &NoteStore, feature_id: &str) -> Result<String> {
     let filter = ScopeFilter {
         scopes: vec![NoteScope::Feature],
         feature_id: Some(feature_id.to_string()),
@@ -218,9 +215,18 @@ pub(super) async fn compose_prior_digest(
     }
     let mut out = String::new();
     for n in rows {
-        let first_line: String =
-            n.content.lines().next().unwrap_or("").chars().take(160).collect();
-        out.push_str(&format!("- `[note:{}]` [{}] {}\n", n.id, n.kind, first_line));
+        let first_line: String = n
+            .content
+            .lines()
+            .next()
+            .unwrap_or("")
+            .chars()
+            .take(160)
+            .collect();
+        out.push_str(&format!(
+            "- `[note:{}]` [{}] {}\n",
+            n.id, n.kind, first_line
+        ));
     }
     Ok(out)
 }
@@ -234,8 +240,14 @@ pub(super) async fn compose_global_invariants(notes: &NoteStore) -> Result<Strin
     }
     let mut out = String::new();
     for n in rows.iter().take(20) {
-        let first_line: String =
-            n.content.lines().next().unwrap_or("").chars().take(200).collect();
+        let first_line: String = n
+            .content
+            .lines()
+            .next()
+            .unwrap_or("")
+            .chars()
+            .take(200)
+            .collect();
         out.push_str(&format!("- `[note:{}]` {}\n", n.id, first_line));
     }
     Ok(out)
@@ -256,7 +268,10 @@ mod tests {
 
     #[test]
     fn extract_stop_condition_absent_returns_empty() {
-        assert_eq!(extract_milestone_stop_condition("### 1. Title\n\nBody.\n"), "");
+        assert_eq!(
+            extract_milestone_stop_condition("### 1. Title\n\nBody.\n"),
+            ""
+        );
     }
 
     #[test]
@@ -277,7 +292,10 @@ mod tests {
 
     #[test]
     fn derive_title_handles_plain_text_fallback() {
-        assert_eq!(derive_milestone_title("Plain text brief"), "Plain text brief");
+        assert_eq!(
+            derive_milestone_title("Plain text brief"),
+            "Plain text brief"
+        );
     }
 
     #[test]

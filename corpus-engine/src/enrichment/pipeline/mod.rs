@@ -38,8 +38,8 @@ pub mod run_output;
 pub mod runner;
 pub mod section_classifier;
 pub mod text_helpers;
-pub mod typed_schemas;
 pub mod trait_def;
+pub mod typed_schemas;
 pub mod types;
 pub mod validation;
 pub mod vector_clustering;
@@ -47,8 +47,8 @@ pub mod vector_clustering;
 pub use atlas::{
     ClaimScope, ClaimSketch, DiscourseAct, EnrichmentDepth, EntitySketch, EntityStateSketch,
     EntityType, EpistemicStatus, EventSketch, EventType, QuestionSketch, QuestionType,
-    RelationSketch, RelationStateSketch, RelationType, SectionExtraction, SeedEntities,
-    SeedEntity, SeedOrigin, SeedStrategy, StateType,
+    RelationSketch, RelationStateSketch, RelationType, SectionExtraction, SeedEntities, SeedEntity,
+    SeedOrigin, SeedStrategy, StateType,
 };
 pub use atlas_clustering::{cluster_all_facets, cluster_facet, FacetClusterResult};
 pub use chapter_manifest::{ChapterEntry, ChapterManifest};
@@ -58,25 +58,24 @@ pub use progress::{BuildStep, EnrichProgress, EnrichProgressFn};
 pub use registry::PipelineRegistry;
 pub use run_output::RunOutputWriter;
 pub use runner::{
-    checkpoint_processed_ids, collapse_phase1_checkpoint, read_phase1_checkpoint,
-    CascadeResult, CascadeStep, ChapterSelection, Phase1CheckpointEntry, Phase1Progress,
-    Phase1RunResult, Phase2AtlasRunResult, Phase2RunResult, Phase3RunResult, Phase4RunResult,
-    Phase5RunResult, Phase6RunResult, Phase7RunResult, PhaseFailure, PhaseRunResult, PhaseRunner,
+    checkpoint_processed_ids, collapse_phase1_checkpoint, read_phase1_checkpoint, CascadeResult,
+    CascadeStep, ChapterSelection, Phase1CheckpointEntry, Phase1Progress, Phase1RunResult,
+    Phase2AtlasRunResult, Phase2RunResult, Phase3RunResult, Phase4RunResult, Phase5RunResult,
+    Phase6RunResult, Phase7RunResult, PhaseFailure, PhaseRunResult, PhaseRunner,
 };
 pub use trait_def::Pipeline;
-pub use validation::{
-    run_battery, traverse_atlas, BatteryResult, BatteryRow, ConcernMatch, PositionRef,
-    QueryBattery, QueryTraversal, TensionRef, ValidationQuestion,
-};
-pub use vector_clustering::{cluster_vectors, VectorClusterResult};
 pub use types::{
-    Atlas, AtlasCluster, CanonicalConcern, ChapterInput, ChatCompletionFn,
+    extract_json_block, is_placeholder_literal, is_truncated_thinking_response,
+    strip_reasoning_tags, Atlas, AtlasCluster, CanonicalConcern, ChapterInput, ChatCompletionFn,
     ChatCompletionWithTokensFn, ChatPrompt, ChunkCluster, ChunkRecord, CorpusContext,
     ExtractedQuestion, Facet, Gap, Grounding, NamedCluster, Phase1ChapterResult, Phase1Failure,
     Phase1Output, Phase2AtlasOutput, Phase2Output, Phase3AtlasOutput, Phase3FacetParseResult,
     Phase3Output, Phase3ParseResult, Phase4Output, Phase5Output, Phase5ParseResult, Phase6Output,
     Phase6ParseResult, Phase7Output, Phase7ParseItem, PhaseFailureKind, PipelinePhase, Position,
     QuestionCluster, QuestionRef, RetryMode, SketchExcerpt, SketchRef, Tension, Vocabulary,
-    extract_json_block, is_placeholder_literal, is_truncated_thinking_response,
-    strip_reasoning_tags,
 };
+pub use validation::{
+    run_battery, traverse_atlas, BatteryResult, BatteryRow, ConcernMatch, PositionRef,
+    QueryBattery, QueryTraversal, TensionRef, ValidationQuestion,
+};
+pub use vector_clustering::{cluster_vectors, VectorClusterResult};

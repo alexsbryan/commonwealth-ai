@@ -40,9 +40,7 @@ fn evaluate_condition(condition: &RoutingCondition, ctx: &RequestContext) -> boo
     match condition {
         RoutingCondition::MaxTokensAbove(threshold) => ctx.max_tokens > *threshold,
         RoutingCondition::QualityHint => ctx.quality_hint,
-        RoutingCondition::QualityQueueDepthBelow(threshold) => {
-            ctx.quality_queue_depth < *threshold
-        }
+        RoutingCondition::QualityQueueDepthBelow(threshold) => ctx.quality_queue_depth < *threshold,
         RoutingCondition::RequesterInCredit => ctx.requester_in_credit,
     }
 }

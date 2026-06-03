@@ -70,10 +70,7 @@ async fn run_status(args: &[String]) -> i32 {
     let store = match MeshStore::open(&store_path) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!(
-                "newsworthy: open {} failed: {e}",
-                store_path.display()
-            );
+            eprintln!("newsworthy: open {} failed: {e}", store_path.display());
             return 1;
         }
     };
@@ -110,7 +107,10 @@ async fn run_status(args: &[String]) -> i32 {
     println!("Wikipedia Newsworthy — operator status");
     println!("{}", "─".repeat(60));
     println!("  store: {}", store_path.display());
-    println!("  tracked entries: {} (decode errors: {decode_errors})", total_known);
+    println!(
+        "  tracked entries: {} (decode errors: {decode_errors})",
+        total_known
+    );
     for (label, count) in &by_lifecycle {
         println!("    {label:>14}: {count}");
     }

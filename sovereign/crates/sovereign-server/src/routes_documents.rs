@@ -81,10 +81,7 @@ pub fn document_router() -> Router {
 /// Build a DocumentAssetManager from the Runtime's shared resources.
 /// This is cheap — it just clones Arcs.
 fn manager_from_runtime(runtime: &Runtime) -> DocumentAssetManager {
-    DocumentAssetManager::new(
-        Arc::clone(&runtime.inference),
-        Arc::clone(&runtime.store),
-    )
+    DocumentAssetManager::new(Arc::clone(&runtime.inference), Arc::clone(&runtime.store))
 }
 
 // ─── Handlers ────────────────────────────────────────────────

@@ -613,7 +613,10 @@ mod tests {
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].kind, "function");
         assert_eq!(tools[0].function.name, "get_weather");
-        assert_eq!(req.tool_choice.as_ref().and_then(|v| v.as_str()), Some("auto"));
+        assert_eq!(
+            req.tool_choice.as_ref().and_then(|v| v.as_str()),
+            Some("auto")
+        );
     }
 
     #[test]
@@ -773,7 +776,13 @@ mod tests {
 
     #[test]
     fn finish_reason_round_trips_wire_vocabulary() {
-        for raw in ["stop", "length", "tool_calls", "content_filter", "cancelled"] {
+        for raw in [
+            "stop",
+            "length",
+            "tool_calls",
+            "content_filter",
+            "cancelled",
+        ] {
             let parsed = FinishReason::from_openai_str(raw);
             assert_eq!(parsed.as_openai_str(), raw, "round-trip for {raw}");
         }

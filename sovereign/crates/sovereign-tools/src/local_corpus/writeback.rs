@@ -401,8 +401,7 @@ impl WriteBack {
     pub fn load_snapshot(&self, snapshot_path: &Path) -> Result<WriteSnapshot> {
         let raw = std::fs::read_to_string(snapshot_path)
             .map_err(|e| Error::Execution(format!("read snapshot: {e}")))?;
-        serde_json::from_str(&raw)
-            .map_err(|e| Error::Execution(format!("parse snapshot: {e}")))
+        serde_json::from_str(&raw).map_err(|e| Error::Execution(format!("parse snapshot: {e}")))
     }
 
     /// Remove all `<namespace>/*` tags and `<namespace>_*` keys from
@@ -434,10 +433,9 @@ impl WriteBack {
                 continue;
             };
             let stripped = frontmatter::strip_sovereign(&raw, namespace);
-            if stripped != raw
-                && atomic_write_string(abs, &stripped).is_ok() {
-                    tags_removed_from += 1;
-                }
+            if stripped != raw && atomic_write_string(abs, &stripped).is_ok() {
+                tags_removed_from += 1;
+            }
         }
 
         let index_dir = self.vault_path.join(&self.config.index_dir);
@@ -540,8 +538,7 @@ fn atomic_write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<()> 
     }
     let json = serde_json::to_string_pretty(value)
         .map_err(|e| Error::Execution(format!("serialize snapshot: {e}")))?;
-    atomic_write_string(path, &json)
-        .map_err(|e| Error::Execution(format!("write snapshot: {e}")))
+    atomic_write_string(path, &json).map_err(|e| Error::Execution(format!("write snapshot: {e}")))
 }
 
 fn is_hidden(p: &Path) -> bool {

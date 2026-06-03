@@ -84,8 +84,15 @@ pub fn classify_query(query: &str, entities: &[Entity]) -> QueryPlan {
     let trimmed = lower.trim();
 
     // Corpus-level intents first (no target entity).
-    if matches_any(trimmed, &["what tensions", "tensions ", "contradictions", "disagreements"])
-    {
+    if matches_any(
+        trimmed,
+        &[
+            "what tensions",
+            "tensions ",
+            "contradictions",
+            "disagreements",
+        ],
+    ) {
         return QueryPlan::TensionList;
     }
     if matches_any(
@@ -289,7 +296,11 @@ fn find_whole_word(haystack: &str, needle: &str) -> Option<usize> {
                 .unwrap_or(true);
         let end = pos + needle.len();
         let after_ok = end == haystack.len()
-            || haystack[end..].chars().next().map(is_boundary).unwrap_or(true);
+            || haystack[end..]
+                .chars()
+                .next()
+                .map(is_boundary)
+                .unwrap_or(true);
         if before_ok && after_ok {
             return Some(pos);
         }
@@ -342,10 +353,7 @@ fn parse_relation_pair(
     // don't overlap.
     matches.sort_by(|a, b| (b.1 - b.0).cmp(&(a.1 - a.0)));
     let a = &matches[0];
-    let b = matches
-        .iter()
-        .skip(1)
-        .find(|m| m.0 >= a.1 || m.1 <= a.0)?;
+    let b = matches.iter().skip(1).find(|m| m.0 >= a.1 || m.1 <= a.0)?;
     if a.2.id == b.2.id {
         // Same entity matched under two aliases — not a pair.
         return None;
@@ -382,10 +390,10 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-}
-}
+            provenance: Default::default(),
+            concept_kind: None,
+        }
+    }
 
     fn bk_fixture() -> Vec<Entity> {
         vec![
@@ -400,7 +408,11 @@ mod tests {
         let plan = classify_query("Who is Alyosha?", &bk_fixture());
         match plan {
             QueryPlan::EntityLookup {
-                target: QueryTarget::Resolved { entity_id, matched_form },
+                target:
+                    QueryTarget::Resolved {
+                        entity_id,
+                        matched_form,
+                    },
             } => {
                 assert_eq!(entity_id, "entity-0001");
                 assert_eq!(matched_form, "Alyosha");
@@ -423,10 +435,7 @@ mod tests {
         // the match even though both substrings appear. Without
         // the longest-match rule, the bare "Fyodor" alias would
         // ambiguously land first.
-        let plan = classify_query(
-            "Tell me about Fyodor Pavlovich Karamazov.",
-            &bk_fixture(),
-        );
+        let plan = classify_query("Tell me about Fyodor Pavlovich Karamazov.", &bk_fixture());
         match plan {
             QueryPlan::EntityLookup {
                 target: QueryTarget::Resolved { matched_form, .. },
@@ -456,7 +465,8 @@ mod tests {
                         matched_form: _,
                     },
             } => {
-                let ids: std::collections::HashSet<&str> = [a.as_str(), b.as_str()].into_iter().collect();
+                let ids: std::collections::HashSet<&str> =
+                    [a.as_str(), b.as_str()].into_iter().collect();
                 assert!(ids.contains("entity-0001"));
                 assert!(ids.contains("entity-0003"));
             }
@@ -513,7 +523,11 @@ mod tests {
         let plan = classify_query("Who is Fyodor?", &entities);
         match plan {
             QueryPlan::EntityLookup {
-                target: QueryTarget::Resolved { entity_id, matched_form },
+                target:
+                    QueryTarget::Resolved {
+                        entity_id,
+                        matched_form,
+                    },
             } => {
                 assert_eq!(entity_id, "entity-0001");
                 assert_eq!(matched_form, "fyodor");

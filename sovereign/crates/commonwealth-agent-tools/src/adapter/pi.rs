@@ -106,7 +106,11 @@ impl AgentToolAdapter for Adapter {
             "find" => translate_find(raw_args),
             "grep" => translate_grep(raw_args),
             "write" => translate_write(raw_args),
-            "bash" => translate_bash(raw_args, self.build_cmd.as_deref(), self.verify_cmd.as_deref()),
+            "bash" => translate_bash(
+                raw_args,
+                self.build_cmd.as_deref(),
+                self.verify_cmd.as_deref(),
+            ),
             "done" => translate_done(raw_args),
             other => TranslateOutcome::Unknown {
                 tool_name: other.to_string(),
@@ -273,11 +277,7 @@ enum BashIntent {
     Unrecognized,
 }
 
-fn classify_bash(
-    cmd: &str,
-    build_prefix: Option<&str>,
-    verify_prefix: Option<&str>,
-) -> BashIntent {
+fn classify_bash(cmd: &str, build_prefix: Option<&str>, verify_prefix: Option<&str>) -> BashIntent {
     // Strip common shell wrappers + noise so prefix matching sees
     // the actual command head.
     let normalized = cmd
@@ -296,26 +296,22 @@ fn classify_bash(
 
     // Check verify_match FIRST when it's a strict prefix of
     // build_match (or vice versa) — longest match wins.
-    let (first, first_intent, second, second_intent): (
-        &str,
-        BashIntent,
-        &str,
-        BashIntent,
-    ) = if verify_match.len() >= build_match.len() {
-        (
-            verify_match,
-            BashIntent::Smoke { filter: None },
-            build_match,
-            BashIntent::Build,
-        )
-    } else {
-        (
-            build_match,
-            BashIntent::Build,
-            verify_match,
-            BashIntent::Smoke { filter: None },
-        )
-    };
+    let (first, first_intent, second, second_intent): (&str, BashIntent, &str, BashIntent) =
+        if verify_match.len() >= build_match.len() {
+            (
+                verify_match,
+                BashIntent::Smoke { filter: None },
+                build_match,
+                BashIntent::Build,
+            )
+        } else {
+            (
+                build_match,
+                BashIntent::Build,
+                verify_match,
+                BashIntent::Smoke { filter: None },
+            )
+        };
 
     if matches_command_prefix(head, first) {
         return refine_intent(head, first, first_intent);
@@ -336,10 +332,7 @@ fn matches_command_prefix(head: &str, prefix: &str) -> bool {
         return false;
     }
     let head_norm: String = head.split_whitespace().collect::<Vec<_>>().join(" ");
-    let prefix_norm: String = prefix
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
+    let prefix_norm: String = prefix.split_whitespace().collect::<Vec<_>>().join(" ");
     if head_norm == prefix_norm {
         return true;
     }
@@ -354,12 +347,8 @@ fn refine_intent(head: &str, prefix: &str, base: BashIntent) -> BashIntent {
     match base {
         BashIntent::Smoke { .. } => {
             let head_norm: String = head.split_whitespace().collect::<Vec<_>>().join(" ");
-            let prefix_norm: String =
-                prefix.split_whitespace().collect::<Vec<_>>().join(" ");
-            let tail = head_norm
-                .strip_prefix(&prefix_norm)
-                .unwrap_or("")
-                .trim();
+            let prefix_norm: String = prefix.split_whitespace().collect::<Vec<_>>().join(" ");
+            let tail = head_norm.strip_prefix(&prefix_norm).unwrap_or("").trim();
             let filter = tail
                 .split_whitespace()
                 .next()
@@ -411,10 +400,7 @@ mod tests {
     #[test]
     fn find_to_inspect_find_by_name() {
         let a = Adapter::default();
-        let r = a.translate(
-            "find",
-            &json!({"root": ".", "pattern": "*.rs"}),
-        );
+        let r = a.translate("find", &json!({"root": ".", "pattern": "*.rs"}));
         assert_eq!(r.canonical_kind(), Some(PrimitiveKind::InspectWorkdir));
     }
 
@@ -526,9 +512,7 @@ mod tests {
         let r = a.translate("bash", &json!({"command": "echo hi"}));
         match r {
             TranslateOutcome::Unrecognized {
-                tool_name,
-                reason,
-                ..
+                tool_name, reason, ..
             } => {
                 assert_eq!(tool_name, "bash");
                 assert!(reason.contains("echo hi"));

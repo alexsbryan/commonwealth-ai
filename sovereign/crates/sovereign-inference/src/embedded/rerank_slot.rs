@@ -15,17 +15,19 @@ use futures::Stream;
 use tokio::sync::Mutex;
 
 use crate::llama::cpp::context::params::{LlamaContextParams, LlamaContextType};
-use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::llama_backend::LlamaBackend;
 use crate::llama::cpp::llama_batch::LlamaBatch;
 use crate::llama::cpp::model::params::LlamaModelParams;
 use crate::llama::cpp::model::{AddBos, LlamaChatMessage, LlamaModel};
+use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
 use sovereign_core::error::Error;
-use sovereign_core::model_family::{EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl};
+use sovereign_core::model_family::{
+    EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
+};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::*;
 use sovereign_core::Result;
@@ -97,8 +99,8 @@ pub struct RerankSlot {
 ///   - `verbose` (default-historic) — full system message + XML tags
 ///   - `lean` — no system message, `Query: ... Document: ...` body
 fn jina_v3_prompt_fragments() -> (String, String, String) {
-    let variant = std::env::var("SOVEREIGN_RERANK_PROMPT_VARIANT")
-        .unwrap_or_else(|_| "verbose".to_string());
+    let variant =
+        std::env::var("SOVEREIGN_RERANK_PROMPT_VARIANT").unwrap_or_else(|_| "verbose".to_string());
     match variant.as_str() {
         "lean" => {
             let prefix = "<|im_start|>user\nQuery: ".to_string();
@@ -134,8 +136,8 @@ impl RerankSlot {
         rerank_quirks: Option<RerankQuirks>,
     ) -> Result<Self> {
         // Same GPU-first / CPU-fallback policy as EmbedSlot.
-        let gpu_default_available = cfg!(all(target_os = "macos", target_arch = "aarch64"))
-            || cfg!(target_os = "linux");
+        let gpu_default_available =
+            cfg!(all(target_os = "macos", target_arch = "aarch64")) || cfg!(target_os = "linux");
         let requested_gpu_layers = if gpu_default_available && n_gpu_layers == 0 {
             999
         } else {
@@ -175,13 +177,12 @@ impl RerankSlot {
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
                 .with_offload_kqv(gpu)
-                // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
+            // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
         };
 
         let (ctx, used_gpu) = match if wants_gpu {
             unsafe {
-                let model_ref: &'static LlamaModel =
-                    &*(Arc::as_ptr(&model) as *const LlamaModel);
+                let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model) as *const LlamaModel);
                 model_ref
                     .new_context(backend, build_params(true))
                     .map(|c| (c, true))
@@ -203,9 +204,7 @@ impl RerankSlot {
                     model_ref
                         .new_context(backend, build_params(false))
                         .map_err(|e| {
-                            Error::Inference(format!(
-                                "Failed to create rerank context: {e}"
-                            ))
+                            Error::Inference(format!("Failed to create rerank context: {e}"))
                         })?
                 };
                 (ctx, false)
@@ -224,14 +223,13 @@ impl RerankSlot {
         // special token exactly. If either lookup fails, the load
         // fails up front — we never want to silently fall through to
         // garbage scores at query time.
-        let score_token_id =
-            resolve_special_token(&model, "<|score_token|>").ok_or_else(|| {
-                Error::Inference(
-                    "Reranker GGUF lacks `<|score_token|>` — does this model \
+        let score_token_id = resolve_special_token(&model, "<|score_token|>").ok_or_else(|| {
+            Error::Inference(
+                "Reranker GGUF lacks `<|score_token|>` — does this model \
                      follow the jina-reranker-v3 protocol?"
-                        .to_string(),
-                )
-            })?;
+                    .to_string(),
+            )
+        })?;
         let rerank_token_id =
             resolve_special_token(&model, "<|rerank_token|>").ok_or_else(|| {
                 Error::Inference(
@@ -281,10 +279,7 @@ impl RerankSlot {
 
         Ok(Self {
             model: model.clone(),
-            ctx: std::sync::Mutex::new(RerankSlotContext {
-                ctx,
-                _model: model,
-            }),
+            ctx: std::sync::Mutex::new(RerankSlotContext { ctx, _model: model }),
             max_input_tokens,
             score_token_id,
             rerank_token_id,
@@ -294,7 +289,6 @@ impl RerankSlot {
             model_id,
         })
     }
-
 }
 
 /// Resolve a special token by its string form. Returns `None` when
@@ -318,7 +312,6 @@ fn resolve_special_token(model: &LlamaModel, name: &str) -> Option<i32> {
 
 // Continuation of the RerankSlot impl block (split for the helper above).
 impl RerankSlot {
-
     /// Score a single (query, doc) pair via the jina-reranker-v3
     /// protocol: build a Qwen3 chat-template prompt that wraps the
     /// pair, end with `<|rerank_token|>`, run one forward pass, and
@@ -352,10 +345,7 @@ impl RerankSlot {
         // is split: query keeps its full length up to a ceiling
         // (queries are usually short), and doc takes everything
         // else. When even the query won't fit, truncate query too.
-        let fixed = prefix_tokens.len()
-            + middle_tokens.len()
-            + suffix_tokens.len()
-            + 1;
+        let fixed = prefix_tokens.len() + middle_tokens.len() + suffix_tokens.len() + 1;
         let dynamic_budget = max_input_tokens.saturating_sub(fixed);
         const QUERY_HARD_CAP: usize = 256;
         let query_budget = query_tokens.len().min(QUERY_HARD_CAP).min(dynamic_budget);
@@ -366,9 +356,14 @@ impl RerankSlot {
             ));
         }
 
-        let mut tokens: Vec<LlamaToken> =
-            Vec::with_capacity(prefix_tokens.len() + query_budget + middle_tokens.len()
-                + doc_budget + suffix_tokens.len() + 1);
+        let mut tokens: Vec<LlamaToken> = Vec::with_capacity(
+            prefix_tokens.len()
+                + query_budget
+                + middle_tokens.len()
+                + doc_budget
+                + suffix_tokens.len()
+                + 1,
+        );
         tokens.extend_from_slice(prefix_tokens);
         tokens.extend(query_tokens.iter().take(query_budget).copied());
         tokens.extend_from_slice(middle_tokens);
@@ -512,4 +507,3 @@ pub(crate) fn gpu_backend_label() -> &'static str {
         "gpu"
     }
 }
-

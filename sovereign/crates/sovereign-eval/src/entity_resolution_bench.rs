@@ -60,8 +60,7 @@ impl GroundTruthEntity {
     /// canonical name + surface forms. The runner refuses to score
     /// such entries without unseal.
     pub fn is_sealed(&self) -> bool {
-        self.canonical_name == "<sealed>"
-            || self.surface_forms.iter().all(|s| s == "<sealed>")
+        self.canonical_name == "<sealed>" || self.surface_forms.iter().all(|s| s == "<sealed>")
     }
 }
 
@@ -118,10 +117,7 @@ impl BenchGroundTruth {
 
     /// Filter to entries in a given split.
     pub fn by_split(&self, split: Split) -> Vec<&GroundTruthEntity> {
-        self.entries
-            .iter()
-            .filter(|e| e.split == split)
-            .collect()
+        self.entries.iter().filter(|e| e.split == split).collect()
     }
 
     /// Build a [`Clustering`] keyed by *surface form* → canonical id.
@@ -171,9 +167,8 @@ impl PeekBudget {
             return Ok(Self::default());
         }
         let text = fs::read_to_string(path)?;
-        serde_json::from_str(&text).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
-        })
+        serde_json::from_str(&text)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
     }
 
     /// Persist atomically (write-temp + rename).
@@ -182,9 +177,8 @@ impl PeekBudget {
             fs::create_dir_all(parent)?;
         }
         let tmp: PathBuf = path.with_extension("json.tmp");
-        let json = serde_json::to_string_pretty(self).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
-        })?;
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
         fs::write(&tmp, json)?;
         fs::rename(&tmp, path)?;
         Ok(())
@@ -308,7 +302,10 @@ mod tests {
         let path = dir.path().join("peek_budget.json");
         let mut budget = PeekBudget::load(&path).unwrap();
         assert_eq!(budget.holdout_peeks, 0);
-        budget.burn("tuned reconciler over train; want holdout sanity", Some("abc123".into()));
+        budget.burn(
+            "tuned reconciler over train; want holdout sanity",
+            Some("abc123".into()),
+        );
         budget.save(&path).unwrap();
         let read = PeekBudget::load(&path).unwrap();
         assert_eq!(read.holdout_peeks, 1);

@@ -26,12 +26,8 @@ impl DomainRegistry {
         registry.register("science", || {
             Arc::new(super::domains::science::ScienceDomain)
         });
-        registry.register("policy", || {
-            Arc::new(super::domains::policy::PolicyDomain)
-        });
-        registry.register("legal", || {
-            Arc::new(super::domains::legal::LegalDomain)
-        });
+        registry.register("policy", || Arc::new(super::domains::policy::PolicyDomain));
+        registry.register("legal", || Arc::new(super::domains::legal::LegalDomain));
         registry.register("community", || {
             Arc::new(super::domains::community::CommunityKnowledgeDomain)
         });

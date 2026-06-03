@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use super::phase_cache::PhaseCache;
 use super::types::{
-    Atlas, CanonicalConcern, Phase3Output, Phase5Output, Phase6Output, Phase7Output,
-    PipelinePhase, Position, Tension,
+    Atlas, CanonicalConcern, Phase3Output, Phase5Output, Phase6Output, Phase7Output, PipelinePhase,
+    Position, Tension,
 };
 use crate::error::{Error, Result};
 use crate::types::EmbedFn;
@@ -26,28 +26,28 @@ impl Atlas {
     pub fn from_cache_dir(cache_dir: &Path) -> Result<Self> {
         let cache = PhaseCache::new(cache_dir);
         let concerns: Phase3Output = cache.read(PipelinePhase::Concerns)?.ok_or_else(|| {
-            Error::InvalidInput(
-                "atlas cannot be built: phase 3 (concerns) cache is missing".into(),
-            )
+            Error::InvalidInput("atlas cannot be built: phase 3 (concerns) cache is missing".into())
         })?;
-        let positions: Phase5Output = cache
-            .read(PipelinePhase::Positions)?
-            .unwrap_or_else(|| Phase5Output {
-                schema_version: Phase5Output::SCHEMA_VERSION,
-                pipeline_id: concerns.pipeline_id.clone(),
-                positions: Vec::new(),
-                failures: Vec::new(),
-                written_at: String::new(),
-            });
-        let tensions: Phase6Output = cache
-            .read(PipelinePhase::Tensions)?
-            .unwrap_or_else(|| Phase6Output {
-                schema_version: Phase6Output::SCHEMA_VERSION,
-                pipeline_id: concerns.pipeline_id.clone(),
-                tensions: Vec::new(),
-                failures: Vec::new(),
-                written_at: String::new(),
-            });
+        let positions: Phase5Output =
+            cache
+                .read(PipelinePhase::Positions)?
+                .unwrap_or_else(|| Phase5Output {
+                    schema_version: Phase5Output::SCHEMA_VERSION,
+                    pipeline_id: concerns.pipeline_id.clone(),
+                    positions: Vec::new(),
+                    failures: Vec::new(),
+                    written_at: String::new(),
+                });
+        let tensions: Phase6Output =
+            cache
+                .read(PipelinePhase::Tensions)?
+                .unwrap_or_else(|| Phase6Output {
+                    schema_version: Phase6Output::SCHEMA_VERSION,
+                    pipeline_id: concerns.pipeline_id.clone(),
+                    tensions: Vec::new(),
+                    failures: Vec::new(),
+                    written_at: String::new(),
+                });
         let gaps: Phase7Output = cache
             .read(PipelinePhase::Gaps)?
             .unwrap_or_else(|| Phase7Output {
@@ -140,8 +140,10 @@ pub async fn traverse_atlas(
         .collect();
     scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
-    let above: Vec<&(f32, &CanonicalConcern)> =
-        scored.iter().filter(|(s, _)| *s >= min_similarity).collect();
+    let above: Vec<&(f32, &CanonicalConcern)> = scored
+        .iter()
+        .filter(|(s, _)| *s >= min_similarity)
+        .collect();
     let locate: Vec<ConcernMatch> = if !above.is_empty() {
         above
             .iter()
@@ -247,7 +249,11 @@ impl QueryBattery {
             });
         }
         serde_json::from_str(&raw).map_err(|e| {
-            Error::Serialization(format!("validation battery {} parse error: {}", path.display(), e))
+            Error::Serialization(format!(
+                "validation battery {} parse error: {}",
+                path.display(),
+                e
+            ))
         })
     }
 }
@@ -293,11 +299,7 @@ pub async fn run_battery(
     let mut rows = Vec::with_capacity(battery.questions.len());
     for q in &battery.questions {
         let t = traverse_atlas(atlas, &q.question, embed, min_similarity).await?;
-        let top = t
-            .locate
-            .first()
-            .map(|m| m.similarity)
-            .unwrap_or(0.0);
+        let top = t.locate.first().map(|m| m.similarity).unwrap_or(0.0);
         rows.push(BatteryRow {
             question_id: q.id.clone(),
             question: q.question.clone(),
@@ -334,8 +336,8 @@ fn cosine(a: &[f32], b: &[f32]) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::types::{Grounding, Position, Tension};
+    use super::*;
     use std::collections::HashMap;
     use std::sync::Arc;
     use tempfile::tempdir;

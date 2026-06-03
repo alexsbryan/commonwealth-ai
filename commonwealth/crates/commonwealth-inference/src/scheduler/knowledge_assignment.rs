@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::knowledge::{
-    ChunkRange, IngestionHandoff, IngestionPartition, KnowledgeShardAssignment,
-    KnowledgeShardPlan, PartitionStatus, WorkUnit,
+    ChunkRange, IngestionHandoff, IngestionPartition, KnowledgeShardAssignment, KnowledgeShardPlan,
+    PartitionStatus, WorkUnit,
 };
 use commonwealth_core::mesh::MemberRecord;
 use commonwealth_core::oicp::EmbedModelInfo;
@@ -14,7 +14,9 @@ use corpus_engine::SourceFileRecord;
 /// Errors that prevent planning collaborative ingestion.
 #[derive(Debug, thiserror::Error)]
 pub enum CollaborativeIngestionError {
-    #[error("no compatible peers: embed model mismatch (local: {local}, candidates: {candidates})")]
+    #[error(
+        "no compatible peers: embed model mismatch (local: {local}, candidates: {candidates})"
+    )]
     NoCompatiblePeers { local: String, candidates: String },
     #[error("no compatible peers: insufficient storage (need {needed_gb:.1} GB total)")]
     InsufficientStorage { needed_gb: f64 },
@@ -46,7 +48,9 @@ pub fn plan_collaborative_ingestion(
     use corpus_engine::SourceFileStatus;
 
     if remaining_files.is_empty() {
-        return Err(CollaborativeIngestionError::AlreadyComplete(corpus_id.to_string()));
+        return Err(CollaborativeIngestionError::AlreadyComplete(
+            corpus_id.to_string(),
+        ));
     }
 
     // Belt-and-suspenders filter. The coordinator
@@ -110,9 +114,7 @@ pub fn plan_collaborative_ingestion(
 
     if total_available_gb < needed_gb * 0.8 {
         // Allow 20% slack — estimates are rough.
-        return Err(CollaborativeIngestionError::InsufficientStorage {
-            needed_gb,
-        });
+        return Err(CollaborativeIngestionError::InsufficientStorage { needed_gb });
     }
 
     // Build per-node partitions.
@@ -186,7 +188,9 @@ pub fn plan_collaborative_ingestion_jsonl(
 ) -> Result<IngestionHandoff, CollaborativeIngestionError> {
     let remaining = total_articles.saturating_sub(current_article_pos);
     if remaining == 0 {
-        return Err(CollaborativeIngestionError::AlreadyComplete(corpus_id.to_string()));
+        return Err(CollaborativeIngestionError::AlreadyComplete(
+            corpus_id.to_string(),
+        ));
     }
 
     // Filter candidates whose gossiped embed_model matches ours.
@@ -232,7 +236,9 @@ pub fn plan_collaborative_ingestion_jsonl(
     // the ingest pipeline uses `article_range` + existing `committed_iter_pos`
     // skip-ahead to resume cleanly from where it left off.
     debug_assert_eq!(
-        partitions.last().map(|p| p.article_range.unwrap_or((0, 0)).1),
+        partitions
+            .last()
+            .map(|p| p.article_range.unwrap_or((0, 0)).1),
         Some(total_articles),
         "partition ranges must cover all remaining articles"
     );
@@ -367,11 +373,7 @@ pub fn build_work_units_jsonl_sharded(remaining_shards: Vec<usize>) -> Vec<WorkU
 /// caps the queue size — 32 gives enough granularity for 2–4 peers without
 /// being chatty. Returns a single unit when the range is shorter than
 /// `target_units` (e.g. a small resume-tail).
-pub fn build_work_units_jsonl_single(
-    start: u64,
-    end: u64,
-    target_units: u32,
-) -> Vec<WorkUnit> {
+pub fn build_work_units_jsonl_single(start: u64, end: u64, target_units: u32) -> Vec<WorkUnit> {
     if end <= start {
         return Vec::new();
     }
@@ -423,10 +425,7 @@ mod work_unit_tests {
     fn jsonl_single_builder_slices_range() {
         let units = build_work_units_jsonl_single(0, 1000, 4);
         assert_eq!(units.len(), 4);
-        assert_eq!(
-            units[0],
-            WorkUnit::JsonlRange { start: 0, end: 250 }
-        );
+        assert_eq!(units[0], WorkUnit::JsonlRange { start: 0, end: 250 });
         assert_eq!(
             units[3],
             WorkUnit::JsonlRange {
@@ -714,8 +713,7 @@ mod tests {
             &qwen_embed(),
         )
         .unwrap();
-        let assigned_nodes: Vec<NodeId> =
-            handoff.partitions.iter().map(|p| p.node_id).collect();
+        let assigned_nodes: Vec<NodeId> = handoff.partitions.iter().map(|p| p.node_id).collect();
         assert!(assigned_nodes.contains(&local.node_id));
         assert!(assigned_nodes.contains(&peer_match.node_id));
         assert!(
@@ -885,7 +883,10 @@ mod tests {
             &qwen_embed(),
         )
         .unwrap_err();
-        assert!(matches!(err, CollaborativeIngestionError::AlreadyComplete(_)));
+        assert!(matches!(
+            err,
+            CollaborativeIngestionError::AlreadyComplete(_)
+        ));
     }
 
     #[test]

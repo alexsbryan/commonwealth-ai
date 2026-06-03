@@ -16,10 +16,7 @@ use commonwealth_test_harness::simulated_node::SimulatedNodeBuilder;
 /// Helper: register model names on nodes so the scheduler can detect
 /// which models each node has available. The scheduler's `NodeProfile`
 /// uses model name strings, not ModelIds.
-fn register_models_on_profiles(
-    profiles: &mut HashMap<NodeId, NodeProfile>,
-    models: &[&str],
-) {
+fn register_models_on_profiles(profiles: &mut HashMap<NodeId, NodeProfile>, models: &[&str]) {
     for profile in profiles.values_mut() {
         profile.model_ids = models.iter().map(|s| s.to_string()).collect();
     }
@@ -62,7 +59,10 @@ fn ti01_parallel_to_tiered_on_high_memory_join() {
         .unwrap();
 
     assert!(
-        matches!(initial_plan.strategy, SchedulingStrategy::ParallelInstances { .. }),
+        matches!(
+            initial_plan.strategy,
+            SchedulingStrategy::ParallelInstances { .. }
+        ),
         "Initial plan should be ParallelInstances: {:?}",
         initial_plan.strategy
     );
@@ -303,17 +303,16 @@ fn ti05_only_leader_replans() {
 
     // Scheduler on leader (node A) should succeed.
     let leader_scheduler = mesh.make_scheduler();
-    let result = leader_scheduler.replan(
-        PlanTrigger::LeaderElected(NodeId::from_u128(1)),
-        &profiles,
-    );
+    let result =
+        leader_scheduler.replan(PlanTrigger::LeaderElected(NodeId::from_u128(1)), &profiles);
     assert!(result.is_ok(), "Leader should be able to replan");
 
     // Scheduler on follower (node B) should fail.
-    let mut follower_scheduler = commonwealth_inference::scheduler::adaptive::InferenceScheduler::new(
-        NodeId::from_u128(100),
-        SchedulerConfig::default(),
-    );
+    let mut follower_scheduler =
+        commonwealth_inference::scheduler::adaptive::InferenceScheduler::new(
+            NodeId::from_u128(100),
+            SchedulerConfig::default(),
+        );
     follower_scheduler.online_nodes = mesh.node_ids();
 
     let result = follower_scheduler.replan(
@@ -373,10 +372,13 @@ fn ti06_demo_scenario_full_arc() {
         .replan(PlanTrigger::NodeJoined(NodeId::from_u128(18)), &profiles)
         .unwrap();
 
-    if let SchedulingStrategy::ParallelInstances { instance_nodes, .. } =
-        &midmorning_plan.strategy
+    if let SchedulingStrategy::ParallelInstances { instance_nodes, .. } = &midmorning_plan.strategy
     {
-        assert_eq!(instance_nodes.len(), 18, "All 18 nodes should serve throughput");
+        assert_eq!(
+            instance_nodes.len(),
+            18,
+            "All 18 nodes should serve throughput"
+        );
     } else {
         panic!("Midmorning should be ParallelInstances");
     }

@@ -53,11 +53,7 @@ impl CorpusIndex {
     /// stamped a doc id.
     ///
     /// Returns `Ok(None)` when `chunk_id` is not present in the index.
-    pub async fn neighbors(
-        &self,
-        chunk_id: u64,
-        radius: usize,
-    ) -> Result<Option<NeighborWindow>> {
+    pub async fn neighbors(&self, chunk_id: u64, radius: usize) -> Result<Option<NeighborWindow>> {
         // Look up the center first via the existing chunks_by_ids
         // path so we get the same row shape the HTTP layer wants.
         let center_rows = self.chunks_by_ids(&[chunk_id]).await?;
@@ -85,12 +81,8 @@ impl CorpusIndex {
         let lower_min = center_id.saturating_sub(span);
         let upper_max = center_id.saturating_add(span);
 
-        let mut prev_predicate = format!(
-            "id >= {lower_min} AND id < {center_id}"
-        );
-        let mut next_predicate = format!(
-            "id > {center_id} AND id <= {upper_max}"
-        );
+        let mut prev_predicate = format!("id >= {lower_min} AND id < {center_id}");
+        let mut next_predicate = format!("id > {center_id} AND id <= {upper_max}");
         if let Some(sd) = &center.source_doc_id {
             // Escape single quotes — same defense as
             // fetch_chunks_by_title.
@@ -152,7 +144,9 @@ impl CorpusIndex {
         let all = self.all_chunks_full().await?;
         let mut by_section: HashMap<String, u64> = HashMap::new();
         for row in all {
-            let Some(meta_raw) = row.metadata_raw.as_deref() else { continue };
+            let Some(meta_raw) = row.metadata_raw.as_deref() else {
+                continue;
+            };
             let Ok(meta) = serde_json::from_str::<serde_json::Value>(meta_raw) else {
                 continue;
             };
@@ -184,10 +178,7 @@ impl CorpusIndex {
     /// needs. Mirrors the column set in
     /// [`CorpusIndex::chunks_by_ids`] so the two functions return
     /// rows with the same shape.
-    async fn scan_rows(
-        &self,
-        predicate: &str,
-    ) -> Result<Vec<EnrichmentChunkRow>> {
+    async fn scan_rows(&self, predicate: &str) -> Result<Vec<EnrichmentChunkRow>> {
         let batches: Vec<RecordBatch> = self
             .table
             .query()
@@ -235,16 +226,32 @@ impl CorpusIndex {
                     id: id_col.value(i) as u64,
                     content: contents.value(i).to_string(),
                     title: titles.and_then(|t| {
-                        if t.is_null(i) { None } else { Some(t.value(i).to_string()) }
+                        if t.is_null(i) {
+                            None
+                        } else {
+                            Some(t.value(i).to_string())
+                        }
                     }),
                     url: urls.and_then(|u| {
-                        if u.is_null(i) { None } else { Some(u.value(i).to_string()) }
+                        if u.is_null(i) {
+                            None
+                        } else {
+                            Some(u.value(i).to_string())
+                        }
                     }),
                     metadata_raw: metadatas.and_then(|m| {
-                        if m.is_null(i) { None } else { Some(m.value(i).to_string()) }
+                        if m.is_null(i) {
+                            None
+                        } else {
+                            Some(m.value(i).to_string())
+                        }
                     }),
                     source_doc_id: source_doc_ids.and_then(|s| {
-                        if s.is_null(i) { None } else { Some(s.value(i).to_string()) }
+                        if s.is_null(i) {
+                            None
+                        } else {
+                            Some(s.value(i).to_string())
+                        }
                     }),
                 });
             }
@@ -387,10 +394,7 @@ impl CorpusIndex {
                     } else {
                         contents.value(i).to_string()
                     };
-                    let preview: String = content
-                        .chars()
-                        .take(preview_chars.max(1))
-                        .collect();
+                    let preview: String = content.chars().take(preview_chars.max(1)).collect();
                     min_content = Some(preview);
                 }
             }
@@ -435,7 +439,9 @@ impl CorpusIndex {
             .try_collect()
             .await
             .map_err(|e| {
-                Error::Database(format!("chunks_for_source_doc_with_embeddings collect: {e}"))
+                Error::Database(format!(
+                    "chunks_for_source_doc_with_embeddings collect: {e}"
+                ))
             })?;
 
         let mut out: Vec<(EnrichmentChunkRow, Vec<f32>)> = Vec::new();
@@ -505,16 +511,32 @@ impl CorpusIndex {
                     id: ids.value(i) as u64,
                     content: contents.value(i).to_string(),
                     title: titles.and_then(|t| {
-                        if t.is_null(i) { None } else { Some(t.value(i).to_string()) }
+                        if t.is_null(i) {
+                            None
+                        } else {
+                            Some(t.value(i).to_string())
+                        }
                     }),
                     url: urls.and_then(|u| {
-                        if u.is_null(i) { None } else { Some(u.value(i).to_string()) }
+                        if u.is_null(i) {
+                            None
+                        } else {
+                            Some(u.value(i).to_string())
+                        }
                     }),
                     metadata_raw: metadatas.and_then(|m| {
-                        if m.is_null(i) { None } else { Some(m.value(i).to_string()) }
+                        if m.is_null(i) {
+                            None
+                        } else {
+                            Some(m.value(i).to_string())
+                        }
                     }),
                     source_doc_id: source_doc_ids.and_then(|s| {
-                        if s.is_null(i) { None } else { Some(s.value(i).to_string()) }
+                        if s.is_null(i) {
+                            None
+                        } else {
+                            Some(s.value(i).to_string())
+                        }
                     }),
                 };
                 out.push((row, embedding));
@@ -535,9 +557,7 @@ impl CorpusIndex {
     ///
     /// Returns chunk ids in the order Lance returns them; callers that
     /// need sorted output should sort post-hoc.
-    pub async fn group_chunks_by_source_doc(
-        &self,
-    ) -> Result<HashMap<String, Vec<u64>>> {
+    pub async fn group_chunks_by_source_doc(&self) -> Result<HashMap<String, Vec<u64>>> {
         let batches: Vec<RecordBatch> = self
             .table
             .query()

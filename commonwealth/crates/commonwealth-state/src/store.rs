@@ -38,7 +38,9 @@ impl MeshStore {
     /// Open (or create) the store at `path`.
     pub fn open(path: &Path) -> Result<Self> {
         let backend = SqliteBackend::open(path)?;
-        Ok(Self { backend: Arc::new(backend) })
+        Ok(Self {
+            backend: Arc::new(backend),
+        })
     }
 
     /// Create an in-memory store (useful for tests).
@@ -60,7 +62,9 @@ impl MeshStore {
         )
         .map_err(|e| Error::Backend(format!("in-memory init failed: {e}")))?;
         Ok(Self {
-            backend: Arc::new(crate::backend::SqliteBackend { conn: Mutex::new(conn) }),
+            backend: Arc::new(crate::backend::SqliteBackend {
+                conn: Mutex::new(conn),
+            }),
         })
     }
 
@@ -281,10 +285,7 @@ mod tests {
         assert_eq!(gossipable[0].app_id, "contributions");
         // But direct read still works — the entry IS persisted, just
         // not gossiped.
-        assert!(store
-            .get("peer_preferences", "deadbeef")
-            .unwrap()
-            .is_some());
+        assert!(store.get("peer_preferences", "deadbeef").unwrap().is_some());
     }
 
     #[test]
@@ -348,10 +349,18 @@ mod tests {
     #[test]
     fn scan_filters_by_prefix() {
         let store = MeshStore::in_memory().unwrap();
-        store.set("inf", "model:abc", Bytes::from("a"), node(1)).unwrap();
-        store.set("inf", "model:def", Bytes::from("b"), node(1)).unwrap();
-        store.set("inf", "ledger:xyz", Bytes::from("c"), node(1)).unwrap();
-        store.set("other", "model:abc", Bytes::from("d"), node(1)).unwrap();
+        store
+            .set("inf", "model:abc", Bytes::from("a"), node(1))
+            .unwrap();
+        store
+            .set("inf", "model:def", Bytes::from("b"), node(1))
+            .unwrap();
+        store
+            .set("inf", "ledger:xyz", Bytes::from("c"), node(1))
+            .unwrap();
+        store
+            .set("other", "model:abc", Bytes::from("d"), node(1))
+            .unwrap();
 
         let model_entries = store.scan("inf", "model:").unwrap();
         assert_eq!(model_entries.len(), 2);

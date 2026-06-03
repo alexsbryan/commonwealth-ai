@@ -39,7 +39,13 @@ pub fn snapshot_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
 }
 
 fn copy_dir_filtered(src: &Path, dst: &Path) -> std::io::Result<()> {
-    const SKIP: &[&str] = &["target", "node_modules", ".git", "__pycache__", ".pytest_cache"];
+    const SKIP: &[&str] = &[
+        "target",
+        "node_modules",
+        ".git",
+        "__pycache__",
+        ".pytest_cache",
+    ];
     std::fs::create_dir_all(dst)?;
     for entry in std::fs::read_dir(src)? {
         let entry = entry?;
@@ -73,7 +79,10 @@ mod tests {
         let dst_parent = tempfile::tempdir().unwrap();
         let dst = dst_parent.path().join("snap");
         snapshot_dir(src.path(), &dst).unwrap();
-        assert_eq!(std::fs::read_to_string(dst.join("a.py")).unwrap(), "x = 1\n");
+        assert_eq!(
+            std::fs::read_to_string(dst.join("a.py")).unwrap(),
+            "x = 1\n"
+        );
         assert_eq!(
             std::fs::read_to_string(dst.join("tests/test_a.py")).unwrap(),
             "def test_a(): pass\n"
@@ -99,7 +108,10 @@ mod tests {
         assert!(dst.path().join(".git/HEAD").exists());
         // old.py was wiped, new.py was copied in
         assert!(!dst.path().join("old.py").exists());
-        assert_eq!(std::fs::read_to_string(dst.path().join("new.py")).unwrap(), "new\n");
+        assert_eq!(
+            std::fs::read_to_string(dst.path().join("new.py")).unwrap(),
+            "new\n"
+        );
     }
 
     #[test]

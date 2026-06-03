@@ -123,9 +123,18 @@ pub fn select_candidates(input: CandidateSelectionInput<'_>) -> Vec<TensionCandi
     let mut out = Vec::new();
     out.extend(select_intra_cluster(input.claim_clusters));
     out.extend(select_entity_overlap_claim_claim(input.claims));
-    out.extend(select_entity_overlap_claim_state(input.claims, input.states));
-    out.extend(select_concept_overlap_cross_position(input.claims, input.entities));
-    out.extend(select_chunk_cooccurrence_cross_position(input.claims, input.entities));
+    out.extend(select_entity_overlap_claim_state(
+        input.claims,
+        input.states,
+    ));
+    out.extend(select_concept_overlap_cross_position(
+        input.claims,
+        input.entities,
+    ));
+    out.extend(select_chunk_cooccurrence_cross_position(
+        input.claims,
+        input.entities,
+    ));
     // Dedup pairs across signal sources — prefer IntraCluster >
     // EntityOverlap when the same (a, b) appears under both tags,
     // since the cluster pre-filter is a stronger prior.
@@ -137,9 +146,7 @@ pub fn select_candidates(input: CandidateSelectionInput<'_>) -> Vec<TensionCandi
     out
 }
 
-fn select_intra_cluster(
-    clusters: &[(String, Vec<AtomId>)],
-) -> Vec<TensionCandidate> {
+fn select_intra_cluster(clusters: &[(String, Vec<AtomId>)]) -> Vec<TensionCandidate> {
     let mut out = Vec::new();
     for (cid, members) in clusters {
         for i in 0..members.len() {
@@ -186,10 +193,7 @@ fn select_entity_overlap_claim_claim(claims: &[Claim]) -> Vec<TensionCandidate> 
     out
 }
 
-fn select_entity_overlap_claim_state(
-    claims: &[Claim],
-    states: &[State],
-) -> Vec<TensionCandidate> {
+fn select_entity_overlap_claim_state(claims: &[Claim], states: &[State]) -> Vec<TensionCandidate> {
     // Match every claim attributed to E against every state whose
     // entity_id is E. A saying-vs-doing mismatch is the archetypal
     // novelistic tension (Alyosha asserts the primacy of brotherly
@@ -260,8 +264,7 @@ fn select_concept_overlap_cross_position(
         return Vec::new();
     }
     use std::collections::HashMap;
-    let entity_by_id: HashMap<&AtomId, &Entity> =
-        entities.iter().map(|e| (&e.id, e)).collect();
+    let entity_by_id: HashMap<&AtomId, &Entity> = entities.iter().map(|e| (&e.id, e)).collect();
 
     // Pre-filter the entity name index for matchable mentions.
     // Names < 4 chars hit too often as substrings ("Mind", "X").
@@ -287,8 +290,8 @@ fn select_concept_overlap_cross_position(
     // common English prose and would over-fire if we stem-matched
     // them.
     const STOP_TOKENS: &[&str] = &[
-        "there", "their", "these", "those", "where", "which", "would", "could",
-        "about", "other", "after", "first", "every", "still", "ought",
+        "there", "their", "these", "those", "where", "which", "would", "could", "about", "other",
+        "after", "first", "every", "still", "ought",
     ];
     let is_stop = |t: &str| STOP_TOKENS.contains(&t);
     let matchable: Vec<MatchableEntity<'_>> = entities
@@ -391,10 +394,7 @@ fn select_concept_overlap_cross_position(
             // "claim attributed to A mentions A's name in context
             // of position B").
             let canonical_hit = lower_content.contains(&m.canonical_lower);
-            let token_hit = m
-                .tokens
-                .iter()
-                .any(|t| lower_content.contains(t.as_str()));
+            let token_hit = m.tokens.iter().any(|t| lower_content.contains(t.as_str()));
             if canonical_hit || token_hit {
                 mentions.insert(&m.entity.id);
             }
@@ -548,8 +548,7 @@ fn select_chunk_cooccurrence_cross_position(
         return Vec::new();
     }
     use std::collections::{BTreeSet, HashMap};
-    let entity_by_id: HashMap<&AtomId, &Entity> =
-        entities.iter().map(|e| (&e.id, e)).collect();
+    let entity_by_id: HashMap<&AtomId, &Entity> = entities.iter().map(|e| (&e.id, e)).collect();
 
     struct ClaimMeta<'a> {
         claim: &'a Claim,
@@ -560,16 +559,11 @@ fn select_chunk_cooccurrence_cross_position(
         .iter()
         .filter_map(|c| {
             let attr = c.attributed_to.as_ref()?;
-            let positions =
-                resolve_positions_for_attribution(attr, entities, &entity_by_id);
+            let positions = resolve_positions_for_attribution(attr, entities, &entity_by_id);
             if positions.is_empty() {
                 return None;
             }
-            let sections: BTreeSet<&str> = c
-                .evidence
-                .iter()
-                .map(|e| e.chunk_id.as_str())
-                .collect();
+            let sections: BTreeSet<&str> = c.evidence.iter().map(|e| e.chunk_id.as_str()).collect();
             if sections.is_empty() {
                 return None;
             }
@@ -657,11 +651,11 @@ fn dedup_pairs(cands: &mut Vec<TensionCandidate>) {
 
 #[cfg(test)]
 mod tests {
+    use super::super::super::atoms::{ChunkRef, SectionRange};
     use super::*;
     use crate::enrichment::pipeline::atlas::{
         ClaimScope, DiscourseAct, EnrichmentDepth, EpistemicStatus, StateType,
     };
-    use super::super::super::atoms::{ChunkRef, SectionRange};
 
     fn claim(id: u32, attributed_to: Option<u32>) -> Claim {
         Claim {
@@ -671,17 +665,16 @@ mod tests {
             epistemic_status: EpistemicStatus::Confident,
             scope: ClaimScope::Universal,
             evidence: vec![ChunkRef::new("sec_0001", None)],
-            attributed_to: attributed_to
-                .map(|e| AtomId::from_raw(format!("entity-{e:04}"))),
+            attributed_to: attributed_to.map(|e| AtomId::from_raw(format!("entity-{e:04}"))),
             confidence: Some(1.0),
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
             quotable_excerpt: None,
-                    claim_kind: None,
+            claim_kind: None,
             concession_outcome: None,
             evidence_kind: None,
-}
-}
+        }
+    }
 
     fn state(id: u32, owner: u32) -> State {
         State {
@@ -720,7 +713,9 @@ mod tests {
         assert!(out
             .iter()
             .all(|c| matches!(c.discovery, CandidateSource::IntraCluster)));
-        assert!(out.iter().all(|c| c.cluster_id.as_deref() == Some("cluster-01")));
+        assert!(out
+            .iter()
+            .all(|c| c.cluster_id.as_deref() == Some("cluster-01")));
     }
 
     #[test]
@@ -822,10 +817,10 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-                    provenance: Default::default(),
-                    concept_kind: None,
-}
-}
+            provenance: Default::default(),
+            concept_kind: None,
+        }
+    }
 
     /// Two claims attributed to two different concept-typed entities,
     /// whose contents both mention the canonical name of a third
@@ -891,9 +886,7 @@ mod tests {
         // cross-position selector must NOT also fire.
         let cross_count = out
             .iter()
-            .filter(|c| {
-                c.shared_entity.as_ref().map(|s| s.as_str()) == Some("entity-0003")
-            })
+            .filter(|c| c.shared_entity.as_ref().map(|s| s.as_str()) == Some("entity-0003"))
             .count();
         assert_eq!(
             cross_count, 0,
@@ -963,8 +956,7 @@ mod tests {
             .iter()
             .filter(|c| matches!(c.discovery, CandidateSource::EntityOverlap))
             .filter(|c| {
-                c.source_atom.as_str() == "claim-0001"
-                    && c.target_atom.as_str() == "claim-0002"
+                c.source_atom.as_str() == "claim-0001" && c.target_atom.as_str() == "claim-0002"
             })
             .collect();
         assert_eq!(
@@ -1005,8 +997,7 @@ mod tests {
         let cross: Vec<_> = out
             .iter()
             .filter(|c| {
-                c.source_atom.as_str() == "claim-0001"
-                    && c.target_atom.as_str() == "claim-0002"
+                c.source_atom.as_str() == "claim-0001" && c.target_atom.as_str() == "claim-0002"
             })
             .collect();
         assert_eq!(
@@ -1171,8 +1162,7 @@ mod tests {
         let pair_cands: Vec<_> = out
             .iter()
             .filter(|c| {
-                c.source_atom.as_str() == "claim-0001"
-                    && c.target_atom.as_str() == "claim-0002"
+                c.source_atom.as_str() == "claim-0001" && c.target_atom.as_str() == "claim-0002"
             })
             .collect();
         assert_eq!(pair_cands.len(), 1);

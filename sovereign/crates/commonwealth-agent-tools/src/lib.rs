@@ -40,11 +40,10 @@ pub mod role;
 pub mod syntax;
 
 pub use primitive::{
-    AgentDoneArgs, AgentPlanArgs, HandoffToEvaluatorArgs, HandoffToImplementerArgs,
-    InspectIntent, PatchFileArgs, Primitive, PrimitiveKind, ReplaceFunctionArgs, SmokeArgs,
-    WriteFileArgs,
+    AgentDoneArgs, AgentPlanArgs, HandoffToEvaluatorArgs, HandoffToImplementerArgs, InspectIntent,
+    PatchFileArgs, Primitive, PrimitiveKind, ReplaceFunctionArgs, SmokeArgs, WriteFileArgs,
 };
-pub use result::{ToolError, ToolResult};
 pub use registry::Registry;
-pub use role::{Role, RoleDossier, RoleModelMap, RoleProfile};
+pub use result::{ToolError, ToolResult};
 pub use role::dossier::summarize as summarize_for_dossier;
+pub use role::{Role, RoleDossier, RoleModelMap, RoleProfile};

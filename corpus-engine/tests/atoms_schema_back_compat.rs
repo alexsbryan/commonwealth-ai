@@ -65,8 +65,7 @@ fn v2_1_atoms_file_with_asset_variant_round_trips() {
             "/tmp/assets/parsed/deadbeef00000001.parquet",
         )),
         first_seen_source_doc_id: "msg-12345".into(),
-        enrichment_depth:
-            corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth::Extracted,
+        enrichment_depth: corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth::Extracted,
     };
     let file = AtomsFile::new(vec![AtomEnvelope::Asset(atom.clone())]);
     let json = serde_json::to_string(&file).expect("serialise 2.1 atoms");
@@ -114,8 +113,7 @@ fn v2_1_entity_without_provenance_loads_with_default() {
         }
       ]
     }"#;
-    let file: AtomsFile =
-        serde_json::from_str(toml_2_1_entity).expect("parse 2.1 entity");
+    let file: AtomsFile = serde_json::from_str(toml_2_1_entity).expect("parse 2.1 entity");
     match &file.atoms[0] {
         AtomEnvelope::Entity(e) => {
             assert!(e.provenance.extractor_id.is_empty());

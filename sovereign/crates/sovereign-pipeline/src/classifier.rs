@@ -357,7 +357,8 @@ mod tests {
         let r = classify(
             ExecOutcome::Exit {
                 code: Some(1),
-                combined_output: "error: phase 3 (cluster) failed: some new failure shape we haven't seen",
+                combined_output:
+                    "error: phase 3 (cluster) failed: some new failure shape we haven't seen",
             },
             &[],
         );

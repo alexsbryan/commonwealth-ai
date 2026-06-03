@@ -296,9 +296,10 @@ pub fn batch_harvest_all_commits(
         let timestamp_raw = parts
             .next()
             .ok_or_else(|| GitArchaeologyError::Parse("missing timestamp".into()))?;
-        let timestamp: i64 = timestamp_raw.trim().parse().map_err(|e| {
-            GitArchaeologyError::Parse(format!("timestamp `{timestamp_raw}`: {e}"))
-        })?;
+        let timestamp: i64 = timestamp_raw
+            .trim()
+            .parse()
+            .map_err(|e| GitArchaeologyError::Parse(format!("timestamp `{timestamp_raw}`: {e}")))?;
         let author_email = parts
             .next()
             .ok_or_else(|| GitArchaeologyError::Parse("missing author".into()))?
@@ -372,8 +373,11 @@ pub fn enrich_atom(
     }
     let mut ranked: Vec<(&str, u32)> = counts.into_iter().collect();
     ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
-    let primary_authors: Vec<String> =
-        ranked.into_iter().take(3).map(|(e, _)| e.to_string()).collect();
+    let primary_authors: Vec<String> = ranked
+        .into_iter()
+        .take(3)
+        .map(|(e, _)| e.to_string())
+        .collect();
 
     let staleness = if last.timestamp > atlas_built_at {
         Staleness::Moved
@@ -585,7 +589,12 @@ mod tests {
         write_and_add(repo, "lib.rs", "fn v1() {}\n");
         commit(repo, "v1", 1_700_000_000, Some("alice@example.com"));
         write_and_add(repo, "lib.rs", "fn v2() {}\n");
-        commit(repo, "v2", 1_700_000_000 + 50 * 86_400, Some("bob@example.com"));
+        commit(
+            repo,
+            "v2",
+            1_700_000_000 + 50 * 86_400,
+            Some("bob@example.com"),
+        );
         write_and_add(repo, "lib.rs", "fn v3() {}\n");
         commit(
             repo,
@@ -645,7 +654,12 @@ mod tests {
         for i in 0..8 {
             write_and_add(repo, "a.rs", &format!("fn a{i}() {{}}\n"));
             write_and_add(repo, "b.rs", &format!("fn b{i}() {{}}\n"));
-            commit(repo, &format!("ab joint {i}"), 1_700_000_000 + i * 86_400, None);
+            commit(
+                repo,
+                &format!("ab joint {i}"),
+                1_700_000_000 + i * 86_400,
+                None,
+            );
         }
         // One b/c joint touch.
         write_and_add(repo, "b.rs", "fn b8() {}\n");

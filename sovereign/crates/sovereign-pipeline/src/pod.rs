@@ -72,7 +72,11 @@ pub struct Offer {
     // parsed as `verified=false` regardless of host status, and the
     // verified-first ranking was a no-op — observed in pod-up runs
     // picking unverified offers despite the search asking `verified=true`.
-    #[serde(default, rename = "verification", deserialize_with = "deserialize_verified_from_verification")]
+    #[serde(
+        default,
+        rename = "verification",
+        deserialize_with = "deserialize_verified_from_verification"
+    )]
     pub verified: bool,
     // Vast emits both `reliability` and `reliability2` in the same offer
     // object (identical values today; reliability2 is the documented "last
@@ -236,8 +240,16 @@ pub fn pick_offer(offers: &[Offer]) -> Option<&Offer> {
     ranked.sort_by(|a, b| {
         b.verified
             .cmp(&a.verified)
-            .then(b.reliability.partial_cmp(&a.reliability).unwrap_or(std::cmp::Ordering::Equal))
-            .then(a.price_per_hour.partial_cmp(&b.price_per_hour).unwrap_or(std::cmp::Ordering::Equal))
+            .then(
+                b.reliability
+                    .partial_cmp(&a.reliability)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
+            .then(
+                a.price_per_hour
+                    .partial_cmp(&b.price_per_hour)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
     });
     ranked.first().copied()
 }
@@ -302,7 +314,10 @@ mod tests {
             "cuda_max_good": 13.0
         }"#;
         let o: Offer = serde_json::from_str(raw).unwrap();
-        assert!(o.verified, "verification=\"verified\" must parse as verified=true");
+        assert!(
+            o.verified,
+            "verification=\"verified\" must parse as verified=true"
+        );
         assert_eq!(o.id, 35153580);
         assert_eq!(o.geolocation, "Texas, US");
     }

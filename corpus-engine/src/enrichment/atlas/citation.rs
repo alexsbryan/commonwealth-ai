@@ -70,10 +70,7 @@ impl SourceCitation {
     /// `fallback_section_id` is used when `primary` is `None` — keeps
     /// the citation usable at a coarser grain (atoms still ground at
     /// the RAPTOR-node or theme level rather than orphaning).
-    pub fn from_primary(
-        fallback_section_id: &str,
-        primary: Option<(u32, &str)>,
-    ) -> Self {
+    pub fn from_primary(fallback_section_id: &str, primary: Option<(u32, &str)>) -> Self {
         match primary {
             Some((chunk_id, text)) => Self {
                 section_id: format!("chunk:{chunk_id}"),
@@ -127,7 +124,10 @@ mod tests {
     fn citation_with_primary_points_at_source_chunk() {
         let citation = SourceCitation::from_primary(
             "raptor:fallback",
-            Some((42, "Spread pricing lets PBMs charge payers more than they reimburse.")),
+            Some((
+                42,
+                "Spread pricing lets PBMs charge payers more than they reimburse.",
+            )),
         );
         assert_eq!(citation.section_id, "chunk:42");
         assert_eq!(

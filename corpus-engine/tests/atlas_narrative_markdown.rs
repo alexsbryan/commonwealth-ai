@@ -92,8 +92,12 @@ fn extractor_emits_one_doc_per_section_with_full_metadata() {
     );
     assert!(titles.iter().any(|t| t == "Components"));
     assert!(titles.iter().any(|t| t == "Decisions"));
-    assert!(titles.iter().any(|t| t == "Decision 1: One process per host"));
-    assert!(titles.iter().any(|t| t == "Decision 2: Narrative-first documentation"));
+    assert!(titles
+        .iter()
+        .any(|t| t == "Decision 1: One process per host"));
+    assert!(titles
+        .iter()
+        .any(|t| t == "Decision 2: Narrative-first documentation"));
     assert!(titles.iter().any(|t| t == "Out of scope"));
 }
 

@@ -67,8 +67,7 @@ async fn boot() -> Fixture {
     std::fs::create_dir_all(&folder).unwrap();
 
     let engine = Arc::new(
-        CorpusEngine::new(recipes_dir, indexes_dir, stub_embed())
-            .with_embedding_model("test-mock"),
+        CorpusEngine::new(recipes_dir, indexes_dir, stub_embed()).with_embedding_model("test-mock"),
     );
     let store: Arc<dyn StateStore> = Arc::new(InMemoryStateStore::new());
     let manager = Arc::new(
@@ -109,11 +108,8 @@ fn write(p: &std::path::Path, s: &str) {
 }
 
 async fn register(fx: &Fixture, watched_cfg: WatchedFolderConfig) -> String {
-    let cfg = LocalCorpusConfig::watched_folder(
-        fx.folder.clone(),
-        "test".into(),
-        watched_cfg.clone(),
-    );
+    let cfg =
+        LocalCorpusConfig::watched_folder(fx.folder.clone(), "test".into(), watched_cfg.clone());
     let id = fx.manager.register(cfg).await.expect("register");
     fx.registry
         .register(id.clone(), watched_cfg.sweep_interval_secs)
@@ -184,7 +180,10 @@ async fn initial_ingest_then_no_changes_sweep() {
     let state = WatchedFolderState::load(&fx.manager.index_dir_root().join(&id))
         .expect("state load")
         .expect("state file exists after sweep");
-    assert!(!state.entries.is_empty(), "state.entries should be populated after first sweep");
+    assert!(
+        !state.entries.is_empty(),
+        "state.entries should be populated after first sweep"
+    );
 
     let outcome2 = fx.worker.run_once(&id).await.expect("second run_once");
     assert_eq!(
@@ -235,7 +234,10 @@ async fn deleting_a_file_records_a_tombstone() {
     let outcome = fx.worker.run_once(&id).await.expect("sweep");
     match outcome {
         WorkerOutcome::Applied(summary) => {
-            assert_eq!(summary.removed, 1, "expected one removed doc, got {summary:?}");
+            assert_eq!(
+                summary.removed, 1,
+                "expected one removed doc, got {summary:?}"
+            );
         }
         other => panic!("expected Applied, got {other:?}"),
     }
@@ -298,7 +300,10 @@ async fn deletion_guard_pauses_when_threshold_tripped() {
     let outcome2 = fx.worker.run_once(&id).await.expect("post-confirm sweep");
     match outcome2 {
         WorkerOutcome::Applied(summary) => {
-            assert_eq!(summary.removed, 5, "post-confirm sweep applies the pending deletes");
+            assert_eq!(
+                summary.removed, 5,
+                "post-confirm sweep applies the pending deletes"
+            );
         }
         other => panic!("expected Applied after confirm, got {other:?}"),
     }
@@ -559,11 +564,8 @@ async fn watched_folder_factory_projects_with_ocr_onto_local_corpus() {
     use sovereign_tools::local_corpus::config::WatchedFolderConfig;
     let mut wf = WatchedFolderConfig::default();
     wf.with_ocr = true;
-    let cfg = LocalCorpusConfig::watched_folder(
-        PathBuf::from("/tmp/ocr-watched"),
-        "ocr".into(),
-        wf,
-    );
+    let cfg =
+        LocalCorpusConfig::watched_folder(PathBuf::from("/tmp/ocr-watched"), "ocr".into(), wf);
     assert!(
         cfg.ocr_pdfs,
         "watched_folder factory must project WatchedFolderConfig.with_ocr onto LocalCorpusConfig.ocr_pdfs"
@@ -577,7 +579,10 @@ async fn watched_folder_with_ocr_off_keeps_default() {
         "no-ocr".into(),
         WatchedFolderConfig::default(),
     );
-    assert!(!cfg.ocr_pdfs, "default WatchedFolderConfig leaves ocr_pdfs off");
+    assert!(
+        !cfg.ocr_pdfs,
+        "default WatchedFolderConfig leaves ocr_pdfs off"
+    );
 }
 
 #[tokio::test]

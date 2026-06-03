@@ -12,8 +12,8 @@ use crate::query_session::{SessionStore, SharedSessionStore};
 use crate::registry::ToolRegistry;
 use crate::skills::{SkillRegister, SkillRegistry};
 use crate::traits::{
-    ApprovalChannel, InferenceProvider, NoOpRoutingEventSink, Planner, Router,
-    RoutingEventSink, StateStore,
+    ApprovalChannel, InferenceProvider, NoOpRoutingEventSink, Planner, Router, RoutingEventSink,
+    StateStore,
 };
 use crate::types::*;
 
@@ -42,13 +42,14 @@ pub(crate) const OVERSIZE_MESSAGE_HINT: &str =
      routes attachments through a map-reduce pipeline designed for long \
      inputs. Or summarise your question into a paragraph or two.";
 
-pub(crate) use self::voice_prompts::{
-    build_witness_grounding, epistemic_contract_for, render_temporal_tensions, RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT,
-};
 pub use self::voice_prompts::{
     __voice_test_epistemic_contract_for, __voice_test_factual_base_prompt,
     __voice_test_relational_base_prompt, __voice_test_relational_expressive_prompt,
     __voice_test_render_temporal_tensions,
+};
+pub(crate) use self::voice_prompts::{
+    build_witness_grounding, epistemic_contract_for, render_temporal_tensions,
+    RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT,
 };
 
 mod voice_prompts;
@@ -228,7 +229,8 @@ an essay. Use exact source terminology for technical terms, dates, \
 and proper nouns — paraphrase only the connective prose.";
 
 pub(crate) use self::text_utils::{
-    audit_pipeline_stage, format_conversation_history, now, today_anchor_block, truncate_chars, truncate_with_ellipsis,
+    audit_pipeline_stage, format_conversation_history, now, today_anchor_block, truncate_chars,
+    truncate_with_ellipsis,
 };
 
 mod text_utils;
@@ -276,8 +278,6 @@ pub(crate) fn chars_for_message_age(age: usize) -> usize {
     }
 }
 
-
-
 /// Minimum number of *dropped* messages (those that would otherwise
 /// be invisible to the synthesis prompt) before paying the Fast-slot
 /// cost of summarizing them. At 2 dropped messages a single coref
@@ -318,9 +318,6 @@ pub(crate) const COMPACTION_PRESSURE_THRESHOLD: f32 = 0.9;
 /// are spam on short chats). The compaction still runs and emits a
 /// `debug!` trace; only the user-facing chip is gated.
 pub(crate) const COMPACTION_CHIP_MIN_DROPPED: usize = 3;
-
-
-
 
 /// Per-corpus chunk limit for KnowledgeQuery retrieval. Tuned for
 /// 1M-2M chunk corpora (Wikipedia L5 scale) where the merged top-K
@@ -384,7 +381,6 @@ pub(crate) const DECOMP_MAX_QUERIES: usize = 4;
 /// not a replacement.
 pub(crate) const DECOMP_QUERY_LIMIT: usize = 5;
 
-
 /// Fast-path output budget. Enough for a focused summary with citations,
 /// not enough to invite the model to ramble. Pairs with `think_budget = 0`.
 pub(crate) const FAST_KNOWLEDGE_MAX_TOKENS: u32 = 600;
@@ -411,7 +407,6 @@ pub(crate) fn build_response_length_directive(max_tokens: usize) -> String {
          answer beats opening every door."
     )
 }
-
 
 /// When evidence-shape routes FastFocused and a single source dominates,
 /// pull up to this many chunks from that source by title (cohesion, not
@@ -503,7 +498,6 @@ pub(crate) const EXPANSION_MULTI_PER_SOURCE: usize = 4;
 /// and capping at 3 dropped half of them.
 pub(crate) const MAX_CHUNKS_PER_ARTICLE_AT_MERGE: usize = 10;
 
-
 /// Context budget when source-expansion has fired.
 ///
 /// Sized for the multi-source expansion path, which is additive on top
@@ -518,18 +512,15 @@ pub(crate) const MAX_CHUNKS_PER_ARTICLE_AT_MERGE: usize = 10;
 /// model's own output budget.
 pub(crate) const EXPANDED_KNOWLEDGE_CHARS: usize = 16000;
 
-
-
 pub(crate) use self::collaboration::{
     emit_ask_deliberation_chip, run_collaboration, run_post_stream_refinement, ContradictionCheck,
     ASK_MOVE_DELIBERATION_LINGER_MS,
 };
+pub use self::evidence::build_test_evidence_shape;
 pub(crate) use self::evidence::{
-    compute_evidence_shape, decide_expansion_strategy,
-    is_grounding_candidate, route_from_evidence,
+    compute_evidence_shape, decide_expansion_strategy, is_grounding_candidate, route_from_evidence,
     EvidenceShape, ExpansionStrategy, SynthesisRoute, EVIDENCE_MIN_TOKEN_COVERAGE,
 };
-pub use self::evidence::build_test_evidence_shape;
 pub(crate) use self::intent_helpers::{
     build_clarification_question, default_oicp_for_intent, format_interpretation, intent_hint,
     label_for_intent, parse_intent_hint,
@@ -544,11 +535,11 @@ pub(crate) use self::retrieval_helpers::{
     collect_hot_corpora, cross_corpus_sort_cmp, drop_no_overlap_chunks, inject_meta_atlas_hits,
     reweight_by_query_relevance,
 };
-pub(crate) use self::types::{KnowledgeContext, KnowledgeQueryPlan};
 pub use self::types::{
     ContradictionProv, HistoryEntryProv, HistorySummaryProv, MetaAtlasHitRecord,
     RecalledMemoryProv, StreamHandle, TurnProvenance,
 };
+pub(crate) use self::types::{KnowledgeContext, KnowledgeQueryPlan};
 
 pub(crate) use self::formatters::{
     build_coverage_gaps_note, build_provenance_components, format_scored_chunks,
@@ -792,10 +783,7 @@ impl Runtime {
     /// 0.4·jaccard(query_entities, pair_entities). When `None`,
     /// retrieval falls back to pure cosine + MMR (pre-GLiNER
     /// behaviour preserved).
-    pub fn with_gliner(
-        mut self,
-        gliner: Arc<dyn crate::traits::EntityExtractor>,
-    ) -> Self {
+    pub fn with_gliner(mut self, gliner: Arc<dyn crate::traits::EntityExtractor>) -> Self {
         self.gliner = Some(gliner);
         self
     }
@@ -823,10 +811,7 @@ impl Runtime {
     /// the SEP source-recall lift attributed to the reranker
     /// experiment is actually driven by dedup or by the
     /// cross-encoder logits.
-    pub fn with_rerank_config(
-        mut self,
-        config: corpus_engine::RerankConfig,
-    ) -> Self {
+    pub fn with_rerank_config(mut self, config: corpus_engine::RerankConfig) -> Self {
         self.rerank_fn = None;
         self.rerank_config = config;
         self
@@ -837,10 +822,7 @@ impl Runtime {
     /// that conversation in this Runtime's lifetime (e.g. a fresh
     /// daemon, a non-relational classification, or a conversation that
     /// only ran on the non-streaming witness path).
-    pub fn get_last_turn_provenance(
-        &self,
-        conversation_id: &str,
-    ) -> Option<TurnProvenance> {
+    pub fn get_last_turn_provenance(&self, conversation_id: &str) -> Option<TurnProvenance> {
         let guard = self.turn_provenance.read().ok()?;
         guard.get(conversation_id).cloned()
     }
@@ -851,10 +833,7 @@ impl Runtime {
     /// emits its `NarrationPhase` events). Production callers
     /// inherit the `NARRATION_MIN_ELAPSED` const default from
     /// [`SessionStore::new`].
-    pub fn with_session_store(
-        mut self,
-        sessions: SharedSessionStore,
-    ) -> Self {
+    pub fn with_session_store(mut self, sessions: SharedSessionStore) -> Self {
         self.sessions = sessions;
         self
     }
@@ -863,10 +842,7 @@ impl Runtime {
     /// clarification, and narration events. The desktop bootstrap
     /// calls this with a `TauriRoutingEventSink`; headless harnesses
     /// inherit the `NoOpRoutingEventSink` default from `new`.
-    pub fn with_routing_events(
-        mut self,
-        sink: Arc<dyn RoutingEventSink>,
-    ) -> Self {
+    pub fn with_routing_events(mut self, sink: Arc<dyn RoutingEventSink>) -> Self {
         self.routing_events = sink;
         self
     }
@@ -905,19 +881,10 @@ impl Runtime {
     /// when a graph DB is found alongside a corpus's LanceDB table;
     /// callers that don't wire one (e.g. tests, code-corpus chat)
     /// leave it `None` and retrieval behaves exactly as before.
-    pub fn with_wikipedia_graph(
-        mut self,
-        graph: Arc<corpus_engine::WikipediaGraph>,
-    ) -> Self {
+    pub fn with_wikipedia_graph(mut self, graph: Arc<corpus_engine::WikipediaGraph>) -> Self {
         self.wikipedia_graph = Some(graph);
         self
     }
-
-
-
-
-
-
 
     /// Install a note store for commitment persistence. Daemon bootstrap
     /// wires this; CLI eval path leaves it `None`, in which case the
@@ -1025,17 +992,6 @@ impl Runtime {
         self
     }
 
-
-
-
-
-
-
-
-
-
-
-
     /// Spawn a background task that generates an auto-title for the
     /// conversation if one isn't already set. Non-blocking — failures are
     /// logged and do not affect the caller.
@@ -1060,19 +1016,6 @@ impl Runtime {
         });
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
     /// Extract long-term memories from a conversation and save them.
     /// Call this when a conversation ends (user quits or session ends).
     pub async fn end_conversation(&self, conversation_id: &str) -> Result<()> {
@@ -1089,7 +1032,10 @@ impl Runtime {
         )
         .await?;
 
-        tracing::info!(count = extracted.len(), "memory: extracted long-term memories");
+        tracing::info!(
+            count = extracted.len(),
+            "memory: extracted long-term memories"
+        );
         // Read the conversation's skill_id once before the loop. The
         // tag is denormalized onto each extracted memory so the
         // recall layer can wall scoped pools (e.g. inner-work) at the
@@ -1188,21 +1134,14 @@ impl Runtime {
                 confidence: 1.0,
             },
             alternatives: Vec::new(),
-            rationale: Some(format!(
-                "session continuation from {}",
-                &resume.session_id
-            )),
+            rationale: Some(format!("session continuation from {}", &resume.session_id)),
             coarse_intent: Some("CONTINUATION".to_string()),
             self_assessment: None,
             timing: None,
             scope: None,
         };
-        self.handle_message_stream_with_classification(
-            message,
-            conversation_id,
-            Some(synthetic),
-        )
-        .await
+        self.handle_message_stream_with_classification(message, conversation_id, Some(synthetic))
+            .await
     }
 
     /// PR2c redirect handler — cancel an in-flight Propose-mode
@@ -1279,12 +1218,8 @@ impl Runtime {
         let message = session.input.clone();
         let conversation_id = session.conversation_id.clone();
         drop(session);
-        self.handle_message_stream_with_classification(
-            &message,
-            &conversation_id,
-            Some(synthetic),
-        )
-        .await
+        self.handle_message_stream_with_classification(&message, &conversation_id, Some(synthetic))
+            .await
     }
 
     pub async fn handle_message_stream(
@@ -1418,7 +1353,8 @@ impl Runtime {
         //     still fires (and traces) but the user sees no chip on
         //     this entry point. The chip surface fires from the
         //     handler-level paths that have a session in scope.
-        self.maybe_compact_dropped_history(&mut context, conversation_id, None).await;
+        self.maybe_compact_dropped_history(&mut context, conversation_id, None)
+            .await;
 
         // 2a.5. Retrieval-over-history spike (2026-05-26). Gated on
         //       SOVEREIGN_HISTORY_RETRIEVAL=1. Embeds prior turn pairs
@@ -1426,7 +1362,8 @@ impl Runtime {
         //       the current user message, stashes hits on the context
         //       for the renderer. Mechanism A/B vs the lossy-summary
         //       compaction arm — see `maybe_retrieve_relevant_history`.
-        self.maybe_retrieve_relevant_history(&mut context, message).await;
+        self.maybe_retrieve_relevant_history(&mut context, message)
+            .await;
 
         // 2b. Tag the conversation with the skill that was active
         // when it started. The store upsert is idempotent — only
@@ -1471,8 +1408,8 @@ impl Runtime {
         // (e.g. `shell`) on a recipe-author turn. See decision note
         // 2026-05-23 for the silent-misroute history.
         let early_active_mode = self.resolve_active_mode(conversation_id).await;
-        let tool_descriptors = self
-            .narrow_tools_pre_classification_for_mode(early_active_mode.as_deref());
+        let tool_descriptors =
+            self.narrow_tools_pre_classification_for_mode(early_active_mode.as_deref());
         let classification = if let Some(preset) = preset {
             preset
         } else {
@@ -1593,12 +1530,7 @@ impl Runtime {
         // its token loop and promptly fires `message-complete`.
         if matches!(policy.move_kind, MoveKind::Ask) {
             return self
-                .handle_ask_move_stream(
-                    message,
-                    conversation_id,
-                    &_session_id,
-                    &classification,
-                )
+                .handle_ask_move_stream(message, conversation_id, &_session_id, &classification)
                 .await;
         }
 
@@ -1671,9 +1603,7 @@ impl Runtime {
                 intent = ?intent,
                 "team-pipeline: kill-switch enabled — routing turn through orchestrator"
             );
-            let candidates = self
-                .retrieve_candidates(message, &context, &intent)
-                .await;
+            let candidates = self.retrieve_candidates(message, &context, &intent).await;
             let register = context.turn_register();
             let witness_grounding = build_witness_grounding(&context, register);
             let inputs = crate::pipeline::TeamPipelineInputs {
@@ -1779,13 +1709,15 @@ impl Runtime {
 
         // R3 — temporal tension pre-pass. Active for relational
         // skills only; zero-cost no-op for factual skills.
-        self.maybe_splice_temporal_tensions(&mut context, message).await;
+        self.maybe_splice_temporal_tensions(&mut context, message)
+            .await;
 
         // Tool-Mastery Layer 2 — compute the tool dossier so
         // `build_system_message` can splice it. No-op on relational
         // skills (the helper short-circuits) and when no NoteStore
         // is wired.
-        self.maybe_compute_tool_dossier(&mut context, conversation_id).await;
+        self.maybe_compute_tool_dossier(&mut context, conversation_id)
+            .await;
 
         // KnowledgeQuery: real streaming path. Prepare the synthesis
         // plan synchronously (retrieval + evidence-shape routing +
@@ -2010,16 +1942,14 @@ impl Runtime {
             tokio::spawn(async move {
                 let started = std::time::Instant::now();
 
-                let (mut s, model_id) = match inference
-                    .complete_stream_with_id_and_finish(&request)
-                    .await
-                {
-                    Ok(pair) => pair,
-                    Err(e) => {
-                        let _ = tx.send(Err(e)).await;
-                        return;
-                    }
-                };
+                let (mut s, model_id) =
+                    match inference.complete_stream_with_id_and_finish(&request).await {
+                        Ok(pair) => pair,
+                        Err(e) => {
+                            let _ = tx.send(Err(e)).await;
+                            return;
+                        }
+                    };
 
                 let mut full_text = String::new();
                 let mut observed_finish: Option<crate::types::FinishReason> = None;
@@ -2063,9 +1993,7 @@ impl Runtime {
                             observed_finish = Some(reason);
                         }
                         StreamFrame::Error(msg) => {
-                            let _ = tx
-                                .send(Err(crate::error::Error::Inference(msg)))
-                                .await;
+                            let _ = tx.send(Err(crate::error::Error::Inference(msg))).await;
                             return;
                         }
                     }
@@ -2236,15 +2164,31 @@ impl Runtime {
                     // so it transfers across questions.
                     let answer_is_honest_negation = {
                         let lower = full_text.to_lowercase();
-                        let has_negation = ["don't", "do not", "cannot", "can't",
-                            "doesn't have", "no information", "no data",
-                            "no record", "outside", "unable to"]
-                            .iter()
-                            .any(|w| lower.contains(w));
-                        let has_scope_token = ["information", "data", "record",
-                            "snapshot", "knowledge base", "details", "results"]
-                            .iter()
-                            .any(|w| lower.contains(w));
+                        let has_negation = [
+                            "don't",
+                            "do not",
+                            "cannot",
+                            "can't",
+                            "doesn't have",
+                            "no information",
+                            "no data",
+                            "no record",
+                            "outside",
+                            "unable to",
+                        ]
+                        .iter()
+                        .any(|w| lower.contains(w));
+                        let has_scope_token = [
+                            "information",
+                            "data",
+                            "record",
+                            "snapshot",
+                            "knowledge base",
+                            "details",
+                            "results",
+                        ]
+                        .iter()
+                        .any(|w| lower.contains(w));
                         has_negation && has_scope_token
                     };
                     let retrieval_missed = documents_found == 0
@@ -2469,8 +2413,7 @@ impl Runtime {
         // actually been given. Soft-fails to None when no prior
         // ids exist (Tier 1 prompt discipline is then the only
         // safety net — same posture as today).
-        let evidence_id_allowlist =
-            self.gather_evidence_id_allowlist(conversation_id).await;
+        let evidence_id_allowlist = self.gather_evidence_id_allowlist(conversation_id).await;
         let request = CompletionRequest {
             prompt: kc.prompt,
             system_message: Some(kc.system),
@@ -2482,16 +2425,16 @@ impl Runtime {
             top_k: self.inference_config.top_k,
             top_p: None,
             oicp,
-                    tools: None,
-                    tool_choice: None,
-                            model_id: None,
-                            enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist,
-        lark_grammar: None,
+            tools: None,
+            tool_choice: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist,
+            lark_grammar: None,
         };
 
         let search_method = kc.search_method;
@@ -2515,8 +2458,7 @@ impl Runtime {
         // wait, but it's still the right time to acknowledge the
         // long phase to the user.
         if matches!(request.preferred_speed, Speed::Slow) {
-            let txt =
-                "Generating a deep answer with the primary model.".to_string();
+            let txt = "Generating a deep answer with the primary model.".to_string();
             if let Some(event) = self.sessions.try_emit_narration(
                 &_session_id,
                 NarrationPhase::PrimarySynthesisStart,
@@ -2553,8 +2495,7 @@ impl Runtime {
         // shape — id + content + created_at is what the echo overlay
         // displays; the rest of the Memory record stays internal.
         let recalled_memories_for_metadata: Option<serde_json::Value> =
-            if context.turn_register() == SkillRegister::Relational
-                && !context.memories.is_empty()
+            if context.turn_register() == SkillRegister::Relational && !context.memories.is_empty()
             {
                 Some(serde_json::Value::Array(
                     context
@@ -2579,16 +2520,14 @@ impl Runtime {
             let started = std::time::Instant::now();
             let mut full_text = String::new();
 
-            let (mut s, model_id) = match inference
-                .complete_stream_with_id_and_finish(&request)
-                .await
-            {
-                Ok(pair) => pair,
-                Err(e) => {
-                    let _ = tx.send(Err(e)).await;
-                    return;
-                }
-            };
+            let (mut s, model_id) =
+                match inference.complete_stream_with_id_and_finish(&request).await {
+                    Ok(pair) => pair,
+                    Err(e) => {
+                        let _ = tx.send(Err(e)).await;
+                        return;
+                    }
+                };
             let mut observed_finish: Option<crate::types::FinishReason> = None;
             let mut observed_completion_tokens: Option<u32> = None;
             while let Some(frame) = s.next().await {
@@ -2601,8 +2540,7 @@ impl Runtime {
                         }
                     }
                     StreamFrame::Finish { reason, usage } => {
-                        observed_completion_tokens =
-                            usage.as_ref().map(|u| u.completion_tokens);
+                        observed_completion_tokens = usage.as_ref().map(|u| u.completion_tokens);
                         // See the matching block in the KQ stream
                         // spawn above — Finish::Error means the slot
                         // bailed mid-stream (context overflow, decode
@@ -2624,9 +2562,7 @@ impl Runtime {
                         observed_finish = Some(reason);
                     }
                     StreamFrame::Error(msg) => {
-                        let _ = tx
-                            .send(Err(crate::error::Error::Inference(msg)))
-                            .await;
+                        let _ = tx.send(Err(crate::error::Error::Inference(msg))).await;
                         return;
                     }
                 }
@@ -2638,8 +2574,7 @@ impl Runtime {
             // frame (older test stubs); the trait
             // `complete_stream_with_finish` default guarantees a
             // terminal frame on every provider that ships today.
-            let finish_reason_typed =
-                observed_finish.unwrap_or(crate::types::FinishReason::Stop);
+            let finish_reason_typed = observed_finish.unwrap_or(crate::types::FinishReason::Stop);
             let max_budget = inference_config.max_tokens;
             let completion_tokens_val = observed_completion_tokens
                 .unwrap_or_else(|| (full_text.chars().count() / 4) as u32);
@@ -2779,11 +2714,7 @@ impl Runtime {
         skip(self, message),
         fields(conversation_id = %conversation_id, message_chars = message.len())
     )]
-    pub async fn handle_message(
-        &self,
-        message: &str,
-        conversation_id: &str,
-    ) -> Result<Response> {
+    pub async fn handle_message(&self, message: &str, conversation_id: &str) -> Result<Response> {
         // Save the user message first so `handle_turn` sees it in the
         // conversation history during context building and routing.
         let user_msg = Message {
@@ -2834,11 +2765,7 @@ impl Runtime {
         skip(self, message),
         fields(conversation_id = %conversation_id, message_chars = message.len())
     )]
-    pub async fn handle_turn(
-        &self,
-        message: &str,
-        conversation_id: &str,
-    ) -> Result<Response> {
+    pub async fn handle_turn(&self, message: &str, conversation_id: &str) -> Result<Response> {
         let turn_start = std::time::Instant::now();
         let has_doc_prefix = message.starts_with("[Document attached: ");
         tracing::info!(has_doc_prefix, "runtime: turn begin");
@@ -2908,8 +2835,7 @@ impl Runtime {
                 }
                 _ => {}
             }
-            upstream_metrics.memory_recall_ms =
-                Some(recall_start.elapsed().as_millis() as u64);
+            upstream_metrics.memory_recall_ms = Some(recall_start.elapsed().as_millis() as u64);
         }
 
         // 1b. Compress working memory from conversation history (now including
@@ -2940,8 +2866,7 @@ impl Runtime {
         )
         .await
         .ok();
-        upstream_metrics.topic_context_ms =
-            Some(topic_context_start.elapsed().as_millis() as u64);
+        upstream_metrics.topic_context_ms = Some(topic_context_start.elapsed().as_millis() as u64);
         context.topic_context = topic_context;
 
         // 2. Route.
@@ -2955,8 +2880,8 @@ impl Runtime {
         // (registry-side lookup misses workspace tags stored only on
         // the conversation row).
         let early_active_mode = self.resolve_active_mode(conversation_id).await;
-        let tool_descriptors = self
-            .narrow_tools_pre_classification_for_mode(early_active_mode.as_deref());
+        let tool_descriptors =
+            self.narrow_tools_pre_classification_for_mode(early_active_mode.as_deref());
         let routing_start = std::time::Instant::now();
         let classification = self
             .router
@@ -3036,12 +2961,7 @@ impl Runtime {
                 "runtime: dispatching recipe-author workspace turn to agent loop (non-stream)"
             );
             return self
-                .handle_recipe_author_turn(
-                    message,
-                    conversation_id,
-                    &context,
-                    &tool_descriptors,
-                )
+                .handle_recipe_author_turn(message, conversation_id, &context, &tool_descriptors)
                 .await;
         }
 
@@ -3102,13 +3022,15 @@ impl Runtime {
         // streaming path: active for relational skills only,
         // zero-cost no-op for factual skills.
         let tensions_start = std::time::Instant::now();
-        self.maybe_splice_temporal_tensions(&mut context, message).await;
+        self.maybe_splice_temporal_tensions(&mut context, message)
+            .await;
         upstream_metrics.tensions_ms = Some(tensions_start.elapsed().as_millis() as u64);
 
         // 2d. Tool-Mastery Layer 2 — compute the dossier. Same
         // pattern as the streaming path: pre-pass populates the
         // field, `build_system_message` splices it.
-        self.maybe_compute_tool_dossier(&mut context, conversation_id).await;
+        self.maybe_compute_tool_dossier(&mut context, conversation_id)
+            .await;
 
         // When a legacy [Document attached: ...] prefix is used, bypass the
         // planner entirely and route to the map-reduce document_operation path.
@@ -3155,7 +3077,9 @@ impl Runtime {
                 conversation_id,
                 "runtime: dispatching to handle_attached_doc_turn (document_session present)"
             );
-            let result = self.handle_attached_doc_turn(message, conversation_id).await;
+            let result = self
+                .handle_attached_doc_turn(message, conversation_id)
+                .await;
             tracing::info!(
                 success = result.is_ok(),
                 total_latency_ms = turn_start.elapsed().as_millis() as u64,
@@ -3189,9 +3113,7 @@ impl Runtime {
                 intent = ?intent,
                 "team-pipeline: kill-switch enabled — routing turn through orchestrator (non-streaming path)"
             );
-            let candidates = self
-                .retrieve_candidates(message, &context, &intent)
-                .await;
+            let candidates = self.retrieve_candidates(message, &context, &intent).await;
             let register = context.turn_register();
             let witness_grounding = build_witness_grounding(&context, register);
             let inputs = crate::pipeline::TeamPipelineInputs {
@@ -3310,16 +3232,20 @@ impl Runtime {
                 .await
             }
             Intent::MetalingualQuery => {
-                self.handle_metalingual_query(message, conversation_id, &context).await
+                self.handle_metalingual_query(message, conversation_id, &context)
+                    .await
             }
             Intent::ConationQuery => {
-                self.handle_conation_query(message, conversation_id, &context).await
+                self.handle_conation_query(message, conversation_id, &context)
+                    .await
             }
             Intent::CommissiveQuery => {
-                self.handle_commissive_query(message, conversation_id, &context).await
+                self.handle_commissive_query(message, conversation_id, &context)
+                    .await
             }
             Intent::ExpressiveQuery => {
-                self.handle_expressive_query(message, conversation_id, &context).await
+                self.handle_expressive_query(message, conversation_id, &context)
+                    .await
             }
             _ => {
                 self.handle_simple(
@@ -3367,12 +3293,10 @@ impl Runtime {
 }
 
 pub(crate) use self::attached_doc_render::{
-    parse_tool_call_inline, render_attached_doc_conversation, truncate_for_chip,
-    AttachedDocSegment,
+    parse_tool_call_inline, render_attached_doc_conversation, truncate_for_chip, AttachedDocSegment,
 };
 
 mod attached_doc_render;
-
 
 #[cfg(test)]
 mod relational_intent_override_tests {
@@ -3381,15 +3305,15 @@ mod relational_intent_override_tests {
     #[test]
     fn non_relational_register_is_passthrough() {
         let intent = Intent::MetalingualQuery;
-        let out = crate::intent_policy::apply_witness_intent_override(&intent, SkillRegister::Factual);
+        let out =
+            crate::intent_policy::apply_witness_intent_override(&intent, SkillRegister::Factual);
         assert!(matches!(out, Intent::MetalingualQuery));
     }
 
     #[test]
     fn relational_overrides_metalingual_to_expressive() {
         let out = crate::intent_policy::apply_witness_intent_override(
-            &
-            Intent::MetalingualQuery,
+            &Intent::MetalingualQuery,
             SkillRegister::Relational,
         );
         assert!(matches!(out, Intent::ExpressiveQuery));
@@ -3398,8 +3322,7 @@ mod relational_intent_override_tests {
     #[test]
     fn relational_overrides_knowledge_to_expressive() {
         let out = crate::intent_policy::apply_witness_intent_override(
-            &
-            Intent::KnowledgeQuery,
+            &Intent::KnowledgeQuery,
             SkillRegister::Relational,
         );
         assert!(matches!(out, Intent::ExpressiveQuery));
@@ -3408,8 +3331,7 @@ mod relational_intent_override_tests {
     #[test]
     fn relational_overrides_complex_task_to_expressive() {
         let out = crate::intent_policy::apply_witness_intent_override(
-            &
-            Intent::ComplexTask,
+            &Intent::ComplexTask,
             SkillRegister::Relational,
         );
         assert!(matches!(out, Intent::ExpressiveQuery));
@@ -3418,8 +3340,7 @@ mod relational_intent_override_tests {
     #[test]
     fn relational_preserves_expressive() {
         let out = crate::intent_policy::apply_witness_intent_override(
-            &
-            Intent::ExpressiveQuery,
+            &Intent::ExpressiveQuery,
             SkillRegister::Relational,
         );
         assert!(matches!(out, Intent::ExpressiveQuery));
@@ -3430,8 +3351,7 @@ mod relational_intent_override_tests {
         // DeepQuery + Relational rides handle_simple's witness branch
         // and benefits from extended-thinking budget; don't downgrade.
         let out = crate::intent_policy::apply_witness_intent_override(
-            &
-            Intent::DeepQuery,
+            &Intent::DeepQuery,
             SkillRegister::Relational,
         );
         assert!(matches!(out, Intent::DeepQuery));
@@ -3442,8 +3362,9 @@ mod relational_intent_override_tests {
         // Continuation routes from the prior turn's rebound intent;
         // overriding here would mask the actual continuation context.
         let out = crate::intent_policy::apply_witness_intent_override(
-            &
-            Intent::Continuation { task_id: "t-1".into() },
+            &Intent::Continuation {
+                task_id: "t-1".into(),
+            },
             SkillRegister::Relational,
         );
         assert!(matches!(out, Intent::Continuation { .. }));

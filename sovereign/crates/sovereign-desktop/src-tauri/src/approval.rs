@@ -127,11 +127,7 @@ impl TauriApprovalChannel {
 
     /// Resolve a pending information-request. `content = None` means the
     /// user pressed skip; `Some(text)` means they pasted something.
-    pub async fn submit_information_response(
-        &self,
-        key: &str,
-        content: Option<String>,
-    ) -> bool {
+    pub async fn submit_information_response(&self, key: &str, content: Option<String>) -> bool {
         if let Some(sender) = self.pending_info.write().await.remove(key) {
             let _ = sender.send(content);
             true
@@ -179,10 +175,7 @@ impl ApprovalChannel for TauriApprovalChannel {
         );
 
         let (tx, rx) = oneshot::channel();
-        self.pending_approvals
-            .write()
-            .await
-            .insert(key, tx);
+        self.pending_approvals.write().await.insert(key, tx);
 
         rx.await.map_err(|_| Error::Cancelled)
     }
@@ -201,10 +194,7 @@ impl ApprovalChannel for TauriApprovalChannel {
         );
 
         let (tx, rx) = oneshot::channel();
-        self.pending_inputs
-            .write()
-            .await
-            .insert(key, tx);
+        self.pending_inputs.write().await.insert(key, tx);
 
         rx.await.map_err(|_| Error::Cancelled)
     }
@@ -252,7 +242,9 @@ impl ApprovalChannel for TauriApprovalChannel {
             .unwrap_or_default();
 
         let status = match output {
-            StepOutput::Text(_) | StepOutput::Json(_) | StepOutput::ReasonWithToolsResult { .. } => "done".to_string(),
+            StepOutput::Text(_)
+            | StepOutput::Json(_)
+            | StepOutput::ReasonWithToolsResult { .. } => "done".to_string(),
             StepOutput::Jump(t) => format!("jump to {t}"),
             StepOutput::Skipped => "skipped".to_string(),
         };

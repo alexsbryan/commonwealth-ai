@@ -51,9 +51,7 @@ const DEFAULT_MAX_OUTPUT_TOKENS: u32 = 8192;
 
 pub async fn cmd_investigation(args: &[String]) -> i32 {
     if args.is_empty() {
-        eprintln!(
-            "Usage: sovereign enrich investigation <build|show> <corpus_id> [args]"
-        );
+        eprintln!("Usage: sovereign enrich investigation <build|show> <corpus_id> [args]");
         return 2;
     }
     match args[0].as_str() {
@@ -144,7 +142,9 @@ async fn cmd_build(args: &[String]) -> i32 {
         }
     }
     let Some(corpus_id) = corpus_id else {
-        return arg_error("missing corpus id (e.g. `sovereign enrich investigation build sec-investigation`)");
+        return arg_error(
+            "missing corpus id (e.g. `sovereign enrich investigation build sec-investigation`)",
+        );
     };
 
     // ── Resolve recipe (registry + bundled fallback + local user
@@ -287,8 +287,7 @@ async fn cmd_build(args: &[String]) -> i32 {
     // ── Convert StoredChunk → ChunkInput. We hold the strings on
     //     the stack so the borrowed `&str`s in `ChunkInput` stay
     //     alive for the duration of the run. ─────────────────────
-    let chunk_id_strings: Vec<String> =
-        stored.iter().map(|c| c.id.to_string()).collect();
+    let chunk_id_strings: Vec<String> = stored.iter().map(|c| c.id.to_string()).collect();
     let chunks: Vec<ChunkInput<'_>> = stored
         .iter()
         .zip(chunk_id_strings.iter())
@@ -318,10 +317,7 @@ async fn cmd_build(args: &[String]) -> i32 {
                 out.findings.len(),
             );
             println!();
-            println!(
-                "Outputs: {}/{INVESTIGATION_DIRNAME}/",
-                index_dir.display()
-            );
+            println!("Outputs: {}/{INVESTIGATION_DIRNAME}/", index_dir.display());
             println!("Inspect with: sovereign enrich investigation show {corpus_id}");
             0
         }
@@ -357,9 +353,7 @@ async fn cmd_show(args: &[String]) -> i32 {
         );
         return 1;
     }
-    let (entities, relationships, findings) = match investigation_graph::read_outputs(
-        &index_dir,
-    ) {
+    let (entities, relationships, findings) = match investigation_graph::read_outputs(&index_dir) {
         Ok(t) => t,
         Err(e) => {
             eprintln!("error: failed to read investigation outputs: {e}");
@@ -453,9 +447,7 @@ fn parse_param_spec(
 
 fn arg_error(msg: &str) -> i32 {
     eprintln!("error: {msg}");
-    eprintln!(
-        "Run `sovereign enrich investigation --help` for usage."
-    );
+    eprintln!("Run `sovereign enrich investigation --help` for usage.");
     2
 }
 

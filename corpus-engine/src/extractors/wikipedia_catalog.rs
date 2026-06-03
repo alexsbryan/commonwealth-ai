@@ -80,12 +80,11 @@ impl Extractor for WikipediaCatalogExtractor {
             ))
         })?;
         let mut magic = [0u8; 2];
-        let read_n = file.read(&mut magic).map_err(|e| {
-            Error::Extraction(format!("wikipedia_catalog: read magic: {e}"))
-        })?;
-        let file = File::open(source_path).map_err(|e| {
-            Error::Extraction(format!("wikipedia_catalog: reopen: {e}"))
-        })?;
+        let read_n = file
+            .read(&mut magic)
+            .map_err(|e| Error::Extraction(format!("wikipedia_catalog: read magic: {e}")))?;
+        let file = File::open(source_path)
+            .map_err(|e| Error::Extraction(format!("wikipedia_catalog: reopen: {e}")))?;
         let reader: Box<dyn Read + Send> = if read_n == 2 && magic == [0x1f, 0x8b] {
             Box::new(flate2::read::GzDecoder::new(file))
         } else {
@@ -102,9 +101,8 @@ impl Extractor for WikipediaCatalogExtractor {
             if line.trim().is_empty() {
                 return Err(Error::Extraction("wikipedia_catalog: empty line".into()));
             }
-            let row: CatalogRow = serde_json::from_str(&line).map_err(|e| {
-                Error::Extraction(format!("wikipedia_catalog: bad JSON line: {e}"))
-            })?;
+            let row: CatalogRow = serde_json::from_str(&line)
+                .map_err(|e| Error::Extraction(format!("wikipedia_catalog: bad JSON line: {e}")))?;
             Ok(build_doc(row))
         });
         // Filter the empty-line errors out cleanly while preserving
@@ -203,7 +201,9 @@ mod tests {
         assert_eq!(d.title.as_deref(), Some("Albert Einstein"));
         assert_eq!(d.source_id, "Albert Einstein");
         assert!(d.content.contains("Abstract: German-born"));
-        assert!(d.content.contains("Sections: Early life, Career, Personal life"));
+        assert!(d
+            .content
+            .contains("Sections: Early life, Career, Personal life"));
         let embed = d.embed_text.as_ref().unwrap();
         assert!(embed.starts_with("Albert Einstein"));
         assert!(embed.contains("German-born"));

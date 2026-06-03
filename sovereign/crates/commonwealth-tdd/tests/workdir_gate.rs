@@ -14,9 +14,22 @@ fn fresh_repo() -> tempfile::TempDir {
 }
 
 fn init_git(path: &Path) {
-    let _ = Command::new("git").arg("-C").arg(path).arg("init").arg("--initial-branch=main").output();
-    let _ = Command::new("git").arg("-C").arg(path).args(["config", "user.email", "t@t.t"]).output();
-    let _ = Command::new("git").arg("-C").arg(path).args(["config", "user.name", "t"]).output();
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .arg("init")
+        .arg("--initial-branch=main")
+        .output();
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["config", "user.email", "t@t.t"])
+        .output();
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["config", "user.name", "t"])
+        .output();
     let _ = Command::new("git")
         .arg("-C")
         .arg(path)
@@ -29,7 +42,10 @@ fn gate_refuses_dirty_repo_at_request_boundary() {
     let tmp = fresh_repo();
     std::fs::write(tmp.path().join("uncommitted.txt"), "wip").unwrap();
     let result = Workdir::check_safe(tmp.path().to_path_buf(), false);
-    assert!(matches!(result, Err(DirtyWorkdir::UncommittedChanges { .. })));
+    assert!(matches!(
+        result,
+        Err(DirtyWorkdir::UncommittedChanges { .. })
+    ));
 }
 
 #[test]
@@ -42,7 +58,10 @@ fn gate_force_unlocks_dirty_repo_only() {
 
     // System path refusal is unbypassable.
     let system_result = Workdir::check_safe(std::path::PathBuf::from("/etc"), true);
-    assert!(matches!(system_result, Err(DirtyWorkdir::SystemPath { .. })));
+    assert!(matches!(
+        system_result,
+        Err(DirtyWorkdir::SystemPath { .. })
+    ));
 }
 
 #[test]

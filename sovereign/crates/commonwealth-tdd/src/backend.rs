@@ -128,9 +128,7 @@ impl ChatBackend for ReqwestChatBackend {
         let content = v
             .pointer("/choices/0/message/content")
             .and_then(|x| x.as_str())
-            .ok_or_else(|| {
-                BackendError::Malformed("missing choices[0].message.content".into())
-            })?
+            .ok_or_else(|| BackendError::Malformed("missing choices[0].message.content".into()))?
             .to_string();
         let prompt_tokens = v
             .pointer("/usage/prompt_tokens")

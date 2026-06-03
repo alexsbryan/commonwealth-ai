@@ -22,12 +22,11 @@ impl Tool for RegistryBrowseTool {
         ToolDescriptor {
             id: "registry_browse".into(),
             name: "RegistryBrowse".into(),
-            description:
-                "List every recipe in the registry (bundled + local). Use this \
+            description: "List every recipe in the registry (bundled + local). Use this \
                  first when authoring a new recipe — there's likely an existing \
                  example with a similar acquire/extract shape you can read with \
                  RecipeRead and pattern off."
-                    .into(),
+                .into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -39,10 +38,9 @@ impl Tool for RegistryBrowseTool {
                 }
             }),
             examples: vec![ToolExample {
-                situation:
-                    "Find any existing SEC-shaped recipes before drafting one for \
+                situation: "Find any existing SEC-shaped recipes before drafting one for \
                      CourtListener."
-                        .into(),
+                    .into(),
                 call: serde_json::json!({"filter": "sec"}),
             }],
             effect: Effect::Read,
@@ -74,11 +72,7 @@ impl Tool for RegistryBrowseTool {
         vec![Permission::RecipeAuthoring]
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let filter = params
             .get("filter")
             .and_then(|v| v.as_str())

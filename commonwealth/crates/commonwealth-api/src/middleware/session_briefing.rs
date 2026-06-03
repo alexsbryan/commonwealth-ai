@@ -134,7 +134,10 @@ async fn append_milestone_state(out: &mut String, store: &FeatureStore, feature_
     if milestones.is_empty() {
         return;
     }
-    let runs = store.list_runs_for_feature(feature_id).await.unwrap_or_default();
+    let runs = store
+        .list_runs_for_feature(feature_id)
+        .await
+        .unwrap_or_default();
 
     // "Last milestone passed" = milestone with highest ordinal whose
     // normal-mode run has stop_passed=true. "Next milestone" = the
@@ -142,9 +145,9 @@ async fn append_milestone_state(out: &mut String, store: &FeatureStore, feature_
     // that hasn't yet passed in normal mode.
     let mut passed_ordinals: Vec<i64> = Vec::new();
     for m in &milestones {
-        let passed_normal = runs.iter().any(|r| {
-            r.milestone_id == m.id && r.mode == "normal" && r.stop_passed == Some(true)
-        });
+        let passed_normal = runs
+            .iter()
+            .any(|r| r.milestone_id == m.id && r.mode == "normal" && r.stop_passed == Some(true));
         if passed_normal {
             passed_ordinals.push(m.ordinal);
         }
@@ -271,12 +274,12 @@ mod tests {
             chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         }
     }
 
@@ -369,14 +372,14 @@ mod tests {
         let mut req = minimal_request();
 
         let mut delta = sovereign_atos::session::ArtifactDelta::default();
-        delta.milestones_passed.push(sovereign_atos::session::MilestonePassEvent {
-            feature_id: "fx".into(),
-            ordinal: 1,
-            artifact_path: ".sovereign/features/fx/milestone-1.md".into(),
-        });
         delta
-            .notes_by_kind
-            .insert("uncertainty".into(), 2);
+            .milestones_passed
+            .push(sovereign_atos::session::MilestonePassEvent {
+                feature_id: "fx".into(),
+                ordinal: 1,
+                artifact_path: ".sovereign/features/fx/milestone-1.md".into(),
+            });
+        delta.notes_by_kind.insert("uncertainty".into(), 2);
         delta
             .recent_note_ids
             .insert("uncertainty".into(), vec!["abc-1".into(), "abc-2".into()]);

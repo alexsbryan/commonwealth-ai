@@ -45,8 +45,6 @@
 
 use serde::Deserialize;
 
-use crate::enrichment::domain::ClusteringConfig;
-use crate::enrichment::pipeline::{AtlasCluster, Exemplar, Facet};
 use super::super::atlas::{
     ClaimSketch, DiscourseAct, EnrichmentDepth, EpistemicStatus, SectionExtraction,
 };
@@ -57,15 +55,18 @@ use super::super::types::{
     Phase7ParseItem, Position, QuestionCluster, SketchExcerpt, Vocabulary,
 };
 use super::literary_atlas::LiteraryAtlasPipeline;
+use crate::enrichment::domain::ClusteringConfig;
+use crate::enrichment::pipeline::{AtlasCluster, Exemplar, Facet};
 use crate::error::{Error, Result};
 
 pub const PIPELINE_ID: &str = "engineering_atlas";
 
-static PHASE1_SYSTEM: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+static PHASE1_SYSTEM: ::std::sync::LazyLock<&'static str> = ::std::sync::LazyLock::new(|| {
+    crate::enrichment::pipeline::prompts::load_or_baked(
         "engineering_atlas/phase1_system.md",
         include_str!("engineering_atlas_prompts/phase1_system.md"),
-    ));
+    )
+});
 
 pub struct EngineeringAtlasPipeline {
     inner: LiteraryAtlasPipeline,
@@ -73,7 +74,9 @@ pub struct EngineeringAtlasPipeline {
 
 impl EngineeringAtlasPipeline {
     pub fn new() -> Self {
-        Self { inner: LiteraryAtlasPipeline::new() }
+        Self {
+            inner: LiteraryAtlasPipeline::new(),
+        }
     }
 }
 
@@ -117,11 +120,7 @@ impl Pipeline for EngineeringAtlasPipeline {
     /// extraction does not benefit from exemplars (the prompt
     /// encodes the schema directly; the model's task is mechanical
     /// not stylistic) and does not use a seed strategy.
-    fn compose_phase1(
-        &self,
-        chapter: &ChapterInput,
-        _exemplars: &[&Exemplar],
-    ) -> ChatPrompt {
+    fn compose_phase1(&self, chapter: &ChapterInput, _exemplars: &[&Exemplar]) -> ChatPrompt {
         let user = render_user_body(chapter);
         ChatPrompt::new(*PHASE1_SYSTEM, user)
             .with_response_schema("engineering_claims", phase1_engineering_schema())
@@ -146,10 +145,7 @@ impl Pipeline for EngineeringAtlasPipeline {
     /// minimal, so the terse path mostly exists so the runner's
     /// auto-retry has something to fall back on when a deadline-
     /// exceeded or parse-drift failure surfaces.
-    fn compose_phase1_terse(
-        &self,
-        chapter: &ChapterInput,
-    ) -> Option<ChatPrompt> {
+    fn compose_phase1_terse(&self, chapter: &ChapterInput) -> Option<ChatPrompt> {
         let user = format!(
             "{}\n\nReminder: respond with one JSON object only. \
              Start with `{{`. No prose, no <think> block.",
@@ -176,7 +172,8 @@ impl Pipeline for EngineeringAtlasPipeline {
         chapter_excerpts: &[&ChapterInput],
         exemplars: &[&Exemplar],
     ) -> ChatPrompt {
-        self.inner.compose_phase3(cluster, chapter_excerpts, exemplars)
+        self.inner
+            .compose_phase3(cluster, chapter_excerpts, exemplars)
     }
 
     fn parse_phase3(&self, response: &str) -> Result<Phase3ParseResult> {
@@ -194,11 +191,7 @@ impl Pipeline for EngineeringAtlasPipeline {
             .compose_phase3_facet(cluster, facet, excerpts, exemplars)
     }
 
-    fn parse_phase3_facet(
-        &self,
-        facet: Facet,
-        response: &str,
-    ) -> Result<Phase3FacetParseResult> {
+    fn parse_phase3_facet(&self, facet: Facet, response: &str) -> Result<Phase3FacetParseResult> {
         self.inner.parse_phase3_facet(facet, response)
     }
 
@@ -303,7 +296,8 @@ impl Pipeline for EngineeringAtlasPipeline {
                 questions_raised: Vec::new(),
                 argument_reconstructions: Vec::new(),
                 type_extension: None,
-                type_extensions: Vec::new(),            }),
+                type_extensions: Vec::new(),
+            }),
         })
     }
 }
@@ -434,7 +428,9 @@ mod tests {
             ]
         }"#;
         let res = p.parse_phase1(resp).unwrap();
-        let sx = res.section_extraction.expect("section_extraction populated");
+        let sx = res
+            .section_extraction
+            .expect("section_extraction populated");
         assert_eq!(sx.claims.len(), 1);
         assert_eq!(sx.claims[0].anchor, "SYSTEM_OVERVIEW.md §10");
         assert_eq!(

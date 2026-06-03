@@ -28,10 +28,7 @@ pub struct McpServerManager {
 
 impl McpServerManager {
     /// Connect to all enabled servers and register their tools.
-    pub async fn from_config(
-        configs: &[McpServerConfig],
-        registry: &mut ToolRegistry,
-    ) -> Self {
+    pub async fn from_config(configs: &[McpServerConfig], registry: &mut ToolRegistry) -> Self {
         let mut statuses = Vec::new();
 
         for config in configs {
@@ -85,15 +82,16 @@ impl McpServerManager {
 }
 
 /// Connect to a single server and discover its tools.
-async fn connect_and_discover(
-    config: &McpServerConfig,
-) -> Result<Vec<Box<dyn Tool>>> {
+async fn connect_and_discover(config: &McpServerConfig) -> Result<Vec<Box<dyn Tool>>> {
     match &config.transport {
         McpTransportConfig::Stdio { command, args, .. } => {
             let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
             super::connect_mcp_server(command, &args_refs, &config.name).await
         }
-        McpTransportConfig::Http { url, auth: auth_config } => {
+        McpTransportConfig::Http {
+            url,
+            auth: auth_config,
+        } => {
             let auth = McpAuth::resolve(&config.name, auth_config);
             super::connect_http_mcp_server(url, auth, &config.name).await
         }

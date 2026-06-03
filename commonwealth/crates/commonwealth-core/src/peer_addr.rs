@@ -110,16 +110,17 @@ mod tests {
         sort_addresses(&mut addrs);
         assert_eq!(addrs[0], s("100.104.36.28:9741"), "Tailscale IPv4 first");
         assert_eq!(addrs[1], s("192.168.1.42:9741"), "LAN IPv4 second");
-        assert_eq!(addrs[2], s("[fd7a:115c:a1e0::a3a:241c]:9741"), "IPv6 ULA last");
+        assert_eq!(
+            addrs[2],
+            s("[fd7a:115c:a1e0::a3a:241c]:9741"),
+            "IPv6 ULA last"
+        );
     }
 
     #[test]
     fn sort_is_stable_within_rank() {
         // Two same-rank addresses should keep input order.
-        let mut addrs = vec![
-            s("100.10.0.1:9741"),
-            s("100.20.0.1:9741"),
-        ];
+        let mut addrs = vec![s("100.10.0.1:9741"), s("100.20.0.1:9741")];
         sort_addresses(&mut addrs);
         assert_eq!(addrs[0], s("100.10.0.1:9741"));
         assert_eq!(addrs[1], s("100.20.0.1:9741"));

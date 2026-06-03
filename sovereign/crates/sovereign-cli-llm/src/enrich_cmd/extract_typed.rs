@@ -23,10 +23,10 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use corpus_engine::enrichment::pipeline::atlas::TypeExtension;
 use corpus_engine::enrichment::pipeline::section_classifier::content_hash;
 use corpus_engine::enrichment::pipeline::typed_schemas::argumentative::{
-    parse_phase1_argumentative_extension, phase1_argumentative_schema,
-    PHASE1_ARGUMENTATIVE_SYSTEM,
+    parse_phase1_argumentative_extension, phase1_argumentative_schema, PHASE1_ARGUMENTATIVE_SYSTEM,
 };
 use corpus_engine::enrichment::pipeline::typed_schemas::descriptive::{
     parse_phase1_descriptive_extension, phase1_descriptive_schema, PHASE1_DESCRIPTIVE_SYSTEM,
@@ -46,7 +46,6 @@ use corpus_engine::enrichment::pipeline::typed_schemas::procedural::{
 use corpus_engine::enrichment::pipeline::typed_schemas::reflective::{
     parse_phase1_reflective_extension, phase1_reflective_schema, PHASE1_REFLECTIVE_SYSTEM,
 };
-use corpus_engine::enrichment::pipeline::atlas::TypeExtension;
 use corpus_engine::enrichment::pipeline::types::{
     ChapterInput, ChatPrompt, DiscourseMode, Phase1Output, SectionClassificationVector,
     SectionClassificationsFile, DISCOURSE_ROUTING_THRESHOLD,
@@ -158,8 +157,8 @@ fn classifications_path(corpus_id: &str) -> PathBuf {
 }
 
 fn load_classifications(path: &PathBuf) -> Result<SectionClassificationsFile, String> {
-    let raw = std::fs::read_to_string(path)
-        .map_err(|e| format!("reading {}: {e}", path.display()))?;
+    let raw =
+        std::fs::read_to_string(path).map_err(|e| format!("reading {}: {e}", path.display()))?;
     SectionClassificationsFile::from_json_with_migration(&raw)
         .map_err(|e| format!("parsing {}: {e}", path.display()))
 }
@@ -446,7 +445,10 @@ pub async fn cmd_extract_typed(args: &[String]) -> i32 {
 
     for (idx, chapter) in dispatch_targets.iter().enumerate() {
         let h = content_hash(&chapter.text);
-        let i = by_chapter_idx.get(&chapter.chapter_id).copied().unwrap_or(usize::MAX);
+        let i = by_chapter_idx
+            .get(&chapter.chapter_id)
+            .copied()
+            .unwrap_or(usize::MAX);
 
         // Cache hit check: if the chapter already has any typed
         // extensions and `--force` is unset, skip. The plural
@@ -568,8 +570,7 @@ pub async fn cmd_extract_typed(args: &[String]) -> i32 {
         // Apply Epistemic + Temporal modulators. v1 is a no-op on
         // the atom shapes but the call is wired so future modulator
         // logic lands without dispatcher surgery.
-        let ctx =
-            ModulatorContext::new(vector.epistemic_posture, vector.temporal_frame);
+        let ctx = ModulatorContext::new(vector.epistemic_posture, vector.temporal_frame);
         let extensions_for_section = apply_modulators(extensions_for_section, ctx);
 
         if extensions_for_section.is_empty() {

@@ -106,9 +106,7 @@ pub enum LedgerEventKind {
     /// not reconstruct hosting from a stream of install/uninstall
     /// events because the hourly cadence is sufficient for routing
     /// and reporting and it cleanly handles process restarts.
-    StorageSnapshot {
-        corpora: Vec<(String, f64)>,
-    },
+    StorageSnapshot { corpora: Vec<(String, f64)> },
 }
 
 /// Aggregated activity for a single inference role (served or
@@ -193,12 +191,12 @@ pub fn aggregate(
     // emission.
     let window_days = (window_secs / 86_400).max(1) as u32;
     for ev in events.iter().filter(|e| e.timestamp >= cutoff) {
-        let entry = by_node.entry(ev.node_id).or_insert_with(|| {
-            NodeContributions {
+        let entry = by_node
+            .entry(ev.node_id)
+            .or_insert_with(|| NodeContributions {
                 window_days,
                 ..Default::default()
-            }
-        });
+            });
         match &ev.kind {
             LedgerEventKind::InferenceServed {
                 tokens_generated,
@@ -206,16 +204,14 @@ pub fn aggregate(
                 ..
             } => {
                 entry.inference_served.requests += 1;
-                entry.inference_served.total_tokens_generated +=
-                    tokens_generated;
+                entry.inference_served.total_tokens_generated += tokens_generated;
                 entry.inference_served.wall_seconds += wall_seconds;
             }
             LedgerEventKind::InferenceReceived {
                 tokens_generated, ..
             } => {
                 entry.inference_consumed.requests += 1;
-                entry.inference_consumed.total_tokens_generated +=
-                    tokens_generated;
+                entry.inference_consumed.total_tokens_generated += tokens_generated;
             }
             LedgerEventKind::KnowledgeQueryServed { corpus_id, .. } => {
                 let bucket = entry
@@ -253,21 +249,20 @@ pub fn aggregate(
                 // `ev.node_id`. Replace that bookkeeping with the two
                 // explicit nodes from `kind`.
                 let _ = entry; // see comment above — emitter bucket unused
-                let sender_entry =
-                    by_node.entry(*from_node).or_insert_with(|| {
-                        NodeContributions {
-                            window_days,
-                            ..Default::default()
-                        }
+                let sender_entry = by_node
+                    .entry(*from_node)
+                    .or_insert_with(|| NodeContributions {
+                        window_days,
+                        ..Default::default()
                     });
                 sender_entry.bytes_served += bytes;
                 let recipient_entry =
-                    by_node.entry(*to_node).or_insert_with(|| {
-                        NodeContributions {
+                    by_node
+                        .entry(*to_node)
+                        .or_insert_with(|| NodeContributions {
                             window_days,
                             ..Default::default()
-                        }
-                    });
+                        });
                 recipient_entry.bytes_received += bytes;
             }
             LedgerEventKind::StorageSnapshot { corpora } => {
@@ -282,8 +277,7 @@ pub fn aggregate(
                     .collect();
                 entry.corpora_hosted.clear();
                 for (corpus_id, size_gb) in corpora {
-                    let q =
-                        existing_queries.remove(corpus_id).unwrap_or(0);
+                    let q = existing_queries.remove(corpus_id).unwrap_or(0);
                     entry.corpora_hosted.push(CorpusHosting {
                         corpus_id: corpus_id.clone(),
                         corpus_name: corpus_id.clone(),
@@ -319,11 +313,7 @@ pub fn aggregate(
     }
     for (_node_id, contrib) in by_node.iter_mut() {
         for corpus in &mut contrib.corpora_hosted {
-            corpus.is_sole_host = hosting_count
-                .get(&corpus.corpus_id)
-                .copied()
-                .unwrap_or(0)
-                == 1;
+            corpus.is_sole_host = hosting_count.get(&corpus.corpus_id).copied().unwrap_or(0) == 1;
         }
     }
 
@@ -368,8 +358,7 @@ mod tests {
                 wall_seconds: 2.5,
             },
         )];
-        let result =
-            aggregate(&events, now, 86_400, &HashMap::new());
+        let result = aggregate(&events, now, 86_400, &HashMap::new());
         // Origin (server side) sees a served bump.
         assert_eq!(result[&a].inference_served.requests, 1);
         assert_eq!(result[&a].inference_served.total_tokens_generated, 100);
@@ -396,10 +385,7 @@ mod tests {
         )];
         let result = aggregate(&events, now, 86_400, &HashMap::new());
         assert_eq!(result[&a].inference_consumed.requests, 1);
-        assert_eq!(
-            result[&a].inference_consumed.total_tokens_generated,
-            100
-        );
+        assert_eq!(result[&a].inference_consumed.total_tokens_generated, 100);
         // wall_seconds is intentionally not on InferenceReceived —
         // the requester doesn't measure server-side wall clock.
         assert_eq!(result[&a].inference_consumed.wall_seconds, 0.0);
@@ -485,14 +471,10 @@ mod tests {
                 },
             ),
         ];
-        let result =
-            aggregate(&events, now, window, &HashMap::new());
+        let result = aggregate(&events, now, window, &HashMap::new());
         // Only the recent event counts.
         assert_eq!(result[&a].inference_served.requests, 1);
-        assert_eq!(
-            result[&a].inference_served.total_tokens_generated,
-            100
-        );
+        assert_eq!(result[&a].inference_served.total_tokens_generated, 100);
     }
 
     #[test]

@@ -383,8 +383,8 @@ pub async fn atlas_download_gliner_model(
     model_id: Option<String>,
 ) -> Result<(), String> {
     use tauri::Emitter;
-    let model_id = model_id
-        .unwrap_or_else(|| sovereign_tools::gliner_ner::DEFAULT_MODEL_ID.to_string());
+    let model_id =
+        model_id.unwrap_or_else(|| sovereign_tools::gliner_ner::DEFAULT_MODEL_ID.to_string());
     let app_for_cb = app.clone();
     let on_progress = move |file: &str, downloaded: u64, total: u64| {
         let _ = app_for_cb.emit(

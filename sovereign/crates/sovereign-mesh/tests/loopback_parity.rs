@@ -204,8 +204,7 @@ async fn loopback_caller_reaches_mesh_status() {
     tokio::spawn(async move {
         let _ = axum::serve(
             listener,
-            mesh_router(daemon)
-                .into_make_service_with_connect_info::<SocketAddr>(),
+            mesh_router(daemon).into_make_service_with_connect_info::<SocketAddr>(),
         )
         .await;
     });
@@ -291,17 +290,9 @@ async fn every_router_fails_closed_when_connect_info_absent() {
     assert_500_on_bare_serve(project_router(rex), "/v1/projects").await;
 
     let (_t4, d4) = fresh_daemon();
-    assert_500_on_bare_serve(
-        reading_router(d4),
-        "/internal/corpus/wikipedia/chunks/0",
-    )
-    .await;
+    assert_500_on_bare_serve(reading_router(d4), "/internal/corpus/wikipedia/chunks/0").await;
 
-    assert_500_on_bare_serve(
-        corpus_watch_router(),
-        "/internal/corpus/watch/list",
-    )
-    .await;
+    assert_500_on_bare_serve(corpus_watch_router(), "/internal/corpus/watch/list").await;
 }
 
 // Silence unused-import lint when the test build slims something

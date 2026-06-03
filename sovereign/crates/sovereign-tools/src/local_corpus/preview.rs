@@ -72,14 +72,22 @@ pub struct OutlierNote {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OutlierReason {
-    LowConfidence { threshold: f32 },
-    AmbiguousCluster { top_clusters: Vec<ClusterConfidence> },
-    TooShort { char_count: usize },
+    LowConfidence {
+        threshold: f32,
+    },
+    AmbiguousCluster {
+        top_clusters: Vec<ClusterConfidence>,
+    },
+    TooShort {
+        char_count: usize,
+    },
     /// The note's best-matching cluster ended up with fewer than
     /// `min_notes_per_cluster` notes after the chunk-to-note rollup,
     /// so we don't tag it on its own. `cluster_size` is how many
     /// notes were in that collapsed cluster.
-    SingletonCluster { cluster_size: usize },
+    SingletonCluster {
+        cluster_size: usize,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -191,13 +199,15 @@ pub async fn build_preview(
         let char_count = chunk.content.chars().count();
         let effective = effective_cluster_of(*chunk_id, *cluster_id);
 
-        let entry = best_by_note.entry(note_title.clone()).or_insert_with(|| NoteBest {
-            chunk_id: *chunk_id,
-            effective_cluster: effective,
-            confidence,
-            note_title: note_title.clone(),
-            char_count,
-        });
+        let entry = best_by_note
+            .entry(note_title.clone())
+            .or_insert_with(|| NoteBest {
+                chunk_id: *chunk_id,
+                effective_cluster: effective,
+                confidence,
+                note_title: note_title.clone(),
+                char_count,
+            });
         if confidence > entry.confidence {
             entry.chunk_id = *chunk_id;
             entry.effective_cluster = effective;
@@ -246,7 +256,10 @@ pub async fn build_preview(
             .get(&note.effective_cluster)
             .map(|c| format!("{NAMESPACE}/{}", c.tag_path))
             .unwrap_or_else(|| {
-                format!("{NAMESPACE}/uncategorized/cluster-{}", note.effective_cluster)
+                format!(
+                    "{NAMESPACE}/uncategorized/cluster-{}",
+                    note.effective_cluster
+                )
             });
 
         cluster_assignments
@@ -296,7 +309,11 @@ pub async fn build_preview(
     // Sort assignments within each cluster by descending confidence
     // so the UI's top rows are the clearest exemplars.
     for list in cluster_assignments.values_mut() {
-        list.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        list.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
     }
     outliers.sort_by(|a, b| {
         b.best_cluster_confidence
@@ -430,9 +447,11 @@ mod tests {
         // Pass 1: per-note best.
         let mut best: BTreeMap<String, (i32, f32, usize)> = BTreeMap::new();
         for c in chunks {
-            let e = best
-                .entry(c.title.to_string())
-                .or_insert((effective(c), c.confidence, c.char_count));
+            let e = best.entry(c.title.to_string()).or_insert((
+                effective(c),
+                c.confidence,
+                c.char_count,
+            ));
             if c.confidence > e.1 {
                 *e = (effective(c), c.confidence, e.2.max(c.char_count));
             } else {
@@ -638,9 +657,27 @@ mod tests {
         // Captures the demo complaint that a single note
         // shouldn't get its own tag.
         let chunks = vec![
-            Chunk { title: "Unique Note",   cluster_id: 42, noise_best: None, confidence: 0.9,  char_count: 600 },
-            Chunk { title: "Big Cluster A", cluster_id: 1,  noise_best: None, confidence: 0.8,  char_count: 600 },
-            Chunk { title: "Big Cluster B", cluster_id: 1,  noise_best: None, confidence: 0.75, char_count: 600 },
+            Chunk {
+                title: "Unique Note",
+                cluster_id: 42,
+                noise_best: None,
+                confidence: 0.9,
+                char_count: 600,
+            },
+            Chunk {
+                title: "Big Cluster A",
+                cluster_id: 1,
+                noise_best: None,
+                confidence: 0.8,
+                char_count: 600,
+            },
+            Chunk {
+                title: "Big Cluster B",
+                cluster_id: 1,
+                noise_best: None,
+                confidence: 0.75,
+                char_count: 600,
+            },
         ];
 
         let (assigned, outliers) = rollup_preview(&chunks, 0.4, 2);

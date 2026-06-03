@@ -103,8 +103,8 @@ impl ChapterManifest {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let json = serde_json::to_string_pretty(self)
-            .map_err(|e| Error::Serialization(e.to_string()))?;
+        let json =
+            serde_json::to_string_pretty(self).map_err(|e| Error::Serialization(e.to_string()))?;
         let tmp = path.with_extension("json.tmp");
         fs::write(&tmp, json)?;
         fs::rename(&tmp, path)?;
@@ -167,14 +167,10 @@ impl ChapterManifest {
     /// one slip through once permanently contaminates the manifest for
     /// this corpus, and future runs have no way to tell a real
     /// character named `"..."` from a schema echo.
-    pub fn merge_characters_present(
-        &mut self,
-        chapter_id: &str,
-        new: &[String],
-    ) -> Result<()> {
-        let entry = self.get_mut(chapter_id).ok_or_else(|| {
-            Error::InvalidInput(format!("chapter not found: {chapter_id}"))
-        })?;
+    pub fn merge_characters_present(&mut self, chapter_id: &str, new: &[String]) -> Result<()> {
+        let entry = self
+            .get_mut(chapter_id)
+            .ok_or_else(|| Error::InvalidInput(format!("chapter not found: {chapter_id}")))?;
         // First, scrub any placeholder entries that a prior (pre-fix)
         // run may have persisted. This turns every merge call into an
         // opportunity to self-heal.
@@ -224,10 +220,7 @@ fn parse_hierarchy(title: &str, marker: &str) -> Option<u32> {
     let after = &title[idx + marker.len()..];
     // Skip separators; then take the next alphanumeric run.
     let after = after.trim_start_matches(|c: char| c.is_whitespace() || c == '.' || c == ':');
-    let first_token: String = after
-        .chars()
-        .take_while(|c| c.is_alphanumeric())
-        .collect();
+    let first_token: String = after.chars().take_while(|c| c.is_alphanumeric()).collect();
     if let Ok(n) = first_token.parse::<u32>() {
         return Some(n);
     }
@@ -392,9 +385,13 @@ mod tests {
             characters_present: vec!["...".into(), "Alyosha".into()],
             metadata: Default::default(),
         });
-        m.merge_characters_present("c1", &["Dmitri".into()]).unwrap();
+        m.merge_characters_present("c1", &["Dmitri".into()])
+            .unwrap();
         let chars = &m.get("c1").unwrap().characters_present;
-        assert!(!chars.iter().any(|c| c == "..."), "scrub should have dropped '...': {chars:?}");
+        assert!(
+            !chars.iter().any(|c| c == "..."),
+            "scrub should have dropped '...': {chars:?}"
+        );
         assert!(chars.iter().any(|c| c == "Alyosha"));
         assert!(chars.iter().any(|c| c == "Dmitri"));
     }

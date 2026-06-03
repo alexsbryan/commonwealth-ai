@@ -125,8 +125,7 @@ impl OcrCtx {
 /// Page-level progress callback signature, shared by `pipeline` and
 /// the manager glue that surfaces it onto the
 /// `local-corpus://progress/{job_id}` channel.
-pub type PageProgressCallback =
-    std::sync::Arc<dyn Fn(PageProgress) + Send + Sync>;
+pub type PageProgressCallback = std::sync::Arc<dyn Fn(PageProgress) + Send + Sync>;
 
 /// One page-level event for the UI.
 #[derive(Debug, Clone)]

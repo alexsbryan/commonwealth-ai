@@ -38,16 +38,10 @@ pub enum WatchedFolderStatus {
     },
     /// User-requested pause. The scheduler skips this corpus entirely
     /// until `resume` is called.
-    PausedManual {
-        since_unix: u64,
-        reason: String,
-    },
+    PausedManual { since_unix: u64, reason: String },
     /// A sweep errored (extraction panic that escaped the guard, IO
     /// failure mid-apply, etc.). The next scheduler tick will retry.
-    Errored {
-        message: String,
-        errored_unix: u64,
-    },
+    Errored { message: String, errored_unix: u64 },
 }
 
 impl WatchedFolderStatus {
@@ -107,14 +101,8 @@ pub struct DiffSummary {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "rule", rename_all = "snake_case")]
 pub enum TrippedRule {
-    Absolute {
-        threshold: usize,
-        observed: usize,
-    },
-    Fractional {
-        threshold: f32,
-        observed: f32,
-    },
+    Absolute { threshold: usize, observed: usize },
+    Fractional { threshold: f32, observed: f32 },
 }
 
 #[cfg(test)]
@@ -155,7 +143,10 @@ mod tests {
 
     #[test]
     fn tripped_rule_round_trips() {
-        let r = TrippedRule::Absolute { threshold: 100, observed: 200 };
+        let r = TrippedRule::Absolute {
+            threshold: 100,
+            observed: 200,
+        };
         let j = serde_json::to_string(&r).unwrap();
         let back: TrippedRule = serde_json::from_str(&j).unwrap();
         assert_eq!(back, r);

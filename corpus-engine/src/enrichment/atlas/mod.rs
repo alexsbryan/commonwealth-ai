@@ -47,33 +47,34 @@ pub use atoms::{
     AtomEnvelope, AtomId, AtomType, AtomsFile, ChunkRef, Claim, Configuration, Entity, Event,
     Question, Relation, ResolutionStatus, SectionPosition, SectionRange, State,
 };
-pub use citation::{apply_citation, SourceCitation};
 pub use axis_catalog::{
     all_axes, axes_for_mode, axis_by_key, AtomKind, GatingField, TypedAxis, AXIS_CATALOG,
 };
-pub use edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
-pub use ingestion::{AtlasData, AtlasIngestion, AtlasIngestionConfig};
-pub use registry::AtlasIngestionRegistry;
-pub use resolution::{
-    fold, resolve_entities_and_events, resolve_step_3b, ResolutionOutput, Step3bOutput,
-    Trajectory, TrajectoryState, TrajectoryTransition,
-};
+pub use citation::{apply_citation, SourceCitation};
 pub use cross_corpus::{
-    detect_grounding, CrossCorpusEdge, CrossCorpusEdgesFile, CrossCorpusInput,
-    CrossCorpusReport, DetectorSummary, MatchTrace, PeerAtomRef, RejectionBucket,
-    RejectionSample,
+    detect_grounding, CrossCorpusEdge, CrossCorpusEdgesFile, CrossCorpusInput, CrossCorpusReport,
+    DetectorSummary, MatchTrace, PeerAtomRef, RejectionBucket, RejectionSample,
 };
+pub use edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
 pub use embeddings::{
     atoms_content_hash, read_atlas_embeddings, write_atlas_embeddings, CachedAtlasEntry,
 };
-pub use summary::{compute_summary as compute_atlas_summary,
-    read_or_compute_summary as read_or_compute_atlas_summary, AtlasSummary};
-pub use vital_tier::{tier_sizes as vital_tier_sizes, vital_tier};
-pub use schema_validation::{
-    build_report as build_schema_validation_report, compare_across_corpora,
-    count_open_questions, count_transitions_without_trigger, count_ungrounded_claims,
-    SchemaComparison, SchemaValidationInput, SchemaValidationReport,
+pub use ingestion::{AtlasData, AtlasIngestion, AtlasIngestionConfig};
+pub use registry::AtlasIngestionRegistry;
+pub use resolution::{
+    fold, resolve_entities_and_events, resolve_step_3b, ResolutionOutput, Step3bOutput, Trajectory,
+    TrajectoryState, TrajectoryTransition,
 };
+pub use schema_validation::{
+    build_report as build_schema_validation_report, compare_across_corpora, count_open_questions,
+    count_transitions_without_trigger, count_ungrounded_claims, SchemaComparison,
+    SchemaValidationInput, SchemaValidationReport,
+};
+pub use summary::{
+    compute_summary as compute_atlas_summary,
+    read_or_compute_summary as read_or_compute_atlas_summary, AtlasSummary,
+};
+pub use vital_tier::{tier_sizes as vital_tier_sizes, vital_tier};
 pub use writer::{
     read_atlas_atoms, read_atlas_cross_corpus_edges, read_atlas_edges, read_tension_candidates,
     write_atlas, write_atlas_configurations, write_atlas_cross_corpus_edges, write_atlas_edges,

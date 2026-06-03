@@ -15,9 +15,7 @@ use super::clustering::{cluster_embeddings, ClusterResult, EnrichmentProgress, F
 use super::domain::{Domain, SkeletonStorage};
 use super::fault_lines::detect_fault_lines;
 use super::open_questions::detect_open_questions;
-use super::skeleton::{
-    CanonicalQuestion, FieldSkeleton, PartialSkeleton, SkeletonQuestion,
-};
+use super::skeleton::{CanonicalQuestion, FieldSkeleton, PartialSkeleton, SkeletonQuestion};
 use super::skeleton_parse::{
     deduplicate_questions, extract_json_from_response, parse_skeleton_response, ParseResult,
 };
@@ -85,8 +83,8 @@ impl FieldModelEngine {
         let index_dir = index.path();
 
         // ── Load or create checkpoint ─────────────────────────────────
-        let mut checkpoint = EnrichmentCheckpoint::load(&index_dir)?
-            .unwrap_or_else(|| EnrichmentCheckpoint {
+        let mut checkpoint =
+            EnrichmentCheckpoint::load(&index_dir)?.unwrap_or_else(|| EnrichmentCheckpoint {
                 schema_version: 1,
                 corpus_id: index.corpus_id().to_string(),
                 domain_id: self.domain.id().to_string(),
@@ -296,8 +294,14 @@ impl FieldModelEngine {
 
         // ── Phase 5: Open questions ───────────────────────────────────
         if !checkpoint.phase_5_complete {
-            detect_open_questions(index, &clusters, &self.inference, self.domain.as_ref(), progress)
-                .await?;
+            detect_open_questions(
+                index,
+                &clusters,
+                &self.inference,
+                self.domain.as_ref(),
+                progress,
+            )
+            .await?;
             checkpoint.phase_5_complete = true;
             checkpoint.last_updated = chrono::Utc::now().to_rfc3339();
             checkpoint.save(&index_dir)?;
@@ -386,7 +390,10 @@ impl FieldModelEngine {
         );
 
         // Count how many chunks have non-empty titles.
-        let titled_count = all.iter().filter(|c| c.title.as_ref().is_some_and(|t| !t.is_empty())).count();
+        let titled_count = all
+            .iter()
+            .filter(|c| c.title.as_ref().is_some_and(|t| !t.is_empty()))
+            .count();
 
         let filtered: Vec<_> = if filter.is_first_in_entry == Some(true) && titled_count > 10 {
             // Titles are available — keep the first chunk per distinct title.
@@ -453,7 +460,8 @@ impl FieldModelEngine {
 
         const CONCURRENCY: usize = 4;
 
-        type InferenceFuture = Pin<Box<dyn futures::Future<Output = (usize, crate::error::Result<String>)> + Send>>;
+        type InferenceFuture =
+            Pin<Box<dyn futures::Future<Output = (usize, crate::error::Result<String>)> + Send>>;
 
         // Resume from partial skeleton if we have checkpoint progress.
         let resume_from = checkpoint.phase_1_batches_done;
@@ -507,18 +515,19 @@ impl FieldModelEngine {
             })
             .collect();
 
-        let spawn_inference = |inference: InferenceFn, batch_idx: usize, prompt: String| -> InferenceFuture {
-            Box::pin(async move {
-                // Skeleton extraction is currently free-form (no
-                // schema); Phase 1b is the only path that opts in
-                // via `Domain::entity_extraction_schema`. Pass None
-                // here to keep the rest of the field-engine pipeline
-                // unchanged. Future schema work for skeleton extract
-                // would add an analogous domain hook.
-                let result = (inference)(&prompt, None).await;
-                (batch_idx, result)
-            })
-        };
+        let spawn_inference =
+            |inference: InferenceFn, batch_idx: usize, prompt: String| -> InferenceFuture {
+                Box::pin(async move {
+                    // Skeleton extraction is currently free-form (no
+                    // schema); Phase 1b is the only path that opts in
+                    // via `Domain::entity_extraction_schema`. Pass None
+                    // here to keep the rest of the field-engine pipeline
+                    // unchanged. Future schema work for skeleton extract
+                    // would add an analogous domain hook.
+                    let result = (inference)(&prompt, None).await;
+                    (batch_idx, result)
+                })
+            };
 
         // Process in concurrent windows.
         let mut prompt_iter = prompts.into_iter();
@@ -535,7 +544,11 @@ impl FieldModelEngine {
         while let Some((batch_idx, result)) = in_flight.next().await {
             // Refill: start the next batch immediately.
             if let Some((next_idx, next_prompt)) = prompt_iter.next() {
-                in_flight.push(spawn_inference(self.inference.clone(), next_idx, next_prompt));
+                in_flight.push(spawn_inference(
+                    self.inference.clone(),
+                    next_idx,
+                    next_prompt,
+                ));
             }
 
             batches_done += 1;
@@ -796,9 +809,7 @@ impl FieldModelEngine {
 /// let (salvaged, failed) = reprocess_skeleton_failures(index)?;
 /// println!("Recovered {salvaged} questions, {failed} still unrecoverable");
 /// ```
-pub fn reprocess_skeleton_failures(
-    index: &CorpusIndex,
-) -> Result<(usize, usize)> {
+pub fn reprocess_skeleton_failures(index: &CorpusIndex) -> Result<(usize, usize)> {
     let failures_path = index.path().join("_skeleton_failures.ndjson");
     if !failures_path.exists() {
         return Ok((0, 0));
@@ -856,7 +867,11 @@ pub fn reprocess_skeleton_failures(
         if let Some(mut existing) = index.load_field_skeleton()? {
             for q in &salvaged_questions {
                 // Check for duplicate question IDs before merging.
-                if let Some(existing_q) = existing.canonical_questions.iter_mut().find(|eq| eq.id == q.id) {
+                if let Some(existing_q) = existing
+                    .canonical_questions
+                    .iter_mut()
+                    .find(|eq| eq.id == q.id)
+                {
                     // Merge positions.
                     for pos in &q.positions {
                         if !existing_q.positions.iter().any(|p| p.id == pos.id) {
@@ -864,15 +879,17 @@ pub fn reprocess_skeleton_failures(
                         }
                     }
                 } else {
-                    existing.canonical_questions.push(crate::enrichment::skeleton::CanonicalQuestion {
-                        id: q.id.clone(),
-                        question: q.question.clone(),
-                        status: q.status.clone(),
-                        question_type: q.question_type.clone(),
-                        primary_entries: q.primary_article_ids.clone(),
-                        positions: q.positions.clone(),
-                        fault_lines: Vec::new(),
-                    });
+                    existing.canonical_questions.push(
+                        crate::enrichment::skeleton::CanonicalQuestion {
+                            id: q.id.clone(),
+                            question: q.question.clone(),
+                            status: q.status.clone(),
+                            question_type: q.question_type.clone(),
+                            primary_entries: q.primary_article_ids.clone(),
+                            positions: q.positions.clone(),
+                            fault_lines: Vec::new(),
+                        },
+                    );
                 }
             }
             existing.generated_at = chrono::Utc::now().to_rfc3339();
@@ -925,7 +942,8 @@ domain = "astrology"
         .unwrap();
 
         let embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(vec![0.0; 768]) }));
-        let inference: InferenceFn = Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(String::new()) }));
+        let inference: InferenceFn =
+            Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(String::new()) }));
         let result = FieldModelEngine::from_recipe(&recipe, embed, inference);
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -957,14 +975,22 @@ enabled = true
         .unwrap();
 
         let embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(vec![0.0; 768]) }));
-        let inference: InferenceFn = Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(String::new()) }));
+        let inference: InferenceFn =
+            Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(String::new()) }));
         let engine = FieldModelEngine::from_recipe(&recipe, embed, inference).unwrap();
         assert_eq!(engine.domain.id(), "philosophy");
     }
 
     #[test]
     fn from_recipe_all_known_domains() {
-        let domains = ["philosophy", "science", "policy", "legal", "community", "multi"];
+        let domains = [
+            "philosophy",
+            "science",
+            "policy",
+            "legal",
+            "community",
+            "multi",
+        ];
         for domain in &domains {
             let toml = format!(
                 r#"
@@ -989,7 +1015,8 @@ domain = "{domain}"
             );
             let recipe = crate::recipe::Recipe::from_toml(&toml).unwrap();
             let embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(vec![0.0; 768]) }));
-            let inference: InferenceFn = Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(String::new()) }));
+            let inference: InferenceFn =
+                Arc::new(|_, _: Option<&serde_json::Value>| Box::pin(async { Ok(String::new()) }));
             let engine = FieldModelEngine::from_recipe(&recipe, embed, inference);
             assert!(
                 engine.is_ok(),
@@ -998,5 +1025,4 @@ domain = "{domain}"
             assert_eq!(engine.unwrap().domain.id(), *domain);
         }
     }
-
 }

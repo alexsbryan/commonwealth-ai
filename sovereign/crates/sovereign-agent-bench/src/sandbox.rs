@@ -169,7 +169,11 @@ mod tests {
         let fx = tempfile::tempdir().unwrap();
         let scaffold = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(scaffold.path().join("src")).unwrap();
-        std::fs::write(scaffold.path().join("Cargo.toml"), "[package]\nname=\"x\"\n").unwrap();
+        std::fs::write(
+            scaffold.path().join("Cargo.toml"),
+            "[package]\nname=\"x\"\n",
+        )
+        .unwrap();
         std::fs::write(scaffold.path().join("src/lib.rs"), "pub fn solve(){}\n").unwrap();
 
         let sb = Sandbox::new(fx.path().to_path_buf()).unwrap();

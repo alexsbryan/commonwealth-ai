@@ -154,10 +154,7 @@ impl Pipeline for ConversationAtlasPipeline {
 
     fn compose_phase1(&self, chapter: &ChapterInput, exemplars: &[&Exemplar]) -> ChatPrompt {
         let user = render_phase1_user_body(
-            chapter,
-            exemplars,
-            /*include_exemplars=*/ true,
-            /*seed=*/ None,
+            chapter, exemplars, /*include_exemplars=*/ true, /*seed=*/ None,
         );
         ChatPrompt::new(self.phase1_system(), user)
             .with_response_schema(
@@ -173,12 +170,8 @@ impl Pipeline for ConversationAtlasPipeline {
         exemplars: &[&Exemplar],
         seed: Option<&SeedEntities>,
     ) -> ChatPrompt {
-        let user = render_phase1_user_body(
-            chapter,
-            exemplars,
-            /*include_exemplars=*/ true,
-            seed,
-        );
+        let user =
+            render_phase1_user_body(chapter, exemplars, /*include_exemplars=*/ true, seed);
         ChatPrompt::new(self.phase1_system(), user)
             .with_response_schema(
                 "phase1_section_extraction",
@@ -196,7 +189,8 @@ impl Pipeline for ConversationAtlasPipeline {
         chapter: &ChapterInput,
         existing: &SectionExtraction,
     ) -> Option<ChatPrompt> {
-        self.inner.compose_phase1b_entity_coverage(chapter, existing)
+        self.inner
+            .compose_phase1b_entity_coverage(chapter, existing)
     }
 
     fn compose_phase1b_concept_coverage(
@@ -204,7 +198,8 @@ impl Pipeline for ConversationAtlasPipeline {
         chapter: &ChapterInput,
         existing: &SectionExtraction,
     ) -> Option<ChatPrompt> {
-        self.inner.compose_phase1b_concept_coverage(chapter, existing)
+        self.inner
+            .compose_phase1b_concept_coverage(chapter, existing)
     }
 
     fn parse_phase1b_coverage(&self, response: &str) -> Result<Vec<EntitySketch>> {
@@ -237,7 +232,8 @@ impl Pipeline for ConversationAtlasPipeline {
         chapter_excerpts: &[&ChapterInput],
         exemplars: &[&Exemplar],
     ) -> ChatPrompt {
-        self.inner.compose_phase3(cluster, chapter_excerpts, exemplars)
+        self.inner
+            .compose_phase3(cluster, chapter_excerpts, exemplars)
     }
 
     fn parse_phase3(&self, response: &str) -> Result<Phase3ParseResult> {
@@ -251,14 +247,11 @@ impl Pipeline for ConversationAtlasPipeline {
         excerpts: &[SketchExcerpt],
         exemplars: &[&Exemplar],
     ) -> Option<ChatPrompt> {
-        self.inner.compose_phase3_facet(cluster, facet, excerpts, exemplars)
+        self.inner
+            .compose_phase3_facet(cluster, facet, excerpts, exemplars)
     }
 
-    fn parse_phase3_facet(
-        &self,
-        facet: Facet,
-        response: &str,
-    ) -> Result<Phase3FacetParseResult> {
+    fn parse_phase3_facet(&self, facet: Facet, response: &str) -> Result<Phase3FacetParseResult> {
         self.inner.parse_phase3_facet(facet, response)
     }
 
@@ -432,7 +425,9 @@ mod tests {
         // 2. User-as-voice rule.
         assert!(p1.contains("user (the speaker behind `### [...] user` blocks) is NEVER a"));
         // 3. Assistant-as-non-person rule.
-        assert!(p1.contains("assistant (the speaker behind `### [...] assistant` blocks)\nis NEVER a Person atom"));
+        assert!(p1.contains(
+            "assistant (the speaker behind `### [...] assistant` blocks)\nis NEVER a Person atom"
+        ));
         // 4. Timestamps / IDs.
         assert!(p1.contains("Years, dates, timestamps, and IDs are NEVER Person"));
         // 5. Decisions via discourse_act=commit.

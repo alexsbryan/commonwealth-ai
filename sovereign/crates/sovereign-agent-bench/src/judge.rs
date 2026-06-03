@@ -145,11 +145,12 @@ pub fn parse_judge_response(raw: &str) -> Result<JudgeTrialOutcome, JudgeError> 
     let v: serde_json::Value = serde_json::from_str(&candidate).map_err(|_| JudgeError::Parse {
         raw: raw.to_string(),
     })?;
-    let anchor_raw = v.get("anchor").and_then(|x| x.as_i64()).ok_or_else(|| {
-        JudgeError::Parse {
+    let anchor_raw = v
+        .get("anchor")
+        .and_then(|x| x.as_i64())
+        .ok_or_else(|| JudgeError::Parse {
             raw: raw.to_string(),
-        }
-    })?;
+        })?;
     if !(0..=3).contains(&anchor_raw) {
         return Err(JudgeError::Parse {
             raw: raw.to_string(),
@@ -431,12 +432,7 @@ mod tests {
             problem_id: "1.1".into(),
             problem_prompt: "P".into(),
             dimension_name: "Approach".into(),
-            rubric_anchors: [
-                "wrong".into(),
-                "ok".into(),
-                "good".into(),
-                "optimal".into(),
-            ],
+            rubric_anchors: ["wrong".into(), "ok".into(), "good".into(), "optimal".into()],
             workspace_view: "WS".into(),
             final_assistant_text: "FT".into(),
         };

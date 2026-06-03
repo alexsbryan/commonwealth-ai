@@ -29,8 +29,8 @@ use std::path::Path;
 use jsonpath_rust::JsonPath;
 use serde_json::Value;
 
-use crate::error::{Error, Result};
 use super::{ExtractedDoc, Extractor};
+use crate::error::{Error, Result};
 
 /// Walks a single JSON file and emits one document per JSONPath match.
 pub struct JsonApiExtractor {
@@ -103,9 +103,8 @@ fn collect_json_files(path: &Path) -> Result<Vec<std::path::PathBuf>> {
 }
 
 fn collect_recursive(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result<()> {
-    let entries = std::fs::read_dir(dir).map_err(|e| {
-        Error::Extraction(format!("read_dir {}: {e}", dir.display()))
-    })?;
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| Error::Extraction(format!("read_dir {}: {e}", dir.display())))?;
     for entry in entries {
         let entry = entry.map_err(|e| Error::Extraction(format!("dir entry: {e}")))?;
         let p = entry.path();
@@ -173,16 +172,13 @@ fn open_one_file(
             "extract.document_path `{document_path}` is not a valid JSONPath: {e}"
         ))
     })?;
-    let mut file = File::open(path).map_err(|e| {
-        Error::Extraction(format!("Failed to open {}: {e}", path.display()))
-    })?;
+    let mut file = File::open(path)
+        .map_err(|e| Error::Extraction(format!("Failed to open {}: {e}", path.display())))?;
     let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes).map_err(|e| {
-        Error::Extraction(format!("Failed to read {}: {e}", path.display()))
-    })?;
-    let body: Value = serde_json::from_slice(&bytes).map_err(|e| {
-        Error::Extraction(format!("{} is not valid JSON: {e}", path.display()))
-    })?;
+    file.read_to_end(&mut bytes)
+        .map_err(|e| Error::Extraction(format!("Failed to read {}: {e}", path.display())))?;
+    let body: Value = serde_json::from_slice(&bytes)
+        .map_err(|e| Error::Extraction(format!("{} is not valid JSON: {e}", path.display())))?;
     let matches = match jpath.find(&body) {
         Value::Array(arr) => arr,
         other => vec![other],
@@ -271,15 +267,9 @@ impl Iterator for JsonApiIter {
                 let mut filtered = serde_json::Map::new();
                 for (k, v) in obj {
                     let drop = k == &self.content_field
-                        || (self
-                            .title_field
-                            .as_deref() == Some(k.as_str()))
-                        || (self
-                            .url_field
-                            .as_deref() == Some(k.as_str()))
-                        || (self
-                            .id_field
-                            .as_deref() == Some(k.as_str()));
+                        || (self.title_field.as_deref() == Some(k.as_str()))
+                        || (self.url_field.as_deref() == Some(k.as_str()))
+                        || (self.id_field.as_deref() == Some(k.as_str()));
                     if !drop {
                         filtered.insert(k.clone(), v.clone());
                     }
@@ -507,11 +497,7 @@ mod tests {
     #[test]
     fn empty_array_yields_no_docs() {
         let dir = tempfile::tempdir().unwrap();
-        let path = write_page(
-            dir.path(),
-            "page.json",
-            r#"{"results": [], "next": null}"#,
-        );
+        let path = write_page(dir.path(), "page.json", r#"{"results": [], "next": null}"#);
         let extractor = JsonApiExtractor {
             document_path: "$.results[*]".into(),
             content_field: "plain_text".into(),

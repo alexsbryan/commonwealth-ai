@@ -18,12 +18,12 @@
 
 use std::path::Path;
 
+use corpus_engine::index::{InsertChunk, InsertCodeMeta};
 use corpus_engine::{
     append_partition_to_canonical, merge_partitions_into_canonical,
     sharding::{extract_shard, index_stats, merge_shards},
     ChunkRange, CorpusIndex,
 };
-use corpus_engine::index::{InsertChunk, InsertCodeMeta};
 
 const EMBED_DIM: usize = 8;
 
@@ -47,16 +47,20 @@ fn chunk(content: &str, title: &str, content_hash: Option<&str>) -> InsertChunk 
 
 async fn build_index(path: &Path, corpus_id: &str, rows: &[(&str, &str, Option<&str>)]) {
     let index = CorpusIndex::create(
-        path, corpus_id, "Test Corpus", "test-model", EMBED_DIM, true, "MIT",
+        path,
+        corpus_id,
+        "Test Corpus",
+        "test-model",
+        EMBED_DIM,
+        true,
+        "MIT",
     )
     .await
     .expect("create index");
     let payload: Vec<_> = rows
         .iter()
         .enumerate()
-        .map(|(i, (content, title, hash))| {
-            (chunk(content, title, *hash), embedding(i as f32))
-        })
+        .map(|(i, (content, title, hash))| (chunk(content, title, *hash), embedding(i as f32)))
         .collect();
     index.insert_batch(&payload).await.expect("insert_batch");
 }
@@ -69,16 +73,25 @@ async fn append_creates_canonical_when_absent() {
     let source = dir.path().join("partition");
     let canonical = dir.path().join("canonical");
 
-    build_index(&source, "legal", &[
-        ("alpha body", "Alpha", Some("h-alpha")),
-        ("bravo body", "Bravo", Some("h-bravo")),
-        ("cha body",   "Cha",   Some("h-cha")),
-    ])
+    build_index(
+        &source,
+        "legal",
+        &[
+            ("alpha body", "Alpha", Some("h-alpha")),
+            ("bravo body", "Bravo", Some("h-bravo")),
+            ("cha body", "Cha", Some("h-cha")),
+        ],
+    )
     .await;
 
     let report = append_partition_to_canonical(
-        &source, &canonical, "legal", "Legal Corpus",
-        "test-model", EMBED_DIM, true,
+        &source,
+        &canonical,
+        "legal",
+        "Legal Corpus",
+        "test-model",
+        EMBED_DIM,
+        true,
     )
     .await
     .expect("append");
@@ -102,28 +115,46 @@ async fn append_dedupes_overlapping_content_hashes() {
     // way to populate a canonical without going through the engine
     // façade).
     let seed = dir.path().join("seed");
-    build_index(&seed, "legal", &[
-        ("alpha body", "Alpha", Some("h-alpha")),
-        ("bravo body", "Bravo", Some("h-bravo")),
-    ])
+    build_index(
+        &seed,
+        "legal",
+        &[
+            ("alpha body", "Alpha", Some("h-alpha")),
+            ("bravo body", "Bravo", Some("h-bravo")),
+        ],
+    )
     .await;
     append_partition_to_canonical(
-        &seed, &canonical, "legal", "Legal Corpus",
-        "test-model", EMBED_DIM, true,
+        &seed,
+        &canonical,
+        "legal",
+        "Legal Corpus",
+        "test-model",
+        EMBED_DIM,
+        true,
     )
     .await
     .unwrap();
 
     // Partition shares one hash with canonical + adds one new.
-    build_index(&partition, "legal", &[
-        ("alpha body", "Alpha-dupe",  Some("h-alpha")), // dupe
-        ("delta body", "Delta",       Some("h-delta")), // new
-    ])
+    build_index(
+        &partition,
+        "legal",
+        &[
+            ("alpha body", "Alpha-dupe", Some("h-alpha")), // dupe
+            ("delta body", "Delta", Some("h-delta")),      // new
+        ],
+    )
     .await;
 
     let report = append_partition_to_canonical(
-        &partition, &canonical, "legal", "Legal Corpus",
-        "test-model", EMBED_DIM, true,
+        &partition,
+        &canonical,
+        "legal",
+        "Legal Corpus",
+        "test-model",
+        EMBED_DIM,
+        true,
     )
     .await
     .expect("append");
@@ -146,8 +177,13 @@ async fn append_rejects_dimension_mismatch() {
 
     // Stated dim 16 differs from the source's 8.
     let err = append_partition_to_canonical(
-        &source, &canonical, "legal", "Legal Corpus",
-        "test-model", 16, true,
+        &source,
+        &canonical,
+        "legal",
+        "Legal Corpus",
+        "test-model",
+        16,
+        true,
     )
     .await
     .expect_err("dim mismatch must error");
@@ -170,8 +206,7 @@ async fn merge_partitions_happy_path() {
     for (i, rows) in [
         vec![("alpha", "Alpha", Some("h-a"))],
         vec![("bravo", "Bravo", Some("h-b"))],
-        vec![("cha",   "Cha",   Some("h-c")),
-             ("delta", "Delta", Some("h-d"))],
+        vec![("cha", "Cha", Some("h-c")), ("delta", "Delta", Some("h-d"))],
     ]
     .into_iter()
     .enumerate()
@@ -217,7 +252,11 @@ async fn merged_search_finds_term_unique_to_one_shard() {
     let mut start = stats.min_chunk_id;
     let mut shards = Vec::new();
     for i in 0..3 {
-        let end = if i == 2 { stats.max_chunk_id } else { start + chunk_size };
+        let end = if i == 2 {
+            stats.max_chunk_id
+        } else {
+            start + chunk_size
+        };
         let p = dir.path().join(format!("shard-{i}"));
         extract_shard(&source, ChunkRange::new(start, end), &p)
             .await

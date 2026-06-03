@@ -77,21 +77,22 @@ impl GgufExpectation {
         // round numbers in our manifest, so 0.5× is a generous
         // floor that still catches byte-level stubs.
         let floor_bytes = (size_gb * 0.5 * 1024.0 * 1024.0 * 1024.0) as u64;
-        Self { min_size_bytes: Some(floor_bytes.max(Self::DEFAULT_MIN_BYTES)) }
+        Self {
+            min_size_bytes: Some(floor_bytes.max(Self::DEFAULT_MIN_BYTES)),
+        }
     }
 
     pub fn unknown() -> Self {
-        Self { min_size_bytes: None }
+        Self {
+            min_size_bytes: None,
+        }
     }
 }
 
 /// GGUF magic prefix — four ASCII bytes `GGUF`.
 pub const GGUF_MAGIC: [u8; 4] = *b"GGUF";
 
-pub fn validate_gguf(
-    path: &Path,
-    expected: &GgufExpectation,
-) -> Result<(), GgufValidationError> {
+pub fn validate_gguf(path: &Path, expected: &GgufExpectation) -> Result<(), GgufValidationError> {
     let meta = match std::fs::metadata(path) {
         Ok(m) => m,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {

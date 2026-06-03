@@ -67,9 +67,8 @@ async fn cmd_feature_approve(args: &[String]) -> i32 {
     // Node identity. Derive deterministically from the git user
     // identity so repeated `approve` invocations from the same
     // operator produce the same witness id.
-    let origin = derive_node_id_from_git(&repo_root).unwrap_or_else(|| {
-        commonwealth_core::ids::NodeId::from_u128(0xA7057E07_A7057E07u128)
-    });
+    let origin = derive_node_id_from_git(&repo_root)
+        .unwrap_or_else(|| commonwealth_core::ids::NodeId::from_u128(0xA7057E07_A7057E07u128));
 
     match sovereign_atos::approval::record_approval(&mesh, origin, &repo_root, &feature_id) {
         Ok(appr) => {

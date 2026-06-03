@@ -30,9 +30,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use crate::catalog_ingest::{
-    run_catalog_ingest, CatalogIngestRequest,
-};
+use crate::catalog_ingest::{run_catalog_ingest, CatalogIngestRequest};
 
 /// Default catalog corpus id paired with this tool. Operators with a
 /// custom catalog setup can wrap [`run_catalog_ingest`] directly
@@ -125,11 +123,7 @@ impl Tool for WikipediaFetchTool {
         vec![Permission::FileWrite, Permission::Network]
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let title = params
             .get("title")
             .and_then(|v| v.as_str())
@@ -174,10 +168,9 @@ impl Tool for WikipediaFetchTool {
         // enrich + atlas summary in one call. Returns the new
         // corpus id on success; we re-shape into a tool-output
         // string so the agent can quote it back to the user.
-        let new_corpus_id =
-            run_catalog_ingest(Arc::clone(&self.engine), req).await.map_err(|e| {
-                Error::Execution(format!("wikipedia_fetch: {e}"))
-            })?;
+        let new_corpus_id = run_catalog_ingest(Arc::clone(&self.engine), req)
+            .await
+            .map_err(|e| Error::Execution(format!("wikipedia_fetch: {e}")))?;
 
         Ok(StepOutput::Text(format!(
             "Fetched \"{title}\" from Wikipedia and appended to the shared `{new_corpus_id}` \

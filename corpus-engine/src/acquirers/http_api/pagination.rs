@@ -50,9 +50,7 @@ pub fn next_page(
             param,
             response_path,
         } => cursor_next(current_url, body, param, response_path),
-        PaginationStrategy::NextUrl { response_path } => {
-            next_url_next(body, response_path)
-        }
+        PaginationStrategy::NextUrl { response_path } => next_url_next(body, response_path),
         PaginationStrategy::PageNumber {
             param,
             start: _,
@@ -109,11 +107,8 @@ fn offset_next(
 fn count_items_at_path(body: &Value, items_path: &str) -> Result<usize> {
     use jsonpath_rust::JsonPath;
 
-    let path = JsonPath::try_from(items_path).map_err(|e| {
-        Error::Recipe(format!(
-            "invalid `items_path` JSONPath `{items_path}`: {e}"
-        ))
-    })?;
+    let path = JsonPath::try_from(items_path)
+        .map_err(|e| Error::Recipe(format!("invalid `items_path` JSONPath `{items_path}`: {e}")))?;
     match path.find(body) {
         Value::Array(arr) => {
             // Single match wrapping an array → unwrap once.
@@ -144,15 +139,11 @@ fn cursor_next(
     // `find()` always returns a Value (Array of matches); pull the
     // first non-null string.
     let cursor = match path.find(body) {
-        Value::Array(arr) => arr.into_iter().find_map(|v| {
-            v.as_str().map(String::from)
-        }),
+        Value::Array(arr) => arr.into_iter().find_map(|v| v.as_str().map(String::from)),
         _ => None,
     };
     match cursor {
-        Some(c) if !c.is_empty() => {
-            Ok(NextPage::Url(set_query_param(current_url, param, &c)))
-        }
+        Some(c) if !c.is_empty() => Ok(NextPage::Url(set_query_param(current_url, param, &c))),
         _ => Ok(NextPage::Done),
     }
 }
@@ -166,9 +157,7 @@ fn next_url_next(body: &Value, response_path: &str) -> Result<NextPage> {
         ))
     })?;
     let next_url = match path.find(body) {
-        Value::Array(arr) => arr.into_iter().find_map(|v| {
-            v.as_str().map(String::from)
-        }),
+        Value::Array(arr) => arr.into_iter().find_map(|v| v.as_str().map(String::from)),
         _ => None,
     };
     match next_url {
@@ -186,8 +175,7 @@ fn page_number_next(
     if state.current_page == 0 {
         // First call — orchestrator sent the start page; we now
         // schedule the next.
-        state.current_page = parse_query_param_usize(current_url, param)
-            .unwrap_or(1);
+        state.current_page = parse_query_param_usize(current_url, param).unwrap_or(1);
     }
     state.current_page += 1;
     if state.current_page > end {
@@ -235,11 +223,7 @@ fn parse_query(url: &str) -> (String, BTreeMap<String, String>, Option<String>) 
     (base, query, fragment)
 }
 
-fn assemble(
-    base: &str,
-    params: &BTreeMap<String, String>,
-    fragment: Option<&str>,
-) -> String {
+fn assemble(base: &str, params: &BTreeMap<String, String>, fragment: Option<&str>) -> String {
     let mut out = base.to_string();
     if !params.is_empty() {
         out.push('?');
@@ -296,8 +280,13 @@ mod tests {
 
         // Second page: 1 item (< page_size) → done.
         let body2 = json!({"items": [3]});
-        let next2 = next_page(&strat, "https://api.example.com/q?offset=2", &body2, &mut state)
-            .unwrap();
+        let next2 = next_page(
+            &strat,
+            "https://api.example.com/q?offset=2",
+            &body2,
+            &mut state,
+        )
+        .unwrap();
         assert!(matches!(next2, NextPage::Done));
     }
 
@@ -340,8 +329,7 @@ mod tests {
         };
         let body = json!({"next": "https://api.example.com/page2"});
         let mut state = PaginationState::default();
-        let next =
-            next_page(&strat, "https://api.example.com/page1", &body, &mut state).unwrap();
+        let next = next_page(&strat, "https://api.example.com/page1", &body, &mut state).unwrap();
         match next {
             NextPage::Url(u) => assert_eq!(u, "https://api.example.com/page2"),
             NextPage::Done => panic!("expected continuation"),
@@ -357,20 +345,35 @@ mod tests {
         };
         let body = json!({});
         let mut state = PaginationState::default();
-        let next =
-            next_page(&strat, "https://api.example.com/q?page=1", &body, &mut state).unwrap();
+        let next = next_page(
+            &strat,
+            "https://api.example.com/q?page=1",
+            &body,
+            &mut state,
+        )
+        .unwrap();
         match next {
             NextPage::Url(u) => assert!(u.contains("page=2")),
             NextPage::Done => panic!("expected continuation"),
         }
-        let next2 =
-            next_page(&strat, "https://api.example.com/q?page=2", &body, &mut state).unwrap();
+        let next2 = next_page(
+            &strat,
+            "https://api.example.com/q?page=2",
+            &body,
+            &mut state,
+        )
+        .unwrap();
         match next2 {
             NextPage::Url(u) => assert!(u.contains("page=3")),
             NextPage::Done => panic!("expected continuation"),
         }
-        let next3 =
-            next_page(&strat, "https://api.example.com/q?page=3", &body, &mut state).unwrap();
+        let next3 = next_page(
+            &strat,
+            "https://api.example.com/q?page=3",
+            &body,
+            &mut state,
+        )
+        .unwrap();
         assert!(matches!(next3, NextPage::Done));
     }
 

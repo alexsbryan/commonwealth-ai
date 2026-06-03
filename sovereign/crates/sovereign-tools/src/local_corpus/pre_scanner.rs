@@ -182,10 +182,7 @@ impl<'a> PreScanner<'a> {
     /// the count of files matching the extension filter, known after
     /// the first pass. Before that, `total_estimate` is the count of
     /// files-so-far.
-    pub fn run_blocking(
-        &self,
-        mut on_progress: impl FnMut(usize, usize),
-    ) -> PreScanResult {
+    pub fn run_blocking(&self, mut on_progress: impl FnMut(usize, usize)) -> PreScanResult {
         // First pass: collect candidate paths + sizes and count files
         // whose extension didn't match the allow-list.
         let (candidates, ignored_types, total_visited, skipped_by_extension) =
@@ -458,10 +455,14 @@ mod tests {
         // matching the intent that "0" means "off". For this test we
         // want flagging on, so set a low positive threshold.
         cfg.pre_scan.large_file_threshold_mb = 1; // threshold = 1 MB
-        // Our file is exactly 1 MB; > 1 MB would be 1,048,577 bytes.
-        // Bump threshold logic: test with threshold 0.5 MB. `u64` only,
-        // so use 1 and add a second file slightly over.
-        fs::write(dir.path().join("bigger.txt"), vec![b'x'; 2 * 1024 * 1024 + 1]).unwrap();
+                                                  // Our file is exactly 1 MB; > 1 MB would be 1,048,577 bytes.
+                                                  // Bump threshold logic: test with threshold 0.5 MB. `u64` only,
+                                                  // so use 1 and add a second file slightly over.
+        fs::write(
+            dir.path().join("bigger.txt"),
+            vec![b'x'; 2 * 1024 * 1024 + 1],
+        )
+        .unwrap();
 
         let scanner = PreScanner::new(&cfg);
         let result = scanner.run_blocking(|_, _| {});
@@ -520,9 +521,7 @@ mod tests {
         // path used PreScanner directly and bypassed the rule —
         // resulting in a LanceDB index that contained material the
         // user explicitly asked to skip.
-        use super::super::config::{
-            LocalCorpusConfig, LocalCorpusSourceType, WatchedFolderConfig,
-        };
+        use super::super::config::{LocalCorpusConfig, LocalCorpusSourceType, WatchedFolderConfig};
         let dir = tempdir().unwrap();
         fs::write(dir.path().join("root.md"), b"keep").unwrap();
         fs::create_dir_all(dir.path().join("COMMONWEALTH")).unwrap();
@@ -531,15 +530,9 @@ mod tests {
         fs::write(dir.path().join("_sovereign-index/index.md"), b"drop").unwrap();
 
         let mut wf = WatchedFolderConfig::default();
-        wf.exclude_globs = vec![
-            "COMMONWEALTH/**".into(),
-            "_sovereign-index/**".into(),
-        ];
-        let mut cfg = LocalCorpusConfig::watched_folder(
-            dir.path().to_path_buf(),
-            "test".into(),
-            wf.clone(),
-        );
+        wf.exclude_globs = vec!["COMMONWEALTH/**".into(), "_sovereign-index/**".into()];
+        let mut cfg =
+            LocalCorpusConfig::watched_folder(dir.path().to_path_buf(), "test".into(), wf.clone());
         // `watched_folder()` factory consumes the WatchedFolderConfig
         // into source_type; force the cfg's extensions to include md
         // (default already does).

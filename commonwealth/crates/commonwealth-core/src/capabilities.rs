@@ -378,7 +378,10 @@ mod tests {
     fn inference_capable_round_trips() {
         let json = minimal_capabilities_json(None, Some(true));
         let caps: NodeCapabilities = serde_json::from_str(&json).unwrap();
-        assert!(caps.inference_capable, "inference_capable: true must survive JSON round-trip");
+        assert!(
+            caps.inference_capable,
+            "inference_capable: true must survive JSON round-trip"
+        );
         let re_json = serde_json::to_string(&caps).unwrap();
         let back: NodeCapabilities = serde_json::from_str(&re_json).unwrap();
         assert!(back.inference_capable);

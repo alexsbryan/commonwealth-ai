@@ -98,12 +98,11 @@ pub async fn upload_document_asset(
                 // for the entire embed phase, then jumped straight between
                 // milestones. `or_insert` preserves the id the milestone
                 // variants already carry.
-                let mut payload = serde_json::to_value(&progress)
-                    .unwrap_or_else(|_| serde_json::json!({}));
+                let mut payload =
+                    serde_json::to_value(&progress).unwrap_or_else(|_| serde_json::json!({}));
                 if let serde_json::Value::Object(map) = &mut payload {
-                    map.entry("asset_id".to_string()).or_insert_with(|| {
-                        serde_json::Value::String(event_asset_id.clone())
-                    });
+                    map.entry("asset_id".to_string())
+                        .or_insert_with(|| serde_json::Value::String(event_asset_id.clone()));
                 }
                 let _ = handle.emit("document:progress", &payload);
             })
@@ -338,11 +337,7 @@ pub async fn ask_document(
         context_window: None,
     };
 
-    let sources_content: Vec<String> = output
-        .citations
-        .iter()
-        .map(|c| c.content.clone())
-        .collect();
+    let sources_content: Vec<String> = output.citations.iter().map(|c| c.content.clone()).collect();
 
     // Epistemic-humility hook: the runtime audits the document-op answer
     // against its citations and may surface an InformationRequestCard so
@@ -557,8 +552,7 @@ pub async fn delete_document_asset(
             .ok_or("Inference not ready")?
     };
 
-    let manager =
-        sovereign_tools::document_asset::DocumentAssetManager::new(inference, store);
+    let manager = sovereign_tools::document_asset::DocumentAssetManager::new(inference, store);
     manager
         .delete(&asset_id)
         .await
@@ -592,10 +586,8 @@ pub async fn list_legacy_documents(
 
     // Filter out sources that already have a DocumentAsset (including
     // the "asset:uuid" sources created by DocumentAssetManager).
-    let asset_sources: std::collections::HashSet<String> = assets
-        .iter()
-        .map(|a| format!("asset:{}", a.id))
-        .collect();
+    let asset_sources: std::collections::HashSet<String> =
+        assets.iter().map(|a| format!("asset:{}", a.id)).collect();
 
     let mut entries = Vec::new();
     for source in &sources {
@@ -608,10 +600,7 @@ pub async fn list_legacy_documents(
             continue;
         }
 
-        let chunks = store
-            .get_chunks_by_source(source)
-            .await
-            .unwrap_or_default();
+        let chunks = store.get_chunks_by_source(source).await.unwrap_or_default();
         if chunks.is_empty() {
             continue;
         }
@@ -620,11 +609,7 @@ pub async fn list_legacy_documents(
             .iter()
             .map(|c| c.content.split_whitespace().count())
             .sum();
-        let filename = source
-            .rsplit('/')
-            .next()
-            .unwrap_or(source)
-            .to_string();
+        let filename = source.rsplit('/').next().unwrap_or(source).to_string();
 
         entries.push(LegacyDocumentEntry {
             source: source.clone(),
@@ -663,11 +648,7 @@ pub async fn promote_legacy_document(
         .iter()
         .map(|c| c.content.split_whitespace().count())
         .sum();
-    let filename = source
-        .rsplit('/')
-        .next()
-        .unwrap_or(&source)
-        .to_string();
+    let filename = source.rsplit('/').next().unwrap_or(&source).to_string();
     let title = filename
         .rsplit_once('.')
         .map(|(name, _)| name)
@@ -695,4 +676,3 @@ pub async fn promote_legacy_document(
 
     Ok(DocumentAssetResponse { asset })
 }
-

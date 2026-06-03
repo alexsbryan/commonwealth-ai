@@ -52,7 +52,10 @@ pub async fn cmd_replay(args: &[String]) -> i32 {
         }
     };
     if !workdir.is_dir() {
-        eprintln!("atos replay: --workdir is not a directory: {}", workdir.display());
+        eprintln!(
+            "atos replay: --workdir is not a directory: {}",
+            workdir.display()
+        );
         return 2;
     }
 
@@ -169,21 +172,23 @@ pub async fn cmd_replay(args: &[String]) -> i32 {
     let design_path = workdir.join("DESIGN.md");
     let charter_path = workdir.join("CHARTER.md");
     if let Err(e) = std::fs::write(&design_path, &design_md) {
-        eprintln!(
-            "atos replay: write {}: {e}",
-            design_path.display()
-        );
+        eprintln!("atos replay: write {}: {e}", design_path.display());
         return 1;
     }
     if let Err(e) = std::fs::write(&charter_path, &charter_md) {
-        eprintln!(
-            "atos replay: write {}: {e}",
-            charter_path.display()
-        );
+        eprintln!("atos replay: write {}: {e}", charter_path.display());
         return 1;
     }
-    println!("  design       = {} ({} bytes)", design_path.display(), design_md.len());
-    println!("  charter      = {} ({} bytes)", charter_path.display(), charter_md.len());
+    println!(
+        "  design       = {} ({} bytes)",
+        design_path.display(),
+        design_md.len()
+    );
+    println!(
+        "  charter      = {} ({} bytes)",
+        charter_path.display(),
+        charter_md.len()
+    );
 
     // Snapshot the synthesized artifacts to the runs dir for triage.
     // The actual run-id is allocated by `cmd_run`, so write to a
@@ -240,12 +245,8 @@ async fn synthesize_design(
     diff_text: &str,
     changed_files: &[String],
 ) -> Result<String, String> {
-    let user_prompt = build_synth_user_prompt(
-        "DESIGN.md",
-        commit_message,
-        diff_text,
-        changed_files,
-    );
+    let user_prompt =
+        build_synth_user_prompt("DESIGN.md", commit_message, diff_text, changed_files);
     call_synth(daemon_url, model, DESIGN_SYNTH_SYSTEM, &user_prompt).await
 }
 
@@ -256,12 +257,8 @@ async fn synthesize_charter(
     diff_text: &str,
     changed_files: &[String],
 ) -> Result<String, String> {
-    let user_prompt = build_synth_user_prompt(
-        "CHARTER.md",
-        commit_message,
-        diff_text,
-        changed_files,
-    );
+    let user_prompt =
+        build_synth_user_prompt("CHARTER.md", commit_message, diff_text, changed_files);
     call_synth(daemon_url, model, CHARTER_SYNTH_SYSTEM, &user_prompt).await
 }
 
@@ -386,11 +383,7 @@ fn git_diff(workdir: &Path, base: &str, head: &str) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-fn git_changed_files(
-    workdir: &Path,
-    base: &str,
-    head: &str,
-) -> Result<Vec<String>, String> {
+fn git_changed_files(workdir: &Path, base: &str, head: &str) -> Result<Vec<String>, String> {
     let out = Command::new("git")
         .arg("-C")
         .arg(workdir)
@@ -409,11 +402,7 @@ fn git_changed_files(
         .collect())
 }
 
-fn git_checkout_new_branch(
-    workdir: &Path,
-    branch: &str,
-    base_sha: &str,
-) -> Result<(), String> {
+fn git_checkout_new_branch(workdir: &Path, branch: &str, base_sha: &str) -> Result<(), String> {
     let out = Command::new("git")
         .arg("-C")
         .arg(workdir)

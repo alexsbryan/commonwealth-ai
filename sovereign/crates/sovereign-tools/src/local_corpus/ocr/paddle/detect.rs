@@ -24,7 +24,10 @@ const STRIDE: u32 = 32;
 
 /// Detect text-line boxes in `image`. Returns axis-aligned boxes in the
 /// ORIGINAL image's pixel coordinates, in reading order.
-pub fn run_detection(engine: &PaddleEngine, image: &DynamicImage) -> Result<Vec<Quad>, PaddleError> {
+pub fn run_detection(
+    engine: &PaddleEngine,
+    image: &DynamicImage,
+) -> Result<Vec<Quad>, PaddleError> {
     let cfg = engine.cfg();
     let (orig_w, orig_h) = (image.width(), image.height());
 
@@ -56,8 +59,10 @@ pub fn run_detection(engine: &PaddleEngine, image: &DynamicImage) -> Result<Vec<
             .lock()
             .map_err(|_| PaddleError::Session("det mutex poisoned".into()))?;
         let outputs = sess
-            .run(ort::inputs![engine.det_input() => tensor]
-                .map_err(|e| PaddleError::Session(format!("det inputs!: {e}")))?)
+            .run(
+                ort::inputs![engine.det_input() => tensor]
+                    .map_err(|e| PaddleError::Session(format!("det inputs!: {e}")))?,
+            )
             .map_err(|e| PaddleError::Session(format!("det run: {e}")))?;
         let view = outputs[0]
             .try_extract_tensor::<f32>()
@@ -66,7 +71,12 @@ pub fn run_detection(engine: &PaddleEngine, image: &DynamicImage) -> Result<Vec<
         let arr = view
             .into_dimensionality::<Ix4>()
             .map_err(|e| PaddleError::Shape(format!("det output not 4-D: {e}")))?;
-        let (_n, _c, ph, pw) = (arr.shape()[0], arr.shape()[1], arr.shape()[2], arr.shape()[3]);
+        let (_n, _c, ph, pw) = (
+            arr.shape()[0],
+            arr.shape()[1],
+            arr.shape()[2],
+            arr.shape()[3],
+        );
         let mut m = vec![0f32; ph * pw];
         for y in 0..ph {
             for x in 0..pw {

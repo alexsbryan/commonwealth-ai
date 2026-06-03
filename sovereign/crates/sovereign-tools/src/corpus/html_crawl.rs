@@ -20,10 +20,7 @@ impl HtmlCrawlParser {
 }
 
 impl CorpusParser for HtmlCrawlParser {
-    fn parse(
-        &self,
-        source_path: &Path,
-    ) -> Result<Box<dyn Iterator<Item = Result<DocumentChunk>>>> {
+    fn parse(&self, source_path: &Path) -> Result<Box<dyn Iterator<Item = Result<DocumentChunk>>>> {
         let files = collect_html_files(source_path)?;
         let label = corpus_label(&self.corpus_id);
         Ok(Box::new(HtmlCrawlIterator {
@@ -53,12 +50,7 @@ impl Iterator for HtmlCrawlIterator {
                 return Some(Ok(chunk));
             }
             let path = self.files.pop_front()?;
-            match process_html_file(
-                &self.corpus_id,
-                self.label,
-                &path,
-                &mut self.chunk_counter,
-            ) {
+            match process_html_file(&self.corpus_id, self.label, &path, &mut self.chunk_counter) {
                 Ok(chunks) => {
                     self.pending = chunks.into();
                     continue;
@@ -91,8 +83,7 @@ fn collect_recursive(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
     let entries = fs::read_dir(dir)
         .map_err(|e| Error::Storage(format!("Failed to read {}: {e}", dir.display())))?;
     for entry in entries {
-        let entry =
-            entry.map_err(|e| Error::Storage(format!("Directory entry error: {e}")))?;
+        let entry = entry.map_err(|e| Error::Storage(format!("Directory entry error: {e}")))?;
         let path = entry.path();
         if path.is_dir() {
             collect_recursive(&path, files)?;

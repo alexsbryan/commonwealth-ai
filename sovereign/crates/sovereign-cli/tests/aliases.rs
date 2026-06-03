@@ -74,9 +74,13 @@ fn siblings_built() -> bool {
     let dir = std::path::Path::new(env!("CARGO_BIN_EXE_sovereign-cli"))
         .parent()
         .expect("CARGO_BIN_EXE_sovereign-cli has a parent dir");
-    ["sovereign-cli-dev", "sovereign-cli-daemon", "sovereign-cli-llm"]
-        .iter()
-        .all(|b| dir.join(b).is_file())
+    [
+        "sovereign-cli-dev",
+        "sovereign-cli-daemon",
+        "sovereign-cli-llm",
+    ]
+    .iter()
+    .all(|b| dir.join(b).is_file())
 }
 
 macro_rules! require_siblings {
@@ -260,7 +264,11 @@ fn alias_notes() {
     // reflection view that `sovereign notes` now owns. The banner
     // fires inside `run_reflect` regardless of the args passed —
     // `--help` is the cheapest probe (no DB / fs touch).
-    banner_fires(&["reflect", "--help"], "sovereign reflect", "sovereign notes");
+    banner_fires(
+        &["reflect", "--help"],
+        "sovereign reflect",
+        "sovereign notes",
+    );
 }
 
 // ─── Quiet-mode suppression ─────────────────────────────────────

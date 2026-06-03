@@ -210,8 +210,7 @@ pub fn sample_article_stats(source_path: &Path) -> Result<ArticleStats> {
         return Ok(stats);
     }
 
-    let mean_sections_per_article =
-        section_count_total as f64 / articles_in_sample as f64;
+    let mean_sections_per_article = section_count_total as f64 / articles_in_sample as f64;
 
     let total_articles = if bytes_read >= source_size_bytes {
         // Whole file fit inside the sample budget — exact count.
@@ -358,10 +357,7 @@ mod tests {
         assert!(read_sidecar(&src).is_some());
 
         // Append data → size changes → sidecar stale.
-        let mut f = std::fs::OpenOptions::new()
-            .append(true)
-            .open(&src)
-            .unwrap();
+        let mut f = std::fs::OpenOptions::new().append(true).open(&src).unwrap();
         writeln!(f, "{{\"name\":\"added\",\"sections\":[]}}").unwrap();
         drop(f);
 

@@ -68,8 +68,14 @@ math = 3
         let profile = parse_profile(toml).unwrap();
         assert_eq!(profile.model_repo, "Qwen/Qwen3-Coder-30B-GGUF");
         assert_eq!(profile.quantization, "Q4_K_M");
-        assert_eq!(oicp::proficiency(&profile.capabilities, Capability::Code), 4);
-        assert_eq!(oicp::proficiency(&profile.capabilities, Capability::General), 2);
+        assert_eq!(
+            oicp::proficiency(&profile.capabilities, Capability::Code),
+            4
+        );
+        assert_eq!(
+            oicp::proficiency(&profile.capabilities, Capability::General),
+            2
+        );
         assert_eq!(profile.context_tokens, 32768);
         assert_eq!(profile.notes.as_deref(), Some("Strong coding model"));
     }

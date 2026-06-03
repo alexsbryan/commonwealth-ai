@@ -136,9 +136,7 @@ const REVIEW_HELP: Help = Help {
     command: "sovereign enrich schema-review",
     summary: "Compare schema validation reports across N corpora; flag systematic gaps.",
     sections: &[
-        HelpSection::Usage(
-            "sovereign enrich schema-review <corpus-a> <corpus-b> [<corpus-c> ...]",
-        ),
+        HelpSection::Usage("sovereign enrich schema-review <corpus-a> <corpus-b> [<corpus-c> ...]"),
         HelpSection::Examples(&[(
             "sovereign enrich schema-review brothers_karamazov compatibilism",
             "Compute both reports; flag gaps present in both as schema-revision candidates.",
@@ -184,7 +182,10 @@ pub async fn cmd_schema_review(args: &[String]) -> i32 {
 
     let comparison = compare_across_corpora(&reports);
 
-    println!("=== Schema review across {} corpora ===", comparison.corpora.len());
+    println!(
+        "=== Schema review across {} corpora ===",
+        comparison.corpora.len()
+    );
     for c in &comparison.corpora {
         println!("  · {c}");
     }
@@ -193,9 +194,7 @@ pub async fn cmd_schema_review(args: &[String]) -> i32 {
     if comparison.convergent_gaps.is_empty() {
         println!("  No convergent gaps — no schema revision candidates.");
     } else {
-        println!(
-            "  Convergent gaps (schema revision candidates — present in ≥ 2 corpora):"
-        );
+        println!("  Convergent gaps (schema revision candidates — present in ≥ 2 corpora):");
         for g in &comparison.convergent_gaps {
             println!();
             println!("  [{}]", g.signature);
@@ -317,10 +316,12 @@ fn write_atomic<T: serde::Serialize>(path: &Path, value: &T) -> std::io::Result<
     fs::create_dir_all(parent)?;
     let tmp = parent.join(format!(
         ".{}.tmp",
-        path.file_name().and_then(|n| n.to_str()).unwrap_or("report")
+        path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("report")
     ));
-    let data = serde_json::to_vec_pretty(value)
-        .map_err(|e| std::io::Error::other(format!("ser: {e}")))?;
+    let data =
+        serde_json::to_vec_pretty(value).map_err(|e| std::io::Error::other(format!("ser: {e}")))?;
     fs::write(&tmp, data)?;
     fs::rename(&tmp, path)?;
     Ok(())
@@ -335,10 +336,7 @@ fn print_human_report(r: &SchemaValidationReport) {
     println!();
 
     println!("  [1] Extraction coverage");
-    println!(
-        "      total atoms: {}",
-        r.extraction.total_atoms
-    );
+    println!("      total atoms: {}", r.extraction.total_atoms);
     for b in &r.extraction.by_type {
         println!("        · {:13} {}", b.atom_type, b.count);
     }
@@ -388,11 +386,7 @@ fn print_human_report(r: &SchemaValidationReport) {
 
     println!("  [4] Atom-type utilisation");
     for f in &r.utilisation.fractions {
-        println!(
-            "        · {:13} {:.1}%",
-            f.atom_type,
-            f.fraction * 100.0
-        );
+        println!("        · {:13} {:.1}%", f.atom_type, f.fraction * 100.0);
     }
     if !r.utilisation.under_utilised_types.is_empty() {
         println!(
@@ -439,14 +433,10 @@ fn print_human_report(r: &SchemaValidationReport) {
 
     println!("  [7] Cross-corpus connectivity");
     if r.cross_corpus.available {
-        println!(
-            "      grounding edges: {}",
-            r.cross_corpus.grounding_count
-        );
+        println!("      grounding edges: {}", r.cross_corpus.grounding_count);
         println!(
             "      local entity atoms with ≥ 1 outbound edge: {}/{}",
-            r.cross_corpus.local_atoms_with_outbound,
-            r.cross_corpus.local_entity_atom_count
+            r.cross_corpus.local_atoms_with_outbound, r.cross_corpus.local_entity_atom_count
         );
     } else {
         println!(

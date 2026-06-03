@@ -153,10 +153,7 @@ impl PoolHandle {
                 if prior_received >= pod.assigned_units {
                     continue;
                 }
-                match controller
-                    .poll_completed(&pod.handle, &pod.client)
-                    .await
-                {
+                match controller.poll_completed(&pod.handle, &pod.client).await {
                     Ok(batch) => {
                         for unit in batch.units {
                             on_unit(pod_idx, unit);
@@ -282,7 +279,11 @@ impl MultiPodCoordinator {
         controller_config: crate::worker_controller::ControllerConfig,
         coordinator_config: CoordinatorConfig,
     ) -> Self {
-        let controller = Arc::new(WorkerController::new(provider, owner_signing, controller_config));
+        let controller = Arc::new(WorkerController::new(
+            provider,
+            owner_signing,
+            controller_config,
+        ));
         Self {
             controller,
             config: coordinator_config,
@@ -347,12 +348,10 @@ impl MultiPodCoordinator {
             match jh.await {
                 Ok(Ok(p)) => successes.push(Arc::new(p)),
                 Ok(Err(e)) => errors.push((i, e)),
-                Err(join_err) => {
-                    errors.push((
-                        i,
-                        ControllerError::InvalidArgument(format!("join error: {join_err}")),
-                    ))
-                }
+                Err(join_err) => errors.push((
+                    i,
+                    ControllerError::InvalidArgument(format!("join error: {join_err}")),
+                )),
             }
         }
         if !errors.is_empty() {
@@ -456,7 +455,7 @@ mod tests {
         assert_eq!(parts[1].len(), 3); // 1, 5, 9
         assert_eq!(parts[2].len(), 2); // 2, 6
         assert_eq!(parts[3].len(), 2); // 3, 7
-        // Original unit_ids preserved
+                                       // Original unit_ids preserved
         assert_eq!(parts[0][0].unit_id, 0);
         assert_eq!(parts[0][1].unit_id, 4);
         assert_eq!(parts[3][1].unit_id, 7);
@@ -514,11 +513,7 @@ mod tests {
         }
     }
     impl WorkerProvider for StubProvider {
-        fn create(
-            &self,
-            _bootstrap_b64: &str,
-            spec: &JobSpec,
-        ) -> ProviderResult<ProviderInstance> {
+        fn create(&self, _bootstrap_b64: &str, spec: &JobSpec) -> ProviderResult<ProviderInstance> {
             let idx = self.create_count.fetch_add(1, Ordering::SeqCst);
             Ok(ProviderInstance {
                 instance_id: format!("inst-{idx}-{}", spec.job_id),

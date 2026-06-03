@@ -133,8 +133,7 @@ mod tests {
             )
             .unwrap();
 
-        let peer_shards: Vec<usize> =
-            vec![0, 1, 2, 3, 4, 16, 17, 18, 21, 23, 28, 31, 33, 35, 37];
+        let peer_shards: Vec<usize> = vec![0, 1, 2, 3, 4, 16, 17, 18, 21, 23, 28, 31, 33, 35, 37];
         store
             .set(
                 PROCESSED_SHARDS_APP_ID,
@@ -147,8 +146,7 @@ mod tests {
         let union = union_processed_shards(&store, "wikipedia");
         assert_eq!(union.len(), 33, "33 distinct shards across the two peers");
 
-        let missing: Vec<usize> =
-            (0..38).filter(|i| !union.contains(i)).collect();
+        let missing: Vec<usize> = (0..38).filter(|i| !union.contains(i)).collect();
         assert_eq!(
             missing,
             vec![5, 6, 7, 8, 9],

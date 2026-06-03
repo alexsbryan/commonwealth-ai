@@ -110,21 +110,14 @@ pub fn walk_folder(
             .collect(),
         _ => Vec::new(),
     };
-    let mut roots: Vec<(u8, &Path)> =
-        Vec::with_capacity(1 + additional.len());
+    let mut roots: Vec<(u8, &Path)> = Vec::with_capacity(1 + additional.len());
     roots.push((0, config.root_path.as_path()));
     for (i, p) in additional.iter().enumerate() {
         roots.push((u8::try_from(i + 1).unwrap_or(u8::MAX), *p));
     }
 
     for (root_index, root_path) in roots {
-        let outcome = walk_one_root(
-            config,
-            root_path,
-            root_index,
-            prior_meta,
-            exclude_globs,
-        )?;
+        let outcome = walk_one_root(config, root_path, root_index, prior_meta, exclude_globs)?;
         // Merge per-root snapshot into the combined snapshot. The
         // doc_id namespacing (`_r{n}/...` for additional roots)
         // means primary and additional entries don't collide.
@@ -135,20 +128,21 @@ pub fn walk_folder(
             combined_snapshot.insert(doc_id, entry);
         }
         // Merge raw counts. Counters add; per-file lists concat.
-        combined_raw.total_visited =
-            combined_raw.total_visited.saturating_add(outcome.raw.total_visited);
-        combined_raw.ignored_types =
-            combined_raw.ignored_types.saturating_add(outcome.raw.ignored_types);
+        combined_raw.total_visited = combined_raw
+            .total_visited
+            .saturating_add(outcome.raw.total_visited);
+        combined_raw.ignored_types = combined_raw
+            .ignored_types
+            .saturating_add(outcome.raw.ignored_types);
         for (ext, count) in outcome.raw.skipped_by_extension {
-            *combined_raw
-                .skipped_by_extension
-                .entry(ext)
-                .or_insert(0) += count;
+            *combined_raw.skipped_by_extension.entry(ext).or_insert(0) += count;
         }
         combined_raw.readable.extend(outcome.raw.readable);
         combined_raw.large_files.extend(outcome.raw.large_files);
         combined_raw.corrupt_files.extend(outcome.raw.corrupt_files);
-        combined_raw.protected_pdfs.extend(outcome.raw.protected_pdfs);
+        combined_raw
+            .protected_pdfs
+            .extend(outcome.raw.protected_pdfs);
         combined_raw.scanned_pdfs.extend(outcome.raw.scanned_pdfs);
         total_visited = total_visited.saturating_add(outcome.visited);
     }
@@ -331,7 +325,11 @@ fn walk_one_root(
         );
     }
 
-    Ok(WalkOutcome { snapshot, raw, visited })
+    Ok(WalkOutcome {
+        snapshot,
+        raw,
+        visited,
+    })
 }
 
 /// Project `prior_meta` from a snapshot — extracts just the
@@ -668,7 +666,10 @@ mod tests {
         // source_root_index correctly stamped.
         assert_eq!(out.snapshot.get("notes/a.md").unwrap().source_root_index, 0);
         assert_eq!(
-            out.snapshot.get("_r1/notes/a.md").unwrap().source_root_index,
+            out.snapshot
+                .get("_r1/notes/a.md")
+                .unwrap()
+                .source_root_index,
             1
         );
         // Total: 4 entries (2 per root).
@@ -690,7 +691,10 @@ mod tests {
 
         // Same content in both roots, different relative paths.
         write(&primary.path().join("shared.md"), "identical body");
-        write(&additional.path().join("backup/shared.md"), "identical body");
+        write(
+            &additional.path().join("backup/shared.md"),
+            "identical body",
+        );
         // A unique file in each root for sanity.
         write(&primary.path().join("only-primary.txt"), "p");
         write(&additional.path().join("only-additional.txt"), "a");
@@ -710,14 +714,20 @@ mod tests {
         let out = walk_folder(&cfg, &HashMap::new(), &[]).unwrap();
 
         // 3 entries (4 files, 1 cross-root dup folded).
-        assert_eq!(out.snapshot.len(), 3, "got {:?}", out.snapshot.keys().collect::<Vec<_>>());
+        assert_eq!(
+            out.snapshot.len(),
+            3,
+            "got {:?}",
+            out.snapshot.keys().collect::<Vec<_>>()
+        );
 
         // Canonical is the lex-first doc_id of the dup group.
         // Primary's `shared.md` < additional's `_r1/backup/shared.md`,
         // so the primary entry wins.
-        let canonical = out.snapshot.get("shared.md").expect(
-            "canonical (primary `shared.md`) should survive dedup",
-        );
+        let canonical = out
+            .snapshot
+            .get("shared.md")
+            .expect("canonical (primary `shared.md`) should survive dedup");
         assert_eq!(canonical.aux_paths.len(), 1);
         assert!(
             canonical.aux_paths[0]
@@ -735,7 +745,10 @@ mod tests {
         assert!(out.snapshot.contains_key("_r1/only-additional.txt"));
         for (doc_id, entry) in &out.snapshot {
             if doc_id != "shared.md" {
-                assert!(entry.aux_paths.is_empty(), "{doc_id} should not have aux_paths");
+                assert!(
+                    entry.aux_paths.is_empty(),
+                    "{doc_id} should not have aux_paths"
+                );
             }
         }
     }

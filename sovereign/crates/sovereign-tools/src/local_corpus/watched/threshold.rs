@@ -108,7 +108,10 @@ mod tests {
         // independently of fractional.
         let decision = DeletionGuard::evaluate(30, 100, &cfg(25, 0.50));
         match decision {
-            GuardDecision::Pause(TrippedRule::Absolute { threshold, observed }) => {
+            GuardDecision::Pause(TrippedRule::Absolute {
+                threshold,
+                observed,
+            }) => {
                 assert_eq!(threshold, 25);
                 assert_eq!(observed, 30);
             }
@@ -122,7 +125,10 @@ mod tests {
         // frac=0.10. Verifies fractional fires independently.
         let decision = DeletionGuard::evaluate(5, 10, &cfg(100, 0.10));
         match decision {
-            GuardDecision::Pause(TrippedRule::Fractional { threshold, observed }) => {
+            GuardDecision::Pause(TrippedRule::Fractional {
+                threshold,
+                observed,
+            }) => {
                 assert!((threshold - 0.10).abs() < f32::EPSILON);
                 assert!((observed - 0.50).abs() < f32::EPSILON);
             }

@@ -70,12 +70,7 @@ pub(crate) fn atom_surface_fields(
             format!("State of {}: {}", s.entity_id.as_str(), s.label),
             s.confidence,
         ),
-        AtomEnvelope::Relation(r) => (
-            r.label.clone(),
-            Vec::new(),
-            r.label.clone(),
-            None,
-        ),
+        AtomEnvelope::Relation(r) => (r.label.clone(), Vec::new(), r.label.clone(), None),
         AtomEnvelope::Claim(c) => (
             truncate(&c.content, 80),
             Vec::new(),
@@ -160,9 +155,7 @@ pub(crate) fn truncate(s: &str, max_chars: usize) -> String {
 /// atom's evidence (or `first_appearance` for entities, or
 /// `section_position` for events). Order preserves the order
 /// evidence was written.
-pub(crate) fn atom_evidence_section_refs(
-    atom: &AtomEnvelope,
-) -> Vec<(String, Option<String>)> {
+pub(crate) fn atom_evidence_section_refs(atom: &AtomEnvelope) -> Vec<(String, Option<String>)> {
     match atom {
         AtomEnvelope::Entity(e) => vec![(
             e.first_appearance.chunk_id.clone(),

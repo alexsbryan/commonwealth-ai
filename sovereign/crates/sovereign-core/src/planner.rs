@@ -57,20 +57,20 @@ impl Planner for LlmPlanner {
                 max_tokens: Some(1024),
                 temperature: Some(0.0),
                 structured_output: None,
-            think_budget: None,
+                think_budget: None,
                 top_k: None,
                 top_p: None,
                 oicp: None,
                 tools: None,
                 tool_choice: None,
-                            model_id: None,
-                            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -86,11 +86,7 @@ impl Planner for LlmPlanner {
                     return Ok(plan);
                 }
                 Err(e) => {
-                    eprintln!(
-                        "[planner] Parse failed (attempt {}): {}",
-                        attempt + 1,
-                        e
-                    );
+                    eprintln!("[planner] Parse failed (attempt {}): {}", attempt + 1, e);
                     last_error = format!(
                         "Your previous output could not be parsed: {e}. Output ONLY valid JSON matching the schema."
                     );
@@ -114,8 +110,13 @@ impl Planner for LlmPlanner {
                 let out_str = match output {
                     StepOutput::Text(t) => t.chars().take(200).collect::<String>(),
                     StepOutput::Json(v) => serde_json::to_string(v).unwrap_or_default(),
-                    StepOutput::ReasonWithToolsResult { text, iterations, .. } => {
-                        format!("({iterations} searches) {}", text.chars().take(200).collect::<String>())
+                    StepOutput::ReasonWithToolsResult {
+                        text, iterations, ..
+                    } => {
+                        format!(
+                            "({iterations} searches) {}",
+                            text.chars().take(200).collect::<String>()
+                        )
                     }
                     StepOutput::Jump(t) => format!("jumped to step {t}"),
                     StepOutput::Skipped => "skipped".to_string(),
@@ -147,16 +148,16 @@ impl Planner for LlmPlanner {
             top_k: None,
             top_p: None,
             oicp: None,
-                tools: None,
-                tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-        sampling_mode: None,
-        assistant_prefix: None,
-        cmd_prefix: None,
-        url_allowlist: None,
-        evidence_id_allowlist: None,
-        lark_grammar: None,
+            tools: None,
+            tool_choice: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
 
         let response = self.inference.complete(&request).await?;
@@ -265,10 +266,7 @@ fn build_plan_prompt(
                         .map(|o| o.keys().cloned().collect::<Vec<_>>())
                     {
                         if !keys.is_empty() {
-                            line.push_str(&format!(
-                                "\n  Output keys: {}",
-                                keys.join(", ")
-                            ));
+                            line.push_str(&format!("\n  Output keys: {}", keys.join(", ")));
                         }
                     }
                 }
@@ -324,14 +322,16 @@ pub fn extract_json(raw: &str) -> Result<String> {
         }
     }
 
-    Err(Error::Planning("No JSON object found in model output".to_string()))
+    Err(Error::Planning(
+        "No JSON object found in model output".to_string(),
+    ))
 }
 
 /// Parse a flat JSON plan into a Plan struct.
 /// Handles the simplified schema where `kind` is a string, not a tagged enum.
 pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
-    let raw: serde_json::Value =
-        serde_json::from_str(json_str).map_err(|e| Error::Planning(format!("Invalid JSON: {e}")))?;
+    let raw: serde_json::Value = serde_json::from_str(json_str)
+        .map_err(|e| Error::Planning(format!("Invalid JSON: {e}")))?;
 
     let obj = raw
         .as_object()
@@ -454,32 +454,30 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
                     .get("request")
                     .cloned()
                     .unwrap_or(serde_json::Value::Object(Default::default()));
-                let request: crate::types::InformationRequest =
-                    serde_json::from_value(request_obj).unwrap_or(
-                        crate::types::InformationRequest {
-                            current_understanding: String::new(),
-                            gap: step_obj
-                                .get("gap")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or(&description)
-                                .to_string(),
-                            relevance: String::new(),
-                            satisfying_source: String::new(),
-                            search_hints: Vec::new(),
-                            task_id: String::new(),
-                            step_id: 0,
-                            // Planner-side default; executor re-stamps
-                            // kind = StepBlock + task_title at dispatch,
-                            // so the value here is never observed by the
-                            // UI. Default::default() would be Refinement,
-                            // which is the wrong default for a step kind
-                            // whose entire job is to block a task — keep
-                            // it explicit to make that visible at the
-                            // construction site.
-                            kind: crate::types::InformationRequestKind::StepBlock,
-                            task_title: String::new(),
-                        },
-                    );
+                let request: crate::types::InformationRequest = serde_json::from_value(request_obj)
+                    .unwrap_or(crate::types::InformationRequest {
+                        current_understanding: String::new(),
+                        gap: step_obj
+                            .get("gap")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or(&description)
+                            .to_string(),
+                        relevance: String::new(),
+                        satisfying_source: String::new(),
+                        search_hints: Vec::new(),
+                        task_id: String::new(),
+                        step_id: 0,
+                        // Planner-side default; executor re-stamps
+                        // kind = StepBlock + task_title at dispatch,
+                        // so the value here is never observed by the
+                        // UI. Default::default() would be Refinement,
+                        // which is the wrong default for a step kind
+                        // whose entire job is to block a task — keep
+                        // it explicit to make that visible at the
+                        // construction site.
+                        kind: crate::types::InformationRequestKind::StepBlock,
+                        task_title: String::new(),
+                    });
                 StepKind::AwaitUserInfo { request }
             }
             _ => {
@@ -553,7 +551,9 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
     edges.retain(|&(from, to)| {
         if from >= max_id || to >= max_id {
             tracing::warn!(
-                from, to, max_id,
+                from,
+                to,
+                max_id,
                 "Dropping invalid edge — references non-existent step"
             );
             return false;
@@ -622,10 +622,9 @@ fn find_matching_template(
             .filter(|w| trigger_lower.contains(**w))
             .count();
 
-        if overlap > 0
-            && (best_match.is_none() || overlap > best_match.unwrap().0) {
-                best_match = Some((overlap, &template.steps));
-            }
+        if overlap > 0 && (best_match.is_none() || overlap > best_match.unwrap().0) {
+            best_match = Some((overlap, &template.steps));
+        }
     }
 
     best_match.map(|(_, steps)| steps.to_string())

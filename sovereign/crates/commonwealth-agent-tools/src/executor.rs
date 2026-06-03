@@ -15,8 +15,8 @@ use tokio::io::AsyncReadExt;
 use tracing::info;
 
 use crate::primitive::{
-    AgentDoneArgs, AgentPlanArgs, HandoffToEvaluatorArgs, HandoffToImplementerArgs,
-    InspectIntent, PatchFileArgs, Primitive, ReplaceFunctionArgs, SmokeArgs, WriteFileArgs,
+    AgentDoneArgs, AgentPlanArgs, HandoffToEvaluatorArgs, HandoffToImplementerArgs, InspectIntent,
+    PatchFileArgs, Primitive, ReplaceFunctionArgs, SmokeArgs, WriteFileArgs,
 };
 use crate::result::{ToolError, ToolResult};
 use crate::syntax::DynSyntaxValidator;
@@ -60,7 +60,10 @@ impl std::fmt::Debug for ExecCtx {
             .field("subprocess_wall_cap", &self.subprocess_wall_cap)
             .field("build_cmd", &self.build_cmd)
             .field("verify_cmd", &self.verify_cmd)
-            .field("syntax_validator", &self.syntax_validator.as_ref().map(|_| "<set>"))
+            .field(
+                "syntax_validator",
+                &self.syntax_validator.as_ref().map(|_| "<set>"),
+            )
             .finish()
     }
 }
@@ -136,10 +139,12 @@ async fn exec_inspect(ctx: &ExecCtx, intent: &InspectIntent) -> Result<ToolResul
     match intent {
         InspectIntent::File { path } => {
             let abs = resolve_workdir_path(&ctx.workdir, path)?;
-            let bytes = tokio::fs::read(&abs).await.map_err(|e| ToolError::Filesystem {
-                primitive: "inspect_workdir",
-                reason: format!("read {}: {e}", path),
-            })?;
+            let bytes = tokio::fs::read(&abs)
+                .await
+                .map_err(|e| ToolError::Filesystem {
+                    primitive: "inspect_workdir",
+                    reason: format!("read {}: {e}", path),
+                })?;
             let content = String::from_utf8_lossy(&bytes).into_owned();
             Ok(ToolResult::ok(json!({
                 "intent": "file",
@@ -151,10 +156,12 @@ async fn exec_inspect(ctx: &ExecCtx, intent: &InspectIntent) -> Result<ToolResul
         InspectIntent::Dir { path } => {
             let abs = resolve_workdir_path(&ctx.workdir, path)?;
             let mut entries: Vec<serde_json::Value> = Vec::new();
-            let mut rd = tokio::fs::read_dir(&abs).await.map_err(|e| ToolError::Filesystem {
-                primitive: "inspect_workdir",
-                reason: format!("readdir {}: {e}", path),
-            })?;
+            let mut rd = tokio::fs::read_dir(&abs)
+                .await
+                .map_err(|e| ToolError::Filesystem {
+                    primitive: "inspect_workdir",
+                    reason: format!("readdir {}: {e}", path),
+                })?;
             while let Some(entry) = rd.next_entry().await.map_err(|e| ToolError::Filesystem {
                 primitive: "inspect_workdir",
                 reason: format!("readdir-iter {}: {e}", path),
@@ -170,9 +177,10 @@ async fn exec_inspect(ctx: &ExecCtx, intent: &InspectIntent) -> Result<ToolResul
                 entries.push(json!({"name": name, "kind": kind}));
             }
             entries.sort_by(|a, b| {
-                a.get("name").and_then(|v| v.as_str()).unwrap_or("").cmp(
-                    b.get("name").and_then(|v| v.as_str()).unwrap_or(""),
-                )
+                a.get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .cmp(b.get("name").and_then(|v| v.as_str()).unwrap_or(""))
             });
             Ok(ToolResult::ok(json!({
                 "intent": "dir",
@@ -220,7 +228,9 @@ fn walk_collect_paths(dir: &Path, needle: &str, out: &mut Vec<String>) {
     };
     for entry in rd.flatten() {
         let p = entry.path();
-        if p.file_name().is_some_and(|n| n.to_string_lossy().contains(needle)) {
+        if p.file_name()
+            .is_some_and(|n| n.to_string_lossy().contains(needle))
+        {
             out.push(p.to_string_lossy().into_owned());
         }
         if p.is_dir() && !p.file_name().is_some_and(|n| n == "target" || n == ".git") {
@@ -329,8 +339,7 @@ async fn exec_write_file(ctx: &ExecCtx, args: &WriteFileArgs) -> Result<ToolResu
             .iter()
             .any(|ext| path_str.ends_with(ext));
         if handled {
-            let errors =
-                validator.check_file(std::path::Path::new(&args.path), &args.content);
+            let errors = validator.check_file(std::path::Path::new(&args.path), &args.content);
             if !errors.is_empty() {
                 let rendered = validator.render_errors(&errors);
                 let language = validator.language_id();
@@ -379,11 +388,9 @@ async fn exec_patch_file(ctx: &ExecCtx, args: &PatchFileArgs) -> Result<ToolResu
     // available but defaults to patch_file from habit" class
     // observed on 4.2 v-replfn 2026-05-23.
     if let Ok(existing) = tokio::fs::read_to_string(&abs).await {
-        if let Some(fn_name) = function_at_range(
-            &existing,
-            args.start_line as usize,
-            args.end_line as usize,
-        ) {
+        if let Some(fn_name) =
+            function_at_range(&existing, args.start_line as usize, args.end_line as usize)
+        {
             return Err(ToolError::InvalidArguments {
                 primitive: "patch_file",
                 reason: format!(
@@ -492,8 +499,7 @@ async fn exec_patch_file(ctx: &ExecCtx, args: &PatchFileArgs) -> Result<ToolResu
             .iter()
             .any(|ext| path_str.ends_with(ext));
         if handled {
-            let errors =
-                validator.check_file(std::path::Path::new(&args.path), &result);
+            let errors = validator.check_file(std::path::Path::new(&args.path), &result);
             if !errors.is_empty() {
                 let rendered = validator.render_errors(&errors);
                 let language = validator.language_id();
@@ -728,8 +734,7 @@ async fn exec_replace_function(
             .iter()
             .any(|ext| path_str.ends_with(ext));
         if handled {
-            let errors =
-                validator.check_file(std::path::Path::new(&args.path), &result);
+            let errors = validator.check_file(std::path::Path::new(&args.path), &result);
             if !errors.is_empty() {
                 let rendered = validator.render_errors(&errors);
                 let language = validator.language_id();
@@ -822,8 +827,7 @@ async fn exec_smoke(ctx: &ExecCtx, args: &SmokeArgs) -> Result<ToolResult, ToolE
     if ctx.verify_cmd.trim().is_empty() {
         return Err(ToolError::Subprocess {
             primitive: "smoke",
-            reason: "ExecCtx.verify_cmd is empty — bench problem config missing verify_cmd"
-                .into(),
+            reason: "ExecCtx.verify_cmd is empty — bench problem config missing verify_cmd".into(),
         });
     }
     // Append filter as a single positional argument when supplied.
@@ -926,9 +930,7 @@ async fn exec_agent_plan(args: &AgentPlanArgs) -> Result<ToolResult, ToolError> 
     })))
 }
 
-async fn exec_handoff_to_evaluator(
-    args: &HandoffToEvaluatorArgs,
-) -> Result<ToolResult, ToolError> {
+async fn exec_handoff_to_evaluator(args: &HandoffToEvaluatorArgs) -> Result<ToolResult, ToolError> {
     Ok(ToolResult::ok(json!({
         "kind": "handoff",
         "to": "evaluator",
@@ -1381,7 +1383,10 @@ mod tests {
             other => panic!("expected InvalidArguments, got {other:?}"),
         }
         // File must be unchanged.
-        assert_eq!(std::fs::read_to_string(tmp.path().join("a.py")).unwrap(), "x = 1\n");
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("a.py")).unwrap(),
+            "x = 1\n"
+        );
     }
 
     #[tokio::test]
@@ -1411,7 +1416,10 @@ mod tests {
             other => panic!("expected InvalidArguments redirect, got {other:?}"),
         }
         // File unchanged.
-        assert_eq!(std::fs::read_to_string(tmp.path().join("a.py")).unwrap(), src);
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("a.py")).unwrap(),
+            src
+        );
     }
 
     #[tokio::test]
@@ -1488,7 +1496,11 @@ mod tests {
         });
         let err = execute(&ctx, &write).await.unwrap_err();
         match err {
-            ToolError::WriteFileTooLarge { path: p, existing_lines, threshold } => {
+            ToolError::WriteFileTooLarge {
+                path: p,
+                existing_lines,
+                threshold,
+            } => {
                 assert_eq!(p, "big.py");
                 assert!(existing_lines > threshold);
                 assert_eq!(threshold, LARGE_FILE_REWRITE_THRESHOLD_LINES);

@@ -35,9 +35,12 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
     sections: &[
         crate::util::help::HelpSection::Usage("sovereign mcp <command> [args]"),
         crate::util::help::HelpSection::Subcommands(&[
-            ("list",               "List configured MCP servers with status"),
-            ("test <server>",      "Test connection to a named server"),
-            ("tools [server]",     "List available MCP tools (optionally for one server)"),
+            ("list", "List configured MCP servers with status"),
+            ("test <server>", "Test connection to a named server"),
+            (
+                "tools [server]",
+                "List available MCP tools (optionally for one server)",
+            ),
         ]),
     ],
 };
@@ -60,10 +63,7 @@ async fn cmd_list() -> i32 {
                 Err(e) => format!("[error]       {e}"),
             }
         };
-        let desc = config
-            .description
-            .as_deref()
-            .unwrap_or("");
+        let desc = config.description.as_deref().unwrap_or("");
         eprintln!("  {:<16} {status}  {desc}", config.name);
     }
     0
@@ -139,10 +139,8 @@ async fn cmd_tools(args: &[String]) -> i32 {
 fn load_mcp_configs() -> Vec<McpServerConfig> {
     // Try to load from the standard config file locations.
     let config_paths: [Option<std::path::PathBuf>; 2] = [
-        dirs::config_dir()
-            .map(|d| d.join("sovereign").join("config.toml")),
-        dirs::home_dir()
-            .map(|d| d.join(".sovereign").join("config.toml")),
+        dirs::config_dir().map(|d| d.join("sovereign").join("config.toml")),
+        dirs::home_dir().map(|d| d.join(".sovereign").join("config.toml")),
     ];
 
     for path in config_paths.iter().flatten() {
@@ -180,12 +178,14 @@ async fn test_connection_verbose(
                 .map_err(|e| e.to_string())?;
             Ok(tools.iter().map(|t| t.descriptor().id).collect())
         }
-        McpTransportConfig::Http { url, auth: auth_config } => {
+        McpTransportConfig::Http {
+            url,
+            auth: auth_config,
+        } => {
             let auth = McpAuth::resolve(&config.name, auth_config);
-            let tools =
-                sovereign_tools::mcp::connect_http_mcp_server(url, auth, &config.name)
-                    .await
-                    .map_err(|e| e.to_string())?;
+            let tools = sovereign_tools::mcp::connect_http_mcp_server(url, auth, &config.name)
+                .await
+                .map_err(|e| e.to_string())?;
             Ok(tools.iter().map(|t| t.descriptor().id).collect())
         }
     }

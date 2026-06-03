@@ -86,15 +86,27 @@ pub struct ConfigWire {
 fn build_config(wire: Option<ConfigWire>) -> TrialConfig {
     let mut c = TrialConfig::default();
     let Some(w) = wire else { return c };
-    if let Some(n) = w.candidates_per_round { c.candidates_per_round = n; }
-    if let Some(n) = w.rounds_per_trial { c.rounds_per_trial = n; }
-    if let Some(n) = w.max_stall_rounds { c.max_stall_rounds = n; }
-    if let Some(n) = w.emit_max_tokens { c.emit_max_tokens = n; }
+    if let Some(n) = w.candidates_per_round {
+        c.candidates_per_round = n;
+    }
+    if let Some(n) = w.rounds_per_trial {
+        c.rounds_per_trial = n;
+    }
+    if let Some(n) = w.max_stall_rounds {
+        c.max_stall_rounds = n;
+    }
+    if let Some(n) = w.emit_max_tokens {
+        c.emit_max_tokens = n;
+    }
     if let Some(s) = w.candidate_test_timeout_seconds {
         c.candidate_test_timeout = Duration::from_secs(s);
     }
-    if let Some(v) = w.temp_ladder_default { c.temp_ladder_default = v; }
-    if let Some(v) = w.temp_ladder_wide { c.temp_ladder_wide = v; }
+    if let Some(v) = w.temp_ladder_default {
+        c.temp_ladder_default = v;
+    }
+    if let Some(v) = w.temp_ladder_wide {
+        c.temp_ladder_wide = v;
+    }
     c
 }
 
@@ -241,10 +253,27 @@ mod tests {
 
     fn fresh_repo() -> tempfile::TempDir {
         let tmp = tempfile::tempdir().unwrap();
-        let _ = Command::new("git").arg("-C").arg(tmp.path()).arg("init").arg("--initial-branch=main").output();
-        let _ = Command::new("git").arg("-C").arg(tmp.path()).args(["config", "user.email", "t@t.t"]).output();
-        let _ = Command::new("git").arg("-C").arg(tmp.path()).args(["config", "user.name", "t"]).output();
-        let _ = Command::new("git").arg("-C").arg(tmp.path()).args(["commit", "--allow-empty", "-m", "init"]).output();
+        let _ = Command::new("git")
+            .arg("-C")
+            .arg(tmp.path())
+            .arg("init")
+            .arg("--initial-branch=main")
+            .output();
+        let _ = Command::new("git")
+            .arg("-C")
+            .arg(tmp.path())
+            .args(["config", "user.email", "t@t.t"])
+            .output();
+        let _ = Command::new("git")
+            .arg("-C")
+            .arg(tmp.path())
+            .args(["config", "user.name", "t"])
+            .output();
+        let _ = Command::new("git")
+            .arg("-C")
+            .arg(tmp.path())
+            .args(["commit", "--allow-empty", "-m", "init"])
+            .output();
         tmp
     }
 
@@ -275,7 +304,9 @@ mod tests {
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
-        let body_bytes = axum::body::to_bytes(resp.into_body(), 1024 * 64).await.unwrap();
+        let body_bytes = axum::body::to_bytes(resp.into_body(), 1024 * 64)
+            .await
+            .unwrap();
         let v: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
         assert_eq!(v["error"], "dirty_workdir");
         assert_eq!(v["kind"], "uncommitted_changes");
@@ -300,7 +331,9 @@ mod tests {
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let body_bytes = axum::body::to_bytes(resp.into_body(), 1024 * 64).await.unwrap();
+        let body_bytes = axum::body::to_bytes(resp.into_body(), 1024 * 64)
+            .await
+            .unwrap();
         let v: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
         // TrialResult shape: status object, tests_before/after, rounds, etc.
         assert!(v.get("status").is_some(), "missing status field: {v}");
@@ -327,7 +360,9 @@ mod tests {
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let body_bytes = axum::body::to_bytes(resp.into_body(), 1024 * 64).await.unwrap();
+        let body_bytes = axum::body::to_bytes(resp.into_body(), 1024 * 64)
+            .await
+            .unwrap();
         let v: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
         // BddCycleResponseWire shape: synthesis is always present;
         // green is optional (None when synthesis didn't Reach or pause mode).

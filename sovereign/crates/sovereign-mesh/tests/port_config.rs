@@ -21,9 +21,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use sovereign_core::setup_config::{
-    DaemonSection, DataSection, ModelsSection, SetupConfig,
-};
+use sovereign_core::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
 use sovereign_mesh::daemon::EmbeddedDaemon;
 
 fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
@@ -80,9 +78,7 @@ async fn custom_client_port_from_setup_config_flows_to_api_address() {
     // bind decision must reflect it. Pre-fix this was a silent
     // no-op (operator changed the TOML, daemon still bound 9741).
     let daemon = EmbeddedDaemon::new_in_memory();
-    daemon
-        .set_setup_config(cfg_with_ports(39741, 39742))
-        .await;
+    daemon.set_setup_config(cfg_with_ports(39741, 39742)).await;
     daemon
         .create_mesh("custom-port test", "node")
         .await

@@ -203,8 +203,7 @@ fn read_summary_file(atlas_dir: &Path) -> Option<AtlasSummary> {
 fn write_summary_file(atlas_dir: &Path, summary: &AtlasSummary) -> io::Result<()> {
     let path = atlas_dir.join(SUMMARY_FILE);
     let tmp = atlas_dir.join(format!(".{SUMMARY_FILE}.tmp"));
-    let bytes = serde_json::to_vec_pretty(summary)
-        .map_err(io::Error::other)?;
+    let bytes = serde_json::to_vec_pretty(summary).map_err(io::Error::other)?;
     fs::write(&tmp, bytes)?;
     fs::rename(&tmp, &path)
 }
@@ -283,7 +282,10 @@ mod tests {
         // SCHEMA_VERSION mismatch and recomputes — the recomputed
         // v2 summary must include atom_counts.
         let tmp = tempfile::tempdir().unwrap();
-        write_atoms(tmp.path(), &[EnrichmentDepth::Extracted, EnrichmentDepth::Extracted]);
+        write_atoms(
+            tmp.path(),
+            &[EnrichmentDepth::Extracted, EnrichmentDepth::Extracted],
+        );
 
         let live_meta = std::fs::metadata(tmp.path().join("atoms.json")).unwrap();
         let live_mtime_ms = live_meta

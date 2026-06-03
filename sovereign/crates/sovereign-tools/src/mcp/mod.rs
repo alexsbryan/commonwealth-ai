@@ -108,11 +108,7 @@ impl Tool for McpToolAdapter {
         vec![Permission::Network]
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let result = self
             .caller
             .call_tool(&self.tool_name, params.clone())
@@ -156,13 +152,24 @@ impl Tool for McpToolAdapter {
 /// conventions we don't have a corpus for.
 fn infer_behaviour(name: &str, _description: &str) -> (Effect, Idempotency) {
     const READ_PREFIXES: &[&str] = &[
-        "get_", "read_", "list_", "find_", "search_", "show_", "query_", "fetch_",
-        "describe_", "lookup_", "inspect_", "count_", "exists_",
+        "get_",
+        "read_",
+        "list_",
+        "find_",
+        "search_",
+        "show_",
+        "query_",
+        "fetch_",
+        "describe_",
+        "lookup_",
+        "inspect_",
+        "count_",
+        "exists_",
     ];
     const DESTRUCTIVE_PREFIXES: &[&str] = &["delete_", "remove_", "drop_", "destroy_", "purge_"];
     const MUTATING_PREFIXES: &[&str] = &[
-        "create_", "add_", "insert_", "write_", "post_", "send_", "publish_", "push_",
-        "commit_", "apply_", "update_", "set_",
+        "create_", "add_", "insert_", "write_", "post_", "send_", "publish_", "push_", "commit_",
+        "apply_", "update_", "set_",
     ];
 
     let lower = name.to_lowercase();
@@ -241,7 +248,13 @@ mod tests {
 
     #[test]
     fn read_prefixes_infer_read_idempotent() {
-        for name in ["read_file", "get_status", "list_branches", "find_symbol", "search_docs"] {
+        for name in [
+            "read_file",
+            "get_status",
+            "list_branches",
+            "find_symbol",
+            "search_docs",
+        ] {
             let (e, i) = infer_behaviour(name, "");
             assert_eq!(e, Effect::Read, "name={name}");
             assert_eq!(i, Idempotency::Idempotent, "name={name}");
@@ -263,7 +276,13 @@ mod tests {
 
     #[test]
     fn mutating_prefixes_are_write_nonidempotent() {
-        for name in ["create_issue", "add_user", "send_email", "post_comment", "commit_tx"] {
+        for name in [
+            "create_issue",
+            "add_user",
+            "send_email",
+            "post_comment",
+            "commit_tx",
+        ] {
             let (e, i) = infer_behaviour(name, "");
             assert_eq!(e, Effect::Write, "name={name}");
             assert_eq!(i, Idempotency::NonIdempotent, "name={name}");

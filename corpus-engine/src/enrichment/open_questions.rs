@@ -69,10 +69,7 @@ pub async fn detect_open_questions(
 
         open_questions.push(OpenQuestion {
             id: format!("oq_{}", open_questions.len()),
-            question: parsed["question"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string(),
+            question: parsed["question"].as_str().unwrap_or_default().to_string(),
             status: "active_research".into(),
             question_type: "conceptual".into(),
             related_question_id: None,

@@ -51,7 +51,9 @@ pub fn check_git_repo(vault_path: &Path) -> Option<GitStatus> {
         .current_dir(vault_path)
         .output()
         .ok()?;
-    let mut branch = String::from_utf8_lossy(&branch_out.stdout).trim().to_string();
+    let mut branch = String::from_utf8_lossy(&branch_out.stdout)
+        .trim()
+        .to_string();
     if branch == "HEAD" {
         // Detached HEAD — substitute the short SHA.
         if let Ok(short) = Command::new("git")

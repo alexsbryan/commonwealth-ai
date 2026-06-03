@@ -30,8 +30,8 @@
 //! `enrichment::atlas::strategies::code_walk`).
 
 pub mod error;
-pub mod scip_graph;
 pub mod scip_export;
+pub mod scip_graph;
 mod scip_proto;
 
 pub use error::{Error, Result};

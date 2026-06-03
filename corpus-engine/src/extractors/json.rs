@@ -5,8 +5,8 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use crate::error::{Error, Result};
 use super::{ExtractedDoc, Extractor};
+use crate::error::{Error, Result};
 
 /// JSONL (JSON Lines) file extractor.
 ///
@@ -55,13 +55,12 @@ impl Extractor for JsonlExtractor {
         &self,
         source_path: &Path,
     ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send>> {
-        let file = File::open(source_path)
-            .map_err(|e| Error::Extraction(format!("Failed to open {}: {e}", source_path.display())))?;
+        let file = File::open(source_path).map_err(|e| {
+            Error::Extraction(format!("Failed to open {}: {e}", source_path.display()))
+        })?;
 
         let is_gz = self.decompress.as_deref() == Some("gzip")
-            || (source_path
-                .extension()
-                .and_then(|e| e.to_str()) == Some("gz"));
+            || (source_path.extension().and_then(|e| e.to_str()) == Some("gz"));
 
         let reader: Box<dyn BufRead + Send> = if is_gz {
             Box::new(BufReader::new(flate2::read::GzDecoder::new(file)))
@@ -177,7 +176,10 @@ impl Iterator for JsonlIterator {
             self.pending.push_back(ExtractedDoc {
                 title,
                 content,
-                url: obj.get("url").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                url: obj
+                    .get("url")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
                 source_id: id,
                 metadata,
                 source_file: None,
@@ -328,8 +330,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file_path = dir.path().join("data.jsonl");
         let mut f = File::create(&file_path).unwrap();
-        writeln!(f, r#"{{"id":"1","title":"Doc One","content":"Content of doc one."}}"#).unwrap();
-        writeln!(f, r#"{{"id":"2","title":"Doc Two","content":"Content of doc two."}}"#).unwrap();
+        writeln!(
+            f,
+            r#"{{"id":"1","title":"Doc One","content":"Content of doc one."}}"#
+        )
+        .unwrap();
+        writeln!(
+            f,
+            r#"{{"id":"2","title":"Doc Two","content":"Content of doc two."}}"#
+        )
+        .unwrap();
         writeln!(f, r#"{{"id":"3","content":""}}"#).unwrap(); // empty content, skipped
 
         let extractor = JsonlExtractor::new();
@@ -364,7 +374,11 @@ mod tests {
 
         let f = File::create(&file_path).unwrap();
         let mut encoder = flate2::write::GzEncoder::new(f, flate2::Compression::fast());
-        writeln!(encoder, r#"{{"id":"1","title":"Compressed","content":"Compressed content."}}"#).unwrap();
+        writeln!(
+            encoder,
+            r#"{{"id":"1","title":"Compressed","content":"Compressed content."}}"#
+        )
+        .unwrap();
         encoder.finish().unwrap();
 
         let extractor = JsonlExtractor {

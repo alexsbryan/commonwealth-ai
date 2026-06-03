@@ -54,7 +54,9 @@ pub async fn corpus_ingest_partition(
             StatusCode::SERVICE_UNAVAILABLE,
             Json(IngestPartitionResponse {
                 accepted: false,
-                reason: Some("embed model not configured on this node — cannot accept partition".into()),
+                reason: Some(
+                    "embed model not configured on this node — cannot accept partition".into(),
+                ),
             }),
         );
     };
@@ -89,11 +91,14 @@ pub async fn corpus_ingest_partition(
     // Snapshot peer base URLs now — we can't hold the mesh lock across an async task.
     let peer_urls: Vec<(NodeId, String)> = {
         let mesh = state.inner.mesh.read().await;
-        mesh.members.values()
+        mesh.members
+            .values()
             .filter(|m| m.node_id != local_node_id)
-            .filter_map(|m| m.addresses.first().map(|a| {
-                (m.node_id, format!("http://{}:9742", a.ip()))
-            }))
+            .filter_map(|m| {
+                m.addresses
+                    .first()
+                    .map(|a| (m.node_id, format!("http://{}:9742", a.ip())))
+            })
             .collect()
     };
 
@@ -127,7 +132,8 @@ pub async fn corpus_ingest_partition(
         active.insert(corpus_id.clone());
     }
 
-    let output_path = engine.index_dir()
+    let output_path = engine
+        .index_dir()
         .join(format!("{corpus_id}-partition-{local_node_id}"));
 
     tracing::info!(
@@ -144,15 +150,21 @@ pub async fn corpus_ingest_partition(
     // with. Pull-based peers invoke `ingest_with_overrides` directly with
     // `Some(unit_id)` from their own pull loop (see sovereign-mesh::auto_ingest).
     tokio::spawn(async move {
-        let ingest_result = engine.ingest_with_overrides(
-            &recipe_id,
-            Some(file_indices),
-            article_range,
-            &output_path,
-            None,
-            None,
-        ).await;
-        state_clone.inner.active_ingests.write().await
+        let ingest_result = engine
+            .ingest_with_overrides(
+                &recipe_id,
+                Some(file_indices),
+                article_range,
+                &output_path,
+                None,
+                None,
+            )
+            .await;
+        state_clone
+            .inner
+            .active_ingests
+            .write()
+            .await
             .remove(&corpus_id);
 
         match ingest_result {
@@ -176,7 +188,10 @@ pub async fn corpus_ingest_partition(
                     mesh_store,
                 )
                 .with_emitter(state_clone.inner.contribution_emitter.clone());
-                match shard_mgr.coordinate_merge(handoff_id, local_node_id, &peer_urls).await {
+                match shard_mgr
+                    .coordinate_merge(handoff_id, local_node_id, &peer_urls)
+                    .await
+                {
                     Ok(Some(info)) => tracing::info!(
                         corpus = %corpus_id,
                         chunks = info.chunk_count,
@@ -244,13 +259,13 @@ pub async fn corpus_next_unit(
                 "next_unit: leased unit to peer"
             );
             (
-            StatusCode::OK,
-            Json(NextUnitResponse::Leased {
-                unit_id: leased.unit_id,
-                unit: leased.unit,
-                lease_expires_at_ms: leased.lease_expires_at_ms,
-            }),
-        )
+                StatusCode::OK,
+                Json(NextUnitResponse::Leased {
+                    unit_id: leased.unit_id,
+                    unit: leased.unit,
+                    lease_expires_at_ms: leased.lease_expires_at_ms,
+                }),
+            )
         }
         Ok(None) => {
             // Queue empty — include the current phase so the peer can
@@ -309,11 +324,11 @@ pub async fn corpus_heartbeat(
                 "heartbeat: lease renewed"
             );
             (
-            StatusCode::OK,
-            Json(HeartbeatResponseBody::Renewed {
-                lease_expires_at_ms: expires_at_ms,
-            }),
-        )
+                StatusCode::OK,
+                Json(HeartbeatResponseBody::Renewed {
+                    lease_expires_at_ms: expires_at_ms,
+                }),
+            )
         }
         Ok(HeartbeatResult::Reclaimed) => {
             tracing::warn!(
@@ -323,11 +338,11 @@ pub async fn corpus_heartbeat(
                 "heartbeat: lease reclaimed — peer must abort"
             );
             (
-            StatusCode::GONE,
-            Json(HeartbeatResponseBody::Reclaimed {
-                reason: "lease was reclaimed; abort current unit".into(),
-            }),
-        )
+                StatusCode::GONE,
+                Json(HeartbeatResponseBody::Reclaimed {
+                    reason: "lease was reclaimed; abort current unit".into(),
+                }),
+            )
         }
         Err(QueueError::NotFound) => (
             StatusCode::NOT_FOUND,
@@ -398,10 +413,7 @@ pub async fn corpus_complete_unit(
             if matches!(phase, HandoffPhase::Merging) {
                 spawn_queue_merge(state.clone(), handoff_id);
             }
-            (
-            StatusCode::OK,
-            Json(CompleteUnitResponse::Ok { phase }),
-        )
+            (StatusCode::OK, Json(CompleteUnitResponse::Ok { phase }))
         }
         Err(QueueError::LeaseReclaimed) => (
             StatusCode::CONFLICT,
@@ -479,10 +491,7 @@ pub fn find_local_handoff_for_corpus(
 /// where merge_leader is set to `self_id`). Errors are logged and
 /// swallowed — the response to `complete_unit` already returned 200,
 /// and the operator can retry by re-issuing collaborative ingest.
-pub fn spawn_queue_merge(
-    state: AppState,
-    handoff_id: commonwealth_core::ids::HandoffId,
-) {
+pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::HandoffId) {
     tokio::spawn(async move {
         let engine = match state.inner.corpus_engine.as_ref() {
             Some(e) => Arc::clone(e),
@@ -495,11 +504,7 @@ pub fn spawn_queue_merge(
             }
         };
         let mesh_store = Arc::clone(&state.inner.mesh_store);
-        let local_node_id = *state
-            .inner
-            .self_node_id_swap
-            .load_full()
-            .as_ref();
+        let local_node_id = *state.inner.self_node_id_swap.load_full().as_ref();
         let peer_urls: Vec<(NodeId, String)> = {
             let mesh = state.inner.mesh.read().await;
             mesh.members

@@ -7,12 +7,10 @@
 use std::sync::Arc;
 
 use commonwealth_api::state::AppState;
-use commonwealth_core::capabilities::{
-    AvailableResources, HardwareProfile, NodeCapabilities,
-};
+use commonwealth_app::registry::AppRegistry;
+use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use commonwealth_app::registry::AppRegistry;
 use commonwealth_state::MeshStore;
 use corpus_engine::index::{CorpusIndex, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
@@ -86,7 +84,7 @@ fn empty_node_capabilities() -> NodeCapabilities {
         embed_model: None,
         benchmark: None,
         current_in_flight: None,
-        }
+    }
 }
 
 #[tokio::test]

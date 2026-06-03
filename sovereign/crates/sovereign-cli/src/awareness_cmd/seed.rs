@@ -235,7 +235,11 @@ fn print_plan(t: &Template, plan: &SeedPlan) {
     println!(
         "  Will write {} conversation{}, {} message{}",
         plan.conversations.len(),
-        if plan.conversations.len() == 1 { "" } else { "s" },
+        if plan.conversations.len() == 1 {
+            ""
+        } else {
+            "s"
+        },
         total_msgs,
         if total_msgs == 1 { "" } else { "s" }
     );
@@ -246,7 +250,11 @@ fn print_plan(t: &Template, plan: &SeedPlan) {
     );
 
     if !t.expected_entities.is_empty() {
-        let person_n = t.expected_entities.iter().filter(|e| e.kind == "person").count();
+        let person_n = t
+            .expected_entities
+            .iter()
+            .filter(|e| e.kind == "person")
+            .count();
         let org_n = t
             .expected_entities
             .iter()

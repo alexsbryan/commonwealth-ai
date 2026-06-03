@@ -293,8 +293,8 @@ Return JSON:
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::super::domain::{ComparisonOp, MetadataComparison};
+    use super::*;
 
     #[test]
     fn institutional_domain_identity() {

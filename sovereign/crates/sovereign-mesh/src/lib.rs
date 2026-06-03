@@ -16,39 +16,39 @@ pub mod auto_resume;
 pub mod canonical_pull;
 pub mod capabilities;
 pub mod commit_harvest;
+pub mod corpus_watch_http;
 pub mod daemon;
-pub mod loopback_guard;
-#[cfg(feature = "treesitter")]
-pub mod project_http;
-pub mod projects;
-#[cfg(feature = "treesitter")]
-pub mod reindexer;
-pub mod supervised_task;
 pub mod deep_link;
 pub mod gossip;
 pub mod http_response;
 pub mod inference_adapter;
 pub mod join;
-pub mod prompt_compactor;
-pub mod source_content_validator;
-pub mod tool_profile;
 pub mod knowledge_client;
 pub mod landscape_digest_client;
 pub mod landscape_digest_http;
-pub mod newsworthy_host;
+pub mod loopback_guard;
 pub mod mcp_router;
 pub mod mesh_discovery;
 pub mod mesh_http;
 pub mod model_fetch;
+pub mod newsworthy_host;
 pub(crate) mod oicp_select;
 pub mod oicp_synthesis;
 pub mod peer_inference;
 pub mod persist;
-pub mod corpus_watch_http;
+#[cfg(feature = "treesitter")]
+pub mod project_http;
+pub mod projects;
+pub mod prompt_compactor;
 pub mod reading_formatters;
 pub mod reading_http;
+#[cfg(feature = "treesitter")]
+pub mod reindexer;
+pub mod source_content_validator;
 pub mod state;
+pub mod supervised_task;
 pub mod throughput_tracking;
+pub mod tool_profile;
 pub mod types;
 pub mod watched_folder_runtime;
 pub mod watched_folder_setup;
@@ -60,18 +60,18 @@ pub mod multi_pod_coordinator;
 pub mod worker_controller;
 pub mod worker_daemon;
 pub mod worker_http;
+pub mod worker_inference_proxy;
 pub mod worker_pod;
 pub mod worker_subprocess_runner;
-pub mod worker_inference_proxy;
 // Pinned-pod inference routing — lets ephemeral worker pods join the
 // mesh scheduler's inference pool as one more peer, scored by the
 // same load balancer. Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
+pub mod pinned_pod_snapshot;
 pub mod pinned_transport;
 pub mod pinned_worker_source;
-pub mod pinned_pod_snapshot;
 
 pub use daemon::EmbeddedDaemon;
-pub use work_atlas_broadcaster::MeshBroadcaster;
-pub use deep_link::{DeepLink, parse_deep_link};
+pub use deep_link::{parse_deep_link, DeepLink};
 pub use state::MeshState;
 pub use types::*;
+pub use work_atlas_broadcaster::MeshBroadcaster;

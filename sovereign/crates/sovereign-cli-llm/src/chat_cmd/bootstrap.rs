@@ -32,9 +32,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::planner::LlmPlanner;
 use sovereign_core::router::LlmRouter;
 use sovereign_core::runtime::Runtime;
-use sovereign_core::traits::{
-    ApprovalChannel, InferenceProvider, StateStore,
-};
+use sovereign_core::traits::{ApprovalChannel, InferenceProvider, StateStore};
 use sovereign_core::types::*;
 use sovereign_core::{SkillRegistry, ToolRegistry};
 use sovereign_inference::remote::RemoteApiProvider;
@@ -245,7 +243,10 @@ pub async fn build_session_with_skills(
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
     let dotsovereign = home.join(".sovereign");
     let (recipes_dir, indexes_dir): (PathBuf, PathBuf) = if globals.data_dir_explicit {
-        (globals.data_dir.join("recipes"), globals.data_dir.join("indexes"))
+        (
+            globals.data_dir.join("recipes"),
+            globals.data_dir.join("indexes"),
+        )
     } else {
         (dotsovereign.join("recipes"), dotsovereign.join("indexes"))
     };
@@ -280,18 +281,16 @@ pub async fn build_session_with_skills(
     // TTL. Idempotent tools (knowledge_lookup, code-intel reads)
     // hit the cache when the model re-calls with the same args
     // within the window.
-    let tool_cache = Arc::new(
-        sovereign_core::tool_result_cache::ToolResultCache::new(),
-    );
+    let tool_cache = Arc::new(sovereign_core::tool_result_cache::ToolResultCache::new());
     let mut tools = ToolRegistry::new().with_cache(Arc::clone(&tool_cache));
     tools.register(Box::new(ShellTool));
     tools.register(Box::new(sovereign_tools::document::DocumentTool::new(
         Arc::clone(&store),
         Arc::clone(&inference),
     )));
-    tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(
-        Arc::clone(&corpus_engine),
-    )));
+    tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(Arc::clone(
+        &corpus_engine,
+    ))));
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
@@ -359,12 +358,7 @@ pub async fn build_session_with_skills(
         Arc::clone(&skills),
     );
     if let Some(path) = resolve_router_exemplars_path() {
-        match sovereign_core::router_embed::EmbedRouter::load(
-            &path,
-            Arc::clone(&inference),
-        )
-        .await
-        {
+        match sovereign_core::router_embed::EmbedRouter::load(&path, Arc::clone(&inference)).await {
             Ok(embed) => {
                 eprintln!(
                     "Router embed exemplars: {} loaded from {}",
@@ -474,8 +468,7 @@ pub async fn build_session_with_skills(
     // already opened above also impls ConvTieredReader. Spec
     // `sovereign/docs/specs/CONV_TIERED_PORT.md`.
     runtime = runtime.with_conv_tiered_reader(
-        Arc::clone(&store_concrete)
-            as Arc<dyn sovereign_store::sqlite::ConvTieredReader>,
+        Arc::clone(&store_concrete) as Arc<dyn sovereign_store::sqlite::ConvTieredReader>
     );
     if let Some(m) = mesh_knowledge {
         runtime = runtime.with_mesh_knowledge(m);
@@ -492,7 +485,10 @@ pub async fn build_session_with_skills(
                 Ok(g) => {
                     let arc: Arc<dyn sovereign_core::traits::EntityExtractor> = Arc::new(g);
                     runtime = runtime.with_gliner(arc);
-                    tracing::info!(model = model_id, "bootstrap: GLiNER entity extractor loaded");
+                    tracing::info!(
+                        model = model_id,
+                        "bootstrap: GLiNER entity extractor loaded"
+                    );
                 }
                 Err(e) => {
                     tracing::warn!(error = %e, "bootstrap: GLiNER probe ok but load failed; entity-aware retrieval disabled");
@@ -534,17 +530,15 @@ pub async fn build_session_with_skills(
             embed_model.clone(),
         ),
     );
-    runtime = runtime.with_atlas_context_provider(
-        Arc::clone(&atlas_mgr)
-            as Arc<dyn sovereign_core::atlas_context::AtlasContextProvider>,
-    );
+    runtime =
+        runtime
+            .with_atlas_context_provider(Arc::clone(&atlas_mgr)
+                as Arc<dyn sovereign_core::atlas_context::AtlasContextProvider>);
     atlas_mgr.init_from_cache().await;
     eprintln!(
         "Atlas: {} corpus context(s) loaded from cache",
-        sovereign_core::atlas_context::AtlasContextProvider::loaded_corpus_ids(
-            atlas_mgr.as_ref()
-        )
-        .len()
+        sovereign_core::atlas_context::AtlasContextProvider::loaded_corpus_ids(atlas_mgr.as_ref())
+            .len()
     );
     // Adaptive triage (Phase B2): start the bump-flusher background
     // task so query-time hits eventually land on disk and feed the
@@ -561,15 +555,14 @@ pub async fn build_session_with_skills(
     // build at chat boot (cost is non-trivial on a 1.6M-atom
     // wikipedia install).
     let meta_atlas_path = corpus_engine::meta_atlas::default_meta_atlas_path();
-    let meta_atlas = match corpus_engine::meta_atlas::MetaAtlasIndex::load(
-        meta_atlas_path.as_deref(),
-    ) {
-        Ok(idx) => Arc::new(idx),
-        Err(e) => {
-            eprintln!("Meta-atlas: load failed ({e}); boost disabled");
-            Arc::new(corpus_engine::meta_atlas::MetaAtlasIndex::empty())
-        }
-    };
+    let meta_atlas =
+        match corpus_engine::meta_atlas::MetaAtlasIndex::load(meta_atlas_path.as_deref()) {
+            Ok(idx) => Arc::new(idx),
+            Err(e) => {
+                eprintln!("Meta-atlas: load failed ({e}); boost disabled");
+                Arc::new(corpus_engine::meta_atlas::MetaAtlasIndex::empty())
+            }
+        };
     eprintln!(
         "Meta-atlas:  {} canonical atoms across {} corpus(es)",
         meta_atlas.len(),
@@ -658,8 +651,7 @@ pub async fn build_session_with_skills(
         ) {
             Ok(reranker) => {
                 let reranker: Arc<dyn InferenceProvider> = Arc::new(reranker);
-                let rerank_fn =
-                    sovereign_tools::corpus::inference_to_rerank_fn(reranker);
+                let rerank_fn = sovereign_tools::corpus::inference_to_rerank_fn(reranker);
                 let mut cfg = corpus_engine::RerankConfig::default();
                 cfg.enabled = true;
                 if let Ok(s) = std::env::var("SOVEREIGN_RERANK_CANDIDATES_K") {
@@ -678,8 +670,7 @@ pub async fn build_session_with_skills(
                     }
                 }
                 if let Ok(s) = std::env::var("SOVEREIGN_RERANK_PER_ARTICLE") {
-                    cfg.per_article =
-                        s == "1" || s.eq_ignore_ascii_case("true");
+                    cfg.per_article = s == "1" || s.eq_ignore_ascii_case("true");
                 }
                 if let Ok(s) = std::env::var("SOVEREIGN_RERANK_ATLAS_WEIGHT") {
                     if let Ok(f) = s.parse::<f32>() {
@@ -749,10 +740,7 @@ async fn probe_or_bail(base: &str) -> Result<()> {
 /// Resolve `(chat_model_id, embed_model_id)` against the daemon.
 /// See the call-site comment in `build_session` for the preference
 /// order — explicit flag → SetupConfig stem → `/v1/models` probe.
-async fn resolve_model_ids(
-    v1: &str,
-    globals: &ChatGlobals,
-) -> Result<(String, String)> {
+async fn resolve_model_ids(v1: &str, globals: &ChatGlobals) -> Result<(String, String)> {
     // (a) Explicit flags short-circuit everything.
     if let (Some(c), Some(e)) = (&globals.chat_model, &globals.embed_model) {
         return Ok((c.clone(), e.clone()));
@@ -766,12 +754,14 @@ async fn resolve_model_ids(
     //     *local* slot, never a mesh-peer advertisement, and the
     //     answer is stable across invocations.
     let from_config = chat_and_embed_stems_from_config();
-    let mut chat_found = globals.chat_model.clone().or_else(|| {
-        from_config.as_ref().and_then(|s| s.chat.clone())
-    });
-    let mut embed_found = globals.embed_model.clone().or_else(|| {
-        from_config.as_ref().and_then(|s| s.embed.clone())
-    });
+    let mut chat_found = globals
+        .chat_model
+        .clone()
+        .or_else(|| from_config.as_ref().and_then(|s| s.chat.clone()));
+    let mut embed_found = globals
+        .embed_model
+        .clone()
+        .or_else(|| from_config.as_ref().and_then(|s| s.embed.clone()));
     if let (Some(c), Some(e)) = (chat_found.as_ref(), embed_found.as_ref()) {
         return Ok((c.clone(), e.clone()));
     }
@@ -821,7 +811,8 @@ async fn resolve_model_ids(
     match (chat_found, embed_found) {
         (Some(c), Some(e)) => Ok((c, e)),
         (None, _) => Err(Error::Serialization(
-            "daemon lists no chat models — check `sovereign setup` and the primary/fast slots".into(),
+            "daemon lists no chat models — check `sovereign setup` and the primary/fast slots"
+                .into(),
         )),
         (_, None) => Err(Error::Serialization(
             "daemon lists no embedding model — retrieval will fail. Set `[models] embed` in \
@@ -905,10 +896,7 @@ async fn load_wikipedia_graph(
     }
     let infos = engine.installed_indexes().await.ok()?;
     for info in infos {
-        let db_path = corpus_engine::WikipediaGraph::default_db_path(
-            indexes_dir,
-            &info.corpus_id,
-        );
+        let db_path = corpus_engine::WikipediaGraph::default_db_path(indexes_dir, &info.corpus_id);
         if !db_path.exists() {
             continue;
         }
@@ -971,11 +959,7 @@ struct AutoApprove;
 
 #[async_trait]
 impl ApprovalChannel for AutoApprove {
-    async fn request_approval(
-        &self,
-        _step: &Step,
-        _preview: &ActionPreview,
-    ) -> Result<bool> {
+    async fn request_approval(&self, _step: &Step, _preview: &ActionPreview) -> Result<bool> {
         Ok(true)
     }
 
@@ -985,4 +969,3 @@ impl ApprovalChannel for AutoApprove {
 
     fn emit_progress(&self, _step: &Step, _output: &StepOutput) {}
 }
-

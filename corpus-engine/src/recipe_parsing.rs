@@ -10,9 +10,7 @@ use crate::recipe::{ParameterKind, ParameterValue, MAX_SCHEMA_VERSION};
 
 pub(crate) fn empty_value(kind: &ParameterKind) -> ParameterValue {
     match kind {
-        ParameterKind::String | ParameterKind::Date => {
-            ParameterValue::String(String::new())
-        }
+        ParameterKind::String | ParameterKind::Date => ParameterValue::String(String::new()),
         ParameterKind::Int => ParameterValue::Int(0),
         ParameterKind::List => ParameterValue::List(Vec::new()),
     }
@@ -24,16 +22,13 @@ pub(crate) fn parameter_value_from_toml(
     v: toml::Value,
 ) -> Result<ParameterValue> {
     match (kind, v) {
-        (ParameterKind::String, toml::Value::String(s)) => {
-            Ok(ParameterValue::String(s))
-        }
+        (ParameterKind::String, toml::Value::String(s)) => Ok(ParameterValue::String(s)),
         (ParameterKind::Int, toml::Value::Integer(i)) => Ok(ParameterValue::Int(i)),
-        (ParameterKind::Int, toml::Value::String(s)) => s
-            .parse::<i64>()
-            .map(ParameterValue::Int)
-            .map_err(|e| Error::InvalidInput(format!(
-                "parameter `{name}` is not an integer: {s} ({e})"
-            ))),
+        (ParameterKind::Int, toml::Value::String(s)) => {
+            s.parse::<i64>().map(ParameterValue::Int).map_err(|e| {
+                Error::InvalidInput(format!("parameter `{name}` is not an integer: {s} ({e})"))
+            })
+        }
         (ParameterKind::Date, toml::Value::String(s)) => {
             if !is_iso_date(&s) {
                 return Err(Error::InvalidInput(format!(
@@ -170,9 +165,7 @@ pub(crate) fn extract_unknown_variant(raw: &str) -> Option<(String, String)> {
     let allowed_anchor = "expected one of ";
     let allowed_start = raw.find(allowed_anchor)? + allowed_anchor.len();
     let allowed_chunk = &raw[allowed_start..];
-    let allowed_end = allowed_chunk
-        .find('\n')
-        .unwrap_or(allowed_chunk.len());
+    let allowed_end = allowed_chunk.find('\n').unwrap_or(allowed_chunk.len());
     let allowed = allowed_chunk[..allowed_end]
         .replace('`', "")
         .replace(", ", ", ");
@@ -267,17 +260,15 @@ fn rewrite_unknown_variant(bad_value: &str, allowed: &str, raw: &str) -> String 
 /// line-by-line looking for an `=` neighbouring the bad value.
 fn extract_field_from_span(raw: &str, bad_value: &str) -> Option<String> {
     for line in raw.lines() {
-        let trimmed = line.trim_start_matches(|c: char| {
-            c.is_ascii_digit() || c == '|' || c == ' '
-        });
+        let trimmed = line.trim_start_matches(|c: char| c.is_ascii_digit() || c == '|' || c == ' ');
         if !trimmed.contains(bad_value) || !trimmed.contains('=') {
             continue;
         }
         let key_part = trimmed.split('=').next()?.trim();
         if !key_part.is_empty()
-            && key_part.chars().all(|c| {
-                c.is_ascii_alphanumeric() || c == '_' || c == '.'
-            })
+            && key_part
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
         {
             return Some(key_part.to_string());
         }

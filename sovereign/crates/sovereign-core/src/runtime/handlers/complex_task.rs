@@ -5,7 +5,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-
 use crate::error::Result;
 use crate::traits::*;
 
@@ -79,8 +78,11 @@ impl Runtime {
                 "runtime: complex_task — step failed, attempting replan"
             );
 
-            let completed_vec: Vec<(usize, StepOutput)> =
-                result.completed.iter().map(|(&k, v)| (k, v.clone())).collect();
+            let completed_vec: Vec<(usize, StepOutput)> = result
+                .completed
+                .iter()
+                .map(|(&k, v)| (k, v.clone()))
+                .collect();
 
             match self.planner.replan(&plan, &completed_vec, error).await {
                 Ok(new_plan) => {
@@ -117,20 +119,25 @@ impl Runtime {
                 StepOutput::Text(t) => Some(format!("Step {id}: {t}")),
                 StepOutput::Json(v) => {
                     // For search tool output, use the "answer" field.
-                    let text = v
-                        .get("answer")
-                        .and_then(|a| a.as_str())
-                        .unwrap_or({
-                            // Fallback: serialize the whole JSON.
-                            ""
-                        });
+                    let text = v.get("answer").and_then(|a| a.as_str()).unwrap_or({
+                        // Fallback: serialize the whole JSON.
+                        ""
+                    });
                     if text.is_empty() {
-                        Some(format!("Step {id}: {}", serde_json::to_string_pretty(v).unwrap_or_default()))
+                        Some(format!(
+                            "Step {id}: {}",
+                            serde_json::to_string_pretty(v).unwrap_or_default()
+                        ))
                     } else {
                         Some(format!("Step {id}: {text}"))
                     }
                 }
-                StepOutput::ReasonWithToolsResult { ref text, iterations, capped, .. } => {
+                StepOutput::ReasonWithToolsResult {
+                    ref text,
+                    iterations,
+                    capped,
+                    ..
+                } => {
                     let note = if *capped { " (search cap reached)" } else { "" };
                     Some(format!("Step {id} ({iterations} searches{note}): {text}"))
                 }
@@ -143,9 +150,8 @@ impl Runtime {
             step_summaries.join("\n\n")
         );
 
-        let budget_note = crate::runtime::build_response_length_directive(
-            self.inference_config.max_tokens,
-        );
+        let budget_note =
+            crate::runtime::build_response_length_directive(self.inference_config.max_tokens);
         let synthesis_base = format!(
             "Synthesize the given step results into a clear, comprehensive \
              answer.\n\n{budget_note}"
@@ -165,21 +171,25 @@ impl Runtime {
                 top_k: self.inference_config.top_k,
                 top_p: None,
                 oicp: self.build_oicp(&Intent::ComplexTask),
-            tools: None,
-            tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
+                tools: None,
+                tool_choice: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
             })
             .await?;
 
         // 6. Update task status.
-        task.completed_steps = result.completed.iter().map(|(&k, v)| (k, v.clone())).collect();
+        task.completed_steps = result
+            .completed
+            .iter()
+            .map(|(&k, v)| (k, v.clone()))
+            .collect();
         task.status = if result.error.is_some() {
             TaskStatus::Failed
         } else {
@@ -222,9 +232,8 @@ impl Runtime {
                     // Aggregate search log into source summaries.
                     let mut tool_counts: HashMap<String, usize> = HashMap::new();
                     for entry in search_log {
-                        *tool_counts
-                            .entry(entry.tool_id.clone())
-                            .or_insert(0) += entry.result_count;
+                        *tool_counts.entry(entry.tool_id.clone()).or_insert(0) +=
+                            entry.result_count;
                     }
                     for (tool_id, count) in tool_counts {
                         all_sources.push(SourceSummary {

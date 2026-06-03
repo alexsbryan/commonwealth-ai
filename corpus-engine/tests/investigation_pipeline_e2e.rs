@@ -20,9 +20,7 @@ use std::sync::Arc;
 use corpus_engine::enrichment::investigation::{
     run_investigation, ChunkInput, INVESTIGATION_DIRNAME,
 };
-use corpus_engine::enrichment::pipeline::types::{
-    ChatCompletionFn, ChatPrompt,
-};
+use corpus_engine::enrichment::pipeline::types::{ChatCompletionFn, ChatPrompt};
 use corpus_engine::Recipe;
 
 /// A scripted chat closure that returns a different canned response
@@ -124,8 +122,7 @@ async fn end_to_end_finds_all_three_pattern_types() {
         ChunkInput {
             chunk_id: "openai-revenue",
             source_title: Some("OpenAI investor letter"),
-            content:
-                "OpenAI generated approximately $1.5B from Microsoft Azure customers — \
+            content: "OpenAI generated approximately $1.5B from Microsoft Azure customers — \
                  representing 12% of total revenue.",
         },
         ChunkInput {
@@ -226,7 +223,9 @@ async fn end_to_end_finds_all_three_pattern_types() {
     ];
     let chat = scripted_responses(responses);
     let dir = tempfile::tempdir().unwrap();
-    let out = run_investigation(&recipe, &chunks, chat, dir.path()).await.unwrap();
+    let out = run_investigation(&recipe, &chunks, chat, dir.path())
+        .await
+        .unwrap();
 
     // 4 unique entities: Microsoft, OpenAI, Nvidia, CoreWeave.
     assert_eq!(out.entities.len(), 4, "got: {:?}", out.entities);

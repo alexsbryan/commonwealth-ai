@@ -15,17 +15,19 @@ use futures::Stream;
 use tokio::sync::Mutex;
 
 use crate::llama::cpp::context::params::{LlamaContextParams, LlamaContextType};
-use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::llama_backend::LlamaBackend;
 use crate::llama::cpp::llama_batch::LlamaBatch;
 use crate::llama::cpp::model::params::LlamaModelParams;
 use crate::llama::cpp::model::{AddBos, LlamaChatMessage, LlamaModel};
+use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
 use sovereign_core::error::Error;
-use sovereign_core::model_family::{EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl};
+use sovereign_core::model_family::{
+    EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
+};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::*;
 use sovereign_core::Result;
@@ -96,8 +98,7 @@ pub struct ConstrainedSampler {
     /// active — same byte-stream-deadlock rationale as the URL
     /// constraint (JSON FSM emits `]` which the citation FSM would
     /// treat as a terminator).
-    evidence_id_constraint:
-        Option<crate::evidence_id_constraint::EvidenceIdAllowlistConstraint>,
+    evidence_id_constraint: Option<crate::evidence_id_constraint::EvidenceIdAllowlistConstraint>,
     /// Vocab-sized bitmap of tokens whose rendered bytes contain a
     /// 3+ byte UTF-8 leading byte (CJK / Devanagari / Hangul / etc.).
     /// When `Some`, `sample()` clamps those tokens' logits to
@@ -310,13 +311,9 @@ pub(crate) fn build_sampler(
             }
         }
     } else if let Some(schema) = request.structured_output.as_ref() {
-        match crate::llguidance_constraint::LlguidanceConstraint::from_schema_value(
-            schema, model,
-        ) {
+        match crate::llguidance_constraint::LlguidanceConstraint::from_schema_value(schema, model) {
             Ok(c) => {
-                tracing::info!(
-                    "grammar-constrained decoding enabled (llguidance, schema)"
-                );
+                tracing::info!("grammar-constrained decoding enabled (llguidance, schema)");
                 Some(c)
             }
             Err(e) => {
@@ -350,20 +347,17 @@ pub(crate) fn build_sampler(
     // expansion). Same per-request shape as the URL constraint —
     // built when `CompletionRequest.evidence_id_allowlist` is
     // non-empty. Shares the per-model vocab_bytes cache.
-    let evidence_id_constraint =
-        request.evidence_id_allowlist.as_deref().and_then(|ids| {
-            let vocab_bytes = crate::vocab_cache::vocab_bytes_for(model);
-            let constraint =
-                crate::evidence_id_constraint::EvidenceIdAllowlistConstraint::new(
-                    ids, vocab_bytes,
-                );
-            tracing::info!(
-                ev_id_count = ids.len(),
-                constructed = constraint.is_some(),
-                "evidence_id_allowlist constraint constructed"
-            );
-            constraint
-        });
+    let evidence_id_constraint = request.evidence_id_allowlist.as_deref().and_then(|ids| {
+        let vocab_bytes = crate::vocab_cache::vocab_bytes_for(model);
+        let constraint =
+            crate::evidence_id_constraint::EvidenceIdAllowlistConstraint::new(ids, vocab_bytes);
+        tracing::info!(
+            ev_id_count = ids.len(),
+            constructed = constraint.is_some(),
+            "evidence_id_allowlist constraint constructed"
+        );
+        constraint
+    });
 
     // Non-Latin token denylist: opt-in via `SOVEREIGN_BLOCK_NON_LATIN`.
     // Built once per model and cached for the daemon's lifetime.
@@ -418,10 +412,7 @@ pub(crate) fn build_sampler(
         .unwrap_or(false);
     let (explore_mode, content_mode) = match request.sampling_mode {
         Some(explicit) => (explicit, explicit),
-        None if has_tools => (
-            SamplingMode::Instruct,
-            SamplingMode::Code,
-        ),
+        None if has_tools => (SamplingMode::Instruct, SamplingMode::Code),
         None => (no_tools_mode, no_tools_mode),
     };
     let resolve = |mode: SamplingMode| -> ResolvedSampling {
@@ -524,7 +515,12 @@ pub(crate) fn build_sampler(
             -1,
             breakers.iter().copied(),
         ));
-        samplers.push(LlamaSampler::penalties(128, rep_pen, freq_pen, params.presence_pen));
+        samplers.push(LlamaSampler::penalties(
+            128,
+            rep_pen,
+            freq_pen,
+            params.presence_pen,
+        ));
         if chain_temp < 0.01 {
             samplers.push(LlamaSampler::greedy());
         } else {
@@ -568,4 +564,3 @@ fn rand_seed() -> u32 {
         .unwrap_or_default()
         .subsec_nanos()
 }
-

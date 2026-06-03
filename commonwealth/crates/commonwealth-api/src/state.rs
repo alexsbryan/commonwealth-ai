@@ -7,19 +7,17 @@ use tokio::sync::RwLock;
 use std::pin::Pin;
 
 use async_trait::async_trait;
-use commonwealth_app::registry::AppRegistry;
 use commonwealth_app::proxy::AppPortMap;
+use commonwealth_app::registry::AppRegistry;
+use commonwealth_core::ids::HandoffId;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::{Mesh, NodeStatus};
-use commonwealth_inference::oicp::ProviderManifest;
 use commonwealth_inference::model_aliases::ModelAliasTable;
+use commonwealth_inference::oicp::ProviderManifest;
 use commonwealth_inference::store_adapter::InferenceStateStore;
-use commonwealth_core::ids::HandoffId;
 use commonwealth_knowledge::store_adapter::KnowledgeStateStore;
 use commonwealth_knowledge::WorkQueueManager;
-use commonwealth_state::{
-    ActivityEmitter, ContributionEmitter, MeshStore, PeerPreferenceStore,
-};
+use commonwealth_state::{ActivityEmitter, ContributionEmitter, MeshStore, PeerPreferenceStore};
 use corpus_engine::CorpusEngine;
 use futures::Stream;
 
@@ -126,9 +124,7 @@ pub trait LocalInferenceService: Send + Sync {
 /// a hook that persists `mesh.json` synchronously so a restart within
 /// the gossip interval never forgets a mutation. Tests leave this
 /// `None` and rely on their assertions without touching disk.
-pub type MeshMutationHook = std::sync::Arc<
-    dyn Fn(&Mesh, NodeId) + Send + Sync,
->;
+pub type MeshMutationHook = std::sync::Arc<dyn Fn(&Mesh, NodeId) + Send + Sync>;
 
 /// Shared application state for all API handlers.
 #[derive(Clone)]
@@ -238,8 +234,7 @@ pub struct AppStateInner {
     /// the 24h interval — the only path operators have to recover
     /// from a stale snapshot or kick off the first portal ingest
     /// after becoming leader.
-    pub newsworthy_force_tick:
-        RwLock<Option<tokio::sync::mpsc::Sender<()>>>,
+    pub newsworthy_force_tick: RwLock<Option<tokio::sync::mpsc::Sender<()>>>,
     /// Current inference availability (0.0–1.0). Written by sovereign-server's
     /// ActivityReporter via POST /internal/node/activity; read by gossip each
     /// round to populate NodeCapabilities.inference_availability. Default 1.0.
@@ -418,8 +413,7 @@ pub struct AppStateInner {
     /// a `MeshInferenceProvider`; gossip then emits
     /// `current_in_flight: None`, which is the legacy / "no signal"
     /// behaviour every scoring path handles correctly.
-    pub local_in_flight_publisher:
-        std::sync::OnceLock<Arc<std::sync::atomic::AtomicU32>>,
+    pub local_in_flight_publisher: std::sync::OnceLock<Arc<std::sync::atomic::AtomicU32>>,
 }
 
 impl AppState {
@@ -441,10 +435,7 @@ impl AppState {
     /// this once after `SetupConfig` is loaded; the admin reload path
     /// calls it again whenever `[models]` changes on disk so clients
     /// using `commonwealth/primary` follow the swap without restart.
-    pub fn install_slot_aliases(
-        &self,
-        aliases: std::collections::HashMap<String, String>,
-    ) {
+    pub fn install_slot_aliases(&self, aliases: std::collections::HashMap<String, String>) {
         self.inner.slot_aliases.store(Arc::new(aliases));
     }
     /// Return a snapshot of the registered slot alias names (both
@@ -464,21 +455,15 @@ impl AppState {
     /// serve handler matches only on `file_name()` and reads the
     /// canonical path, but feeding it relative inputs would still
     /// be a footgun for whoever calls it next.
-    pub fn install_servable_model_files(
-        &self,
-        files: Vec<std::path::PathBuf>,
-    ) {
+    pub fn install_servable_model_files(&self, files: Vec<std::path::PathBuf>) {
         self.inner.servable_model_files.store(Arc::new(files));
     }
-
 
     pub fn new(self_node_id: NodeId, mesh: Mesh) -> Self {
         // Test-support constructor (callers in tests/ + the test-harness);
         // in-memory MeshStore creation is infallible — fail-fast is correct.
         #[allow(clippy::expect_used)]
-        let mesh_store = Arc::new(
-            MeshStore::in_memory().expect("in-memory MeshStore failed"),
-        );
+        let mesh_store = Arc::new(MeshStore::in_memory().expect("in-memory MeshStore failed"));
         Self::new_with_platform(self_node_id, mesh, mesh_store, Arc::new(AppRegistry::new()))
     }
 
@@ -489,13 +474,7 @@ impl AppState {
         mesh_store: Arc<MeshStore>,
         app_registry: Arc<AppRegistry>,
     ) -> Self {
-        Self::new_with_platform_and_engine(
-            self_node_id,
-            mesh,
-            mesh_store,
-            app_registry,
-            None,
-        )
+        Self::new_with_platform_and_engine(self_node_id, mesh, mesh_store, app_registry, None)
     }
 
     /// Create state with an optional `CorpusEngine` attached. The
@@ -515,12 +494,9 @@ impl AppState {
     ) -> Self {
         let inference_store = InferenceStateStore::new(Arc::clone(&mesh_store), self_node_id);
         let knowledge_store = KnowledgeStateStore::new(Arc::clone(&mesh_store), self_node_id);
-        let contribution_emitter =
-            ContributionEmitter::new((*mesh_store).clone(), self_node_id);
-        let activity_emitter =
-            ActivityEmitter::new((*mesh_store).clone(), self_node_id);
-        let peer_preferences =
-            PeerPreferenceStore::new((*mesh_store).clone(), self_node_id);
+        let contribution_emitter = ContributionEmitter::new((*mesh_store).clone(), self_node_id);
+        let activity_emitter = ActivityEmitter::new((*mesh_store).clone(), self_node_id);
+        let peer_preferences = PeerPreferenceStore::new((*mesh_store).clone(), self_node_id);
         // ATOS middleware registry with the M4 core four implementations
         // registered under their TOML ids. The wiring is intentionally
         // additive — operators deploying a stock Commonwealth daemon
@@ -551,8 +527,7 @@ impl AppState {
         // say. Stateless beyond `MiddlewareSession.pending_decision`,
         // which is already plumbed through routes_inference's
         // session round-trip.
-        middleware_registry
-            .register(Arc::new(crate::middleware::DecisionExtractor::new()));
+        middleware_registry.register(Arc::new(crate::middleware::DecisionExtractor::new()));
         // `read_only_enforcer` is the red-team alias's gate. For M4
         // it shares the ApprovalGate implementation under a distinct
         // id — M5 splits them if the behavior actually diverges.
@@ -611,9 +586,7 @@ impl AppState {
                 // matched to their consent-dialog choice in W4);
                 // headless / CLI daemons leave it unlimited so they
                 // don't surprise their operators.
-                contribution_max_peer_inflight: std::sync::atomic::AtomicUsize::new(
-                    usize::MAX,
-                ),
+                contribution_max_peer_inflight: std::sync::atomic::AtomicUsize::new(usize::MAX),
                 peer_inflight_count: std::sync::atomic::AtomicUsize::new(0),
                 // 0 = not paused. Wall-clock unix-seconds expiry when
                 // a user-initiated pause is active.
@@ -648,10 +621,7 @@ impl AppState {
     /// invariant the hot-reload path relies on — it must NOT clobber
     /// the publisher the cold-start path installed, or live guards
     /// from the old MIP would decrement an Arc nobody reads.
-    pub fn install_in_flight_publisher(
-        &self,
-        publisher: Arc<std::sync::atomic::AtomicU32>,
-    ) {
+    pub fn install_in_flight_publisher(&self, publisher: Arc<std::sync::atomic::AtomicU32>) {
         let _ = self.inner.local_in_flight_publisher.set(publisher);
     }
 
@@ -660,9 +630,7 @@ impl AppState {
     /// `MeshInferenceProvider::with_in_flight_publisher`. `None` when
     /// the bootstrap hasn't run an install yet (test harnesses,
     /// storage-only nodes).
-    pub fn in_flight_publisher(
-        &self,
-    ) -> Option<Arc<std::sync::atomic::AtomicU32>> {
+    pub fn in_flight_publisher(&self) -> Option<Arc<std::sync::atomic::AtomicU32>> {
         self.inner.local_in_flight_publisher.get().cloned()
     }
 
@@ -786,7 +754,9 @@ impl AppState {
         model_id: commonwealth_core::ids::ModelId,
         address: String,
     ) {
-        self.inner.inference_store.set_llama_address(model_id, &address);
+        self.inner
+            .inference_store
+            .set_llama_address(model_id, &address);
     }
 
     /// Get the llama-server address for a model.
@@ -810,7 +780,10 @@ impl AppState {
     /// on its next 10-second round.
     pub async fn update_local_availability(&self, availability: f32) {
         *self.inner.local_inference_availability.write().await = availability;
-        tracing::debug!(availability, "inference_availability updated by sovereign-server");
+        tracing::debug!(
+            availability,
+            "inference_availability updated by sovereign-server"
+        );
     }
 
     /// Record that a foreground inference request just landed. Called
@@ -1032,8 +1005,7 @@ impl AppState {
     /// usually pick a different peer immediately anyway.
     pub fn admit_peer_request(
         &self,
-    ) -> Result<crate::admission::PeerInflightGuard, crate::admission::AdmissionRejection>
-    {
+    ) -> Result<crate::admission::PeerInflightGuard, crate::admission::AdmissionRejection> {
         use crate::admission::{AdmissionReason, AdmissionRejection, PeerInflightGuard};
         use std::sync::atomic::Ordering;
 

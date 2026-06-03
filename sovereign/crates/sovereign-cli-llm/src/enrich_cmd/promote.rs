@@ -87,12 +87,10 @@ pub async fn cmd_promote(args: &[String]) -> i32 {
     let selector_text = parsed.selector.clone().or_else(|| {
         // Default selector: stringified input's first string-valued field
         // (chapter title, concern_text, position_text).
-        input
-            .as_object()
-            .and_then(|o| {
-                o.iter()
-                    .find_map(|(_, v)| v.as_str().map(|s| s.to_string()))
-            })
+        input.as_object().and_then(|o| {
+            o.iter()
+                .find_map(|(_, v)| v.as_str().map(|s| s.to_string()))
+        })
     });
 
     let (output_field, model_output_field, corrected_output_field) = match parsed.kind {
@@ -105,7 +103,10 @@ pub async fn cmd_promote(args: &[String]) -> i32 {
             (None, model_out, Some(output))
         }
         ExemplarKind::Negative => {
-            let model_out = parsed.model_output.clone().unwrap_or_else(|| output.clone());
+            let model_out = parsed
+                .model_output
+                .clone()
+                .unwrap_or_else(|| output.clone());
             (None, Some(model_out), None)
         }
     };
@@ -123,8 +124,7 @@ pub async fn cmd_promote(args: &[String]) -> i32 {
         facet: None,
     };
 
-    let path = paths::exemplars_dir(&parsed.corpus_id)
-        .join(format!("{}.json", parsed.phase.id()));
+    let path = paths::exemplars_dir(&parsed.corpus_id).join(format!("{}.json", parsed.phase.id()));
     let mut bank = match ExemplarBank::open(&path, parsed.phase) {
         Ok(b) => b,
         Err(e) => {
@@ -158,13 +158,8 @@ fn kind_label(k: ExemplarKind) -> &'static str {
 /// where ordinal disambiguates repeated promotions of the same
 /// finding. Simpler than scanning the bank — we use timestamp
 /// fallback if the bank load failed earlier.
-fn next_exemplar_id(
-    corpus_id: &str,
-    phase: PipelinePhase,
-    finding: &str,
-) -> String {
-    let bank_path =
-        paths::exemplars_dir(corpus_id).join(format!("{}.json", phase.id()));
+fn next_exemplar_id(corpus_id: &str, phase: PipelinePhase, finding: &str) -> String {
+    let bank_path = paths::exemplars_dir(corpus_id).join(format!("{}.json", phase.id()));
     let count = ExemplarBank::open(&bank_path, phase)
         .map(|b| b.len())
         .unwrap_or(0);
@@ -195,10 +190,7 @@ fn extract_finding(
                 .iter()
                 .find(|e| e.get("chapter_id").and_then(|s| s.as_str()) == Some(finding_id))
                 .ok_or_else(|| format!("no chapter with id '{finding_id}' in run"))?;
-            let questions = entry
-                .get("questions")
-                .cloned()
-                .unwrap_or_else(|| json!([]));
+            let questions = entry.get("questions").cloned().unwrap_or_else(|| json!([]));
             let reveals = entry.get("reveals").cloned();
             let thematic = entry
                 .get("thematic_carriers")
@@ -216,18 +208,30 @@ fn extract_finding(
             });
             Ok((input, serde_json::Value::Object(out)))
         }
-        PipelinePhase::Concerns => extract_by_id_field(run, "concerns", finding_id, &[
-            "concern_text", "scope", "primary_arcs",
-        ]),
-        PipelinePhase::Positions => extract_by_id_field(run, "positions", finding_id, &[
-            "position_text", "grounding", "extensions",
-        ]),
-        PipelinePhase::Tensions => extract_by_id_field(run, "tensions", finding_id, &[
-            "description", "specific_disagreement", "structural_type",
-        ]),
-        PipelinePhase::Gaps => extract_by_id_field(run, "gaps", finding_id, &[
-            "gap_text", "evidence", "significance",
-        ]),
+        PipelinePhase::Concerns => extract_by_id_field(
+            run,
+            "concerns",
+            finding_id,
+            &["concern_text", "scope", "primary_arcs"],
+        ),
+        PipelinePhase::Positions => extract_by_id_field(
+            run,
+            "positions",
+            finding_id,
+            &["position_text", "grounding", "extensions"],
+        ),
+        PipelinePhase::Tensions => extract_by_id_field(
+            run,
+            "tensions",
+            finding_id,
+            &["description", "specific_disagreement", "structural_type"],
+        ),
+        PipelinePhase::Gaps => extract_by_id_field(
+            run,
+            "gaps",
+            finding_id,
+            &["gap_text", "evidence", "significance"],
+        ),
         other => Err(format!(
             "phase '{}' is not promotable (no LLM-shaped output)",
             other.id()
@@ -298,8 +302,7 @@ fn parse_args(args: &[String]) -> Result<ParsedPromote, String> {
             }
             "--run" => {
                 run = Some(PathBuf::from(
-                    args.get(i + 1)
-                        .ok_or("--run requires a path".to_string())?,
+                    args.get(i + 1).ok_or("--run requires a path".to_string())?,
                 ));
                 i += 2;
             }
@@ -471,7 +474,10 @@ mod tests {
         });
         let (inp, out) = extract_finding(&PipelinePhase::Questions, &run, "sec_0001").unwrap();
         assert_eq!(inp["chapter_id"], "sec_0001");
-        assert!(out["questions"].as_array().unwrap().contains(&serde_json::json!("q1")));
+        assert!(out["questions"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("q1")));
         assert_eq!(out["reveals"], "r");
     }
 

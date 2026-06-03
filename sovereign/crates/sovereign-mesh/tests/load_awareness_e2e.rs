@@ -80,8 +80,8 @@ async fn build_local_capabilities_publishes_in_flight_through_appstate() {
 
     let caps = build_local_capabilities(
         None, // no CorpusEngine — irrelevant for this assertion
-        100, // reported_at
-        1.0, // inference_availability
+        100,  // reported_at
+        1.0,  // inference_availability
         None, // embed_model
         Some(&state),
     )
@@ -96,14 +96,7 @@ async fn build_local_capabilities_publishes_in_flight_through_appstate() {
     // Drain back to zero and rebuild — the next gossip tick must
     // see the drop, not a stale snapshot.
     publisher.store(0, Ordering::Relaxed);
-    let caps_after = build_local_capabilities(
-        None,
-        101,
-        1.0,
-        None,
-        Some(&state),
-    )
-    .await;
+    let caps_after = build_local_capabilities(None, 101, 1.0, None, Some(&state)).await;
     assert_eq!(
         caps_after.current_in_flight,
         Some(0),
@@ -143,8 +136,7 @@ async fn no_publisher_yields_none_in_gossip_payload() {
     let state = AppState::new(NodeId::from_u128(4), empty_mesh());
     let caps = build_local_capabilities(None, 300, 1.0, None, Some(&state)).await;
     assert_eq!(
-        caps.current_in_flight,
-        None,
+        caps.current_in_flight, None,
         "no publisher → None in gossip (legacy-compatible)"
     );
     let json = serde_json::to_string(&caps).expect("serialize");

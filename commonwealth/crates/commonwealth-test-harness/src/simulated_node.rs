@@ -3,8 +3,8 @@ use std::net::SocketAddr;
 use commonwealth_core::capabilities::*;
 use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_core::mesh::*;
-use commonwealth_inference::model::ModelInfo;
 use commonwealth_inference::inference_plan::InferencePlan;
+use commonwealth_inference::model::ModelInfo;
 
 use commonwealth_api::server::{client_router, internal_router};
 use commonwealth_api::state::AppState;
@@ -125,7 +125,7 @@ impl SimulatedNodeBuilder {
             embed_model: None,
             benchmark: None,
             current_in_flight: None,
-            };
+        };
 
         let member = MemberRecord {
             node_id,
@@ -233,7 +233,7 @@ impl SimulatedNode {
             embed_model: None,
             benchmark: None,
             current_in_flight: None,
-            }
+        }
     }
 }
 

@@ -75,10 +75,7 @@ pub fn write_structural_test(
 
 /// Remove the framework-appropriate structural test from the
 /// workdir. No-op if the file doesn't exist.
-pub fn cleanup_structural_test(
-    workdir: &Path,
-    framework: crate::tasks::framework::Framework,
-) {
+pub fn cleanup_structural_test(workdir: &Path, framework: crate::tasks::framework::Framework) {
     let (rel_path, _) = structural::render_max_file_size(framework, 0);
     let _ = std::fs::remove_file(workdir.join(rel_path));
 }

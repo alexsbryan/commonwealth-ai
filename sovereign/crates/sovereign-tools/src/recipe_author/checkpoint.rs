@@ -27,15 +27,13 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde_json::json;
 
+use corpus_engine_atos::FeatureStore;
 use corpus_engine_notes::{NoteScope, NoteSource, NoteStore, ScopeFilter};
-use corpus_engine_atos::{FeatureStore};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use super::project::{
-    CheckpointMeta, DecisionFrontier, RecipeProject,
-};
+use super::project::{CheckpointMeta, DecisionFrontier, RecipeProject};
 
 /// Produced by `CheckpointTool::do_create`. Surfaced through both
 /// the tool API and the situated-context renderer; pulling the
@@ -80,8 +78,7 @@ impl Tool for CheckpointTool {
         ToolDescriptor {
             id: "checkpoint".into(),
             name: "Checkpoint".into(),
-            description:
-                "Name a recoverable state of the recipe-author project. Use \
+            description: "Name a recoverable state of the recipe-author project. Use \
                  this when: the project is created (`project_creation`), the \
                  sample size scales up (`auto_scale_up`), the extraction \
                  strategy changes substantially (`auto_strategy_change`), or \
@@ -89,7 +86,7 @@ impl Tool for CheckpointTool {
                  partner can later ask to back up to any checkpoint and try a \
                  different direction without losing decision and research \
                  logs."
-                    .into(),
+                .into(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -131,10 +128,9 @@ impl Tool for CheckpointTool {
                 "required": ["feature_id", "name", "trigger"]
             }),
             examples: vec![ToolExample {
-                situation:
-                    "Partner finished tuning the citation-graph schema and \
+                situation: "Partner finished tuning the citation-graph schema and \
                      asked to checkpoint before exploring counsel-of-record."
-                        .into(),
+                    .into(),
                 call: json!({
                     "feature_id": "<project-uuid>",
                     "name": "citation-graph schema settled",
@@ -162,39 +158,25 @@ impl Tool for CheckpointTool {
         vec![Permission::RecipeAuthoring]
     }
 
-    async fn execute(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let notes = self.notes.as_ref().ok_or_else(|| {
-            Error::InvalidInput(
-                "CheckpointTool was constructed without a NoteStore".into(),
-            )
+            Error::InvalidInput("CheckpointTool was constructed without a NoteStore".into())
         })?;
         let features = self.features.as_ref().ok_or_else(|| {
-            Error::InvalidInput(
-                "CheckpointTool was constructed without a FeatureStore".into(),
-            )
+            Error::InvalidInput("CheckpointTool was constructed without a FeatureStore".into())
         })?;
         let feature_id = params
             .get("feature_id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::InvalidInput("CheckpointTool requires `feature_id`".into())
-            })?;
+            .ok_or_else(|| Error::InvalidInput("CheckpointTool requires `feature_id`".into()))?;
         let name = params
             .get("name")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::InvalidInput("CheckpointTool requires `name`".into())
-            })?;
+            .ok_or_else(|| Error::InvalidInput("CheckpointTool requires `name`".into()))?;
         let trigger = params
             .get("trigger")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::InvalidInput("CheckpointTool requires `trigger`".into())
-            })?;
+            .ok_or_else(|| Error::InvalidInput("CheckpointTool requires `trigger`".into()))?;
         validate_trigger(trigger)?;
         let summary = params
             .get("summary")
@@ -203,12 +185,8 @@ impl Tool for CheckpointTool {
             .to_string();
         let recipe_path = params.get("recipe_path").and_then(|v| v.as_str());
 
-        let project = RecipeProject::load(
-            feature_id,
-            Arc::clone(notes),
-            Arc::clone(features),
-        )
-        .await?;
+        let project =
+            RecipeProject::load(feature_id, Arc::clone(notes), Arc::clone(features)).await?;
 
         let outcome = do_create(
             &project,
@@ -235,10 +213,7 @@ impl Tool for CheckpointTool {
 /// `meta.json` for restore-anchor checkpoints).
 fn validate_trigger(s: &str) -> Result<()> {
     match s {
-        "project_creation"
-        | "auto_scale_up"
-        | "auto_strategy_change"
-        | "partner_request" => Ok(()),
+        "project_creation" | "auto_scale_up" | "auto_strategy_change" | "partner_request" => Ok(()),
         other => Err(Error::InvalidInput(format!(
             "CheckpointTool: unknown trigger `{other}`. Allowed: \
              project_creation | auto_scale_up | auto_strategy_change | \
@@ -319,13 +294,11 @@ pub async fn do_create(
     // 1. Snapshot the recipe TOML if the agent supplied a path. The
     //    project-creation checkpoint may be empty here.
     if let Some(rpath) = recipe_path {
-        let resolved =
-            super::resolve_recipe_path(rpath, recipes_dir_override)?;
+        let resolved = super::resolve_recipe_path(rpath, recipes_dir_override)?;
         match std::fs::read_to_string(&resolved) {
             Ok(content) => {
                 let target = dir.join("recipe.toml");
-                std::fs::write(&target, content)
-                    .map_err(|e| io_err("write", &target, e))?;
+                std::fs::write(&target, content).map_err(|e| io_err("write", &target, e))?;
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 // Path resolves under ~/.sovereign/recipes/ but no
@@ -359,19 +332,15 @@ pub async fn do_create(
         note_count: all.len(),
     };
     let frontier_path = dir.join("decision_frontier.json");
-    let frontier_bytes = serde_json::to_vec_pretty(&frontier).map_err(|e| {
-        Error::InvalidInput(format!("failed to serialise frontier: {e}"))
-    })?;
+    let frontier_bytes = serde_json::to_vec_pretty(&frontier)
+        .map_err(|e| Error::InvalidInput(format!("failed to serialise frontier: {e}")))?;
     std::fs::write(&frontier_path, &frontier_bytes)
         .map_err(|e| io_err("write", &frontier_path, e))?;
 
     // 3. Write meta.json.
-    let now_rfc = chrono::DateTime::<chrono::Utc>::from_timestamp(
-        timestamp_secs as i64,
-        0,
-    )
-    .map(|dt| dt.to_rfc3339())
-    .unwrap_or_else(|| timestamp_secs.to_string());
+    let now_rfc = chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp_secs as i64, 0)
+        .map(|dt| dt.to_rfc3339())
+        .unwrap_or_else(|| timestamp_secs.to_string());
     let meta = CheckpointMeta {
         checkpoint_id: checkpoint_id.clone(),
         name: name.to_string(),
@@ -385,11 +354,9 @@ pub async fn do_create(
         created_at: now_rfc,
     };
     let meta_path = dir.join("meta.json");
-    let meta_bytes = serde_json::to_vec_pretty(&meta).map_err(|e| {
-        Error::InvalidInput(format!("failed to serialise checkpoint meta: {e}"))
-    })?;
-    std::fs::write(&meta_path, &meta_bytes)
-        .map_err(|e| io_err("write", &meta_path, e))?;
+    let meta_bytes = serde_json::to_vec_pretty(&meta)
+        .map_err(|e| Error::InvalidInput(format!("failed to serialise checkpoint meta: {e}")))?;
+    std::fs::write(&meta_path, &meta_bytes).map_err(|e| io_err("write", &meta_path, e))?;
 
     // 4. NoteStore notes — one for the checkpoint, plus one for the
     //    restore marker when applicable.
@@ -427,9 +394,7 @@ pub async fn do_create(
             .notes()
             .write_note_full(
                 "checkpoint_restored",
-                &format!(
-                    "Restored project state from checkpoint `{from}`."
-                ),
+                &format!("Restored project state from checkpoint `{from}`."),
                 Vec::new(),
                 Vec::new(),
                 session_id,
@@ -474,14 +439,11 @@ pub async fn restore_checkpoint(
     if let Some(rid) = recipe_id {
         let resolved = super::resolve_recipe_path(rid, recipes_dir_override)?;
         if let Some(parent) = resolved.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| io_err("create_dir_all", parent, e))?;
+            std::fs::create_dir_all(parent).map_err(|e| io_err("create_dir_all", parent, e))?;
         }
         let part = resolved.with_extension("toml.part");
-        std::fs::write(&part, &snapshot_text)
-            .map_err(|e| io_err("write", &part, e))?;
-        std::fs::rename(&part, &resolved)
-            .map_err(|e| io_err("rename to", &resolved, e))?;
+        std::fs::write(&part, &snapshot_text).map_err(|e| io_err("write", &part, e))?;
+        std::fs::rename(&part, &resolved).map_err(|e| io_err("rename to", &resolved, e))?;
     }
 
     // 3. Lay down a restore-anchor checkpoint marking the new state.
@@ -513,8 +475,7 @@ mod tests {
     /// with NotFound). Acquire this lock for the lifetime of every
     /// test that calls `fresh_project`.
     pub(super) fn home_test_lock() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> =
-            std::sync::OnceLock::new();
+        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
         LOCK.get_or_init(|| std::sync::Mutex::new(()))
             .lock()
             .unwrap_or_else(|p| p.into_inner())
@@ -522,11 +483,15 @@ mod tests {
 
     async fn fresh_project(
         recipes_dir: &Path,
-    ) -> (RecipeProject, Arc<NoteStore>, Arc<FeatureStore>, tempfile::TempDir) {
+    ) -> (
+        RecipeProject,
+        Arc<NoteStore>,
+        Arc<FeatureStore>,
+        tempfile::TempDir,
+    ) {
         let dir = tempfile::tempdir().unwrap();
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
-        let features =
-            Arc::new(FeatureStore::open(&dir.path().join("features.db")).unwrap());
+        let features = Arc::new(FeatureStore::open(&dir.path().join("features.db")).unwrap());
         // Per-test HOME so `RecipeProject::new` writes its sidecar dir
         // into the tempdir rather than the user's real home. Caller
         // holds `home_test_lock()` for the lifetime of the assignment
@@ -546,17 +511,22 @@ mod tests {
 
     #[tokio::test]
     async fn slugify_handles_punctuation() {
-        assert_eq!(slugify("Citation graph: settled!"), "citation-graph-settled");
+        assert_eq!(
+            slugify("Citation graph: settled!"),
+            "citation-graph-settled"
+        );
         assert_eq!(slugify("   "), "checkpoint");
-        assert_eq!(slugify("CourtListener — Ninth Circuit"), "courtlistener-ninth-circuit");
+        assert_eq!(
+            slugify("CourtListener — Ninth Circuit"),
+            "courtlistener-ninth-circuit"
+        );
     }
 
     #[tokio::test]
     async fn creates_checkpoint_writes_meta_and_frontier() {
         let _guard = home_test_lock();
         let recipes_dir = tempfile::tempdir().unwrap();
-        let (project, _notes, _features, _dir) =
-            fresh_project(recipes_dir.path()).await;
+        let (project, _notes, _features, _dir) = fresh_project(recipes_dir.path()).await;
         let outcome = do_create(
             &project,
             "initial",
@@ -571,7 +541,10 @@ mod tests {
         .unwrap();
         assert!(outcome.snapshot_path.exists());
         assert!(outcome.snapshot_path.join("meta.json").exists());
-        assert!(outcome.snapshot_path.join("decision_frontier.json").exists());
+        assert!(outcome
+            .snapshot_path
+            .join("decision_frontier.json")
+            .exists());
         assert!(!outcome.snapshot_path.join("recipe.toml").exists());
 
         let checkpoints = project.list_checkpoints().unwrap();
@@ -592,8 +565,7 @@ mod tests {
         )
         .unwrap();
 
-        let (project, _notes, _features, _dir) =
-            fresh_project(recipes_dir.path()).await;
+        let (project, _notes, _features, _dir) = fresh_project(recipes_dir.path()).await;
         let outcome = do_create(
             &project,
             "after first draft",
@@ -633,8 +605,7 @@ mod tests {
         )
         .unwrap();
 
-        let (project, _notes, _features, _dir) =
-            fresh_project(recipes_dir.path()).await;
+        let (project, _notes, _features, _dir) = fresh_project(recipes_dir.path()).await;
         let first = do_create(
             &project,
             "v1",
@@ -665,8 +636,7 @@ mod tests {
         .await
         .unwrap();
 
-        let restored_text =
-            std::fs::read_to_string(recipe_subdir.join("recipe.toml")).unwrap();
+        let restored_text = std::fs::read_to_string(recipe_subdir.join("recipe.toml")).unwrap();
         assert!(restored_text.contains("v1"));
         assert!(!restored_text.contains("v2-wrong"));
 

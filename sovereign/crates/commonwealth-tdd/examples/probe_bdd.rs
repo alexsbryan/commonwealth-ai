@@ -41,7 +41,9 @@ fn parse_args() -> Args {
         match flag.as_str() {
             "--workdir" => args.workdir = Some(it.next().expect("--workdir value").into()),
             "--intent" => args.intent = Some(it.next().expect("--intent value")),
-            "--test-file-hint" => args.test_file_hint = Some(it.next().expect("--test-file-hint value")),
+            "--test-file-hint" => {
+                args.test_file_hint = Some(it.next().expect("--test-file-hint value"))
+            }
             "--test-command" => args.test_command = Some(it.next().expect("--test-command value")),
             "--model" => args.model = it.next().expect("--model value"),
             "--provider-url" => args.provider_url = it.next().expect("--provider-url value"),
@@ -57,10 +59,9 @@ fn parse_args() -> Args {
 async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(
-                    "commonwealth_tdd=info,probe_bdd=info",
-                )),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                tracing_subscriber::EnvFilter::new("commonwealth_tdd=info,probe_bdd=info")
+            }),
         )
         .init();
 
@@ -90,7 +91,14 @@ async fn main() {
     println!("test_file_hint: {:?}", args.test_file_hint);
     println!("test_command:   {:?}", args.test_command);
     println!("model:          {}", args.model);
-    println!("review_mode:    {}", if args.pause { "PauseAfterSynthesis" } else { "Auto" });
+    println!(
+        "review_mode:    {}",
+        if args.pause {
+            "PauseAfterSynthesis"
+        } else {
+            "Auto"
+        }
+    );
     println!();
 
     let started = std::time::Instant::now();
@@ -116,13 +124,20 @@ async fn main() {
 
     println!("─── Synthesis stage ────────────────────────────────");
     println!("status:        {:?}", r.synthesis.status);
-    println!("tests:         before={}p/{}f after={}p/{}f",
-        r.synthesis.tests_before.passed, r.synthesis.tests_before.failed,
-        r.synthesis.tests_after.passed, r.synthesis.tests_after.failed);
+    println!(
+        "tests:         before={}p/{}f after={}p/{}f",
+        r.synthesis.tests_before.passed,
+        r.synthesis.tests_before.failed,
+        r.synthesis.tests_after.passed,
+        r.synthesis.tests_after.failed
+    );
     println!("rounds:        {}", r.synthesis.rounds);
     println!("─── Synthesis trajectory ───────────────────────────");
     for g in &r.synthesis.trajectory {
-        println!("  round {}: winner={:?} passing={} failed={}", g.round, g.winner, g.passing_after, g.failed_after);
+        println!(
+            "  round {}: winner={:?} passing={} failed={}",
+            g.round, g.winner, g.passing_after, g.failed_after
+        );
         for c in &g.candidates {
             println!("    cand: {c}");
         }
@@ -143,13 +158,20 @@ async fn main() {
     if let Some(green) = r.green {
         println!("─── Green stage ────────────────────────────────────");
         println!("status:        {:?}", green.status);
-        println!("tests:         before={}p/{}f after={}p/{}f",
-            green.tests_before.passed, green.tests_before.failed,
-            green.tests_after.passed, green.tests_after.failed);
+        println!(
+            "tests:         before={}p/{}f after={}p/{}f",
+            green.tests_before.passed,
+            green.tests_before.failed,
+            green.tests_after.passed,
+            green.tests_after.failed
+        );
         println!("rounds:        {}", green.rounds);
         println!("─── Green trajectory ───────────────────────────────");
         for g in &green.trajectory {
-            println!("  round {}: winner={:?} passing={}", g.round, g.winner, g.passing_after);
+            println!(
+                "  round {}: winner={:?} passing={}",
+                g.round, g.winner, g.passing_after
+            );
         }
     } else {
         println!("─── Green stage skipped ────────────────────────────");

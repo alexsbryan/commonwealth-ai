@@ -32,8 +32,7 @@ fn dispatcher_walks_mixed_folder_end_to_end() {
     std::fs::write(docs_dir.join(".DS_Store"), b"junk").unwrap();
 
     let assets_root = dir.path().join("assets");
-    let store: Arc<dyn AssetStore> =
-        Arc::new(FilesystemAssetStore::new(&assets_root).unwrap());
+    let store: Arc<dyn AssetStore> = Arc::new(FilesystemAssetStore::new(&assets_root).unwrap());
     let sidecar: PathBuf = dir.path().join("atlas/asset_atoms.jsonl");
     let extractor = DescribedAssetExtractor {
         store: store.clone(),
@@ -128,8 +127,7 @@ fn dispatcher_records_parsed_form_when_sub_extractor_writes_one() {
     std::fs::write(docs_dir.join("payload.stub"), b"opaque-bytes").unwrap();
 
     let assets_root = dir.path().join("assets");
-    let store: Arc<dyn AssetStore> =
-        Arc::new(FilesystemAssetStore::new(&assets_root).unwrap());
+    let store: Arc<dyn AssetStore> = Arc::new(FilesystemAssetStore::new(&assets_root).unwrap());
     let registry = AssetSubExtractorRegistry::new();
     registry.register(Arc::new(StubParsedWriter));
     // Plaintext + opaque fallback added after the stub so the stub

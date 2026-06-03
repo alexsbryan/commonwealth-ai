@@ -218,9 +218,7 @@ pub async fn run(app: AppHandle, state: Arc<AppState>) -> Result<(), String> {
     let app_for_cb = app.clone();
     let cb: state::BootstrapProgressCb = Box::new(move |phase: BootstrapPhase| {
         let (sp, msg) = match phase {
-            BootstrapPhase::SmokeTesting => {
-                (SetupPhase::SmokeTesting, "Testing the connection.")
-            }
+            BootstrapPhase::SmokeTesting => (SetupPhase::SmokeTesting, "Testing the connection."),
             BootstrapPhase::LoadingModel => {
                 (SetupPhase::LoadingModel, "Bringing the model online.")
             }
@@ -402,12 +400,10 @@ fn failed(app: &AppHandle, recoverable: bool, message: String) -> String {
 fn write_first_run_marker() -> Result<(), String> {
     let path = sovereign_root().join("first_run_complete");
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
     }
     let ts = chrono::Utc::now().to_rfc3339();
-    std::fs::write(&path, ts)
-        .map_err(|e| format!("writing {}: {e}", path.display()))?;
+    std::fs::write(&path, ts).map_err(|e| format!("writing {}: {e}", path.display()))?;
     Ok(())
 }
 
@@ -422,11 +418,7 @@ fn sovereign_root() -> PathBuf {
 /// (BYOM placements, dev re-runs); otherwise fall back to the
 /// canonical `~/.sovereign/models/<slot.file>` location, where
 /// the downloader will fetch + validate as usual.
-fn pick_path(
-    existing: Option<&Path>,
-    canonical: PathBuf,
-    _size_gb: f64,
-) -> PathBuf {
+fn pick_path(existing: Option<&Path>, canonical: PathBuf, _size_gb: f64) -> PathBuf {
     if let Some(p) = existing {
         if !p.as_os_str().is_empty() && is_valid_gguf_at(p) {
             return p.to_path_buf();

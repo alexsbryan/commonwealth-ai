@@ -24,14 +24,11 @@ pub mod atlas_resolve;
 pub mod atlas_tensions;
 pub mod atlas_tensions_classify;
 pub mod build;
-pub mod sheets_ingest;
 pub mod cascade;
 pub mod classify;
 pub mod config;
-pub mod delta_cmd;
-pub mod extract_typed;
 pub mod corpus_io;
-pub mod triage;
+pub mod delta_cmd;
 pub mod diagnose;
 pub mod diff;
 pub mod errors;
@@ -39,10 +36,11 @@ pub mod eval;
 pub mod eval_median;
 pub mod exemplars;
 pub mod extract;
+pub mod extract_typed;
 pub mod inference_client;
 pub mod ingest;
-pub mod investigation;
 pub mod init;
+pub mod investigation;
 pub mod paths;
 pub mod phase_cmd;
 pub mod promote;
@@ -52,10 +50,12 @@ pub mod reset;
 pub mod schema_review;
 pub mod seed_cmd;
 pub mod sep_ingest;
+pub mod sheets_ingest;
 pub mod show;
 pub mod source_loader;
 pub mod status;
 pub mod templates;
+pub mod triage;
 pub mod validate;
 
 use crate::util::help::{self, Help, HelpSection};
@@ -181,12 +181,8 @@ pub async fn run_enrich(args: &[String]) -> i32 {
         "query" | "atlas-query" => atlas_query::cmd_atlas_query(rest).await,
         "report" | "schema-report" => schema_review::cmd_schema_report(rest).await,
         "review" | "schema-review" => schema_review::cmd_schema_review(rest).await,
-        "atlas-drift-report" => {
-            atlas_drift_report::cmd_atlas_drift_report(rest).await
-        }
-        "bridge" | "atlas-cross-corpus" => {
-            atlas_cross_corpus::cmd_atlas_cross_corpus(rest).await
-        }
+        "atlas-drift-report" => atlas_drift_report::cmd_atlas_drift_report(rest).await,
+        "bridge" | "atlas-cross-corpus" => atlas_cross_corpus::cmd_atlas_cross_corpus(rest).await,
 
         // ── Individual phases ─────────────────────────────────
         "seed" => seed_cmd::cmd_seed(rest).await,
@@ -195,9 +191,7 @@ pub async fn run_enrich(args: &[String]) -> i32 {
         "extract-typed" => extract_typed::cmd_extract_typed(rest).await,
         "sheets-ingest" => sheets_ingest::cmd_sheets_ingest(rest).await,
         "cluster" | "cluster-atlas" => atlas_phase_cmd::cmd_cluster_atlas(rest).await,
-        "name" | "name-atlas-clusters" => {
-            atlas_phase_cmd::cmd_name_atlas_clusters(rest).await
-        }
+        "name" | "name-atlas-clusters" => atlas_phase_cmd::cmd_name_atlas_clusters(rest).await,
         "resolve" | "atlas-resolve" => atlas_resolve::cmd_atlas_resolve(rest).await,
         "reconcile" | "atlas-reconcile" => atlas_reconcile::cmd_atlas_reconcile(rest).await,
         "tensions" | "atlas-tensions" => atlas_tensions::cmd_atlas_tensions(rest).await,
@@ -227,21 +221,13 @@ pub async fn run_enrich(args: &[String]) -> i32 {
         "cluster-questions" => {
             phase_cmd::run_phase(phase_cmd::PhaseOp::ClusterQuestions, rest).await
         }
-        "name-concerns" => {
-            phase_cmd::run_phase(phase_cmd::PhaseOp::NameConcerns, rest).await
-        }
-        "cluster-chunks" => {
-            phase_cmd::run_phase(phase_cmd::PhaseOp::ClusterChunks, rest).await
-        }
+        "name-concerns" => phase_cmd::run_phase(phase_cmd::PhaseOp::NameConcerns, rest).await,
+        "cluster-chunks" => phase_cmd::run_phase(phase_cmd::PhaseOp::ClusterChunks, rest).await,
         "extract-positions" => {
             phase_cmd::run_phase(phase_cmd::PhaseOp::ExtractPositions, rest).await
         }
-        "detect-tensions" => {
-            phase_cmd::run_phase(phase_cmd::PhaseOp::DetectTensions, rest).await
-        }
-        "detect-gaps" => {
-            phase_cmd::run_phase(phase_cmd::PhaseOp::DetectGaps, rest).await
-        }
+        "detect-tensions" => phase_cmd::run_phase(phase_cmd::PhaseOp::DetectTensions, rest).await,
+        "detect-gaps" => phase_cmd::run_phase(phase_cmd::PhaseOp::DetectGaps, rest).await,
         "cascade" => cascade::cmd_cascade(rest).await,
         "validate" => validate::cmd_validate(rest).await,
         "promote" => promote::cmd_promote(rest).await,
@@ -286,9 +272,7 @@ pub(super) mod test_env {
 
     /// Acquire the `HOME` lock and point `HOME` at a fresh tempdir.
     pub fn scoped_home() -> HomeGuard {
-        let guard = HOME_LOCK
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
+        let guard = HOME_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", dir.path());
         HomeGuard { dir, _guard: guard }

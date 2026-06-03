@@ -11,8 +11,7 @@ use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_core::mesh::NodeStatus;
 use commonwealth_inference::oicp::{
-    self, CapabilityClaim, CapabilityHint, InferenceRequirements,
-    LatencyClass, ShardingPrivacy,
+    self, CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass, ShardingPrivacy,
 };
 use std::collections::HashSet;
 use std::time::Instant;
@@ -334,10 +333,7 @@ pub async fn chat_completions(
 /// Rank every loaded model's synthesized v0.3 claim against the
 /// request and return the `ModelId` with the highest score. Returns
 /// `None` when no claim passes the hard gate.
-fn route_with_oicp(
-    state: &AppState,
-    req: &InferenceRequirements,
-) -> Option<ModelId> {
+fn route_with_oicp(state: &AppState, req: &InferenceRequirements) -> Option<ModelId> {
     let models = state.inner.inference_store.list_models();
     let plan = state.inner.inference_store.get_plan().unwrap_or_default();
 
@@ -376,10 +372,7 @@ fn synthesize_claim_for_model_info(
 
     let (hint, affinity) = if is_code_specialist {
         let code = oicp::proficiency(&model_info.oicp_capabilities, oicp::Capability::Code);
-        (
-            CapabilityHint::code(),
-            (code as f32 / 4.0).clamp(0.0, 1.0),
-        )
+        (CapabilityHint::code(), (code as f32 / 4.0).clamp(0.0, 1.0))
     } else {
         let best = [
             oicp::Capability::General,
@@ -647,9 +640,7 @@ pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
             .chain(
                 mesh.members
                     .values()
-                    .filter(|m| {
-                        matches!(m.status, NodeStatus::Online | NodeStatus::Busy)
-                    })
+                    .filter(|m| matches!(m.status, NodeStatus::Online | NodeStatus::Busy))
                     .map(|m| m.node_id),
             )
             .collect()
@@ -683,7 +674,9 @@ pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
                 object: "model".into(),
                 created: 0,
                 owned_by: "mesh".into(),
-                capabilities: Some(serde_json::to_value(&model.oicp_capabilities).unwrap_or_default()),
+                capabilities: Some(
+                    serde_json::to_value(&model.oicp_capabilities).unwrap_or_default(),
+                ),
                 performance: shard_plan.map(|p| ModelPerformance {
                     estimated_tokens_per_sec: p.estimated_tokens_per_sec,
                     estimated_ttft_ms: p.estimated_ttft_ms,
@@ -801,17 +794,21 @@ async fn serve_local_non_stream(
                 }
             }
             if let Some(for_node) = requester {
-                let tokens =
-                    resp.usage.as_ref().map(|u| u.completion_tokens as u64).unwrap_or(0);
+                let tokens = resp
+                    .usage
+                    .as_ref()
+                    .map(|u| u.completion_tokens as u64)
+                    .unwrap_or(0);
                 let wall_seconds = started.elapsed().as_secs_f64();
-                state.inner.contribution_emitter.record(
-                    LedgerEventKind::InferenceServed {
+                state
+                    .inner
+                    .contribution_emitter
+                    .record(LedgerEventKind::InferenceServed {
                         for_node,
                         model_id,
                         tokens_generated: tokens,
                         wall_seconds,
-                    },
-                );
+                    });
             } else {
                 // Local API client (no `X-Node-Id`). The contribution
                 // ledger deliberately skips this — it's not work *for
@@ -825,14 +822,15 @@ async fn serve_local_non_stream(
                     .map(|u| (u.prompt_tokens as u64, u.completion_tokens as u64))
                     .unwrap_or((0, 0));
                 let wall_seconds = started.elapsed().as_secs_f64();
-                state.inner.activity_emitter.record(
-                    ActivityEventKind::LocalInferenceServed {
+                state
+                    .inner
+                    .activity_emitter
+                    .record(ActivityEventKind::LocalInferenceServed {
                         model_id,
                         prompt_tokens,
                         completion_tokens,
                         wall_seconds,
-                    },
-                );
+                    });
             }
             (StatusCode::OK, Json(resp)).into_response()
         }
@@ -910,8 +908,7 @@ async fn serve_local_stream(
         use crate::openai_types::StreamFrame;
         match frame {
             StreamFrame::Token(delta) => {
-                chunks_count_for_stream
-                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                chunks_count_for_stream.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 let chunk = serde_json::json!({
                     "id": id_for_stream,
                     "object": "chat.completion.chunk",
@@ -923,9 +920,7 @@ async fn serve_local_stream(
                         "finish_reason": null
                     }]
                 });
-                Ok::<_, std::convert::Infallible>(
-                    Event::default().data(chunk.to_string()),
-                )
+                Ok::<_, std::convert::Infallible>(Event::default().data(chunk.to_string()))
             }
             StreamFrame::ToolCalls(calls) => {
                 // Synthetic tools-streaming chunk. Local backends
@@ -935,20 +930,21 @@ async fn serve_local_stream(
                 // OpenAI spec also permits. Both shapes are
                 // wire-legal — clients accumulate by `tool_calls[i].
                 // index` regardless of chunk count.
-                chunks_count_for_stream
-                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                chunks_count_for_stream.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 let tool_calls_json: Vec<serde_json::Value> = calls
                     .iter()
                     .enumerate()
-                    .map(|(i, c)| serde_json::json!({
-                        "index": i,
-                        "id": c.id,
-                        "type": c.kind,
-                        "function": {
-                            "name": c.function.name,
-                            "arguments": c.function.arguments,
-                        }
-                    }))
+                    .map(|(i, c)| {
+                        serde_json::json!({
+                            "index": i,
+                            "id": c.id,
+                            "type": c.kind,
+                            "function": {
+                                "name": c.function.name,
+                                "arguments": c.function.arguments,
+                            }
+                        })
+                    })
                     .collect();
                 let chunk = serde_json::json!({
                     "id": id_for_stream,
@@ -964,9 +960,7 @@ async fn serve_local_stream(
                         "finish_reason": null
                     }]
                 });
-                Ok::<_, std::convert::Infallible>(
-                    Event::default().data(chunk.to_string()),
-                )
+                Ok::<_, std::convert::Infallible>(Event::default().data(chunk.to_string()))
             }
             StreamFrame::Finish { reason, usage } => {
                 // Terminal frame: emit an OpenAI-shaped chunk with
@@ -1023,8 +1017,7 @@ async fn serve_local_stream(
     let requester_for_done = requester;
     let model_for_done = model_id_for_ledger;
     let done = futures::stream::once(async move {
-        let tokens =
-            chunks_for_done.load(std::sync::atomic::Ordering::Relaxed);
+        let tokens = chunks_for_done.load(std::sync::atomic::Ordering::Relaxed);
         let wall_seconds = started.elapsed().as_secs_f64();
         if let Some(for_node) = requester_for_done {
             state_for_done.record(LedgerEventKind::InferenceServed {
@@ -1253,11 +1246,9 @@ fn middleware_error_to_response(err: MiddlewareError) -> Response {
             "atos_approval_required",
             &format!("feature '{feature_id}' is not approved: {hint}"),
         ),
-        MiddlewareError::PipelineRejected(msg) => atos_error_response(
-            StatusCode::FORBIDDEN,
-            "atos_pipeline_rejected",
-            &msg,
-        ),
+        MiddlewareError::PipelineRejected(msg) => {
+            atos_error_response(StatusCode::FORBIDDEN, "atos_pipeline_rejected", &msg)
+        }
         MiddlewareError::Infra(msg) => atos_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "atos_pipeline_infra_error",

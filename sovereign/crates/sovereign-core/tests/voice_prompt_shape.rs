@@ -30,7 +30,7 @@ use sovereign_core::runtime::{
     __voice_test_epistemic_contract_for, __voice_test_factual_base_prompt,
     __voice_test_relational_base_prompt, __voice_test_render_temporal_tensions,
 };
-use sovereign_core::skills::{SkillRegister, SkillRegistry, parse_skill_toml};
+use sovereign_core::skills::{parse_skill_toml, SkillRegister, SkillRegistry};
 use sovereign_core::types::{JudgePreset, Memory, SampleSelector, TemporalTension};
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -327,7 +327,13 @@ fn memory_format_factual_register_uses_pre_existing_flat_layout() {
 #[test]
 fn memory_format_relational_register_renders_three_bands_with_dates() {
     // 2026-03-12 UTC
-    let directly = mem("d", "I want to leave the job", 0.92, 1_773_273_600, Some("c-mar"));
+    let directly = mem(
+        "d",
+        "I want to leave the job",
+        0.92,
+        1_773_273_600,
+        Some("c-mar"),
+    );
     // 2026-04-08 UTC
     let inferred = mem(
         "i",
@@ -338,11 +344,9 @@ fn memory_format_relational_register_renders_three_bands_with_dates() {
     );
     let tentative = mem("t", "May be avoiding conflict", 0.35, 0, None);
 
-    let out = format_memories_for_prompt(
-        &[directly, inferred, tentative],
-        SkillRegister::Relational,
-    )
-    .unwrap();
+    let out =
+        format_memories_for_prompt(&[directly, inferred, tentative], SkillRegister::Relational)
+            .unwrap();
 
     // Three bands, each with the right heading.
     assert!(out.contains("What you've told me directly:"));
@@ -448,7 +452,10 @@ fn temporal_tension_renderer_omits_date_when_no_source_conversation() {
         "let's schedule for Saturday",
     );
     let out = __voice_test_render_temporal_tensions(&[t]);
-    assert!(!out.contains("[2026-03-12]"), "date must NOT render without source conv id");
+    assert!(
+        !out.contains("[2026-03-12]"),
+        "date must NOT render without source conv id"
+    );
     assert!(out.contains("\"no Saturday meetings\""));
     assert!(out.contains("\"let's schedule for Saturday\""));
 }

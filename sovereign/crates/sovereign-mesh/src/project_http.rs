@@ -33,9 +33,14 @@ pub fn project_router(reindexer: Arc<Reindexer>) -> Router {
     Router::new()
         .route("/v1/projects", get(list_projects))
         .route("/v1/projects/register", post(register_project))
-        .route("/v1/projects/{corpus_id}/unregister", post(unregister_project))
+        .route(
+            "/v1/projects/{corpus_id}/unregister",
+            post(unregister_project),
+        )
         .route("/v1/projects/{corpus_id}/rebuild", post(rebuild_project))
-        .layer(axum::middleware::from_fn(crate::loopback_guard::loopback_only))
+        .layer(axum::middleware::from_fn(
+            crate::loopback_guard::loopback_only,
+        ))
         .layer(Extension(reindexer))
 }
 

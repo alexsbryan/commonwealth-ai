@@ -17,12 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use sovereign_pipeline::driver::{DriverConfig, Shutdown};
-use sovereign_pipeline::{
-    ledger, pod,
-    recipe::Recipe,
-    run_recipe, status,
-    worklist::Worklist,
-};
+use sovereign_pipeline::{ledger, pod, recipe::Recipe, run_recipe, status, worklist::Worklist};
 use tokio::sync::Mutex;
 
 use crate::util::help::{self, Help, HelpSection};
@@ -31,9 +26,7 @@ const HELP: Help = Help {
     command: "sovereign pipeline",
     summary: "Generic ingestion-pipeline driver — durable worklist + retry + pause-resume.",
     sections: &[
-        HelpSection::Usage(
-            "sovereign pipeline <run | status | list> [flags]",
-        ),
+        HelpSection::Usage("sovereign pipeline <run | status | list> [flags]"),
         HelpSection::Subcommands(&[
             (
                 "run <recipe.toml>",
@@ -45,10 +38,7 @@ const HELP: Help = Help {
                 "status <recipe-id>",
                 "Print pending/done/failed counts, last-hour throughput, ETA, failure buckets.",
             ),
-            (
-                "list",
-                "List every recipe-id known to the worklist DB.",
-            ),
+            ("list", "List every recipe-id known to the worklist DB."),
             (
                 "pause <recipe-id>",
                 "Gracefully stop active drivers for this recipe across the mesh \
@@ -207,7 +197,9 @@ async fn cmd_run(args: &[String]) -> i32 {
 
     // Apply source overrides. --key wins over --slugs wins over recipe.
     if !keys_override.is_empty() {
-        recipe.source = sovereign_pipeline::recipe::Source::Inline { keys: keys_override };
+        recipe.source = sovereign_pipeline::recipe::Source::Inline {
+            keys: keys_override,
+        };
     } else if let Some(path) = slugs_path {
         recipe.source = sovereign_pipeline::recipe::Source::SlugList { path };
         // Override paths from the CLI are relative to the user's cwd,
@@ -253,7 +245,10 @@ async fn cmd_run(args: &[String]) -> i32 {
         let mut wl = worklist.lock().await;
         match wl.seed(&recipe.recipe.id, keys) {
             Ok(n) => {
-                println!("seeded {n} new work unit(s) for recipe `{}`", recipe.recipe.id);
+                println!(
+                    "seeded {n} new work unit(s) for recipe `{}`",
+                    recipe.recipe.id
+                );
                 return 0;
             }
             Err(e) => {
@@ -290,7 +285,11 @@ async fn cmd_run(args: &[String]) -> i32 {
     println!("rate:      {rate:.1} / hr");
     println!(
         "exit:      {}",
-        if summary.paused { "paused (shutdown requested)" } else { "complete" }
+        if summary.paused {
+            "paused (shutdown requested)"
+        } else {
+            "complete"
+        }
     );
     0
 }
@@ -613,8 +612,11 @@ async fn mesh_pause_via_daemon(
 
     let status = resp.status();
     if status == reqwest::StatusCode::NOT_FOUND {
-        return Err(MeshPauseError::Other("local daemon doesn't expose /internal/pipeline/pause — rebuild + restart it to \
-             enable mesh-aware pause, or pass --local-only to use the legacy path".to_string()));
+        return Err(MeshPauseError::Other(
+            "local daemon doesn't expose /internal/pipeline/pause — rebuild + restart it to \
+             enable mesh-aware pause, or pass --local-only to use the legacy path"
+                .to_string(),
+        ));
     }
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
@@ -720,14 +722,38 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--gpu" => { i += 1; gpu_name = args[i].clone(); }
-            "--image" => { i += 1; image = Some(args[i].clone()); }
-            "--disk" => { i += 1; disk_gb = args[i].parse().unwrap_or(disk_gb); }
-            "--label" => { i += 1; label = Some(args[i].clone()); }
-            "--max-price" => { i += 1; max_price = args[i].parse().unwrap_or(max_price); }
-            "--num-gpus" => { i += 1; num_gpus = args[i].parse().ok(); }
-            "--job-id" => { i += 1; job_id = Some(args[i].clone()); }
-            "--upload" => { i += 1; uploads.push(std::path::PathBuf::from(args[i].clone())); }
+            "--gpu" => {
+                i += 1;
+                gpu_name = args[i].clone();
+            }
+            "--image" => {
+                i += 1;
+                image = Some(args[i].clone());
+            }
+            "--disk" => {
+                i += 1;
+                disk_gb = args[i].parse().unwrap_or(disk_gb);
+            }
+            "--label" => {
+                i += 1;
+                label = Some(args[i].clone());
+            }
+            "--max-price" => {
+                i += 1;
+                max_price = args[i].parse().unwrap_or(max_price);
+            }
+            "--num-gpus" => {
+                i += 1;
+                num_gpus = args[i].parse().ok();
+            }
+            "--job-id" => {
+                i += 1;
+                job_id = Some(args[i].clone());
+            }
+            "--upload" => {
+                i += 1;
+                uploads.push(std::path::PathBuf::from(args[i].clone()));
+            }
             "--upload-from-base-url" => {
                 i += 1;
                 // Strip trailing slash so we can paste either with or
@@ -755,8 +781,13 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
                 }
                 upload_urls.push((name.to_string(), sha.to_string(), url.to_string()));
             }
-            "--ttl-hours" => { i += 1; bootstrap_ttl_hours = args[i].parse().unwrap_or(bootstrap_ttl_hours); }
-            "--dry-run" => { dry_run = true; }
+            "--ttl-hours" => {
+                i += 1;
+                bootstrap_ttl_hours = args[i].parse().unwrap_or(bootstrap_ttl_hours);
+            }
+            "--dry-run" => {
+                dry_run = true;
+            }
             other => {
                 eprintln!("unknown flag: {other}");
                 eprintln!(
@@ -795,7 +826,12 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     let job_id = job_id.unwrap_or_else(|| {
         format!(
             "job-{}",
-            uuid::Uuid::new_v4().simple().to_string().chars().take(12).collect::<String>()
+            uuid::Uuid::new_v4()
+                .simple()
+                .to_string()
+                .chars()
+                .take(12)
+                .collect::<String>()
         )
     });
     // ─── Vast offer search ─────────────────────────────────────────
@@ -831,7 +867,12 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     };
     println!(
         "selected offer: id={} gpu={} ${:.3}/hr rel={:.2} verified={} loc={}",
-        pick.id, pick.gpu_name, pick.price_per_hour, pick.reliability, pick.verified, pick.geolocation,
+        pick.id,
+        pick.gpu_name,
+        pick.price_per_hour,
+        pick.reliability,
+        pick.verified,
+        pick.geolocation,
     );
 
     // ─── Hash uploads up front ─────────────────────────────────────
@@ -846,7 +887,10 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
         let name = match path.file_name().and_then(|n| n.to_str()) {
             Some(n) => n.to_string(),
             None => {
-                eprintln!("--upload path has no filename component: {}", path.display());
+                eprintln!(
+                    "--upload path has no filename component: {}",
+                    path.display()
+                );
                 return 2;
             }
         };
@@ -897,7 +941,11 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
             "DRY RUN: would create instance via vastai create instance {} \
              --image {} --disk {} --label {} --ssh, then mint a worker bootstrap blob \
              with {} upload(s), upload to :9742 over TLS-pinned reqwest.",
-            pick.id, image, disk_gb, label_value, upload_specs.len(),
+            pick.id,
+            image,
+            disk_gb,
+            label_value,
+            upload_specs.len(),
         );
         return 0;
     }
@@ -946,19 +994,18 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     // "uploads ready" state for follow-up commands. The `_with_blob`
     // variant also yields the bootstrap blob so we can persist a
     // pinned-pod snapshot for the inference scheduler.
-    let (handle, instance, blob, _client) =
-        match controller.create_and_run_with_blob(&spec).await {
-            Ok(t) => t,
-            Err(e) => {
-                eprintln!("pod up failed: {e}");
-                // Best-effort cleanup: if `instance_id` was created but
-                // the rest of the lifecycle failed, the operator can run
-                // `vastai destroy instance <id>` manually. Surfacing the
-                // error is more important than guessing the instance id
-                // here.
-                return 1;
-            }
-        };
+    let (handle, instance, blob, _client) = match controller.create_and_run_with_blob(&spec).await {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("pod up failed: {e}");
+            // Best-effort cleanup: if `instance_id` was created but
+            // the rest of the lifecycle failed, the operator can run
+            // `vastai destroy instance <id>` manually. Surfacing the
+            // error is more important than guessing the instance id
+            // here.
+            return 1;
+        }
+    };
 
     // Persist a pinned-pod snapshot so the daemon's inference
     // scheduler picks the pod up on next startup (or via the
@@ -971,8 +1018,7 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     // we re-print it at the end of this command for operator visibility.
     let expires_unix = blob.expires_unix;
     if let Some(dir) = sovereign_mesh::pinned_pod_snapshot::default_snapshot_dir() {
-        let capabilities =
-            capabilities_for_gpu(&instance.gpu_name);
+        let capabilities = capabilities_for_gpu(&instance.gpu_name);
         let snapshot = sovereign_mesh::pinned_pod_snapshot::PinnedPodSnapshot::new(
             instance.instance_id.clone(),
             handle.host(),
@@ -981,8 +1027,13 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
             capabilities,
         );
         match sovereign_mesh::pinned_pod_snapshot::save_snapshot(&dir, &snapshot) {
-            Ok(p) => println!("wrote snapshot at {} (inference routing enabled)", p.display()),
-            Err(e) => eprintln!("warning: snapshot write failed ({e}) — inference routing disabled"),
+            Ok(p) => println!(
+                "wrote snapshot at {} (inference routing enabled)",
+                p.display()
+            ),
+            Err(e) => {
+                eprintln!("warning: snapshot write failed ({e}) — inference routing disabled")
+            }
         }
     }
 
@@ -1263,17 +1314,49 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--pods" => { i += 1; pod_count = args[i].parse().unwrap_or(0); }
-            "--gpu" => { i += 1; gpu_name = args[i].clone(); }
-            "--image" => { i += 1; image = Some(args[i].clone()); }
-            "--disk" => { i += 1; disk_gb = args[i].parse().unwrap_or(disk_gb); }
-            "--label" => { i += 1; label = Some(args[i].clone()); }
-            "--max-price" => { i += 1; max_price = args[i].parse().unwrap_or(max_price); }
-            "--job-id" => { i += 1; job_id = Some(args[i].clone()); }
-            "--manifest" => { i += 1; manifest_path = Some(std::path::PathBuf::from(args[i].clone())); }
-            "--output" => { i += 1; output_path = Some(std::path::PathBuf::from(args[i].clone())); }
-            "--keep-alive" => { keep_alive = true; }
-            "--upload" => { i += 1; uploads.push(std::path::PathBuf::from(args[i].clone())); }
+            "--pods" => {
+                i += 1;
+                pod_count = args[i].parse().unwrap_or(0);
+            }
+            "--gpu" => {
+                i += 1;
+                gpu_name = args[i].clone();
+            }
+            "--image" => {
+                i += 1;
+                image = Some(args[i].clone());
+            }
+            "--disk" => {
+                i += 1;
+                disk_gb = args[i].parse().unwrap_or(disk_gb);
+            }
+            "--label" => {
+                i += 1;
+                label = Some(args[i].clone());
+            }
+            "--max-price" => {
+                i += 1;
+                max_price = args[i].parse().unwrap_or(max_price);
+            }
+            "--job-id" => {
+                i += 1;
+                job_id = Some(args[i].clone());
+            }
+            "--manifest" => {
+                i += 1;
+                manifest_path = Some(std::path::PathBuf::from(args[i].clone()));
+            }
+            "--output" => {
+                i += 1;
+                output_path = Some(std::path::PathBuf::from(args[i].clone()));
+            }
+            "--keep-alive" => {
+                keep_alive = true;
+            }
+            "--upload" => {
+                i += 1;
+                uploads.push(std::path::PathBuf::from(args[i].clone()));
+            }
             "--upload-from-base-url" => {
                 i += 1;
                 upload_from_base = Some(args[i].trim_end_matches('/').to_string());
@@ -1286,15 +1369,18 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
                 let sha = parts.next().unwrap_or("");
                 let url = parts.next().unwrap_or("");
                 if name.is_empty() || sha.len() != 64 || url.is_empty() {
-                    eprintln!(
-                        "--upload-url expects `name=sha256-hex=url`. Got: {raw}"
-                    );
+                    eprintln!("--upload-url expects `name=sha256-hex=url`. Got: {raw}");
                     return 2;
                 }
                 upload_urls.push((name.to_string(), sha.to_string(), url.to_string()));
             }
-            "--ttl-hours" => { i += 1; bootstrap_ttl_hours = args[i].parse().unwrap_or(bootstrap_ttl_hours); }
-            "--dry-run" => { dry_run = true; }
+            "--ttl-hours" => {
+                i += 1;
+                bootstrap_ttl_hours = args[i].parse().unwrap_or(bootstrap_ttl_hours);
+            }
+            "--dry-run" => {
+                dry_run = true;
+            }
             other => {
                 eprintln!("unknown flag: {other}");
                 eprintln!(
@@ -1319,9 +1405,7 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
         return 2;
     }
     let Some(image) = image else {
-        eprintln!(
-            "no container image. Pass `--image <ref>` or set SOVEREIGN_VAST_IMAGE."
-        );
+        eprintln!("no container image. Pass `--image <ref>` or set SOVEREIGN_VAST_IMAGE.");
         return 2;
     };
     let Some(manifest_path) = manifest_path else {
@@ -1334,7 +1418,12 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
     let job_id = job_id.unwrap_or_else(|| {
         format!(
             "pool-{}",
-            uuid::Uuid::new_v4().simple().to_string().chars().take(12).collect::<String>()
+            uuid::Uuid::new_v4()
+                .simple()
+                .to_string()
+                .chars()
+                .take(12)
+                .collect::<String>()
         )
     });
     let label_value = label.unwrap_or_else(|| format!("{job_id}-pool"));
@@ -1446,7 +1535,10 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
         let name = match path.file_name().and_then(|n| n.to_str()) {
             Some(n) => n.to_string(),
             None => {
-                eprintln!("--upload path has no filename component: {}", path.display());
+                eprintln!(
+                    "--upload path has no filename component: {}",
+                    path.display()
+                );
                 return 2;
             }
         };
@@ -1512,13 +1604,14 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let provider =
-        std::sync::Arc::new(crate::worker_pod_provider::MultiOfferVastWorkerProvider::new(
+    let provider = std::sync::Arc::new(
+        crate::worker_pod_provider::MultiOfferVastWorkerProvider::new(
             image.clone(),
             disk_gb,
             label_value.clone(),
             chosen,
-        ));
+        ),
+    );
     let mut ctrl_config = sovereign_mesh::worker_controller::ControllerConfig::default();
     ctrl_config.bootstrap_ttl_seconds = bootstrap_ttl_hours.saturating_mul(3600);
     let coord_config = sovereign_mesh::multi_pod_coordinator::CoordinatorConfig::default();
@@ -1566,8 +1659,8 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
     }
 
     // ─── Drain ──────────────────────────────────────────────────────
-    let output_handle: std::sync::Arc<std::sync::Mutex<Option<std::fs::File>>> = std::sync::Arc::new(
-        std::sync::Mutex::new(match &output_path {
+    let output_handle: std::sync::Arc<std::sync::Mutex<Option<std::fs::File>>> =
+        std::sync::Arc::new(std::sync::Mutex::new(match &output_path {
             Some(p) => match std::fs::File::create(p) {
                 Ok(f) => Some(f),
                 Err(e) => {
@@ -1576,8 +1669,7 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
                 }
             },
             None => None,
-        }),
-    );
+        }));
     let received = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let received_h = received.clone();
     let output_h = output_handle.clone();
@@ -1619,7 +1711,11 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
         summary.total_received,
         summary.elapsed.as_secs_f64(),
         summary.total_errors,
-        if summary.timed_out { " [TIMED OUT]" } else { "" },
+        if summary.timed_out {
+            " [TIMED OUT]"
+        } else {
+            ""
+        },
     );
 
     // ─── Tear down ──────────────────────────────────────────────────
@@ -1648,5 +1744,9 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
         }
         println!("destroy each with `sovereign pipeline pod down <vast-id>`.");
     }
-    if summary.timed_out { 1 } else { 0 }
+    if summary.timed_out {
+        1
+    } else {
+        0
+    }
 }

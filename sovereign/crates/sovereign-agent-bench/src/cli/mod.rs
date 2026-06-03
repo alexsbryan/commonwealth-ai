@@ -64,8 +64,9 @@ fn init_tracing() {
     // binary installs; the sovereign-cli dispatcher will already have.
     let _ = tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("sovereign_agent_bench=info")),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                tracing_subscriber::EnvFilter::new("sovereign_agent_bench=info")
+            }),
         )
         .try_init();
 }

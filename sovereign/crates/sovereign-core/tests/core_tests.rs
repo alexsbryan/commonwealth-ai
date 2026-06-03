@@ -13,8 +13,8 @@ use sovereign_core::registry::ToolRegistry;
 use sovereign_core::runtime::Runtime;
 use sovereign_core::skills::*;
 use sovereign_core::stubs::{NoOpPlanner, PassthroughRouter};
-use sovereign_core::types::TrustLevel;
 use sovereign_core::traits::*;
+use sovereign_core::types::TrustLevel;
 use sovereign_core::types::*;
 
 // ─── Mock InferenceProvider ────────────────────────────────────
@@ -42,7 +42,8 @@ impl InferenceProvider for MockInference {
             latency_ms: 1,
             oicp_meta: None,
             finish_reason: None,
-            completion_tokens: None,        })
+            completion_tokens: None,
+        })
     }
 
     async fn complete_stream(
@@ -95,7 +96,11 @@ impl ConversationStore for MockStore {
     }
     async fn get_conversation(&self, id: &str) -> Result<Conversation> {
         let msgs = self.messages.read().await;
-        let conv_msgs: Vec<Message> = msgs.iter().filter(|m| m.conversation_id == id).cloned().collect();
+        let conv_msgs: Vec<Message> = msgs
+            .iter()
+            .filter(|m| m.conversation_id == id)
+            .cloned()
+            .collect();
         if conv_msgs.is_empty() {
             return Err(Error::NotFound(format!("Conversation {id}")));
         }
@@ -109,7 +114,7 @@ impl ConversationStore for MockStore {
             deleted_at: None,
             skill_id: None,
             enabled_corpora: None,
-        searched_sources: None,
+            searched_sources: None,
         })
     }
     async fn list_conversations(&self, _limit: usize, _offset: usize) -> Result<Vec<Conversation>> {
@@ -176,7 +181,12 @@ impl DocumentStore for MockStore {
     async fn store_chunks(&self, _chunks: &[DocumentChunk]) -> Result<()> {
         Ok(())
     }
-    async fn search_documents(&self, _qe: &[f32], _qt: &str, _l: usize) -> Result<Vec<DocumentChunk>> {
+    async fn search_documents(
+        &self,
+        _qe: &[f32],
+        _qt: &str,
+        _l: usize,
+    ) -> Result<Vec<DocumentChunk>> {
         Ok(Vec::new())
     }
     async fn get_chunks_by_source(&self, _source: &str) -> Result<Vec<DocumentChunk>> {
@@ -237,26 +247,110 @@ impl HealthStore for MockStore {}
 
 #[async_trait::async_trait]
 impl sovereign_core::traits::DocumentSessionStore for MockStore {
-    async fn create_document_session(&self, _session: &sovereign_core::DocumentSession) -> sovereign_core::error::Result<()> { Ok(()) }
-    async fn get_document_session(&self, _session_id: &str) -> sovereign_core::error::Result<Option<sovereign_core::DocumentSession>> { Ok(None) }
-    async fn get_document_session_by_conversation(&self, _conversation_id: &str) -> sovereign_core::error::Result<Option<sovereign_core::DocumentSession>> { Ok(None) }
-    async fn update_document_session(&self, _session: &sovereign_core::DocumentSession) -> sovereign_core::error::Result<()> { Ok(()) }
+    async fn create_document_session(
+        &self,
+        _session: &sovereign_core::DocumentSession,
+    ) -> sovereign_core::error::Result<()> {
+        Ok(())
+    }
+    async fn get_document_session(
+        &self,
+        _session_id: &str,
+    ) -> sovereign_core::error::Result<Option<sovereign_core::DocumentSession>> {
+        Ok(None)
+    }
+    async fn get_document_session_by_conversation(
+        &self,
+        _conversation_id: &str,
+    ) -> sovereign_core::error::Result<Option<sovereign_core::DocumentSession>> {
+        Ok(None)
+    }
+    async fn update_document_session(
+        &self,
+        _session: &sovereign_core::DocumentSession,
+    ) -> sovereign_core::error::Result<()> {
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
 impl sovereign_core::traits::DocumentAssetStore for MockStore {
-    async fn save_document_asset(&self, _asset: &sovereign_core::DocumentAsset) -> sovereign_core::error::Result<()> { Ok(()) }
-    async fn update_asset_state(&self, _id: &str, _state: &sovereign_core::AssetState) -> sovereign_core::error::Result<()> { Ok(()) }
-    async fn save_asset_skeleton(&self, _id: &str, _skeleton: &sovereign_core::DocumentSkeleton, _document_type: &sovereign_core::types::DocumentTypeTag) -> sovereign_core::error::Result<()> { Ok(()) }
-    async fn get_document_asset(&self, _id: &str) -> sovereign_core::error::Result<Option<sovereign_core::DocumentAsset>> { Ok(None) }
-    async fn list_document_assets(&self) -> sovereign_core::error::Result<Vec<sovereign_core::DocumentAsset>> { Ok(Vec::new()) }
-    async fn delete_document_asset(&self, _id: &str) -> sovereign_core::error::Result<()> { Ok(()) }
-    async fn save_document_operation(&self, _message_id: &str, _asset_id: &str, _operation: &sovereign_core::DocumentAssetOperation, _duration_ms: u64) -> sovereign_core::error::Result<()> { Ok(()) }
-    async fn save_raptor_nodes(&self, _asset_id: &str, _nodes: &[sovereign_core::types::RaptorNode]) -> sovereign_core::error::Result<()> { Ok(()) }
-    async fn list_raptor_nodes(&self, _asset_id: &str) -> sovereign_core::error::Result<Vec<sovereign_core::types::RaptorNode>> { Ok(Vec::new()) }
-    async fn get_raptor_node(&self, _node_id: &str) -> sovereign_core::error::Result<Option<sovereign_core::types::RaptorNode>> { Ok(None) }
-    async fn save_asset_motifs(&self, _asset_id: &str, _motifs: &[sovereign_core::types::AssetMotif]) -> sovereign_core::error::Result<()> { Ok(()) }
-    async fn list_asset_motifs(&self, _asset_id: &str) -> sovereign_core::error::Result<Vec<sovereign_core::types::AssetMotif>> { Ok(Vec::new()) }
+    async fn save_document_asset(
+        &self,
+        _asset: &sovereign_core::DocumentAsset,
+    ) -> sovereign_core::error::Result<()> {
+        Ok(())
+    }
+    async fn update_asset_state(
+        &self,
+        _id: &str,
+        _state: &sovereign_core::AssetState,
+    ) -> sovereign_core::error::Result<()> {
+        Ok(())
+    }
+    async fn save_asset_skeleton(
+        &self,
+        _id: &str,
+        _skeleton: &sovereign_core::DocumentSkeleton,
+        _document_type: &sovereign_core::types::DocumentTypeTag,
+    ) -> sovereign_core::error::Result<()> {
+        Ok(())
+    }
+    async fn get_document_asset(
+        &self,
+        _id: &str,
+    ) -> sovereign_core::error::Result<Option<sovereign_core::DocumentAsset>> {
+        Ok(None)
+    }
+    async fn list_document_assets(
+        &self,
+    ) -> sovereign_core::error::Result<Vec<sovereign_core::DocumentAsset>> {
+        Ok(Vec::new())
+    }
+    async fn delete_document_asset(&self, _id: &str) -> sovereign_core::error::Result<()> {
+        Ok(())
+    }
+    async fn save_document_operation(
+        &self,
+        _message_id: &str,
+        _asset_id: &str,
+        _operation: &sovereign_core::DocumentAssetOperation,
+        _duration_ms: u64,
+    ) -> sovereign_core::error::Result<()> {
+        Ok(())
+    }
+    async fn save_raptor_nodes(
+        &self,
+        _asset_id: &str,
+        _nodes: &[sovereign_core::types::RaptorNode],
+    ) -> sovereign_core::error::Result<()> {
+        Ok(())
+    }
+    async fn list_raptor_nodes(
+        &self,
+        _asset_id: &str,
+    ) -> sovereign_core::error::Result<Vec<sovereign_core::types::RaptorNode>> {
+        Ok(Vec::new())
+    }
+    async fn get_raptor_node(
+        &self,
+        _node_id: &str,
+    ) -> sovereign_core::error::Result<Option<sovereign_core::types::RaptorNode>> {
+        Ok(None)
+    }
+    async fn save_asset_motifs(
+        &self,
+        _asset_id: &str,
+        _motifs: &[sovereign_core::types::AssetMotif],
+    ) -> sovereign_core::error::Result<()> {
+        Ok(())
+    }
+    async fn list_asset_motifs(
+        &self,
+        _asset_id: &str,
+    ) -> sovereign_core::error::Result<Vec<sovereign_core::types::AssetMotif>> {
+        Ok(Vec::new())
+    }
 }
 
 impl StateStore for MockStore {}
@@ -302,8 +396,12 @@ fn tool_registry_empty() {
 #[test]
 fn tool_registry_register_and_get() {
     let mut reg = ToolRegistry::new();
-    reg.register(Box::new(DummyTool { id: "tool_a".to_string() }));
-    reg.register(Box::new(DummyTool { id: "tool_b".to_string() }));
+    reg.register(Box::new(DummyTool {
+        id: "tool_a".to_string(),
+    }));
+    reg.register(Box::new(DummyTool {
+        id: "tool_b".to_string(),
+    }));
 
     assert_eq!(reg.count(), 2);
     assert_eq!(reg.descriptors().len(), 2);
@@ -449,7 +547,7 @@ fn format_history_empty() {
             deleted_at: None,
             skill_id: None,
             enabled_corpora: None,
-        searched_sources: None,
+            searched_sources: None,
         },
         memories: Vec::new(),
         working_memory: None,
@@ -458,10 +556,10 @@ fn format_history_empty() {
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
-            compacted_history: None,
-            history_retrieval_hits: None,
-            tool_dossier: None,
-            intent_policy: None,
+        compacted_history: None,
+        history_retrieval_hits: None,
+        tool_dossier: None,
+        intent_policy: None,
     };
     assert_eq!(format_history_as_prompt(&ctx, 10), "");
 }
@@ -498,7 +596,7 @@ fn format_history_multi_turn() {
             deleted_at: None,
             skill_id: None,
             enabled_corpora: None,
-        searched_sources: None,
+            searched_sources: None,
         },
         memories: Vec::new(),
         working_memory: None,
@@ -507,10 +605,10 @@ fn format_history_multi_turn() {
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
-            compacted_history: None,
-            history_retrieval_hits: None,
-            tool_dossier: None,
-            intent_policy: None,
+        compacted_history: None,
+        history_retrieval_hits: None,
+        tool_dossier: None,
+        intent_policy: None,
     };
 
     let prompt = format_history_as_prompt(&ctx, 10);
@@ -543,7 +641,7 @@ fn format_history_truncates_to_max() {
             deleted_at: None,
             skill_id: None,
             enabled_corpora: None,
-        searched_sources: None,
+            searched_sources: None,
         },
         memories: Vec::new(),
         working_memory: None,
@@ -552,10 +650,10 @@ fn format_history_truncates_to_max() {
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
-            compacted_history: None,
-            history_retrieval_hits: None,
-            tool_dossier: None,
-            intent_policy: None,
+        compacted_history: None,
+        history_retrieval_hits: None,
+        tool_dossier: None,
+        intent_policy: None,
     };
 
     let prompt = format_history_as_prompt(&ctx, 3);
@@ -581,7 +679,7 @@ async fn passthrough_router_always_simple_query() {
             deleted_at: None,
             skill_id: None,
             enabled_corpora: None,
-        searched_sources: None,
+            searched_sources: None,
         },
         memories: Vec::new(),
         working_memory: None,
@@ -590,10 +688,10 @@ async fn passthrough_router_always_simple_query() {
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
-            compacted_history: None,
-            history_retrieval_hits: None,
-            tool_dossier: None,
-            intent_policy: None,
+        compacted_history: None,
+        history_retrieval_hits: None,
+        tool_dossier: None,
+        intent_policy: None,
     };
 
     let outcome = router.classify("anything", &ctx, &[]).await.unwrap();
@@ -614,7 +712,7 @@ async fn noop_planner_returns_not_implemented() {
             deleted_at: None,
             skill_id: None,
             enabled_corpora: None,
-        searched_sources: None,
+            searched_sources: None,
         },
         memories: Vec::new(),
         working_memory: None,
@@ -623,10 +721,10 @@ async fn noop_planner_returns_not_implemented() {
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
-            compacted_history: None,
-            history_retrieval_hits: None,
-            tool_dossier: None,
-            intent_policy: None,
+        compacted_history: None,
+        history_retrieval_hits: None,
+        tool_dossier: None,
+        intent_policy: None,
     };
 
     let result = planner.plan("do something", &ctx, &[]).await;
@@ -720,7 +818,9 @@ struct SequencedMockInference {
 impl SequencedMockInference {
     fn new(responses: Vec<&str>, default: &str) -> Self {
         Self {
-            responses: tokio::sync::Mutex::new(responses.into_iter().map(|s| s.to_string()).collect()),
+            responses: tokio::sync::Mutex::new(
+                responses.into_iter().map(|s| s.to_string()).collect(),
+            ),
             default: default.to_string(),
         }
     }
@@ -743,7 +843,8 @@ impl InferenceProvider for SequencedMockInference {
             latency_ms: 1,
             oicp_meta: None,
             finish_reason: None,
-            completion_tokens: None,        })
+            completion_tokens: None,
+        })
     }
 
     async fn complete_stream(
@@ -791,8 +892,8 @@ async fn executor_linear_plan() {
                 },
                 requires_approval: false,
                 inputs: vec![],
-            sampling: None,
-            evaluation: None,
+                sampling: None,
+                evaluation: None,
             },
             Step {
                 id: 1,
@@ -806,8 +907,8 @@ async fn executor_linear_plan() {
                     step_id: 0,
                     key: "output".to_string(),
                 }],
-            sampling: None,
-            evaluation: None,
+                sampling: None,
+                evaluation: None,
             },
         ],
         edges: vec![(0, 1)],
@@ -844,9 +945,13 @@ async fn executor_linear_plan() {
     assert_eq!(result.completed.len(), 2);
 
     // Step 0 ran first.
-    assert!(matches!(result.completed.get(&0), Some(StepOutput::Text(t)) if t == "Python is versatile"));
+    assert!(
+        matches!(result.completed.get(&0), Some(StepOutput::Text(t)) if t == "Python is versatile")
+    );
     // Step 1 used step 0's output.
-    assert!(matches!(result.completed.get(&1), Some(StepOutput::Text(t)) if t.contains("learn Python")));
+    assert!(
+        matches!(result.completed.get(&1), Some(StepOutput::Text(t)) if t.contains("learn Python"))
+    );
 }
 
 #[tokio::test]
@@ -871,8 +976,8 @@ async fn executor_parallel_then_merge() {
                 },
                 requires_approval: false,
                 inputs: vec![],
-            sampling: None,
-            evaluation: None,
+                sampling: None,
+                evaluation: None,
             },
             Step {
                 id: 1,
@@ -883,8 +988,8 @@ async fn executor_parallel_then_merge() {
                 },
                 requires_approval: false,
                 inputs: vec![],
-            sampling: None,
-            evaluation: None,
+                sampling: None,
+                evaluation: None,
             },
             Step {
                 id: 2,
@@ -895,11 +1000,17 @@ async fn executor_parallel_then_merge() {
                 },
                 requires_approval: false,
                 inputs: vec![
-                    StepInput { step_id: 0, key: "output".to_string() },
-                    StepInput { step_id: 1, key: "output".to_string() },
+                    StepInput {
+                        step_id: 0,
+                        key: "output".to_string(),
+                    },
+                    StepInput {
+                        step_id: 1,
+                        key: "output".to_string(),
+                    },
                 ],
-            sampling: None,
-            evaluation: None,
+                sampling: None,
+                evaluation: None,
             },
         ],
         edges: vec![(0, 2), (1, 2)],
@@ -917,7 +1028,13 @@ async fn executor_parallel_then_merge() {
         version: 0,
     };
 
-    let executor = Executor::new(inference, Arc::new(ToolRegistry::new()), store, Arc::new(AutoApprovalChannel), Arc::new(SkillRegistry::new()));
+    let executor = Executor::new(
+        inference,
+        Arc::new(ToolRegistry::new()),
+        store,
+        Arc::new(AutoApprovalChannel),
+        Arc::new(SkillRegistry::new()),
+    );
     let mut ctx = TaskContext {
         task,
         completed: std::collections::HashMap::new(),
@@ -932,7 +1049,7 @@ async fn executor_parallel_then_merge() {
 async fn executor_branch_skips_non_taken_path() {
     let inference = Arc::new(SequencedMockInference::new(
         vec![
-            "yes",           // Branch evaluation → takes true path
+            "yes", // Branch evaluation → takes true path
             "True path result",
         ],
         "fallback",
@@ -953,8 +1070,8 @@ async fn executor_branch_skips_non_taken_path() {
                 },
                 requires_approval: false,
                 inputs: vec![],
-            sampling: None,
-            evaluation: None,
+                sampling: None,
+                evaluation: None,
             },
             Step {
                 id: 1,
@@ -965,8 +1082,8 @@ async fn executor_branch_skips_non_taken_path() {
                 },
                 requires_approval: false,
                 inputs: vec![],
-            sampling: None,
-            evaluation: None,
+                sampling: None,
+                evaluation: None,
             },
             Step {
                 id: 2,
@@ -977,8 +1094,8 @@ async fn executor_branch_skips_non_taken_path() {
                 },
                 requires_approval: false,
                 inputs: vec![],
-            sampling: None,
-            evaluation: None,
+                sampling: None,
+                evaluation: None,
             },
         ],
         edges: vec![(0, 1), (0, 2)],
@@ -996,7 +1113,13 @@ async fn executor_branch_skips_non_taken_path() {
         version: 0,
     };
 
-    let executor = Executor::new(inference, Arc::new(ToolRegistry::new()), store, Arc::new(AutoApprovalChannel), Arc::new(SkillRegistry::new()));
+    let executor = Executor::new(
+        inference,
+        Arc::new(ToolRegistry::new()),
+        store,
+        Arc::new(AutoApprovalChannel),
+        Arc::new(SkillRegistry::new()),
+    );
     let mut ctx = TaskContext {
         task,
         completed: std::collections::HashMap::new(),
@@ -1006,11 +1129,20 @@ async fn executor_branch_skips_non_taken_path() {
     assert!(result.error.is_none());
 
     // Branch jumped to step 1.
-    assert!(matches!(result.completed.get(&0), Some(StepOutput::Jump(1))));
+    assert!(matches!(
+        result.completed.get(&0),
+        Some(StepOutput::Jump(1))
+    ));
     // Step 1 (sunny) executed.
-    assert!(matches!(result.completed.get(&1), Some(StepOutput::Text(_))));
+    assert!(matches!(
+        result.completed.get(&1),
+        Some(StepOutput::Text(_))
+    ));
     // Step 2 (rainy) was skipped.
-    assert!(matches!(result.completed.get(&2), Some(StepOutput::Skipped)));
+    assert!(matches!(
+        result.completed.get(&2),
+        Some(StepOutput::Skipped)
+    ));
 }
 
 // ─── Planner + Executor Integration ────────────────────────────
@@ -1036,7 +1168,7 @@ async fn planner_generates_valid_plan() {
             deleted_at: None,
             skill_id: None,
             enabled_corpora: None,
-        searched_sources: None,
+            searched_sources: None,
         },
         memories: vec![],
         working_memory: None,
@@ -1045,10 +1177,10 @@ async fn planner_generates_valid_plan() {
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
-            compacted_history: None,
-            history_retrieval_hits: None,
-            tool_dossier: None,
-            intent_policy: None,
+        compacted_history: None,
+        history_retrieval_hits: None,
+        tool_dossier: None,
+        intent_policy: None,
     };
 
     let plan = planner.plan("compare languages", &ctx, &[]).await.unwrap();
@@ -1076,7 +1208,7 @@ async fn planner_fallback_on_garbage() {
             deleted_at: None,
             skill_id: None,
             enabled_corpora: None,
-        searched_sources: None,
+            searched_sources: None,
         },
         memories: vec![],
         working_memory: None,
@@ -1085,10 +1217,10 @@ async fn planner_fallback_on_garbage() {
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
-            compacted_history: None,
-            history_retrieval_hits: None,
-            tool_dossier: None,
-            intent_policy: None,
+        compacted_history: None,
+        history_retrieval_hits: None,
+        tool_dossier: None,
+        intent_policy: None,
     };
 
     // Should succeed with fallback plan (single step).
@@ -1129,7 +1261,11 @@ async fn runtime_complex_task_end_to_end() {
 
     // Responses: routing classification (unused for ComplexTaskRouter), plan JSON, step execution, synthesis
     let inference = Arc::new(SequencedMockInference::new(
-        vec![plan_json, "Step result: analysis done", "Final synthesized answer"],
+        vec![
+            plan_json,
+            "Step result: analysis done",
+            "Final synthesized answer",
+        ],
         "default response",
     ));
 
@@ -1138,7 +1274,10 @@ async fn runtime_complex_task_end_to_end() {
     let runtime = Runtime::new(
         inference,
         Box::new(ComplexTaskRouter),
-        Box::new(LlmPlanner::new(Arc::new(MockInference::new(plan_json)), Arc::clone(&skills))),
+        Box::new(LlmPlanner::new(
+            Arc::new(MockInference::new(plan_json)),
+            Arc::clone(&skills),
+        )),
         Arc::new(ToolRegistry::new()),
         store.clone(),
         skills,
@@ -1146,7 +1285,10 @@ async fn runtime_complex_task_end_to_end() {
         sovereign_core::types::InferenceConfig::default(),
     );
 
-    let response = runtime.handle_message("compare Python and Rust", "c1").await.unwrap();
+    let response = runtime
+        .handle_message("compare Python and Rust", "c1")
+        .await
+        .unwrap();
 
     // Should have a task attached.
     assert!(response.task.is_some());
@@ -1179,8 +1321,8 @@ async fn executor_tool_step() {
             },
             requires_approval: false,
             inputs: vec![],
-        sampling: None,
-        evaluation: None,
+            sampling: None,
+            evaluation: None,
         }],
         edges: vec![],
     };
@@ -1280,8 +1422,8 @@ async fn executor_tool_denied_permission_skips() {
             },
             requires_approval: false,
             inputs: vec![],
-        sampling: None,
-        evaluation: None,
+            sampling: None,
+            evaluation: None,
         }],
         edges: vec![],
     };
@@ -1351,8 +1493,8 @@ async fn executor_user_input_step() {
             },
             requires_approval: false,
             inputs: vec![],
-        sampling: None,
-        evaluation: None,
+            sampling: None,
+            evaluation: None,
         }],
         edges: vec![],
     };
@@ -1672,7 +1814,10 @@ async fn cutoff_length_finish_reason_surfaces_in_provenance() {
         Some(FinishReason::Length),
         Some(2047),
     );
-    runtime.handle_message("Tell me everything", "c1").await.unwrap();
+    runtime
+        .handle_message("Tell me everything", "c1")
+        .await
+        .unwrap();
 
     let msgs = store.messages.read().await;
     let assistant_msg = &msgs[1];
@@ -1684,7 +1829,8 @@ async fn cutoff_length_finish_reason_surfaces_in_provenance() {
         "Length truncation must surface as lowercase 'length' for the cutoff chip"
     );
     assert_eq!(
-        provenance["completion_tokens"], serde_json::Value::from(2047),
+        provenance["completion_tokens"],
+        serde_json::Value::from(2047),
         "completion_tokens from provider must reach provenance"
     );
     // max_tokens_budget comes from inference_config.max_tokens (default 2048).
@@ -1700,12 +1846,12 @@ async fn cutoff_length_finish_reason_surfaces_in_provenance() {
 /// pass the truncation test while breaking the chip's specificity.
 #[tokio::test]
 async fn cutoff_clean_stop_does_not_signal_length() {
-    let (runtime, store) = build_runtime_with_finish(
-        "complete answer.",
-        Some(FinishReason::Stop),
-        Some(50),
-    );
-    runtime.handle_message("Short question?", "c1").await.unwrap();
+    let (runtime, store) =
+        build_runtime_with_finish("complete answer.", Some(FinishReason::Stop), Some(50));
+    runtime
+        .handle_message("Short question?", "c1")
+        .await
+        .unwrap();
 
     let msgs = store.messages.read().await;
     let metadata = msgs[1].metadata.as_ref().unwrap();
@@ -1728,11 +1874,7 @@ async fn cutoff_clean_stop_does_not_signal_length() {
 /// honest about not knowing rather than synthesising a value.
 #[tokio::test]
 async fn cutoff_missing_finish_reason_serializes_absent() {
-    let (runtime, store) = build_runtime_with_finish(
-        "best-effort answer",
-        None,
-        None,
-    );
+    let (runtime, store) = build_runtime_with_finish("best-effort answer", None, None);
     runtime.handle_message("question", "c1").await.unwrap();
 
     let msgs = store.messages.read().await;

@@ -78,7 +78,11 @@ pub fn compose_extract_prompt(
         system.push_str(&format!(
             "- **{}**: {}\n  Attributes (keys to populate when present): [{}]\n",
             et.name,
-            if et.description.is_empty() { "(no description)" } else { &et.description },
+            if et.description.is_empty() {
+                "(no description)"
+            } else {
+                &et.description
+            },
             et.attributes.join(", "),
         ));
     }
@@ -87,8 +91,16 @@ pub fn compose_extract_prompt(
         system.push_str(&format!(
             "- **{}**{}: {}\n  Attributes: [{}]\n",
             rt.name,
-            if rt.directional { " (directional A→B)" } else { " (symmetric)" },
-            if rt.description.is_empty() { "(no description)" } else { &rt.description },
+            if rt.directional {
+                " (directional A→B)"
+            } else {
+                " (symmetric)"
+            },
+            if rt.description.is_empty() {
+                "(no description)"
+            } else {
+                &rt.description
+            },
             rt.attributes.join(", "),
         ));
     }
@@ -138,8 +150,7 @@ fn response_schema(
     relationship_types: &[RelationshipTypeDecl],
 ) -> serde_json::Value {
     let entity_type_names: Vec<&str> = entity_types.iter().map(|e| e.name.as_str()).collect();
-    let rel_type_names: Vec<&str> =
-        relationship_types.iter().map(|r| r.name.as_str()).collect();
+    let rel_type_names: Vec<&str> = relationship_types.iter().map(|r| r.name.as_str()).collect();
 
     serde_json::json!({
         "type": "object",
@@ -279,8 +290,7 @@ fn preview(s: &str, n: usize) -> String {
 pub fn group_extracted_entities(
     extractions: &[(String /* chunk_id */, ExtractedRelationship)],
 ) -> BTreeMap<(String, String), super::graph::Entity> {
-    let mut by_key: BTreeMap<(String, String), super::graph::Entity> =
-        BTreeMap::new();
+    let mut by_key: BTreeMap<(String, String), super::graph::Entity> = BTreeMap::new();
 
     for (_chunk_id, rel) in extractions {
         for (name, ty) in [
@@ -288,18 +298,16 @@ pub fn group_extracted_entities(
             (&rel.to_entity, &rel.to_type),
         ] {
             let key = (ty.clone(), name.to_lowercase());
-            let entry = by_key.entry(key.clone()).or_insert_with(|| {
-                super::graph::Entity {
+            let entry = by_key
+                .entry(key.clone())
+                .or_insert_with(|| super::graph::Entity {
                     id: entity_id_for(ty, name),
                     canonical_name: name.clone(),
                     entity_type: ty.clone(),
                     attributes: Default::default(),
                     aliases: Vec::new(),
-                }
-            });
-            if !entry.aliases.iter().any(|a| a == name)
-                && entry.canonical_name != *name
-            {
+                });
+            if !entry.aliases.iter().any(|a| a == name) && entry.canonical_name != *name {
                 entry.aliases.push(name.clone());
             }
         }
@@ -395,7 +403,8 @@ mod tests {
 
     #[test]
     fn parses_response_with_think_block_and_code_fence() {
-        let response = "<think>Let me find the relationships.</think>\n```json\n{\"relationships\": []}\n```";
+        let response =
+            "<think>Let me find the relationships.</think>\n```json\n{\"relationships\": []}\n```";
         let parsed = parse_extract_response(response).unwrap();
         assert!(parsed.is_empty());
     }

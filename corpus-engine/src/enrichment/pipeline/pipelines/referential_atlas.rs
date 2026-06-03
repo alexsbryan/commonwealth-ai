@@ -17,17 +17,15 @@
 //! doesn't speak referential-specific language (parsers, schemas,
 //! atom rendering, clustering tuning) delegates unchanged.
 
-use super::super::atlas::{
-    EntitySketch, SectionExtraction, SeedEntities,
-};
+use super::super::atlas::{EntitySketch, SectionExtraction, SeedEntities};
 use super::super::exemplar_bank::Exemplar;
 use super::super::trait_def::Pipeline;
 use super::super::types::*;
 use super::literary::prepare_phase_json;
 use super::literary_atlas::{
     parse_phase1b_coverage_response, phase1_section_extraction_schema,
-    render_generic_phase3_exemplar, render_phase1_user_body,
-    render_phase1b_user_body, LiteraryAtlasPipeline,
+    render_generic_phase3_exemplar, render_phase1_user_body, render_phase1b_user_body,
+    LiteraryAtlasPipeline,
 };
 use crate::enrichment::domain::ClusteringConfig;
 use crate::error::Result;
@@ -35,60 +33,80 @@ use crate::error::Result;
 // ── Referential-specific prompt assets ───────────────────────
 
 static PHASE1_ATLAS_SYSTEM: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "referential_atlas/phase1_system.md",
-        include_str!("referential_atlas_prompts/phase1_system.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "referential_atlas/phase1_system.md",
+            include_str!("referential_atlas_prompts/phase1_system.md"),
+        )
+    });
 
 static PHASE1_ATLAS_SYSTEM_TERSE: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "referential_atlas/phase1_system_terse.md",
-        include_str!("referential_atlas_prompts/phase1_system_terse.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "referential_atlas/phase1_system_terse.md",
+            include_str!("referential_atlas_prompts/phase1_system_terse.md"),
+        )
+    });
 
 static PHASE1A_SEED_SYSTEM: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "referential_atlas/phase1a_seed_system.md",
-        include_str!("referential_atlas_prompts/phase1a_seed_system.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "referential_atlas/phase1a_seed_system.md",
+            include_str!("referential_atlas_prompts/phase1a_seed_system.md"),
+        )
+    });
 
 static PHASE1B_ENTITY_COVERAGE: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "referential_atlas/phase1b_entity_coverage.md",
-        include_str!("referential_atlas_prompts/phase1b_entity_coverage.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "referential_atlas/phase1b_entity_coverage.md",
+            include_str!("referential_atlas_prompts/phase1b_entity_coverage.md"),
+        )
+    });
 
 static PHASE1B_CONCEPT_COVERAGE: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "referential_atlas/phase1b_concept_coverage.md",
-        include_str!("referential_atlas_prompts/phase1b_concept_coverage.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "referential_atlas/phase1b_concept_coverage.md",
+            include_str!("referential_atlas_prompts/phase1b_concept_coverage.md"),
+        )
+    });
 
 static PHASE3_QUESTION_NAMING: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "referential_atlas/phase3_question_naming.md",
-        include_str!("referential_atlas_prompts/phase3_question_naming.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "referential_atlas/phase3_question_naming.md",
+            include_str!("referential_atlas_prompts/phase3_question_naming.md"),
+        )
+    });
 static PHASE3_CLAIM_NAMING: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "referential_atlas/phase3_claim_naming.md",
-        include_str!("referential_atlas_prompts/phase3_claim_naming.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "referential_atlas/phase3_claim_naming.md",
+            include_str!("referential_atlas_prompts/phase3_claim_naming.md"),
+        )
+    });
 static PHASE3_ENTITY_STATE_NAMING: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "referential_atlas/phase3_entity_state_trajectory_naming.md",
-        include_str!("referential_atlas_prompts/phase3_entity_state_trajectory_naming.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "referential_atlas/phase3_entity_state_trajectory_naming.md",
+            include_str!("referential_atlas_prompts/phase3_entity_state_trajectory_naming.md"),
+        )
+    });
 static PHASE3_RELATION_STATE_NAMING: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "referential_atlas/phase3_relation_state_trajectory_naming.md",
-        include_str!("referential_atlas_prompts/phase3_relation_state_trajectory_naming.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "referential_atlas/phase3_relation_state_trajectory_naming.md",
+            include_str!("referential_atlas_prompts/phase3_relation_state_trajectory_naming.md"),
+        )
+    });
 static PHASE3_EVENT_NAMING: ::std::sync::LazyLock<&'static str> =
-    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
-        "referential_atlas/phase3_event_thread_naming.md",
-        include_str!("referential_atlas_prompts/phase3_event_thread_naming.md"),
-    ));
+    ::std::sync::LazyLock::new(|| {
+        crate::enrichment::pipeline::prompts::load_or_baked(
+            "referential_atlas/phase3_event_thread_naming.md",
+            include_str!("referential_atlas_prompts/phase3_event_thread_naming.md"),
+        )
+    });
 
 /// Pipeline id exposed by the registry.
 pub const PIPELINE_ID: &str = "referential_atlas";
@@ -152,16 +170,9 @@ impl Pipeline for ReferentialAtlasPipeline {
 
     // ── Phase 1 — atlas extraction ────────────────────────────
 
-    fn compose_phase1(
-        &self,
-        chapter: &ChapterInput,
-        exemplars: &[&Exemplar],
-    ) -> ChatPrompt {
+    fn compose_phase1(&self, chapter: &ChapterInput, exemplars: &[&Exemplar]) -> ChatPrompt {
         let user = render_phase1_user_body(
-            chapter,
-            exemplars,
-            /*include_exemplars=*/ true,
-            /*seed=*/ None,
+            chapter, exemplars, /*include_exemplars=*/ true, /*seed=*/ None,
         );
         ChatPrompt::new(self.phase1_system(), user)
             .with_response_schema(
@@ -216,10 +227,7 @@ impl Pipeline for ReferentialAtlasPipeline {
         )
     }
 
-    fn parse_phase1b_coverage(
-        &self,
-        response: &str,
-    ) -> Result<Vec<EntitySketch>> {
+    fn parse_phase1b_coverage(&self, response: &str) -> Result<Vec<EntitySketch>> {
         parse_phase1b_coverage_response(response)
     }
 
@@ -229,12 +237,8 @@ impl Pipeline for ReferentialAtlasPipeline {
         exemplars: &[&Exemplar],
         seed: Option<&SeedEntities>,
     ) -> ChatPrompt {
-        let user = render_phase1_user_body(
-            chapter,
-            exemplars,
-            /*include_exemplars=*/ true,
-            seed,
-        );
+        let user =
+            render_phase1_user_body(chapter, exemplars, /*include_exemplars=*/ true, seed);
         ChatPrompt::new(self.phase1_system(), user)
             .with_response_schema(
                 "phase1_section_extraction",
@@ -330,12 +334,8 @@ impl Pipeline for ReferentialAtlasPipeline {
         let (schema_name, schema) = match facet {
             Facet::Question => ("phase3_question", phase3_question_schema()),
             Facet::Claim => ("phase3_claim", phase3_claim_schema()),
-            Facet::EntityState => {
-                ("phase3_entity_state", phase3_entity_state_schema())
-            }
-            Facet::RelationState => {
-                ("phase3_relation_state", phase3_relation_state_schema())
-            }
+            Facet::EntityState => ("phase3_entity_state", phase3_entity_state_schema()),
+            Facet::RelationState => ("phase3_relation_state", phase3_relation_state_schema()),
             Facet::Event => ("phase3_event", phase3_event_schema()),
         };
 
@@ -360,11 +360,7 @@ impl Pipeline for ReferentialAtlasPipeline {
     /// We try the facet-specific shape first; if that fails, fall
     /// back to the literary `{label, metadata}` parser so a manually
     /// authored response (or a future prompt change) still works.
-    fn parse_phase3_facet(
-        &self,
-        facet: Facet,
-        response: &str,
-    ) -> Result<Phase3FacetParseResult> {
+    fn parse_phase3_facet(&self, facet: Facet, response: &str) -> Result<Phase3FacetParseResult> {
         let cleaned = prepare_phase_json(response, "phase 3 (referential)")?;
         if let Some(parsed) = parse_referential_phase3_facet(facet, &cleaned) {
             return Ok(parsed);
@@ -555,12 +551,10 @@ const PHASE3_EVENT_SCHEMA: &str = r##"{
 }"##;
 
 fn phase3_question_schema() -> serde_json::Value {
-    serde_json::from_str(PHASE3_QUESTION_SCHEMA)
-        .expect("PHASE3_QUESTION_SCHEMA must be valid JSON")
+    serde_json::from_str(PHASE3_QUESTION_SCHEMA).expect("PHASE3_QUESTION_SCHEMA must be valid JSON")
 }
 fn phase3_claim_schema() -> serde_json::Value {
-    serde_json::from_str(PHASE3_CLAIM_SCHEMA)
-        .expect("PHASE3_CLAIM_SCHEMA must be valid JSON")
+    serde_json::from_str(PHASE3_CLAIM_SCHEMA).expect("PHASE3_CLAIM_SCHEMA must be valid JSON")
 }
 fn phase3_entity_state_schema() -> serde_json::Value {
     serde_json::from_str(PHASE3_ENTITY_STATE_SCHEMA)
@@ -571,8 +565,7 @@ fn phase3_relation_state_schema() -> serde_json::Value {
         .expect("PHASE3_RELATION_STATE_SCHEMA must be valid JSON")
 }
 fn phase3_event_schema() -> serde_json::Value {
-    serde_json::from_str(PHASE3_EVENT_SCHEMA)
-        .expect("PHASE3_EVENT_SCHEMA must be valid JSON")
+    serde_json::from_str(PHASE3_EVENT_SCHEMA).expect("PHASE3_EVENT_SCHEMA must be valid JSON")
 }
 
 /// Parse a facet-shaped phase-3 naming response into the generic
@@ -580,10 +573,7 @@ fn phase3_event_schema() -> serde_json::Value {
 ///
 /// Returns `None` when the JSON doesn't match the expected facet
 /// shape — caller falls back to the literary parser.
-fn parse_referential_phase3_facet(
-    facet: Facet,
-    cleaned: &str,
-) -> Option<Phase3FacetParseResult> {
+fn parse_referential_phase3_facet(facet: Facet, cleaned: &str) -> Option<Phase3FacetParseResult> {
     let value: serde_json::Value = serde_json::from_str(cleaned).ok()?;
     let obj = value.as_object()?;
 
@@ -600,8 +590,7 @@ fn parse_referential_phase3_facet(
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty() && !is_placeholder_literal(s))?;
 
-    let mut metadata: std::collections::HashMap<String, String> =
-        std::collections::HashMap::new();
+    let mut metadata: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     for (key, val) in obj {
         if key == primary_key {
             continue;
@@ -726,7 +715,10 @@ mod tests {
             .parse_phase3_facet(Facet::Question, response)
             .expect("referential question parse");
         assert_eq!(parsed.label, "What caused the fall of Rome?");
-        assert_eq!(parsed.metadata.get("kind").map(String::as_str), Some("causal"));
+        assert_eq!(
+            parsed.metadata.get("kind").map(String::as_str),
+            Some("causal")
+        );
         assert!(parsed.metadata.contains_key("description"));
         assert_eq!(
             parsed.metadata.get("aliases").map(String::as_str),
@@ -771,7 +763,10 @@ mod tests {
             .parse_phase3_facet(Facet::Event, response)
             .expect("referential event parse");
         assert_eq!(parsed.label, "Fall of the Berlin Wall");
-        assert_eq!(parsed.metadata.get("kind").map(String::as_str), Some("historical"));
+        assert_eq!(
+            parsed.metadata.get("kind").map(String::as_str),
+            Some("historical")
+        );
     }
 
     #[test]
@@ -865,8 +860,7 @@ mod tests {
             .pointer("/required")
             .and_then(|v| v.as_array())
             .expect("required array");
-        let required_strs: Vec<&str> =
-            required.iter().filter_map(|v| v.as_str()).collect();
+        let required_strs: Vec<&str> = required.iter().filter_map(|v| v.as_str()).collect();
         assert!(required_strs.contains(&"canonical_question"));
         assert!(required_strs.contains(&"kind"));
         // `kind` enum should be present and non-empty.
@@ -883,7 +877,11 @@ mod tests {
         let cases = [
             (Facet::Claim, "canonical_claim", "phase3_claim"),
             (Facet::EntityState, "canonical_label", "phase3_entity_state"),
-            (Facet::RelationState, "canonical_label", "phase3_relation_state"),
+            (
+                Facet::RelationState,
+                "canonical_label",
+                "phase3_relation_state",
+            ),
             (Facet::Event, "canonical_event", "phase3_event"),
         ];
         for (facet, expected_prop, expected_name) in cases {

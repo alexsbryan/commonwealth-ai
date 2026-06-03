@@ -109,15 +109,20 @@ fn streaming_filter_drops_rejected_and_passes_errors_through() {
     }
     impl corpus_engine::DocumentFilter for EveryTenthTitleAccepted {
         fn accept(&self, doc: &ExtractedDoc) -> bool {
-            doc.title.as_deref().map(|t| self.accepted.contains(t)).unwrap_or(false)
+            doc.title
+                .as_deref()
+                .map(|t| self.accepted.contains(t))
+                .unwrap_or(false)
         }
         fn description(&self) -> String {
             format!("every 10th ({} titles)", self.accepted.len())
         }
     }
 
-    let accepted: std::collections::HashSet<String> =
-        (0..1000).filter(|i| i % 10 == 0).map(|i| format!("doc-{i}")).collect();
+    let accepted: std::collections::HashSet<String> = (0..1000)
+        .filter(|i| i % 10 == 0)
+        .map(|i| format!("doc-{i}"))
+        .collect();
     assert_eq!(accepted.len(), 100);
     let filter = std::sync::Arc::new(EveryTenthTitleAccepted { accepted });
 
@@ -126,7 +131,9 @@ fn streaming_filter_drops_rejected_and_passes_errors_through() {
         .map(|i| {
             if i % 21 == 5 {
                 // every 21st-ish item is an extraction error
-                Err(corpus_engine::Error::Extraction(format!("synthetic err {i}")))
+                Err(corpus_engine::Error::Extraction(format!(
+                    "synthetic err {i}"
+                )))
             } else {
                 Ok(synthetic::doc(Some(&format!("doc-{}", i.min(999))), None))
             }

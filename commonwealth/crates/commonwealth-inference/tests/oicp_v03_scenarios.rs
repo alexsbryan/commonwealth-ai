@@ -10,16 +10,12 @@
 //! no mesh bring-up. That keeps the acceptance check to ~20ms per
 //! scenario.
 
-use commonwealth_core::capabilities::{
-    AvailableResources, HardwareProfile, NodeCapabilities,
-};
+use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_inference::oicp::{
-    CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass,
-    ModelStatus, ProviderManifest, ProviderModel,
+    CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass, ModelStatus,
+    ProviderManifest, ProviderModel,
 };
-use commonwealth_inference::scheduler::oicp_select::{
-    pick_slot_for_oicp, BackendCandidate,
-};
+use commonwealth_inference::scheduler::oicp_select::{pick_slot_for_oicp, BackendCandidate};
 
 fn node_caps(availability: f32) -> NodeCapabilities {
     NodeCapabilities {
@@ -62,12 +58,7 @@ fn manifest_with_claims(claims: Vec<CapabilityClaim>) -> ProviderManifest {
     }])
 }
 
-fn req(
-    hint: CapabilityHint,
-    lc: LatencyClass,
-    ctx: u32,
-    out: u32,
-) -> InferenceRequirements {
+fn req(hint: CapabilityHint, lc: LatencyClass, ctx: u32, out: u32) -> InferenceRequirements {
     InferenceRequirements::new()
         .with_hint(hint)
         .with_latency_class(lc)
@@ -140,7 +131,12 @@ fn newsroom_writer_long_normal_request_routes_to_peer() {
     ];
     // Substantive research synthesis: normal latency, 16K context,
     // 2K output. Hard context gate eliminates the 8K local claim.
-    let r = req(CapabilityHint::general(), LatencyClass::Normal, 16_000, 2_000);
+    let r = req(
+        CapabilityHint::general(),
+        LatencyClass::Normal,
+        16_000,
+        2_000,
+    );
     assert_eq!(
         pick_slot_for_oicp(&candidates, &r),
         Some(1),
@@ -342,12 +338,7 @@ fn solo_user_all_requests_route_to_sole_candidate() {
     let candidates = vec![BackendCandidate::new(&local).with_node_capabilities(&idle)];
 
     // Fast, small.
-    let fast_req = req(
-        CapabilityHint::general(),
-        LatencyClass::Fast,
-        1_000,
-        200,
-    );
+    let fast_req = req(CapabilityHint::general(), LatencyClass::Fast, 1_000, 200);
     assert_eq!(pick_slot_for_oicp(&candidates, &fast_req), Some(0));
 
     // Normal, medium.
@@ -361,12 +352,7 @@ fn solo_user_all_requests_route_to_sole_candidate() {
 
     // Code request — no specialist available → general fallback,
     // still routes to the sole candidate.
-    let code_req = req(
-        CapabilityHint::code(),
-        LatencyClass::Normal,
-        8_000,
-        1_000,
-    );
+    let code_req = req(CapabilityHint::code(), LatencyClass::Normal, 8_000, 1_000);
     assert_eq!(pick_slot_for_oicp(&candidates, &code_req), Some(0));
 }
 

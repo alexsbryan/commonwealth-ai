@@ -22,9 +22,7 @@ use arrow::array::{Array, RecordBatch, StringArray};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use serde::{Deserialize, Serialize};
 
-use crate::enrichment::atlas::atoms::{
-    AtomId, ChunkRef, Entity, Provenance, SignalKind,
-};
+use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity, Provenance, SignalKind};
 use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 use crate::error::{Error, Result};
 
@@ -224,9 +222,18 @@ impl HeaderClassifier {
     /// serialises anyway.
     pub async fn build(embed: &crate::types::EmbedFn) -> Result<Self> {
         let centroids = vec![
-            (Some(EntityType::Person), centroid(PERSON_EXEMPLARS, embed).await?),
-            (Some(EntityType::Institution), centroid(ORG_EXEMPLARS, embed).await?),
-            (Some(EntityType::Place), centroid(PLACE_EXEMPLARS, embed).await?),
+            (
+                Some(EntityType::Person),
+                centroid(PERSON_EXEMPLARS, embed).await?,
+            ),
+            (
+                Some(EntityType::Institution),
+                centroid(ORG_EXEMPLARS, embed).await?,
+            ),
+            (
+                Some(EntityType::Place),
+                centroid(PLACE_EXEMPLARS, embed).await?,
+            ),
             // Abstain class: a column nearest this is not an entity column.
             (None, centroid(NON_ENTITY_EXEMPLARS, embed).await?),
         ];
@@ -430,15 +437,17 @@ fn read_parquet_batches(path: &Path) -> Result<Vec<RecordBatch>> {
     })?;
     let reader = ParquetRecordBatchReaderBuilder::try_new(file)
         .map_err(|e| {
-            Error::Extraction(format!("column_aware: parquet open {}: {e}", path.display()))
+            Error::Extraction(format!(
+                "column_aware: parquet open {}: {e}",
+                path.display()
+            ))
         })?
         .build()
         .map_err(|e| Error::Extraction(format!("column_aware: parquet build: {e}")))?;
     let mut batches = Vec::new();
     for b in reader {
-        batches.push(
-            b.map_err(|e| Error::Extraction(format!("column_aware: parquet batch: {e}")))?,
-        );
+        batches
+            .push(b.map_err(|e| Error::Extraction(format!("column_aware: parquet batch: {e}")))?);
     }
     Ok(batches)
 }
@@ -504,7 +513,10 @@ fn emit_entities_from_batches(
     let mut per_column_count: BTreeMap<usize, usize> = BTreeMap::new();
     for batch in batches {
         for (col_idx, (header_name, et)) in header_hints {
-            let Some(col) = batch.column(*col_idx).as_any().downcast_ref::<StringArray>()
+            let Some(col) = batch
+                .column(*col_idx)
+                .as_any()
+                .downcast_ref::<StringArray>()
             else {
                 continue;
             };
@@ -523,8 +535,7 @@ fn emit_entities_from_batches(
                     // lists — so it generalizes across corpora.
                     continue;
                 }
-                let key =
-                    format!("{}|{}", et.as_str_repr(), value.to_ascii_lowercase().trim());
+                let key = format!("{}|{}", et.as_str_repr(), value.to_ascii_lowercase().trim());
                 if emitted.contains_key(&key) {
                     continue;
                 }
@@ -578,7 +589,10 @@ mod tests {
             min_margin: 0.1,
         };
         // Squarely a person → Person.
-        assert!(matches!(c.classify(&[1.0, 0.0, 0.0, 0.0]), Some(EntityType::Person)));
+        assert!(matches!(
+            c.classify(&[1.0, 0.0, 0.0, 0.0]),
+            Some(EntityType::Person)
+        ));
         // No signal → absolute gate abstains.
         assert!(c.classify(&[0.0, 0.0, 0.0, 0.0]).is_none());
         // Equidistant person/org → margin gate abstains.
@@ -659,12 +673,9 @@ mod tests {
         );
         let path = dir.path().join("test.parquet");
         std::fs::write(&path, &parquet_bytes).unwrap();
-        let entities = extract_entities_from_parquet(
-            &path,
-            "spread:fixture",
-            &ColumnAwareConfig::default(),
-        )
-        .unwrap();
+        let entities =
+            extract_entities_from_parquet(&path, "spread:fixture", &ColumnAwareConfig::default())
+                .unwrap();
         let names: std::collections::BTreeSet<_> =
             entities.iter().map(|e| e.canonical_name.clone()).collect();
         assert!(names.contains("Dynegy"));
@@ -685,18 +696,13 @@ mod tests {
     #[test]
     fn typed_columns_route_to_appropriate_entity_type() {
         let dir = tempfile::tempdir().unwrap();
-        let parquet_bytes = build_test_xlsx(
-            &["Counterparty", "Employee"],
-            &[vec!["Dynegy", "Ken Lay"]],
-        );
+        let parquet_bytes =
+            build_test_xlsx(&["Counterparty", "Employee"], &[vec!["Dynegy", "Ken Lay"]]);
         let path = dir.path().join("test.parquet");
         std::fs::write(&path, &parquet_bytes).unwrap();
-        let entities = extract_entities_from_parquet(
-            &path,
-            "spread:fixture",
-            &ColumnAwareConfig::default(),
-        )
-        .unwrap();
+        let entities =
+            extract_entities_from_parquet(&path, "spread:fixture", &ColumnAwareConfig::default())
+                .unwrap();
         let dyn_entity = entities
             .iter()
             .find(|e| e.canonical_name == "Dynegy")
@@ -715,12 +721,9 @@ mod tests {
         let parquet_bytes = build_test_xlsx(&["Notes"], &[vec!["row1"], vec!["row2"]]);
         let path = dir.path().join("test.parquet");
         std::fs::write(&path, &parquet_bytes).unwrap();
-        let entities = extract_entities_from_parquet(
-            &path,
-            "spread:fixture",
-            &ColumnAwareConfig::default(),
-        )
-        .unwrap();
+        let entities =
+            extract_entities_from_parquet(&path, "spread:fixture", &ColumnAwareConfig::default())
+                .unwrap();
         assert!(entities.is_empty());
     }
 }

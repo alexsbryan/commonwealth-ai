@@ -187,7 +187,25 @@ fn is_known_acronym(token: &str) -> bool {
     // example. Extend as users report needs.
     matches!(
         token,
-        "FOIA" | "NASA" | "FBI" | "CIA" | "USA" | "UK" | "EU" | "UN" | "NATO" | "GDP" | "RFP" | "API" | "CPU" | "GPU" | "SQL" | "PDF" | "HTML" | "CSS" | "JS"
+        "FOIA"
+            | "NASA"
+            | "FBI"
+            | "CIA"
+            | "USA"
+            | "UK"
+            | "EU"
+            | "UN"
+            | "NATO"
+            | "GDP"
+            | "RFP"
+            | "API"
+            | "CPU"
+            | "GPU"
+            | "SQL"
+            | "PDF"
+            | "HTML"
+            | "CSS"
+            | "JS"
     )
 }
 

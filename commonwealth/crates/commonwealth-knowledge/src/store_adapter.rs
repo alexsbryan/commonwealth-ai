@@ -31,12 +31,9 @@ impl KnowledgeStateStore {
 
     pub fn set_shard_plan(&self, plan: &KnowledgeShardPlan) {
         if let Ok(bytes) = serde_json::to_vec(plan) {
-            let _ = self.store.set(
-                APP_ID,
-                "knowledge_plan",
-                Bytes::from(bytes),
-                self.node_id,
-            );
+            let _ = self
+                .store
+                .set(APP_ID, "knowledge_plan", Bytes::from(bytes), self.node_id);
         }
     }
 }

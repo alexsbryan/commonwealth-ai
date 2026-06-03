@@ -1,8 +1,8 @@
 use std::fs::File;
 use std::path::Path;
 
-use crate::error::{Error, Result};
 use super::{slug, ExtractedDoc, Extractor};
+use crate::error::{Error, Result};
 
 /// CSV file extractor.
 ///
@@ -41,8 +41,9 @@ impl Extractor for CsvExtractor {
         &self,
         source_path: &Path,
     ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send>> {
-        let file = File::open(source_path)
-            .map_err(|e| Error::Extraction(format!("Failed to open {}: {e}", source_path.display())))?;
+        let file = File::open(source_path).map_err(|e| {
+            Error::Extraction(format!("Failed to open {}: {e}", source_path.display()))
+        })?;
 
         let delimiter = self.delimiter.unwrap_or(b',');
         let mut rdr = csv::ReaderBuilder::new()

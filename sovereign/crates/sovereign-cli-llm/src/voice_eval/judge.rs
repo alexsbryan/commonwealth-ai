@@ -10,6 +10,4 @@
 
 #![allow(dead_code)]
 
-pub use sovereign_core::pipeline::judge::{
-    parse_judge_score, voice_judge_request, JudgeScore,
-};
+pub use sovereign_core::pipeline::judge::{parse_judge_score, voice_judge_request, JudgeScore};
