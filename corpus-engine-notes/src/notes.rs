@@ -2397,7 +2397,7 @@ impl NoteStore {
         bound.push(rusqlite::types::Value::Integer(cap as i64));
         let mut stmt = conn.prepare(&sql).map_err(sqlite_err)?;
         let rows = stmt
-            .query_map(rusqlite::params_from_iter(bound), |row| map_note_row(row))
+            .query_map(rusqlite::params_from_iter(bound), map_note_row)
             .map_err(sqlite_err)?;
         let mut out = Vec::new();
         for r in rows {

@@ -147,10 +147,10 @@ pub(crate) fn strip_html(html: &str) -> String {
                         in_style = true;
                     } else if lower == "/style" {
                         in_style = false;
-                    } else if lower == "br" || lower == "br/" {
-                        result.push('\n');
-                    } else if (lower == "p" || lower == "/p" || lower == "div" || lower == "/div")
-                        && !result.ends_with('\n')
+                    } else if lower == "br"
+                        || lower == "br/"
+                        || ((lower == "p" || lower == "/p" || lower == "div" || lower == "/div")
+                            && !result.ends_with('\n'))
                     {
                         result.push('\n');
                     }

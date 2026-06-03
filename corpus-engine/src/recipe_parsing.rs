@@ -166,9 +166,7 @@ pub(crate) fn extract_unknown_variant(raw: &str) -> Option<(String, String)> {
     let allowed_start = raw.find(allowed_anchor)? + allowed_anchor.len();
     let allowed_chunk = &raw[allowed_start..];
     let allowed_end = allowed_chunk.find('\n').unwrap_or(allowed_chunk.len());
-    let allowed = allowed_chunk[..allowed_end]
-        .replace('`', "")
-        .replace(", ", ", ");
+    let allowed = allowed_chunk[..allowed_end].replace('`', "");
     Some((bad_value, allowed))
 }
 

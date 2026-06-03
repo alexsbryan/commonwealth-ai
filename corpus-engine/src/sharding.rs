@@ -1513,7 +1513,7 @@ mod tests {
         assert!(shard_path.exists());
 
         let merged_path = dir.path().join("wikipedia");
-        let info = merge_shards(&[shard_path.clone()], &merged_path)
+        let info = merge_shards(std::slice::from_ref(&shard_path), &merged_path)
             .await
             .unwrap();
         assert_eq!(info.chunk_count, 7);

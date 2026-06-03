@@ -310,7 +310,7 @@ string_enum_with_other! {
 // downstream and lose fidelity once the claim is lifted from its
 // passage into a cluster.
 
-fn is_empty_str(s: &String) -> bool {
+fn is_empty_str(s: &str) -> bool {
     s.is_empty()
 }
 

@@ -323,7 +323,7 @@ fn parse_relation_pair(
     // A bare "X and Y" without any relationship marker is too
     // loose (it could be a list question). Require an explicit
     // relationship / between marker.
-    if !(has_between && has_and) && !(has_relationship && has_and) {
+    if !has_and || (!has_between && !has_relationship) {
         return None;
     }
     // Enumerate all resolved entity matches in the query, then

@@ -101,7 +101,6 @@ pub(crate) fn repair_unquoted_strings(s: &str) -> String {
             && bytes[i] == b'"'
             && bytes[i + 1] == b':'
             && bytes[i + 2] == b' '
-            && i + 3 < len
         {
             let next = bytes[i + 3];
             // Check if the next char starts an unquoted string value:

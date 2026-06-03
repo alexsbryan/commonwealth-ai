@@ -2077,7 +2077,7 @@ impl CorpusEngine {
     pub async fn merge_partitions(
         &self,
         shard_dirs: &[PathBuf],
-        output_dir: &PathBuf,
+        output_dir: &Path,
     ) -> Result<IndexInfo> {
         if shard_dirs.is_empty() {
             return Err(Error::NoShardsFound("no shard directories provided".into()));

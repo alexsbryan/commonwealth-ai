@@ -170,7 +170,6 @@ impl ThreadedTurnsChunker {
         while i < turns.len() {
             let curr = &turns[i];
             let next = turns.get(i + 1);
-            let step;
             let mut content = String::new();
             let mut spans: Vec<TurnSpan> = Vec::new();
 
@@ -188,16 +187,16 @@ impl ThreadedTurnsChunker {
                 });
             };
 
-            if curr.attribution == Attribution::User
+            let step = if curr.attribution == Attribution::User
                 && next.map(|n| n.attribution) == Some(Attribution::Assistant)
             {
                 append(&mut content, &mut spans, curr);
                 append(&mut content, &mut spans, next.unwrap());
-                step = 2;
+                2
             } else {
                 append(&mut content, &mut spans, curr);
-                step = 1;
-            }
+                1
+            };
 
             // Size cap: oversized chunks (e.g. user pasted a 30K-byte
             // code dump as one turn) throttle the embed pipeline

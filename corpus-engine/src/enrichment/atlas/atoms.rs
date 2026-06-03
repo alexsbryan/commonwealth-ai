@@ -1142,7 +1142,7 @@ mod tests {
             AtomId::event_content_hash("d", &EventType::Action, "s0", "c"),
             AtomId::state_content_hash(&parent, &StateType::Epistemic, "l", "c"),
             AtomId::relation_content_hash(
-                &[parent.clone()],
+                std::slice::from_ref(&parent),
                 &RelationType::Interpersonal,
                 "l",
                 "c",
