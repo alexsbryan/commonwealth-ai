@@ -182,7 +182,7 @@ impl RerankSlot {
 
         let (ctx, used_gpu) = match if wants_gpu {
             unsafe {
-                let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model) as *const LlamaModel);
+                let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model));
                 model_ref
                     .new_context(backend, build_params(true))
                     .map(|c| (c, true))
@@ -200,7 +200,7 @@ impl RerankSlot {
                 }
                 let ctx = unsafe {
                     let model_ref: &'static LlamaModel =
-                        &*(Arc::as_ptr(&model) as *const LlamaModel);
+                        &*(Arc::as_ptr(&model));
                     model_ref
                         .new_context(backend, build_params(false))
                         .map_err(|e| {

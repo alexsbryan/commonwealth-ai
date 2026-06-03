@@ -391,15 +391,15 @@ pub fn strip_orphan_close_brackets(s: &str) -> String {
 /// produce valid JSON matching the schema. This eliminates malformed
 /// JSON, missing required fields, and type errors.
 pub fn json_schema_to_gbnf(schema: &serde_json::Value) -> String {
-    let mut rules = Vec::new();
-
     // Primitive rules shared by all schemas.
-    rules.push(r#"ws ::= [ \t\n]*"#.to_string());
-    rules.push(r#"string ::= "\"" ([^"\\] | "\\" .)* "\""  "#.to_string());
-    rules.push(r#"integer ::= "-"? [0-9]+"#.to_string());
-    rules.push(r#"number ::= "-"? [0-9]+ ("." [0-9]+)?"#.to_string());
-    rules.push(r#"boolean ::= "true" | "false""#.to_string());
-    rules.push(r#"null ::= "null""#.to_string());
+    let mut rules = vec![
+        r#"ws ::= [ \t\n]*"#.to_string(),
+        r#"string ::= "\"" ([^"\\] | "\\" .)* "\""  "#.to_string(),
+        r#"integer ::= "-"? [0-9]+"#.to_string(),
+        r#"number ::= "-"? [0-9]+ ("." [0-9]+)?"#.to_string(),
+        r#"boolean ::= "true" | "false""#.to_string(),
+        r#"null ::= "null""#.to_string(),
+    ];
 
     match schema.get("type").and_then(|t| t.as_str()) {
         Some("object") => {

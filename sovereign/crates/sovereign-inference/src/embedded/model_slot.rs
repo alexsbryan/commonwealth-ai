@@ -328,7 +328,7 @@ fn build_target_ctx_for_slot(
     // never propagated into a fallback SingleToken ctx.
     let _ = params.n_rs_seq;
     unsafe {
-        let model_ref: &'static LlamaModel = &*(Arc::as_ptr(model) as *const LlamaModel);
+        let model_ref: &'static LlamaModel = &*(Arc::as_ptr(model));
         model_ref
             .new_context(&params.backend, ctx_params)
             .map_err(|e| Error::Inference(format!("Failed to create target context: {e}")))
@@ -405,7 +405,7 @@ fn try_upgrade_to_speculative(
 > {
     let mut target_ctx = target;
     let draft_ctx_res = unsafe {
-        let model_ref: &'static LlamaModel = &*(Arc::as_ptr(model) as *const LlamaModel);
+        let model_ref: &'static LlamaModel = &*(Arc::as_ptr(model));
         model_ref.new_context(backend, draft_params)
     };
     let mut draft_ctx = match draft_ctx_res {
@@ -806,7 +806,7 @@ impl ModelSlot {
 
         let (ctx, used_gpu) = match if wants_gpu {
             unsafe {
-                let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model) as *const LlamaModel);
+                let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model));
                 model_ref
                     .new_context(backend, build_ctx_params(true))
                     .map(|c| (c, true))
@@ -825,7 +825,7 @@ impl ModelSlot {
                 }
                 let ctx = unsafe {
                     let model_ref: &'static LlamaModel =
-                        &*(Arc::as_ptr(&model) as *const LlamaModel);
+                        &*(Arc::as_ptr(&model));
                     model_ref
                         .new_context(backend, build_ctx_params(false))
                         .map_err(|e| Error::Inference(format!("Failed to create context: {e}")))?
@@ -1060,7 +1060,7 @@ impl ModelSlot {
 
         let (ctx, used_gpu) = match if wants_gpu {
             unsafe {
-                let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model) as *const LlamaModel);
+                let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model));
                 model_ref
                     .new_context(backend, build_ctx_params(true))
                     .map(|c| (c, true))
@@ -1079,7 +1079,7 @@ impl ModelSlot {
                 }
                 let ctx = unsafe {
                     let model_ref: &'static LlamaModel =
-                        &*(Arc::as_ptr(&model) as *const LlamaModel);
+                        &*(Arc::as_ptr(&model));
                     model_ref
                         .new_context(backend, build_ctx_params(false))
                         .map_err(|e| {
