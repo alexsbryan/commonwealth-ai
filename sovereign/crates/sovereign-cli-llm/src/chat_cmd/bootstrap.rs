@@ -294,6 +294,12 @@ pub async fn build_session_with_skills(
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
+    // Deterministic land-value-tax analytics over parcel corpora
+    // (e.g. sf-assessor-roll) — pre-cited figures the ComplexTask
+    // synthesizer quotes verbatim ("no confabulated numbers").
+    tools.register(Box::new(
+        sovereign_tools::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&corpus_engine)),
+    ));
     // Code-intelligence tools previously registered here against an
     // in-memory stub ScipGraph. Dropped 2026-05-22 along with the
     // REPL's treesitter dep — real SCIP queries go through

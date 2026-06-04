@@ -617,6 +617,7 @@ mod tests {
             role: None,
             participants: vec![AtomId::entity(2), AtomId::entity(3)],
             provenance: Default::default(),
+            attributes: serde_json::Map::new(),
             concept_kind: None,
         };
         let mut counts = HashMap::new();

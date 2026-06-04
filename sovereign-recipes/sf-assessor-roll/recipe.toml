@@ -1,0 +1,122 @@
+[corpus]
+id = "sf-assessor-roll"
+name = "San Francisco Assessor Secured Property Roll (Parcels)"
+description = """
+Per-parcel secured property roll for San Francisco from DataSF's Socrata \
+endpoint wv5m-vpq2: assessed land value, assessed improvement value, lot \
+area, use code, and neighborhood for ~208k parcels (FY ending 2024). \
+Typed deterministically into Parcel entity atoms (no inference) — the \
+provenance-backed source surface for the land-value-tax legibility \
+analysis, where every figure carries a (corpus_id, chunk_id) citation. \
+Assessed values are Prop-13-frozen and below market: a conservative floor.\
+"""
+# DataSF open data. Confirm the exact published license string before any
+# mesh redistribution; local-only for the demo regardless.
+license = "Public Domain (DataSF open data)"
+scope = "local"
+mesh_sharing = false
+query_sharing = false
+size_compressed_gb = 0.10
+size_indexed_gb = 0.20
+
+# ─── Build-time parameters ───────────────────────────────────────────
+# Values are substituted into the URL VERBATIM (the http_api template does
+# not percent-encode), so any parameter that lands in the query string
+# must be URL-safe — see `where_clause`.
+
+[parameters.tax_year]
+type = "string"
+description = "Roll year to ingest, filtered via Socrata's simple `closed_roll_year=` equality. Latest published is 2024 (~212k rows; ~208k with land value > 0)."
+required = false
+default = "2024"
+
+[parameters.where_clause]
+type = "string"
+description = """
+Pre-URL-encoded SoQL predicate for `$where` (AND-ed with the year filter). \
+Default keeps only parcels with a positive assessed land value (drops \
+fully-exempt / zero-land rows that would distort the base): \
+`assessed_land_value%3E0` is `assessed_land_value>0` with `>` encoded. \
+For a fast thin slice, append an encoded neighborhood predicate, e.g. \
+`assessed_land_value%3E0%20AND%20analysis_neighborhood%3D%27Seacliff%27` \
+(~874 rows, single page).\
+"""
+required = false
+default = "assessed_land_value%3E0"
+
+[parameters.app_token]
+type = "string"
+description = "Optional Socrata app token (sent as the X-App-Token header). Token-less access works at low volume; a free token lifts the rate limit for the full-roll pull."
+required = false
+default = ""
+
+# ─── Acquisition ─────────────────────────────────────────────────────
+# Socrata SODA endpoint. The response is a bare JSON array of row objects
+# (no envelope), paginated with $offset. URL is kept free of raw spaces /
+# quotes / operators because the template substitutes verbatim; the year
+# uses Socrata's simple `field=value` equality and the only operator
+# ($where land>0) is pre-encoded in `where_clause`.
+[acquire]
+type = "http_api"
+base_url = "https://data.sfgov.org"
+user_agent = "commonwealth-ai/0.1 (sf-assessor-roll; LVT legibility demo)"
+rate_limit_per_second = 5.0
+
+[acquire.headers]
+X-App-Token = "{app_token}"
+
+[[acquire.requests]]
+url = "{base_url}/resource/wv5m-vpq2.json?$select=parcel_number,assessed_land_value,assessed_improvement_value,assessed_fixtures_value,lot_area,number_of_units,use_code,use_definition,property_class_code,zoning_code,analysis_neighborhood,assessor_neighborhood,property_location,closed_roll_year,row_id&closed_roll_year={tax_year}&$where={where_clause}&$order=row_id&$limit=50000"
+
+# Offset pagination over the bare array. `page_size` MUST match the
+# hardcoded $limit=50000 in the URL above (kept in sync by hand — the
+# paginator steps $offset by this amount and stops when a page returns
+# fewer than this many rows). `items_path = "$"` because the response is
+# a bare top-level array, not an enveloped `{items: [...]}`.
+[acquire.pagination]
+type = "offset"
+param = "$offset"
+page_size = 50000
+items_path = "$"
+
+# ─── Extraction ──────────────────────────────────────────────────────
+# Deterministic tabular → typed-atom extractor. Per row: one chunk (a
+# rendered, FTS-indexable line) AND — via the ingest flow — one Parcel
+# `Entity` atom whose numeric/string columns are recorded in
+# `Entity::attributes`. Socrata serialises every cell as a string;
+# `numeric_attributes` are parsed to numbers. No inference.
+[extract]
+type = "tabular_atoms"
+document_path = "$[*]"
+id_column = "parcel_number"
+entity_type = "parcel"
+numeric_attributes = [
+    "assessed_land_value",
+    "assessed_improvement_value",
+    "assessed_fixtures_value",
+    "lot_area",
+    "number_of_units",
+]
+string_attributes = [
+    "use_code",
+    "use_definition",
+    "property_class_code",
+    "zoning_code",
+    "analysis_neighborhood",
+    "assessor_neighborhood",
+    "property_location",
+    "closed_roll_year",
+]
+
+[chunk]
+# Rows are already one-per-document; emit each as a single chunk.
+type = "passthrough"
+
+[index]
+fts = true
+# Parcels are structured records; FTS over the rendered line (parcel
+# number, neighborhood, use) covers citation surfacing. Embeddings are
+# enabled for the P0a slice (cheap at ~900 parcels); for the full ~208k
+# roll, consider flipping to false — the deterministic analytics read
+# atoms directly and don't depend on vector retrieval.
+vector = true

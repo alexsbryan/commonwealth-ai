@@ -327,6 +327,7 @@ mod tests {
             participants: Vec::new(),
             defining_quote: None,
             provenance: Default::default(),
+            attributes: serde_json::Map::new(),
             concept_kind: None,
         }
     }
@@ -346,6 +347,7 @@ mod tests {
             participants: Vec::new(),
             defining_quote: None,
             provenance: Default::default(),
+            attributes: serde_json::Map::new(),
             concept_kind: None,
         }
     }
@@ -365,6 +367,7 @@ mod tests {
             participants: participant_ids.to_vec(),
             defining_quote: None,
             provenance: Default::default(),
+            attributes: serde_json::Map::new(),
             concept_kind: None,
         }
     }

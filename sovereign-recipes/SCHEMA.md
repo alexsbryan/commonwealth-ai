@@ -515,6 +515,18 @@ JSON-API extractor. Reads a single JSON file (typically the per-page response pe
 | `url_field` | `Option<String>` | no | type default |  |
 | `id_field` | `Option<String>` | no | type default |  |
 
+### `type = "tabular_atoms"`
+
+Deterministic tabular → typed-atom extractor for structured public datasets (e.g. the SF assessor parcel roll from DataSF's Socrata API). Reads the bare-array JSON the `http_api` acquirer persists and emits, per row: one chunk (a rendered, FTS-indexable line) AND — via the ingest flow — one atlas `Entity` atom whose declared numeric/string columns are recorded in `Entity::attributes`, the deterministic, cited substrate the LVT analytics sum over. No inference. Pair with `chunker = "passthrough"`. See [`crate::extractors::tabular_atoms`].
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `document_path` | `Option<String>` | no | type default | JSONPath selecting the row array. Defaults to `$[*]` (a bare top-level array, as Socrata returns); use `$.results[*]` for an enveloped response. |
+| `id_column` | `String` | **yes** | — | Column whose value is each row's stable identity (e.g. `parcel_number`). Drives the atom id + canonical name and the chunk's `source_doc_id`. |
+| `entity_type` | `Option<String>` | no | type default | Atom entity-type label (free-form; becomes `EntityType::Other(..)`). Defaults to `"row"`. |
+| `numeric_attributes` | `Vec<String>` | no | type default | Columns parsed as numbers (string cells like `"172620.0"` are parsed) and stored as JSON numbers in `attributes`. |
+| `string_attributes` | `Vec<String>` | no | type default | Columns kept verbatim as strings in `attributes`. |
+
 ### `type = "html"`
 
 | TOML key | Type | Required | Default | Description |

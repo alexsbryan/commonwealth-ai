@@ -181,6 +181,21 @@ impl CorpusEngine {
                 url_field: url_field.clone(),
                 id_field: id_field.clone(),
             }),
+            ExtractorConfig::TabularAtoms {
+                document_path,
+                id_column,
+                entity_type,
+                numeric_attributes,
+                string_attributes,
+            } => Box::new(extractors::tabular_atoms::TabularAtomsExtractor {
+                config: extractors::tabular_atoms::TabularAtomsConfig {
+                    document_path: document_path.clone().unwrap_or_else(|| "$[*]".to_string()),
+                    id_column: id_column.clone(),
+                    entity_type: entity_type.clone().unwrap_or_else(|| "row".to_string()),
+                    numeric_attributes: numeric_attributes.clone(),
+                    string_attributes: string_attributes.clone(),
+                },
+            }),
             ExtractorConfig::Html {
                 content_selector,
                 title_selector,

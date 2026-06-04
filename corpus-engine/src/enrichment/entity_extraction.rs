@@ -1716,6 +1716,7 @@ fn upsert_entity(
         role,
         participants: Vec::new(),
         provenance: Default::default(),
+        attributes: serde_json::Map::new(),
         concept_kind: None,
     });
     by_folded_name.insert(folded, new_idx);

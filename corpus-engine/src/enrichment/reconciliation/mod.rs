@@ -49,6 +49,7 @@ mod tests {
             role: None,
             participants: Vec::new(),
             provenance: Provenance::new(signal_kind_extractor_name(&signal_kind), doc, signal_kind),
+            attributes: serde_json::Map::new(),
             concept_kind: None,
         }
     }

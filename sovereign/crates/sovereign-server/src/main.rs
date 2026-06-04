@@ -342,6 +342,9 @@ async fn main() {
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
+    tools.register(Box::new(
+        sovereign_tools::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&corpus_engine)),
+    ));
     // SCIP call graph database + tools (v2).
     //
     // The call-graph tools take `Arc<ArcSwap<ScipGraph>>` so the CLI's

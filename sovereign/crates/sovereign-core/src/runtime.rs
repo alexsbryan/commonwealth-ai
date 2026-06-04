@@ -551,6 +551,7 @@ mod evidence;
 mod formatters;
 mod handlers;
 mod intent_helpers;
+mod numeric_audit;
 mod question_analysis;
 mod retrieval;
 mod retrieval_helpers;

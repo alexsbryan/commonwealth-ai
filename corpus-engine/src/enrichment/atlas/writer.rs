@@ -397,6 +397,7 @@ mod tests {
             role: None,
             participants: Vec::new(),
             provenance: Default::default(),
+            attributes: serde_json::Map::new(),
             concept_kind: None,
         };
         let event = Event {
@@ -465,6 +466,7 @@ mod tests {
             role: None,
             participants: Vec::new(),
             provenance: Default::default(),
+            attributes: serde_json::Map::new(),
             concept_kind: None,
         };
         write_atlas(&atlas_dir, &[entity], &[], &[]).unwrap();

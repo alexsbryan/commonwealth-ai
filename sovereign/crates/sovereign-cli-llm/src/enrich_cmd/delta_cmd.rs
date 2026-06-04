@@ -1137,6 +1137,7 @@ mod tests {
                 role: None,
                 participants: vec![],
                 provenance: Default::default(),
+                attributes: serde_json::Map::new(),
                 concept_kind: None,
             })
         }

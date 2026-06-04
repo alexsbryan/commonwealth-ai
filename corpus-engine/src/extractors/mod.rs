@@ -13,6 +13,7 @@ pub mod json;
 pub mod json_api;
 pub mod parquet;
 pub mod plaintext;
+pub mod tabular_atoms;
 pub mod wikipedia_api_article;
 pub mod wikipedia_catalog;
 pub mod wikipedia_jsonl;

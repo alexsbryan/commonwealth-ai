@@ -45,6 +45,7 @@ fn ent(
         role: None,
         participants: Vec::new(),
         provenance: Provenance::new(extractor, doc, signal),
+        attributes: serde_json::Map::new(),
         concept_kind: None,
     }
 }

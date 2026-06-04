@@ -154,7 +154,12 @@ impl Runtime {
             crate::runtime::build_response_length_directive(self.inference_config.max_tokens);
         let synthesis_base = format!(
             "Synthesize the given step results into a clear, comprehensive \
-             answer.\n\n{budget_note}"
+             answer.\n\nProvenance rule: every dollar amount and percentage in \
+             your answer MUST be quoted verbatim from a figure present in the \
+             step results above (for example a `parcel_analytics` cited figure). \
+             Do not compute, round, or estimate numbers yourself, and never \
+             introduce a dollar or percentage figure that is not in the step \
+             results.\n\n{budget_note}"
         );
         let synthesis_system = self.build_primary_system_message(&synthesis_base, context);
 
@@ -201,9 +206,17 @@ impl Runtime {
         // 7. Extract search provenance from tool step outputs.
         let mut search_method: Option<String> = None;
         let mut all_sources: Vec<SourceSummary> = Vec::new();
+        // Cited dollar/percentage figures emitted by deterministic tools
+        // (e.g. `parcel_analytics`) — the audit set for Layer 3 of the
+        // "no confabulated numbers" guarantee.
+        let mut cited_figures: Vec<String> = Vec::new();
         for (_step_idx, output) in &task.completed_steps {
             match output {
                 StepOutput::Json(ref val) => {
+                    if let Some(figs) = val.get("cited_figures").and_then(|v| v.as_array()) {
+                        cited_figures
+                            .extend(figs.iter().filter_map(|f| f.as_str().map(String::from)));
+                    }
                     if let Some(method) = val.get("search_method").and_then(|v| v.as_str()) {
                         search_method = Some(method.to_string());
                     }
@@ -248,6 +261,32 @@ impl Runtime {
             }
         }
 
+        // Layer 3 — deterministic numeric-provenance audit. When a tool
+        // emitted cited figures, every $/% figure in the synthesized
+        // answer must trace to one; otherwise flag it (glassbox, via
+        // `self_assessment` + a warning) rather than letting an unsourced
+        // number pass silently. See `runtime::numeric_audit`.
+        let numeric_audit_note: Option<String> = if cited_figures.is_empty() {
+            None
+        } else {
+            let violations =
+                crate::runtime::numeric_audit::uncited_numerics(&synthesis.text, &cited_figures);
+            if violations.is_empty() {
+                tracing::info!("numeric_audit: all answer figures trace to cited tool output");
+                None
+            } else {
+                tracing::warn!(
+                    violations = ?violations,
+                    "numeric_audit: answer has figure(s) not traceable to a cited source"
+                );
+                Some(format!(
+                    "Provenance audit flag — {} figure(s) not traceable to a cited source: {}",
+                    violations.len(),
+                    violations.join(", ")
+                ))
+            }
+        };
+
         // Save and return assistant message.
         let provenance = ResponseProvenance {
             intent: "ComplexTask".to_string(),
@@ -262,7 +301,7 @@ impl Runtime {
             total_latency_ms: synthesis.latency_ms,
             tokens_used: synthesis.tokens_used,
             coarse_intent: None,
-            self_assessment: None,
+            self_assessment: numeric_audit_note,
             routing_trigger: None,
             coverage: None,
             finish_reason: synthesis.finish_reason.clone(),

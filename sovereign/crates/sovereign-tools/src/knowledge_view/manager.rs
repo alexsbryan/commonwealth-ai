@@ -1208,6 +1208,7 @@ mod tests {
             participants: Vec::new(),
             defining_quote: None,
             provenance: Default::default(),
+            attributes: serde_json::Map::new(),
             concept_kind: None,
         };
         let api_migration = Entity {
@@ -1224,6 +1225,7 @@ mod tests {
             participants: vec![AtomId::entity(1)],
             defining_quote: None,
             provenance: Default::default(),
+            attributes: serde_json::Map::new(),
             concept_kind: None,
         };
 

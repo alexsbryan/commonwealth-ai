@@ -1409,6 +1409,39 @@ pub enum ExtractorConfig {
         #[serde(default)]
         id_field: Option<String>,
     },
+    /// Deterministic tabular → typed-atom extractor for structured
+    /// public datasets (e.g. the SF assessor parcel roll from DataSF's
+    /// Socrata API). Reads the bare-array JSON the `http_api` acquirer
+    /// persists and emits, per row: one chunk (a rendered, FTS-indexable
+    /// line) AND — via the ingest flow — one atlas `Entity` atom whose
+    /// declared numeric/string columns are recorded in
+    /// `Entity::attributes`, the deterministic, cited substrate the LVT
+    /// analytics sum over. No inference. Pair with
+    /// `chunker = "passthrough"`. See
+    /// [`crate::extractors::tabular_atoms`].
+    #[serde(rename = "tabular_atoms")]
+    TabularAtoms {
+        /// JSONPath selecting the row array. Defaults to `$[*]` (a bare
+        /// top-level array, as Socrata returns); use `$.results[*]` for
+        /// an enveloped response.
+        #[serde(default)]
+        document_path: Option<String>,
+        /// Column whose value is each row's stable identity (e.g.
+        /// `parcel_number`). Drives the atom id + canonical name and the
+        /// chunk's `source_doc_id`.
+        id_column: String,
+        /// Atom entity-type label (free-form; becomes
+        /// `EntityType::Other(..)`). Defaults to `"row"`.
+        #[serde(default)]
+        entity_type: Option<String>,
+        /// Columns parsed as numbers (string cells like `"172620.0"` are
+        /// parsed) and stored as JSON numbers in `attributes`.
+        #[serde(default)]
+        numeric_attributes: Vec<String>,
+        /// Columns kept verbatim as strings in `attributes`.
+        #[serde(default)]
+        string_attributes: Vec<String>,
+    },
     #[serde(rename = "html")]
     Html {
         #[serde(default)]
