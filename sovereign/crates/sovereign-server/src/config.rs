@@ -21,6 +21,20 @@ pub struct ServerConfig {
     pub commonwealth: CommonwealthSection,
     #[serde(default)]
     pub knowledge_view: KnowledgeViewSection,
+    #[serde(default)]
+    pub retrieval: RetrievalSection,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct RetrievalSection {
+    /// Allow-list of corpus ids this host searches. Empty/absent = search
+    /// every installed corpus. When set, only these are enumerated by the
+    /// engine — scoping both retrieval and the `/v1/corpora` listing — so
+    /// a machine with experiment/partial/temp corpora doesn't pay to open
+    /// or search the ones the operator doesn't want. Ids match the index
+    /// directory name (the corpus_id for canonical installs).
+    #[serde(default)]
+    pub corpora: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -1589,6 +1589,17 @@ impl Runtime {
                     break;
                 }
 
+                // Respect the conversation's corpus allow-list: an atom's
+                // source corpus must itself be enabled before we fetch from
+                // it. (Atlases load independently of the per-conversation
+                // allow-list, so an atom can originate from a corpus the
+                // conversation excluded.)
+                if let Some(allowed) = enabled_corpora {
+                    if !allowed.iter().any(|c| c == &req.corpus_id) {
+                        continue;
+                    }
+                }
+
                 // Shape-aware fetch. ChunkRequest.chunk_id is the
                 // atom's first_appearance.chunk_id. For SEP/Wikipedia
                 // atoms it's a section slug (`sec_00001`) and the
@@ -1649,7 +1660,15 @@ impl Runtime {
                     continue;
                 }
 
-                // SEP/Wikipedia article-slug path.
+                // SEP/Wikipedia article-slug path. Scope the FTS fetch to
+                // the atom's OWN corpus — the chunk lives there (the atlas
+                // was extracted from it), so this selects the same chunk
+                // the title filter would, without searching every other
+                // enabled corpus per request (the 1.9M-chunk wikipedia
+                // index was otherwise opened once per atom). `enabled_corpora`
+                // (the host allow-list) still applies via installed_indexes,
+                // so an atom whose corpus isn't allow-listed yields nothing.
+                let req_scope = [req.corpus_id.clone()];
                 let fts_hits = self
                     // Article slug + passage preview as FTS query
                     // (see eval-side runner.rs comment). Title-bias
@@ -1660,7 +1679,7 @@ impl Runtime {
                         30,
                         "AtlasNavigate",
                         None,
-                        enabled_corpora,
+                        Some(&req_scope),
                     )
                     .await;
                 for hit in fts_hits {

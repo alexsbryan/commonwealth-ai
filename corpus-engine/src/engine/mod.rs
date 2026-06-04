@@ -181,6 +181,15 @@ pub struct CorpusEngine {
     /// re-indexed corpus is re-opened without threading invalidation
     /// through every mutation path.
     index_cache: std::sync::Mutex<HashMap<PathBuf, (std::time::SystemTime, CorpusIndex)>>,
+    /// Optional host-level allow-list of corpus ids to surface from
+    /// `installed_indexes`. `None` (the default) lists every installed
+    /// corpus. When `Some`, only listed ids are enumerated — and since
+    /// every retrieval path and the corpora-list endpoint enumerate via
+    /// `installed_indexes`, this scopes both search and the listing to a
+    /// chosen set. Set by `sovereign-server` from `[retrieval] corpora`
+    /// so a machine full of experiment/partial corpora doesn't search
+    /// (or pay to open) the ones the operator doesn't care about.
+    corpus_allow_list: Option<std::collections::HashSet<String>>,
     /// Display-formatted identifier for this node, used as the partition
     /// suffix when ingesting into `<corpus>-partition-<self_node_id>`.
     /// Callers (daemon startup, CLI) set this from the persistent node
@@ -331,6 +340,7 @@ impl CorpusEngine {
             // `"qwen-embedding-0.6b"` on every fresh install).
             expected_embedding_model: String::new(),
             index_cache: std::sync::Mutex::new(HashMap::new()),
+            corpus_allow_list: None,
             self_node_id: DEFAULT_LOCAL_NODE_SUFFIX.to_string(),
             cancel_registry: CancellationRegistry::new(),
             custom_acquirers: Arc::new(RwLock::new(HashMap::new())),
@@ -571,6 +581,21 @@ impl CorpusEngine {
     /// `SetupConfig.models.embed.file_stem()`.
     pub fn with_embedding_model(mut self, model: &str) -> Self {
         self.expected_embedding_model = model.to_string();
+        self
+    }
+
+    /// Restrict `installed_indexes` (and therefore every retrieval path
+    /// and the corpora-list endpoint) to the given corpus ids. An empty
+    /// list is treated as "no restriction" (lists everything) so an
+    /// accidentally-empty config can't silently disable all retrieval.
+    /// Ids match the index directory name, which equals the corpus_id
+    /// for canonical installs.
+    pub fn with_corpus_allow_list(mut self, ids: Vec<String>) -> Self {
+        self.corpus_allow_list = if ids.is_empty() {
+            None
+        } else {
+            Some(ids.into_iter().collect())
+        };
         self
     }
 
@@ -1300,6 +1325,16 @@ impl CorpusEngine {
             }
             if Self::is_out_of_band_index_name(name) {
                 continue;
+            }
+            // Host allow-list (server `[retrieval] corpora`): skip corpora
+            // not on the list BEFORE paying the open + info() cost. The
+            // directory name equals the corpus_id for canonical installs;
+            // partition/shard dirs (name != corpus_id) are skipped too,
+            // which is what we want — the canonical dir carries the data.
+            if let Some(allow) = &self.corpus_allow_list {
+                if !allow.contains(name) {
+                    continue;
+                }
             }
             // Check for _corpus_meta.json to identify valid indexes.
             if !path.join("_corpus_meta.json").exists() {
