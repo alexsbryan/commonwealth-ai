@@ -69,6 +69,34 @@ mod voice_prompts;
 ///
 /// Target: cite RETRIEVED claims frequently (every retrieved claim gets a
 /// tag), cite PARAMETRIC claims never, never fabricate-and-cite.
+/// Compact synthesis prompt for the **FastFocused** route — focused /
+/// single-source / trivial-fact answers that run on the fast slot. The full
+/// `KNOWLEDGE_SYNTHESIS_SYSTEM` rulebook (three tiers, contested + catalog
+/// source handling, the terminology essay, the worked Girton example)
+/// overwhelms the small fast model: it quotes the citation rules back and
+/// deliberates about formatting instead of answering ("The user is asking…
+/// I need to cite…", verified on the 4B against the SEP bank). This keeps
+/// only the load-bearing rules — the `[Source: title]` citation shape, no
+/// numeric refs, no parametric tagging, no fabrication — and, crucially,
+/// tells the model to LEAD WITH THE ANSWER. The nuanced full prompt stays
+/// on `PrimarySynthesis` (the diffuse-evidence path on the primary slot).
+pub(crate) const FAST_KNOWLEDGE_SYNTHESIS_SYSTEM: &str = "\
+You have retrieved passages from a knowledge base, shown above under \
+[Source: title] headers. Answer the question using those passages together \
+with your general knowledge.\n\
+\n\
+- Lead with the answer in the first sentence. Do NOT restate the question, \
+  narrate your process, or deliberate about how to cite — write the answer \
+  directly.\n\
+- After a claim that came from a passage, add [Source: title] using the \
+  exact title from a [Source: …] header above. That is the ONLY citation \
+  form — never numbered references like [1] or [2]. If you don't recall the \
+  exact title, omit the citation rather than guess.\n\
+- Do not attach [Source: …] to general-knowledge claims.\n\
+- Do not invent authors, dates, quotations, or lists. If the passages and \
+  your knowledge don't cover what was asked, say so in one sentence.\n\
+";
+
 pub(crate) const KNOWLEDGE_SYNTHESIS_SYSTEM: &str = "\
 You have been given retrieved passages from an installed knowledge base. \
 Use them together with your general knowledge to answer the question.\n\
