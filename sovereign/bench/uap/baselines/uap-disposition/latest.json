@@ -5,7 +5,7 @@
   "split": "test",
   "corpus": "uap-blue-book",
   "model_id": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL",
-  "captured_ts_unix": 1780613943,
+  "captured_ts_unix": 1780616445,
   "accuracy": 0.9166666666666666,
   "macro_f1": 0.888888888888889,
   "n_aligned": 12,
