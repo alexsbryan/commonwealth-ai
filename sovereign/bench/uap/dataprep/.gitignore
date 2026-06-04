@@ -1,0 +1,14 @@
+# Computed data-prep artifacts — DO NOT commit. These are re-derivable
+# from the scripts in this directory (parse_nicap.py, fetch_nara_bluebook.py,
+# join_unidentified.py, ocr_hero_cases.py), and the real enriched corpus
+# distributes via the HuggingFace prebuilt snapshot, not source control.
+#
+# Tracked: the *.py scripts (the source of truth) + this .gitignore.
+# Ignored: their outputs (metadata table, unidentified spine, OCR'd cases)
+# and any cached downloads that land here.
+*.jsonl
+*.html
+*.csv
+images/
+shards/
+cache/
