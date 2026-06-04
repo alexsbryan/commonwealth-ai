@@ -559,6 +559,7 @@ fn emit_entities_from_batches(
                         source_doc_id,
                         SignalKind::ColumnHeader,
                     ),
+                    attributes: serde_json::Map::new(),
                     concept_kind: None,
                 };
                 emitted.insert(key, entity);

@@ -445,6 +445,17 @@ pub struct Entity {
     /// [`Provenance`] for back-compat with pre-2.2 atoms.json files.
     #[serde(default)]
     pub provenance: Provenance,
+    /// Free-form typed attributes for atoms produced by deterministic
+    /// tabular extraction (the `tabular_atoms` extractor): the source
+    /// row's numeric and string columns keyed by column name
+    /// (`assessed_land_value`, `use_code`, …). Numbers stay JSON
+    /// numbers; everything else is a JSON string — so downstream
+    /// deterministic analytics read typed values without re-parsing
+    /// prose. Empty on LLM / literary / philosophy atoms.
+    /// `#[serde(default)]` keeps pre-2.3 `atoms.json` reading unchanged
+    /// (absent → empty map).
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub attributes: serde_json::Map<String, serde_json::Value>,
     /// Gap-B qualifier for `Concept`-typed entities sourced from the
     /// routed-Phase-1 typed-extension dispatcher. Populated when the
     /// resolver projects a Mechanism / Definition / Image / Motif /
@@ -1047,7 +1058,10 @@ impl AtomsFile {
     /// - `2.2` — added `Entity::provenance` field (AD-4;
     ///   architecture-over-Enron Phase 4). Old atoms.json deserialise
     ///   with a default empty `Provenance`.
-    pub const SCHEMA_VERSION: &'static str = "2.2";
+    /// - `2.3` — added `Entity::attributes` (free-form typed column
+    ///   values) for the deterministic `tabular_atoms` extractor. Old
+    ///   atoms.json deserialise with a default empty map.
+    pub const SCHEMA_VERSION: &'static str = "2.3";
 
     pub fn new(atoms: Vec<AtomEnvelope>) -> Self {
         Self {
@@ -1195,6 +1209,7 @@ mod tests {
             role: None,
             participants: Vec::new(),
             provenance: Default::default(),
+            attributes: serde_json::Map::new(),
             concept_kind: None,
         };
         let env = AtomEnvelope::Entity(entity.clone());
@@ -1513,6 +1528,7 @@ mod tests {
             role: None,
             participants: Vec::new(),
             provenance: Default::default(),
+            attributes: serde_json::Map::new(),
             concept_kind: None,
         };
         let env = AtomEnvelope::Entity(entity);

@@ -1069,6 +1069,7 @@ mod tests {
             participants: Vec::new(),
             defining_quote: None,
             provenance: Default::default(),
+            attributes: serde_json::Map::new(),
             concept_kind: None,
         };
         // Off-list noise: 5 entities with massive centrality (each
@@ -1089,6 +1090,7 @@ mod tests {
                 participants: Vec::new(),
                 defining_quote: None,
                 provenance: Default::default(),
+                attributes: serde_json::Map::new(),
                 concept_kind: None,
             }));
         }
@@ -1215,6 +1217,7 @@ mod tests {
                 participants: Vec::new(),
                 defining_quote: None,
                 provenance: Default::default(),
+                attributes: serde_json::Map::new(),
                 concept_kind: None,
             })
         };
@@ -1366,6 +1369,7 @@ mod tests {
                 participants: Vec::new(),
                 defining_quote: None,
                 provenance: Default::default(),
+                attributes: serde_json::Map::new(),
                 concept_kind: None,
             }));
         }

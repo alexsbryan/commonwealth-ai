@@ -24,6 +24,7 @@
 pub mod configuration;
 pub mod gaps;
 pub mod holistic_classifier;
+pub mod parcel_analytics;
 pub mod tension_classifier;
 pub mod tensions;
 
@@ -33,6 +34,10 @@ pub use configuration::{
     RelationSynopsis, TrajectorySynopsis,
 };
 pub use gaps::{detect_deterministic_gaps, Gap, GapKind, GapsOutput};
+pub use parcel_analytics::{
+    compute_aggregates, flags, per_parcel_deltas, FlagKind, ParcelAggregates, ParcelDelta,
+    ParcelFlag,
+};
 pub use holistic_classifier::{
     parse_holistic_response, render_holistic_user_body, HolisticTension,
 };

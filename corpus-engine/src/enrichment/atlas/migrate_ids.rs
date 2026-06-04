@@ -543,6 +543,7 @@ mod tests {
             role: None,
             participants: vec![],
             provenance: Default::default(),
+            attributes: serde_json::Map::new(),
             concept_kind: None,
         })
     }
@@ -639,6 +640,7 @@ mod tests {
             role: None,
             participants: vec![AtomId::entity(1)], // points at Alice
             provenance: Default::default(),
+            attributes: serde_json::Map::new(),
             concept_kind: None,
         });
         write_fixture(tmp.path(), vec![alice, bob], vec![]);

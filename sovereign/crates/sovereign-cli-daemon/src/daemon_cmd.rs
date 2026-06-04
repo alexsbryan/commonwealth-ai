@@ -2268,6 +2268,13 @@ async fn build_tool_registry(
             .with_atlas(Arc::clone(&work_atlas_store)),
     ));
 
+    // Deterministic land-value-tax analytics over parcel corpora
+    // (e.g. sf-assessor-roll) — pre-cited figures for the "no
+    // confabulated numbers" demo. Read-only; safe on the MCP surface.
+    tools.register(Box::new(
+        sovereign_tools::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&engine)),
+    ));
+
     // ── Work atlas tools (Phase 2) ──────────────────────────────
     // Always registered so MCP clients see them even on a repo
     // without an origin remote — `declare_scope` rejects with an

@@ -481,6 +481,7 @@ mod tests {
             role: None,
             participants: Vec::new(),
             provenance: Provenance::default(),
+            attributes: serde_json::Map::new(),
             concept_kind: None,
         }
     }

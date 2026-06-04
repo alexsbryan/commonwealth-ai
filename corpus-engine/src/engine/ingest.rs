@@ -1958,6 +1958,46 @@ impl CorpusEngine {
             );
         }
 
+        // ── Deterministic typed-atom emission for `tabular_atoms`
+        // recipes (e.g. the SF assessor parcel roll). Runs
+        // unconditionally — independent of any `[enrichment]` block —
+        // re-reading the acquired rows and writing one typed `Entity`
+        // atom per row via the canonical atlas writer. No inference: the
+        // figures the LVT analytics later cite are read from these atoms,
+        // never originated by a model (ARCH glassbox + the "no
+        // confabulated numbers" invariant). The `Extractor` trait can't
+        // do this (it yields docs, has no atlas dir), so the orchestrator
+        // calls the sibling pure builder over the same parsed rows.
+        if let ExtractorConfig::TabularAtoms {
+            document_path,
+            id_column,
+            entity_type,
+            numeric_attributes,
+            string_attributes,
+        } = &recipe.extract
+        {
+            let cfg = crate::extractors::tabular_atoms::TabularAtomsConfig {
+                document_path: document_path.clone().unwrap_or_else(|| "$[*]".to_string()),
+                id_column: id_column.clone(),
+                entity_type: entity_type.clone().unwrap_or_else(|| "row".to_string()),
+                numeric_attributes: numeric_attributes.clone(),
+                string_attributes: string_attributes.clone(),
+            };
+            let rows =
+                crate::extractors::tabular_atoms::parse_rows(&source_path, &cfg.document_path)?;
+            let atoms =
+                crate::extractors::tabular_atoms::build_atoms(&rows, &cfg, &recipe.corpus.id);
+            let atlas_dir = self.index_dir.join(&recipe.corpus.id).join("atlas");
+            let atom_count = atoms.len();
+            crate::enrichment::atlas::writer::write_atlas(&atlas_dir, &atoms, &[], &[])?;
+            tracing::info!(
+                corpus = %recipe.corpus.id,
+                atoms = atom_count,
+                rows = rows.len(),
+                "tabular_atoms: wrote deterministic typed atoms to atlas"
+            );
+        }
+
         if let Some(ref cb) = progress {
             cb(IngestProgress::Complete {
                 total_chunks,

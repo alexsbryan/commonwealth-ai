@@ -217,10 +217,21 @@ pipeline. Built-ins per stage:
 | Stage      | Built-ins                                                          |
 |------------|--------------------------------------------------------------------|
 | Acquirer   | `bulk_download`, `huggingface_dataset`, `local_file`, `http_api`   |
-| Extractor  | `mediawiki_xml`, `stackexchange_xml`, `jsonl`, `wikipedia_jsonl`, `wikipedia_structured`, `html`, `html_sections`, `csv`, `parquet`, `plaintext`, `code`, `email` (RFC-5322 + MIME), `described_asset` (content-addressed binary dispatcher), `column_aware` (typed Entity atoms from parquet parsed-form caches) |
+| Extractor  | `mediawiki_xml`, `stackexchange_xml`, `jsonl`, `wikipedia_jsonl`, `wikipedia_structured`, `html`, `html_sections`, `csv`, `parquet`, `plaintext`, `code`, `email` (RFC-5322 + MIME), `described_asset` (content-addressed binary dispatcher), `column_aware` (typed Entity atoms from parquet parsed-form caches), `tabular_atoms` (deterministic typed Entity atoms per row from tabular JSON, e.g. the SF assessor parcel roll) |
 | Filter     | `pageview_rank`, `title_list`, `boilerplate` (email signature / quoted-reply / disclaimer stripping), composed via `[[filter]]` (`Any` / `All`) |
 | Chunker    | `paragraph`, `sentence`, `fixed`, `semantic`, `passthrough`, `portal_event_bullet`, `threaded_turns` |
 | Index      | `CorpusIndex` over LanceDB (IVF-PQ) + Tantivy FTS                  |
+
+The `tabular_atoms` extractor (deterministic, no inference) types each row
+of a structured public dataset into a `parcel`-style `Entity` atom whose
+numeric/string columns land in `Entity::attributes` (atoms.json schema
+2.3); the SF land-value-tax demo folds those atoms into revenue-neutral
+land-rate aggregates via the `parcel_analytics` lib (`enrichment/atlas/
+analysis/`) + the read-only `parcel_analytics` tool, and the ComplexTask
+synthesizer runs a deterministic numeric-provenance audit
+(`runtime::numeric_audit`) so every dollar/percentage figure in the answer
+traces to a cited tool figure — the "no confabulated numbers" guarantee.
+See `sovereign-recipes/sf-assessor-roll/`.
 
 The `email` + `described_asset` extractors and the `column_aware`
 extractor land together as the substrate of the architecture-over-Enron

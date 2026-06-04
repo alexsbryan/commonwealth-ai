@@ -92,7 +92,7 @@ impl Extractor for JsonApiExtractor {
 
 /// Walk a JSON source path. Single-file: just that file. Directory:
 /// every `*.json` (recursively) sorted for stability.
-fn collect_json_files(path: &Path) -> Result<Vec<std::path::PathBuf>> {
+pub(crate) fn collect_json_files(path: &Path) -> Result<Vec<std::path::PathBuf>> {
     if path.is_file() {
         return Ok(vec![path.to_path_buf()]);
     }

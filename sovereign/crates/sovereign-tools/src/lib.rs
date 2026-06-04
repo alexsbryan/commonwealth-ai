@@ -37,6 +37,7 @@ pub mod wikipedia_fetch;
 pub mod mcp;
 pub mod mcp_surface;
 pub mod notes;
+pub mod parcel_analytics;
 pub mod rag;
 pub mod recipe_author;
 pub mod search;

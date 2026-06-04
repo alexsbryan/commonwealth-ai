@@ -85,10 +85,11 @@ fn v2_1_atoms_file_with_asset_variant_round_trips() {
 #[test]
 fn schema_version_constant_is_current() {
     // Phase 1 bumped from 2.0 → 2.1 (Asset variant). Phase 4 bumped
-    // from 2.1 → 2.2 (Entity::provenance). If a later phase bumps
+    // from 2.1 → 2.2 (Entity::provenance). The SF-LVT tabular track
+    // bumped 2.2 → 2.3 (Entity::attributes). If a later phase bumps
     // further, update this assertion deliberately — the test is the
     // canary.
-    assert_eq!(AtomsFile::SCHEMA_VERSION, "2.2");
+    assert_eq!(AtomsFile::SCHEMA_VERSION, "2.3");
 }
 
 #[test]
@@ -118,6 +119,37 @@ fn v2_1_entity_without_provenance_loads_with_default() {
         AtomEnvelope::Entity(e) => {
             assert!(e.provenance.extractor_id.is_empty());
             assert!(e.provenance.source_chunk_id.is_none());
+        }
+        other => panic!("expected Entity, got {other:?}"),
+    }
+}
+
+#[test]
+fn v2_2_entity_without_attributes_loads_with_default() {
+    // Entities written by a ≤2.2 reader carry no `attributes` field;
+    // the 2.3 reader must give them a default-constructed (empty) map
+    // so the schema-bump is back-compat.
+    let json_2_2_entity = r#"{
+      "schema_version": "2.2",
+      "atoms": [
+        {
+          "atom_type": "Entity",
+          "data": {
+            "id": "entity-001",
+            "canonical_name": "Pre-2.3 Entity",
+            "entity_type": "person",
+            "first_appearance": { "chunk_id": "sec-001" },
+            "description": "Authored under 2.2.",
+            "salience": 0.5,
+            "enrichment_depth": "extracted"
+          }
+        }
+      ]
+    }"#;
+    let file: AtomsFile = serde_json::from_str(json_2_2_entity).expect("parse 2.2 entity");
+    match &file.atoms[0] {
+        AtomEnvelope::Entity(e) => {
+            assert!(e.attributes.is_empty(), "absent attributes → empty map");
         }
         other => panic!("expected Entity, got {other:?}"),
     }

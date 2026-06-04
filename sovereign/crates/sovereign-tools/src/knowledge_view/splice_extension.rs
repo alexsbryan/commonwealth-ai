@@ -653,6 +653,7 @@ mod tests {
             participants: Vec::new(),
             defining_quote: None,
             provenance: Default::default(),
+            attributes: serde_json::Map::new(),
             concept_kind: None,
         };
         let file = AtomsFile::new(vec![AtomEnvelope::Entity(entity)]);
