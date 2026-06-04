@@ -26,7 +26,7 @@
 
 <div class="pair">
   <header class="masthead">
-    <div class="crest">◈</div>
+    <div class="crest" aria-hidden="true">◈</div>
     <h1>Connect to your host</h1>
     <p class="hint">Reachable over your tailnet only. The token is stored in the device keychain.</p>
   </header>

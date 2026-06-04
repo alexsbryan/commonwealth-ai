@@ -112,7 +112,7 @@ export function renderMarkdown(text: string): string {
     (_match, name: string) => {
       const trimmed = name.trim();
       const escaped = escapeAttr(trimmed);
-      return `<span class="source-citation" data-source="${escaped}" title="Retrieved from: ${escaped}">${escapeHtml(trimmed)}</span>`;
+      return `<span class="source-citation" role="button" tabindex="0" aria-label="Read source: ${escaped}" data-source="${escaped}" title="Retrieved from: ${escaped}">${escapeHtml(trimmed)}</span>`;
     },
   );
 
@@ -125,7 +125,7 @@ export function renderMarkdown(text: string): string {
     /(^|[^A-Za-z0-9_\]])\[(\d{1,2})\]/g,
     (_match, lead: string, digits: string) => {
       const idx = parseInt(digits, 10);
-      return `${lead}<span class="source-citation citation-numeric" data-citation-index="${idx}" title="Numeric citation [${idx}] — click to resolve">[${idx}]</span>`;
+      return `${lead}<span class="source-citation citation-numeric" role="button" tabindex="0" aria-label="Citation ${idx}" data-citation-index="${idx}" title="Numeric citation [${idx}] — click to resolve">[${idx}]</span>`;
     },
   );
 

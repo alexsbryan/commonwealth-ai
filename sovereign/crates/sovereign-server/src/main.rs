@@ -3,6 +3,7 @@ mod approval;
 mod auth;
 mod busy;
 mod config;
+mod narration;
 mod projection;
 mod routes;
 mod routes_documents;
@@ -479,6 +480,12 @@ async fn main() {
     let (approval_channel, _event_rx) = ServerApprovalChannel::new();
     let approval = Arc::new(approval_channel);
 
+    // Glassbox progress: republish the runtime's turn narration on a
+    // broadcast channel so each WS turn can forward its own stage frames
+    // (retrieval / synthesis / gap-check / tool calls) to the client.
+    // The `Sender` is layered as an Extension for `ws::stream_turn`.
+    let (narration_sink, narration_tx) = crate::narration::BroadcastRoutingEventSink::new();
+
     let mut runtime_builder = Runtime::new(
         Arc::clone(&inference),
         router,
@@ -489,7 +496,8 @@ async fn main() {
         approval.clone() as Arc<dyn sovereign_core::traits::ApprovalChannel>,
         sovereign_core::types::InferenceConfig::default(),
     )
-    .with_corpus_engine(Arc::clone(&corpus_engine));
+    .with_corpus_engine(Arc::clone(&corpus_engine))
+    .with_routing_events(std::sync::Arc::new(narration_sink));
     // Note store for commitment persistence (CommissiveQuery handler).
     if let Some(store) = note_store_for_runtime {
         runtime_builder = runtime_builder.with_note_store(store);
@@ -663,6 +671,7 @@ async fn main() {
         .layer(Extension(approval))
         .layer(Extension(tdd_state))
         .layer(Extension(busy_guard))
+        .layer(Extension(narration_tx))
         .layer(CorsLayer::permissive());
 
     // Startup UX — mesh peer count from Commonwealth (non-fatal if daemon

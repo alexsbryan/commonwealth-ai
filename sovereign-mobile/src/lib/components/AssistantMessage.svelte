@@ -71,13 +71,9 @@
   // `<span class="source-citation">`. Map the chip back to a retrieved
   // chunk — by numeric index for `[N]`, else by title for `[Source: X]` —
   // and open the reader.
-  function onProseClick(e: MouseEvent) {
-    const el = (e.target as HTMLElement | null)?.closest(
-      ".source-citation",
-    ) as HTMLElement | null;
-    if (!el) return;
-    e.preventDefault();
-
+  // Resolve a tapped/activated `.source-citation` element to a retrieved
+  // chunk and open the reader. Shared by the pointer + keyboard handlers.
+  function resolveCitationEl(el: HTMLElement) {
     const idxAttr = el.getAttribute("data-citation-index");
     if (idxAttr) {
       const chunk = retrievedChunks[parseInt(idxAttr, 10) - 1];
@@ -97,15 +93,34 @@
       });
     if (chunk) openReaderFor(chunk);
   }
+
+  function onProseClick(e: MouseEvent) {
+    const el = (e.target as HTMLElement | null)?.closest(
+      ".source-citation",
+    ) as HTMLElement | null;
+    if (!el) return;
+    e.preventDefault();
+    resolveCitationEl(el);
+  }
+
+  // Keyboard activation — the inline chips are `role="button" tabindex=0`,
+  // so Enter/Space must trigger them like a real button.
+  function onProseKeydown(e: KeyboardEvent) {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const el = (e.target as HTMLElement | null)?.closest(
+      ".source-citation",
+    ) as HTMLElement | null;
+    if (!el) return;
+    e.preventDefault();
+    resolveCitationEl(el);
+  }
 </script>
 
-<!-- The wrapper captures taps on the inline ◈ citation spans that
-     markdown.ts injects via {@html}; those spans can't be <button>s, so
-     the delegation lives here. Keyboard users reach the same passages via
-     the labelled chip <button>s in the grid below. -->
+<!-- The wrapper delegates pointer + keyboard activation for the inline
+     citation chips markdown.ts injects via {@html} (role=button tabindex=0
+     spans that can't be real <button>s through @html). -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="assistant" onclick={onProseClick}>
+<div class="assistant" onclick={onProseClick} onkeydown={onProseKeydown}>
   {#each blocks as block}
     {#if block.type === "think"}
       <ThinkBlock content={block.text} />
@@ -117,11 +132,16 @@
   <SourceAttribution {content} retrievedChunks={renderChunks} />
 
   {#if retrievedChunks.length}
-    <div class="cites">
+    <div class="cites" role="group" aria-label="Sources">
       {#each retrievedChunks as c (c.chunk_id)}
-        <button class="cite" onclick={() => openReaderFor(c)}>
+        <button
+          class="cite"
+          onclick={() => openReaderFor(c)}
+          aria-label={`Read source: ${c.title ?? c.corpus_id}${corporaStore.isPrivate(c.corpus_id) ? " (private to this host)" : ""}`}
+        >
           {#if corporaStore.isPrivate(c.corpus_id)}<span
               class="lock"
+              aria-hidden="true"
               title="Private to this host — never shared with mesh peers">🔒</span
             >{/if}
           {c.title ?? c.corpus_id}

@@ -45,6 +45,17 @@ struct ErrorPayload {
     retry_after_secs: Option<u64>,
 }
 
+/// A glassbox progress signal forwarded to the webview as a
+/// `message-narration` event while the turn is in flight.
+#[derive(Serialize, Clone)]
+struct NarrationPayload {
+    conversation_id: String,
+    message_id: String,
+    phase: serde_json::Value,
+    text: String,
+    elapsed_ms: u64,
+}
+
 /// Drive one streamed turn end-to-end. `db` is the shared cache
 /// connection; it is locked only briefly at completion (no lock is held
 /// across an await).
@@ -162,6 +173,25 @@ pub async fn run_stream(
             }) => {
                 let _ = app.emit("message-error", ErrorPayload { message, retry_after_secs });
                 return Ok(());
+            }
+            Ok(ServerEvent::Narration {
+                message_id,
+                phase,
+                text,
+                elapsed_ms,
+            }) => {
+                // Live progress for the in-flight turn — forwarded to the
+                // ChatScreen narration stack. Best-effort; never persisted.
+                let _ = app.emit(
+                    "message-narration",
+                    NarrationPayload {
+                        conversation_id: conversation_id.clone(),
+                        message_id,
+                        phase,
+                        text,
+                        elapsed_ms,
+                    },
+                );
             }
             _ => {}
         }
