@@ -669,6 +669,11 @@ async fn run_native_role_aware(
     // transition resets this so re-entering Evaluator forces
     // `build` again.
     let mut force_first_tool_pending = default_profile_for(active_role).forced_first_tool;
+    // Recovery-escalation flag: armed when the Implementer re-emits a
+    // rejected SPLICE edit at the same site (one rejection before the
+    // sticky-kill); forces its next turn onto write_file (full rewrite).
+    // Consumed when the restricted subset is applied.
+    let mut force_full_rewrite_pending = false;
     // Per-tenure tool-call counter. Replaces PR-2's same-primitive
     // detector with substance-level counting per §C of the PR-3
     // plan: the methodology fix is to detect stuck-state via what
@@ -818,6 +823,17 @@ async fn run_native_role_aware(
             filter_descriptors_for(
                 &adapter,
                 commonwealth_agent_tools::role::EVALUATOR_MUST_HANDOFF_SUBSET,
+            )
+        } else if matches!(active_role, Role::Implementer) && force_full_rewrite_pending {
+            force_full_rewrite_pending = false;
+            tracing::info!(
+                problem = %problem_id,
+                role = active_role.id(),
+                "native_runner: recovery-escalation — Implementer restricted to [write_file] for a full rewrite after repeated splice rejection"
+            );
+            filter_descriptors_for(
+                &adapter,
+                commonwealth_agent_tools::role::IMPLEMENTER_REWRITE_SUBSET,
             )
         } else {
             filter_descriptors(&adapter, &profile)
@@ -1204,6 +1220,28 @@ async fn run_native_role_aware(
                         .iter()
                         .filter(|s| **s == sig)
                         .count();
+                    // Recovery-escalation: ONE rejection before the
+                    // sticky-kill, if the Implementer is stuck re-emitting
+                    // a rejected SPLICE edit (patch_file / replace_function)
+                    // at the same site, arm a forced full rewrite. A
+                    // write_file rewrite has no line-range/body splice
+                    // contract to violate and gives a fresh regeneration
+                    // that won't reproduce a one-off formatting glitch —
+                    // generic over the defect (interface mismatch OR model
+                    // glitch). The kill below remains as last resort if even
+                    // the rewrite keeps failing.
+                    if matches_in_window == STICKY_RETRY_THRESHOLD - 1
+                        && matches!(active_role, Role::Implementer)
+                        && matches!(kind, PrimitiveKind::PatchFile | PrimitiveKind::ReplaceFunction)
+                    {
+                        force_full_rewrite_pending = true;
+                        tracing::info!(
+                            problem = %problem_id,
+                            primitive = kind.id(),
+                            signature = %sig,
+                            "native_runner: recovery-escalation armed — next Implementer turn forced to write_file (full rewrite)"
+                        );
+                    }
                     if matches_in_window >= STICKY_RETRY_THRESHOLD {
                         tracing::warn!(
                             problem = %problem_id,

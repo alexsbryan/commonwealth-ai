@@ -65,6 +65,16 @@ pub const EVALUATOR_TERMINATING_SUBSET: &[PrimitiveKind] = &[
 pub const EVALUATOR_MUST_HANDOFF_SUBSET: &[PrimitiveKind] =
     &[PrimitiveKind::HandoffToImplementer];
 
+/// Tool subset for the recovery-escalation: after the Implementer has had
+/// a SPLICE edit (patch_file / replace_function) rejected repeatedly at
+/// the same site, restrict its next turn to a full-file rewrite.
+/// `write_file` has no line-range/body splice contract to violate and
+/// re-generates the whole (small) file fresh — sidestepping BOTH
+/// interface mismatches AND one-off formatting glitches in a single move.
+/// The escape-whitespace recovery handles write_file's own known quirk,
+/// so this is the most robust edit primitive to fall back to.
+pub const IMPLEMENTER_REWRITE_SUBSET: &[PrimitiveKind] = &[PrimitiveKind::WriteFile];
+
 /// Compiled-in default profile for a role. Used when no TOML
 /// override is present and as the test-stability anchor.
 pub fn default_profile_for(role: Role) -> RoleProfile {
