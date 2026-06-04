@@ -73,6 +73,10 @@ export interface MessageView {
   created_at: number;
   provenance?: Provenance | null;
   citations: Citation[];
+  /** `{ provenance, retrieved_chunks }` blob built host-client-side on
+   *  hydrate so reopened messages render citations + resolve reader
+   *  clicks like freshly-streamed ones (see Rust `attach_metadata`). */
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface ConversationView extends ConversationSummary {

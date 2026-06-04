@@ -47,6 +47,14 @@ pub struct MessageDto {
     pub provenance: Option<ProvenanceDto>,
     #[serde(default)]
     pub citations: Vec<CitationDto>,
+    /// The chat-UI `metadata` blob (`{provenance, retrieved_chunks}`),
+    /// built host-client-side from `provenance`/`citations` so a
+    /// reopened (hydrated) message renders citations and resolves
+    /// reader clicks identically to a freshly-streamed one. The host
+    /// never sends this key — it's populated on the hydrate path (see
+    /// `commands::conversation`), mirroring the WS `metadata_blob`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
 
 /// The spec's `RESPONSE_PROVENANCE` (server's reduced projection).

@@ -218,6 +218,7 @@ pub fn read_conversation(conn: &Connection, id: &str) -> Result<Option<Conversat
                 server_version: r.get(5)?,
                 provenance: None,
                 citations: Vec::new(),
+                metadata: None,
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;

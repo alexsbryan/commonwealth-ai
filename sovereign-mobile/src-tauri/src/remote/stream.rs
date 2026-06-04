@@ -131,6 +131,10 @@ pub async fn run_stream(
                     server_version: None,
                     provenance: provenance.clone(),
                     citations: citations.clone(),
+                    // The live event below carries the blob; the cached
+                    // row stores provenance/citations and rebuilds it on
+                    // hydrate (see commands::conversation::attach_metadata).
+                    metadata: None,
                 };
                 if let Ok(mut conn) = db.lock() {
                     let _ = store::upsert_message_full(

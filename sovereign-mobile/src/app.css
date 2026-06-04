@@ -57,6 +57,16 @@
   --radius-lg: 10px;
   --radius-xl: 18px;
 
+  /* ── Responsive layout — fluid, safe-area-aware gutters + a centered
+     reading measure. The phone is full-bleed-minus-gutter; on a tablet
+     (or landscape) content caps at --measure and centers, so nothing
+     stretches edge-to-edge. No fixed pixel breakpoints — these adapt to
+     whatever viewport and safe-area insets the device reports. ── */
+  --gutter:  1.15rem;
+  --pad-l:   max(var(--gutter), env(safe-area-inset-left));
+  --pad-r:   max(var(--gutter), env(safe-area-inset-right));
+  --measure: 40rem;
+
   /* ── Typography stacks (fontsource-bundled in main.ts) ── */
   --font-sans:  'IBM Plex Sans Variable', 'IBM Plex Sans', system-ui, sans-serif;
   --font-serif: 'Source Serif 4 Variable', 'Source Serif 4', Georgia, serif;
@@ -74,6 +84,14 @@
 html, body, #app {
   height: 100%;
   width: 100%;
+}
+
+/* Never scroll sideways — a final guard so a stray wide child (a long
+   token, a code block) can't introduce a horizontal scrollbar on any
+   device. `clip` (not `hidden`) avoids creating a scroll container. */
+html, body {
+  overflow-x: clip;
+  max-width: 100%;
 }
 
 /* ─── Base ────────────────────────────────────────────────────── */
@@ -157,6 +175,9 @@ input, textarea, select {
   font-size: 16px;
   line-height: 1.72;
   color: var(--text-primary);
+  /* Long URLs / unbreakable tokens wrap instead of forcing width. */
+  overflow-wrap: break-word;
+  min-width: 0;
 }
 .sv-prose h1, .sv-prose h2, .sv-prose h3, .sv-prose h4 {
   font-family: var(--font-sans);
@@ -195,6 +216,7 @@ input, textarea, select {
   border-radius: var(--radius);
   padding: 0.8em 1em;
   margin: 0.75em 0;
+  max-width: 100%;
   overflow-x: auto;
 }
 .sv-prose pre code { background: none; padding: 0; }
@@ -210,7 +232,9 @@ input, textarea, select {
   background: var(--lavender-dim);
   padding: 1px 6px;
   border-radius: 3px;
-  white-space: nowrap;
+  /* A long source name (e.g. "incompatibilism-arguments") must wrap
+     rather than push the column wide on a narrow phone. */
+  overflow-wrap: anywhere;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }

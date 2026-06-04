@@ -44,12 +44,17 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    /* Cap the column on tablets/landscape; full-width with gutters on a
+       phone. Centered so it never stretches edge-to-edge. */
+    width: 100%;
+    max-width: var(--measure);
+    margin-inline: auto;
   }
   header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 1rem 1.1rem 0.7rem;
+    padding: 1rem var(--pad-r) 0.7rem var(--pad-l);
     position: sticky;
     top: 0;
     z-index: 2;
@@ -87,7 +92,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    padding: 0.4rem 1.1rem calc(1rem + env(safe-area-inset-bottom));
+    padding: 0.4rem var(--pad-r) calc(1rem + env(safe-area-inset-bottom)) var(--pad-l);
   }
   .row {
     text-align: left;
@@ -115,6 +120,6 @@
   .empty {
     color: var(--text-muted);
     font-size: 0.9rem;
-    padding: 1.5rem 1.1rem;
+    padding: 1.5rem var(--pad-l);
   }
 </style>
