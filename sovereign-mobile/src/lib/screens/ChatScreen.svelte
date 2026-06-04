@@ -83,11 +83,16 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    /* Centered reading column — capped on tablets, full-width (with
+       gutters) on a phone. */
+    width: 100%;
+    max-width: var(--measure);
+    margin-inline: auto;
   }
   header {
     display: flex;
     align-items: center;
-    padding: 0.35rem 0.5rem;
+    padding: 0.35rem var(--pad-r) 0.35rem var(--pad-l);
     border-bottom: 1px solid var(--border);
   }
   .back {
@@ -105,7 +110,7 @@
   .scroll {
     flex: 1;
     overflow-y: auto;
-    padding: 1rem 0.9rem;
+    padding: 1rem var(--pad-r) 1rem var(--pad-l);
     display: flex;
     flex-direction: column;
     gap: 1rem;
@@ -120,18 +125,21 @@
     border-radius: var(--radius-lg) var(--radius-lg) var(--radius) var(--radius-lg);
     line-height: 1.55;
     white-space: pre-wrap;
-    word-wrap: break-word;
+    overflow-wrap: anywhere;
   }
   .composer {
     display: flex;
     gap: 0.5rem;
     align-items: flex-end;
-    padding: 0.6rem 0.7rem calc(0.6rem + env(safe-area-inset-bottom));
+    padding: 0.6rem var(--pad-r) calc(0.6rem + env(safe-area-inset-bottom)) var(--pad-l);
     border-top: 1px solid var(--border);
     background: var(--bg-secondary);
   }
   .composer input {
-    flex: 1;
+    flex: 1 1 auto;
+    /* min-width:0 lets the input shrink below its intrinsic size so the
+       Send button is never pushed off-screen on a narrow device. */
+    min-width: 0;
     background: var(--bg-input);
     border: 1px solid var(--border-mid);
     border-radius: var(--radius);
@@ -146,6 +154,7 @@
     border-color: color-mix(in srgb, var(--accent) 50%, transparent);
   }
   .composer button {
+    flex: none;
     background: var(--accent);
     color: var(--text-on-accent);
     border: 1px solid var(--accent);
@@ -153,6 +162,7 @@
     padding: 0.62rem 1rem;
     font-weight: 600;
     font-size: 0.9rem;
+    white-space: nowrap;
     transition: background 0.15s, opacity 0.15s;
   }
   .composer button:active:not(:disabled) { background: var(--accent-hover); }

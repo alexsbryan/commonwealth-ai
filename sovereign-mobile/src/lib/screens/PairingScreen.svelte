@@ -54,9 +54,14 @@
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
-    padding: 2rem 1.4rem calc(2rem + env(safe-area-inset-bottom));
+    padding: 2rem var(--pad-r) calc(2rem + env(safe-area-inset-bottom)) var(--pad-l);
     min-height: 100%;
     justify-content: center;
+    /* A form is most legible narrow — cap it and centre so the inputs
+       don't span a whole tablet. */
+    width: 100%;
+    max-width: 26rem;
+    margin-inline: auto;
   }
   .masthead {
     display: flex;

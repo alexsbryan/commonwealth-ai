@@ -10,7 +10,23 @@ use tauri::State;
 use crate::cache::store as cache;
 use crate::error::Result;
 use crate::remote::dto::ConversationDto;
+use crate::remote::map::metadata_blob;
 use crate::state::AppState;
+
+/// Populate each message's `metadata` blob from its projected
+/// provenance + citations, so a reopened (hydrated) conversation
+/// renders citations and resolves reader clicks identically to a
+/// freshly-streamed one. Without this, the WS path emits `metadata`
+/// (via `metadata_blob`) but the hydrate path returned only
+/// `citations`/`provenance` — so reopened messages showed no chips.
+fn attach_metadata(mut dto: ConversationDto) -> ConversationDto {
+    for m in &mut dto.messages {
+        if !m.citations.is_empty() || m.provenance.is_some() {
+            m.metadata = Some(metadata_blob(m.provenance.as_ref(), &m.citations));
+        }
+    }
+    dto
+}
 
 #[tauri::command]
 pub async fn create_conversation(state: State<'_, AppState>) -> Result<String> {
@@ -58,11 +74,11 @@ pub async fn get_conversation(
                     );
                 }
             }
-            return Ok(Some(remote));
+            return Ok(Some(attach_metadata(remote)));
         }
     }
     let conn = state.db.lock().map_err(|_| crate::error::Error::Other("db poisoned".into()))?;
-    cache::read_conversation(&conn, &conversation_id)
+    Ok(cache::read_conversation(&conn, &conversation_id)?.map(attach_metadata))
 }
 
 #[tauri::command]

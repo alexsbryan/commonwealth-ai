@@ -93,7 +93,9 @@
   }
   .reader {
     position: fixed;
-    inset: 5.5% 0 0 0;
+    /* Leave a thumb's-worth of the chat visible up top, clearing the
+       status bar / Dynamic Island on whatever device this is. */
+    inset: calc(env(safe-area-inset-top) + 1.2rem) 0 0 0;
     z-index: 201;
     display: flex;
     flex-direction: column;
@@ -107,7 +109,7 @@
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    padding: 0.85rem 1rem;
+    padding: 0.85rem var(--pad-r) 0.85rem var(--pad-l);
     border-bottom: 1px solid var(--border);
     background: var(--bg-secondary);
   }
@@ -146,7 +148,12 @@
   .body {
     flex: 1;
     overflow-y: auto;
-    padding: 1.4rem 1.25rem calc(1.6rem + env(safe-area-inset-bottom));
+    /* Full-width scroll area; the prose itself caps at the reading
+       measure and centers, so lines never run too long on a tablet. */
+    width: 100%;
+    max-width: var(--measure);
+    margin-inline: auto;
+    padding: 1.4rem var(--pad-r) calc(1.6rem + env(safe-area-inset-bottom)) var(--pad-l);
     font-family: var(--font-serif);
     font-variation-settings: "opsz" 14;
     font-weight: 380;
@@ -154,6 +161,7 @@
     font-size: 16px;
     line-height: 1.78;
     color: var(--text-primary);
+    overflow-wrap: break-word;
   }
   .ctx {
     color: var(--text-muted);
@@ -192,7 +200,7 @@
     padding: 2.5rem 0;
   }
   footer {
-    padding: 0.8rem 1rem calc(0.8rem + env(safe-area-inset-bottom));
+    padding: 0.8rem var(--pad-r) calc(0.8rem + env(safe-area-inset-bottom)) var(--pad-l);
     border-top: 1px solid var(--border);
     background: var(--bg-secondary);
   }

@@ -151,6 +151,7 @@
   .assistant {
     align-self: flex-start;
     max-width: 94%;
+    min-width: 0;
   }
   /* Clickable corpus citations — the lavender ◈ chip, the Sovereign
      citation signature. 🔒 marks corpora private to this host. */
