@@ -78,10 +78,11 @@ sovereign corpus install uap-blue-book        # pulls the prebuilt enriched inde
 
 ## Act 2 — The 701: surface what stayed unexplained *(the hero)*
 
-`[FILL POST-ENRICH]` — pick 3 of the strongest real UNIDENTIFIED cases from the enriched
-graph (radar-confirmed, multiple witnesses, clean OCR). Candidates surfaced so far:
+Three real UNIDENTIFIED cases, verified in the hero set (199 of the 401 mention
+radar). Capture the grounded answers live per §Capture:
+- **Albuquerque, N.M., Aug 1951** (BB-955) — radar, near the Sandia / Los Alamos
+  nuclear complex; ties straight into Act 3's nuclear-site cluster.
 - **Iwo Jima, 24 June 1953** (BB-2605) — ground + radar, military witnesses.
-- **Lake Charles, La., Aug 1952** (BB-1783).
 - **Bohol Island, Philippines, May 1958** (BB-5800) — 90-sec falling object, smoke trail.
 
 For each, show the **grounded, cited answer** + the **typed graph** (the sighting, the
@@ -96,21 +97,43 @@ the witness roles, and shows you the actual card it's citing. This is the 701, l
 
 ## Act 3 — The hotspot map + the disposition bench *(turn "spooky" into "measured")*
 
-**3.1 — Hotspots (descriptive geography, à la AARO's own maps).** `[FILL POST-ENRICH]`
-The `sighting_hotspots` threshold over the unidentified set surfaces the installations
-that recur most. Real bases coalesce across OCR spelling variants (Wright-Patterson /
-WPAFB / "Aiforce" OCR noise → one installation) — show the merged node + its count.
+**3.1 — Hotspots (descriptive geography, à la AARO's own maps).** The
+`sighting_hotspots` threshold over the unidentified set surfaces **15** installations
+that recur most. The headline:
 
-**3.2 — Can a local model adjudicate like Blue Book did?** `[FILL POST-ENRICH]` Run the
-disposition bench: the model classifies a case's disposition from its narrative, **era-
-aware** (it can't say "Starlink" for 1952), scored against the Air Force's own ruling.
+| Installation | Unidentified sightings nearby |
+|---|---|
+| **Wright-Patterson AFB** (Blue Book HQ / ATIC) | 15 |
+| **Washington, D.C.** (the 1952 Capitol radar-visual flap) | 7 |
+| Kelly AFB · San Antonio | 7 |
+| Kirtland AFB | 6 |
+| Lake Charles · George AFB | 5 |
+| **Los Alamos · Oak Ridge** (the nuclear-site cluster) | 4 |
+
+**Say:** "Two things jump out. Wright-Patterson — the Air Force's own UFO HQ — tops
+the list. And there's a cluster over the *atomic* sites, Los Alamos and Oak Ridge.
+That's not us editorializing; it's the threshold detector counting the Air Force's
+own files." Then show the **coalescing**: the Wright-Patterson node merged **24**
+OCR / location / org spelling variants (`Wright-Patterson AFB`, `WPAFB`,
+`Wright-Patterson Air Forca Base`, `ATIC WPAFB Ohio`, …) into one installation —
+open the node and show the alias list. The fold is identity-grade, so 15 is a *floor*.
+
+**3.2 — Can a local model adjudicate like Blue Book did?** Run the disposition bench:
+the model classifies a case's disposition from its narrative, **era-aware** (it can't
+say "Starlink" for 1952), scored against the Air Force's own ruling. 12-category
+taxonomy, labeled fixture spanning all categories (the hero corpus is all-UNIDENTIFIED,
+so the *variety* lives in the fixture).
 ```sh
-sovereign bench uap run --split test --policy tuned
-sovereign bench uap diagnose --split test     # confusion matrix + worst confusions
+sovereign bench uap run --split test --policy tuned    # accuracy 0.917 / macro-F1 0.889
+sovereign bench uap diagnose --split test              # confusion matrix + worst confusions
 ```
-**Say:** "We measured it. Here's the confusion matrix — and the mistakes are the *same*
-ones the human investigators made: night-time astronomical-vs-aircraft, modern
-satellite misreads. That's the tell that it's doing the real task, not pattern-matching."
+**They see:** a near-perfect diagonal confusion matrix — **11 of 12 correct** — with
+the one miss being **SENSOR_ARTIFACT → ATMOSPHERIC**.
+
+**Say:** "We measured it: 0.917 accuracy. And the one mistake is the *exact* kind a
+human investigator made — a radar/sensor artifact read as an atmospheric effect.
+That's the tell that it's doing the real adjudication task, not pattern-matching a
+keyword."
 
 ---
 
@@ -127,9 +150,15 @@ satellite misreads. That's the tell that it's doing the real task, not pattern-m
 
 ---
 
-## §Capture (run before the demo) `[FILL POST-ENRICH]`
-Capture the 3 hero answers + their `[Source: …]` citations and the hotspot/bench numbers
-from a real run once enrichment completes; paste into Acts 2–3.
+## §Capture (run before the demo)
+Hotspot + bench numbers are final and live in `CAPABILITY_BRIEF.md` (Acts 3.1/3.2
+above quote them). The one remaining live capture is the **3 hero answers** (Act 2):
+ask each case via the chat path against `uap-blue-book`, and save the grounded answer +
+its `[Source: …]` Form-10073 citations (35B synth is slow live — capture ahead). Suggested
+prompts: "What did the Air Force conclude about the Albuquerque sighting of August 1951,
+and what evidence is in the file?" / same for Iwo Jima (June 1953) and Bohol Island (May
+1958). Reproduce the rest: `sovereign enrich investigation show uap-blue-book` (graph +
+hotspots) and `sovereign bench uap run --split test --policy tuned` (the 0.917 number).
 
 ---
 

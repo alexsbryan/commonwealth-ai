@@ -185,3 +185,14 @@ trailing_suffixes = [
 [display]
 category = "investigation"
 icon = "search"
+
+# Prebuilt cold-start: `sovereign corpus install uap-blue-book` restores the
+# enriched hero index (710 OCR'd chunks + the investigation graph: 5,598
+# entities / 3,386 relationships / 15 hotspots) from HuggingFace in seconds —
+# no GPU, no API key, no 35B re-run. Snapshot built 2026-06-04 with the
+# recipe-driven coalescing (re-folded; .orig backups excluded).
+[prebuilt]
+hf_repo = "svrnmesh/uap-blue-book-index"
+hf_filename = "uap-blue-book-qwen-embedding-0.6b-2026-06-04.tar.zst"
+sha256 = "701163e520ad3b369d5ee6fc3588aab8da646e49b509e223c8a0f5c8dda7297e"
+compatible_embedding_model = "qwen-embedding-0.6b"
