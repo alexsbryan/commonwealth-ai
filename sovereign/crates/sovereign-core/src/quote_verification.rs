@@ -138,6 +138,33 @@ pub fn verify_quotes(
     result
 }
 
+/// Convenience wrapper for corpus-grounded synthesis paths (KnowledgeQuery
+/// streaming + non-streaming, post-stream refinement) where the source
+/// evidence is already assembled as a single formatted string — the exact
+/// chunk text the model was shown — rather than a per-chunk slice.
+///
+/// Guard: when `evidence` is empty (the parametric / retrieval-miss path,
+/// where `doc_context` is `""`), the answer is returned **unchanged**. We
+/// have no source to verify against, so we must not demote — a quote can
+/// only be called unverified when there was something to check it against.
+/// This mirrors the attached-doc guardrail's graceful-degradation contract:
+/// an empty verification surface leaves the answer untouched.
+///
+/// A genuine verbatim quote from any retrieved chunk is a whitespace-folded
+/// substring of the concatenated evidence and passes; a composite or
+/// fabricated quote is not contiguous anywhere in it and is demoted.
+pub fn verify_answer_against_evidence(answer: &str, evidence: &str) -> VerificationResult {
+    if evidence.trim().is_empty() {
+        return VerificationResult {
+            rewritten: answer.to_string(),
+            verified_count: 0,
+            demoted_count: 0,
+        };
+    }
+    let sources = [evidence.to_string()];
+    verify_quotes(answer, &sources, &[], DEFAULT_MIN_QUOTE_CHARS)
+}
+
 /// Collapse runs of whitespace to a single space. Both quotes and
 /// sources are run through this before substring comparison so line
 /// breaks in markdown vs the source don't cause false negatives.
@@ -179,6 +206,46 @@ fn find_double_quote_close(chars: &[char], from: usize) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn empty_evidence_leaves_answer_unchanged() {
+        // Parametric / retrieval-miss path: doc_context is empty. Even a
+        // long quoted span must NOT be demoted — there is no source to
+        // verify against, so demotion would be a false accusation.
+        let answer = r#"Kant argues that "the categorical imperative binds all rational agents unconditionally and without exception.""#;
+        let r = verify_answer_against_evidence(answer, "");
+        assert_eq!(r.demoted_count, 0);
+        assert_eq!(r.verified_count, 0);
+        assert_eq!(r.rewritten, answer);
+        // Whitespace-only evidence is treated the same as empty.
+        let r2 = verify_answer_against_evidence(answer, "   \n  ");
+        assert_eq!(r2.rewritten, answer);
+        assert_eq!(r2.demoted_count, 0);
+    }
+
+    #[test]
+    fn fabricated_quote_against_evidence_is_demoted() {
+        // SEP-shaped evidence: a real passage the model was shown. The
+        // answer fabricates a verbatim-looking quote that never appears.
+        let evidence = "Compatibilism is the thesis that free will is compatible with determinism. \
+             Classical compatibilists analyse the freedom to do otherwise as a hypothetical: \
+             an agent could have done otherwise if she had chosen to.";
+        let answer = r#"On this view, Frankfurt holds that "moral responsibility floats entirely free of any ability to do otherwise whatsoever.""#;
+        let r = verify_answer_against_evidence(answer, evidence);
+        assert_eq!(r.demoted_count, 1);
+        assert!(r.rewritten.contains("[unverified excerpt:"));
+    }
+
+    #[test]
+    fn verbatim_quote_against_evidence_passes() {
+        let evidence = "Compatibilism is the thesis that free will is compatible with determinism. \
+             Classical compatibilists analyse the freedom to do otherwise as a hypothetical.";
+        let answer = r#"The entry defines it directly: "free will is compatible with determinism" is the core claim."#;
+        let r = verify_answer_against_evidence(answer, evidence);
+        assert_eq!(r.demoted_count, 0);
+        assert_eq!(r.verified_count, 1);
+        assert_eq!(r.rewritten, answer);
+    }
 
     #[test]
     fn verified_quote_passes_through_unchanged() {

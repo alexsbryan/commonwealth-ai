@@ -91,6 +91,7 @@ pub fn personal_knowledge_recipe(db_path: &Path) -> Recipe {
         // view is a digest source, not a corpus the user browses in
         // Atlas View.
         display: None,
+        retrieval: Default::default(),
     }
 }
 
@@ -178,6 +179,7 @@ pub fn institutional_notes_recipe(db_path: &Path) -> Recipe {
         // No display.category — institutional-notes is a digest
         // source, not a corpus the user browses in Atlas View.
         display: None,
+        retrieval: Default::default(),
     }
 }
 
@@ -313,6 +315,7 @@ pub fn conversation_history_recipe(db_path: &Path, local_only_skill_ids: &[&str]
             category: Some("conversation".into()),
             icon: Some("chat-bubble".into()),
         }),
+        retrieval: Default::default(),
     }
 }
 

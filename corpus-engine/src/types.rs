@@ -301,6 +301,12 @@ pub struct IndexInfo {
     /// when the on-disk meta lacks an explicit value).
     #[serde(default)]
     pub query_sharing: bool,
+    /// Resolved `dedup_by_source` flag (recipe `[retrieval]
+    /// dedup_by_source`). When true the runtime applies per-article
+    /// source dedup to this corpus's retrieval. Falls back to `false`
+    /// for legacy indexes whose `_corpus_meta.json` predates the field.
+    #[serde(default)]
+    pub dedup_by_source: bool,
     pub is_shard: bool,
     pub chunk_range: Option<ChunkRange>,
 

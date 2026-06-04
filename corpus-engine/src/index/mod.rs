@@ -270,6 +270,11 @@ struct IndexMeta {
     /// `mesh_sharing`". Set by the recipe at ingest time.
     #[serde(default)]
     query_sharing: Option<bool>,
+    /// Recipe `[retrieval] dedup_by_source`. `None` = legacy index
+    /// predating the field → resolves to `false`. Stamped post-create by
+    /// `set_dedup_by_source` (mirrors `set_display` / `set_mutable_merge`).
+    #[serde(default)]
+    dedup_by_source: Option<bool>,
     license: String,
     created_at: u64,
     last_updated: u64,
@@ -734,6 +739,10 @@ impl CorpusIndex {
         // single boolean they can trust — the Option/fallback logic
         // lives in one place.
         let query_sharing = meta.query_sharing.unwrap_or(meta.mesh_sharing);
+        // Resolve `dedup_by_source` to a single boolean the runtime reads
+        // off `IndexInfo` without re-resolving the recipe. `None` (legacy
+        // index) → false (baseline retrieval).
+        let dedup_by_source = meta.dedup_by_source.unwrap_or(false);
         // `source_path` is only set by the code-ingest pipeline
         // (`CorpusIndex::set_source_path`, called from `sovereign
         // code index`) — every other ingest path leaves it `None`.
@@ -762,6 +771,7 @@ impl CorpusIndex {
             embedding_dimensions: meta.embedding_dimensions,
             mesh_sharing: meta.mesh_sharing,
             query_sharing,
+            dedup_by_source,
             is_shard: meta.is_shard,
             chunk_range,
             parent_corpus_id: meta.parent_corpus_id,
@@ -888,6 +898,18 @@ impl CorpusIndex {
         let index_dir = Path::new(self.db.uri());
         let mut meta = read_meta(index_dir)?;
         meta.mutable_merge = policy;
+        write_meta(index_dir, &meta)
+    }
+
+    /// Stamp the `[retrieval] dedup_by_source` flag from the recipe onto
+    /// this index's `_corpus_meta.json`. A post-create meta stamp (mirrors
+    /// `set_mutable_merge` / `set_display`) so no `create_*` signature
+    /// needs threading. Read back by `installed_indexes()` into
+    /// `IndexInfo::dedup_by_source`.
+    pub fn set_dedup_by_source(&self, dedup_by_source: bool) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.dedup_by_source = Some(dedup_by_source);
         write_meta(index_dir, &meta)
     }
 

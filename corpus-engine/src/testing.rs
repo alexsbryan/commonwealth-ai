@@ -1425,6 +1425,18 @@ type = "sentence"
         Recipe::from_toml(&toml).expect("recipe parses")
     }
 
+    #[test]
+    fn retrieval_dedup_by_source_parses_and_defaults() {
+        // Declared in the recipe → surfaced on `Recipe::retrieval`.
+        let r = parse_recipe("[retrieval]\ndedup_by_source = true");
+        assert!(r.retrieval.dedup_by_source);
+
+        // Omitted entirely → false (back-compat: recipes predating the
+        // `[retrieval]` block parse with baseline behaviour).
+        let r2 = parse_recipe("");
+        assert!(!r2.retrieval.dedup_by_source);
+    }
+
     #[tokio::test]
     async fn validate_flags_invalid_html_sections_regex() {
         let toml = r#"

@@ -45,6 +45,20 @@ vector = true
 # embedding_model and embedding_dimensions are auto-detected from the
 # loaded model at ingest time.
 
+# ── Retrieval behaviour ──────────────────────────────────────────────
+#
+# Per-article source dedup. SEP answers attribute to a single canonical
+# article, so after fusion we keep each article's single best chunk and
+# return the top-K *distinct* articles rather than several chunks of one
+# tangentially-relevant entry. Validated on sep-core-v1.1 (2026-06-04,
+# isolated synth eval): sources 50/66 → 56/66 (76%→85%), facts +5, ~11%
+# faster, no category regression (contested 4/9 → 8/9 drove the lift).
+# Promotes the previously operator-only SOVEREIGN_RERANK_DEDUP_ONLY env
+# var to a per-corpus default. Leave OFF for topical corpora (Wikipedia
+# regresses under blind one-chunk-per-article truncation).
+[retrieval]
+dedup_by_source = true
+
 # ── Cold-start: prebuilt snapshot on HuggingFace ────────────────────
 #
 # Private repo (Stanford license forbids public redistribution of SEP

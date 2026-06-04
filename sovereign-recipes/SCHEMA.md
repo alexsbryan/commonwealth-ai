@@ -49,6 +49,7 @@ Optional pre-built index block. When present, the engine can download a pre-buil
 | `filter_mode` | `FilterModeConfig` | no | type default | How filters in `filters` combine. Defaults to [`ComposeMode::Any`] — a document is accepted if any filter accepts. Set `mode = "all"` to require every filter to accept. Lives in its own `[filter_mode]` table because TOML does not allow scalars next to an array of tables. |
 | `parameters` | `BTreeMap<String, ParameterSpec>` | no | type default | Install-time parameters declared by the recipe. Concrete values are supplied by the user at `corpus install` time and interpolate into the `[acquire]` block via `{name}` placeholders. Lets a financial journalist (for example) ship one `sec-filings` recipe and let downstream users plug in their own entity list / form types / date range. See [`ParameterSpec`] and [`Recipe::resolve_parameters`]. |
 | `display` | `Option<DisplayMeta>` | no | type default | Presentation hints for UI surfaces (Atlas View rail grouping, Settings → Knowledge tile icons, etc.). Pure UI metadata — retrieval and ingest ignore this block. Drives the "Conversations" group in the Atlas View when corpora declare `category = "conversation"`. `#[serde(default)]` so recipes pre-dating this block still parse — see the back-compat policy at the top of this module. |
+| `retrieval` | `RetrievalConfig` | no | type default | Retrieval-time behaviour hints (see [`RetrievalConfig`]). Unlike `[display]`, the runtime *reads* this when retrieving from the corpus. `#[serde(default)]` so recipes pre-dating the block parse. |
 
 ## `DisplayMeta`
 
@@ -58,6 +59,14 @@ Presentation hints for a recipe. See [`Recipe::display`]. Pure UI metadata: the 
 |---|---|---|---|---|
 | `category` | `Option<String>` | no | — | Logical group this corpus belongs to. Example values: `"conversation"`, `"reference"`, `"argument"`, `"personal"`. `None` means "ungrouped" — UI buckets these as "Other". |
 | `icon` | `Option<String>` | no | — | Optional icon hint for desktop tiles. Free-form string; the frontend maps known values (`"chat-bubble"`, `"book"`, …) onto its icon set and falls back to a generic glyph for unknown values. |
+
+## `RetrievalConfig`
+
+Retrieval-time behaviour hints for a corpus. Unlike [`DisplayMeta`] (pure UI), these change how the runtime *retrieves* from this corpus. `#[serde(default)]` on the struct + each field so a recipe omitting the `[retrieval]` table parses with baseline behaviour.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `dedup_by_source` | `bool` | no | type default | When true, apply per-article source dedup to this corpus's retrieval: after fusion, keep each source article's single best chunk, then return the top-K *distinct* articles. Captures the canonical-source lift for corpora with narrow authoritative sources (SEP: +6 sources, 76%→85% on the eval bank, validated 2026-06-04) without the operator-only `SOVEREIGN_RERANK_DEDUP_ONLY` env var. Leave false for topical corpora (e.g. Wikipedia), where strict one-chunk-per-article truncation *regresses* recall — there the per-article tiebreak needs a cross-encoder, not blind dedup. |
 
 ## `FilterModeConfig`
 

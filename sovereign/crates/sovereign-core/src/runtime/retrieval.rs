@@ -1968,13 +1968,17 @@ impl Runtime {
                     "{label}: per-corpus K override applied"
                 );
             }
+            // Per-corpus effective rerank config: opts this corpus into
+            // source-dedup when its recipe declared it (recipe-driven SEP
+            // promotion), otherwise the runtime base config unchanged.
+            let corpus_rerank = rerank_config_for_corpus(&self.rerank_config, info);
             match idx
                 .search_with_rerank(
                     embedding,
                     query_text,
                     effective_limit,
                     self.rerank_fn.as_ref(),
-                    &self.rerank_config,
+                    &corpus_rerank,
                     None,
                 )
                 .await
@@ -2157,13 +2161,14 @@ impl Runtime {
                     continue;
                 }
             };
+            let corpus_rerank = rerank_config_for_corpus(&self.rerank_config, info);
             match idx
                 .search_with_rerank(
                     embedding,
                     query_text,
                     limit,
                     self.rerank_fn.as_ref(),
-                    &self.rerank_config,
+                    &corpus_rerank,
                     None,
                 )
                 .await
@@ -4012,6 +4017,36 @@ fn extract_first_json_object(s: &str) -> Option<String> {
     None
 }
 
+/// Build the effective [`corpus_engine::RerankConfig`] for a
+/// single-corpus search. Starts from the runtime's base config (which may
+/// carry an operator env-var override or a wired cross-encoder) and, when
+/// the corpus's recipe declared `[retrieval] dedup_by_source` (surfaced on
+/// `IndexInfo::dedup_by_source`), enables per-article source dedup for it.
+///
+/// This is the recipe-driven promotion of the SEP dedup lever (+6 sources,
+/// 76%→85% on the eval bank, validated 2026-06-04): it now fires in every
+/// runtime — desktop, server, CLI — with no env var. Corpora that don't
+/// opt in are returned unchanged, so topical corpora (e.g. Wikipedia),
+/// which regress under blind dedup, keep baseline behaviour.
+fn rerank_config_for_corpus(
+    base: &corpus_engine::RerankConfig,
+    info: &corpus_engine::IndexInfo,
+) -> corpus_engine::RerankConfig {
+    if !info.dedup_by_source {
+        return base.clone();
+    }
+    let mut cfg = base.clone();
+    cfg.enabled = true;
+    cfg.per_article = true;
+    // Single-corpus search: a `None` filter means "every candidate
+    // eligible", which here is exactly this (opted-in) corpus. Clearing any
+    // operator-set filter avoids it excluding the very corpus that asked
+    // for dedup; the cross-encoder (`rerank_fn`) is passed separately and
+    // is unaffected.
+    cfg.dedup_corpus_filter = None;
+    cfg
+}
+
 /// Apply the per-conversation corpus allow-list to a pool of
 /// `IndexInfo`. Each index passes when its `corpus_id` is in the
 /// allow-list OR its `parent_corpus_id` is. The parent-aware branch
@@ -4044,6 +4079,33 @@ fn apply_corpus_allow_list(
 #[cfg(test)]
 mod allow_list_tests {
     use super::apply_corpus_allow_list;
+    use super::rerank_config_for_corpus;
+
+    #[test]
+    fn dedup_by_source_corpus_opts_into_per_article() {
+        // Baseline: a corpus that did NOT declare `[retrieval]
+        // dedup_by_source` is returned the runtime's base config unchanged
+        // (no dedup) — preserves Wikipedia-shape behaviour.
+        let base = corpus_engine::RerankConfig::default();
+        assert!(!base.enabled, "precondition: base config is disabled");
+
+        let plain = idx("wikipedia", None); // idx() sets dedup_by_source = false
+        let cfg_plain = rerank_config_for_corpus(&base, &plain);
+        assert!(!cfg_plain.enabled);
+        assert!(!cfg_plain.per_article);
+
+        // Opted-in corpus (SEP): per-article source dedup is enabled even
+        // though the runtime base config is off and no reranker is wired.
+        let mut opted = idx("sep", None);
+        opted.dedup_by_source = true;
+        let cfg = rerank_config_for_corpus(&base, &opted);
+        assert!(cfg.enabled, "opted-in corpus enables the dedup path");
+        assert!(cfg.per_article, "opted-in corpus requests per-article dedup");
+        assert!(
+            cfg.dedup_corpus_filter.is_none(),
+            "single-corpus search clears any operator filter so this corpus is eligible"
+        );
+    }
 
     fn idx(id: &str, parent: Option<&str>) -> corpus_engine::IndexInfo {
         corpus_engine::IndexInfo {
@@ -4058,6 +4120,7 @@ mod allow_list_tests {
             embedding_dimensions: 0,
             mesh_sharing: false,
             query_sharing: false,
+            dedup_by_source: false,
             is_shard: false,
             chunk_range: None,
             chunks_expected: None,
