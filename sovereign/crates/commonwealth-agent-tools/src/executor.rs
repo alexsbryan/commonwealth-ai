@@ -332,36 +332,14 @@ async fn exec_write_file(ctx: &ExecCtx, args: &WriteFileArgs) -> Result<ToolResu
     // the pre-build check walks the workdir. Together they form a
     // belt-and-suspenders gate against syntactically-invalid
     // workdir state.
-    if let Some(validator) = ctx.syntax_validator.as_ref() {
-        let path_str = args.path.as_str();
-        let handled = validator
-            .language_extensions()
-            .iter()
-            .any(|ext| path_str.ends_with(ext));
-        if handled {
-            let errors = validator.check_file(std::path::Path::new(&args.path), &args.content);
-            if !errors.is_empty() {
-                let rendered = validator.render_errors(&errors);
-                let language = validator.language_id();
-                tracing::info!(
-                    path = %args.path,
-                    language,
-                    error_count = errors.len(),
-                    "commonwealth_agent_tools::executor: pre-write syntax check rejected write_file"
-                );
-                return Err(ToolError::SyntaxRejected {
-                    primitive: "write_file",
-                    language: language.to_string(),
-                    rendered_errors: rendered,
-                });
-            }
-        }
-    }
+    let recovered =
+        syntax_gate_with_gutter_recovery(ctx, "write_file", args.path.as_str(), &args.content)?;
 
     if let Some(parent) = abs.parent() {
         let _ = tokio::fs::create_dir_all(parent).await;
     }
-    let bytes = args.content.as_bytes();
+    let content_to_write: &str = recovered.as_deref().unwrap_or(&args.content);
+    let bytes = content_to_write.as_bytes();
     tokio::fs::write(&abs, bytes)
         .await
         .map_err(|e| ToolError::Filesystem {
@@ -492,31 +470,11 @@ async fn exec_patch_file(ctx: &ExecCtx, args: &PatchFileArgs) -> Result<ToolResu
 
     // Pre-write syntax check on the FULL post-patch content. Symmetric
     // with exec_write_file: broken content never lands on disk.
-    if let Some(validator) = ctx.syntax_validator.as_ref() {
-        let path_str = args.path.as_str();
-        let handled = validator
-            .language_extensions()
-            .iter()
-            .any(|ext| path_str.ends_with(ext));
-        if handled {
-            let errors = validator.check_file(std::path::Path::new(&args.path), &result);
-            if !errors.is_empty() {
-                let rendered = validator.render_errors(&errors);
-                let language = validator.language_id();
-                tracing::info!(
-                    path = %args.path,
-                    language,
-                    error_count = errors.len(),
-                    "commonwealth_agent_tools::executor: pre-write syntax check rejected patch_file"
-                );
-                return Err(ToolError::SyntaxRejected {
-                    primitive: "patch_file",
-                    language: language.to_string(),
-                    rendered_errors: rendered,
-                });
-            }
-        }
-    }
+    let result = match syntax_gate_with_gutter_recovery(ctx, "patch_file", args.path.as_str(), &result)?
+    {
+        Some(cleaned) => cleaned,
+        None => result,
+    };
 
     tokio::fs::write(&abs, result.as_bytes())
         .await
@@ -727,32 +685,12 @@ async fn exec_replace_function(
     }
 
     // Pre-write syntax check on the full post-replace content.
-    if let Some(validator) = ctx.syntax_validator.as_ref() {
-        let path_str = args.path.as_str();
-        let handled = validator
-            .language_extensions()
-            .iter()
-            .any(|ext| path_str.ends_with(ext));
-        if handled {
-            let errors = validator.check_file(std::path::Path::new(&args.path), &result);
-            if !errors.is_empty() {
-                let rendered = validator.render_errors(&errors);
-                let language = validator.language_id();
-                tracing::info!(
-                    path = %args.path,
-                    function = %args.name,
-                    language,
-                    error_count = errors.len(),
-                    "executor: pre-write syntax check rejected replace_function"
-                );
-                return Err(ToolError::SyntaxRejected {
-                    primitive: "replace_function",
-                    language: language.to_string(),
-                    rendered_errors: rendered,
-                });
-            }
-        }
-    }
+    let result =
+        match syntax_gate_with_gutter_recovery(ctx, "replace_function", args.path.as_str(), &result)?
+        {
+            Some(cleaned) => cleaned,
+            None => result,
+        };
 
     tokio::fs::write(&abs, result.as_bytes())
         .await
@@ -1125,6 +1063,177 @@ fn looks_like_diff(new_content: &str) -> bool {
     diffish >= 2 || (sampled >= 2 && diffish * 2 > sampled)
 }
 
+/// Strip a single leading line-number "gutter" from one source line, if
+/// present. The line-numbered file view (`runners/native.rs` renders
+/// source as `<pad><n>: <code>`); a model that echoes that format into a
+/// `write_file` / `patch_file` content field emits lines like
+/// `   25:     #[test] fn ...`, where the leading `25: ` is not valid
+/// source and trips the pre-write syntax check. Returns `Some(rest)`
+/// when the line begins (after optional indent) with `<digits>` then
+/// `:` or `|` then an optional single space; `None` otherwise. Only the
+/// gutter is removed — the code after it (including its own indentation)
+/// is preserved verbatim.
+fn strip_one_line_gutter(line: &str) -> Option<&str> {
+    let bytes = line.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\t') {
+        i += 1;
+    }
+    let digits_start = i;
+    while i < bytes.len() && bytes[i].is_ascii_digit() {
+        i += 1;
+    }
+    if i == digits_start {
+        return None; // no leading number → not a gutter
+    }
+    while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\t') {
+        i += 1;
+    }
+    match bytes.get(i) {
+        Some(b':') | Some(b'|') => i += 1,
+        _ => return None, // number not followed by `:`/`|` → not a gutter
+    }
+    if bytes.get(i) == Some(&b' ') {
+        i += 1; // consume the single separator space
+    }
+    Some(&line[i..])
+}
+
+/// Strip echoed line-number gutters from every line of `content`,
+/// returning `Some(cleaned)` if at least one line carried a gutter, else
+/// `None`. Operates on `split('\n')` + LF re-join (the bench writes LF
+/// source), preserving blank lines.
+fn strip_echoed_line_number_gutters(content: &str) -> Option<String> {
+    let mut any = false;
+    let mut out = String::with_capacity(content.len());
+    for (idx, line) in content.split('\n').enumerate() {
+        if idx > 0 {
+            out.push('\n');
+        }
+        match strip_one_line_gutter(line) {
+            Some(rest) => {
+                any = true;
+                out.push_str(rest);
+            }
+            None => out.push_str(line),
+        }
+    }
+    if any {
+        Some(out)
+    } else {
+        None
+    }
+}
+
+/// Pre-write syntax gate with line-number-gutter recovery.
+///
+/// Runs the bound `SyntaxValidator` against `content`. On a clean parse
+/// (or when no validator is bound / the path isn't handled), returns
+/// `Ok(None)` — the caller writes the original content. On a parse
+/// failure, makes ONE recovery attempt: strip echoed line-number gutters
+/// (a model copying the line-numbered file view into its write) and
+/// re-check. If that resolves every error, returns `Ok(Some(cleaned))`
+/// and logs the recovery; otherwise the ORIGINAL errors surface as
+/// `SyntaxRejected`.
+///
+/// The recovery is strictly safe: it only rewrites content that ALREADY
+/// fails the check, and only adopts the stripped form when it parses
+/// cleanly. Valid content (e.g. a Python dict whose integer key sits on
+/// its own `25:` line) never enters the failure branch, so it is never
+/// touched. Closes the "echo the line-numbered anchor into the write"
+/// class observed 2026-06-03 (Qwen3.5-122B Implementer sticky-looping on
+/// `SyntaxRejected:write_file`).
+/// Repair a model "escaped-whitespace" artifact: a model emitting a
+/// multi-line source file as one JSON string sometimes double-escapes its
+/// newlines/tabs, so the decoded content carries the LITERAL two-char
+/// sequences `\n` / `\t` where real whitespace belongs (observed
+/// 2026-06-03: a 122B write landed `i += 1\n  continue\n...` as one
+/// physical line → "unexpected character after line continuation
+/// character"). Replace those literal escapes with the real char; returns
+/// `Some` only when a replacement was made. Applied ONLY as a
+/// post-failure candidate and adopted ONLY when the result parses clean,
+/// so a genuine string literal containing a real `\n` escape is never
+/// corrupted (that candidate would not parse and is discarded).
+fn repair_escaped_whitespace(content: &str) -> Option<String> {
+    if !content.contains("\\n") && !content.contains("\\t") {
+        return None;
+    }
+    let repaired = content.replace("\\n", "\n").replace("\\t", "\t");
+    if repaired == content {
+        None
+    } else {
+        Some(repaired)
+    }
+}
+
+fn syntax_gate_with_gutter_recovery(
+    ctx: &ExecCtx,
+    primitive: &'static str,
+    path: &str,
+    content: &str,
+) -> Result<Option<String>, ToolError> {
+    let Some(validator) = ctx.syntax_validator.as_ref() else {
+        return Ok(None);
+    };
+    let handled = validator
+        .language_extensions()
+        .iter()
+        .any(|ext| path.ends_with(ext));
+    if !handled {
+        return Ok(None);
+    }
+    let errors = validator.check_file(std::path::Path::new(path), content);
+    if errors.is_empty() {
+        return Ok(None);
+    }
+    // Recovery: the content may carry a boundary-level formatting
+    // artifact that the syntax check correctly rejects but that the model
+    // then re-emits verbatim, sticky-looping. Two are known (2026-06-03,
+    // 5.1-minilang):
+    //   - line-number gutters echoed from the file view (`25: code`)
+    //   - double-escaped whitespace: a multi-line file emitted as one
+    //     physical line with literal `\n` / `\t` (`i += 1\n  continue\n`)
+    // Try each conservative repair and adopt the FIRST that parses clean.
+    // Strictly safe: only content that ALREADY failed is rewritten, and
+    // only a candidate that parses is adopted — valid source (e.g. a
+    // string literal with a real `\n` escape) never enters this branch,
+    // and if it did the repaired form wouldn't parse and isn't adopted.
+    for (label, candidate) in [
+        ("escaped-whitespace", repair_escaped_whitespace(content)),
+        ("line-number gutters", strip_echoed_line_number_gutters(content)),
+    ] {
+        if let Some(candidate) = candidate {
+            if validator
+                .check_file(std::path::Path::new(path), &candidate)
+                .is_empty()
+            {
+                tracing::info!(
+                    path = %path,
+                    primitive,
+                    repair = label,
+                    language = validator.language_id(),
+                    "commonwealth_agent_tools::executor: recovered write — repaired a model formatting artifact the syntax check rejected"
+                );
+                return Ok(Some(candidate));
+            }
+        }
+    }
+    let rendered = validator.render_errors(&errors);
+    let language = validator.language_id();
+    tracing::info!(
+        path = %path,
+        language,
+        error_count = errors.len(),
+        primitive,
+        "commonwealth_agent_tools::executor: pre-write syntax check rejected"
+    );
+    Err(ToolError::SyntaxRejected {
+        primitive,
+        language: language.to_string(),
+        rendered_errors: rendered,
+    })
+}
+
 fn cap_tail(s: &str, limit: usize) -> String {
     if s.len() <= limit {
         return s.to_string();
@@ -1142,6 +1251,45 @@ fn cap_tail(s: &str, limit: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn strip_gutter_removes_echoed_line_number() {
+        // The failure shape observed 2026-06-03: a `25:` gutter copied
+        // from the line-numbered file view into a write_file content.
+        assert_eq!(strip_one_line_gutter("   25: pub fn f() {}"), Some("pub fn f() {}"));
+        assert_eq!(strip_one_line_gutter("1: x"), Some("x"));
+        assert_eq!(strip_one_line_gutter("  10 | code"), Some("code"));
+    }
+
+    #[test]
+    fn strip_gutter_leaves_real_code_untouched() {
+        assert_eq!(strip_one_line_gutter("    let x = 1;"), None);
+        assert_eq!(strip_one_line_gutter("pub fn reverse() {}"), None);
+        // digit then space+operator is arithmetic, not a gutter
+        assert_eq!(strip_one_line_gutter("5 + 3 == 8"), None);
+    }
+
+    #[test]
+    fn strip_echoed_gutters_only_when_present() {
+        // Clean block → None (no change, no allocation churn).
+        assert!(strip_echoed_line_number_gutters("fn a() {}\nfn b() {}").is_none());
+        // One echoed gutter line → repaired, the rest preserved.
+        let got = strip_echoed_line_number_gutters("fn a() {}\n   25: fn b() {}").unwrap();
+        assert_eq!(got, "fn a() {}\nfn b() {}");
+    }
+
+    #[test]
+    fn repair_escaped_whitespace_unescapes_literal_newlines() {
+        // The 5.1-minilang trial-0 bomb: a body emitted as one physical
+        // line with literal `\n` (double-escaped). Un-escaping → newlines.
+        assert_eq!(
+            repair_escaped_whitespace("def f():\\n    return 1\\n").unwrap(),
+            "def f():\n    return 1\n"
+        );
+        assert_eq!(repair_escaped_whitespace("a\\tb").unwrap(), "a\tb");
+        // Clean content (real newlines, no literal escapes) → None.
+        assert!(repair_escaped_whitespace("def f():\n    return 1\n").is_none());
+    }
 
     #[test]
     fn resolve_workdir_path_rejects_absolute() {

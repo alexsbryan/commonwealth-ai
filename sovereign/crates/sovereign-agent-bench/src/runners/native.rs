@@ -790,6 +790,15 @@ async fn run_native_role_aware(
         // 2.1 native role-aware trial (HANDOFF.md 2026-05-21 night).
         let evaluator_terminating =
             matches!(active_role, Role::Evaluator) && role_dossier.smoke_just_passed();
+        // Symmetric to the smoke-pass gate: when the Evaluator's last
+        // build/smoke FAILED on an unchanged workdir, re-running it is
+        // deterministic waste. Restrict the tool subset to
+        // `[handoff_to_implementer]` so the (fast) Evaluator is forced to
+        // route the failure back to the Implementer instead of
+        // dead-looping into a sticky/no-progress kill (5.1-minilang
+        // bombs, 2026-06-03).
+        let evaluator_must_handoff =
+            matches!(active_role, Role::Evaluator) && role_dossier.verification_just_failed();
         let role_tools = if evaluator_terminating {
             tracing::info!(
                 problem = %problem_id,
@@ -799,6 +808,16 @@ async fn run_native_role_aware(
             filter_descriptors_for(
                 &adapter,
                 commonwealth_agent_tools::role::EVALUATOR_TERMINATING_SUBSET,
+            )
+        } else if evaluator_must_handoff {
+            tracing::info!(
+                problem = %problem_id,
+                role = active_role.id(),
+                "native_runner: build/smoke failed on unchanged workdir → restricting Evaluator to [handoff_to_implementer] to force a fix"
+            );
+            filter_descriptors_for(
+                &adapter,
+                commonwealth_agent_tools::role::EVALUATOR_MUST_HANDOFF_SUBSET,
             )
         } else {
             filter_descriptors(&adapter, &profile)

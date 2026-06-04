@@ -56,6 +56,15 @@ pub const EVALUATOR_TERMINATING_SUBSET: &[PrimitiveKind] = &[
     PrimitiveKind::HandoffToImplementer,
 ];
 
+/// Tool subset for an Evaluator whose last build/smoke FAILED on an
+/// unchanged workdir: the only legal move is to route the failure back to
+/// the Implementer. Build/Smoke are excluded (a re-run on identical input
+/// is deterministic waste — the dead-loop pathology); AgentDone is
+/// excluded (tests are red). Forces forward progress instead of a
+/// sticky / no-progress kill.
+pub const EVALUATOR_MUST_HANDOFF_SUBSET: &[PrimitiveKind] =
+    &[PrimitiveKind::HandoffToImplementer];
+
 /// Compiled-in default profile for a role. Used when no TOML
 /// override is present and as the test-stability anchor.
 pub fn default_profile_for(role: Role) -> RoleProfile {
