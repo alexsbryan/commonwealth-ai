@@ -5,7 +5,7 @@
   "split": "test",
   "corpus": "uap-blue-book",
   "model_id": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL",
-  "captured_ts_unix": 1780526472,
+  "captured_ts_unix": 1780616215,
   "accuracy": 0.9166666666666666,
   "macro_f1": 0.8888888888888888,
   "n_aligned": 12,
@@ -296,6 +296,6 @@
     }
   ],
   "source": "fixture",
-  "delta_from_baseline_accuracy": null,
+  "delta_from_baseline_accuracy": 0.0,
   "notes": "Written by `sovereign bench uap run`. Narrative source: fixture cases.jsonl. n_aligned=12 — small-N fixture, read per-category F1 with the support column."
 }
