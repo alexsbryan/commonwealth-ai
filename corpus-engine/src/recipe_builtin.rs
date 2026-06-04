@@ -79,6 +79,11 @@ pub enum RecipeId {
     /// PDFs (scanned + born-digital RG615/AARO) via `described_asset`,
     /// sharing the same investigation enrichment block.
     UapBlueBookScans,
+    /// Breadth companion to `UapBlueBook` — all ~10,750 digitized Blue
+    /// Book cases as searchable metadata (location/date/NARA handle), no
+    /// OCR narrative and no investigation enrichment. Distributed via
+    /// `[prebuilt]`; a local rebuild needs the dataprep metadata JSONL.
+    UapBlueBookIndex,
 }
 
 impl RecipeId {
@@ -114,6 +119,7 @@ impl RecipeId {
             Self::EnronSampleMultiWide => "enron-sample-multi-wide",
             Self::UapBlueBook => "uap-blue-book",
             Self::UapBlueBookScans => "uap-blue-book-scans",
+            Self::UapBlueBookIndex => "uap-blue-book-index",
         }
     }
 
@@ -146,6 +152,7 @@ impl RecipeId {
             "enron-sample-multi-wide" => Some(Self::EnronSampleMultiWide),
             "uap-blue-book" => Some(Self::UapBlueBook),
             "uap-blue-book-scans" => Some(Self::UapBlueBookScans),
+            "uap-blue-book-index" => Some(Self::UapBlueBookIndex),
             _ => None,
         }
     }
@@ -280,6 +287,12 @@ impl RecipeId {
                     "/recipes/uap-blue-book-scans/recipe.toml"
                 ))
             }
+            Self::UapBlueBookIndex => {
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/uap-blue-book-index/recipe.toml"
+                ))
+            }
         }
     }
 
@@ -312,6 +325,7 @@ impl RecipeId {
         Self::EnronSampleMultiWide,
         Self::UapBlueBook,
         Self::UapBlueBookScans,
+        Self::UapBlueBookIndex,
     ];
 }
 
