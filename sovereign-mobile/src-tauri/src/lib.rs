@@ -67,6 +67,7 @@ pub fn run() {
             commands::chat::send_message_stream,
             commands::corpus::list_corpora,
             commands::corpus::resolve_citation,
+            commands::corpus::read_citation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running sovereign-mobile");

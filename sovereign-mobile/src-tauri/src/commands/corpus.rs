@@ -5,7 +5,7 @@ use tauri::State;
 
 use crate::cache::store as cache;
 use crate::error::Result;
-use crate::remote::dto::CorpusRefDto;
+use crate::remote::dto::{CorpusRefDto, ReadChunkDto, ReadingWindowDto};
 use crate::state::AppState;
 
 #[tauri::command]
@@ -52,4 +52,45 @@ pub async fn resolve_citation(
 ) -> Result<Option<String>> {
     let conn = state.db.lock().map_err(|_| crate::error::Error::Other("db poisoned".into()))?;
     cache::citation_snippet(&conn, &corpus_id, &chunk_id)
+}
+
+/// Open the reader for a tapped citation: fetch the full cited passage +
+/// a window of surrounding chunks from the host's corpus engine. Falls
+/// back to the cached citation snippet (as a single-chunk window) when
+/// the host is unreachable or the chunk id isn't a numeric corpus id, so
+/// the reader always shows *something*.
+#[tauri::command]
+pub async fn read_citation(
+    state: State<'_, AppState>,
+    corpus_id: String,
+    chunk_id: String,
+) -> Result<Option<ReadingWindowDto>> {
+    if let Ok(client) = state.active_client() {
+        if let Ok(window) = client.read_chunk(&corpus_id, &chunk_id).await {
+            if window.found {
+                return Ok(Some(window));
+            }
+        }
+    }
+    // Offline / non-numeric id → degrade to the cached snippet so the
+    // reader opens with the grounding text rather than nothing.
+    let snippet = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| crate::error::Error::Other("db poisoned".into()))?;
+        cache::citation_snippet(&conn, &corpus_id, &chunk_id)?
+    };
+    Ok(snippet.map(|content| ReadingWindowDto {
+        corpus_id,
+        found: true,
+        center: Some(ReadChunkDto {
+            chunk_id: 0,
+            content,
+            title: None,
+            url: None,
+        }),
+        prev: vec![],
+        next: vec![],
+    }))
 }

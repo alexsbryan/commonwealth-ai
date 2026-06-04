@@ -167,7 +167,16 @@ pub(crate) fn format_scored_chunks_with_kinds(
                 format!("[Catalog: {title}{contested_suffix}]"),
                 &mut catalog_parts,
             )
-        } else if c.url.is_some() {
+        } else if c.url.is_some() && c.chunk_id.is_none() {
+            // `[Web:]` ONLY for genuine live web-fetch results: a URL but
+            // no corpus handle (`chunk_id`). An INSTALLED-CORPUS chunk
+            // (sep, wikipedia, …) also carries its source-article URL, but
+            // it is NOT a web result — it has a `chunk_id` and falls through
+            // to the `[Source:]`/articulation headers below. Without this
+            // guard, corpus passages were headed `[Web: title]`, so the
+            // model faithfully cited them as `[Web:]`, misrepresenting a
+            // local-corpus answer as web search (and the discriminator now
+            // matches `projection::project_citation`'s corpus-grounded rule).
             (format!("[Web: {title}{contested_suffix}]"), &mut web_parts)
         } else if let Some(axis) = articulation_tag {
             // Meta-atlas-tagged corpus chunk — sub-bucket by axis.
@@ -446,6 +455,57 @@ mod folder_attribution_tests {
             source_doc_id: None,
             vector_distance: None,
         }
+    }
+
+    #[test]
+    fn corpus_chunk_with_url_heads_source_not_web() {
+        // A corpus chunk carries its source-article URL but has a
+        // chunk_id (corpus handle) — it must head `[Source:]`, never
+        // `[Web:]`. A genuine web-fetch result (URL, no chunk_id) still
+        // heads `[Web:]`. Regression: corpus passages were headed
+        // `[Web: …]`, so the synthesis model cited local corpora as web.
+        let corpus = ScoredChunk {
+            content: "Compatibilism holds that…".into(),
+            title: Some("incompatibilism-arguments".into()),
+            url: Some("https://plato.stanford.edu/entries/incompatibilism".into()),
+            corpus_id: "sep".into(),
+            score: 0.9,
+            metadata: HashMap::new(),
+            chunk_id: Some(42),
+            source_doc_id: None,
+            vector_distance: None,
+        };
+        let web = ScoredChunk {
+            content: "Breaking news…".into(),
+            title: Some("Live Result".into()),
+            url: Some("https://example.com/news".into()),
+            corpus_id: "web".into(),
+            score: 0.5,
+            metadata: HashMap::new(),
+            chunk_id: None,
+            source_doc_id: None,
+            vector_distance: None,
+        };
+        let out = format_scored_chunks_with_kinds(
+            &[corpus, web],
+            100_000,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert!(
+            out.contains("[Source: incompatibilism-arguments]"),
+            "corpus chunk WITH a URL must head [Source:], got:\n{out}"
+        );
+        assert!(
+            !out.contains("[Web: incompatibilism-arguments]"),
+            "corpus chunk must NOT be mislabeled [Web:]"
+        );
+        assert!(
+            out.contains("[Web: Live Result]"),
+            "genuine web-fetch (no chunk_id) must still head [Web:]"
+        );
     }
 
     #[test]

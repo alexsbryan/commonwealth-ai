@@ -65,22 +65,30 @@ pub async fn generate_title_from_messages(
     let user_snippet = truncate_to_char_boundary(user_msg, MESSAGE_SNIPPET_CHARS);
     let assistant_snippet = truncate_to_char_boundary(assistant_msg, MESSAGE_SNIPPET_CHARS);
 
+    // Show, don't tell. A reasoning-distilled Fast model treats verbose prose
+    // rules as *content* — given a paragraph of "do not do X", it echoes the
+    // rules back as a bulleted outline instead of obeying them. So the prompt
+    // is almost pure demonstration: two worked (conversation → Title:) pairs
+    // and a one-line instruction. The model pattern-matches the shape — a short
+    // title on the line after `Title:` — rather than narrating the task. Paired
+    // with `enable_thinking(false)` below, which stops the chain-of-thought at
+    // the chat-template level (not just the sampler).
     let prompt = format!(
-        "Write a short, specific title (4-8 words) for this conversation. \
-         Use sentence case. Do not wrap it in quotes. Do not end with a period. \
-         Do not add any explanation — just the title.\n\n\
+        "Give each conversation a short title of a few words.\n\n\
+         User: How do I center a div horizontally and vertically in CSS?\n\
+         Assistant: Use flexbox on the parent: display:flex with justify-content \
+         and align-items both set to center.\n\
+         Title: Centering a div with flexbox\n\n\
+         User: What were the main causes of the French Revolution?\n\
+         Assistant: A fiscal crisis, the inequitable estate system, Enlightenment \
+         ideas, and food scarcity all converged.\n\
+         Title: Causes of the French Revolution\n\n\
          User: {user_snippet}\n\n\
-         Assistant: {assistant_snippet}\n\n\
-         Title:"
+         Assistant: {assistant_snippet}"
     );
 
-    // Belt-and-suspenders: some models ignore `think_budget: 0` at the
-    // sampler level. A system directive reinforces the instruction.
-    let system_message = Some(
-        "You produce conversation titles. Output only the title — no thinking, \
-         no preface, no explanation, no surrounding quotes."
-            .to_string(),
-    );
+    let system_message =
+        Some("Output only the title — a few words, nothing else.".to_string());
 
     let request = CompletionRequest {
         prompt,
@@ -96,9 +104,22 @@ pub async fn generate_title_from_messages(
         tools: None,
         tool_choice: None,
         model_id: None,
-        enable_thinking: None,
+        // Hard-off the reasoning scaffold: the distilled Fast model otherwise
+        // narrates its plan ("the user wants a title…") and that becomes the
+        // output. `enable_thinking(false)` renders the chat template without the
+        // think block — stronger than `think_budget: 0`, which only nudges the
+        // sampler and is widely ignored.
+        enable_thinking: Some(false),
         sampling_mode: None,
-        assistant_prefix: None,
+        // Prefill the assistant turn with "Title:" so the model physically
+        // continues a title instead of opening with a preamble ("the user
+        // wants me to…"). With the few-shot pairs above demonstrating that
+        // "Title:" is followed by a few clean words, the prefill leaves the
+        // model mid-pattern — the single most reliable way to stop a
+        // narration-happy distilled model. The rendered response is only the
+        // continuation (the prefix is part of the prompt), so it needs no
+        // stripping.
+        assistant_prefix: Some("Title:".to_string()),
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist: None,

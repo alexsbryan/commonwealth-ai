@@ -630,6 +630,10 @@ async fn main() {
         .route("/v1/tasks/{id}/approve", post(routes::approve_task))
         .route("/v1/tools", get(routes::list_tools))
         .route("/v1/corpora", get(routes::list_corpora))
+        .route(
+            "/v1/corpora/{corpus_id}/chunks/{chunk_id}",
+            get(routes::read_chunk),
+        )
         .route("/v1/search", post(routes::search))
         .route("/v1/conversations/{id}/stream", get(ws::ws_handler))
         .merge(routes_documents::document_router())

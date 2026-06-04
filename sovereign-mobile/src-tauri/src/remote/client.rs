@@ -7,7 +7,7 @@
 use reqwest::{Client, StatusCode};
 
 use crate::error::{Error, Result};
-use crate::remote::dto::{ConversationDto, CorpusListDto, CorpusRefDto};
+use crate::remote::dto::{ConversationDto, CorpusListDto, CorpusRefDto, ReadingWindowDto};
 
 #[derive(Clone)]
 pub struct ApiClient {
@@ -119,5 +119,20 @@ impl ApiClient {
     pub async fn list_corpora(&self) -> Result<Vec<CorpusRefDto>> {
         let c: CorpusListDto = self.get_json("/v1/corpora").await?;
         Ok(c.corpora)
+    }
+
+    /// Fetch the full cited passage + a window of surrounding chunks for
+    /// the reader. `chunk_id` is the opaque string handle the client holds;
+    /// the host parses it as a numeric corpus chunk id (a non-numeric id
+    /// simply 404s and the reader degrades to the cached snippet).
+    pub async fn read_chunk(
+        &self,
+        corpus_id: &str,
+        chunk_id: &str,
+    ) -> Result<ReadingWindowDto> {
+        self.get_json(&format!(
+            "/v1/corpora/{corpus_id}/chunks/{chunk_id}?radius=1"
+        ))
+        .await
     }
 }
