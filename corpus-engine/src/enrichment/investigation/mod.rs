@@ -33,7 +33,9 @@ pub mod aggregate;
 pub mod checkpoint;
 pub mod extract;
 pub mod graph;
+pub mod normalize;
 pub mod patterns;
+pub mod recoalesce;
 
 use std::path::Path;
 
@@ -248,14 +250,19 @@ pub async fn run_investigation<'a>(
     }
 
     // Phase 2 — Coalesce entities; rewrite relationships to canonical ids.
-    let entities_map = extract::group_extracted_entities(&all_entities, &all_extractions);
+    // The recipe supplies the coalescing vocabulary (aliases, suffixes, …);
+    // the Normalizer applies it. Endpoint ids below route through the SAME
+    // normalizer so they resolve to the coalesced entity (no dangling edges).
+    let normalizer = normalize::Normalizer::from_recipe(recipe);
+    let entities_map =
+        extract::group_extracted_entities(&normalizer, &all_entities, &all_extractions);
     let mut entities: Vec<Entity> = entities_map.values().cloned().collect();
     entities.sort_by(|a, b| a.id.cmp(&b.id));
 
     let mut relationships: Vec<Relationship> = Vec::with_capacity(all_extractions.len());
     for (i, (chunk_id, ex)) in all_extractions.iter().enumerate() {
-        let from_id = extract::entity_id_for(&ex.from_type, &ex.from_entity);
-        let to_id = extract::entity_id_for(&ex.to_type, &ex.to_entity);
+        let from_id = normalizer.entity_id(&ex.from_type, &ex.from_entity);
+        let to_id = normalizer.entity_id(&ex.to_type, &ex.to_entity);
         relationships.push(Relationship {
             id: format!("r-{i}"),
             from_entity_id: from_id,

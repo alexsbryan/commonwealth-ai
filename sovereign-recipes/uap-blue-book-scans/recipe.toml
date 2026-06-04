@@ -136,6 +136,37 @@ attribute = "sighting_count"
 threshold = 3.0
 comparison = "greater_than"
 
+# ── Normalization (entity-name coalescing vocabulary) ─────────────────
+# DATA the generic engine applies — domain knowledge lives here, not in
+# the abstraction layer. See uap-blue-book/recipe.toml for the rationale.
+[enrichment.normalization]
+identity_attribute = { adjudication = "category" }
+
+[[enrichment.normalization.fold]]
+types = ["installation", "investigating_body"]
+aliases = [["wpafb", "wright patterson"], ["wp afb", "wright patterson"]]
+leading_prefixes = [
+  "air technical intelligence center", "air material command",
+  "air materiel command", "headquarters", "atic", "amc", "hq",
+]
+trailing_qualifiers = [
+  "alabama", "alaska", "arizona", "arkansas", "california", "colorado",
+  "connecticut", "delaware", "florida", "georgia", "hawaii", "idaho",
+  "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine",
+  "maryland", "massachusetts", "michigan", "minnesota", "mississippi",
+  "missouri", "montana", "nebraska", "nevada", "ohio", "oklahoma", "oregon",
+  "pennsylvania", "tennessee", "texas", "utah", "vermont", "virginia",
+  "washington", "wisconsin", "wyoming",
+  "new hampshire", "new jersey", "new mexico", "new york", "north carolina",
+  "north dakota", "rhode island", "south carolina", "south dakota",
+  "west virginia",
+]
+trailing_suffixes = [
+  "air", "airforce", "aiforce", "force", "forcebase", "airforcebase", "base",
+  "field", "station", "range", "naval", "missile", "facility", "center",
+  "afb", "nas", "naf", "af",
+]
+
 [display]
 category = "investigation"
 icon = "search"
