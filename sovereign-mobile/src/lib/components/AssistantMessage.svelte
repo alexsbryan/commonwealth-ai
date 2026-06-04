@@ -18,12 +18,29 @@
   const blocks = $derived(parseAssistantContent(content));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const provenance = $derived((metadata?.provenance ?? null) as any);
+  // Wire shape from the Rust core's `metadata_blob` (remote/map.rs): each
+  // citation carries an opaque string `chunk_id` handle (resolved against
+  // the cache on tap), the corpus, an optional title, and the snippet.
   const retrievedChunks = $derived(
     (metadata?.retrieved_chunks ?? []) as Array<{
-      title?: string;
+      title: string | null;
       corpus_id: string;
       chunk_id: string;
+      snippet: string;
     }>,
+  );
+
+  // The shared @sovereign/chat-ui leaves (SourceAttribution / RoutingMeta)
+  // require `title` + `snippet` and type `chunk_id` as a numeric desktop
+  // chunk index. Project mobile's rows to exactly the fields those leaves
+  // render — dropping the string `chunk_id`, which only the tap-to-resolve
+  // path below needs — so the prop contracts line up.
+  const renderChunks = $derived(
+    retrievedChunks.map((c) => ({
+      title: c.title ?? c.corpus_id,
+      corpus_id: c.corpus_id,
+      snippet: c.snippet,
+    })),
   );
 
   // Citation tap → resolve the snippet from cache (the (corpus_id,
@@ -37,13 +54,13 @@
 <div class="assistant">
   {#each blocks as block}
     {#if block.type === "think"}
-      <ThinkBlock content={block.content} />
+      <ThinkBlock content={block.text} />
     {:else}
-      <div class="prose">{@html renderMarkdown(block.content)}</div>
+      <div class="prose">{@html renderMarkdown(block.text)}</div>
     {/if}
   {/each}
 
-  <SourceAttribution {content} {retrievedChunks} />
+  <SourceAttribution {content} retrievedChunks={renderChunks} />
 
   {#if retrievedChunks.length}
     <div class="cites">
@@ -60,7 +77,7 @@
   {/if}
 
   {#if provenance}
-    <RoutingMeta {provenance} {retrievedChunks} />
+    <RoutingMeta {provenance} retrievedChunks={renderChunks} />
   {/if}
 
   {#if openSnippet}

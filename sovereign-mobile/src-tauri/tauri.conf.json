@@ -11,13 +11,19 @@
   },
   "app": {
     "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Sovereign"
+      }
+    ],
     "security": {
       "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'"
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "apk"],
+    "targets": ["app"],
     "icon": ["icons/icon.png"],
     "iOS": {
       "minimumSystemVersion": "14.0"

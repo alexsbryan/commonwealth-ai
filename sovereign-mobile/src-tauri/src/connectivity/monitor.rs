@@ -78,7 +78,13 @@ impl ConnectivityMonitor {
         db: Arc<Mutex<Connection>>,
         interval: Duration,
     ) {
-        tokio::spawn(async move {
+        // `tauri::async_runtime::spawn` (not bare `tokio::spawn`): on iOS the
+        // Tauri `setup()` closure runs inside the app-delegate's
+        // `did_finish_launching` with no ambient Tokio runtime on that
+        // thread, so `tokio::spawn` panics ("no reactor running") — and
+        // across the ObjC FFI boundary that aborts the process instead of
+        // unwinding. Tauri's runtime handle works from any context.
+        tauri::async_runtime::spawn(async move {
             let mut last: Option<ConnState> = None;
             loop {
                 let (state, retry) = classify(&client).await;

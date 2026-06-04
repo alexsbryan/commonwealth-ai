@@ -3,8 +3,13 @@
 // chat.machine consumes mobile streams unchanged.
 
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { ChatEvent } from "./machines/chat.machine";
 
-type Send = (event: Record<string, unknown>) => void;
+// The shared chat FSM's send only accepts its own event union, so typing
+// this as the looser `Record<string, unknown>` made the machine's `send`
+// un-assignable here (function-param contravariance). Mirror the machine's
+// event type — this also type-checks the events we dispatch below.
+type Send = (event: ChatEvent) => void;
 
 interface ChunkPayload {
   conversation_id: string;
