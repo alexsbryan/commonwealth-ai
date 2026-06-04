@@ -167,7 +167,7 @@ fn project_citations(meta: &Value) -> Vec<Citation> {
 fn project_citation(c: &Value, rank: usize) -> Option<Citation> {
     // Corpus-grounded only: require both handle components, non-empty.
     let corpus_id = non_empty_str(c.get("corpus_id"))?;
-    let chunk_id = non_empty_str(c.get("chunk_id"))?;
+    let chunk_id = chunk_id_str(c.get("chunk_id"))?;
     let snippet = c
         .get("snippet")
         .and_then(Value::as_str)
@@ -190,6 +190,20 @@ fn non_empty_str(v: Option<&Value>) -> Option<String> {
     v.and_then(Value::as_str)
         .filter(|s| !s.is_empty())
         .map(str::to_string)
+}
+
+/// Coerce a `chunk_id` to its string handle. The runtime persists
+/// `retrieved_chunks[].chunk_id` as a **numeric** chunk index (e.g.
+/// `1396570`), but a string handle (`"sep:free-will:3"`) is also valid.
+/// Accept either; reject only absent / null / empty-string. Without this
+/// every numeric-id chunk was dropped, so corpus-grounded answers surfaced
+/// `sources` but zero clickable `citations`.
+fn chunk_id_str(v: Option<&Value>) -> Option<String> {
+    match v? {
+        Value::String(s) if !s.is_empty() => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -295,5 +309,24 @@ mod tests {
         // rank preserves the original retrieved_chunks index (1), not the
         // post-filter position (0).
         assert_eq!(cites[0].rank, 1);
+    }
+
+    #[test]
+    fn numeric_chunk_id_is_a_valid_citation() {
+        // The runtime persists chunk_id as a numeric chunk index, not a
+        // string — a corpus-grounded answer must still produce citations.
+        let meta = json!({
+            "provenance": { "inference_backend": "local" },
+            "retrieved_chunks": [
+                {"title": "Free Will", "corpus_id": "wikipedia",
+                 "snippet": "Compatibilism holds...", "score": 0.91,
+                 "chunk_id": 1396570}
+            ]
+        });
+        let (_, cites) = project_message_metadata(&Some(meta));
+        assert_eq!(cites.len(), 1, "numeric chunk_id must not be dropped");
+        assert_eq!(cites[0].corpus_id, "wikipedia");
+        assert_eq!(cites[0].chunk_id, "1396570");
+        assert!(cites[0].snippet.starts_with("Compatibilism"));
     }
 }
