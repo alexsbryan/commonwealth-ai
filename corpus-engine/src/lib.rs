@@ -113,7 +113,7 @@ pub use progress::{
 pub use recipe::{
     Comparison, DisplayMeta, DocFormat, EnrichmentConfig, EntityTypeDecl, FollowConfig, HttpMethod,
     PaginationStrategy, ParameterKind, ParameterSpec, ParameterValue, PatternDecl, PrebuiltConfig,
-    Recipe, RelationshipTypeDecl, RequestTemplate, ResolvedParameters,
+    Recipe, RelationshipTypeDecl, RequestTemplate, ResolvedParameters, RetrievalConfig,
 };
 pub use registry::{RecipeRegistry, RegistryEntry, RegistryPrebuilt, RegistrySnapshot};
 pub use sharding::{

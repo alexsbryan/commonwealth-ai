@@ -1375,6 +1375,28 @@ impl Runtime {
             completion.text.clone()
         };
 
+        // Post-synthesis guardrail: demote any quoted span that isn't
+        // verbatim-present in the evidence we showed the model, so a
+        // composite / fabricated quotation can't reach the user framed
+        // as a real one. Runs after the gap check so it also covers a
+        // refined answer. Empty doc_context (parametric path) is a
+        // no-op — nothing to verify against. See
+        // `quote_verification::verify_answer_against_evidence`.
+        let final_content = {
+            let v = crate::quote_verification::verify_answer_against_evidence(
+                &final_content,
+                &plan.doc_context,
+            );
+            if v.demoted_count > 0 {
+                tracing::warn!(
+                    demoted = v.demoted_count,
+                    verified = v.verified_count,
+                    "knowledge_query: post-synthesis guardrail demoted unverified quotations"
+                );
+            }
+            v.rewritten
+        };
+
         let (sources_for_prov, coverage_for_prov) = build_provenance_components(
             &plan.source_map,
             &std::collections::HashMap::new(),

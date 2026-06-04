@@ -233,6 +233,12 @@ pub struct Recipe {
     /// parse — see the back-compat policy at the top of this module.
     #[serde(default)]
     pub display: Option<DisplayMeta>,
+
+    /// Retrieval-time behaviour hints (see [`RetrievalConfig`]). Unlike
+    /// `[display]`, the runtime *reads* this when retrieving from the
+    /// corpus. `#[serde(default)]` so recipes pre-dating the block parse.
+    #[serde(default)]
+    pub retrieval: RetrievalConfig,
 }
 
 /// Presentation hints for a recipe. See [`Recipe::display`].
@@ -255,6 +261,29 @@ pub struct DisplayMeta {
     /// its icon set and falls back to a generic glyph for unknown
     /// values.
     pub icon: Option<String>,
+}
+
+/// Retrieval-time behaviour hints for a corpus. Unlike [`DisplayMeta`]
+/// (pure UI), these change how the runtime *retrieves* from this corpus.
+///
+/// `#[serde(default)]` on the struct + each field so a recipe omitting the
+/// `[retrieval]` table parses with baseline behaviour.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct RetrievalConfig {
+    /// When true, apply per-article source dedup to this corpus's
+    /// retrieval: after fusion, keep each source article's single best
+    /// chunk, then return the top-K *distinct* articles. Captures the
+    /// canonical-source lift for corpora with narrow authoritative
+    /// sources (SEP: +6 sources, 76%→85% on the eval bank, validated
+    /// 2026-06-04) without the operator-only `SOVEREIGN_RERANK_DEDUP_ONLY`
+    /// env var.
+    ///
+    /// Leave false for topical corpora (e.g. Wikipedia), where strict
+    /// one-chunk-per-article truncation *regresses* recall — there the
+    /// per-article tiebreak needs a cross-encoder, not blind dedup.
+    #[serde(default)]
+    pub dedup_by_source: bool,
 }
 
 /// Sidecar TOML table for [`Recipe::filter_mode`]. Splitting this from

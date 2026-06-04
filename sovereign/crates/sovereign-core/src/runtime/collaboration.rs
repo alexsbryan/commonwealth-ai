@@ -381,6 +381,24 @@ pub(crate) async fn run_post_stream_refinement(
         // Inference ran and produced new content. Persist the rewrite
         // and emit `message-refined` so the desktop swaps the bubble.
         RefinementOutcome::Refined(refined) => {
+            // Post-synthesis guardrail (refinement path): the gap-check
+            // rewrite is a fresh generation grounded in the same
+            // evidence, so re-verify its quotes before it overwrites the
+            // already-verified streamed answer. Without this, the guard
+            // would be silently defeated on exactly the turns the gap
+            // check fires. Empty evidence is a no-op.
+            let refined = {
+                let v = crate::quote_verification::verify_answer_against_evidence(&refined, evidence);
+                if v.demoted_count > 0 {
+                    tracing::warn!(
+                        demoted = v.demoted_count,
+                        verified = v.verified_count,
+                        message_id = %message_id,
+                        "post-stream refinement: guardrail demoted unverified quotations"
+                    );
+                }
+                v.rewritten
+            };
             let updated = Message {
                 id: message_id.to_string(),
                 conversation_id: conversation_id.to_string(),

@@ -1,1 +1,637 @@
-../../../sovereign-recipes/sep/eval/sep_questions.toml
+# SEP evaluation question bank — 21 questions calibrated for the Harvard
+# undergrad-philosophy-essay bar. Used by `sovereign eval run` to measure
+# retrieval quality before/after atlas enrichment. Drives `triage-candidates`
+# selection of which SEP articles to deeply enrich first.
+#
+# Schema (mirrors wikipedia/eval/wikipedia_questions.toml):
+#   - `id`               stable identifier; used in run-output filenames + diffs
+#   - `category`         eval-shape rollup: position_summary, argument_reconstruction,
+#                        concept_distinction, dialectical, comparative, contested
+#   - `subject`          subject-area tag (ethics, metaphysics, epistemology, mind,
+#                        language, logic, political, science, history, continental,
+#                        non_western, applied) — for breadth audit, not rollup
+#   - `question`         the literal question, written as an essay prompt
+#   - `expected_facts`   keyword-fuzzy substrings expected in retrieved chunks
+#                        or synthesized answer. Lean on named positions, named
+#                        thinkers, named arguments, technical distinctions.
+#   - `expected_sources` SEP article slugs (canonical, validated against parquet
+#                        catalog 2026-05-04). Match is case-insensitive and
+#                        underscore-folded by `corpus_engine::filters::normalize_title`.
+#   - `notes`            optional human commentary
+#
+# Designing for the bar:
+#   - Each question can't be answered with one paragraph from one article
+#   - References at least one specific thinker or named argument
+#   - Forces correct use of technical vocabulary so fact-scoring grades on it
+#   - Has a defensible dialectical answer — multiple legitimate positions
+#
+# Subject coverage (v1 = 21 questions):
+#   ethics: 2, metaphysics: 3, epistemology: 2, mind: 3, language: 2,
+#   logic: 1, political: 2, science: 1, history: 2, continental: 1,
+#   non_western: 1, applied: 1
+#
+# Category coverage (v1):
+#   argument_reconstruction: 6, comparative: 4, position_summary: 4,
+#   dialectical: 3, concept_distinction: 2, contested: 2
+
+[bank]
+name = "sep-core-v1.1"
+corpus = "sep"
+description = """
+21-question philosophy-undergrad-essay bank spanning ethics, metaphysics,
+epistemology, mind, language, logic, political philosophy, philosophy
+of science, history, continental, non-Western, and applied ethics. Each
+question is calibrated to the Harvard-PHIL-major-essay bar: requires
+at least one named distinction or argument moved between articles, uses
+technical vocabulary correctly, and has a defensible dialectical answer.
+
+v1 (2026-05-04): authored against the parquet's 1,770-slug catalog;
+every expected_source is verified to exist as a SEP entry. Drives the
+initial triage-candidates selection for SEP atlas enrichment.
+
+v1.1 (2026-05-04): five Bucket-A patches after baseline spot-check
+caught wrong/non-canonical slugs:
+  - kant_hume_causation: causation-metaphysics → kant-hume-causality
+    (specific entry literally named for the topic; was 0/3 sources)
+  - locke_reid_personal_identity: added locke-personal-identity +
+    reid-memory-identity (canonical specific entries)
+  - kripke_reference: natural-kinds → reference + descriptions
+    (the actual SEP entries on reference theory)
+  - godel_incompleteness: added the broader goedel entry
+  - trolley_doctrine_double_effect: added doing-allowing +
+    philippa-foot (canonical entries that retrieved cleanly)
+Total expected_sources: 60 → 67 (5 added, 1 removed via swap, 1 swap kept count).
+"""
+
+# Latency budgets are intentionally looser than the wikipedia bank because
+# SEP questions tend to require more synthesis-class routing (philosophy
+# arguments rarely answer in one chunk).
+[bank.latency_budget]
+default_p95_ms = 45000
+max_per_question_ms = 90000
+
+[bank.latency_budget.by_category.position_summary]
+p50_ms = 18000
+p95_ms = 30000
+
+[bank.latency_budget.by_category.argument_reconstruction]
+p50_ms = 25000
+p95_ms = 45000
+
+[bank.latency_budget.by_category.concept_distinction]
+p50_ms = 22000
+p95_ms = 35000
+
+[bank.latency_budget.by_category.dialectical]
+p50_ms = 28000
+p95_ms = 50000
+
+[bank.latency_budget.by_category.comparative]
+p50_ms = 28000
+p95_ms = 50000
+
+[bank.latency_budget.by_category.contested]
+p50_ms = 30000
+p95_ms = 55000
+
+# ─── Metaphysics ────────────────────────────────────────────────
+
+[[questions]]
+id = "argument_consequence_against_compatibilism"
+category = "argument_reconstruction"
+subject = "metaphysics"
+question = """
+Reconstruct van Inwagen's consequence argument and explain the strongest
+compatibilist response to it.
+"""
+expected_facts = [
+    "consequence argument",
+    "van Inwagen",
+    "no choice about",
+    "rule beta",
+    "compatibilism",
+    "Frankfurt",
+    "alternative possibilities",
+]
+expected_sources = [
+    "incompatibilism-arguments",
+    "compatibilism",
+    "freewill",
+]
+notes = "Canonical free-will-and-determinism prompt; rule-beta is the load-bearing inference."
+
+[[questions]]
+id = "concept_modality_necessary_aposteriori"
+category = "concept_distinction"
+subject = "metaphysics"
+question = """
+What is the distinction between epistemic and metaphysical possibility,
+and why does Kripke think there are necessary a posteriori truths like
+'water is H2O'?
+"""
+expected_facts = [
+    "rigid designator",
+    "necessary a posteriori",
+    "Kripke",
+    "metaphysical possibility",
+    "epistemic possibility",
+    "water is H2O",
+    "natural kind",
+]
+expected_sources = [
+    "rigid-designators",
+    "modality-varieties",
+    "natural-kinds",
+    "possible-worlds",
+]
+
+[[questions]]
+id = "comparative_locke_reid_personal_identity"
+category = "comparative"
+subject = "metaphysics"
+question = """
+Reconstruct Locke's memory criterion of personal identity and explain
+Reid's brave-officer objection. What does the objection show about the
+transitivity of identity?
+"""
+expected_facts = [
+    "memory criterion",
+    "Locke",
+    "Reid",
+    "brave officer",
+    "transitivity",
+    "personal identity",
+    "consciousness",
+]
+expected_sources = [
+    "identity-personal",
+    "locke",
+    "reid",
+    "locke-personal-identity",
+    "reid-memory-identity",
+]
+
+# ─── Epistemology ───────────────────────────────────────────────
+
+[[questions]]
+id = "dialectical_gettier_lottery"
+category = "dialectical"
+subject = "epistemology"
+question = """
+How do reliabilist analyses of knowledge handle Gettier cases, and what
+does the lottery paradox suggest about whether reliability is enough?
+"""
+expected_facts = [
+    "Gettier",
+    "reliabilism",
+    "lottery paradox",
+    "justified true belief",
+    "process reliabilism",
+    "safety",
+    "sensitivity",
+]
+expected_sources = [
+    "knowledge-analysis",
+    "reliabilism",
+    "epistemic-paradoxes",
+]
+
+[[questions]]
+id = "argument_internalism_externalism_justification"
+category = "argument_reconstruction"
+subject = "epistemology"
+question = """
+Reconstruct the new evil demon problem and explain why it is taken as a
+serious challenge to externalist accounts of epistemic justification.
+"""
+expected_facts = [
+    "new evil demon",
+    "internalism",
+    "externalism",
+    "epistemic justification",
+    "reliabilism",
+    "mentalism",
+    "BonJour",
+]
+expected_sources = [
+    "epistemology",
+    "reliabilism",
+    "knowledge-analysis",
+]
+
+# ─── Mind ───────────────────────────────────────────────────────
+
+[[questions]]
+id = "concept_qualia_physicalism"
+category = "concept_distinction"
+subject = "mind"
+question = """
+What is the distinction between phenomenal and access consciousness, and
+why does it matter for the knowledge argument against physicalism?
+"""
+expected_facts = [
+    "Block",
+    "phenomenal consciousness",
+    "access consciousness",
+    "Mary's room",
+    "Jackson",
+    "what it is like",
+    "knowledge argument",
+]
+expected_sources = [
+    "consciousness",
+    "qualia-knowledge",
+    "physicalism",
+]
+
+[[questions]]
+id = "position_summary_hard_problem_illusionism"
+category = "position_summary"
+subject = "mind"
+question = """
+What is Chalmers's hard problem of consciousness, and how does
+illusionism propose to dissolve rather than solve it?
+"""
+expected_facts = [
+    "hard problem",
+    "Chalmers",
+    "illusionism",
+    "Frankish",
+    "phenomenal consciousness",
+    "explanatory gap",
+    "easy problems",
+]
+expected_sources = [
+    "consciousness",
+    "qualia-knowledge",
+    "physicalism",
+]
+
+[[questions]]
+id = "dialectical_content_narrow_wide_burge"
+category = "dialectical"
+subject = "mind"
+question = """
+Compare narrow and wide content, and explain how Burge's arthritis
+thought experiment is supposed to show that mental content is partly
+constituted by social and linguistic facts external to the individual.
+"""
+expected_facts = [
+    "narrow content",
+    "wide content",
+    "Burge",
+    "arthritis",
+    "content externalism",
+    "twin earth",
+    "individualism",
+]
+expected_sources = [
+    "content-narrow",
+    "content-externalism",
+    "intentionality",
+]
+
+# ─── Ethics ─────────────────────────────────────────────────────
+
+[[questions]]
+id = "contested_trolley_doctrine_double_effect"
+category = "contested"
+subject = "ethics"
+question = """
+What are the main positions on whether the doctrine of double effect can
+justify the asymmetry between the trolley and footbridge cases?
+"""
+expected_facts = [
+    "doctrine of double effect",
+    "trolley problem",
+    "footbridge",
+    "intended versus foreseen",
+    "Foot",
+    "Thomson",
+    "deontological",
+]
+expected_sources = [
+    "double-effect",
+    "doing-allowing",
+    "philippa-foot",
+    "ethics-deontological",
+    "consequentialism",
+]
+
+[[questions]]
+id = "position_summary_virtue_ethics_function"
+category = "position_summary"
+subject = "ethics"
+question = """
+Reconstruct Aristotle's function argument for virtue ethics in
+Nicomachean Ethics I, and explain MacIntyre's communitarian update of it
+in After Virtue.
+"""
+expected_facts = [
+    "function argument",
+    "ergon",
+    "eudaimonia",
+    "virtue",
+    "MacIntyre",
+    "After Virtue",
+    "practice",
+    "tradition",
+]
+expected_sources = [
+    "ethics-virtue",
+    "aristotle-ethics",
+    "communitarianism",
+]
+
+# ─── Language ───────────────────────────────────────────────────
+
+[[questions]]
+id = "position_summary_kripke_reference_causal_historical"
+category = "position_summary"
+subject = "language"
+question = """
+Reconstruct Kripke's causal-historical theory of reference and explain
+how it handles names whose initial baptism is uncertain or whose
+reference may shift over time.
+"""
+expected_facts = [
+    "causal-historical",
+    "Kripke",
+    "rigid designator",
+    "initial baptism",
+    "reference borrowing",
+    "qua-problem",
+    "descriptivism",
+]
+expected_sources = [
+    "rigid-designators",
+    "reference",
+    "descriptions",
+]
+
+[[questions]]
+id = "dialectical_putnam_twin_earth_meaning"
+category = "dialectical"
+subject = "language"
+question = """
+What is Putnam's twin earth thought experiment, and what does the
+slogan 'meanings just ain't in the head' commit one to about the
+location of mental content?
+"""
+expected_facts = [
+    "twin earth",
+    "Putnam",
+    "XYZ",
+    "water",
+    "meanings just ain't in the head",
+    "semantic externalism",
+    "wide content",
+]
+expected_sources = [
+    "content-externalism",
+    "natural-kinds",
+    "content-narrow",
+]
+
+# ─── Logic ──────────────────────────────────────────────────────
+
+[[questions]]
+id = "argument_godel_incompleteness"
+category = "argument_reconstruction"
+subject = "logic"
+question = """
+State Gödel's two incompleteness theorems and explain what philosophical
+lessons they have been taken to draw, separately, against logicism and
+against Hilbert's program.
+"""
+expected_facts = [
+    "first incompleteness",
+    "second incompleteness",
+    "Gödel",
+    "Hilbert's program",
+    "logicism",
+    "consistency",
+    "arithmetic",
+    "self-reference",
+]
+expected_sources = [
+    "goedel-incompleteness",
+    "goedel",
+    "hilbert-program",
+    "frege-hilbert",
+]
+
+# ─── Political ──────────────────────────────────────────────────
+
+[[questions]]
+id = "argument_rawls_original_position"
+category = "argument_reconstruction"
+subject = "political"
+question = """
+Reconstruct Rawls's original-position argument for the two principles of
+justice, and explain Nozick's entitlement-theory objection that the
+argument illegitimately privileges patterned over historical
+conceptions of justice.
+"""
+expected_facts = [
+    "original position",
+    "veil of ignorance",
+    "Rawls",
+    "two principles",
+    "difference principle",
+    "Nozick",
+    "entitlement theory",
+    "patterned",
+]
+expected_sources = [
+    "original-position",
+    "rawls",
+    "nozick-political",
+    "justice-distributive",
+]
+
+[[questions]]
+id = "comparative_berlin_liberty"
+category = "comparative"
+subject = "political"
+question = """
+Compare Berlin's negative and positive conceptions of liberty, and
+explain why Berlin thinks positive liberty is historically liable to
+authoritarian inversion.
+"""
+expected_facts = [
+    "negative liberty",
+    "positive liberty",
+    "Berlin",
+    "Two Concepts of Liberty",
+    "self-mastery",
+    "authoritarian",
+    "MacCallum",
+]
+expected_sources = [
+    "liberty-positive-negative",
+    "berlin",
+    "liberalism",
+]
+
+# ─── Science ────────────────────────────────────────────────────
+
+[[questions]]
+id = "contested_no_miracles_scientific_realism"
+category = "contested"
+subject = "science"
+question = """
+Reconstruct the no-miracles argument for scientific realism, and explain
+the pessimistic meta-induction response. Which other contemporary
+positions (constructive empiricism, structural realism) try to thread
+between them?
+"""
+expected_facts = [
+    "no miracles argument",
+    "Putnam",
+    "pessimistic meta-induction",
+    "Laudan",
+    "scientific realism",
+    "constructive empiricism",
+    "van Fraassen",
+    "structural realism",
+    "Worrall",
+]
+expected_sources = [
+    "scientific-realism",
+    "scientific-underdetermination",
+]
+
+# ─── History of philosophy ──────────────────────────────────────
+
+[[questions]]
+id = "comparative_kant_hume_causation"
+category = "comparative"
+subject = "history"
+question = """
+Compare Hume's and Kant's accounts of causation, and explain why Kant
+took Hume to have shown a problem that demanded a transcendental
+solution.
+"""
+expected_facts = [
+    "constant conjunction",
+    "necessary connection",
+    "transcendental",
+    "synthetic a priori",
+    "regularity theory",
+    "categories of understanding",
+    "Hume",
+    "Kant",
+]
+expected_sources = [
+    "hume",
+    "kant",
+    "kant-hume-causality",
+]
+
+[[questions]]
+id = "argument_aristotle_hylomorphism"
+category = "argument_reconstruction"
+subject = "history"
+question = """
+Reconstruct Aristotle's hylomorphic account of substance, and explain
+why some commentators read De Anima's account of the soul as
+non-reductive form-of-the-body and others as a kind of property
+dualism.
+"""
+expected_facts = [
+    "hylomorphism",
+    "form",
+    "matter",
+    "Aristotle",
+    "substance",
+    "De Anima",
+    "soul",
+    "actuality",
+]
+expected_sources = [
+    "aristotle-metaphysics",
+    "aristotle-psychology",
+    "form-matter",
+]
+
+# ─── Continental ────────────────────────────────────────────────
+
+[[questions]]
+id = "position_summary_husserl_heidegger"
+category = "position_summary"
+subject = "continental"
+question = """
+What is Husserl's transcendental reduction (the epoché), and how does
+Heidegger's analysis of being-in-the-world in Being and Time depart
+from the methodological commitments of Husserlian phenomenology?
+"""
+expected_facts = [
+    "epoché",
+    "transcendental reduction",
+    "Husserl",
+    "phenomenology",
+    "Heidegger",
+    "being-in-the-world",
+    "Dasein",
+    "ready-to-hand",
+]
+expected_sources = [
+    "husserl",
+    "heidegger",
+]
+
+# ─── Non-Western ────────────────────────────────────────────────
+
+[[questions]]
+id = "comparative_mencius_xunzi_human_nature"
+category = "comparative"
+subject = "non_western"
+question = """
+Compare Mencius's and Xunzi's accounts of human nature (xing), and
+explain how their different starting points lead to different views on
+the role of ritual (li) in moral cultivation.
+"""
+expected_facts = [
+    "Mencius",
+    "Xunzi",
+    "human nature",
+    "xing",
+    "ritual",
+    "li",
+    "four sprouts",
+    "moral cultivation",
+    "Confucian",
+]
+expected_sources = [
+    "mencius",
+    "xunzi",
+]
+
+# ─── Applied ────────────────────────────────────────────────────
+
+[[questions]]
+id = "contested_bioethics_principlism"
+category = "contested"
+subject = "applied"
+question = """
+What are the four principles of biomedical ethics in the Beauchamp-
+Childress framework, and what are the main lines of objection
+(particularist, virtue-ethical, casuist) to principlism as a
+methodology in bioethics?
+"""
+expected_facts = [
+    "autonomy",
+    "beneficence",
+    "non-maleficence",
+    "justice",
+    "Beauchamp",
+    "Childress",
+    "principlism",
+    "casuistry",
+    "particularism",
+]
+expected_sources = [
+    "theory-bioethics",
+    "feminist-bioethics",
+]

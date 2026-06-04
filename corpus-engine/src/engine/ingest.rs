@@ -694,6 +694,21 @@ impl CorpusEngine {
             }
         }
 
+        // Stamp the `[retrieval] dedup_by_source` flag so the runtime can
+        // apply per-article source dedup to this corpus without an env var
+        // or re-resolving the recipe. Stamped unconditionally (like the
+        // mutable-merge policy below) so every fresh index carries an
+        // explicit value. Non-fatal — retrieval falls back to no dedup.
+        if let Err(e) = index.set_dedup_by_source(recipe.retrieval.dedup_by_source) {
+            tracing::warn!(
+                corpus = %recipe.corpus.id,
+                path = %index_path.display(),
+                error = %e,
+                "ingest_inner: failed to stamp [retrieval] dedup_by_source — \
+                 retrieval falls back to no dedup for this corpus"
+            );
+        }
+
         // Stamp the mutable-merge policy from the recipe so future
         // merges of this index against peer partitions take the
         // chosen reconciliation rule. None preserves classic

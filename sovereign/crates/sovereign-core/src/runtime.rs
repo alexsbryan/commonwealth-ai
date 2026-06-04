@@ -1999,6 +1999,30 @@ impl Runtime {
                     }
                 }
 
+                // Post-synthesis guardrail: demote any quoted span that
+                // isn't verbatim-present in the evidence shown to the
+                // model before it's persisted, so the stored record (and
+                // any reload of this bubble) can't present a composite /
+                // fabricated quotation as verbatim. The live token stream
+                // already went out unmodified — this hardens the durable
+                // copy; the refinement path (collaboration.rs) re-verifies
+                // any gap-check rewrite. Empty doc_context (parametric
+                // path) is a no-op.
+                let full_text = {
+                    let v = crate::quote_verification::verify_answer_against_evidence(
+                        &full_text,
+                        &doc_context,
+                    );
+                    if v.demoted_count > 0 {
+                        tracing::warn!(
+                            demoted = v.demoted_count,
+                            verified = v.verified_count,
+                            "kq-stream: post-synthesis guardrail demoted unverified quotations"
+                        );
+                    }
+                    v.rewritten
+                };
+
                 // Persist final assistant message with full KQ metadata
                 // so the UI citation expander and provenance header
                 // have everything they had on the non-streaming path.
@@ -2612,6 +2636,26 @@ impl Runtime {
                 // dots; chat ignores the field.
                 "recalled_memories": recalled_memories_for_metadata,
             });
+            // Post-synthesis guardrail (DeepQuery / reasoning stream):
+            // same contract as the KnowledgeQuery stream — demote any
+            // quoted span not verbatim-present in the evidence before
+            // it's persisted. Empty evidence (pure-reasoning, no
+            // retrieval) is a no-op. The refinement path
+            // (collaboration.rs) re-verifies any gap-check rewrite.
+            let full_text = {
+                let v = crate::quote_verification::verify_answer_against_evidence(
+                    &full_text,
+                    &evidence,
+                );
+                if v.demoted_count > 0 {
+                    tracing::warn!(
+                        demoted = v.demoted_count,
+                        verified = v.verified_count,
+                        "deep-stream: post-synthesis guardrail demoted unverified quotations"
+                    );
+                }
+                v.rewritten
+            };
             let assistant_msg = Message {
                 id: message_id_owned.clone(),
                 conversation_id: conversation_id_owned.clone(),

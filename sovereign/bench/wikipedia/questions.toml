@@ -1,1 +1,479 @@
-../../../sovereign-recipes/wikipedia/eval/wikipedia_questions.toml
+# Wikipedia evaluation question bank — 20 challenging questions across
+# six categories. Used by `sovereign eval run` to measure retrieval and
+# (optionally) synthesis quality before/after enrichment changes.
+#
+# Schema (see `sovereign-cli/src/eval_cmd/bank.rs`):
+#   - `id`               stable identifier; used in run-output filenames + diffs
+#   - `category`         slice key for category-level rollups
+#   - `question`         the literal question we ask
+#   - `expected_facts`   substantive facts that should appear in retrieved
+#                        chunks (or, with --synth, in the synthesised answer).
+#                        Scoring is keyword-fuzzy — keep facts terse and
+#                        keyword-rich (proper nouns + dates + numbers).
+#   - `expected_sources` canonical Wikipedia article titles that should rank
+#                        in top-K retrieval. Match is case-insensitive and
+#                        underscore-folded by `corpus_engine::filters::normalize_title`.
+#   - `notes`            optional commentary for humans tuning the bank.
+#
+# Designing for breadth + difficulty:
+#   - Factual recall    — well-covered single article (3)
+#   - Multi-article synthesis — answer requires combining info across articles (4)
+#   - Causal / historical — "why did X lead to Y" (3)
+#   - Comparative       — comparing two figures / theories (3)
+#   - Boundary / coverage — probes edges of Vital Articles L5 (3)
+#   - Contested / atlas-relevant — multiple perspectives, fault-line territory (4)
+
+[bank]
+name = "wikipedia-core-v2"
+corpus = "wikipedia"
+description = """
+20-question bank focused on WWII, foundational physics, and contested 20th-century topics.
+
+v2 (2026-04-29): Pruned every `expected_source` that wasn't on the bundled
+vital_articles_l5 list — those titles were unreachable by definition (the recipe
+filter excludes them at ingest), and their presence put a hard ~73% ceiling on
+sources-matched even with a perfect retrieval pipeline. The questions are
+unchanged; expected_sources now lists only articles the corpus *can* contain.
+After this prune the achievable ceiling is 100%, so deviations from 100% are
+real signal.
+"""
+
+# Latency budgets calibrated for Strix Halo (Vulkan) + gemma-4-E4B-it
+# Q4_K_M as the chat model. Targets are the *p95 wall time* per category;
+# rows over budget are flagged in the rollup but don't fail scoring.
+#
+# Calibration sources:
+#   - gemma-4-E4B Q4_K_M throughput on Strix Halo Vulkan: ~30-60 tok/s
+#   - Typical answer length: 200-500 tokens
+#   - Routing classifier (Fast slot): ~1s
+#   - Hybrid retrieval over 1.85M chunks: ~300-500ms
+#   - Prompt eval at 8000 chars / 2k tokens: ~1-2s
+#
+# Categories that route via KnowledgeQuery (factual_recall +
+# boundary_coverage) take the FastFocused path with no thinking budget,
+# capped at 600 output tokens. Synthesis-class queries (multi_article,
+# causal, comparative, contested) route via DeepQuery / PrimarySynthesis
+# with full thinking and the configured max_tokens.
+[bank.latency_budget]
+default_p95_ms = 30000
+max_per_question_ms = 60000
+
+[bank.latency_budget.by_category.factual_recall]
+p50_ms = 8000
+p95_ms = 15000
+
+[bank.latency_budget.by_category.boundary_coverage]
+p50_ms = 10000
+p95_ms = 18000
+
+[bank.latency_budget.by_category.multi_article_synthesis]
+p50_ms = 22000
+p95_ms = 35000
+
+[bank.latency_budget.by_category.causal_reasoning]
+p50_ms = 22000
+p95_ms = 35000
+
+[bank.latency_budget.by_category.comparative]
+p50_ms = 25000
+p95_ms = 40000
+
+[bank.latency_budget.by_category.contested]
+p50_ms = 25000
+p95_ms = 40000
+
+# ─── Factual recall ─────────────────────────────────────────────
+
+[[questions]]
+id = "factual_einstein_1905"
+category = "factual_recall"
+question = "What were Einstein's four 1905 'Annus Mirabilis' papers about?"
+expected_facts = [
+    "photoelectric effect",
+    "Brownian motion",
+    "special relativity",
+    "mass-energy equivalence",
+    "1905",
+]
+expected_sources = [
+    "Albert Einstein",
+]
+
+[[questions]]
+id = "factual_yalta_leaders"
+category = "factual_recall"
+question = "Who were the three Allied leaders at the Yalta Conference?"
+expected_facts = [
+    "Franklin D. Roosevelt",
+    "Winston Churchill",
+    "Joseph Stalin",
+    "February 1945",
+]
+expected_sources = [
+    "Yalta Conference",
+]
+
+[[questions]]
+id = "factual_special_vs_general_relativity"
+category = "factual_recall"
+# Two-entity contrast shape; routes to ComparisonQuery (fast slot,
+# bounded contrast) rather than KnowledgeQuery default for the
+# factual_recall category. Override required because the bank
+# category was set before the comparison split landed.
+expected_intent = "comparison_query"
+question = "What is the core difference between special relativity and general relativity?"
+expected_facts = [
+    "inertial frames",
+    "accelerated frames",
+    "gravity",
+    "spacetime curvature",
+    "1905",
+    "1915",
+]
+expected_sources = [
+    "Special relativity",
+    "General relativity",
+]
+
+# ─── Multi-article synthesis ────────────────────────────────────
+
+[[questions]]
+id = "synth_manhattan_emigre_physicists"
+category = "multi_article_synthesis"
+question = "How did the Manhattan Project draw on European physicists who fled Nazi Germany?"
+expected_facts = [
+    "Albert Einstein",
+    "Leo Szilard",
+    "Edward Teller",
+    "Enrico Fermi",
+    "Einstein-Szilard letter",
+    "Los Alamos",
+]
+expected_sources = [
+    "Manhattan Project",
+    "Albert Einstein",
+    "Leo Szilard",
+    "Enrico Fermi",
+]
+
+[[questions]]
+id = "synth_einstein_bohr_debate"
+category = "multi_article_synthesis"
+question = "What were the central scientific disagreements between Einstein and Bohr about quantum mechanics?"
+expected_facts = [
+    "Copenhagen interpretation",
+    "EPR paradox",
+    "hidden variables",
+    "Solvay Conference",
+    "God does not play dice",
+    "complementarity",
+]
+expected_sources = [
+    "Albert Einstein",
+    "Niels Bohr",
+    "Copenhagen interpretation",
+]
+
+[[questions]]
+id = "synth_industrial_revolution_origins"
+category = "multi_article_synthesis"
+question = "What conditions in 18th-century Britain enabled the Industrial Revolution to begin there first?"
+expected_facts = [
+    "coal",
+    "iron",
+    "steam engine",
+    "James Watt",
+    "enclosure",
+    "agricultural",
+    "colonial",
+    "textile",
+]
+expected_sources = [
+    "Industrial Revolution",
+    "James Watt",
+    "Steam engine",
+    "Enclosure",
+]
+notes = "Multi-article synthesis across economic-history articles; tests breadth beyond physics/WWII."
+
+[[questions]]
+id = "synth_evolution_natural_selection"
+category = "multi_article_synthesis"
+question = "How does Darwin's theory of natural selection account for the diversity of species?"
+expected_facts = [
+    "Charles Darwin",
+    "natural selection",
+    "variation",
+    "heritable",
+    "On the Origin of Species",
+    "speciation",
+    "adaptation",
+]
+expected_sources = [
+    "Charles Darwin",
+    "Natural selection",
+    "On the Origin of Species",
+    "Evolution",
+]
+notes = "Biology synthesis; canonical articles overlap heavily so retrieval should land within-domain."
+
+# ─── Causal / historical reasoning ──────────────────────────────
+
+[[questions]]
+id = "causal_roman_empire_fall"
+category = "causal_reasoning"
+question = "What caused the fall of the Western Roman Empire?"
+expected_facts = [
+    "barbarian",
+    "invasions",
+    "476",
+    "economic",
+    "Christianity",
+    "military",
+    "political",
+    "Migration Period",
+]
+expected_sources = [
+    "Fall of the Western Roman Empire",
+    "Roman Empire",
+    "Migration Period",
+]
+notes = "Ancient-history causal reasoning; tests retrieval breadth beyond modern conflicts."
+
+[[questions]]
+id = "causal_french_revolution"
+category = "causal_reasoning"
+question = "What were the main causes of the French Revolution?"
+expected_facts = [
+    "financial",
+    "American Revolution",
+    "Enlightenment",
+    "1789",
+    "feudal",
+    "third estate",
+    "Louis XVI",
+    "Bastille",
+]
+expected_sources = [
+    "French Revolution",
+    "Storming of the Bastille",
+]
+notes = "Modern-history causal reasoning; canonical article is large so chunks should cluster."
+
+[[questions]]
+id = "causal_great_depression_to_fascism"
+category = "causal_reasoning"
+question = "How did the Great Depression contribute to the rise of fascism in Europe?"
+expected_facts = [
+    "mass unemployment",
+    "Weimar Republic",
+    "Adolf Hitler",
+    "Benito Mussolini",
+    "1929",
+    "loss of faith in liberal democracy",
+]
+expected_sources = [
+    "Great Depression",
+    "Fascism",
+    "Weimar Republic",
+    "Adolf Hitler",
+]
+
+# ─── Comparative ────────────────────────────────────────────────
+
+[[questions]]
+id = "compare_buddhism_christianity"
+category = "comparative"
+question = "How do Buddhism and Christianity differ in their conceptions of salvation and the afterlife?"
+expected_facts = [
+    "nirvana",
+    "salvation",
+    "rebirth",
+    "Jesus",
+    "heaven",
+    "Buddha",
+    "enlightenment",
+    "grace",
+]
+expected_sources = [
+    "Buddhism",
+    "Christianity",
+    "Salvation",
+    "Nirvana",
+]
+notes = "Cross-religion comparison; tests retrieval across religious-studies articles, a domain entirely absent from the original WWII/physics-heavy bank."
+
+[[questions]]
+id = "compare_einstein_newton_gravity"
+category = "comparative"
+question = "How do Einstein's and Newton's conceptions of gravity differ?"
+expected_facts = [
+    "action at a distance",
+    "spacetime curvature",
+    "inverse-square law",
+    "geodesic",
+    "equivalence principle",
+    "Mercury perihelion",
+]
+expected_sources = [
+    "Isaac Newton",
+    "Albert Einstein",
+    "General relativity",
+    "Newton's law of universal gravitation",
+]
+
+[[questions]]
+id = "compare_curie_meitner"
+category = "comparative"
+question = "Compare the scientific contributions of Marie Curie and Lise Meitner."
+expected_facts = [
+    "radioactivity",
+    "polonium",
+    "radium",
+    "nuclear fission",
+    "Otto Hahn",
+    "Nobel Prize",
+]
+expected_sources = [
+    "Marie Curie",
+    "Lise Meitner",
+    "Otto Hahn",
+]
+
+# ─── Boundary / coverage ────────────────────────────────────────
+
+[[questions]]
+id = "boundary_ada_lovelace"
+category = "boundary_coverage"
+question = "What was Ada Lovelace's contribution to computing, and how did it relate to Babbage's Analytical Engine?"
+expected_facts = [
+    "Analytical Engine",
+    "Charles Babbage",
+    "algorithm",
+    "1843",
+    "Bernoulli numbers",
+    "first computer programmer",
+    "notes",
+]
+expected_sources = [
+    "Ada Lovelace",
+    "Analytical Engine",
+    "Charles Babbage",
+]
+notes = "History of computing; tests boundary retrieval on a 19th-century biographical pair where both Lovelace and Babbage articles exist on L5."
+
+[[questions]]
+id = "boundary_emmy_noether"
+category = "boundary_coverage"
+question = "Who was Emmy Noether and what is the significance of Noether's theorem?"
+expected_facts = [
+    "abstract algebra",
+    "ring theory",
+    "symmetry",
+    "conservation laws",
+    "Göttingen",
+    "1918",
+]
+expected_sources = [
+    "Emmy Noether",
+    "Noether's theorem",
+]
+notes = "Edge case — Noether is in Vital Articles L5 but mathematicians of her era are sparsely represented; tests how far the recall extends beyond highest-traffic subjects."
+
+[[questions]]
+id = "boundary_copenhagen_interpretation"
+category = "boundary_coverage"
+question = "What is the Copenhagen interpretation of quantum mechanics?"
+expected_facts = [
+    "wavefunction collapse",
+    "complementarity",
+    "Niels Bohr",
+    "Werner Heisenberg",
+    "measurement",
+    "no underlying reality independent of observation",
+]
+expected_sources = [
+    "Copenhagen interpretation",
+    "Niels Bohr",
+    "Werner Heisenberg",
+]
+
+# ─── Contested / atlas-relevant ─────────────────────────────────
+
+[[questions]]
+id = "contested_atomic_bombings_morality"
+category = "contested"
+question = "What are the major arguments for and against the morality of the atomic bombings of Hiroshima and Nagasaki?"
+expected_facts = [
+    "ended the war sooner",
+    "saved lives by avoiding invasion",
+    "civilian casualties",
+    "alternatives existed",
+    "demonstration",
+    "Soviet entry",
+]
+expected_sources = [
+    "Atomic bombings of Hiroshima and Nagasaki",
+]
+notes = "Atlas fault-line territory — should surface multiple positions, ideally with Wikipedia POV-flagged sections."
+
+[[questions]]
+id = "contested_colonialism_legacy"
+category = "contested"
+question = "How is the legacy of European colonialism in Africa contested today?"
+expected_facts = [
+    "Scramble for Africa",
+    "extraction",
+    "borders",
+    "slavery",
+    "decolonization",
+    "underdevelopment",
+    "exploitation",
+]
+expected_sources = [
+    "Colonialism",
+    "Scramble for Africa",
+    "Decolonization",
+]
+notes = "Atlas fault-line in postcolonial history; tests whether retrieval surfaces multiple positions on a non-WWII contested topic."
+
+[[questions]]
+id = "contested_globalization_effects"
+category = "contested"
+question = "What are the major arguments for and against globalization's economic effects?"
+expected_facts = [
+    "free trade",
+    "inequality",
+    "development",
+    "poverty",
+    "labor",
+    "competition",
+    "growth",
+    "outsourcing",
+]
+expected_sources = [
+    "Globalization",
+    "Free trade",
+    "Capitalism",
+]
+notes = "Economic-policy fault-line; canonical articles surface multiple positions on benefits vs. costs."
+
+[[questions]]
+id = "contested_quantum_determinism"
+category = "contested"
+question = "How did Heisenberg's uncertainty principle reshape philosophical debate about determinism?"
+expected_facts = [
+    "indeterminism",
+    "Laplace's demon",
+    "hidden variables",
+    "Bohr",
+    "Einstein",
+    "free will",
+]
+expected_sources = [
+    "Uncertainty principle",
+    "Determinism",
+    "Werner Heisenberg",
+    "Hidden-variable theory",
+]
+notes = "Bridges physics → philosophy → free will; tests cross-domain retrieval and whether atlas Question/Position atoms surface."

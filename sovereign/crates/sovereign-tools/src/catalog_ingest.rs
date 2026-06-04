@@ -883,6 +883,7 @@ mod tests {
             parameters: Default::default(),
             resolved_parameters: Default::default(),
             display: None,
+            retrieval: Default::default(),
         }
     }
 

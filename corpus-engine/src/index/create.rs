@@ -200,6 +200,9 @@ impl CorpusIndex {
             embedding_dimensions: embedding_dim,
             mesh_sharing,
             query_sharing,
+            // Stamped post-create from the recipe via `set_dedup_by_source`
+            // (mirrors `set_display`); `None` here = baseline at creation.
+            dedup_by_source: None,
             license: license.to_string(),
             created_at: now,
             last_updated: now,
