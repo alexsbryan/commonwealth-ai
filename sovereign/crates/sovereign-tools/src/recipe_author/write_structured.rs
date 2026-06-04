@@ -196,8 +196,13 @@ impl Tool for RecipeWriteStructuredTool {
             return Err(Error::InvalidInput("`recipe` must be a JSON object".into()));
         }
 
-        // 1. JSON → TOML (rejects nulls + bad numbers, with paths).
-        let toml_value = json_to_toml(recipe)
+        // 1. JSON → TOML. First repair the two structured-output
+        //    artifacts the 35B reliably emits (stray `key": ` escapes,
+        //    null-valued optional keys) so a well-formed recipe survives
+        //    instead of forcing the agent into a raw-recipe_write
+        //    fallback; the on-disk validator then catches anything real.
+        let sanitized = super::json_to_toml::sanitize_for_toml(recipe);
+        let toml_value = json_to_toml(&sanitized)
             .map_err(|e| Error::InvalidInput(format!("recipe → TOML conversion failed: {e}")))?;
         let toml_text = toml_value_to_string(&toml_value)
             .map_err(|e| Error::InvalidInput(format!("TOML serialization failed: {e}")))?;
@@ -447,33 +452,84 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn null_in_recipe_is_rejected_with_path() {
+    async fn null_optional_key_is_dropped_not_fatal() {
+        // F1: a null-valued optional key (the 35B's `attribute: null` /
+        // `max_pages: null` artifact) is now SANITIZED (dropped) before
+        // conversion rather than hard-failing — the recipe writes and the
+        // on-disk validator handles the rest, so the agent never needs the
+        // raw-recipe_write fallback.
         let home = tempfile::tempdir().unwrap();
         let root = make_root(home.path());
-        let tool = RecipeWriteStructuredTool::with_recipes_dir(root);
-        let err = tool
+        let tool = RecipeWriteStructuredTool::with_recipes_dir(root.clone());
+        let out = tool
             .execute(
                 &json!({
-                    "path": "bad",
+                    "path": "nulldrop",
                     "recipe": {
-                        "corpus":  { "id": "bad", "name": "bad" },
+                        "corpus":  { "id": "nulldrop", "name": "nulldrop" },
                         "acquire": {
-                            "type": "http_api",
-                            "base_url": "https://example.com",
-                            "pagination": { "type": "offset", "max_pages": null }
+                            "type": "bulk_download",
+                            "url": "https://example.com/data.zip"
                         },
                         "extract": { "type": "html" },
-                        "chunk":   { "type": "paragraph" }
+                        "chunk":   { "type": "paragraph", "max_chars": null }
                     }
                 }),
                 &ctx(),
             )
             .await
-            .unwrap_err();
-        let msg = format!("{err}");
-        assert!(
-            msg.contains("/acquire/pagination/max_pages") && msg.contains("TOML has no null"),
-            "got: {msg}"
-        );
+            .expect("null optional key should be dropped, not error the tool");
+        let StepOutput::Json(_) = out else {
+            panic!("expected json output");
+        };
+        let body = std::fs::read_to_string(root.join("nulldrop/recipe.toml")).unwrap();
+        assert!(body.contains("[chunk]"));
+        assert!(!body.contains("max_chars"), "null max_chars dropped: {body}");
+    }
+
+    #[tokio::test]
+    async fn recovers_malformed_comparison_key_artifact() {
+        // F1: the recurring `comparison": ` escaped-quote key artifact is
+        // repaired to `comparison` so the threshold pattern survives
+        // recipe_write_structured (previously a hard conversion failure).
+        let home = tempfile::tempdir().unwrap();
+        let root = make_root(home.path());
+        let tool = RecipeWriteStructuredTool::with_recipes_dir(root.clone());
+        let mut threshold = serde_json::Map::new();
+        threshold.insert("type".into(), json!("threshold"));
+        threshold.insert("name".into(), json!("hotspots"));
+        threshold.insert("edge_type".into(), json!("occurred_near"));
+        threshold.insert("attribute".into(), json!("sighting_count"));
+        threshold.insert("threshold".into(), json!(3.0));
+        // The artifact: a key carrying a stray escaped quote + colon.
+        threshold.insert("comparison\": ".into(), json!("greater_than"));
+        let out = tool
+            .execute(
+                &json!({
+                    "path": "artifact",
+                    "recipe": {
+                        "corpus":  { "id": "artifact", "name": "artifact" },
+                        "acquire": { "type": "bulk_download", "url": "https://example.com/d.zip" },
+                        "extract": { "type": "jsonl", "content_field": "narrative" },
+                        "chunk":   { "type": "paragraph" },
+                        "enrichment": {
+                            "enabled": true,
+                            "type": "investigation",
+                            "entity_types": [{ "name": "installation" }],
+                            "relationship_types": [{ "name": "occurred_near" }],
+                            "patterns": [serde_json::Value::Object(threshold)]
+                        }
+                    }
+                }),
+                &ctx(),
+            )
+            .await
+            .expect("malformed comparison key should be repaired, not error");
+        let StepOutput::Json(_) = out else {
+            panic!("expected json output");
+        };
+        let body = std::fs::read_to_string(root.join("artifact/recipe.toml")).unwrap();
+        assert!(body.contains("comparison = \"greater_than\""), "recovered key: {body}");
+        assert!(!body.contains("comparison\\\""), "no escaped-quote key remains: {body}");
     }
 }

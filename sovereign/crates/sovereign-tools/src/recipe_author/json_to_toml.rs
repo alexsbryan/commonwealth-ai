@@ -106,6 +106,57 @@ fn convert(v: &serde_json::Value, path: &str) -> Result<toml::Value, ConvertErro
     }
 }
 
+/// Best-effort repair of the two structured-output artifacts the 35B
+/// reliably emits, applied BEFORE [`json_to_toml`] so a well-formed
+/// recipe survives `recipe_write_structured` instead of hard-failing the
+/// conversion (which forced agents into a raw-`recipe_write` fallback):
+///
+/// 1. **Stray escaped-quote key suffix** — the model emits a key like
+///    `comparison": ` (an unescaped `"` from the grammar). The real key
+///    is the identifier prefix; we cut at the first `"`/`\`/control char
+///    and trim a trailing `:`/whitespace, recovering `comparison`.
+/// 2. **Null-valued optional keys** — `attribute: null`. TOML has no
+///    null, so we DROP the key. If the field was actually required, the
+///    on-disk validator then reports a clean "missing field" the agent
+///    can fix — far better than an opaque conversion failure.
+///
+/// Recurses through objects and arrays. The [`convert`] guard stays as
+/// defense-in-depth: anything this misses is still rejected loudly.
+pub fn sanitize_for_toml(v: &serde_json::Value) -> serde_json::Value {
+    match v {
+        serde_json::Value::Object(map) => {
+            let mut out = serde_json::Map::new();
+            for (k, child) in map {
+                if child.is_null() {
+                    continue; // drop null-valued keys
+                }
+                let key = clean_key(k);
+                if key.is_empty() {
+                    continue;
+                }
+                // First clean occurrence wins (a recovered `comparison`
+                // shouldn't be clobbered by a later malformed dup).
+                out.entry(key).or_insert_with(|| sanitize_for_toml(child));
+            }
+            serde_json::Value::Object(out)
+        }
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.iter().map(sanitize_for_toml).collect())
+        }
+        other => other.clone(),
+    }
+}
+
+/// Recover the identifier prefix of a possibly-malformed key: cut at the
+/// first quote/backslash/control char, then trim trailing `:`/whitespace.
+fn clean_key(k: &str) -> String {
+    let cut = match k.find(|c| matches!(c, '"' | '\\' | '\n' | '\r' | '\t')) {
+        Some(i) => &k[..i],
+        None => k,
+    };
+    cut.trim().trim_end_matches(':').trim().to_string()
+}
+
 fn convert_number(n: &serde_json::Number, path: &str) -> Result<toml::Value, ConvertError> {
     if let Some(i) = n.as_i64() {
         return Ok(toml::Value::Integer(i));
@@ -164,6 +215,23 @@ fn type_name(v: &toml::Value) -> &'static str {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn sanitize_repairs_artifacts_then_converts() {
+        // The two 35B artifacts: a stray escaped-quote key + a null key.
+        let mut inner = serde_json::Map::new();
+        inner.insert("comparison\": ".to_string(), json!("greater_than"));
+        inner.insert("attribute".to_string(), serde_json::Value::Null);
+        inner.insert("threshold".to_string(), json!(3.0));
+        let v = serde_json::Value::Object(inner);
+        let cleaned = sanitize_for_toml(&v);
+        // Now it converts (no malformed-key/null rejection).
+        let t = json_to_toml(&cleaned).unwrap();
+        let s = toml_value_to_string(&t).unwrap();
+        assert!(s.contains("comparison = \"greater_than\""), "got: {s}");
+        assert!(!s.contains("attribute"), "null attribute dropped: {s}");
+        assert!(s.contains("threshold = 3.0"));
+    }
 
     #[test]
     fn rejects_malformed_key_with_embedded_quote() {

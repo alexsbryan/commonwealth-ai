@@ -237,5 +237,10 @@ required-features = ["treesitter"]
 name = "paddle_bakeoff"
 required-features = ["paddle-ocr"]
 
+# Headless PaddleOCR over per-case Blue Book page JPGs (UAP data-prep).
+[[example]]
+name = "ocr_images"
+required-features = ["paddle-ocr"]
+
 [lints]
 workspace = true
