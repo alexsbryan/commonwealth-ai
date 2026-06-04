@@ -1,0 +1,49 @@
+# UAP Blue Book — full-catalog metadata index (cold tail).
+# The breadth corpus: ALL ~10,750 digitized Blue Book cases as searchable
+# metadata (location / date / NARA handle). No OCR narrative, NO investigation
+# enrichment — 1-chunk records embed + index cheaply (ConvBucket::Tiny → no
+# RAPTOR/LLM). The deep typed graph lives in the sibling `uap-blue-book` (the
+# unidentified hero set). Distribution is the [prebuilt] HuggingFace download;
+# a local rebuild needs the dataprep pipeline (sovereign/bench/uap/dataprep)
+# to stage the metadata JSONL under corpora-staging.
+
+[corpus]
+id = "uap-blue-book-index"
+name = "UAP Blue Book — Full Catalog (metadata)"
+description = "All ~10,750 digitized Project Blue Book cases as searchable metadata (location / date / NARA fileUnit). Breadth companion to the uap-blue-book unidentified hero set."
+license = "public-domain"
+schema_version = 1
+parent_corpus_id = "uap-blue-book"
+mesh_sharing = false
+size_compressed_gb = 0.04
+size_indexed_gb = 0.05
+
+[acquire]
+type = "local_file"
+path = "~/.sovereign/corpora-staging/uap-blue-book-index"
+
+[extract]
+type = "jsonl"
+content_field = "content"
+title_field = "title"
+
+[chunk]
+type = "paragraph"
+
+[index]
+fts = true
+vector = true
+
+[display]
+category = "investigation"
+icon = "search"
+
+# Prebuilt cold-start: `sovereign corpus install uap-blue-book-index` restores
+# all 10,750 metadata records (FTS + vector, no graph) from HuggingFace in
+# seconds. Breadth companion to the enriched uap-blue-book hero install.
+# Snapshot built 2026-06-04.
+[prebuilt]
+hf_repo = "svrnmesh/uap-blue-book-index"
+hf_filename = "uap-blue-book-index-qwen-embedding-0.6b-2026-06-04.tar.zst"
+sha256 = "e65e19c4dd7614a741d3f1ede0fe9778f8a0f661ac7a67b9a4cc935821b49692"
+compatible_embedding_model = "qwen-embedding-0.6b"
