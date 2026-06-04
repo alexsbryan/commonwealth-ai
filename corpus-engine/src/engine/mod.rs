@@ -169,6 +169,18 @@ pub struct CorpusEngine {
     /// `primary_entities` per the Option-A path.
     chunk_entity_extractor: Option<crate::enrichment::tiered::ChunkEntityExtractorHandle>,
     expected_embedding_model: String,
+    /// Cache of opened read indexes, keyed by index path. The value pairs
+    /// the open `CorpusIndex` (cheap to clone — shared LanceDB handles)
+    /// with the mtime of the index's `chunks.lance/_versions` dir at open
+    /// time. Retrieval calls `open_index` per corpus per query; without a
+    /// cache each call re-`connect`s LanceDB and reloads the table (~5s
+    /// for the 1.9M-chunk wikipedia corpus). On a hit at the same on-disk
+    /// version we hand back a clone, skipping both the open and the
+    /// `info()` chunk-count/dir-size walk. The mtime key self-invalidates
+    /// on any write (a commit adds a new `_versions/<n>.manifest`), so a
+    /// re-indexed corpus is re-opened without threading invalidation
+    /// through every mutation path.
+    index_cache: std::sync::Mutex<HashMap<PathBuf, (std::time::SystemTime, CorpusIndex)>>,
     /// Display-formatted identifier for this node, used as the partition
     /// suffix when ingesting into `<corpus>-partition-<self_node_id>`.
     /// Callers (daemon startup, CLI) set this from the persistent node
@@ -318,6 +330,7 @@ impl CorpusEngine {
             // default and drifted from the real file stem
             // `"qwen-embedding-0.6b"` on every fresh install).
             expected_embedding_model: String::new(),
+            index_cache: std::sync::Mutex::new(HashMap::new()),
             self_node_id: DEFAULT_LOCAL_NODE_SUFFIX.to_string(),
             cancel_registry: CancellationRegistry::new(),
             custom_acquirers: Arc::new(RwLock::new(HashMap::new())),
@@ -1480,8 +1493,36 @@ impl CorpusEngine {
         report
     }
 
-    /// Open an index for search. Validates embedding model.
+    /// Open an index for search, caching the open handle. Validates the
+    /// embedding model on first open.
+    ///
+    /// Retrieval calls this once per corpus per query. Re-opening LanceDB
+    /// each time dominates chat latency on large corpora (the 1.9M-chunk
+    /// wikipedia index takes ~5s to `connect` + load). We cache the open
+    /// `CorpusIndex` keyed by path, validated against the LanceDB commit
+    /// marker mtime so any write transparently invalidates the entry.
     pub async fn open_index(&self, path: &Path) -> Result<CorpusIndex> {
+        // Cheap freshness key: the mtime of the table's `_versions` dir,
+        // which gains a new `<n>.manifest` on every committed write. `None`
+        // (unexpected layout) → skip the cache and always re-open.
+        let version_mtime = std::fs::metadata(path.join("chunks.lance").join("_versions"))
+            .and_then(|m| m.modified())
+            .ok();
+
+        // Fast path: a cached open at the same on-disk version. Hand back a
+        // clone (shared LanceDB handles) — no re-`connect`, no `info()`
+        // chunk-count/dir-size walk.
+        if let Some(mtime) = version_mtime {
+            if let Ok(cache) = self.index_cache.lock() {
+                if let Some((cached_mtime, index)) = cache.get(path) {
+                    if *cached_mtime == mtime {
+                        return Ok(index.clone());
+                    }
+                }
+            }
+        }
+
+        // Slow path: open, validate the embedding model, then cache.
         let index = CorpusIndex::open(path).await?;
         let info = index.info().await?;
 
@@ -1498,6 +1539,13 @@ impl CorpusEngine {
                 info.embedding_model,
                 self.expected_embedding_model,
             );
+        }
+
+        // Cache only when we have a freshness key to validate against.
+        if let Some(mtime) = version_mtime {
+            if let Ok(mut cache) = self.index_cache.lock() {
+                cache.insert(path.to_path_buf(), (mtime, index.clone()));
+            }
         }
 
         Ok(index)

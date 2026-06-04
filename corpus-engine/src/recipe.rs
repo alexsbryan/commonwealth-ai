@@ -525,6 +525,71 @@ pub struct EnrichmentConfig {
     /// extractors set this block to tune the merger.
     #[serde(default)]
     pub reconciliation: Option<ReconciliationToml>,
+
+    /// Corpus-specific entity-name coalescing rules for the investigation
+    /// pipeline. The engine supplies the *mechanism* (alias map, prefix /
+    /// suffix / qualifier stripping, identity-by-attribute); this block
+    /// supplies the *vocabulary*, so domain knowledge (US states, Air Force
+    /// base aliases, disposition categories) lives in the recipe as data
+    /// rather than hardcoded in the abstraction layer. `None` → names fold by
+    /// case/punctuation only (the engine default). Consumed by
+    /// [`crate::enrichment::investigation::normalize::Normalizer`].
+    #[serde(default)]
+    pub normalization: Option<NormalizationConfig>,
+}
+
+/// Data-driven entity-name normalization for the investigation pipeline.
+/// Every field is optional; an empty config folds names by case/punctuation
+/// only. See [`crate::enrichment::investigation::normalize::Normalizer`] for
+/// the mechanism that applies it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct NormalizationConfig {
+    /// `entity_type → attribute`: entities of this type take their identity
+    /// from the named attribute's value, not their (often noisy) name — e.g.
+    /// `adjudication = "category"` collapses date-/synthetic-id-named nodes
+    /// that share a disposition. Applied during the offline re-fold
+    /// (`recoalesce`), which remaps relationship endpoints so it can't strand
+    /// an edge; build-time coalescing stays name-based (endpoint-safe).
+    #[serde(default)]
+    pub identity_attribute: std::collections::BTreeMap<String, String>,
+
+    /// Name-fold rules, each scoped to the entity types it lists.
+    #[serde(default)]
+    pub fold: Vec<FoldRule>,
+}
+
+/// One scoped name-fold rule. Applied (in order) to the entity types in
+/// `types`: alias map on the full folded form, then drop a leading qualifier,
+/// then a trailing qualifier run, then the trailing-suffix run (OCR-tolerant),
+/// then re-check the alias map on the reduced base. Identity-grade — only
+/// qualifier/suffix regions are touched, base tokens are never fuzzy-matched,
+/// so two distinct bases never merge.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct FoldRule {
+    /// Entity types this rule applies to (e.g. `["installation"]`).
+    pub types: Vec<String>,
+
+    /// `(folded-variant, canonical)` acronym/alias pairs, exact-matched on the
+    /// folded surface form (e.g. `["wpafb", "wright patterson"]`).
+    #[serde(default)]
+    pub aliases: Vec<(String, String)>,
+
+    /// Leading qualifier phrases dropped when followed by a base
+    /// (e.g. `"air material command"`, `"atic"` → the org sat AT the base).
+    #[serde(default)]
+    pub leading_prefixes: Vec<String>,
+
+    /// Trailing qualifier tokens/phrases dropped before the suffix run
+    /// (e.g. US state names: `"ohio"`, `"new mexico"`). Multi-word entries
+    /// match a trailing token-pair.
+    #[serde(default)]
+    pub trailing_qualifiers: Vec<String>,
+
+    /// Single-token trailing suffix vocabulary, OCR-tolerant (edit-distance 1)
+    /// — `"air"`, `"force"`, `"base"`, `"afb"`, `"field"`, … A trailing run of
+    /// these (plus ≤2-char OCR fragments) is stripped to reach the base.
+    #[serde(default)]
+    pub trailing_suffixes: Vec<String>,
 }
 
 /// TOML mirror of
@@ -773,6 +838,7 @@ impl Default for EnrichmentConfig {
             relationship_types: Vec::new(),
             patterns: Vec::new(),
             reconciliation: None,
+            normalization: None,
         }
     }
 }

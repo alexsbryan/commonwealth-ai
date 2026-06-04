@@ -23,9 +23,12 @@
 
 use std::collections::BTreeMap;
 
+use std::path::Path;
+
 use corpus_engine::{
     enrichment::investigation::{
-        graph as investigation_graph, run_investigation, ChunkInput, INVESTIGATION_DIRNAME,
+        graph as investigation_graph, normalize::Normalizer, recoalesce, run_investigation,
+        ChunkInput, INVESTIGATION_DIRNAME,
     },
     CorpusIndex, RecipeRegistry,
 };
@@ -61,6 +64,7 @@ pub async fn cmd_investigation(args: &[String]) -> i32 {
         }
         "build" => cmd_build(&args[1..]).await,
         "show" => cmd_show(&args[1..]).await,
+        "recoalesce" => cmd_recoalesce(&args[1..]).await,
         other => {
             eprintln!("Unknown investigation subcommand: {other}");
             print_help();
@@ -74,8 +78,10 @@ fn print_help() {
         "Usage: sovereign enrich investigation <subcommand> <corpus_id> [args]\n\
          \n\
          Subcommands:\n\
-           build <id>   Run the investigation pipeline (extract → coalesce → detect)\n\
-           show <id>    Render findings persisted under the corpus's investigation/\n\
+           build <id>        Run the investigation pipeline (extract → coalesce → detect)\n\
+           show <id>         Render findings persisted under the corpus's investigation/\n\
+           recoalesce <id>   Re-fold the persisted graph under current rules \
+                             (no inference; backs up originals)\n\
          \n\
          build flags:\n\
            --params k=v[,...]      Recipe parameters (multi-supply with --params \
@@ -412,6 +418,115 @@ fn json_brief(v: &serde_json::Value) -> String {
         serde_json::Value::Bool(b) => b.to_string(),
         other => other.to_string(),
     }
+}
+
+// ---------------------------------------------------------------------------
+// recoalesce
+// ---------------------------------------------------------------------------
+
+/// Re-fold a persisted investigation graph under the *current* coalescing
+/// rules — no inference, no daemon. Reuses the (expensive) Phase-1 extraction
+/// and only re-runs the deterministic coalesce + aggregate + detect, so
+/// tightened fold rules (state-suffix stripping, adjudication-by-category)
+/// collapse straggler nodes that escaped the original pass. Idempotent. Backs
+/// up the originals to `*.orig` before overwriting (glassbox / reversible).
+async fn cmd_recoalesce(args: &[String]) -> i32 {
+    let Some(corpus_id) = args.first() else {
+        return arg_error(
+            "missing corpus id (e.g. `sovereign enrich investigation recoalesce uap-blue-book`)",
+        );
+    };
+    let index_dir = crate::util::dirs::sovereign_indexes().join(corpus_id);
+    let invest_dir = index_dir.join(INVESTIGATION_DIRNAME);
+    if !invest_dir.is_dir() {
+        eprintln!(
+            "error: no investigation outputs at {}.\n\
+             Run: sovereign enrich investigation build {corpus_id}",
+            invest_dir.display(),
+        );
+        return 1;
+    }
+
+    // Resolve the recipe for its pattern declarations (re-detect needs them).
+    let local_dir = RecipeRegistry::default_local_recipes_dir();
+    let mut registry = RecipeRegistry::from_bundled(local_dir.clone());
+    if let Some(d) = &local_dir {
+        registry = registry.with_local_registry(&d.join("registry.toml"));
+    }
+    let recipe = match registry.fetch_recipe(corpus_id).await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: failed to resolve recipe for `{corpus_id}`: {e}");
+            return 1;
+        }
+    };
+    let patterns = recipe
+        .enrichment
+        .as_ref()
+        .map(|e| e.patterns.clone())
+        .unwrap_or_default();
+
+    let (entities, relationships, _) = match investigation_graph::read_outputs(&index_dir) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("error: failed to read investigation outputs: {e}");
+            return 1;
+        }
+    };
+
+    if let Err(e) = backup_investigation_outputs(&invest_dir) {
+        eprintln!("error: failed to back up investigation outputs: {e}");
+        return 1;
+    }
+
+    // The recipe supplies the coalescing vocabulary; the Normalizer applies it.
+    let normalizer = Normalizer::from_recipe(&recipe);
+    let out = recoalesce::recoalesce_graph(&normalizer, entities, relationships, &patterns);
+
+    if let Err(e) = investigation_graph::write_outputs(
+        &index_dir,
+        &out.entities,
+        &out.relationships,
+        &out.findings,
+    ) {
+        eprintln!("error: failed to write recoalesced outputs: {e}");
+        return 1;
+    }
+
+    println!("Recoalesced `{corpus_id}`:");
+    println!(
+        "  Entities:         {} → {}  (merged {})",
+        out.entities_before,
+        out.entities_after,
+        out.entities_before.saturating_sub(out.entities_after),
+    );
+    println!(
+        "  Relationships:    {} → {}  (deduped/dropped {})",
+        out.relationships_before,
+        out.relationships_after,
+        out.relationships_before.saturating_sub(out.relationships_after),
+    );
+    println!("  Pattern findings: {}", out.findings.len());
+    println!();
+    println!(
+        "Originals preserved as *.orig under {}/. Re-run is idempotent.",
+        invest_dir.display(),
+    );
+    0
+}
+
+/// Copy the three graph files to `<name>.orig` before a recoalesce overwrites
+/// them — but only if no `.orig` already exists, so the FIRST re-fold
+/// preserves the true original and later (idempotent) runs don't clobber it.
+fn backup_investigation_outputs(invest_dir: &Path) -> std::io::Result<()> {
+    for f in ["entities.json", "relationships.json", "pattern_findings.json"] {
+        let src = invest_dir.join(f);
+        let dst = invest_dir.join(format!("{f}.orig"));
+        if src.exists() && !dst.exists() {
+            std::fs::copy(&src, &dst)?;
+        }
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

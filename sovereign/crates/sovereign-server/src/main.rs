@@ -241,9 +241,20 @@ async fn main() {
     let batch_embed_fn =
         sovereign_tools::corpus::inference_to_batch_embed_fn(Arc::clone(&inference));
     let inference_fn = sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference));
+    // Tell the engine which embedding model it's running, so its
+    // per-corpus model-mismatch check is meaningful (corpora are indexed
+    // with e.g. `qwen-embedding-0.6b`; an empty expected id warned on
+    // every open). Derived from the resolved embed model's file stem.
+    let embed_model_name = embed_model
+        .as_deref()
+        .and_then(|p| p.file_stem())
+        .and_then(|s| s.to_str())
+        .unwrap_or_default()
+        .to_string();
     let corpus_engine = Arc::new(
         corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir.clone(), embed_fn)
             .with_batch_embed_fn(batch_embed_fn)
+            .with_embedding_model(&embed_model_name)
             .with_inference_fn(inference_fn.clone()),
     );
 

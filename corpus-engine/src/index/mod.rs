@@ -192,6 +192,12 @@ impl DedupeReport {
 /// (`corpus_id` for identity, `embedding_dimensions` for vector ops); the
 /// rest is loaded on-demand via `info()`. This avoids stale-cache bugs when
 /// callers like `set_shard_meta()` mutate the metadata file.
+///
+/// `Clone` is cheap: `lancedb::Connection`/`Table` are `Arc`-backed
+/// handles, so a clone shares the same open dataset. This lets
+/// `CorpusEngine` cache opened indexes and hand out clones (see
+/// `open_index`) instead of re-opening LanceDB on every search.
+#[derive(Clone)]
 pub struct CorpusIndex {
     db: lancedb::Connection,
     table: lancedb::Table,

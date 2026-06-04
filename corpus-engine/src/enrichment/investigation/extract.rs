@@ -20,6 +20,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use super::normalize::Normalizer;
 use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::error::{Error, Result};
 use crate::recipe::{EntityTypeDecl, RelationshipTypeDecl};
@@ -366,18 +367,19 @@ fn preview(s: &str, n: usize) -> String {
 }
 
 /// Coalesce extracted entity mentions + relationship endpoints into
-/// canonical [`Entity`] records, keyed by a type-scoped, fold-normalized
-/// name (see [`coalesce_key`]). Surface-form variants of one entity
-/// (e.g. `"Wright-Patterson AFB"` / `"Wright-Patterson Air Force Base"` /
-/// `"Wright-Patterson"`) collapse into a single record; the longest
-/// surface form becomes `canonical_name`, the rest become `aliases`.
-/// Declared attributes from `entities[]` rows are merged onto the
-/// record (first-non-null wins). Relationship endpoints backfill any
-/// entity only mentioned in an edge.
+/// canonical [`Entity`] records, keyed by a type-scoped, fold-normalized name
+/// produced by the [`Normalizer`] (whose vocabulary comes from the recipe).
+/// Surface-form variants of one entity (e.g. `"Wright-Patterson AFB"` /
+/// `"Wright-Patterson Air Force Base"` / `"Wright-Patterson"`, when the recipe
+/// declares the facility fold) collapse into a single record; the longest
+/// surface form becomes `canonical_name`, the rest become `aliases`. Declared
+/// attributes from `entities[]` rows are merged onto the record (first-non-null
+/// wins). Relationship endpoints backfill any entity only mentioned in an edge.
 ///
-/// Entity rows are processed before relationship endpoints so the
-/// attribute merge sees the richest data first.
+/// Entity rows are processed before relationship endpoints so the attribute
+/// merge sees the richest data first.
 pub fn group_extracted_entities(
+    normalizer: &Normalizer,
     entities: &[(String /* chunk_id */, ExtractedEntity)],
     relationships: &[(String /* chunk_id */, ExtractedRelationship)],
 ) -> BTreeMap<String, super::graph::Entity> {
@@ -385,6 +387,7 @@ pub fn group_extracted_entities(
 
     for (_chunk_id, ent) in entities {
         upsert_entity(
+            normalizer,
             &mut by_key,
             &ent.entity_type,
             &ent.name,
@@ -392,8 +395,8 @@ pub fn group_extracted_entities(
         );
     }
     for (_chunk_id, rel) in relationships {
-        upsert_entity(&mut by_key, &rel.from_type, &rel.from_entity, None);
-        upsert_entity(&mut by_key, &rel.to_type, &rel.to_entity, None);
+        upsert_entity(normalizer, &mut by_key, &rel.from_type, &rel.from_entity, None);
+        upsert_entity(normalizer, &mut by_key, &rel.to_type, &rel.to_entity, None);
     }
     by_key
 }
@@ -403,14 +406,15 @@ pub fn group_extracted_entities(
 /// `aliases`, and merges any supplied attributes (first-non-null wins;
 /// never overwrites a present value with a later one).
 fn upsert_entity(
+    normalizer: &Normalizer,
     by_key: &mut BTreeMap<String, super::graph::Entity>,
     entity_type: &str,
     name: &str,
     attributes: Option<&serde_json::Map<String, serde_json::Value>>,
 ) {
-    let key = coalesce_key(entity_type, name);
+    let key = normalizer.coalesce_key(entity_type, name);
     let entry = by_key.entry(key).or_insert_with(|| super::graph::Entity {
-        id: entity_id_for(entity_type, name),
+        id: normalizer.entity_id(entity_type, name),
         canonical_name: name.to_string(),
         entity_type: entity_type.to_string(),
         attributes: Default::default(),
@@ -435,143 +439,6 @@ fn upsert_entity(
             entry.attributes.entry(k.clone()).or_insert_with(|| v.clone());
         }
     }
-}
-
-/// Type-scoped coalesce key: `"<type>|<normalized-name>"`. The type
-/// prefix guarantees different `entity_type`s never merge (so a
-/// `witness` named "radar operator" can't collapse into a
-/// `military_unit`). See [`normalize_entity_name`].
-fn coalesce_key(entity_type: &str, name: &str) -> String {
-    format!("{entity_type}|{}", normalize_entity_name(entity_type, name))
-}
-
-/// Pure per-name normalization shared by [`coalesce_key`] and
-/// [`entity_id_for`] — they MUST agree so relationship endpoints
-/// resolve to the same id the coalesced entity carries (no dangling
-/// edges). Folds case/punctuation via the reconciliation
-/// [`fold_name`](crate::enrichment::reconciliation::signals::fold_name)
-/// helper; for facility-shaped types additionally strips a trailing run
-/// of facility suffixes so `"X AFB"` / `"X Air Force Base"` / `"X"`
-/// collapse.
-///
-/// Scope note: lightweight, OCR-tolerant coalescing of the
-/// suffix-variant family + an explicit acronym/alias gazetteer. It folds
-/// `"X AFB"` / `"X Air Force Base"` / `"X"` and OCR-mangled suffix
-/// variants (`"X Aiforce Base"`, `"X Air ForceBase"`, `"X Air Force
-/// Basd"`, `"X A ir Force Base"`) to the same base, and maps known
-/// acronyms (`"WPAFB"`) via [`FACILITY_ALIASES`]. It deliberately does
-/// NOT fuzzy-match BASE tokens — only the trailing suffix region — so it
-/// never merges two distinct bases (`"Patterson Field"` stays apart from
-/// `"Wright-Patterson"`). Pure per-name function so [`coalesce_key`] and
-/// [`entity_id_for`] always agree.
-fn normalize_entity_name(entity_type: &str, name: &str) -> String {
-    let folded = crate::enrichment::reconciliation::signals::fold_name(name);
-    if !is_facility_type(entity_type) {
-        return folded;
-    }
-    // Acronym/alias gazetteer (identity-grade, exact match on the folded
-    // form) — extend as the corpus surfaces more bases.
-    if let Some((_, canon)) = FACILITY_ALIASES.iter().find(|(a, _)| *a == folded) {
-        return canon.to_string();
-    }
-    strip_facility_suffixes(&folded)
-}
-
-/// Facility-shaped entity types whose names get suffix-folded.
-fn is_facility_type(entity_type: &str) -> bool {
-    matches!(
-        entity_type.to_ascii_lowercase().as_str(),
-        "installation" | "investigating_body"
-    )
-}
-
-/// Known acronym/alias → canonical normalized base. Identity-grade exact
-/// match on the folded surface form; a base's acronym can't be derived
-/// safely per-name (it needs map-aware context that would break the
-/// id/coalesce-key agreement), so this is an explicit, extensible list.
-const FACILITY_ALIASES: &[(&str, &str)] = &[
-    ("wpafb", "wright patterson"),
-    ("wp afb", "wright patterson"),
-];
-
-/// Single-token facility-suffix vocabulary (incl. common OCR
-/// concatenations). A trailing token is stripped when it is one of these,
-/// is within edit-distance 1 of one (microfilm OCR noise: `aiforce`,
-/// `basd`), or is a 1–2 char fragment (`a`, `ir`, `b` from split words).
-const FACILITY_SUFFIX_WORDS: &[&str] = &[
-    "air", "airforce", "aiforce", "force", "forcebase", "airforcebase", "base",
-    "field", "station", "range", "naval", "missile", "facility", "center",
-    "afb", "nas", "naf", "af",
-];
-
-/// Strip the trailing facility-suffix run from an already-folded name,
-/// OCR-tolerant, keeping ≥1 base token. Only the trailing suffix region
-/// is touched — base tokens are never fuzzy-matched, so distinct bases
-/// never merge. `"wright patterson aiforce base"` → `"wright patterson"`;
-/// `"kirtland air force basd"` → `"kirtland"`.
-fn strip_facility_suffixes(folded: &str) -> String {
-    let mut toks: Vec<&str> = folded.split_whitespace().collect();
-    while toks.len() > 1 && is_suffix_noise(toks[toks.len() - 1]) {
-        toks.pop();
-    }
-    toks.join(" ")
-}
-
-/// True for a trailing token that's facility-suffix noise.
-fn is_suffix_noise(tok: &str) -> bool {
-    if tok.len() <= 2 {
-        return true; // OCR fragments: "a", "ir", "b", "af"
-    }
-    FACILITY_SUFFIX_WORDS
-        .iter()
-        .any(|w| *w == tok || edit_distance_le_1(tok, w))
-}
-
-/// Bounded Levenshtein: true iff edit distance between `a` and `b` is ≤ 1.
-/// Cheap early-outs on length; only used on short suffix tokens.
-fn edit_distance_le_1(a: &str, b: &str) -> bool {
-    let (a, b) = (a.as_bytes(), b.as_bytes());
-    let (la, lb) = (a.len(), b.len());
-    if la.abs_diff(lb) > 1 {
-        return false;
-    }
-    if la == lb {
-        // ≤1 substitution.
-        return a.iter().zip(b).filter(|(x, y)| x != y).count() <= 1;
-    }
-    // Lengths differ by 1: check one insertion/deletion (b is the longer).
-    let (short, long) = if la < lb { (a, b) } else { (b, a) };
-    let (mut i, mut j, mut diff) = (0usize, 0usize, 0u8);
-    while i < short.len() && j < long.len() {
-        if short[i] == long[j] {
-            i += 1;
-            j += 1;
-        } else {
-            diff += 1;
-            if diff > 1 {
-                return false;
-            }
-            j += 1; // skip one char in the longer string
-        }
-    }
-    true
-}
-
-/// Stable entity id: `e-<type>-<slug(normalized-name)>`. Routed through
-/// [`normalize_entity_name`] so it agrees with [`coalesce_key`] — two
-/// surface forms that coalesce produce the same id, and relationship
-/// endpoints built from raw surface forms (mod.rs) resolve to that same
-/// id. Stable across reruns.
-pub fn entity_id_for(ty: &str, name: &str) -> String {
-    let slug: String = normalize_entity_name(ty, name)
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect::<String>()
-        .split('-')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("-");
-    format!("e-{ty}-{slug}")
 }
 
 #[cfg(test)]
@@ -738,7 +605,7 @@ mod tests {
             // different case, same entity
             ("c2".to_string(), rel("Nvidia", "company", "Google", "company", "revenue")),
         ];
-        let grouped = group_extracted_entities(&[], &rels);
+        let grouped = group_extracted_entities(&Normalizer::default(), &[], &rels);
         // 3 unique entities: NVIDIA (canonical), Microsoft, Google
         assert_eq!(grouped.len(), 3);
         let nvidia = grouped
@@ -747,36 +614,24 @@ mod tests {
         assert!(nvidia.aliases.contains(&"Nvidia".to_string()));
     }
 
-    #[test]
-    fn coalesce_key_folds_facility_suffix_family() {
-        // The AFB / Air Force Base / bare suffix family collapses.
-        let a = coalesce_key("installation", "Wright-Patterson AFB");
-        let b = coalesce_key("installation", "Wright-Patterson Air Force Base");
-        let c = coalesce_key("installation", "Wright-Patterson");
-        let d = coalesce_key("installation", "Wright Patterson AFB");
-        assert_eq!(a, "installation|wright patterson");
-        assert_eq!(a, b);
-        assert_eq!(a, c);
-        assert_eq!(a, d);
-    }
-
-    #[test]
-    fn coalesce_key_keeps_distinct_bases_apart() {
-        let wpafb = coalesce_key("installation", "Wright-Patterson AFB");
-        let edwards = coalesce_key("installation", "Edwards AFB");
-        let maxwell = coalesce_key("installation", "Maxwell AFB");
-        assert_ne!(wpafb, edwards);
-        assert_ne!(edwards, maxwell);
-        assert_eq!(edwards, "installation|edwards");
-    }
-
-    #[test]
-    fn coalesce_key_is_type_scoped() {
-        // The same string under different types never merges — a
-        // witness named "radar operator" can't collapse into a unit.
-        let as_witness = coalesce_key("witness", "radar operator");
-        let as_unit = coalesce_key("installation", "radar operator");
-        assert_ne!(as_witness, as_unit);
+    /// A Normalizer with a facility fold rule, so the coalesce test exercises
+    /// the recipe-shaped folding. (The fold mechanism itself is unit-tested in
+    /// `normalize.rs`; here we only check coalescing wiring.)
+    fn facility_norm() -> Normalizer {
+        use crate::recipe::{FoldRule, NormalizationConfig};
+        Normalizer::new(NormalizationConfig {
+            identity_attribute: Default::default(),
+            fold: vec![FoldRule {
+                types: vec!["installation".into()],
+                aliases: vec![],
+                leading_prefixes: vec![],
+                trailing_qualifiers: vec![],
+                trailing_suffixes: ["air", "force", "base", "afb"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+            }],
+        })
     }
 
     #[test]
@@ -805,7 +660,7 @@ mod tests {
                 },
             ),
         ];
-        let grouped = group_extracted_entities(&entities, &[]);
+        let grouped = group_extracted_entities(&facility_norm(), &entities, &[]);
         assert_eq!(grouped.len(), 1);
         let inst = grouped.get("installation|wright patterson").unwrap();
         // Longest surface form wins as canonical; the other is an alias.
@@ -816,54 +671,4 @@ mod tests {
         assert_eq!(inst.attributes.get("type"), Some(&serde_json::json!("AIRBASE")));
     }
 
-    #[test]
-    fn coalesce_key_folds_ocr_variants_and_acronym() {
-        // F3: OCR-mangled suffix variants + the WPAFB acronym all fold to
-        // the same canonical base.
-        let canon = "installation|wright patterson";
-        for surface in [
-            "Wright-Patterson AFB",
-            "Wright-Patterson Air Force Base",
-            "Wright-Patterson Aiforce Base",   // OCR: dropped 'r'
-            "Wright-Patterson Air ForceBase",  // OCR: lost space
-            "Wright-Patterson A ir Force Base", // OCR: split 'air'
-            "WPAFB",                            // acronym (gazetteer)
-        ] {
-            assert_eq!(
-                coalesce_key("installation", surface),
-                canon,
-                "surface {surface:?} should fold to {canon}"
-            );
-        }
-        // OCR typo in the suffix ("Basd") still folds.
-        assert_eq!(
-            coalesce_key("installation", "Kirtland Air Force Basd"),
-            "installation|kirtland"
-        );
-    }
-
-    #[test]
-    fn ocr_fold_does_not_over_merge_distinct_bases() {
-        // The OCR-tolerant strip must never collapse two real bases.
-        let wp = coalesce_key("installation", "Wright-Patterson AFB");
-        let edwards = coalesce_key("installation", "Edwards Air Force Base");
-        let patterson_field = coalesce_key("installation", "Patterson Field");
-        assert_ne!(wp, edwards);
-        assert_ne!(wp, patterson_field); // historical alias stays separate
-        assert_eq!(edwards, "installation|edwards");
-    }
-
-    #[test]
-    fn entity_id_for_is_stable_and_fold_aware() {
-        let id1 = entity_id_for("company", "NVIDIA Corporation");
-        let id2 = entity_id_for("company", "NVIDIA Corporation");
-        assert_eq!(id1, id2);
-        assert_eq!(id1, "e-company-nvidia-corporation");
-        // Facility suffix variants resolve to the same id (so
-        // relationship endpoints align with the coalesced entity).
-        assert_eq!(
-            entity_id_for("installation", "Wright-Patterson AFB"),
-            entity_id_for("installation", "Wright-Patterson Air Force Base"),
-        );
-    }
 }
