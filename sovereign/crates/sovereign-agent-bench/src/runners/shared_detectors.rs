@@ -254,16 +254,25 @@ fn hash_stdout(s: &str) -> u64 {
 //
 // Closes loop class L4/L7/L17 — non-convergent Implementer↔Evaluator
 // alternation. Hard ceiling regardless of whether the model varies
-// its output. A productive 2.1-class problem converges in 1-3
-// cycles; cap=6 leaves headroom for genuinely hard recovery while
-// preventing the 30+ turn token-burn shape.
+// its output. A productive 2.1-class SINGLE-FILE problem converges
+// in 1-3 cycles. But multi-bug / multi-file problems (4.x, 5.x) fix
+// one bug per cycle by design, so they legitimately need ~bug-count
+// cycles: cap=6 mis-fired on 5.1-minilang (7 bugs across 3 files),
+// killing a CONVERGENT run at 16/24 (judge dim_b=3, "one bug per
+// cycle with precision") while it was still climbing. Genuine
+// non-convergence is caught independently and tighter by
+// ThrashTracker (same-signature sticky-retry) and VerifyStuckTracker,
+// so this secondary alternation ceiling can be generous without
+// reopening the token-burn loop class.
 
 /// Maximum complete Implementer↔Evaluator round-trips (counted on
 /// `handoff_to_implementer` — Evaluator giving up on this attempt)
-/// before the run terminates as non-convergent. Tuned on the
-/// 58-turn 2026-05-21 observation: 13 handoffs before token_cap.
-/// 6 fires at turn ~14, saves ~40 turns and a budget refund.
-pub const HANDOFF_CYCLE_CAP: u32 = 6;
+/// before the run terminates as non-convergent. Raised 6 → 14 on
+/// 2026-06-03 after 5.1-minilang (7-bug multi-file) was capped
+/// mid-convergence; ≈ 2× the hardest current problem's bug count,
+/// still well short of the 30+ turn token-burn shape, and the
+/// sticky / verify-stuck detectors guard genuine loops.
+pub const HANDOFF_CYCLE_CAP: u32 = 14;
 
 #[derive(Debug, Default, Clone)]
 pub struct HandoffCycleCounter {

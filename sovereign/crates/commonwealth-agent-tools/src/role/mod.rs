@@ -32,7 +32,9 @@ use serde::{Deserialize, Serialize};
 
 pub use dossier::{RoleDossier, RoleDossierOutcome};
 pub use model_map::RoleModelMap;
-pub use profile::{RoleProfile, SamplingOverrides, EVALUATOR_TERMINATING_SUBSET};
+pub use profile::{
+    RoleProfile, SamplingOverrides, EVALUATOR_MUST_HANDOFF_SUBSET, EVALUATOR_TERMINATING_SUBSET,
+};
 pub use transition::{transition_after, TransitionTrigger};
 
 /// Closed enum of agent roles. Adding a variant requires touching:

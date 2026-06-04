@@ -142,9 +142,18 @@ pub fn parse_judge_response(raw: &str) -> Result<JudgeTrialOutcome, JudgeError> 
     let candidate = extract_json_object(raw).ok_or_else(|| JudgeError::Parse {
         raw: raw.to_string(),
     })?;
-    let v: serde_json::Value = serde_json::from_str(&candidate).map_err(|_| JudgeError::Parse {
-        raw: raw.to_string(),
-    })?;
+    // Judge models frequently embed LaTeX (`$O(n \cdot 2^n)$`) or
+    // Windows paths in `rationale`, emitting backslash sequences (`\c`,
+    // `\2`) that are not valid JSON escapes — `serde_json` then rejects
+    // an otherwise well-formed verdict. Try strict parse first; on
+    // failure, repair invalid `\`-escapes and retry. Observed
+    // 2026-06-03 (122B judge scoring 0 on 3.2-lights-out-python because
+    // the rationale cited `O(n \cdot 2^n)`).
+    let v: serde_json::Value = serde_json::from_str(&candidate)
+        .or_else(|_| serde_json::from_str(&repair_json_escapes(&candidate)))
+        .map_err(|_| JudgeError::Parse {
+            raw: raw.to_string(),
+        })?;
     let anchor_raw = v
         .get("anchor")
         .and_then(|x| x.as_i64())
@@ -165,6 +174,43 @@ pub fn parse_judge_response(raw: &str) -> Result<JudgeTrialOutcome, JudgeError> 
         anchor: anchor_raw as u8,
         rationale,
     })
+}
+
+/// Repair invalid JSON backslash escapes in a candidate object string so
+/// `serde_json` can parse it. For each backslash that is NOT the start
+/// of a valid JSON escape (`" \ / b f n r t u`), double it so it becomes
+/// a literal backslash in the parsed string. Valid escapes — including
+/// `\\` and `\uXXXX` — pass through untouched. This rescues verdicts
+/// whose `rationale` contains LaTeX (`\cdot`, `\sum`) or Windows paths
+/// (`\Users`), which would otherwise be a hard parse failure scored 0.
+/// Applied only as a fallback after a strict parse fails, so well-formed
+/// JSON is never altered.
+fn repair_json_escapes(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 8);
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.peek() {
+                Some('"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't' | 'u') => {
+                    // Valid escape: emit the backslash and the escaped
+                    // char verbatim so the pair stays intact.
+                    out.push('\\');
+                    if let Some(next) = chars.next() {
+                        out.push(next);
+                    }
+                }
+                _ => {
+                    // Invalid escape (e.g. `\c` from `\cdot`): double the
+                    // backslash so it parses as a literal backslash.
+                    out.push('\\');
+                    out.push('\\');
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 /// Find the last balanced JSON object substring in `raw`. Lenient over
@@ -371,6 +417,26 @@ fn truncate(s: &str, n: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_judge_response_repairs_latex_backslashes() {
+        // The 122B judge embeds LaTeX in `rationale`; `\cdot` is an
+        // invalid JSON escape that strict serde rejects. The repair
+        // fallback must rescue it (observed 2026-06-03 on
+        // 3.2-lights-out-python, dim_b wrongly scored 0).
+        let s = r#"{"anchor": 2, "rationale": "O(n \cdot 2^n) is correct"}"#;
+        let out = parse_judge_response(s).unwrap();
+        assert_eq!(out.anchor, 2);
+        assert!(out.rationale.contains("cdot"));
+    }
+
+    #[test]
+    fn repair_json_escapes_preserves_valid_escapes() {
+        // Valid escapes (\n, \", \\) survive the repair untouched.
+        let repaired = repair_json_escapes(r#"{"a":"line\nbreak \"q\" end"}"#);
+        let v: serde_json::Value = serde_json::from_str(&repaired).unwrap();
+        assert_eq!(v.get("a").unwrap().as_str().unwrap(), "line\nbreak \"q\" end");
+    }
 
     #[test]
     fn parse_judge_response_raw_json() {

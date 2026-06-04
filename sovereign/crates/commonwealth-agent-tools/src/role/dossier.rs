@@ -191,6 +191,21 @@ impl RoleDossier {
             && self.last_verification_kind == Some(PrimitiveKind::Smoke)
     }
 
+    /// True iff the most recent verification (build OR smoke) FAILED and
+    /// no write has happened since (`writes_since_last_verify == 0`). When
+    /// true, the Evaluator's next request is structurally restricted to
+    /// `[handoff_to_implementer]`: re-running build/smoke on an unchanged
+    /// workdir is deterministic waste (the dead-loop pathology), and
+    /// `agent_done` is illegal with red tests. Forces the loop forward to
+    /// an Implementer fix. Symmetric to `smoke_just_passed()`; closes the
+    /// "Evaluator dead-loops on a failing verify" class (5.1-minilang
+    /// trial-2 / v2, 2026-06-03) that previously only ended via a
+    /// sticky/no-progress KILL — a 0/24 bomb — instead of a productive
+    /// handoff.
+    pub fn verification_just_failed(&self) -> bool {
+        self.writes_since_last_verify == 0 && self.last_verification_ok == Some(false)
+    }
+
     /// Render the dossier as a context block for the next role's
     /// system message. Returns an empty string when the dossier is
     /// fresh (no prior activity).
@@ -689,6 +704,30 @@ mod tests {
         let mut d = RoleDossier::new();
         d.record_verification(PrimitiveKind::Smoke, false, "1 test failed");
         assert!(!d.smoke_just_passed());
+    }
+
+    #[test]
+    fn verification_just_failed_true_for_failing_smoke_no_writes() {
+        let mut d = RoleDossier::new();
+        d.record_verification(PrimitiveKind::Smoke, false, "1 test failed");
+        assert!(d.verification_just_failed());
+    }
+
+    #[test]
+    fn verification_just_failed_false_for_passing_smoke() {
+        let mut d = RoleDossier::new();
+        d.record_verification(PrimitiveKind::Smoke, true, "ok");
+        assert!(!d.verification_just_failed());
+    }
+
+    #[test]
+    fn verification_just_failed_false_after_write_lets_evaluator_reverify() {
+        // Implementer edited after the failing smoke → the Evaluator must
+        // be allowed to re-verify, not be force-handed-off on stale state.
+        let mut d = RoleDossier::new();
+        d.record_verification(PrimitiveKind::Smoke, false, "fail");
+        d.on_write();
+        assert!(!d.verification_just_failed());
     }
 
     #[test]

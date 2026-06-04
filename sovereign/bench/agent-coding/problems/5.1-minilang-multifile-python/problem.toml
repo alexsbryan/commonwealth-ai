@@ -1,0 +1,87 @@
+[meta]
+id = "5.1-minilang-multifile-python"
+title = "minilang interpreter — cross-file cascading bug fix (Python, multi-file)"
+category = "CodeTest"
+tier = "Scaffolded"
+version = "v0"
+notes = """
+5.x problems are MULTI-FILE: the bug surface spans a package, not a
+single module. This is the multi-file escalation of 4.2 — a small
+expression-language interpreter (`minilang/`) split into tokenizer →
+parser → evaluator, with SEVEN bugs distributed across the three
+stage files. The bugs cascade ACROSS file boundaries: a tokenizer
+bug raises SyntaxError on inputs whose real defect lives in the
+parser or evaluator, so the model cannot localise a failing test to
+one file from the traceback alone. It must fix the upstream stage,
+re-run, and follow the failure as it moves downstream into the next
+file. Each individual file is small (≤ ~90 lines, fully inlined in
+the position-0 anchor), so the discriminator is cross-file
+attention and routing, not outline navigation.
+
+Bug map (held-out; for maintainers):
+  tokenizer.py
+    T1. two-char operators (<=, >=, ==, !=, **) not lexed — they
+        fall through to single-char tokens, so any input using them
+        fails to parse.
+    T2. `or` is missing from the keyword set, so `a or b` lexes `or`
+        as an identifier and the parse trails.
+  parser.py
+    P1. `**` is parsed left-associative instead of right
+        (2 ** 3 ** 2 → (2 ** 3) ** 2 = 64, not 512).
+    P2. `+` / `-` are parsed right-associative instead of left
+        (10 - 3 - 2 → 10 - (3 - 2) = 9, not 5).
+  evaluator.py
+    E1. `and` / `or` evaluate both operands instead of
+        short-circuiting.
+    E2. `let` mutates the shared environment (dynamic scope) instead
+        of extending a copy (lexical scope).
+    E3. `/` uses true division instead of integer floor division.
+
+Cascade examples:
+  - `2 ** 3 ** 2`: fails T1 (SyntaxError) → after T1, fails P1 (64).
+  - `false and (10 / 0 == 0)`: fails T1 (==) → after T1, fails E1
+    (ZeroDivisionError) → after E1, passes.
+
+Reference (correct) implementation passes all 24 held-out tests;
+the buggy scaffold passes 9 / fails 15. Tier=Scaffolded: harness
+pre-installs the buggy `minilang/` package plus a smoke subset.
+Agent's job is fix-not-author; the full held-out suite grades at
+exit.
+"""
+
+[prompt]
+file = "prompt.md"
+
+[witness]
+kind = "Hybrid"
+language = "Python"
+fixture_subdir = "fixtures"
+scaffold_subdir = "scaffold"
+verify_cmd = "python3 -m pytest -q tests/test_integration.py 2>&1"
+# First-past-the-post buckets: only ALL tests pass earns 3.
+score_buckets = [
+  [0.0,   0.6,    0],
+  [0.6,   0.85,   1],
+  [0.85,  0.999,  2],
+  [0.999, 1.001,  3],
+]
+
+[budget]
+# 7 bugs across 3 files; cross-file cascade + navigation overhead.
+# Generous on the first pass.
+token_cap = 40000
+wall_seconds_cap = 2400
+
+[scoring.dim_a]
+name = "Correctness"
+mode = "AutoTestPassFraction"
+
+[scoring.dim_b]
+name = "Cross-file diagnosis discipline"
+mode = "JudgeRubric"
+rubric_id = "dim_b"
+
+[scoring.dim_c]
+name = "Multi-file navigation discipline"
+mode = "HybridAutoFloor"
+rubric_id = "dim_c"
