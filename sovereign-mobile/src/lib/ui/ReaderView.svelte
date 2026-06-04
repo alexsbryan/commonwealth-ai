@@ -48,20 +48,30 @@
   role="presentation"
 ></div>
 
-<section class="reader" transition:fly={{ y: 48, duration: 240, easing: cubicOut }}>
+<div
+  class="reader"
+  role="dialog"
+  aria-modal="true"
+  aria-label={`Source reader: ${title}`}
+  transition:fly={{ y: 48, duration: 240, easing: cubicOut }}
+>
   <header>
     <div class="crumb">
-      {#if isPrivate}<span class="lock" title="Private to this host — never shared with mesh peers">🔒</span>{/if}
+      {#if isPrivate}<span class="lock" title="Private to this host — never shared with mesh peers" aria-label="Private to this host">🔒</span>{/if}
       <span class="corpus">{corpusId}</span>
-      <span class="sep">›</span>
+      <span class="sep" aria-hidden="true">›</span>
       <span class="title">{title}</span>
     </div>
-    <button class="close" onclick={onclose} aria-label="Close reader">✕</button>
+    <button class="close" onclick={onclose} aria-label="Close reader">
+      <span aria-hidden="true">✕</span>
+    </button>
   </header>
 
   <div class="body">
     {#if loading}
-      <div class="loading"><span class="crest">◈</span></div>
+      <div class="loading" role="status" aria-label="Loading passage">
+        <span class="crest" aria-hidden="true">◈</span>
+      </div>
     {:else if failed || !win?.center}
       <p class="empty">Couldn't load this passage from the host.</p>
     {:else}
@@ -80,7 +90,7 @@
       <a href={url} target="_blank" rel="noopener noreferrer">Read the full source ↗</a>
     </footer>
   {/if}
-</section>
+</div>
 
 <style>
   .scrim {

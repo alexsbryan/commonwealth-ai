@@ -72,6 +72,27 @@ export async function attachStreamListeners(send: Send): Promise<UnlistenFn> {
   return () => offs.forEach((off) => off());
 }
 
+/** One glassbox progress signal for the in-flight turn, forwarded from
+ *  the host's runtime narration channel (`message-narration`). */
+export interface NarrationEntry {
+  conversation_id: string;
+  message_id: string;
+  /** `NarrationPhase`: a snake_case string (`"retrieval_start"`) or a
+   *  single-key object (`{ retrieval_complete: { chunks_in, corpora } }`). */
+  phase: string | Record<string, unknown>;
+  text: string;
+  elapsed_ms: number;
+}
+
+/** Attach the live-narration listener; returns an unlisten fn. Kept
+ *  separate from the chat FSM (mirrors desktop's routingStore): narration
+ *  is transient turn-progress, not message state. */
+export async function attachNarrationListener(
+  cb: (entry: NarrationEntry) => void,
+): Promise<UnlistenFn> {
+  return listen<NarrationEntry>("message-narration", (e) => cb(e.payload));
+}
+
 /** Subscribe to connectivity transitions (off-tailnet / host-down /
  *  host-busy / reachable). */
 export async function attachConnectivityListener(

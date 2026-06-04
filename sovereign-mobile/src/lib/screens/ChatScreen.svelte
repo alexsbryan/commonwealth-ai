@@ -1,22 +1,38 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { useMachine } from "@xstate/svelte";
   import { chatMachine } from "../machines/chat.machine";
-  import { attachStreamListeners } from "../events";
+  import { attachStreamListeners, attachNarrationListener, type NarrationEntry } from "../events";
   import { getConversation, sendMessageStream } from "../api";
   import type { MessageEntry } from "../types";
   import AssistantMessage from "../components/AssistantMessage.svelte";
+  import NarrationChip from "../components/NarrationChip.svelte";
 
   let { conversationId, onback }: { conversationId: string; onback: () => void } = $props();
 
   const { snapshot, send } = useMachine(chatMachine);
   let input = $state("");
-  let unlisten: (() => void) | null = null;
+  // Live turn progress (glassbox). Transient — kept out of the chat FSM
+  // (mirrors desktop's separate routingStore); cleared when the turn ends.
+  let narration = $state<NarrationEntry[]>([]);
+  const offs: UnlistenFn[] = [];
 
   onMount(async () => {
     // Same event contract the desktop FSM consumes — the Rust core
     // re-emits message-start/chunk/complete/error.
-    unlisten = await attachStreamListeners(send);
+    offs.push(await attachStreamListeners(send));
+    // Live progress narration → the in-flight chip stack.
+    offs.push(
+      await attachNarrationListener((n) => {
+        if (n.conversation_id !== conversationId) return;
+        narration = [...narration, n].slice(-6);
+      }),
+    );
+    // The answer has landed (or failed) → drop the progress trace.
+    offs.push(await listen("message-complete", () => (narration = [])));
+    offs.push(await listen("message-error", () => (narration = [])));
+
     send({ type: "CONVERSATION_BOUND", conversationId });
     // Cache-first hydrate (offline-read / instant relaunch).
     const convo = await getConversation(conversationId);
@@ -29,12 +45,13 @@
     }
   });
 
-  onDestroy(() => unlisten?.());
+  onDestroy(() => offs.forEach((off) => off()));
 
   async function submit() {
     const text = input.trim();
     if (!text) return;
     input = "";
+    narration = []; // fresh turn — clear any prior progress trace
     const userMsg: MessageEntry = {
       id: `local-${Date.now()}`,
       role: "user",
@@ -52,11 +69,35 @@
   }
 
   const messages = $derived($snapshot.context.messages as MessageEntry[]);
+
+  // Keep the view pinned to the latest content. Re-runs whenever a
+  // message streams a token or a narration chip arrives, so the live
+  // progress (and the answer forming under it) stays in view instead of
+  // landing below the fold.
+  let scrollEl = $state<HTMLDivElement | null>(null);
+  $effect(() => {
+    // Touch the reactive deps so this runs on every update.
+    void messages.length;
+    void (messages.at(-1)?.content?.length ?? 0);
+    void narration.length;
+    const el = scrollEl;
+    if (el) requestAnimationFrame(() => (el.scrollTop = el.scrollHeight));
+  });
 </script>
 
 <div class="chat">
-  <header><button class="back" onclick={onback}>←</button></header>
-  <div class="scroll">
+  <header>
+    <button class="back" onclick={onback} aria-label="Back to conversations">
+      <span aria-hidden="true">←</span>
+    </button>
+  </header>
+  <div
+    class="scroll"
+    role="log"
+    aria-live="polite"
+    aria-label="Conversation"
+    bind:this={scrollEl}
+  >
     {#each messages as m (m.id)}
       {#if m.role === "assistant"}
         <AssistantMessage content={m.content} metadata={m.metadata} />
@@ -64,6 +105,9 @@
         <div class="user">{m.content}</div>
       {/if}
     {/each}
+    {#if narration.length}
+      <NarrationChip entries={narration} />
+    {/if}
   </div>
   <form
     class="composer"
@@ -72,8 +116,13 @@
       void submit();
     }}
   >
-    <input bind:value={input} placeholder="Type a message…" />
-    <button type="submit" disabled={!input.trim()}>Send</button>
+    <input
+      bind:value={input}
+      placeholder="Type a message…"
+      aria-label="Message"
+      enterkeyhint="send"
+    />
+    <button type="submit" disabled={!input.trim()} aria-label="Send message">Send</button>
   </form>
 </div>
 

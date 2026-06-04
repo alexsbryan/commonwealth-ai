@@ -66,6 +66,27 @@ pub enum ServerEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         retry_after_secs: Option<u64>,
     },
+    /// A glassbox progress signal for the in-flight turn: a phase the
+    /// runtime entered or completed (retrieval, synthesis, gap check,
+    /// tool call), forwarded from the runtime's narration channel. Lets
+    /// the client show what the host is actually doing before and while
+    /// the answer streams — the desktop-parity "process handles".
+    Narration {
+        /// The assistant message this turn is producing. Empty for
+        /// narration emitted before the stream handle is acquired.
+        #[serde(skip_serializing_if = "String::is_empty")]
+        message_id: String,
+        /// `NarrationPhase`, snake_case: unit variants serialize as a
+        /// string (`"retrieval_start"`), struct variants as a single-key
+        /// object (`{ "retrieval_complete": { … } }`). The client reads
+        /// the key for an icon and falls back gracefully on unknowns.
+        phase: serde_json::Value,
+        /// Human-readable narration text from the runtime (e.g. "Read 12
+        /// chunks across sep, wikipedia").
+        text: String,
+        /// Wall-clock milliseconds since the turn began.
+        elapsed_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

@@ -42,7 +42,9 @@
 </script>
 
 {#if !loaded}
-  <div class="loading"><span class="crest">◈</span></div>
+  <div class="loading" role="status" aria-label="Loading">
+    <span class="crest" aria-hidden="true">◈</span>
+  </div>
 {:else if !paired}
   <PairingScreen onpaired={refreshHosts} />
 {:else}

@@ -26,11 +26,17 @@
 <div class="list">
   <header>
     <h1>Conversations</h1>
-    <button class="new-btn" onclick={startNew}><span class="plus">+</span> New</button>
+    <button class="new-btn" onclick={startNew} aria-label="New conversation">
+      <span class="plus" aria-hidden="true">+</span> New
+    </button>
   </header>
-  <div class="rows">
+  <div class="rows" role="group" aria-label="Conversations">
     {#each convos as c (c.id)}
-      <button class="row" onclick={() => onopen(c.id)}>
+      <button
+        class="row"
+        onclick={() => onopen(c.id)}
+        aria-label={`Open conversation: ${c.title ?? "Untitled"}`}
+      >
         <span class="title">{c.title ?? "Untitled"}</span>
       </button>
     {:else}

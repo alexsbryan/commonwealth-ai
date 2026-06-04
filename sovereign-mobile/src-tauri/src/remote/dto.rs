@@ -174,6 +174,21 @@ pub enum ServerEvent {
         #[serde(default)]
         retry_after_secs: Option<u64>,
     },
+    /// A glassbox progress signal for the in-flight turn — the host
+    /// narrating its real work (retrieval, synthesis, gap check, tool
+    /// call). Surfaced as live progress chips while the answer is
+    /// prepared. `phase` is `NarrationPhase` (snake_case string or a
+    /// single-key object); `text` is the human-readable line.
+    Narration {
+        #[serde(default)]
+        message_id: String,
+        #[serde(default)]
+        phase: serde_json::Value,
+        #[serde(default)]
+        text: String,
+        #[serde(default)]
+        elapsed_ms: u64,
+    },
     #[serde(other)]
     Ignored,
 }
