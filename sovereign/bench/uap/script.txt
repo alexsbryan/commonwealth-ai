@@ -1,0 +1,14 @@
+# Partner-message script for the uap-blue-book recipe-author trial.
+# One partner turn per blank-line-separated block. '#' lines are comments.
+# Directive (not open-framing): the charter pins every choice, so the agent
+# should go straight to recipe_write_structured. An earlier open "propose the
+# shape" turn made the 35B fixate on a chunking deferred_question and loop on
+# decision_log — so we tell it to draft immediately and not re-log questions.
+
+Draft the `uap-blue-book` recipe now — do NOT ask questions, do NOT call decision_log more than once per real choice, and never re-log the same question. Use exactly: acquire type `local_file` with path `/Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/uap/fixtures`; extract type `jsonl` with `content_field = "narrative"` and `title_field = "case_id"`; chunk type `paragraph`; and `[enrichment]` type `investigation` with the entity types, relationship types, and the single `threshold` pattern from my charter. Write it with recipe_write_structured, then validate it and tell me in two sentences whether it passed.
+
+Run a test on the sample (sample_size 10) and report the extraction results, categorized. Do not change the recipe yet.
+
+If the test failed, fix the single most-blocking issue, then re-validate and re-test. If it already passed, say so and don't change it.
+
+Checkpoint the recipe with a one-line summary, then call done.

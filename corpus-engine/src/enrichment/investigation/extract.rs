@@ -60,6 +60,31 @@ fn default_one() -> f32 {
     1.0
 }
 
+/// One LLM-extracted entity mention before coalesce. Carries the
+/// declared attribute values the model harvested for this mention.
+/// `name` is a surface form (coalesce merges variants); `attributes`
+/// keys come from the entity_type's `attributes: [...]` declaration.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ExtractedEntity {
+    pub name: String,
+    /// References a `[[enrichment.entity_types]] name`.
+    #[serde(rename = "type")]
+    pub entity_type: String,
+    #[serde(default)]
+    pub attributes: serde_json::Map<String, serde_json::Value>,
+}
+
+/// The parsed result of one chunk's extraction call: typed entities
+/// (with attributes) plus typed relationships. `entities` is
+/// optional in the wire schema — a model that only emits
+/// relationships still parses, and the relationship endpoints
+/// backfill any entities not listed explicitly.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ExtractedChunk {
+    pub entities: Vec<ExtractedEntity>,
+    pub relationships: Vec<ExtractedRelationship>,
+}
+
 /// Build the schema-driven extraction prompt for one chunk.
 /// Embeds the entity_types and relationship_types in the system
 /// preamble; the user message carries the chunk content. Pairs
@@ -113,8 +138,10 @@ pub fn compose_extract_prompt(
     user.push_str("Chunk content:\n\n");
     user.push_str(chunk.content);
     user.push_str(
-        "\n\nReturn JSON with the shape `{\"relationships\": [...]}` per the schema. \
-         Empty array if no relationships are present in this chunk.",
+        "\n\nReturn JSON with the shape `{\"entities\": [...], \"relationships\": [...]}` \
+         per the schema. For each distinct entity you reference, emit one `entities[]` \
+         row using its SPECIFIC proper name (never the bare type word) and populating as \
+         many declared attributes as the chunk supports. Empty arrays if none are present.",
     );
 
     let schema = response_schema(entity_types, relationship_types);
@@ -140,8 +167,10 @@ Rules:
 ";
 
 const EXTRACT_OUTPUT_INSTRUCTIONS: &str = "\n\
-Return JSON only — no prose, no Markdown fences. \
-Empty `relationships` array means no relationships were found in this chunk.\n";
+Return JSON only — no prose, no Markdown fences. Emit an `entities` array \
+(each entity's specific proper name + declared attributes) AND a `relationships` \
+array. Use the entity's real name, NEVER the type word as the name. Empty arrays \
+mean nothing of that kind was found in this chunk.\n";
 
 /// JSON Schema for the response — used to drive
 /// LLGuidance grammar-constrained generation.
@@ -155,6 +184,25 @@ fn response_schema(
     serde_json::json!({
         "type": "object",
         "properties": {
+            "entities": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": { "type": "string", "minLength": 1 },
+                        "type": {
+                            "type": "string",
+                            "enum": entity_type_names,
+                        },
+                        "attributes": {
+                            "type": "object",
+                            "additionalProperties": true,
+                        },
+                    },
+                    "required": ["name", "type"],
+                    "additionalProperties": false,
+                },
+            },
             "relationships": {
                 "type": "array",
                 "items": {
@@ -210,12 +258,12 @@ fn response_schema(
 ///
 /// Errors with a descriptive message on schema mismatch so the
 /// caller can log + retry.
-pub fn parse_extract_response(response: &str) -> Result<Vec<ExtractedRelationship>> {
+pub fn parse_extract_response(response: &str) -> Result<ExtractedChunk> {
     let cleaned = strip_think(response);
     let cleaned = strip_code_fences(&cleaned);
     let cleaned = cleaned.trim();
     if cleaned.is_empty() {
-        return Ok(Vec::new());
+        return Ok(ExtractedChunk::default());
     }
 
     let value: serde_json::Value = serde_json::from_str(cleaned).map_err(|e| {
@@ -225,7 +273,10 @@ pub fn parse_extract_response(response: &str) -> Result<Vec<ExtractedRelationshi
         ))
     })?;
 
-    let arr = value
+    // `relationships` is required (the load-bearing output); `entities`
+    // is optional so a model that only emits relationships still parses
+    // and the relationship endpoints backfill the entity set.
+    let rel_arr = value
         .get("relationships")
         .and_then(|v| v.as_array())
         .ok_or_else(|| {
@@ -235,16 +286,32 @@ pub fn parse_extract_response(response: &str) -> Result<Vec<ExtractedRelationshi
             ))
         })?;
 
-    let mut out = Vec::with_capacity(arr.len());
-    for (i, item) in arr.iter().enumerate() {
+    let mut relationships = Vec::with_capacity(rel_arr.len());
+    for (i, item) in rel_arr.iter().enumerate() {
         let rel: ExtractedRelationship = serde_json::from_value(item.clone()).map_err(|e| {
             Error::Serialization(format!(
-                "investigation extract response item {i} parse failed: {e}"
+                "investigation extract response relationship {i} parse failed: {e}"
             ))
         })?;
-        out.push(rel);
+        relationships.push(rel);
     }
-    Ok(out)
+
+    let mut entities = Vec::new();
+    if let Some(ent_arr) = value.get("entities").and_then(|v| v.as_array()) {
+        for (i, item) in ent_arr.iter().enumerate() {
+            let ent: ExtractedEntity = serde_json::from_value(item.clone()).map_err(|e| {
+                Error::Serialization(format!(
+                    "investigation extract response entity {i} parse failed: {e}"
+                ))
+            })?;
+            entities.push(ent);
+        }
+    }
+
+    Ok(ExtractedChunk {
+        entities,
+        relationships,
+    })
 }
 
 fn strip_think(s: &str) -> String {
@@ -283,44 +350,166 @@ fn preview(s: &str, n: usize) -> String {
     }
 }
 
-/// Guess at canonical surface forms from extracted relationships.
-/// Used by the coalesce phase to dedup mentions of the same
-/// entity. Keys by `(entity_type, lowercased canonical name)`;
-/// keeps every observed surface form as an alias.
+/// Coalesce extracted entity mentions + relationship endpoints into
+/// canonical [`Entity`] records, keyed by a type-scoped, fold-normalized
+/// name (see [`coalesce_key`]). Surface-form variants of one entity
+/// (e.g. `"Wright-Patterson AFB"` / `"Wright-Patterson Air Force Base"` /
+/// `"Wright-Patterson"`) collapse into a single record; the longest
+/// surface form becomes `canonical_name`, the rest become `aliases`.
+/// Declared attributes from `entities[]` rows are merged onto the
+/// record (first-non-null wins). Relationship endpoints backfill any
+/// entity only mentioned in an edge.
+///
+/// Entity rows are processed before relationship endpoints so the
+/// attribute merge sees the richest data first.
 pub fn group_extracted_entities(
-    extractions: &[(String /* chunk_id */, ExtractedRelationship)],
-) -> BTreeMap<(String, String), super::graph::Entity> {
-    let mut by_key: BTreeMap<(String, String), super::graph::Entity> = BTreeMap::new();
+    entities: &[(String /* chunk_id */, ExtractedEntity)],
+    relationships: &[(String /* chunk_id */, ExtractedRelationship)],
+) -> BTreeMap<String, super::graph::Entity> {
+    let mut by_key: BTreeMap<String, super::graph::Entity> = BTreeMap::new();
 
-    for (_chunk_id, rel) in extractions {
-        for (name, ty) in [
-            (&rel.from_entity, &rel.from_type),
-            (&rel.to_entity, &rel.to_type),
-        ] {
-            let key = (ty.clone(), name.to_lowercase());
-            let entry = by_key
-                .entry(key.clone())
-                .or_insert_with(|| super::graph::Entity {
-                    id: entity_id_for(ty, name),
-                    canonical_name: name.clone(),
-                    entity_type: ty.clone(),
-                    attributes: Default::default(),
-                    aliases: Vec::new(),
-                });
-            if !entry.aliases.iter().any(|a| a == name) && entry.canonical_name != *name {
-                entry.aliases.push(name.clone());
-            }
-        }
+    for (_chunk_id, ent) in entities {
+        upsert_entity(
+            &mut by_key,
+            &ent.entity_type,
+            &ent.name,
+            Some(&ent.attributes),
+        );
+    }
+    for (_chunk_id, rel) in relationships {
+        upsert_entity(&mut by_key, &rel.from_type, &rel.from_entity, None);
+        upsert_entity(&mut by_key, &rel.to_type, &rel.to_entity, None);
     }
     by_key
 }
 
-/// Stable entity id: `e-<type>-<slugged-name>`. Stays the same
-/// across reruns of identical extractions so the graph is
-/// reproducible.
+/// Upsert one entity mention into the coalesce map. Promotes the
+/// longest surface form to `canonical_name`, demotes the rest to
+/// `aliases`, and merges any supplied attributes (first-non-null wins;
+/// never overwrites a present value with a later one).
+fn upsert_entity(
+    by_key: &mut BTreeMap<String, super::graph::Entity>,
+    entity_type: &str,
+    name: &str,
+    attributes: Option<&serde_json::Map<String, serde_json::Value>>,
+) {
+    let key = coalesce_key(entity_type, name);
+    let entry = by_key.entry(key).or_insert_with(|| super::graph::Entity {
+        id: entity_id_for(entity_type, name),
+        canonical_name: name.to_string(),
+        entity_type: entity_type.to_string(),
+        attributes: Default::default(),
+        aliases: Vec::new(),
+    });
+    if name != entry.canonical_name {
+        if name.len() > entry.canonical_name.len() {
+            // Longer surface form is the better canonical; demote the old.
+            let old = std::mem::replace(&mut entry.canonical_name, name.to_string());
+            if !entry.aliases.contains(&old) {
+                entry.aliases.push(old);
+            }
+        } else if !entry.aliases.iter().any(|a| a == name) {
+            entry.aliases.push(name.to_string());
+        }
+    }
+    if let Some(attrs) = attributes {
+        for (k, v) in attrs {
+            if v.is_null() {
+                continue;
+            }
+            entry.attributes.entry(k.clone()).or_insert_with(|| v.clone());
+        }
+    }
+}
+
+/// Type-scoped coalesce key: `"<type>|<normalized-name>"`. The type
+/// prefix guarantees different `entity_type`s never merge (so a
+/// `witness` named "radar operator" can't collapse into a
+/// `military_unit`). See [`normalize_entity_name`].
+fn coalesce_key(entity_type: &str, name: &str) -> String {
+    format!("{entity_type}|{}", normalize_entity_name(entity_type, name))
+}
+
+/// Pure per-name normalization shared by [`coalesce_key`] and
+/// [`entity_id_for`] — they MUST agree so relationship endpoints
+/// resolve to the same id the coalesced entity carries (no dangling
+/// edges). Folds case/punctuation via the reconciliation
+/// [`fold_name`](crate::enrichment::reconciliation::signals::fold_name)
+/// helper; for facility-shaped types additionally strips a trailing run
+/// of facility suffixes so `"X AFB"` / `"X Air Force Base"` / `"X"`
+/// collapse.
+///
+/// Scope note: this is lightweight coalescing — it merges the
+/// suffix-variant family only. Acronym forms (`"WPAFB"`) and historical
+/// aliases (`"Patterson Field"` for Wright-Patterson) are NOT folded
+/// here; that needs the deferred facility-reconciliation gazetteer.
+fn normalize_entity_name(entity_type: &str, name: &str) -> String {
+    let folded = crate::enrichment::reconciliation::signals::fold_name(name);
+    if is_facility_type(entity_type) {
+        strip_facility_suffixes(&folded)
+    } else {
+        folded
+    }
+}
+
+/// Facility-shaped entity types whose names get suffix-folded.
+fn is_facility_type(entity_type: &str) -> bool {
+    matches!(
+        entity_type.to_ascii_lowercase().as_str(),
+        "installation" | "investigating_body"
+    )
+}
+
+/// Trailing facility-suffix run, longest phrases first so multi-word
+/// suffixes ("air force base") strip before their single-token tails.
+const FACILITY_SUFFIXES: &[&str] = &[
+    "naval air station",
+    "naval air facility",
+    "air force base",
+    "air force station",
+    "air station",
+    "test range",
+    "missile range",
+    "afb",
+    "nas",
+    "naf",
+    "field",
+    "station",
+    "range",
+    "base",
+];
+
+/// Strip the trailing run of facility suffixes from an already-folded
+/// name, keeping at least one base token (mirrors `strip_org_suffixes`
+/// discipline: trailing-only, never to empty). `"wright patterson air
+/// force base"` → `"wright patterson"`; `"edwards afb"` → `"edwards"`.
+fn strip_facility_suffixes(folded: &str) -> String {
+    let mut toks: Vec<&str> = folded.split_whitespace().collect();
+    loop {
+        let mut stripped = false;
+        for suffix in FACILITY_SUFFIXES {
+            let sfx: Vec<&str> = suffix.split_whitespace().collect();
+            if toks.len() > sfx.len() && toks[toks.len() - sfx.len()..] == sfx[..] {
+                let keep = toks.len() - sfx.len();
+                toks.truncate(keep);
+                stripped = true;
+                break;
+            }
+        }
+        if !stripped || toks.len() <= 1 {
+            break;
+        }
+    }
+    toks.join(" ")
+}
+
+/// Stable entity id: `e-<type>-<slug(normalized-name)>`. Routed through
+/// [`normalize_entity_name`] so it agrees with [`coalesce_key`] — two
+/// surface forms that coalesce produce the same id, and relationship
+/// endpoints built from raw surface forms (mod.rs) resolve to that same
+/// id. Stable across reruns.
 pub fn entity_id_for(ty: &str, name: &str) -> String {
-    let slug: String = name
-        .to_lowercase()
+    let slug: String = normalize_entity_name(ty, name)
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
         .collect::<String>()
@@ -395,10 +584,10 @@ mod tests {
         }
         "#;
         let parsed = parse_extract_response(response).unwrap();
-        assert_eq!(parsed.len(), 1);
-        assert_eq!(parsed[0].from_entity, "NVIDIA");
-        assert_eq!(parsed[0].relationship_type, "revenue");
-        assert!((parsed[0].confidence - 0.92).abs() < 1e-6);
+        assert_eq!(parsed.relationships.len(), 1);
+        assert_eq!(parsed.relationships[0].from_entity, "NVIDIA");
+        assert_eq!(parsed.relationships[0].relationship_type, "revenue");
+        assert!((parsed.relationships[0].confidence - 0.92).abs() < 1e-6);
     }
 
     #[test]
@@ -406,13 +595,45 @@ mod tests {
         let response =
             "<think>Let me find the relationships.</think>\n```json\n{\"relationships\": []}\n```";
         let parsed = parse_extract_response(response).unwrap();
-        assert!(parsed.is_empty());
+        assert!(parsed.relationships.is_empty());
+        assert!(parsed.entities.is_empty());
     }
 
     #[test]
     fn empty_string_yields_empty_list() {
         let parsed = parse_extract_response("").unwrap();
-        assert!(parsed.is_empty());
+        assert!(parsed.relationships.is_empty());
+        assert!(parsed.entities.is_empty());
+    }
+
+    #[test]
+    fn parses_entities_array_with_attributes() {
+        let response = r#"
+        {
+            "entities": [
+                {"name": "Wright-Patterson AFB", "type": "installation",
+                 "attributes": {"branch": "USAF", "type": "AIRBASE"}}
+            ],
+            "relationships": []
+        }
+        "#;
+        let parsed = parse_extract_response(response).unwrap();
+        assert_eq!(parsed.entities.len(), 1);
+        assert_eq!(parsed.entities[0].name, "Wright-Patterson AFB");
+        assert_eq!(parsed.entities[0].entity_type, "installation");
+        assert_eq!(
+            parsed.entities[0].attributes.get("branch"),
+            Some(&serde_json::json!("USAF"))
+        );
+    }
+
+    #[test]
+    fn parses_response_without_entities_is_tolerant() {
+        // Backward-compat: a model that only emits relationships parses.
+        let response = r#"{"relationships": []}"#;
+        let parsed = parse_extract_response(response).unwrap();
+        assert!(parsed.entities.is_empty());
+        assert!(parsed.relationships.is_empty());
     }
 
     #[test]
@@ -429,50 +650,115 @@ mod tests {
         assert!(format!("{err}").contains("missing `relationships`"));
     }
 
+    fn rel(from: &str, fty: &str, to: &str, tty: &str, rtype: &str) -> ExtractedRelationship {
+        ExtractedRelationship {
+            from_entity: from.into(),
+            to_entity: to.into(),
+            from_type: fty.into(),
+            to_type: tty.into(),
+            relationship_type: rtype.into(),
+            attributes: Default::default(),
+            verbatim_excerpt: "x".into(),
+            confidence: 1.0,
+        }
+    }
+
     #[test]
     fn group_extracted_entities_dedupes_by_type_and_name() {
-        let extractions = vec![
-            (
-                "chunk-1".to_string(),
-                ExtractedRelationship {
-                    from_entity: "NVIDIA".into(),
-                    to_entity: "Microsoft".into(),
-                    from_type: "company".into(),
-                    to_type: "company".into(),
-                    relationship_type: "revenue".into(),
-                    attributes: Default::default(),
-                    verbatim_excerpt: "x".into(),
-                    confidence: 1.0,
-                },
-            ),
-            (
-                "chunk-2".to_string(),
-                ExtractedRelationship {
-                    from_entity: "Nvidia".into(), // different case, same entity
-                    to_entity: "Google".into(),
-                    from_type: "company".into(),
-                    to_type: "company".into(),
-                    relationship_type: "revenue".into(),
-                    attributes: Default::default(),
-                    verbatim_excerpt: "y".into(),
-                    confidence: 1.0,
-                },
-            ),
+        let rels = vec![
+            ("c1".to_string(), rel("NVIDIA", "company", "Microsoft", "company", "revenue")),
+            // different case, same entity
+            ("c2".to_string(), rel("Nvidia", "company", "Google", "company", "revenue")),
         ];
-        let grouped = group_extracted_entities(&extractions);
+        let grouped = group_extracted_entities(&[], &rels);
         // 3 unique entities: NVIDIA (canonical), Microsoft, Google
         assert_eq!(grouped.len(), 3);
         let nvidia = grouped
-            .get(&("company".into(), "nvidia".into()))
-            .expect("NVIDIA grouped under lowercased key");
+            .get("company|nvidia")
+            .expect("NVIDIA grouped under normalized key");
         assert!(nvidia.aliases.contains(&"Nvidia".to_string()));
     }
 
     #[test]
-    fn entity_id_for_is_stable() {
+    fn coalesce_key_folds_facility_suffix_family() {
+        // The AFB / Air Force Base / bare suffix family collapses.
+        let a = coalesce_key("installation", "Wright-Patterson AFB");
+        let b = coalesce_key("installation", "Wright-Patterson Air Force Base");
+        let c = coalesce_key("installation", "Wright-Patterson");
+        let d = coalesce_key("installation", "Wright Patterson AFB");
+        assert_eq!(a, "installation|wright patterson");
+        assert_eq!(a, b);
+        assert_eq!(a, c);
+        assert_eq!(a, d);
+    }
+
+    #[test]
+    fn coalesce_key_keeps_distinct_bases_apart() {
+        let wpafb = coalesce_key("installation", "Wright-Patterson AFB");
+        let edwards = coalesce_key("installation", "Edwards AFB");
+        let maxwell = coalesce_key("installation", "Maxwell AFB");
+        assert_ne!(wpafb, edwards);
+        assert_ne!(edwards, maxwell);
+        assert_eq!(edwards, "installation|edwards");
+    }
+
+    #[test]
+    fn coalesce_key_is_type_scoped() {
+        // The same string under different types never merges — a
+        // witness named "radar operator" can't collapse into a unit.
+        let as_witness = coalesce_key("witness", "radar operator");
+        let as_unit = coalesce_key("installation", "radar operator");
+        assert_ne!(as_witness, as_unit);
+    }
+
+    #[test]
+    fn coalesce_promotes_longest_canonical_and_merges_attrs() {
+        let entities = vec![
+            (
+                "c1".to_string(),
+                ExtractedEntity {
+                    name: "Wright-Patterson".into(),
+                    entity_type: "installation".into(),
+                    attributes: serde_json::Map::from_iter([(
+                        "branch".to_string(),
+                        serde_json::json!("USAF"),
+                    )]),
+                },
+            ),
+            (
+                "c2".to_string(),
+                ExtractedEntity {
+                    name: "Wright-Patterson Air Force Base".into(),
+                    entity_type: "installation".into(),
+                    attributes: serde_json::Map::from_iter([(
+                        "type".to_string(),
+                        serde_json::json!("AIRBASE"),
+                    )]),
+                },
+            ),
+        ];
+        let grouped = group_extracted_entities(&entities, &[]);
+        assert_eq!(grouped.len(), 1);
+        let inst = grouped.get("installation|wright patterson").unwrap();
+        // Longest surface form wins as canonical; the other is an alias.
+        assert_eq!(inst.canonical_name, "Wright-Patterson Air Force Base");
+        assert!(inst.aliases.contains(&"Wright-Patterson".to_string()));
+        // Attributes from both mentions merge.
+        assert_eq!(inst.attributes.get("branch"), Some(&serde_json::json!("USAF")));
+        assert_eq!(inst.attributes.get("type"), Some(&serde_json::json!("AIRBASE")));
+    }
+
+    #[test]
+    fn entity_id_for_is_stable_and_fold_aware() {
         let id1 = entity_id_for("company", "NVIDIA Corporation");
         let id2 = entity_id_for("company", "NVIDIA Corporation");
         assert_eq!(id1, id2);
         assert_eq!(id1, "e-company-nvidia-corporation");
+        // Facility suffix variants resolve to the same id (so
+        // relationship endpoints align with the coalesced entity).
+        assert_eq!(
+            entity_id_for("installation", "Wright-Patterson AFB"),
+            entity_id_for("installation", "Wright-Patterson Air Force Base"),
+        );
     }
 }

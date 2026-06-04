@@ -11086,6 +11086,7 @@ dependencies = [
  "chrono",
  "commonwealth-tdd",
  "corpus-engine",
+ "corpus-engine-atos",
  "corpus-engine-notes",
  "corpus-engine-scip",
  "dirs 5.0.1",

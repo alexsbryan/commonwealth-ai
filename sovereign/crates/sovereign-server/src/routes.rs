@@ -19,6 +19,16 @@ pub struct SendMessageRequest {
     pub content: String,
 }
 
+/// Optional body for `POST /v1/conversations`. `skill_id =
+/// "recipe-author"` tags the conversation so subsequent messages route
+/// into the recipe-author agent loop. Body is optional — an empty POST
+/// keeps the pre-existing "untagged conversation" behaviour.
+#[derive(serde::Deserialize, Default)]
+pub struct CreateConversationRequest {
+    #[serde(default)]
+    pub skill_id: Option<String>,
+}
+
 #[derive(serde::Serialize)]
 pub struct CreateConversationResponse {
     pub id: String,
@@ -161,13 +171,32 @@ fn tenant_runtime(runtime: &Arc<Runtime>, tenant: &TenantId) -> TenantRuntime {
 pub async fn create_conversation(
     Extension(runtime): Extension<Arc<Runtime>>,
     Extension(tenant): Extension<TenantId>,
+    body: axum::body::Bytes,
 ) -> ApiResult<CreateConversationResponse> {
-    let _ = tenant_runtime(&runtime, &tenant);
+    let tr = tenant_runtime(&runtime, &tenant);
+    // Body is optional + best-effort: an empty or malformed POST yields
+    // an untagged conversation (the prior behaviour) rather than a 4xx.
+    let req: CreateConversationRequest = if body.is_empty() {
+        CreateConversationRequest::default()
+    } else {
+        serde_json::from_slice(&body).unwrap_or_default()
+    };
     let id = uuid::Uuid::new_v4().to_string();
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64;
+
+    // Seed the row now so the skill tag is set before the first message
+    // (mirrors the desktop "new chat" create flow). Without this,
+    // `resolve_active_mode` can't route the conversation into a
+    // workspace agent loop.
+    if let Err(e) = tr.seed_conversation(&id, now, req.skill_id.as_deref()).await {
+        return Err(api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &format!("seed conversation: {e}"),
+        ));
+    }
 
     Ok(Json(CreateConversationResponse {
         id,
@@ -203,7 +232,7 @@ pub async fn send_message(
     // Set task_id context for approval channel (will be updated by executor if needed).
     approval.set_task_id(&conversation_id).await;
 
-    match tr.handle_message(&body.content, &conversation_id).await {
+    match tr.handle_message_any(&body.content, &conversation_id).await {
         Ok(response) => {
             let task_summary = response.task.map(|t| TaskSummary {
                 id: t.id,

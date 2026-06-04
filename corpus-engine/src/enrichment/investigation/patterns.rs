@@ -64,6 +64,7 @@ pub fn detect_all(
                 attribute,
                 *threshold,
                 *comparison,
+                entities,
                 relationships,
             ),
             PatternDecl::CustomSql {
@@ -413,9 +414,12 @@ pub fn detect_threshold(
     attribute: &str,
     threshold: f64,
     comparison: Comparison,
+    entities: &[Entity],
     relationships: &[Relationship],
 ) -> Vec<PatternFinding> {
     let mut findings = Vec::new();
+    // Edge scan (unchanged): numeric attribute on an edge of `edge_type`
+    // (e.g. revenue concentration on a `revenue` edge).
     for r in relationships {
         if r.relationship_type != edge_type {
             continue;
@@ -431,32 +435,62 @@ pub fn detect_threshold(
         if !comparison_matches(n, threshold, comparison) {
             continue;
         }
-        let mut attributes = serde_json::Map::new();
-        attributes.insert(
-            "value".into(),
-            serde_json::Number::from_f64(n)
-                .map(serde_json::Value::Number)
-                .unwrap_or(serde_json::Value::Null),
-        );
-        attributes.insert(
-            "attribute".into(),
-            serde_json::Value::String(attribute.into()),
-        );
-        attributes.insert(
-            "threshold".into(),
-            serde_json::Number::from_f64(threshold)
-                .map(serde_json::Value::Number)
-                .unwrap_or(serde_json::Value::Null),
-        );
         findings.push(PatternFinding {
             pattern_name: name.to_string(),
             pattern_type: PatternKind::Threshold,
             entity_ids: vec![r.from_entity_id.clone(), r.to_entity_id.clone()],
             relationship_ids: vec![r.id.clone()],
-            attributes,
+            attributes: threshold_attrs(n, attribute, threshold),
+        });
+    }
+    // Entity scan (additive): numeric attribute stamped on an ENTITY —
+    // e.g. `sighting_count` written by `aggregate::stamp_edge_counts` for a
+    // count-based hotspot threshold. Fires when the attribute lives on the
+    // entity rather than an edge; never affects edge-attribute thresholds
+    // (their attribute isn't on these entities).
+    for e in entities {
+        let raw = match e.attributes.get(attribute) {
+            Some(v) => v,
+            None => continue,
+        };
+        let n = match coerce_number(raw) {
+            Some(n) => n,
+            None => continue,
+        };
+        if !comparison_matches(n, threshold, comparison) {
+            continue;
+        }
+        findings.push(PatternFinding {
+            pattern_name: name.to_string(),
+            pattern_type: PatternKind::Threshold,
+            entity_ids: vec![e.id.clone()],
+            relationship_ids: Vec::new(),
+            attributes: threshold_attrs(n, attribute, threshold),
         });
     }
     findings
+}
+
+/// Build the standard finding-attribute bag for a threshold match.
+fn threshold_attrs(value: f64, attribute: &str, threshold: f64) -> serde_json::Map<String, serde_json::Value> {
+    let mut attributes = serde_json::Map::new();
+    attributes.insert(
+        "value".into(),
+        serde_json::Number::from_f64(value)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+    );
+    attributes.insert(
+        "attribute".into(),
+        serde_json::Value::String(attribute.into()),
+    );
+    attributes.insert(
+        "threshold".into(),
+        serde_json::Number::from_f64(threshold)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+    );
+    attributes
 }
 
 fn coerce_number(v: &serde_json::Value) -> Option<f64> {
@@ -649,6 +683,7 @@ mod tests {
             "percentage_of_total",
             0.10,
             Comparison::GreaterThan,
+            &[],
             &relationships,
         );
         assert_eq!(findings.len(), 1);
@@ -682,9 +717,37 @@ mod tests {
             "percentage_of_total",
             0.0,
             Comparison::GreaterThan,
+            &[],
             &relationships,
         );
         assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn threshold_fires_on_entity_attribute() {
+        // A count-based hotspot: the numeric attribute lives on the
+        // ENTITY (stamped by aggregate::stamp_edge_counts), not an edge.
+        let mut attrs = serde_json::Map::new();
+        attrs.insert("sighting_count".into(), serde_json::json!(4));
+        let installation = Entity {
+            id: "e-installation-wpafb".into(),
+            canonical_name: "Wright-Patterson AFB".into(),
+            entity_type: "installation".into(),
+            attributes: attrs,
+            aliases: Vec::new(),
+        };
+        let findings = detect_threshold(
+            "sighting_hotspots",
+            "occurred_near",
+            "sighting_count",
+            3.0,
+            Comparison::GreaterThan,
+            std::slice::from_ref(&installation),
+            &[],
+        );
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].entity_ids, vec!["e-installation-wpafb"]);
+        assert!(findings[0].relationship_ids.is_empty());
     }
 
     #[test]

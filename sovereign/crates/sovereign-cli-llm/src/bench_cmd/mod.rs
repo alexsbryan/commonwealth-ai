@@ -32,6 +32,7 @@ mod enron;
 mod obsidian;
 mod render;
 mod scaffold;
+mod uap;
 
 use crate::util::help::{self, Help, HelpSection};
 
@@ -65,6 +66,10 @@ const HELP: Help = Help {
                 "scaffold",
                 "Draft a golden TOML from an existing resolved atlas — sample atoms per axis, emit reviewable starting point.",
             ),
+            (
+                "uap",
+                "Disposition-classification bench over the uap-blue-book corpus (accuracy / macro-F1 / confusion matrix).",
+            ),
         ]),
         HelpSection::Notes(
             "Operates against the running daemon at localhost:9741. The model under \
@@ -95,6 +100,7 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "enron" => enron::cmd_enron(&args[1..]).await,
         "obsidian" => obsidian::cmd_obsidian(&args[1..]).await,
         "scaffold" => scaffold::cmd_scaffold(&args[1..]).await,
+        "uap" => uap::cmd_uap(&args[1..]).await,
         other => {
             eprintln!("error: unknown bench subcommand `{other}`");
             eprintln!();

@@ -392,6 +392,54 @@ async fn main() {
             }
         };
 
+    // Recipe-author workspace tools. Registered so a conversation tagged
+    // `skill_id = "recipe-author"` (via `POST /v1/conversations
+    // {"skill_id":"recipe-author"}`) can drive the authoring agent loop over
+    // the conversation API — the headless equivalent of the desktop
+    // recipe-author workspace (`sovereign-desktop/.../state.rs`). The narrowed
+    // catalog only surfaces these when `active_mode == recipe-author`, so
+    // generic chat is unaffected.
+    {
+        use sovereign_tools::recipe_author::{
+            CapabilityRequestTool, CheckpointTool, DecisionLogTool, ProbeUrlTool, RecipeReadTool,
+            RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool, RecipeWriteTool,
+            RegistryBrowseTool, ResearchFindingTool,
+        };
+        tools.register(Box::new(RecipeReadTool::new()));
+        tools.register(Box::new(RecipeWriteTool::new()));
+        tools.register(Box::new(RecipeWriteStructuredTool::new()));
+        tools.register(Box::new(RecipeValidateTool::new()));
+        tools.register(Box::new(RecipeTestTool::new()));
+        tools.register(Box::new(RegistryBrowseTool));
+        tools.register(Box::new(ProbeUrlTool::new()));
+        if let Some(ref notes) = note_store_for_runtime {
+            tools.register(Box::new(DecisionLogTool::with_notes(Arc::clone(notes))));
+            tools.register(Box::new(ResearchFindingTool::with_notes(Arc::clone(notes))));
+            let features_db = home.join(".sovereign").join("features.db");
+            match corpus_engine_atos::FeatureStore::open(&features_db) {
+                Ok(features) => {
+                    let features = Arc::new(features);
+                    tools.register(Box::new(CheckpointTool::with_stores(
+                        Arc::clone(notes),
+                        Arc::clone(&features),
+                    )));
+                    tools.register(Box::new(CapabilityRequestTool::with_stores(
+                        Arc::clone(notes),
+                        Arc::clone(&features),
+                    )));
+                    tracing::info!("Recipe-author: tools registered (with feature store)");
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "features.db unavailable — recipe-author checkpoint/capability tools disabled");
+                }
+            }
+        } else {
+            tracing::warn!(
+                "notes.db unavailable — recipe-author decision/research/checkpoint tools disabled"
+            );
+        }
+    }
+
     // Activity reporter — signals coding intensity to Commonwealth so
     // the scheduler can route inference away from busy nodes.
     if let Some(ref commonwealth_url) = config.commonwealth.url {

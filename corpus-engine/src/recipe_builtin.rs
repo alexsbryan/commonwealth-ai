@@ -71,6 +71,14 @@ pub enum RecipeId {
     /// `EnronSampleMultiTiny` (one-way `_sent` only) missed because
     /// senders rarely echo their own names back.
     EnronSampleMultiWide,
+    /// UAP Blue Book investigation demo — case-metadata JSONL with the
+    /// full UFO.md ER graph (case/sighting/object/witness/installation/
+    /// body/adjudication) + a sighting-hotspot threshold.
+    UapBlueBook,
+    /// Companion document-scan surface for `UapBlueBook` — archival
+    /// PDFs (scanned + born-digital RG615/AARO) via `described_asset`,
+    /// sharing the same investigation enrichment block.
+    UapBlueBookScans,
 }
 
 impl RecipeId {
@@ -104,6 +112,8 @@ impl RecipeId {
             Self::EnronSampleTiny => "enron-sample-tiny",
             Self::EnronSampleMultiTiny => "enron-sample-multi-tiny",
             Self::EnronSampleMultiWide => "enron-sample-multi-wide",
+            Self::UapBlueBook => "uap-blue-book",
+            Self::UapBlueBookScans => "uap-blue-book-scans",
         }
     }
 
@@ -134,6 +144,8 @@ impl RecipeId {
             "enron-sample-tiny" => Some(Self::EnronSampleTiny),
             "enron-sample-multi-tiny" => Some(Self::EnronSampleMultiTiny),
             "enron-sample-multi-wide" => Some(Self::EnronSampleMultiWide),
+            "uap-blue-book" => Some(Self::UapBlueBook),
+            "uap-blue-book-scans" => Some(Self::UapBlueBookScans),
             _ => None,
         }
     }
@@ -259,6 +271,15 @@ impl RecipeId {
                     "/recipes/enron-sample-multi-wide/recipe.toml"
                 ))
             }
+            Self::UapBlueBook => {
+                include_str!(concat!(env!("OUT_DIR"), "/recipes/uap-blue-book/recipe.toml"))
+            }
+            Self::UapBlueBookScans => {
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/uap-blue-book-scans/recipe.toml"
+                ))
+            }
         }
     }
 
@@ -289,6 +310,8 @@ impl RecipeId {
         Self::EnronSampleTiny,
         Self::EnronSampleMultiTiny,
         Self::EnronSampleMultiWide,
+        Self::UapBlueBook,
+        Self::UapBlueBookScans,
     ];
 }
 

@@ -315,3 +315,30 @@ mesh_sharing = false
 parent_corpus_id = "enron-sample"
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/enron-sample-multi-wide/recipe.toml"
 sha256 = ""
+
+[[recipes]]
+id = "uap-blue-book"
+name = "UAP Blue Book Case Metadata"
+description = "U.S. Air Force UAP adjudication records (Sign/Grudge/Blue Book) + modern RG615/AARO as a typed investigation graph (case/sighting/object/witness/installation/body/adjudication) with a sighting-hotspot threshold."
+license = "public-domain"
+size_compressed_gb = 0.001
+size_indexed_gb = 0.01
+enrichment_enabled = true
+mesh_sharing = false
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/uap-blue-book/recipe.toml"
+sha256 = ""
+catalog_status = "preview"
+
+[[recipes]]
+id = "uap-blue-book-scans"
+name = "UAP Blue Book Document Scans"
+description = "Archival UAP documents (scanned Blue Book microfilm + born-digital RG615/AARO PDFs) via described_asset, sharing the uap-blue-book investigation ER graph."
+license = "public-domain"
+size_compressed_gb = 0.05
+size_indexed_gb = 0.05
+enrichment_enabled = true
+mesh_sharing = false
+parent_corpus_id = "uap-blue-book"
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/uap-blue-book-scans/recipe.toml"
+sha256 = ""
+catalog_status = "hidden"

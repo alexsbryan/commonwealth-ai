@@ -1,0 +1,141 @@
+# UAP Blue Book — document-scan surface (L2).
+#
+# The companion to `uap-blue-book` (which ingests case-metadata JSONL).
+# This recipe ingests the actual archival DOCUMENTS via the
+# `described_asset` extractor:
+#   - Scanned Blue Book microfilm (PDF_SCAN) — needs the PDF/OCR
+#     sub-extractor registered at daemon startup; `ocr_confidence` is
+#     populated (often low).
+#   - Born-digital RG 615 / AARO records (PDF_BORN_DIGITAL) — recover a
+#     text layer directly, NO OCR; `ocr_confidence` is null.
+# The described_asset dispatcher selects the sub-extractor by file magic,
+# so a mixed folder of scans + born-digital PDFs ingests in one pass.
+#
+# Separate recipe (not a dual extractor) because a recipe declares
+# exactly one [extract]. Shares the SAME investigation enrichment block
+# as uap-blue-book so both surfaces extract one consistent ER graph.
+#
+# Operator setup: stage the documents under
+#   ~/.sovereign/corpora-staging/uap-blue-book-scans/
+
+[corpus]
+id = "uap-blue-book-scans"
+name = "UAP Blue Book Document Scans"
+description = "Archival UAP documents (scanned Blue Book microfilm + born-digital RG615/AARO PDFs) via described_asset, sharing the uap-blue-book investigation ER graph."
+license = "public-domain"
+schema_version = 1
+parent_corpus_id = "uap-blue-book"
+mesh_sharing = false
+size_compressed_gb = 0.05
+size_indexed_gb = 0.05
+
+[acquire]
+type = "local_file"
+path = "~/.sovereign/corpora-staging/uap-blue-book-scans"
+
+[extract]
+type = "described_asset"
+max_bytes_per_asset = 67108864
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "investigation"
+domain = "investigation"
+prompt_version = "uap-v0"
+
+[[enrichment.entity_types]]
+name = "case"
+description = "The archival unit — a Blue Book/Sign/Grudge case file or an RG615/AARO record. One case usually corresponds to one sighting event."
+attributes = ["study", "record_group", "date_filed", "location_text"]
+
+[[enrichment.entity_types]]
+name = "sighting"
+description = "The observed event. Object and weather attributes hang off the event, not the file."
+attributes = ["occurred_at", "time_of_day", "duration_seconds", "num_witnesses", "detection_method"]
+
+[[enrichment.entity_types]]
+name = "observed_object"
+description = "The structured 'what was seen' — the primary features the disposition classifier reads."
+attributes = ["shape", "color", "count", "motion", "sound", "size_estimate"]
+
+[[enrichment.entity_types]]
+name = "witness"
+description = "An observer. De-identified: model the role and reliability, not the identity (NARA redacts names)."
+attributes = ["witness_ref", "category", "reliability"]
+
+[[enrichment.entity_types]]
+name = "installation"
+description = "A military base, radar site, or test range near the sighting. Primary reconciliation target."
+attributes = ["name", "branch", "type"]
+
+[[enrichment.entity_types]]
+name = "investigating_body"
+description = "The office, officer, or agency that investigated the case (OSI, ATIC, project staff)."
+attributes = ["name", "kind"]
+
+[[enrichment.entity_types]]
+name = "adjudication"
+description = "The official disposition ruling — the eval target. Carries the disposition category and rationale."
+attributes = ["category", "subcategory", "rationale_text", "origin_agency"]
+
+[[enrichment.entity_types]]
+name = "weather_context"
+description = "Atmospheric / astronomical conditions offered as an explanation (Venus prominent, temperature inversion)."
+attributes = ["visibility", "cloud_cover", "celestial_present", "temp_inversion"]
+
+[[enrichment.relationship_types]]
+name = "has_sighting"
+description = "A case has one or more sighting events."
+directional = true
+
+[[enrichment.relationship_types]]
+name = "involves_object"
+description = "A sighting involves one or more observed objects (the classifier features)."
+directional = true
+
+[[enrichment.relationship_types]]
+name = "observed_by"
+description = "A sighting was observed by a witness."
+directional = false
+
+[[enrichment.relationship_types]]
+name = "occurred_near"
+description = "A sighting occurred near an installation — drives the hotspot detector."
+directional = false
+
+[[enrichment.relationship_types]]
+name = "under_conditions"
+description = "A sighting occurred under given weather/astronomical conditions."
+directional = true
+
+[[enrichment.relationship_types]]
+name = "investigated_by"
+description = "A case was investigated by an investigating body."
+directional = true
+
+[[enrichment.relationship_types]]
+name = "officially_resolved_as"
+description = "A case was officially resolved as an adjudication (the gold ruling)."
+directional = true
+
+[[enrichment.patterns]]
+type = "threshold"
+name = "sighting_hotspots"
+description = "Installations with more than 3 nearby sightings (descriptive geography, à la AARO hotspot maps)."
+edge_type = "occurred_near"
+attribute = "sighting_count"
+threshold = 3.0
+comparison = "greater_than"
+
+[display]
+category = "investigation"
+icon = "search"

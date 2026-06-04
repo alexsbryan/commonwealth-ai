@@ -1,0 +1,301 @@
+{
+  "schema_version": 1,
+  "bench_id": "uap-disposition",
+  "policy_kind": "baseline",
+  "split": "test",
+  "corpus": "uap-blue-book",
+  "model_id": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL",
+  "captured_ts_unix": 1780526472,
+  "accuracy": 0.9166666666666666,
+  "macro_f1": 0.8888888888888888,
+  "n_aligned": 12,
+  "era_axis": [
+    "ASTRONOMICAL",
+    "AIRCRAFT",
+    "BALLOON",
+    "SATELLITE",
+    "UAS_DRONE",
+    "BIRD",
+    "ATMOSPHERIC",
+    "SENSOR_ARTIFACT",
+    "HOAX",
+    "OTHER_IDENTIFIED",
+    "INSUFFICIENT_DATA",
+    "UNIDENTIFIED"
+  ],
+  "confusion_matrix": {
+    "categories": [
+      "ASTRONOMICAL",
+      "AIRCRAFT",
+      "BALLOON",
+      "SATELLITE",
+      "UAS_DRONE",
+      "BIRD",
+      "ATMOSPHERIC",
+      "SENSOR_ARTIFACT",
+      "HOAX",
+      "OTHER_IDENTIFIED",
+      "INSUFFICIENT_DATA",
+      "UNIDENTIFIED"
+    ],
+    "matrix": [
+      [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    ]
+  },
+  "per_category": [
+    {
+      "category": "ASTRONOMICAL",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 1
+    },
+    {
+      "category": "AIRCRAFT",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 1
+    },
+    {
+      "category": "BALLOON",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 1
+    },
+    {
+      "category": "SATELLITE",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 1
+    },
+    {
+      "category": "UAS_DRONE",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 1
+    },
+    {
+      "category": "BIRD",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 1
+    },
+    {
+      "category": "ATMOSPHERIC",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 1
+    },
+    {
+      "category": "SENSOR_ARTIFACT",
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "support": 1
+    },
+    {
+      "category": "HOAX",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 1
+    },
+    {
+      "category": "OTHER_IDENTIFIED",
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "support": 1
+    },
+    {
+      "category": "INSUFFICIENT_DATA",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 1
+    },
+    {
+      "category": "UNIDENTIFIED",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 1
+    }
+  ],
+  "source": "fixture",
+  "delta_from_baseline_accuracy": null,
+  "notes": "Written by `sovereign bench uap run`. Narrative source: fixture cases.jsonl. n_aligned=12 — small-N fixture, read per-category F1 with the support column."
+}
