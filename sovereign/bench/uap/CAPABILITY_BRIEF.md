@@ -2,8 +2,9 @@
 
 The numbers behind the demo. Everything here traces to a public-domain source, a
 committed script, or a committed bench — no proprietary data, nothing that left the
-machine. `[FILL POST-ENRICH]` marks figures finalized once the hero enrichment
-(35B over the 401 unidentified cases) completes.
+machine. Graph figures are from the completed hero enrichment (35B over the 401
+unidentified cases) + the deterministic re-fold; the bench figures are a live-model
+run, reproducible with the command shown.
 
 ## The archive (real, public, local)
 
@@ -35,23 +36,41 @@ metadata (`uap-blue-book-index`, all 10,750) is a second install for breadth.
 - **Distribution:** `corpus snapshot publish --upload <hf>` bundles chunks + atlas +
   the investigation graph; `[recipes.prebuilt]` makes the cold-start a single install.
 
-## The evidence graph (hero set) `[FILL POST-ENRICH]`
+## The evidence graph (hero set)
+
+Built by the recipe-declared investigation pipeline (35B, local) over the 710
+OCR'd hero chunks, then deterministically re-folded (`enrich investigation
+recoalesce`) under the recipe's coalescing rules — no re-inference.
 
 | Metric | Value |
 |---|---|
-| Entities extracted (8 types) | `[FILL]` |
-| Relationships (7 types) | `[FILL]` |
-| Sighting-hotspot findings | `[FILL]` (installations w/ >3 nearby unidentified sightings) |
-| Installations coalesced across OCR variants | `[FILL]` (e.g. Wright-Patterson / WPAFB / OCR noise → 1 node) |
+| Entities (8 types: case / sighting / observed_object / witness / installation / investigating_body / adjudication / weather_context) | **5,598** |
+| Relationships (7 types) | **3,386** |
+| Sighting-hotspot findings | **15** (installations with >3 nearby unidentified sightings) |
+| OCR / location / org variants folded into the Wright-Patterson node | **24 → 1** (count 15) |
 
-## The disposition bench (measured, era-aware) `[FILL POST-ENRICH — real corpus]`
+Top hotspots (descriptive geography, à la AARO's maps): **Wright-Patterson 15**,
+**Washington D.C. 7** (the 1952 Capitol radar-visual flap), San Antonio 7,
+Kelly AFB 7, Kirtland 6, Lake Charles 5, George AFB 5 — plus a **nuclear-site
+cluster** (Los Alamos, Oak Ridge). Coalescing is identity-grade (only OCR
+suffix / qualifier regions fold; base tokens stay exact), so a base's true
+count is ≥ what's shown — the numbers are conservative, never inflated.
+
+## The disposition bench (measured, era-aware)
 
 - Task: classify a case's disposition from its narrative, scored against the Air
   Force's own ruling. 12-category taxonomy; **date-conditioned era mask** (no
   "Starlink" for a 1952 case; the confusion matrix is read against era-possible labels).
-- Synthetic-fixture baseline (mechanism proof): **accuracy 0.917 / macro-F1 0.889**,
-  one real confusion (SENSOR_ARTIFACT→ATMOSPHERIC).
-- Real-corpus numbers: `[FILL]` via `sovereign bench uap run|diagnose`.
+- Against the **live local 35B**: **accuracy 0.917 / macro-F1 0.889** on the
+  held-out test split (12 cases), one real confusion — **SENSOR_ARTIFACT →
+  ATMOSPHERIC** (the night-sky misread a human investigator would make too).
+  Reproduce: `sovereign bench uap run --split test --policy tuned`.
+- The bench runs on a **labeled fixture set** spanning all 12 categories, *not*
+  the hero corpus: the 401 image-backed hero cases are all the Air Force's own
+  UNIDENTIFIED (single-class by construction), so the disposition *variety* must
+  live in the fixture. The hero corpus carries the graph + grounded retrieval;
+  the fixture bench carries the "can a local model adjudicate like Blue Book did?"
+  measurement. Both are real; neither is synthetic-data-for-the-graph.
 
 ## Honesty notes
 

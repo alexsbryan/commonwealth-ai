@@ -1102,13 +1102,10 @@ impl Runtime {
                 // Comparison-shape contrast — append the directive that
                 // pins the model to a bounded axes structure rather
                 // than the open-ended essay shape.
-                // Lean prompt on the fast slot — the full rulebook makes
-                // the small model narrate citation rules instead of
-                // answering. PrimarySynthesis (below) keeps the full prompt.
                 let base = if matches!(intent, Intent::ComparisonQuery) {
-                    format!("{FAST_KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{COMPARISON_DIRECTIVE}")
+                    format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{COMPARISON_DIRECTIVE}")
                 } else {
-                    FAST_KNOWLEDGE_SYNTHESIS_SYSTEM.to_string()
+                    KNOWLEDGE_SYNTHESIS_SYSTEM.to_string()
                 };
                 let base = if gap_note.is_empty() {
                     base

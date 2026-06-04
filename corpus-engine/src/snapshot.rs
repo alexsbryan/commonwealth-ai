@@ -624,7 +624,7 @@ fn write_snapshot_archive(
 
     if let Some(enrichment_dir) = opts.enrichment_dir.as_ref() {
         let enrichment_prefix = snapshot_enrichment_path(&manifest.corpus_id);
-        tar.append_dir_all(&enrichment_prefix, enrichment_dir)?;
+        append_dir_recursive(&mut tar, &enrichment_prefix, enrichment_dir)?;
     }
 
     // Sibling-corpus bundling (e.g. SEP's 1770 per-article atlases).
@@ -643,7 +643,7 @@ fn write_snapshot_archive(
                  (no Lance-aware capture for siblings yet)"
             )));
         }
-        tar.append_dir_all(&sibling_prefix, sibling_dir)?;
+        append_dir_recursive(&mut tar, &sibling_prefix, sibling_dir)?;
     }
 
     tar.finish()?;
@@ -674,11 +674,51 @@ fn append_dir_skipping<W: io::Write>(
         let archive_path = format!("{prefix}/{name}");
         let file_type = entry.file_type()?;
         if file_type.is_dir() {
-            tar.append_dir_all(&archive_path, &path)?;
+            append_dir_recursive(tar, &archive_path, &path)?;
         } else if file_type.is_file() {
+            if is_ephemeral_artifact(&name) {
+                continue;
+            }
             tar.append_path_with_name(&path, &archive_path)?;
         } else {
             tracing::debug!(path = %path.display(), "snapshot: skipping non-regular entry");
+        }
+    }
+    Ok(())
+}
+
+/// Local-only artifacts that must NEVER ship in a distributed snapshot:
+/// recoalesce backups (`*.orig`, written by `enrich investigation recoalesce`)
+/// and the Phase-1 resume checkpoint (`_phase1_checkpoint.jsonl`). They're
+/// node-local working state, not part of the canonical corpus a downloader
+/// restores.
+fn is_ephemeral_artifact(name: &str) -> bool {
+    name.ends_with(".orig") || name == "_phase1_checkpoint.jsonl"
+}
+
+/// Recursively append a directory subtree, skipping [`is_ephemeral_artifact`]
+/// files at every level. Replaces `tar.append_dir_all`, which would ship the
+/// local backups/checkpoints nested under `investigation/` etc.
+fn append_dir_recursive<W: io::Write>(
+    tar: &mut tar::Builder<W>,
+    archive_path: &str,
+    src: &Path,
+) -> Result<()> {
+    tar.append_dir(archive_path, src)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let name_owned = entry.file_name();
+        let name = name_owned.to_string_lossy();
+        let path = entry.path();
+        let child = format!("{archive_path}/{name}");
+        let ft = entry.file_type()?;
+        if ft.is_dir() {
+            append_dir_recursive(tar, &child, &path)?;
+        } else if ft.is_file() {
+            if is_ephemeral_artifact(&name) {
+                continue;
+            }
+            tar.append_path_with_name(&path, &child)?;
         }
     }
     Ok(())
@@ -818,6 +858,52 @@ pub fn read_manifest_from_archive(archive_path: &Path) -> Result<SnapshotManifes
 mod tests {
     use super::*;
     use crate::snapshot_restore::restore_snapshot_archive;
+
+    #[test]
+    fn is_ephemeral_artifact_matches_backups_and_checkpoints() {
+        assert!(is_ephemeral_artifact("entities.json.orig"));
+        assert!(is_ephemeral_artifact("relationships.json.orig"));
+        assert!(is_ephemeral_artifact("_phase1_checkpoint.jsonl"));
+        assert!(!is_ephemeral_artifact("entities.json"));
+        assert!(!is_ephemeral_artifact("pattern_findings.json"));
+    }
+
+    #[test]
+    fn append_dir_recursive_excludes_ephemeral_artifacts() {
+        // A snapshot must not ship recoalesce backups or resume checkpoints,
+        // even when nested under investigation/.
+        let dir = tempfile::tempdir().unwrap();
+        let inv = dir.path().join("investigation");
+        std::fs::create_dir_all(&inv).unwrap();
+        std::fs::write(inv.join("entities.json"), b"{}").unwrap();
+        std::fs::write(inv.join("entities.json.orig"), b"{}").unwrap();
+        std::fs::write(inv.join("_phase1_checkpoint.jsonl"), b"{}").unwrap();
+        std::fs::write(dir.path().join("_corpus_meta.json"), b"{}").unwrap();
+
+        let mut buf = Vec::new();
+        {
+            let mut tar = tar::Builder::new(&mut buf);
+            append_dir_recursive(&mut tar, "indexes/x", dir.path()).unwrap();
+            tar.finish().unwrap();
+        }
+
+        let mut archive = tar::Archive::new(&buf[..]);
+        let names: Vec<String> = archive
+            .entries()
+            .unwrap()
+            .map(|e| e.unwrap().path().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert!(names.iter().any(|n| n.ends_with("investigation/entities.json")));
+        assert!(names.iter().any(|n| n.ends_with("_corpus_meta.json")));
+        assert!(
+            !names.iter().any(|n| n.ends_with(".orig")),
+            "recoalesce .orig backups must not ship: {names:?}"
+        );
+        assert!(
+            !names.iter().any(|n| n.ends_with("_phase1_checkpoint.jsonl")),
+            "resume checkpoint must not ship: {names:?}"
+        );
+    }
 
     fn sample_manifest() -> SnapshotManifest {
         SnapshotManifest::new(
