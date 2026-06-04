@@ -5,4 +5,7 @@
 pub mod monitor;
 pub mod reachability;
 
-pub use monitor::{ConnState, ConnectivityMonitor};
+// `ConnState` stays addressable as `monitor::ConnState` (used throughout
+// the monitor + classify path); only `ConnectivityMonitor` needs hoisting
+// to the module root, where `lib.rs` consumes it.
+pub use monitor::ConnectivityMonitor;

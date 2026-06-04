@@ -11,3 +11,7 @@
 
 # Dev-only credential placeholder (see keychain.rs)
 **/keychain-dev/
+
+# Local test host (sandboxed sovereign-server: config, sqlite db, logs,
+# fake HOME). Stood up to exercise the app end-to-end; not for the repo.
+/.host-sandbox/

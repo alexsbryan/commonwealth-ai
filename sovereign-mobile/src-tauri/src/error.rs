@@ -35,7 +35,9 @@ pub enum Error {
 }
 
 impl Serialize for Error {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+    // NB: spell out `std::result::Result` — the crate's one-param `Result`
+    // alias (below) would otherwise shadow serde's two-arg return type.
+    fn serialize<S: Serializer>(&self, s: S) -> std::result::Result<S::Ok, S::Error> {
         s.serialize_str(&self.to_string())
     }
 }
