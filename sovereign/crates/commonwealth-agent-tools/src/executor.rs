@@ -333,7 +333,7 @@ async fn exec_write_file(ctx: &ExecCtx, args: &WriteFileArgs) -> Result<ToolResu
     // belt-and-suspenders gate against syntactically-invalid
     // workdir state.
     let recovered =
-        syntax_gate_with_gutter_recovery(ctx, "write_file", args.path.as_str(), &args.content)?;
+        syntax_gate_with_gutter_recovery(ctx, "write_file", args.path.as_str(), &args.content, &[])?;
 
     if let Some(parent) = abs.parent() {
         let _ = tokio::fs::create_dir_all(parent).await;
@@ -468,10 +468,36 @@ async fn exec_patch_file(ctx: &ExecCtx, args: &PatchFileArgs) -> Result<ToolResu
         result.push('\n');
     }
 
+    // Build a boundary-deduped recovery candidate: the dominant patch
+    // defect is the model including a leading/trailing CONTEXT line that
+    // this strict line-range splice then DUPLICATES against the unchanged
+    // prefix/suffix (off-by-one on the range, or diff-style context).
+    // Trim that overlap and offer the re-spliced result as a candidate —
+    // adopted only if it parses, so a legitimate boundary-repeat is never
+    // silently shortened.
+    let deduped: Vec<String> = match dedup_patch_boundary(prefix, &new_lines, suffix) {
+        Some(trimmed) => {
+            let mut dl: Vec<&str> = Vec::with_capacity(prefix.len() + trimmed.len() + suffix.len());
+            dl.extend_from_slice(prefix);
+            dl.extend(trimmed.iter().copied());
+            dl.extend_from_slice(suffix);
+            let mut s = dl.join("\n");
+            if trailing_newline {
+                s.push('\n');
+            }
+            vec![s]
+        }
+        None => Vec::new(),
+    };
     // Pre-write syntax check on the FULL post-patch content. Symmetric
     // with exec_write_file: broken content never lands on disk.
-    let result = match syntax_gate_with_gutter_recovery(ctx, "patch_file", args.path.as_str(), &result)?
-    {
+    let result = match syntax_gate_with_gutter_recovery(
+        ctx,
+        "patch_file",
+        args.path.as_str(),
+        &result,
+        &deduped,
+    )? {
         Some(cleaned) => cleaned,
         None => result,
     };
@@ -685,12 +711,16 @@ async fn exec_replace_function(
     }
 
     // Pre-write syntax check on the full post-replace content.
-    let result =
-        match syntax_gate_with_gutter_recovery(ctx, "replace_function", args.path.as_str(), &result)?
-        {
-            Some(cleaned) => cleaned,
-            None => result,
-        };
+    let result = match syntax_gate_with_gutter_recovery(
+        ctx,
+        "replace_function",
+        args.path.as_str(),
+        &result,
+        &[],
+    )? {
+        Some(cleaned) => cleaned,
+        None => result,
+    };
 
     tokio::fs::write(&abs, result.as_bytes())
         .await
@@ -1166,11 +1196,55 @@ fn repair_escaped_whitespace(content: &str) -> Option<String> {
     }
 }
 
+/// Trim leading/trailing lines of a `patch_file` replacement that
+/// DUPLICATE the unchanged lines just outside the spliced range. The
+/// strict line-range splice does no context matching, so when the model
+/// includes a line of surrounding context (diff convention) or is off by
+/// one on `start_line`/`end_line`, that boundary line is duplicated
+/// against the prefix/suffix and corrupts the file (observed 2026-06-03
+/// on 5.1-minilang: a trailing `if op == "**":` context line duplicated
+/// the next statement → "expected an indented block"). Returns the
+/// trimmed replacement when a boundary overlap was found, else `None`.
+/// Applied only as a post-failure recovery candidate, adopted only when
+/// the re-spliced result parses clean — so a legitimate replacement that
+/// genuinely repeats a boundary line is never silently shortened.
+fn dedup_patch_boundary<'a>(
+    prefix: &[&'a str],
+    new_lines: &[&'a str],
+    suffix: &[&'a str],
+) -> Option<Vec<&'a str>> {
+    // Largest trailing overlap: tail of new_lines == head of suffix.
+    let max_tail = new_lines.len().min(suffix.len());
+    let mut tail = 0;
+    for k in (1..=max_tail).rev() {
+        if new_lines[new_lines.len() - k..] == suffix[..k] {
+            tail = k;
+            break;
+        }
+    }
+    // Largest leading overlap among the remaining lines: head of new_lines
+    // == tail of prefix.
+    let remaining = new_lines.len() - tail;
+    let max_head = remaining.min(prefix.len());
+    let mut head = 0;
+    for j in (1..=max_head).rev() {
+        if new_lines[..j] == prefix[prefix.len() - j..] {
+            head = j;
+            break;
+        }
+    }
+    if head == 0 && tail == 0 {
+        return None;
+    }
+    Some(new_lines[head..new_lines.len() - tail].to_vec())
+}
+
 fn syntax_gate_with_gutter_recovery(
     ctx: &ExecCtx,
     primitive: &'static str,
     path: &str,
     content: &str,
+    extra_candidates: &[String],
 ) -> Result<Option<String>, ToolError> {
     let Some(validator) = ctx.syntax_validator.as_ref() else {
         return Ok(None);
@@ -1198,6 +1272,24 @@ fn syntax_gate_with_gutter_recovery(
     // only a candidate that parses is adopted — valid source (e.g. a
     // string literal with a real `\n` escape) never enters this branch,
     // and if it did the repaired form wouldn't parse and isn't adopted.
+    //
+    // Caller-supplied candidates (e.g. a `patch_file` boundary-dedup) are
+    // tried FIRST — they are the most targeted repair for their primitive.
+    for cand in extra_candidates {
+        if validator
+            .check_file(std::path::Path::new(path), cand)
+            .is_empty()
+        {
+            tracing::info!(
+                path = %path,
+                primitive,
+                repair = "caller-candidate",
+                language = validator.language_id(),
+                "commonwealth_agent_tools::executor: recovered write — a caller-supplied repair candidate parsed clean"
+            );
+            return Ok(Some(cand.clone()));
+        }
+    }
     for (label, candidate) in [
         ("escaped-whitespace", repair_escaped_whitespace(content)),
         ("line-number gutters", strip_echoed_line_number_gutters(content)),
@@ -1289,6 +1381,42 @@ mod tests {
         assert_eq!(repair_escaped_whitespace("a\\tb").unwrap(), "a\tb");
         // Clean content (real newlines, no literal escapes) → None.
         assert!(repair_escaped_whitespace("def f():\n    return 1\n").is_none());
+    }
+
+    #[test]
+    fn dedup_patch_boundary_trims_trailing_context_dup() {
+        // The 5.1-minilang bomb: the replacement's trailing line duplicates
+        // the suffix's first line (off-by-one on end_line / diff-style
+        // context). It must be trimmed so the splice doesn't duplicate it.
+        let prefix = ["        lv = a;"];
+        let new_lines = [
+            "        if op == \"/\":",
+            "            return lv // rv",
+            "        if op == \"**\":",
+        ];
+        let suffix = ["        if op == \"**\":", "            return lv ** rv"];
+        let got = dedup_patch_boundary(&prefix, &new_lines, &suffix).unwrap();
+        assert_eq!(
+            got,
+            vec!["        if op == \"/\":", "            return lv // rv"]
+        );
+    }
+
+    #[test]
+    fn dedup_patch_boundary_trims_leading_context_dup() {
+        let prefix = ["def f():", "    x = 1"];
+        let new_lines = ["    x = 1", "    return x * 3"];
+        let suffix = ["    return x * 2"];
+        let got = dedup_patch_boundary(&prefix, &new_lines, &suffix).unwrap();
+        assert_eq!(got, vec!["    return x * 3"]);
+    }
+
+    #[test]
+    fn dedup_patch_boundary_none_when_no_overlap() {
+        let prefix = ["a"];
+        let new_lines = ["x", "y"];
+        let suffix = ["b"];
+        assert!(dedup_patch_boundary(&prefix, &new_lines, &suffix).is_none());
     }
 
     #[test]

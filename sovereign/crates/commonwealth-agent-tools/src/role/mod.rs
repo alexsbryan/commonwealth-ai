@@ -34,6 +34,7 @@ pub use dossier::{RoleDossier, RoleDossierOutcome};
 pub use model_map::RoleModelMap;
 pub use profile::{
     RoleProfile, SamplingOverrides, EVALUATOR_MUST_HANDOFF_SUBSET, EVALUATOR_TERMINATING_SUBSET,
+    IMPLEMENTER_REWRITE_SUBSET,
 };
 pub use transition::{transition_after, TransitionTrigger};
 
