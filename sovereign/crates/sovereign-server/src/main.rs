@@ -87,14 +87,30 @@ async fn main() {
         }
     };
 
+    // Always load a dedicated embedding model. The chat/fast slot is the
+    // wrong tool for embeddings, and the prior `load_dual` path left the
+    // embed slot empty — so `embed()` errored and corpus retrieval was
+    // silently dead. Resolve it once and thread it into every backend.
+    let embed_model = resolve_embed_model(&config.inference);
+    match embed_model {
+        Some(ref p) => tracing::info!("Embedding model: {}", p.display()),
+        None => tracing::warn!(
+            "No embedding model configured and no qwen-embedding-0.6b.gguf found \
+             next to the chat model — corpus retrieval is DISABLED (query \
+             embedding unavailable). Set [inference] embed_model or co-locate the \
+             model."
+        ),
+    }
+
     // Load inference — single model or multi-backend hybrid.
     let inference: Arc<dyn sovereign_core::traits::InferenceProvider> =
         if config.inference.backends.is_empty() {
             // Legacy single-model mode.
             tracing::info!("Loading model: {}", config.inference.model.display());
-            let embedded = match EmbeddedLlamaCpp::load_dual(
+            let embedded = match EmbeddedLlamaCpp::load_full(
                 &config.inference.model,
                 config.inference.primary_model.as_deref(),
+                embed_model.as_deref(),
                 config.inference.context_size,
                 None,
             ) {
@@ -124,9 +140,10 @@ async fn main() {
                     "embedded" => {
                         let model = bc.model.as_ref().unwrap_or(&config.inference.model);
                         tracing::info!("  Backend {}: embedded ({})", bc.name, model.display());
-                        match EmbeddedLlamaCpp::load_dual(
+                        match EmbeddedLlamaCpp::load_full(
                             model,
                             bc.primary_model.as_deref(),
+                            embed_model.as_deref(),
                             bc.context_size,
                             None,
                         ) {
@@ -668,6 +685,19 @@ async fn main() {
         eprintln!("Server error: {e}");
         std::process::exit(1);
     }
+}
+
+/// Resolve the embedding model path. An explicit `[inference] embed_model`
+/// (or the `SOVEREIGN_EMBED_MODEL` env var) wins; otherwise default to
+/// `qwen-embedding-0.6b.gguf` co-located with the chat model — the standard
+/// repo layout (`sovereign/models/`). Returns `None` only when neither is
+/// found, which leaves retrieval disabled (the caller logs it loudly).
+fn resolve_embed_model(inf: &config::InferenceSection) -> Option<PathBuf> {
+    if let Some(p) = inf.embed_model.clone() {
+        return Some(p);
+    }
+    let default = inf.model.parent()?.join("qwen-embedding-0.6b.gguf");
+    default.exists().then_some(default)
 }
 
 /// Probe `<indexes_dir>/<corpus_id>/wikipedia_graph.db` for each

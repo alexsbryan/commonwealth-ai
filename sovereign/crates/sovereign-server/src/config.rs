@@ -49,6 +49,15 @@ pub struct AuthSection {
 pub struct InferenceSection {
     pub model: PathBuf,
     pub primary_model: Option<PathBuf>,
+    /// Dedicated embedding model (e.g. `qwen-embedding-0.6b.gguf`). The chat
+    /// model is the wrong tool for embeddings, and `load_dual` left this
+    /// unset — so `embed()` errored and corpus retrieval was silently dead.
+    /// We now ALWAYS load a real embed slot: when this is absent we default
+    /// to `qwen-embedding-0.6b.gguf` co-located with the chat model (see
+    /// `main.rs::resolve_embed_model`). It must match the dimension the
+    /// installed corpora were embedded with (1024 for qwen-embedding-0.6b).
+    #[serde(default)]
+    pub embed_model: Option<PathBuf>,
     #[serde(default = "default_context_size")]
     pub context_size: u32,
     /// Multi-backend configuration. When present, overrides `model`/`primary_model`.
@@ -182,6 +191,9 @@ impl ServerConfig {
         }
         if let Ok(model) = std::env::var("SOVEREIGN_MODEL") {
             config.inference.model = PathBuf::from(model);
+        }
+        if let Ok(embed) = std::env::var("SOVEREIGN_EMBED_MODEL") {
+            config.inference.embed_model = Some(PathBuf::from(embed));
         }
         if let Ok(db_path) = std::env::var("SOVEREIGN_DB_PATH") {
             config.store.path = PathBuf::from(db_path);
