@@ -255,8 +255,17 @@ async fn main() {
         corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir.clone(), embed_fn)
             .with_batch_embed_fn(batch_embed_fn)
             .with_embedding_model(&embed_model_name)
+            // Scope retrieval to the operator's chosen corpora (empty =
+            // all). Skips opening/searching experiment/partial corpora.
+            .with_corpus_allow_list(config.retrieval.corpora.clone())
             .with_inference_fn(inference_fn.clone()),
     );
+    if !config.retrieval.corpora.is_empty() {
+        tracing::info!(
+            corpora = ?config.retrieval.corpora,
+            "retrieval scoped to allow-listed corpora"
+        );
+    }
 
     // KnowledgeView integration: register the SQLite acquirer on the
     // engine, build the manager with the `inner-work` skill's

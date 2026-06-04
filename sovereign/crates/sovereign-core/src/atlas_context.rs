@@ -142,6 +142,16 @@ impl AtlasGraph {
 /// targeting within the larger section.
 #[derive(Debug, Clone)]
 pub struct ChunkRequest {
+    /// The corpus this atom (and therefore its source chunk) belongs to
+    /// — the `atlas_corpus_id` of the graph that produced it. Lets the
+    /// fetch scope its search to the one corpus the chunk lives in,
+    /// instead of FTS-scanning every enabled corpus per request (a
+    /// 1.9M-chunk wikipedia index would otherwise be searched once per
+    /// atom). The chunk lives here because the atlas was extracted from
+    /// this corpus, so scoping selects the same chunk the cross-corpus
+    /// title filter would — and avoids pulling a same-titled article
+    /// from the wrong corpus.
+    pub corpus_id: String,
     pub article_slug: String,
     /// The atom-evidence section id (e.g. `sec_0001`) in the
     /// per-article extraction corpus. Direct key into chapters.json.
@@ -622,8 +632,14 @@ pub fn atlas_navigate(
     //    Entities, quotable_excerpt on Claims) so retrieval can
     //    surface the article's exact words for the position the
     //    chunk grounds — judge-visibility lift over chunk-only.
-    let mut chunk_scores: HashMap<(String, String), (f32, String, Vec<String>, Vec<String>)> =
-        HashMap::new();
+    // Value tuple: (score, preview, motivating_atoms, verbatim, corpus_id).
+    // corpus_id is the graph's `atlas_corpus_id`, recorded on first insert
+    // — the chunk for a given (article_slug, chunk_id) lives in exactly one
+    // corpus, so first-seen is its home corpus and the fetch can scope to it.
+    let mut chunk_scores: HashMap<
+        (String, String),
+        (f32, String, Vec<String>, Vec<String>, String),
+    > = HashMap::new();
     for ((atlas_id, atom_id), atom_weight) in &neighborhood {
         let Some(graph) = graph_by_id.get(atlas_id.as_str()) else {
             continue;
@@ -642,6 +658,7 @@ pub fn atlas_navigate(
                 preview.to_string(),
                 Vec::new(),
                 Vec::new(),
+                graph.atlas_corpus_id.clone(),
             ));
             entry.0 += atom_weight;
             // Take the longest preview seen for this chunk_id — more
@@ -661,13 +678,16 @@ pub fn atlas_navigate(
     let mut requests: Vec<ChunkRequest> = chunk_scores
         .into_iter()
         .map(
-            |((article_slug, chunk_id), (score, preview, motivating, verbatim))| ChunkRequest {
-                article_slug,
-                chunk_id,
-                passage_preview: preview,
-                score,
-                motivating_atoms: motivating,
-                verbatim_excerpts: verbatim,
+            |((article_slug, chunk_id), (score, preview, motivating, verbatim, corpus_id))| {
+                ChunkRequest {
+                    corpus_id,
+                    article_slug,
+                    chunk_id,
+                    passage_preview: preview,
+                    score,
+                    motivating_atoms: motivating,
+                    verbatim_excerpts: verbatim,
+                }
             },
         )
         .collect();
