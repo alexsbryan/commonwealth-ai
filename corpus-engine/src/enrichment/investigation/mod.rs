@@ -30,6 +30,7 @@
 //! also persisting the artefact for the audit step.
 
 pub mod aggregate;
+pub mod checkpoint;
 pub mod extract;
 pub mod graph;
 pub mod patterns;
@@ -113,20 +114,137 @@ pub async fn run_investigation<'a>(
         Vec::with_capacity(chunks.len() * 4);
     let mut all_entities: Vec<(String, extract::ExtractedEntity)> =
         Vec::with_capacity(chunks.len() * 4);
+
+    // Resume from any prior partial run. The append-only checkpoint
+    // (`investigation/_phase1_checkpoint.jsonl`) records every chunk whose
+    // extraction has settled — so a crash mid-run (e.g. an unrecoverable
+    // daemon fault) never discards completed work. We seed the accumulators
+    // from the recorded successes and skip every already-processed chunk,
+    // turning a multi-hour 35B pass into a restartable one.
+    let ckpt_path = checkpoint::checkpoint_path(&output_dir.join(INVESTIGATION_DIRNAME));
+    let prior = checkpoint::read_checkpoint(&ckpt_path)?;
+    let processed = checkpoint::processed_ids(&prior);
+    for (chunk_id, extracted) in checkpoint::collapse_successes(&prior) {
+        for ent in extracted.entities {
+            all_entities.push((chunk_id.clone(), ent));
+        }
+        for rel in extracted.relationships {
+            all_extractions.push((chunk_id.clone(), rel));
+        }
+    }
+    let resumed = processed.len();
+    if resumed > 0 {
+        tracing::info!(
+            resumed,
+            total = chunks.len(),
+            "investigation: resuming Phase 1 from checkpoint — skipping already-processed chunks"
+        );
+    }
+
+    // A chunk's extraction must survive a *transient* daemon fault. Two
+    // failure modes are non-fatal and worth a retry, NOT a run abort:
+    //   1. inference-call error — e.g. an intermittent `MTP process(verify)
+    //      failed` 503 from the daemon's speculative-decode path on a
+    //      schema-constrained call. The daemon recovers per-request and the
+    //      chunk content is fine, so a re-roll almost always succeeds.
+    //   2. unparseable reply — a schema-mask hiccup on noisy OCR; a fresh
+    //      sample frequently yields clean JSON.
+    // Retry each chunk with exponential backoff and skip it (loudly) only once
+    // every attempt is exhausted, so one ~sub-1% glitch can't discard a
+    // multi-hour run over hundreds of chunks — and the retries keep the graph
+    // COMPLETE rather than silently dropping a node.
+    const MAX_CHUNK_ATTEMPTS: u32 = 4;
+    let mut skipped = 0usize;
     for chunk in chunks {
+        // Already handled in a prior run — its result is seeded above.
+        if processed.contains(chunk.chunk_id) {
+            continue;
+        }
         let prompt = extract::compose_extract_prompt(
             chunk,
             &enrichment.entity_types,
             &enrichment.relationship_types,
         );
-        let response = (chat)(&prompt).await?;
-        let parsed = extract::parse_extract_response(&response)?;
+        let mut parsed: Option<extract::ExtractedChunk> = None;
+        for attempt in 1..=MAX_CHUNK_ATTEMPTS {
+            match (chat)(&prompt).await {
+                Ok(response) => match extract::parse_extract_response(&response) {
+                    Ok(p) => {
+                        parsed = Some(p);
+                        break;
+                    }
+                    Err(e) => tracing::warn!(
+                        chunk_id = %chunk.chunk_id,
+                        attempt,
+                        max_attempts = MAX_CHUNK_ATTEMPTS,
+                        error = %e,
+                        "investigation: extraction reply did not parse — retrying"
+                    ),
+                },
+                Err(e) => tracing::warn!(
+                    chunk_id = %chunk.chunk_id,
+                    attempt,
+                    max_attempts = MAX_CHUNK_ATTEMPTS,
+                    error = %e,
+                    "investigation: extraction inference call failed — retrying"
+                ),
+            }
+            if attempt < MAX_CHUNK_ATTEMPTS {
+                // 0.5s, 1s, 2s — modest next to the ~20s/call cost; lets a
+                // per-request daemon glitch clear before the next attempt.
+                let backoff_ms = 500u64 << (attempt - 1);
+                tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+            }
+        }
+        let parsed = match parsed {
+            Some(p) => p,
+            None => {
+                skipped += 1;
+                tracing::warn!(
+                    chunk_id = %chunk.chunk_id,
+                    attempts = MAX_CHUNK_ATTEMPTS,
+                    "investigation: skipping chunk — all extraction attempts exhausted"
+                );
+                // Record the skip so a resume doesn't retry it forever.
+                checkpoint::append_checkpoint(
+                    &ckpt_path,
+                    &checkpoint::ChunkCheckpointEntry::Skipped {
+                        chunk_id: chunk.chunk_id.to_string(),
+                        reason: format!("extraction failed after {MAX_CHUNK_ATTEMPTS} attempts"),
+                    },
+                )?;
+                continue;
+            }
+        };
+        // Checkpoint the success BEFORE folding it into the accumulators, so a
+        // crash on the very next chunk still finds this one recorded.
+        checkpoint::append_checkpoint(
+            &ckpt_path,
+            &checkpoint::ChunkCheckpointEntry::Success {
+                chunk_id: chunk.chunk_id.to_string(),
+                extracted: parsed.clone(),
+            },
+        )?;
         for ent in parsed.entities {
             all_entities.push((chunk.chunk_id.to_string(), ent));
         }
         for rel in parsed.relationships {
             all_extractions.push((chunk.chunk_id.to_string(), rel));
         }
+    }
+    if skipped > 0 {
+        tracing::warn!(
+            skipped,
+            resumed,
+            total = chunks.len(),
+            "investigation: Phase 1 extraction complete WITH skipped chunks (retries exhausted)"
+        );
+    } else {
+        tracing::info!(
+            resumed,
+            total = chunks.len(),
+            "investigation: Phase 1 extraction complete — every chunk parsed"
+        );
     }
 
     // Phase 2 — Coalesce entities; rewrite relationships to canonical ids.
@@ -181,6 +299,14 @@ pub async fn run_investigation<'a>(
     // Persist + return. Persistence is best-effort: a write error
     // is surfaced to the caller, who can decide whether to retry.
     graph::write_outputs(output_dir, &entities, &relationships, &findings)?;
+
+    // Phase 1's results are now folded into the durable graph outputs, so the
+    // resume checkpoint has served its purpose. Clear it so a *fresh*
+    // re-enrich (e.g. after a recipe/prompt change) starts from zero rather
+    // than skipping every chunk against a stale checkpoint. A crash before
+    // this point leaves the checkpoint in place for the next run to resume.
+    checkpoint::clear_checkpoint(&ckpt_path)?;
+
     Ok(InvestigationOutput {
         entities,
         relationships,
@@ -369,6 +495,159 @@ customer = "revenue.to"
             .join(INVESTIGATION_DIRNAME)
             .join(ENTITIES_FILENAME)
             .exists());
+    }
+
+    /// A *transient* inference fault — the daemon's intermittent
+    /// `MTP process(verify) failed` 503 on a schema-constrained call — must
+    /// NOT abort the run or drop the chunk. The loop retries with backoff and
+    /// recovers the extraction. This closure fails the first two attempts,
+    /// then returns a valid one-relationship reply; the recovered chunk must
+    /// still yield its two entities + one relationship. `start_paused` lets
+    /// the backoff sleeps auto-advance so the test stays fast.
+    #[tokio::test(start_paused = true)]
+    async fn transient_inference_fault_is_retried_not_dropped() {
+        let recipe = make_recipe();
+        let chunks = vec![ChunkInput {
+            chunk_id: "chunk-0",
+            source_title: Some("MSFT 10-K"),
+            content: "Microsoft invested $13B in OpenAI.",
+        }];
+
+        let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let chat: ChatCompletionFn = {
+            let attempts = attempts.clone();
+            Arc::new(move |_prompt| {
+                let attempts = attempts.clone();
+                Box::pin(async move {
+                    let n = attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    if n < 2 {
+                        Err(crate::error::Error::Serialization(
+                            "simulated transient daemon fault: MTP process(verify) failed".into(),
+                        ))
+                    } else {
+                        Ok(r#"{
+                            "relationships": [
+                                {
+                                    "from_entity": "Microsoft",
+                                    "to_entity": "OpenAI",
+                                    "from_type": "company",
+                                    "to_type": "company",
+                                    "type": "investment",
+                                    "attributes": {"amount_usd": 13000000000},
+                                    "verbatim_excerpt": "Microsoft invested $13B in OpenAI",
+                                    "confidence": 0.95
+                                }
+                            ]
+                        }"#
+                        .to_string())
+                    }
+                })
+            })
+        };
+
+        let dir = tempfile::tempdir().unwrap();
+        let out = run_investigation(&recipe, &chunks, chat, dir.path())
+            .await
+            .unwrap();
+
+        // Recovered on the 3rd attempt — the chunk is NOT dropped.
+        assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 3);
+        assert_eq!(out.entities.len(), 2);
+        assert_eq!(out.relationships.len(), 1);
+    }
+
+    /// When *every* attempt fails, the chunk is skipped — never fatal. The
+    /// run completes and simply yields no extraction for that chunk, so one
+    /// permanently-bad chunk can't discard a multi-hour run.
+    #[tokio::test(start_paused = true)]
+    async fn exhausted_retries_skip_chunk_without_aborting() {
+        let recipe = make_recipe();
+        let chunks = vec![ChunkInput {
+            chunk_id: "chunk-0",
+            source_title: None,
+            content: "Whatever.",
+        }];
+        let chat: ChatCompletionFn = Arc::new(|_| {
+            Box::pin(async { Err(crate::error::Error::Serialization("always fails".into())) })
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let out = run_investigation(&recipe, &chunks, chat, dir.path())
+            .await
+            .unwrap();
+        assert!(out.entities.is_empty());
+        assert!(out.relationships.is_empty());
+    }
+
+    /// Resume: a chunk recorded in a prior run's checkpoint must NOT be
+    /// re-sent to the LLM, and its extraction must survive into the output.
+    /// We seed the checkpoint by hand to simulate a crashed partial run, then
+    /// assert (1) only the un-processed chunk hits the chat closure, (2) the
+    /// resumed chunk's relationship is in the result, and (3) the checkpoint
+    /// is cleared once the run completes.
+    #[tokio::test]
+    async fn resumes_from_checkpoint_without_recalling_llm() {
+        let recipe = make_recipe();
+        let dir = tempfile::tempdir().unwrap();
+
+        let ckpt = checkpoint::checkpoint_path(&dir.path().join(INVESTIGATION_DIRNAME));
+        checkpoint::append_checkpoint(
+            &ckpt,
+            &checkpoint::ChunkCheckpointEntry::Success {
+                chunk_id: "chunk-0".into(),
+                extracted: extract::ExtractedChunk {
+                    entities: vec![],
+                    relationships: vec![extract::ExtractedRelationship {
+                        from_entity: "Microsoft".into(),
+                        to_entity: "OpenAI".into(),
+                        from_type: "company".into(),
+                        to_type: "company".into(),
+                        relationship_type: "investment".into(),
+                        attributes: Default::default(),
+                        verbatim_excerpt: "Microsoft invested in OpenAI".into(),
+                        confidence: 0.9,
+                    }],
+                },
+            },
+        )
+        .unwrap();
+
+        // Counts LLM calls; a resume must skip chunk-0 entirely.
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let chat: ChatCompletionFn = {
+            let calls = calls.clone();
+            Arc::new(move |_p| {
+                let calls = calls.clone();
+                Box::pin(async move {
+                    calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    Ok(r#"{"relationships":[]}"#.to_string())
+                })
+            })
+        };
+
+        let chunks = vec![
+            ChunkInput {
+                chunk_id: "chunk-0",
+                source_title: None,
+                content: "already done in a prior run",
+            },
+            ChunkInput {
+                chunk_id: "chunk-1",
+                source_title: None,
+                content: "fresh chunk",
+            },
+        ];
+
+        let out = run_investigation(&recipe, &chunks, chat, dir.path())
+            .await
+            .unwrap();
+
+        // Only chunk-1 hit the LLM — chunk-0 was resumed from the checkpoint.
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        // chunk-0's relationship + its two backfilled endpoints survived.
+        assert_eq!(out.relationships.len(), 1);
+        assert_eq!(out.entities.len(), 2);
+        // Checkpoint cleared on successful completion (fresh re-enrich starts over).
+        assert!(!ckpt.exists());
     }
 
     /// `_` unused-import dance: silences `Phase3PatternsRoundTrip`

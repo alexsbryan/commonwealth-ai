@@ -87,6 +87,32 @@ pub struct CitationDto {
     pub rank: i64,
 }
 
+/// One chunk in a reading window — the full passage text (not the
+/// truncated citation snippet) served by the host's corpus engine.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReadChunkDto {
+    pub chunk_id: u64,
+    pub content: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+}
+
+/// A cited passage + its surrounding context — the reader's payload.
+/// Mirrors the server's `ReadingWindowResponse`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReadingWindowDto {
+    pub corpus_id: String,
+    pub found: bool,
+    #[serde(default)]
+    pub center: Option<ReadChunkDto>,
+    #[serde(default)]
+    pub prev: Vec<ReadChunkDto>,
+    #[serde(default)]
+    pub next: Vec<ReadChunkDto>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct CorpusListDto {
     #[serde(default)]

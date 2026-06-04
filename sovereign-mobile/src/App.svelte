@@ -42,7 +42,7 @@
 </script>
 
 {#if !loaded}
-  <p class="loading">Loading…</p>
+  <div class="loading"><span class="crest">◈</span></div>
 {:else if !paired}
   <PairingScreen onpaired={refreshHosts} />
 {:else}
@@ -59,7 +59,19 @@
 
 <style>
   .loading {
-    padding: 1rem;
-    color: var(--muted);
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .loading .crest {
+    font-size: 2rem;
+    color: var(--lavender);
+    text-shadow: 0 0 20px var(--lavender-glow);
+    animation: breathe 1.8s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%, 100% { opacity: 0.32; transform: scale(0.96); }
+    50%      { opacity: 0.72; transform: scale(1.04); }
   }
 </style>

@@ -79,7 +79,10 @@ pub struct ExtractedEntity {
 /// optional in the wire schema — a model that only emits
 /// relationships still parses, and the relationship endpoints
 /// backfill any entities not listed explicitly.
-#[derive(Debug, Clone, Default, PartialEq)]
+// `Serialize`/`Deserialize` so a parsed chunk can be persisted verbatim to
+// the Phase-1 resume checkpoint (see `checkpoint.rs`) and rebuilt on a
+// re-run without re-calling the LLM.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ExtractedChunk {
     pub entities: Vec<ExtractedEntity>,
     pub relationships: Vec<ExtractedRelationship>,
@@ -255,9 +258,14 @@ fn response_schema(
 /// - `<think>...</think>` reasoning preambles (stripped)
 /// - Code-fenced JSON blocks (`json ... ```)
 /// - Trailing whitespace
+/// - **Trailing characters after the JSON object** — the 35B
+///   occasionally appends a duplicate object / stray prose after a
+///   complete `{...}` (observed mid-run on noisy OCR input). We read
+///   the FIRST complete JSON value via a streaming deserializer and
+///   ignore whatever follows, rather than rejecting the whole response.
 ///
 /// Errors with a descriptive message on schema mismatch so the
-/// caller can log + retry.
+/// caller can log + skip the chunk.
 pub fn parse_extract_response(response: &str) -> Result<ExtractedChunk> {
     let cleaned = strip_think(response);
     let cleaned = strip_code_fences(&cleaned);
@@ -266,12 +274,19 @@ pub fn parse_extract_response(response: &str) -> Result<ExtractedChunk> {
         return Ok(ExtractedChunk::default());
     }
 
-    let value: serde_json::Value = serde_json::from_str(cleaned).map_err(|e| {
-        Error::Serialization(format!(
-            "investigation extract response is not valid JSON: {e} (got: {})",
-            preview(cleaned, 200),
-        ))
-    })?;
+    // Read the first complete JSON value; trailing characters after it
+    // (a duplicated object, stray prose) are tolerated and discarded.
+    let mut stream = serde_json::Deserializer::from_str(cleaned).into_iter::<serde_json::Value>();
+    let value: serde_json::Value = match stream.next() {
+        Some(Ok(v)) => v,
+        Some(Err(e)) => {
+            return Err(Error::Serialization(format!(
+                "investigation extract response is not valid JSON: {e} (got: {})",
+                preview(cleaned, 200),
+            )))
+        }
+        None => return Ok(ExtractedChunk::default()),
+    };
 
     // `relationships` is required (the load-bearing output); `entities`
     // is optional so a model that only emits relationships still parses
@@ -673,6 +688,20 @@ mod tests {
         let parsed = parse_extract_response(response).unwrap();
         assert!(parsed.entities.is_empty());
         assert!(parsed.relationships.is_empty());
+    }
+
+    #[test]
+    fn parses_response_with_trailing_characters() {
+        // Regression: the 35B occasionally appends a duplicate object /
+        // stray text after a complete JSON object (observed mid-run on
+        // noisy OCR). We read the FIRST value and ignore the trailing
+        // junk rather than aborting the whole run.
+        let response = "{\"relationships\": [{\"from_entity\":\"a\",\"to_entity\":\"b\",\
+            \"from_type\":\"t\",\"to_type\":\"t\",\"type\":\"r\",\"verbatim_excerpt\":\"x\"}]}\n\n\
+            {\"relationships\": []}\nstray trailing prose";
+        let parsed = parse_extract_response(response).unwrap();
+        assert_eq!(parsed.relationships.len(), 1);
+        assert_eq!(parsed.relationships[0].from_entity, "a");
     }
 
     #[test]

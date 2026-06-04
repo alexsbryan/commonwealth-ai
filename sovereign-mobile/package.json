@@ -12,6 +12,9 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@fontsource-variable/ibm-plex-sans": "^5.2.8",
+    "@fontsource-variable/source-serif-4": "^5.2.9",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
     "@tauri-apps/api": "~2.11.0",
     "@xstate/svelte": "^5.0.0",
     "highlight.js": "^11.11.1",

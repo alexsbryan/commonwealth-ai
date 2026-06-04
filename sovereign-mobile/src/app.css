@@ -1,52 +1,225 @@
+/* ─── Design tokens — The Lavender Court (mobile port) ───────────── */
+/* Ported verbatim from sovereign-desktop/src/app.css. The phone is a    */
+/* thin window onto the same hall: warm plum-dark, amethyst stone, gold  */
+/* candlelight, lavender as the crown. Only the SHELL (safe areas, touch */
+/* targets, full-bleed layout) is adapted for the mobile form.           */
 :root {
-  --bg: #0f1115;
-  --surface: #181b22;
-  --text: #e6e8ec;
-  --muted: #9aa3b2;
-  --accent: #6ea8fe;
-  --danger: #ff6b6b;
-  --warn: #f0b429;
-  font-family: -apple-system, system-ui, "IBM Plex Sans", sans-serif;
+  /* ── Backgrounds — warm plum-dark, amethyst undertone ── */
+  --bg-root:       #0E0B15;
+  --bg-primary:    #130F1B;
+  --bg-secondary:  #100D17;
+  --bg-surface:    #1C1729;
+  --bg-elevated:   #231D38;
+  --bg-input:      #150F1E;
+
+  /* ── Text — lavender-cream hierarchy, WCAG AA+ ── */
+  --text-primary:   #EDE8F6;
+  --text-secondary: #AFA3CD;
+  --text-muted:     #6B6087;
+
+  /* ── Gold — sovereign light; sunlight on lavender stone ── */
+  --accent:        #C9A84C;
+  --accent-light:  #DFC068;
+  --accent-hover:  #D4B257;
+  --accent-dim:    rgba(201, 168, 76, 0.14);
+  --accent-glow:   rgba(201, 168, 76, 0.06);
+
+  /* ── Lavender — the court's signature; the crown color ── */
+  --lavender:      #9B87C4;
+  --lavender-light:#C4B8E8;
+  --lavender-dim:  rgba(155, 135, 196, 0.14);
+  --lavender-glow: rgba(155, 135, 196, 0.06);
+
+  /* ── Sage / periwinkle / terracotta secondary accents ── */
+  --growth:        #79C478;
+  --growth-dim:    rgba(121, 196, 120, 0.13);
+  --sky:           #8BAFD4;
+  --sky-dim:       rgba(139, 175, 212, 0.12);
+  --coral:         #C8714E;
+  --coral-dim:     rgba(200, 113, 78, 0.13);
+
+  /* ── Semantic ── */
+  --success:  #79C478;
+  --warning:  #C9A84C;
+  --error:    #C95F78;   /* rose-plum, not a jarring red */
+
+  /* ── Borders — warm amethyst tint ── */
+  --border:        #1E1832;
+  --border-mid:    #2B2248;
+  --border-bright: #3D3364;
+
+  /* ── Message bubbles + text on accent ── */
+  --user-bubble:    #1E1838;
+  --text-on-accent: #0E0B15;
+
+  /* ── Radii ── */
+  --radius:    6px;
+  --radius-lg: 10px;
+  --radius-xl: 18px;
+
+  /* ── Typography stacks (fontsource-bundled in main.ts) ── */
+  --font-sans:  'IBM Plex Sans Variable', 'IBM Plex Sans', system-ui, sans-serif;
+  --font-serif: 'Source Serif 4 Variable', 'Source Serif 4', Georgia, serif;
+  --font-mono:  'IBM Plex Mono', ui-monospace, 'Cascadia Code', monospace;
 }
 
-* {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#app {
+/* ─── Reset ───────────────────────────────────────────────────── */
+*, *::before, *::after {
   margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body, #app {
   height: 100%;
-  background: var(--bg);
-  color: var(--text);
+  width: 100%;
+}
+
+/* ─── Base ────────────────────────────────────────────────────── */
+body {
+  font-family: var(--font-sans);
+  /* ss03 (alt a) + ss05 (alt g) + ligatures: Plex away from IBM-corporate. */
+  font-feature-settings: "ss03", "ss05", "calt", "liga";
+  font-weight: 420;
+  letter-spacing: -0.003em;
+  background-color: var(--bg-root);
+
+  /* Lavender bloom upper-right, gold pool lower-left, purple breath centre. */
+  background-image:
+    radial-gradient(ellipse 70% 44% at 88% 4%,  rgba(155, 135, 196, 0.14) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 40% at 8% 96%,  rgba(201, 168, 76,  0.11) 0%, transparent 66%),
+    radial-gradient(ellipse 50% 38% at 55% 52%, rgba(155, 135, 196, 0.04) 0%, transparent 65%);
+  background-size: 100% 100%;
+  background-attachment: fixed;
+
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 #app {
   display: flex;
   flex-direction: column;
-  /* Respect notches / home indicator on iOS. */
+  background: transparent;
+  /* Respect notch / Dynamic Island / home indicator. */
   padding: env(safe-area-inset-top) env(safe-area-inset-right)
-    env(safe-area-inset-bottom) env(safe-area-inset-left);
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
+/* ── Velvet grain — a fixed noise overlay at ~3% gives the deep
+   backgrounds a cloth-like quality. ── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.028;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.80' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 192px 192px;
+  mix-blend-mode: overlay;
+}
+
+/* ─── Form resets ─────────────────────────────────────────────── */
 button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+input, textarea, select {
   font: inherit;
   color: inherit;
-  background: var(--accent);
-  border: none;
-  border-radius: 8px;
-  padding: 0.6rem 1rem;
-  color: #0b1020;
-  font-weight: 600;
 }
 
-input,
-textarea {
-  font: inherit;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid #2a2f3a;
-  border-radius: 8px;
-  padding: 0.6rem 0.75rem;
+/* ─── Scrollbars / focus / selection ──────────────────────────── */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+:focus-visible {
+  outline: 2px solid var(--lavender);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+::selection { background: var(--lavender-dim); color: var(--text-primary); }
+
+/* ─── Prose — assistant responses render in Source Serif 4 ────── */
+.sv-prose {
+  font-family: var(--font-serif);
+  font-variation-settings: "opsz" 14;
+  font-weight: 380;
+  font-feature-settings: "kern", "liga", "calt";
+  font-size: 16px;
+  line-height: 1.72;
+  color: var(--text-primary);
+}
+.sv-prose h1, .sv-prose h2, .sv-prose h3, .sv-prose h4 {
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  margin-top: 1.1em;
+  margin-bottom: 0.4em;
+  line-height: 1.3;
+}
+.sv-prose h1 { font-size: 1.35em; font-weight: 700; }
+.sv-prose h2 { font-size: 1.14em; font-weight: 600; }
+.sv-prose h3 { font-size: 1.0em;  font-weight: 600; color: var(--text-secondary); }
+.sv-prose h4 { font-size: 0.95em; font-weight: 600; color: var(--text-muted); }
+.sv-prose p  { margin-bottom: 0.75em; }
+.sv-prose strong { font-weight: 700; color: var(--text-primary); }
+.sv-prose em { font-style: italic; }
+.sv-prose ul, .sv-prose ol { margin-left: 1.3em; margin-bottom: 0.75em; }
+.sv-prose li { margin-bottom: 0.3em; }
+.sv-prose hr { border: none; border-top: 1px solid var(--border-mid); margin: 1.1em 0; }
+.sv-prose blockquote {
+  border-left: 3px solid var(--lavender-dim);
+  padding-left: 1em;
+  margin: 0.75em 0;
+  color: var(--text-secondary);
+}
+.sv-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-elevated);
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+  color: var(--lavender-light);
+}
+.sv-prose pre {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.8em 1em;
+  margin: 0.75em 0;
+  overflow-x: auto;
+}
+.sv-prose pre code { background: none; padding: 0; }
+
+/* Inline source citations (◈ chip) — rendered by markdown.ts, tappable
+   to open the reader (delegated handler in AssistantMessage). */
+.sv-prose .source-citation {
+  display: inline;
+  font-family: var(--font-sans);
+  font-size: 0.78em;
+  font-weight: 500;
+  color: var(--lavender-light);
+  background: var(--lavender-dim);
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.sv-prose .source-citation:active {
+  background: color-mix(in srgb, var(--lavender) 26%, transparent);
+  color: var(--text-primary);
+}
+.sv-prose .source-citation::before {
+  content: "\25C8 ";
+  font-size: 0.8em;
+  opacity: 0.6;
 }

@@ -72,8 +72,8 @@
       void submit();
     }}
   >
-    <input bind:value={input} placeholder="Ask your host…" />
-    <button type="submit">Send</button>
+    <input bind:value={input} placeholder="Type a message…" />
+    <button type="submit" disabled={!input.trim()}>Send</button>
   </form>
 </div>
 
@@ -85,37 +85,76 @@
     min-height: 0;
   }
   header {
-    padding: 0.5rem;
+    display: flex;
+    align-items: center;
+    padding: 0.35rem 0.5rem;
+    border-bottom: 1px solid var(--border);
   }
   .back {
-    background: transparent;
-    color: var(--text);
-    font-size: 1.2rem;
-    padding: 0.3rem 0.6rem;
+    color: var(--text-secondary);
+    font-size: 1.4rem;
+    line-height: 1;
+    padding: 0.35rem 0.65rem;
+    border-radius: var(--radius);
+    transition: color 0.15s, background 0.15s;
+  }
+  .back:active {
+    color: var(--lavender);
+    background: var(--bg-surface);
   }
   .scroll {
     flex: 1;
     overflow-y: auto;
-    padding: 0.75rem;
+    padding: 1rem 0.9rem;
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 1rem;
   }
   .user {
     align-self: flex-end;
-    background: var(--accent);
-    color: #0b1020;
-    padding: 0.5rem 0.75rem;
-    border-radius: 12px 12px 2px 12px;
-    max-width: 80%;
+    max-width: 82%;
+    background: var(--user-bubble);
+    border: 1px solid var(--border-mid);
+    color: var(--text-primary);
+    padding: 0.62rem 0.85rem;
+    border-radius: var(--radius-lg) var(--radius-lg) var(--radius) var(--radius-lg);
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-wrap: break-word;
   }
   .composer {
     display: flex;
     gap: 0.5rem;
-    padding: 0.6rem;
-    border-top: 1px solid #232833;
+    align-items: flex-end;
+    padding: 0.6rem 0.7rem calc(0.6rem + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    background: var(--bg-secondary);
   }
   .composer input {
     flex: 1;
+    background: var(--bg-input);
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius);
+    padding: 0.62rem 0.8rem;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    transition: border-color 0.15s;
   }
+  .composer input::placeholder { color: var(--text-muted); }
+  .composer input:focus {
+    outline: none;
+    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+  .composer button {
+    background: var(--accent);
+    color: var(--text-on-accent);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 0.62rem 1rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: background 0.15s, opacity 0.15s;
+  }
+  .composer button:active:not(:disabled) { background: var(--accent-hover); }
+  .composer button:disabled { opacity: 0.4; }
 </style>

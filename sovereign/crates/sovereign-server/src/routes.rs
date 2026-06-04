@@ -297,18 +297,27 @@ pub async fn get_conversation(
 /// GET /v1/conversations
 pub async fn list_conversations(
     Extension(runtime): Extension<Arc<Runtime>>,
-    Extension(_tenant): Extension<TenantId>,
+    Extension(tenant): Extension<TenantId>,
     Query(params): Query<ListQuery>,
 ) -> ApiResult<ConversationListResponse> {
     let limit = params.limit.unwrap_or(20);
     let offset = params.offset.unwrap_or(0);
 
+    // Conversations are stored tenant-scoped as `tenant:id`. Two things must
+    // happen here that previously didn't: (1) filter to THIS tenant so we
+    // don't leak other tenants' conversations, and (2) strip the `tenant:`
+    // prefix so the client sees the bare id it created. Returning the scoped
+    // id made the client re-scope it on open — `GET /v1/conversations/
+    // {tenant:id}` becomes `tenant:tenant:id`, which matches nothing, so
+    // every existing conversation opened empty.
+    let prefix = format!("{}:", tenant.0);
     match runtime.store.list_conversations(limit, offset).await {
         Ok(convos) => Ok(Json(ConversationListResponse {
             conversations: convos
                 .into_iter()
+                .filter(|c| c.id.starts_with(&prefix))
                 .map(|c| ConversationListEntry {
-                    id: c.id,
+                    id: c.id.strip_prefix(&prefix).unwrap_or(&c.id).to_string(),
                     title: c.title,
                     created_at: c.created_at,
                     updated_at: c.updated_at,
@@ -460,5 +469,85 @@ pub async fn list_corpora(
             Ok(Json(CorpusListResponse { corpora }))
         }
         Err(e) => Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())),
+    }
+}
+
+// ─── Reading view — fetch a cited passage + surrounding context ──
+//
+// The thin mobile client holds only the truncated citation snippet. This
+// serves the real passage from the host's corpus engine — the cited
+// chunk plus a window of neighbouring chunks — mirroring the desktop's
+// `read_get_chunk_neighbors`, so the phone can render a proper reader.
+
+#[derive(serde::Deserialize)]
+pub struct ReadingQuery {
+    pub radius: Option<usize>,
+}
+
+#[derive(serde::Serialize)]
+pub struct ReadChunkEntry {
+    pub chunk_id: u64,
+    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+pub struct ReadingWindowResponse {
+    pub corpus_id: String,
+    pub found: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub center: Option<ReadChunkEntry>,
+    pub prev: Vec<ReadChunkEntry>,
+    pub next: Vec<ReadChunkEntry>,
+}
+
+/// GET /v1/corpora/:corpus_id/chunks/:chunk_id?radius=1
+pub async fn read_chunk(
+    Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(_tenant): Extension<TenantId>,
+    Path((corpus_id, chunk_id)): Path<(String, u64)>,
+    Query(params): Query<ReadingQuery>,
+) -> ApiResult<ReadingWindowResponse> {
+    let radius = params.radius.unwrap_or(1).min(5);
+    let Some(engine) = runtime.corpus_engine.as_ref() else {
+        return Err(api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "corpus engine not available",
+        ));
+    };
+    let index = engine.open_index_for_corpus(&corpus_id).await.map_err(|e| {
+        api_error(
+            StatusCode::NOT_FOUND,
+            &format!("open index '{corpus_id}': {e}"),
+        )
+    })?;
+    let window = index
+        .neighbors(chunk_id, radius)
+        .await
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    let entry = |r: corpus_engine::EnrichmentChunkRow| ReadChunkEntry {
+        chunk_id: r.id,
+        content: r.content,
+        title: r.title,
+        url: r.url,
+    };
+    match window {
+        None => Ok(Json(ReadingWindowResponse {
+            corpus_id,
+            found: false,
+            center: None,
+            prev: vec![],
+            next: vec![],
+        })),
+        Some(w) => Ok(Json(ReadingWindowResponse {
+            corpus_id,
+            found: true,
+            center: Some(entry(w.center)),
+            prev: w.prev.into_iter().map(entry).collect(),
+            next: w.next.into_iter().map(entry).collect(),
+        })),
     }
 }

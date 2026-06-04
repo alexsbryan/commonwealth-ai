@@ -58,3 +58,28 @@ export const resolveCitation = (
   corpusId: string,
   chunkId: string,
 ): Promise<string | null> => invoke("resolve_citation", { corpusId, chunkId });
+
+/** One chunk in a reading window — the full passage text. */
+export interface ReadChunk {
+  chunk_id: number;
+  content: string;
+  title?: string | null;
+  url?: string | null;
+}
+
+/** A cited passage + its surrounding context (the reader payload). */
+export interface ReadingWindow {
+  corpus_id: string;
+  found: boolean;
+  center?: ReadChunk | null;
+  prev: ReadChunk[];
+  next: ReadChunk[];
+}
+
+/** Open the reader for a citation: the full cited passage + context,
+ *  fetched from the host (falls back to the cached snippet offline). */
+export const readCitation = (
+  corpusId: string,
+  chunkId: string,
+): Promise<ReadingWindow | null> =>
+  invoke("read_citation", { corpusId, chunkId });

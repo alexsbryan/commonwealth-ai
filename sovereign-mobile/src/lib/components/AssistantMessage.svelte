@@ -10,8 +10,8 @@
     ThinkBlock,
   } from "@sovereign/chat-ui";
   import { renderMarkdown } from "../utils/markdown";
-  import { resolveCitation } from "../api";
   import { corporaStore } from "../stores/corpora.svelte";
+  import ReaderView from "../ui/ReaderView.svelte";
 
   let { content, metadata }: { content: string; metadata?: Record<string, unknown> } = $props();
 
@@ -43,20 +43,74 @@
     })),
   );
 
-  // Citation tap → resolve the snippet from cache (the (corpus_id,
-  // chunk_id) handle that proves the answer used an installed corpus).
-  let openSnippet = $state<string | null>(null);
-  async function onCitation(corpusId: string, chunkId: string) {
-    openSnippet = (await resolveCitation(corpusId, chunkId)) ?? "(snippet unavailable)";
+  // Tapping a citation — the inline ◈ chip rendered in the prose, or a
+  // chip in the grid below — opens the glass-box reader on the cited
+  // passage (full text + context, fetched from the host).
+  type ReaderTarget = {
+    corpusId: string;
+    chunkId: string;
+    title: string;
+    isPrivate: boolean;
+  };
+  let openReader = $state<ReaderTarget | null>(null);
+
+  function openReaderFor(c: {
+    corpus_id: string;
+    chunk_id: string;
+    title: string | null;
+  }) {
+    openReader = {
+      corpusId: c.corpus_id,
+      chunkId: c.chunk_id,
+      title: c.title ?? c.corpus_id,
+      isPrivate: corporaStore.isPrivate(c.corpus_id),
+    };
+  }
+
+  // Delegated handler for the inline ◈ citations markdown.ts emits as
+  // `<span class="source-citation">`. Map the chip back to a retrieved
+  // chunk — by numeric index for `[N]`, else by title for `[Source: X]` —
+  // and open the reader.
+  function onProseClick(e: MouseEvent) {
+    const el = (e.target as HTMLElement | null)?.closest(
+      ".source-citation",
+    ) as HTMLElement | null;
+    if (!el) return;
+    e.preventDefault();
+
+    const idxAttr = el.getAttribute("data-citation-index");
+    if (idxAttr) {
+      const chunk = retrievedChunks[parseInt(idxAttr, 10) - 1];
+      if (chunk) openReaderFor(chunk);
+      return;
+    }
+
+    const source = el.getAttribute("data-source");
+    if (!source) return;
+    const sn = source.toLowerCase();
+    const chunk =
+      retrievedChunks.find((c) => c.title === source) ??
+      retrievedChunks.find((c) => (c.title ?? "").toLowerCase() === sn) ??
+      retrievedChunks.find((c) => {
+        const t = (c.title ?? "").toLowerCase();
+        return t.length > 0 && (t.includes(sn) || sn.includes(t));
+      });
+    if (chunk) openReaderFor(chunk);
   }
 </script>
 
-<div class="assistant">
+<!-- The wrapper captures taps on the inline ◈ citation spans that
+     markdown.ts injects via {@html}; those spans can't be <button>s, so
+     the delegation lives here. Keyboard users reach the same passages via
+     the labelled chip <button>s in the grid below. -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<div class="assistant" onclick={onProseClick}>
   {#each blocks as block}
     {#if block.type === "think"}
       <ThinkBlock content={block.text} />
     {:else}
-      <div class="prose">{@html renderMarkdown(block.text)}</div>
+      <div class="sv-prose">{@html renderMarkdown(block.text)}</div>
     {/if}
   {/each}
 
@@ -65,7 +119,7 @@
   {#if retrievedChunks.length}
     <div class="cites">
       {#each retrievedChunks as c (c.chunk_id)}
-        <button class="cite" onclick={() => onCitation(c.corpus_id, c.chunk_id)}>
+        <button class="cite" onclick={() => openReaderFor(c)}>
           {#if corporaStore.isPrivate(c.corpus_id)}<span
               class="lock"
               title="Private to this host — never shared with mesh peers">🔒</span
@@ -79,53 +133,57 @@
   {#if provenance}
     <RoutingMeta {provenance} retrievedChunks={renderChunks} />
   {/if}
-
-  {#if openSnippet}
-    <button class="sheet-scrim" onclick={() => (openSnippet = null)} aria-label="Close">
-      <div class="sheet"><p>{openSnippet}</p></div>
-    </button>
-  {/if}
 </div>
+
+{#if openReader}
+  {#key openReader.corpusId + openReader.chunkId}
+    <ReaderView
+      corpusId={openReader.corpusId}
+      chunkId={openReader.chunkId}
+      title={openReader.title}
+      isPrivate={openReader.isPrivate}
+      onclose={() => (openReader = null)}
+    />
+  {/key}
+{/if}
 
 <style>
   .assistant {
     align-self: flex-start;
-    max-width: 92%;
+    max-width: 94%;
   }
-  .prose {
-    line-height: 1.5;
-  }
+  /* Clickable corpus citations — the lavender ◈ chip, the Sovereign
+     citation signature. 🔒 marks corpora private to this host. */
   .cites {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem;
-    margin-top: 0.4rem;
+    gap: 0.4rem;
+    margin-top: 0.7rem;
+    padding-top: 0.7rem;
+    border-top: 1px solid var(--border);
   }
   .cite {
-    background: var(--surface);
-    color: var(--accent);
-    font-size: 0.75rem;
-    padding: 0.25rem 0.5rem;
-    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.22rem;
+    font-family: var(--font-sans);
+    font-size: 0.74rem;
+    font-weight: 500;
+    color: var(--lavender-light);
+    background: var(--lavender-dim);
+    border: 1px solid color-mix(in srgb, var(--lavender) 26%, transparent);
+    padding: 0.22rem 0.55rem;
+    border-radius: var(--radius);
+    transition: background 0.15s, border-color 0.15s;
   }
-  .lock {
-    font-size: 0.7rem;
-    margin-right: 0.15rem;
+  .cite::before {
+    content: "◈";
+    font-size: 0.7em;
+    opacity: 0.6;
   }
-  .sheet-scrim {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: flex-end;
-    border: none;
-    padding: 0;
+  .cite:active {
+    background: color-mix(in srgb, var(--lavender) 24%, transparent);
+    border-color: var(--lavender);
   }
-  .sheet {
-    background: var(--surface);
-    width: 100%;
-    padding: 1rem;
-    border-radius: 14px 14px 0 0;
-    text-align: left;
-  }
+  .lock { font-size: 0.72em; }
 </style>
