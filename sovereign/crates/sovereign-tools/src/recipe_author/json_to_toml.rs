@@ -81,6 +81,23 @@ fn convert(v: &serde_json::Value, path: &str) -> Result<toml::Value, ConvertErro
             // ordering is preserved into the on-disk document.
             for (k, child) in map {
                 let child_path = format!("{path}/{k}");
+                // Guard against malformed keys the model occasionally emits —
+                // e.g. `comparison":` (an unescaped-quote artifact from
+                // structured output) lands as a dead key the recipe parser
+                // ignores, silently dropping the field. A recipe field key is
+                // a plain identifier; a quote / backslash / control char means
+                // the JSON key itself is broken. Reject loudly so
+                // recipe_write_structured surfaces it and the agent re-emits.
+                if let Some(ch) = k.chars().find(|c| matches!(c, '"' | '\\' | '\n' | '\r' | '\t')) {
+                    return Err(ConvertError {
+                        path: child_path,
+                        message: format!(
+                            "malformed key `{k}` contains an invalid character ({ch:?}). \
+                             Recipe field keys are plain identifiers (e.g. `comparison`); \
+                             re-emit this object with a clean key."
+                        ),
+                    });
+                }
                 let converted = convert(child, &child_path)?;
                 tbl.insert(k.clone(), converted);
             }
@@ -147,6 +164,20 @@ fn type_name(v: &toml::Value) -> &'static str {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn rejects_malformed_key_with_embedded_quote() {
+        // Regression: recipe_write_structured once emitted `comparison":` as a
+        // key (unescaped-quote artifact), which landed as a dead key the recipe
+        // parser ignored. json_to_toml must reject it loudly instead.
+        let mut map = serde_json::Map::new();
+        map.insert("comparison\": ".to_string(), json!("greater_than"));
+        let err = json_to_toml(&serde_json::Value::Object(map)).unwrap_err();
+        assert!(
+            err.message.contains("malformed key"),
+            "expected malformed-key error, got {err:?}"
+        );
+    }
 
     #[test]
     fn flat_object_round_trips() {

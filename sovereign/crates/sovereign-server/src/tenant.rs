@@ -59,4 +59,32 @@ impl TenantRuntime {
             .find(|m| m.id == message_id)
             .and_then(|m| m.metadata)
     }
+
+    /// Non-streaming entry that routes workspace-tagged conversations
+    /// (recipe-author) into the agent loop; generic ones behave like
+    /// [`Self::handle_message`]. The conversation API uses this.
+    pub async fn handle_message_any(
+        &self,
+        message: &str,
+        conversation_id: &str,
+    ) -> Result<Response> {
+        let scoped = self.scoped_id(conversation_id);
+        self.runtime.handle_message_any(message, &scoped).await
+    }
+
+    /// Seed an empty conversation row + optional skill tag before the
+    /// first message (scoped to this tenant). `skill_id =
+    /// "recipe-author"` makes [`Self::handle_message_any`] drive the
+    /// agent loop.
+    pub async fn seed_conversation(
+        &self,
+        conversation_id: &str,
+        created_at: i64,
+        skill_id: Option<&str>,
+    ) -> Result<()> {
+        let scoped = self.scoped_id(conversation_id);
+        self.runtime
+            .seed_conversation(&scoped, created_at, skill_id)
+            .await
+    }
 }

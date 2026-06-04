@@ -864,6 +864,16 @@ impl CorpusEngine {
         let mut docs_skipped = 0u64; // docs skipped due to extraction errors this run
         let mut iter_pos = 0u64; // absolute position in the source iterator
 
+        // Circuit-breaker: a run-ending guard against an extractor whose
+        // iterator yields errors without end (the classic case is a
+        // misconfigured `local_file` pointing at a directory, whose fd
+        // returns EISDIR on every read). Reset to 0 on every successful
+        // document, so a corpus with sparse bad records keeps going; only
+        // an UNBROKEN streak with zero good docs trips it. Turns a silent
+        // multi-million phantom-skip runaway into a fast, legible abort.
+        const MAX_CONSECUTIVE_EXTRACTION_ERRORS: u64 = 1000;
+        let mut consecutive_extraction_errors = 0u64;
+
         // ── Source-file manifest tracking ─────────────────────────────────
         //
         // When the extractor sets `source_file` on each `ExtractedDoc` (e.g.
@@ -1035,16 +1045,31 @@ impl CorpusEngine {
             }
 
             let doc = match doc_result {
-                Ok(d) => d,
+                Ok(d) => {
+                    consecutive_extraction_errors = 0;
+                    d
+                }
                 Err(e) => {
                     docs_skipped += 1;
+                    consecutive_extraction_errors += 1;
                     tracing::warn!(
                         corpus = %recipe.corpus.id,
                         iter_pos,
                         docs_skipped,
+                        consecutive_extraction_errors,
                         error = %e,
                         "skipping document due to extraction error"
                     );
+                    if consecutive_extraction_errors >= MAX_CONSECUTIVE_EXTRACTION_ERRORS {
+                        return Err(Error::Extraction(format!(
+                            "aborting ingest of '{}' after {consecutive_extraction_errors} \
+                             consecutive extraction errors with no successful document — the \
+                             source is likely malformed or the wrong type (e.g. a directory \
+                             where a single file was expected, or a binary file fed to a text \
+                             extractor). Last error: {e}",
+                            recipe.corpus.id
+                        )));
+                    }
                     continue;
                 }
             };
@@ -1616,6 +1641,24 @@ impl CorpusEngine {
                                     )
                                     .await?;
                                 }
+                                break 'enrichment;
+                            }
+
+                            // Investigation enrichment is an explicit, opt-in
+                            // step (`sovereign enrich investigation build
+                            // <id>`) that runs the typed entity/relationship
+                            // pipeline — NOT the field-model domain registry
+                            // below. Skip it here so an investigation-type
+                            // recipe installs + finalizes cleanly instead of
+                            // tripping `UnknownEnrichmentDomain` when the
+                            // recipe's `enrichment.domain` isn't a registered
+                            // field-model domain.
+                            if enrichment_config.enrichment_type == "investigation" {
+                                tracing::info!(
+                                    corpus = %recipe.corpus.id,
+                                    "install: skipping auto-enrichment for investigation recipe — \
+                                     run `sovereign enrich investigation build <id>` to enrich"
+                                );
                                 break 'enrichment;
                             }
 

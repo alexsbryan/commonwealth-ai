@@ -199,6 +199,15 @@ struct Args {
     /// harness reports the in-script outcomes and exits without
     /// hitting the recipe's upstream API.
     no_fetch: bool,
+    /// Drive the REAL recipe-author Runtime loop over the daemon's
+    /// conversation API (`POST /v1/conversations {"skill_id":
+    /// "recipe-author"}` + `/v1/conversations/:id/messages`) instead of
+    /// the client-side raw-completions loop. The daemon's Runtime owns
+    /// the tool loop + grammar (the same `handle_recipe_author_turn`
+    /// the desktop uses); this harness only feeds partner turns and
+    /// reads the project state back. Requires a daemon built with
+    /// recipe-author conversation support (skill_id + registered tools).
+    via_runtime: bool,
 }
 
 fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
@@ -213,6 +222,7 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
     let mut max_tool_iters: usize = 20;
     let mut strip_think = true;
     let mut no_fetch = false;
+    let mut via_runtime = false;
     let mut params: Vec<(String, String)> = Vec::new();
 
     let mut iter = argv.iter();
@@ -243,6 +253,7 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
             }
             "--keep-think" => strip_think = false,
             "--no-fetch" => no_fetch = true,
+            "--via-runtime" => via_runtime = true,
             "--param" => {
                 let kv = iter
                     .next()
@@ -290,6 +301,7 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
         max_tool_iters,
         strip_think,
         no_fetch,
+        via_runtime,
         params,
     })
 }
@@ -301,8 +313,11 @@ fn print_help() {
          [--feature-id <ID>] [--title <T>] \\\n    \
          [--daemon <URL>] [--skills-dir <D>] \\\n    \
          [--sample-size <N>] [--chat-model <ID>] \\\n    \
-         [--max-tool-iters <N>] [--keep-think] \\\n    \
+         [--max-tool-iters <N>] [--keep-think] [--via-runtime] \\\n    \
          [--param KEY=VALUE ...]\n\n\
+         --via-runtime drives the real recipe-author Runtime loop over the\n  \
+         daemon's conversation API (the desktop-equivalent path) instead of\n  \
+         the client-side completions loop.\n\n\
          Drive the recipe-author agent loop end-to-end against the \
          daemon's\n  /v1/chat/completions, then validate the generated \
          recipe and run\n  an initial fetch with --sample-size docs (default 50).\n\n\
@@ -1137,6 +1152,68 @@ async fn run_one_turn(
     }
 }
 
+// ─── Runtime-path drivers (--via-runtime) ───────────────────────
+//
+// Hit the daemon's Runtime-backed conversation API so the daemon owns
+// the recipe-author agent loop (the desktop-equivalent path), rather
+// than re-running the loop client-side against /v1/chat/completions.
+
+/// Create a conversation tagged `skill_id = "recipe-author"` so the
+/// daemon routes its messages into the recipe-author agent loop.
+async fn create_runtime_conversation(
+    http: &reqwest::Client,
+    base: &str,
+) -> std::result::Result<String, String> {
+    let url = format!("{base}/v1/conversations");
+    let resp: serde_json::Value = http
+        .post(&url)
+        .json(&serde_json::json!({ "skill_id": "recipe-author" }))
+        .send()
+        .await
+        .map_err(|e| format!("POST {url}: {e}"))?
+        .error_for_status()
+        .map_err(|e| {
+            format!(
+                "daemon returned non-success creating conversation ({e}). \
+                 Is the daemon built with recipe-author conversation support?"
+            )
+        })?
+        .json()
+        .await
+        .map_err(|e| format!("parse create-conversation response: {e}"))?;
+    resp.get("id")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .ok_or_else(|| "create-conversation response missing `id`".to_string())
+}
+
+/// Post one partner turn and return the agent's final reply. A single
+/// call blocks for the daemon's whole server-side tool loop.
+async fn send_runtime_message(
+    http: &reqwest::Client,
+    base: &str,
+    conversation_id: &str,
+    content: &str,
+) -> std::result::Result<String, String> {
+    let url = format!("{base}/v1/conversations/{conversation_id}/messages");
+    let resp: serde_json::Value = http
+        .post(&url)
+        .json(&serde_json::json!({ "content": content }))
+        .send()
+        .await
+        .map_err(|e| format!("POST {url}: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("daemon returned non-success: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("parse message response: {e}"))?;
+    Ok(resp
+        .get("content")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string())
+}
+
 // ─── Trial entry ─────────────────────────────────────────────────
 
 pub async fn run_live_trial(argv: &[String]) -> i32 {
@@ -1352,7 +1429,11 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
         turn_index: 0,
     };
     let http = match reqwest::Client::builder()
-        .timeout(Duration::from_secs(180))
+        // A single --via-runtime /messages POST blocks for the daemon's
+        // entire server-side tool loop (up to ~12 iterations × a 35B), so
+        // the budget is generous; the client-side path's per-completion
+        // calls finish well under this.
+        .timeout(Duration::from_secs(600))
         .build()
     {
         Ok(c) => c,
@@ -1370,49 +1451,91 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     );
 
     let mut total_tool_calls = 0usize;
-    for (i, partner_msg) in messages_in.iter().enumerate() {
-        eprintln!("──── Turn {} ─────────────────────────────────", i + 1);
-        eprintln!("Partner: {partner_msg}\n");
-        let situated = match situated_context::render(&project).await {
-            Ok(s) => s,
+    if args.via_runtime {
+        // Drive the REAL recipe-author Runtime loop over the daemon's
+        // conversation API. The daemon owns the tool loop + grammar
+        // (handle_recipe_author_turn); we feed partner turns and let the
+        // shared ~/.sovereign stores carry the recipe + decisions back to
+        // the post-trial assertions below.
+        let conv_id = match create_runtime_conversation(&http, &args.daemon_base).await {
+            Ok(id) => id,
             Err(e) => {
-                eprintln!("live-trial: situated render failed: {e}");
-                return 2;
+                eprintln!("live-trial: create runtime conversation: {e}");
+                return 3;
             }
         };
-        // Combine situated context + partner message into a single
-        // user turn. NO bracketed framing — the router-free path
-        // doesn't need cues, and unframed prose stays out of the
-        // model's "this is meta-discussion" bucket.
-        let user_text = format!(
-            "Project state for this turn:\n\n{situated}\n\n\
-             ---\n\nPartner says: {partner_msg}"
-        );
-        messages.push(ChatMessage::new("user", user_text));
-        match run_one_turn(
-            &http,
-            &args.daemon_base,
-            &chat_model,
-            &mut messages,
-            &tool_defs,
-            &registry,
-            &ctx,
-            &project,
-            args.max_tool_iters,
-            args.strip_think,
-        )
-        .await
-        {
-            Ok(out) => {
-                eprintln!(
-                    "\nAgent ({:.1}s, {} tool call(s) over {} iter(s)):\n{}\n",
-                    out.elapsed_secs, out.tool_calls, out.iters, out.final_content
-                );
-                total_tool_calls += out.tool_calls;
+        eprintln!("Runtime conversation: {conv_id} (skill_id=recipe-author)\n");
+        for (i, partner_msg) in messages_in.iter().enumerate() {
+            eprintln!("──── Turn {} ─────────────────────────────────", i + 1);
+            eprintln!("Partner: {partner_msg}\n");
+            let situated = match situated_context::render(&project).await {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("live-trial: situated render failed: {e}");
+                    return 2;
+                }
+            };
+            let content = format!(
+                "Project state for this turn:\n\n{situated}\n\n\
+                 ---\n\nPartner says: {partner_msg}"
+            );
+            let started = std::time::Instant::now();
+            match send_runtime_message(&http, &args.daemon_base, &conv_id, &content).await {
+                Ok(reply) => eprintln!(
+                    "\nAgent ({:.1}s, via daemon Runtime):\n{reply}\n",
+                    started.elapsed().as_secs_f32()
+                ),
+                Err(e) => {
+                    eprintln!("live-trial: turn {} failed: {e}\n", i + 1);
+                    return 3;
+                }
             }
-            Err(e) => {
-                eprintln!("live-trial: turn {} failed: {e}\n", i + 1);
-                return 3;
+        }
+    } else {
+        for (i, partner_msg) in messages_in.iter().enumerate() {
+            eprintln!("──── Turn {} ─────────────────────────────────", i + 1);
+            eprintln!("Partner: {partner_msg}\n");
+            let situated = match situated_context::render(&project).await {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("live-trial: situated render failed: {e}");
+                    return 2;
+                }
+            };
+            // Combine situated context + partner message into a single
+            // user turn. NO bracketed framing — the router-free path
+            // doesn't need cues, and unframed prose stays out of the
+            // model's "this is meta-discussion" bucket.
+            let user_text = format!(
+                "Project state for this turn:\n\n{situated}\n\n\
+                 ---\n\nPartner says: {partner_msg}"
+            );
+            messages.push(ChatMessage::new("user", user_text));
+            match run_one_turn(
+                &http,
+                &args.daemon_base,
+                &chat_model,
+                &mut messages,
+                &tool_defs,
+                &registry,
+                &ctx,
+                &project,
+                args.max_tool_iters,
+                args.strip_think,
+            )
+            .await
+            {
+                Ok(out) => {
+                    eprintln!(
+                        "\nAgent ({:.1}s, {} tool call(s) over {} iter(s)):\n{}\n",
+                        out.elapsed_secs, out.tool_calls, out.iters, out.final_content
+                    );
+                    total_tool_calls += out.tool_calls;
+                }
+                Err(e) => {
+                    eprintln!("live-trial: turn {} failed: {e}\n", i + 1);
+                    return 3;
+                }
             }
         }
     }

@@ -951,15 +951,58 @@ async fn validate_recipe(recipe: &Recipe, offline: bool) -> ValidationResult {
     // placeholder finding, but the recipe author should know up
     // front that the SQL won't actually run yet.
     if let Some(enr) = recipe.enrichment.as_ref() {
+        // The set of declared relationship_type names. A pattern matches
+        // relationship EDGES, so any `edge_type` it references must be one of
+        // these — referencing an entity_type instead is the #1 cause of a
+        // pattern silently finding nothing (observed in the uap-blue-book
+        // trial: `edge_type = "radar_track"` was an entity type → 0 findings).
+        let rel_names: std::collections::BTreeSet<&str> =
+            enr.relationship_types.iter().map(|r| r.name.as_str()).collect();
+        let valid_edges = || {
+            if rel_names.is_empty() {
+                "(no relationship_types declared)".to_string()
+            } else {
+                let mut v: Vec<&str> = rel_names.iter().copied().collect();
+                v.sort_unstable();
+                v.join(", ")
+            }
+        };
         for pattern in &enr.patterns {
-            if let crate::recipe::PatternDecl::CustomSql { name, .. } = pattern {
-                warnings.push(format!(
-                    "pattern `{name}` uses `type = \"custom_sql\"` which is \
-                     reserved for a future engine version. The shape parses \
-                     today and the detector emits a placeholder finding, but \
-                     the SQL will NOT execute until the sandboxed-rusqlite \
-                     runtime ships. Track this in SYSTEM_OVERVIEW.md §3.10."
-                ));
+            match pattern {
+                crate::recipe::PatternDecl::CustomSql { name, .. } => {
+                    warnings.push(format!(
+                        "pattern `{name}` uses `type = \"custom_sql\"` which is \
+                         reserved for a future engine version. The shape parses \
+                         today and the detector emits a placeholder finding, but \
+                         the SQL will NOT execute until the sandboxed-rusqlite \
+                         runtime ships. Track this in SYSTEM_OVERVIEW.md §3.10."
+                    ));
+                }
+                crate::recipe::PatternDecl::Threshold { name, edge_type, .. } => {
+                    if !rel_names.contains(edge_type.as_str()) {
+                        errors.push(format!(
+                            "pattern `{name}` (threshold) sets `edge_type = \"{edge_type}\"`, \
+                             which is not a declared [[enrichment.relationship_types]] name. A \
+                             threshold matches relationship edges — set edge_type to one of: \
+                             {}. (An entity_type is NOT valid here; the pattern would never fire.)",
+                            valid_edges()
+                        ));
+                    }
+                }
+                crate::recipe::PatternDecl::CircularFlow {
+                    name, edge_types, ..
+                } => {
+                    for et in edge_types {
+                        if !rel_names.contains(et.as_str()) {
+                            errors.push(format!(
+                                "pattern `{name}` (circular_flow) lists `edge_type \"{et}\"`, \
+                                 which is not a declared relationship_type. Valid edge types: {}.",
+                                valid_edges()
+                            ));
+                        }
+                    }
+                }
+                crate::recipe::PatternDecl::RoleOverlap { .. } => {}
             }
         }
     }
@@ -1397,6 +1440,56 @@ type = "sentence"
                 .iter()
                 .any(|e| e.contains("md_and_a") && e.contains("invalid start_pattern")),
             "expected invalid-regex error, got {:?}",
+            result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn validate_errors_on_threshold_edge_type_not_a_relationship() {
+        // Regression: the uap-blue-book trial set a threshold `edge_type` to an
+        // ENTITY type ("radar_track") → the pattern silently found nothing.
+        // validate_recipe must error and name the declared relationship types.
+        let toml = r#"
+[corpus]
+id = "demo"
+name = "demo"
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/data.zip"
+
+[extract]
+type = "jsonl"
+
+[chunk]
+type = "paragraph"
+
+[enrichment]
+enabled = true
+type = "investigation"
+
+[[enrichment.entity_types]]
+name = "radar_track"
+
+[[enrichment.relationship_types]]
+name = "observed_by"
+
+[[enrichment.patterns]]
+type = "threshold"
+name = "fast"
+edge_type = "radar_track"
+attribute = "speed_mph"
+threshold = 400.0
+comparison = "greater_than"
+"#;
+        let recipe = Recipe::from_toml(toml).unwrap();
+        let result = validate_recipe(&recipe, true).await;
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| e.contains("edge_type") && e.contains("observed_by")),
+            "expected edge_type error naming the valid relationship, got {:?}",
             result.errors
         );
     }

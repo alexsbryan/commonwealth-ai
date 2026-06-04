@@ -2747,6 +2747,84 @@ impl Runtime {
         self.handle_turn(message, conversation_id).await
     }
 
+    /// Seed an empty conversation row with an optional workspace skill
+    /// tag BEFORE the first message — the daemon `/v1/conversations`
+    /// surface's analog of the desktop "new chat" flow
+    /// (`commands/conversation.rs`). Setting `skill_id = "recipe-author"`
+    /// here is what makes [`Self::handle_message_any`] route the
+    /// conversation into the recipe-author agent loop. INSERT-OR-IGNORE:
+    /// a no-op if the row already exists.
+    pub async fn seed_conversation(
+        &self,
+        id: &str,
+        created_at: i64,
+        skill_id: Option<&str>,
+    ) -> Result<()> {
+        self.store
+            .insert_empty_conversation(id, created_at, skill_id)
+            .await
+    }
+
+    /// Non-streaming entry that honours workspace agent-loops. A
+    /// conversation tagged `recipe-author` runs the long-lived tool
+    /// loop (the same dispatch the desktop streaming path uses at
+    /// [`Self::handle_message_stream`]), drained to a single
+    /// [`Response`]; every other conversation falls through to the
+    /// standard [`Self::handle_message`] turn chain, unchanged. The
+    /// daemon conversation API calls this so a headless caller reaches
+    /// the real recipe-author loop rather than a side-channel.
+    pub async fn handle_message_any(
+        &self,
+        message: &str,
+        conversation_id: &str,
+    ) -> Result<Response> {
+        if self.resolve_active_mode(conversation_id).await.as_deref()
+            == Some(crate::intent_policy::MODE_RECIPE_AUTHOR)
+        {
+            return self
+                .handle_message_stream_drain(message, conversation_id)
+                .await;
+        }
+        self.handle_message(message, conversation_id).await
+    }
+
+    /// Drive the streaming turn pipeline and drain it into a single
+    /// [`Response`]. Reuses [`Self::handle_message_stream`] wholesale —
+    /// context build, user-message persistence, routing, and the
+    /// workspace agent-loop dispatch — so a non-streaming caller gets
+    /// identical behaviour to the desktop streaming surface without
+    /// re-implementing any of it.
+    pub async fn handle_message_stream_drain(
+        &self,
+        message: &str,
+        conversation_id: &str,
+    ) -> Result<Response> {
+        use futures::StreamExt;
+        let StreamHandle {
+            message_id,
+            mut stream,
+        } = self.handle_message_stream(message, conversation_id).await?;
+        let mut text = String::new();
+        while let Some(item) = stream.next().await {
+            text.push_str(&item?);
+        }
+        Ok(Response {
+            message: Message {
+                id: message_id,
+                conversation_id: conversation_id.to_string(),
+                role: Role::Assistant,
+                content: text,
+                created_at: now(),
+                metadata: Some(
+                    serde_json::json!({ "intent": "RecipeAuthor", "via": "stream_drain" }),
+                ),
+                version: now(),
+            },
+            task: None,
+            metrics: None,
+        })
+    }
+
     /// Run a conversation turn assuming the user message has **already** been
     /// saved as the latest message in the conversation.
     ///

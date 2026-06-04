@@ -126,12 +126,22 @@ fn is_system_path(path: &Path) -> bool {
     if normalized == "/" {
         return true;
     }
-    for root in ROOTS {
-        if *root == "/" {
-            continue;
-        }
-        if normalized == *root || normalized.starts_with(&format!("{root}/")) {
-            return true;
+    // The OS temp dir ($TMPDIR / `tempfile::tempdir()`) is where scratch
+    // workdirs — and the entire test/CI suite — live. On macOS it
+    // canonicalizes under a system root: `/private/tmp/…` (firmlinked
+    // `/tmp`) when `$TMPDIR` is under `/tmp`, or `/private/var/folders/…`
+    // (firmlinked `/var`) for the default per-user temp. Either way the
+    // ROOTS denylist below would wrongly swallow it, so skip ROOTS when
+    // the path is inside the temp tree. The `$HOME` guard further down
+    // still runs, so a tempdir-backed `$HOME` is still refused.
+    if !path_under_temp_dir(&normalized) {
+        for root in ROOTS {
+            if *root == "/" {
+                continue;
+            }
+            if normalized == *root || normalized.starts_with(&format!("{root}/")) {
+                return true;
+            }
         }
     }
     // $HOME and $HOME/.config (the dotfile root) are also refused —
@@ -161,6 +171,20 @@ fn home_dir_string() -> Option<String> {
     std::env::var("HOME")
         .ok()
         .or_else(|| std::env::var("USERPROFILE").ok())
+}
+
+/// True when `normalized` is the OS temp dir or a descendant. Checks both
+/// the raw `$TMPDIR` and its canonical form, because macOS firmlinks
+/// rewrite `/tmp` → `/private/tmp` and `/var/folders` → `/private/var/folders`
+/// under `canonicalize()`, and `check_safe` canonicalizes its input.
+fn path_under_temp_dir(normalized: &str) -> bool {
+    let temp = std::env::temp_dir();
+    let canon = temp.canonicalize().unwrap_or_else(|_| temp.clone());
+    [temp.as_path(), canon.as_path()].iter().any(|t| {
+        let t = t.to_string_lossy();
+        let t = t.trim_end_matches('/');
+        !t.is_empty() && (normalized == t || normalized.starts_with(&format!("{t}/")))
+    })
 }
 
 fn is_git_repo(path: &Path) -> bool {

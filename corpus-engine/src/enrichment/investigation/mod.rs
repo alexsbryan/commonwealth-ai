@@ -29,6 +29,7 @@
 //! to disk, so callers can react to findings synchronously while
 //! also persisting the artefact for the audit step.
 
+pub mod aggregate;
 pub mod extract;
 pub mod graph;
 pub mod patterns;
@@ -110,6 +111,8 @@ pub async fn run_investigation<'a>(
     // Phase 1 — Extract per chunk.
     let mut all_extractions: Vec<(String, ExtractedRelationship)> =
         Vec::with_capacity(chunks.len() * 4);
+    let mut all_entities: Vec<(String, extract::ExtractedEntity)> =
+        Vec::with_capacity(chunks.len() * 4);
     for chunk in chunks {
         let prompt = extract::compose_extract_prompt(
             chunk,
@@ -118,13 +121,16 @@ pub async fn run_investigation<'a>(
         );
         let response = (chat)(&prompt).await?;
         let parsed = extract::parse_extract_response(&response)?;
-        for rel in parsed {
+        for ent in parsed.entities {
+            all_entities.push((chunk.chunk_id.to_string(), ent));
+        }
+        for rel in parsed.relationships {
             all_extractions.push((chunk.chunk_id.to_string(), rel));
         }
     }
 
     // Phase 2 — Coalesce entities; rewrite relationships to canonical ids.
-    let entities_map = extract::group_extracted_entities(&all_extractions);
+    let entities_map = extract::group_extracted_entities(&all_entities, &all_extractions);
     let mut entities: Vec<Entity> = entities_map.values().cloned().collect();
     entities.sort_by(|a, b| a.id.cmp(&b.id));
 
@@ -144,6 +150,29 @@ pub async fn run_investigation<'a>(
             },
             confidence: ex.confidence,
         });
+    }
+
+    // Phase 2.5 — Deterministic aggregation. For each declared Threshold
+    // pattern whose target attribute is NOT already an edge attribute the
+    // LLM emits, treat it as a count aggregation: stamp the distinct
+    // edge-count on the target entity so count-based thresholds (e.g.
+    // "installations with > N sightings") can fire via the entity-attribute
+    // scan. The edge-attribute guard means genuine edge thresholds (e.g.
+    // revenue percentage on a `revenue` edge) are left untouched.
+    for pattern in &enrichment.patterns {
+        if let crate::recipe::PatternDecl::Threshold {
+            edge_type,
+            attribute,
+            ..
+        } = pattern
+        {
+            let attr_on_edges = relationships
+                .iter()
+                .any(|r| r.relationship_type == *edge_type && r.attributes.contains_key(attribute));
+            if !attr_on_edges {
+                aggregate::stamp_edge_counts(&mut entities, &relationships, edge_type, attribute);
+            }
+        }
     }
 
     // Phase 3 — Run declared pattern detectors.

@@ -1,7 +1,7 @@
 [skill]
 id = "recipe-author"
 name = "Recipe Author"
-version = "0.3.0"
+version = "0.4.0"
 description = "Authoring partner for a domain expert building a Sovereign corpus + investigation schema. Translates between domain language and recipe TOML; runs the author → validate → test loop; escalates to the maintainer when the engine doesn't have a capability the project needs."
 # User-chosen workspace surface (entered via the nav rail). Wins
 # over any active background skill when chats are dispatched, and
@@ -122,6 +122,13 @@ and you yield with no action taken.
 `source_choice` | `extraction_choice` | `schema_choice` |
 `domain_clarification` | `deferred_question`.
 `attribution` = `partner` | `agent_default` | `deferred`.
+
+Log each decision **at most once**. NEVER re-log the same decision or
+question. If a tool result says you've repeated a call, STOP — switch
+tools or move on; do not call `decision_log` again with the same content.
+An open question is NOT a decision: put it in your final partner-facing
+reply (the `done` reason), not in repeated `decision_log(deferred_question)`
+calls. Re-logging burns the turn and never converges.
 
 `capability_request` is for ENGINE GAPS ONLY — extractors /
 acquirers / chunkers DO NOT handle the format AND you have
@@ -331,6 +338,14 @@ comparison = "greater_than"
 - Comparison enum (threshold patterns) is
   `greater_than | greater_or_equal | less_than | less_or_equal | equal`.
   Not `gt`/`gte`/`lt`/`lte`/`eq`.
+- A pattern's `edge_type` (threshold) / `edge_types` (circular_flow) MUST
+  name a declared `[[enrichment.relationship_types]]` — a RELATIONSHIP, not
+  an entity_type. A threshold matches relationship edges and their numeric
+  attributes; pointing it at an entity type means it finds nothing.
+  `recipe_validate` errors on an edge_type that isn't a declared relationship.
+- `enrichment.domain` is an OPTIONAL free-form tuning hint. For
+  `type = "investigation"` you can omit it. Do NOT invent a domain string —
+  an unrecognised domain can fail `corpus install`.
 - `[[extract.extractors]]` and similar invented sub-tables are
   not part of the schema.
 - `page_size` for offset pagination lives INSIDE

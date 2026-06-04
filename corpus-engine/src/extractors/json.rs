@@ -55,33 +55,138 @@ impl Extractor for JsonlExtractor {
         &self,
         source_path: &Path,
     ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send>> {
-        let file = File::open(source_path).map_err(|e| {
-            Error::Extraction(format!("Failed to open {}: {e}", source_path.display()))
-        })?;
-
-        let is_gz = self.decompress.as_deref() == Some("gzip")
-            || (source_path.extension().and_then(|e| e.to_str()) == Some("gz"));
-
-        let reader: Box<dyn BufRead + Send> = if is_gz {
-            Box::new(BufReader::new(flate2::read::GzDecoder::new(file)))
-        } else {
-            Box::new(BufReader::new(file))
-        };
+        // `local_file` may name a single .jsonl file OR a directory of
+        // them (the recipe author commonly points `acquire.path` at a
+        // "folder"). Resolve to a concrete, ordered file list up front
+        // so the iterator never reads a directory file descriptor: on
+        // Unix `File::open` *succeeds* on a directory, but every read
+        // then returns EISDIR ("Is a directory"). The old single-file
+        // iterator surfaced that as `Some(Err(..))` on every `next()`
+        // and never terminated, spinning the ingest skip-loop to
+        // millions of phantom "skipped" documents. See `collect_jsonl_files`.
+        let files = collect_jsonl_files(source_path)?;
 
         Ok(Box::new(JsonlIterator {
-            lines: reader.lines(),
+            remaining_files: files.into(),
+            current: None,
             content_field: self.content_field.clone(),
             title_field: self.title_field.clone(),
+            decompress: self.decompress.clone(),
             pending: VecDeque::new(),
         }))
     }
 }
 
-struct JsonlIterator {
+/// Resolve a `local_file` source path into the ordered list of JSONL
+/// files to read.
+///
+/// - regular file → `[path]` (extension is not re-checked; the recipe
+///   author chose `jsonl` extraction deliberately);
+/// - directory → every `*.jsonl` / `*.jsonl.gz` inside it, sorted for
+///   deterministic, resume-stable iteration order;
+/// - a directory with no JSONL files is a recipe error surfaced
+///   cleanly — not an empty corpus, not a runaway.
+fn collect_jsonl_files(source_path: &Path) -> Result<Vec<std::path::PathBuf>> {
+    let meta = std::fs::metadata(source_path).map_err(|e| {
+        Error::Extraction(format!("Failed to stat {}: {e}", source_path.display()))
+    })?;
+    if meta.is_file() {
+        return Ok(vec![source_path.to_path_buf()]);
+    }
+    if meta.is_dir() {
+        let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(source_path)
+            .map_err(|e| {
+                Error::Extraction(format!(
+                    "Failed to read directory {}: {e}",
+                    source_path.display()
+                ))
+            })?
+            .filter_map(|entry| entry.ok().map(|e| e.path()))
+            .filter(|p| p.is_file() && is_jsonl_path(p))
+            .collect();
+        files.sort();
+        if files.is_empty() {
+            return Err(Error::Extraction(format!(
+                "no .jsonl or .jsonl.gz files in directory {} — point \
+                 `acquire.path` at a .jsonl file or a folder containing them",
+                source_path.display()
+            )));
+        }
+        return Ok(files);
+    }
+    Err(Error::Extraction(format!(
+        "{} is neither a file nor a directory",
+        source_path.display()
+    )))
+}
+
+/// `true` for `*.jsonl` and `*.jsonl.gz` (case-insensitive).
+fn is_jsonl_path(p: &Path) -> bool {
+    let lower = p
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    lower.ends_with(".jsonl") || lower.ends_with(".jsonl.gz")
+}
+
+/// The file currently being streamed by `JsonlIterator`.
+struct CurrentFile {
     lines: std::io::Lines<Box<dyn BufRead + Send>>,
+    /// Bare file name, stamped onto each `ExtractedDoc.source_file` so
+    /// the ingest loop's per-file boundary detection works across a
+    /// multi-file (directory) source.
+    source_file: String,
+}
+
+struct JsonlIterator {
+    /// Files still to read, in deterministic order. Popped from the
+    /// front as each is exhausted.
+    remaining_files: VecDeque<std::path::PathBuf>,
+    /// The file currently open, or `None` between files / at end.
+    current: Option<CurrentFile>,
     content_field: Option<String>,
     title_field: Option<String>,
+    decompress: Option<String>,
     pending: VecDeque<ExtractedDoc>,
+}
+
+impl JsonlIterator {
+    /// Open the next queued file. Returns:
+    /// - `None` when the queue is empty (the whole stream is done);
+    /// - `Some(Err)` when a file can't be opened — surfaced once, with
+    ///   `current` left cleared so the following `next()` advances to
+    ///   the file after it (one bad file never stalls a directory run);
+    /// - `Some(Ok(()))` when a file opened and `current` is now set.
+    fn open_next(&mut self) -> Option<Result<()>> {
+        let path = self.remaining_files.pop_front()?;
+        let file = match File::open(&path) {
+            Ok(f) => f,
+            Err(e) => {
+                return Some(Err(Error::Extraction(format!(
+                    "Failed to open {}: {e}",
+                    path.display()
+                ))));
+            }
+        };
+        let is_gz = self.decompress.as_deref() == Some("gzip")
+            || path.extension().and_then(|e| e.to_str()) == Some("gz");
+        let reader: Box<dyn BufRead + Send> = if is_gz {
+            Box::new(BufReader::new(flate2::read::GzDecoder::new(file)))
+        } else {
+            Box::new(BufReader::new(file))
+        };
+        let source_file = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_string();
+        self.current = Some(CurrentFile {
+            lines: reader.lines(),
+            source_file,
+        });
+        Some(Ok(()))
+    }
 }
 
 impl Iterator for JsonlIterator {
@@ -92,9 +197,43 @@ impl Iterator for JsonlIterator {
             if let Some(doc) = self.pending.pop_front() {
                 return Some(Ok(doc));
             }
-            let line = match self.lines.next()? {
-                Ok(l) => l,
-                Err(e) => return Some(Err(Error::Extraction(format!("Read error: {e}")))),
+
+            // Make sure a file is open. Open failures surface once and
+            // leave `current` cleared, so the next iteration advances
+            // past the bad file rather than retrying it.
+            if self.current.is_none() {
+                match self.open_next() {
+                    None => return None, // queue drained — stream complete
+                    Some(Ok(())) => {}
+                    Some(Err(e)) => return Some(Err(e)),
+                }
+            }
+
+            // Read one line from the current file. A hard read error
+            // (EISDIR from a directory fd, mid-stream gzip corruption,
+            // …) is surfaced ONCE, then the file is dropped — we never
+            // re-yield the same OS error forever. That infinite
+            // re-yield was the root of the multi-million phantom-skip
+            // runaway (#6).
+            let (line, source_file) = {
+                let current = match self.current.as_mut() {
+                    Some(c) => c,
+                    None => continue,
+                };
+                match current.lines.next() {
+                    None => {
+                        self.current = None; // exhausted — advance to next file
+                        continue;
+                    }
+                    Some(Ok(l)) => (l, current.source_file.clone()),
+                    Some(Err(e)) => {
+                        let src = current.source_file.clone();
+                        self.current = None;
+                        return Some(Err(Error::Extraction(format!(
+                            "read error in {src}: {e}"
+                        ))));
+                    }
+                }
             };
             if line.trim().is_empty() {
                 continue;
@@ -106,7 +245,8 @@ impl Iterator for JsonlIterator {
                     Ok(w) => w,
                     Err(_) => continue,
                 };
-                if let Some(doc) = format_openalex_work(&work) {
+                if let Some(mut doc) = format_openalex_work(&work) {
+                    doc.source_file = Some(source_file.clone());
                     self.pending.push_back(doc);
                     continue;
                 }
@@ -182,7 +322,7 @@ impl Iterator for JsonlIterator {
                     .map(|s| s.to_string()),
                 source_id: id,
                 metadata,
-                source_file: None,
+                source_file: Some(source_file),
                 embed_text: None,
             });
         }
@@ -395,5 +535,87 @@ mod tests {
 
         assert_eq!(docs.len(), 1);
         assert_eq!(docs[0].title.as_deref(), Some("Compressed"));
+    }
+
+    #[test]
+    fn directory_source_walks_all_jsonl_files() {
+        // #6 regression: `local_file` pointing at a *directory* must walk
+        // the .jsonl files inside it (the recipe author phrases the source
+        // as a "folder"), not open the dir fd and spin forever on EISDIR.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("a.jsonl"),
+            "{\"id\":\"1\",\"title\":\"A\",\"content\":\"alpha\"}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("b.jsonl"),
+            "{\"id\":\"2\",\"title\":\"B\",\"content\":\"beta\"}\n",
+        )
+        .unwrap();
+        // A non-JSONL sibling must be ignored, not fed to the parser.
+        std::fs::write(dir.path().join("README.txt"), "ignore me").unwrap();
+
+        let extractor = JsonlExtractor::new();
+        let docs: Vec<_> = extractor
+            .extract(dir.path())
+            .unwrap()
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert_eq!(docs.len(), 2, "both .jsonl files walked; .txt ignored");
+        // Sorted order: a.jsonl then b.jsonl. Each doc is stamped with its
+        // originating file so the ingest loop's boundary tracking works.
+        assert_eq!(docs[0].title.as_deref(), Some("A"));
+        assert_eq!(docs[0].source_file.as_deref(), Some("a.jsonl"));
+        assert_eq!(docs[1].title.as_deref(), Some("B"));
+        assert_eq!(docs[1].source_file.as_deref(), Some("b.jsonl"));
+    }
+
+    #[test]
+    fn directory_with_no_jsonl_files_fails_cleanly() {
+        // A folder with nothing matching must error up front — not yield an
+        // empty corpus, and never the old EISDIR runaway.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("notes.txt"), "nope").unwrap();
+
+        let extractor = JsonlExtractor::new();
+        let err = match extractor.extract(dir.path()) {
+            Ok(_) => panic!("expected an error for a directory with no .jsonl files"),
+            Err(e) => e,
+        };
+        assert!(
+            err.to_string().contains("no .jsonl"),
+            "expected a clean no-jsonl error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn read_error_terminates_iterator() {
+        // Fix A: a hard read error (here, a file claiming to be gzip but
+        // holding plain bytes) is surfaced ONCE, then the iterator ends.
+        // Before, a read error was re-yielded on every `next()`, so the
+        // ingest skip-loop never terminated.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("corrupt.jsonl.gz");
+        std::fs::write(&path, b"this is not gzip data").unwrap();
+
+        let extractor = JsonlExtractor {
+            content_field: None,
+            title_field: None,
+            filter: None,
+            decompress: Some("gzip".to_string()),
+        };
+        let mut iter = extractor.extract(&path).unwrap();
+        // First poll: the decode error surfaces.
+        assert!(
+            matches!(iter.next(), Some(Err(_))),
+            "read error surfaces once"
+        );
+        // Second poll: terminated, not the same error forever.
+        assert!(
+            iter.next().is_none(),
+            "iterator terminates after a read error"
+        );
     }
 }

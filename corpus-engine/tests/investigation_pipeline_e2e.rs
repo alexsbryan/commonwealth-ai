@@ -284,3 +284,179 @@ async fn end_to_end_finds_all_three_pattern_types() {
     assert!(invest_dir.join("relationships.json").exists());
     assert!(invest_dir.join("pattern_findings.json").exists());
 }
+
+const UAP_RECIPE: &str = r#"
+[corpus]
+id = "uap-test"
+name = "uap test"
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/data.zip"
+
+[extract]
+type = "html"
+
+[chunk]
+type = "paragraph"
+
+[enrichment]
+enabled = true
+type = "investigation"
+
+[[enrichment.entity_types]]
+name = "sighting"
+description = "An observed event"
+attributes = ["occurred_at"]
+
+[[enrichment.entity_types]]
+name = "installation"
+description = "A military base"
+attributes = ["branch", "type"]
+
+[[enrichment.entity_types]]
+name = "observed_object"
+description = "The thing observed"
+attributes = ["shape", "color"]
+
+[[enrichment.relationship_types]]
+name = "occurred_near"
+description = "sighting occurred near installation"
+directional = false
+
+[[enrichment.relationship_types]]
+name = "involves_object"
+description = "sighting involves an observed object"
+directional = true
+
+[[enrichment.patterns]]
+type = "threshold"
+name = "sighting_hotspots"
+description = "Installations with more than 3 nearby sightings"
+edge_type = "occurred_near"
+attribute = "sighting_count"
+threshold = 3.0
+comparison = "greater_than"
+"#;
+
+/// UAP demo path: exercises Phase A end-to-end —
+/// (A1) 4 surface-form variants of one base coalesce into a single
+/// installation with aliases, while a distinct base stays separate;
+/// (A2) declared entity attributes (the observed object's `shape`) are
+/// populated from the `entities[]` array; (A3) the deterministic
+/// `sighting_count` aggregation makes the count-based hotspot threshold
+/// fire on the merged base.
+#[tokio::test]
+async fn uap_coalesces_variants_populates_attrs_and_fires_hotspot() {
+    let recipe = Recipe::from_toml(UAP_RECIPE).unwrap();
+
+    // Five sightings: four near Wright-Patterson (under four surface
+    // forms) + one near Edwards. The four WP forms must merge so the
+    // hotspot (>3) fires; Edwards (count 1) must not.
+    let chunks = vec![
+        ChunkInput { chunk_id: "wp1", source_title: None, content: "near Wright-Patterson AFB" },
+        ChunkInput { chunk_id: "wp2", source_title: None, content: "near Wright-Patterson Air Force Base" },
+        ChunkInput { chunk_id: "wp3", source_title: None, content: "near Wright-Patterson" },
+        ChunkInput { chunk_id: "wp4", source_title: None, content: "near Wright Patterson AFB" },
+        ChunkInput { chunk_id: "ed1", source_title: None, content: "near Edwards AFB" },
+    ];
+
+    let responses: &[&str] = &[
+        r#"{
+            "entities": [
+                {"name": "Wright-Patterson AFB", "type": "installation", "attributes": {"branch": "USAF", "type": "AIRBASE"}},
+                {"name": "sighting-1", "type": "sighting", "attributes": {"occurred_at": "1952-07-01"}},
+                {"name": "object-1", "type": "observed_object", "attributes": {"shape": "DISC", "color": "silver"}}
+            ],
+            "relationships": [
+                {"from_entity": "sighting-1", "to_entity": "Wright-Patterson AFB", "from_type": "sighting", "to_type": "installation", "type": "occurred_near", "verbatim_excerpt": "near Wright-Patterson AFB", "confidence": 1.0},
+                {"from_entity": "sighting-1", "to_entity": "object-1", "from_type": "sighting", "to_type": "observed_object", "type": "involves_object", "verbatim_excerpt": "a disc", "confidence": 1.0}
+            ]
+        }"#,
+        r#"{
+            "entities": [
+                {"name": "Wright-Patterson Air Force Base", "type": "installation", "attributes": {"branch": "USAF"}},
+                {"name": "sighting-2", "type": "sighting", "attributes": {}}
+            ],
+            "relationships": [
+                {"from_entity": "sighting-2", "to_entity": "Wright-Patterson Air Force Base", "from_type": "sighting", "to_type": "installation", "type": "occurred_near", "verbatim_excerpt": "near Wright-Patterson Air Force Base", "confidence": 1.0}
+            ]
+        }"#,
+        r#"{
+            "entities": [
+                {"name": "sighting-3", "type": "sighting", "attributes": {}}
+            ],
+            "relationships": [
+                {"from_entity": "sighting-3", "to_entity": "Wright-Patterson", "from_type": "sighting", "to_type": "installation", "type": "occurred_near", "verbatim_excerpt": "near Wright-Patterson", "confidence": 1.0}
+            ]
+        }"#,
+        r#"{
+            "entities": [
+                {"name": "sighting-4", "type": "sighting", "attributes": {}}
+            ],
+            "relationships": [
+                {"from_entity": "sighting-4", "to_entity": "Wright Patterson AFB", "from_type": "sighting", "to_type": "installation", "type": "occurred_near", "verbatim_excerpt": "near Wright Patterson AFB", "confidence": 1.0}
+            ]
+        }"#,
+        r#"{
+            "entities": [
+                {"name": "sighting-5", "type": "sighting", "attributes": {}}
+            ],
+            "relationships": [
+                {"from_entity": "sighting-5", "to_entity": "Edwards AFB", "from_type": "sighting", "to_type": "installation", "type": "occurred_near", "verbatim_excerpt": "near Edwards AFB", "confidence": 1.0}
+            ]
+        }"#,
+    ];
+    let chat = scripted_responses(responses);
+    let dir = tempfile::tempdir().unwrap();
+    let out = run_investigation(&recipe, &chunks, chat, dir.path())
+        .await
+        .unwrap();
+
+    // (A1) The four Wright-Patterson surface forms coalesce into ONE
+    // installation; Edwards stays separate.
+    let installations: Vec<_> = out
+        .entities
+        .iter()
+        .filter(|e| e.entity_type == "installation")
+        .collect();
+    assert_eq!(
+        installations.len(),
+        2,
+        "WP variants merge + Edwards separate; got: {installations:?}"
+    );
+    let wp = out
+        .entities
+        .iter()
+        .find(|e| e.id == "e-installation-wright-patterson")
+        .expect("merged Wright-Patterson installation");
+    // Longest surface form is canonical; the others are aliases.
+    assert_eq!(wp.canonical_name, "Wright-Patterson Air Force Base");
+    assert!(wp.aliases.contains(&"Wright-Patterson AFB".to_string()));
+    assert!(wp.aliases.contains(&"Wright Patterson AFB".to_string()));
+
+    // (A2) The observed object's declared `shape` attribute is populated.
+    let obj = out
+        .entities
+        .iter()
+        .find(|e| e.entity_type == "observed_object")
+        .expect("observed object extracted");
+    assert_eq!(obj.attributes.get("shape"), Some(&serde_json::json!("DISC")));
+    // Installation attributes merged across mentions too.
+    assert_eq!(wp.attributes.get("branch"), Some(&serde_json::json!("USAF")));
+
+    // (A3) The hotspot threshold fires on the merged base (4 sightings > 3)
+    // and NOT on Edwards (1 sighting).
+    let hotspots: Vec<_> = out
+        .findings
+        .iter()
+        .filter(|f| f.pattern_name == "sighting_hotspots")
+        .collect();
+    assert_eq!(hotspots.len(), 1, "only WP clears the threshold; got: {hotspots:?}");
+    assert_eq!(hotspots[0].entity_ids, vec!["e-installation-wright-patterson"]);
+    // The stamped count is on the entity.
+    assert_eq!(
+        wp.attributes.get("sighting_count"),
+        Some(&serde_json::json!(4))
+    );
+}

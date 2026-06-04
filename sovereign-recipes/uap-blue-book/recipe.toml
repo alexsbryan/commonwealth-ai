@@ -1,0 +1,149 @@
+# UAP Blue Book — investigation demo corpus.
+#
+# Historical U.S. Air Force UAP adjudication records (Projects Sign /
+# Grudge / Blue Book) plus modern RG 615 / AARO records, modeled as the
+# UFO.md entity-relationship graph: CASE → SIGHTING → OBSERVED_OBJECT /
+# WITNESS / INSTALLATION / INVESTIGATING_BODY / ADJUDICATION, with one
+# descriptive "hotspot" threshold (installations with > N nearby
+# sightings — AARO's own hotspot-map framing).
+#
+# This is the L1 (metadata/jsonl) surface. The companion
+# `uap-blue-book-scans` recipe ingests the PDF scans / born-digital
+# RG615/AARO documents via the `described_asset` extractor and shares
+# this same investigation enrichment block.
+#
+# Operator setup: stage the case-metadata JSONL under
+#   ~/.sovereign/corpora-staging/uap-blue-book/
+# (the demo copies sovereign/bench/uap/fixtures/cases.jsonl there). The
+# acquirer points at the folder; the jsonl extractor walks every *.jsonl
+# inside it.
+
+[corpus]
+id = "uap-blue-book"
+name = "UAP Blue Book Case Metadata"
+description = "U.S. Air Force UAP adjudication records (Sign/Grudge/Blue Book) + modern RG615/AARO, as a typed investigation graph (case/sighting/object/witness/installation/body/adjudication) with a sighting-hotspot threshold."
+license = "public-domain"
+schema_version = 1
+mesh_sharing = false
+size_compressed_gb = 0.001
+size_indexed_gb = 0.01
+
+[acquire]
+type = "local_file"
+path = "~/.sovereign/corpora-staging/uap-blue-book"
+
+[extract]
+type = "jsonl"
+content_field = "narrative"
+title_field = "case_id"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 0
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "investigation"
+domain = "investigation"
+prompt_version = "uap-v0"
+
+# ── Entity types (UFO.md ER diagram) ─────────────────────────────────
+[[enrichment.entity_types]]
+name = "case"
+description = "The archival unit — a Blue Book/Sign/Grudge case file or an RG615/AARO record. One case usually corresponds to one sighting event."
+attributes = ["study", "record_group", "date_filed", "location_text"]
+
+[[enrichment.entity_types]]
+name = "sighting"
+description = "The observed event. Object and weather attributes hang off the event, not the file."
+attributes = ["occurred_at", "time_of_day", "duration_seconds", "num_witnesses", "detection_method"]
+
+[[enrichment.entity_types]]
+name = "observed_object"
+description = "The structured 'what was seen' — the primary features the disposition classifier reads."
+attributes = ["shape", "color", "count", "motion", "sound", "size_estimate"]
+
+[[enrichment.entity_types]]
+name = "witness"
+description = "An observer. De-identified: model the role and reliability, not the identity (NARA redacts names)."
+attributes = ["witness_ref", "category", "reliability"]
+
+[[enrichment.entity_types]]
+name = "installation"
+description = "A military base, radar site, or test range near the sighting. Primary reconciliation target."
+attributes = ["name", "branch", "type"]
+
+[[enrichment.entity_types]]
+name = "investigating_body"
+description = "The office, officer, or agency that investigated the case (OSI, ATIC, project staff)."
+attributes = ["name", "kind"]
+
+[[enrichment.entity_types]]
+name = "adjudication"
+description = "The official disposition ruling — the eval target. Carries the disposition category and rationale."
+attributes = ["category", "subcategory", "rationale_text", "origin_agency"]
+
+[[enrichment.entity_types]]
+name = "weather_context"
+description = "Atmospheric / astronomical conditions offered as an explanation (Venus prominent, temperature inversion)."
+attributes = ["visibility", "cloud_cover", "celestial_present", "temp_inversion"]
+
+# ── Relationship types (UFO.md Relationships table) ──────────────────
+[[enrichment.relationship_types]]
+name = "has_sighting"
+description = "A case has one or more sighting events."
+directional = true
+
+[[enrichment.relationship_types]]
+name = "involves_object"
+description = "A sighting involves one or more observed objects (the classifier features)."
+directional = true
+
+[[enrichment.relationship_types]]
+name = "observed_by"
+description = "A sighting was observed by a witness."
+directional = false
+
+[[enrichment.relationship_types]]
+name = "occurred_near"
+description = "A sighting occurred near an installation — drives the hotspot detector."
+directional = false
+
+[[enrichment.relationship_types]]
+name = "under_conditions"
+description = "A sighting occurred under given weather/astronomical conditions."
+directional = true
+
+[[enrichment.relationship_types]]
+name = "investigated_by"
+description = "A case was investigated by an investigating body."
+directional = true
+
+[[enrichment.relationship_types]]
+name = "officially_resolved_as"
+description = "A case was officially resolved as an adjudication (the gold ruling)."
+directional = true
+
+# ── Patterns ─────────────────────────────────────────────────────────
+# One descriptive threshold only. circular_flow / role_overlap are
+# deliberately omitted (UFO.md §Relationships: on this data they
+# manufacture apophenia). `sighting_count` is stamped deterministically
+# post-coalesce by the pipeline's aggregation step (distinct
+# occurred_near sightings per reconciled installation).
+[[enrichment.patterns]]
+type = "threshold"
+name = "sighting_hotspots"
+description = "Installations with more than 3 nearby sightings (descriptive geography, à la AARO hotspot maps)."
+edge_type = "occurred_near"
+attribute = "sighting_count"
+threshold = 3.0
+comparison = "greater_than"
+
+[display]
+category = "investigation"
+icon = "search"
