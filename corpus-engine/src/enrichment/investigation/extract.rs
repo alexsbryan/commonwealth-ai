@@ -439,17 +439,27 @@ fn coalesce_key(entity_type: &str, name: &str) -> String {
 /// of facility suffixes so `"X AFB"` / `"X Air Force Base"` / `"X"`
 /// collapse.
 ///
-/// Scope note: this is lightweight coalescing — it merges the
-/// suffix-variant family only. Acronym forms (`"WPAFB"`) and historical
-/// aliases (`"Patterson Field"` for Wright-Patterson) are NOT folded
-/// here; that needs the deferred facility-reconciliation gazetteer.
+/// Scope note: lightweight, OCR-tolerant coalescing of the
+/// suffix-variant family + an explicit acronym/alias gazetteer. It folds
+/// `"X AFB"` / `"X Air Force Base"` / `"X"` and OCR-mangled suffix
+/// variants (`"X Aiforce Base"`, `"X Air ForceBase"`, `"X Air Force
+/// Basd"`, `"X A ir Force Base"`) to the same base, and maps known
+/// acronyms (`"WPAFB"`) via [`FACILITY_ALIASES`]. It deliberately does
+/// NOT fuzzy-match BASE tokens — only the trailing suffix region — so it
+/// never merges two distinct bases (`"Patterson Field"` stays apart from
+/// `"Wright-Patterson"`). Pure per-name function so [`coalesce_key`] and
+/// [`entity_id_for`] always agree.
 fn normalize_entity_name(entity_type: &str, name: &str) -> String {
     let folded = crate::enrichment::reconciliation::signals::fold_name(name);
-    if is_facility_type(entity_type) {
-        strip_facility_suffixes(&folded)
-    } else {
-        folded
+    if !is_facility_type(entity_type) {
+        return folded;
     }
+    // Acronym/alias gazetteer (identity-grade, exact match on the folded
+    // form) — extend as the corpus surfaces more bases.
+    if let Some((_, canon)) = FACILITY_ALIASES.iter().find(|(a, _)| *a == folded) {
+        return canon.to_string();
+    }
+    strip_facility_suffixes(&folded)
 }
 
 /// Facility-shaped entity types whose names get suffix-folded.
@@ -460,47 +470,76 @@ fn is_facility_type(entity_type: &str) -> bool {
     )
 }
 
-/// Trailing facility-suffix run, longest phrases first so multi-word
-/// suffixes ("air force base") strip before their single-token tails.
-const FACILITY_SUFFIXES: &[&str] = &[
-    "naval air station",
-    "naval air facility",
-    "air force base",
-    "air force station",
-    "air station",
-    "test range",
-    "missile range",
-    "afb",
-    "nas",
-    "naf",
-    "field",
-    "station",
-    "range",
-    "base",
+/// Known acronym/alias → canonical normalized base. Identity-grade exact
+/// match on the folded surface form; a base's acronym can't be derived
+/// safely per-name (it needs map-aware context that would break the
+/// id/coalesce-key agreement), so this is an explicit, extensible list.
+const FACILITY_ALIASES: &[(&str, &str)] = &[
+    ("wpafb", "wright patterson"),
+    ("wp afb", "wright patterson"),
 ];
 
-/// Strip the trailing run of facility suffixes from an already-folded
-/// name, keeping at least one base token (mirrors `strip_org_suffixes`
-/// discipline: trailing-only, never to empty). `"wright patterson air
-/// force base"` → `"wright patterson"`; `"edwards afb"` → `"edwards"`.
+/// Single-token facility-suffix vocabulary (incl. common OCR
+/// concatenations). A trailing token is stripped when it is one of these,
+/// is within edit-distance 1 of one (microfilm OCR noise: `aiforce`,
+/// `basd`), or is a 1–2 char fragment (`a`, `ir`, `b` from split words).
+const FACILITY_SUFFIX_WORDS: &[&str] = &[
+    "air", "airforce", "aiforce", "force", "forcebase", "airforcebase", "base",
+    "field", "station", "range", "naval", "missile", "facility", "center",
+    "afb", "nas", "naf", "af",
+];
+
+/// Strip the trailing facility-suffix run from an already-folded name,
+/// OCR-tolerant, keeping ≥1 base token. Only the trailing suffix region
+/// is touched — base tokens are never fuzzy-matched, so distinct bases
+/// never merge. `"wright patterson aiforce base"` → `"wright patterson"`;
+/// `"kirtland air force basd"` → `"kirtland"`.
 fn strip_facility_suffixes(folded: &str) -> String {
     let mut toks: Vec<&str> = folded.split_whitespace().collect();
-    loop {
-        let mut stripped = false;
-        for suffix in FACILITY_SUFFIXES {
-            let sfx: Vec<&str> = suffix.split_whitespace().collect();
-            if toks.len() > sfx.len() && toks[toks.len() - sfx.len()..] == sfx[..] {
-                let keep = toks.len() - sfx.len();
-                toks.truncate(keep);
-                stripped = true;
-                break;
-            }
-        }
-        if !stripped || toks.len() <= 1 {
-            break;
-        }
+    while toks.len() > 1 && is_suffix_noise(toks[toks.len() - 1]) {
+        toks.pop();
     }
     toks.join(" ")
+}
+
+/// True for a trailing token that's facility-suffix noise.
+fn is_suffix_noise(tok: &str) -> bool {
+    if tok.len() <= 2 {
+        return true; // OCR fragments: "a", "ir", "b", "af"
+    }
+    FACILITY_SUFFIX_WORDS
+        .iter()
+        .any(|w| *w == tok || edit_distance_le_1(tok, w))
+}
+
+/// Bounded Levenshtein: true iff edit distance between `a` and `b` is ≤ 1.
+/// Cheap early-outs on length; only used on short suffix tokens.
+fn edit_distance_le_1(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    let (la, lb) = (a.len(), b.len());
+    if la.abs_diff(lb) > 1 {
+        return false;
+    }
+    if la == lb {
+        // ≤1 substitution.
+        return a.iter().zip(b).filter(|(x, y)| x != y).count() <= 1;
+    }
+    // Lengths differ by 1: check one insertion/deletion (b is the longer).
+    let (short, long) = if la < lb { (a, b) } else { (b, a) };
+    let (mut i, mut j, mut diff) = (0usize, 0usize, 0u8);
+    while i < short.len() && j < long.len() {
+        if short[i] == long[j] {
+            i += 1;
+            j += 1;
+        } else {
+            diff += 1;
+            if diff > 1 {
+                return false;
+            }
+            j += 1; // skip one char in the longer string
+        }
+    }
+    true
 }
 
 /// Stable entity id: `e-<type>-<slug(normalized-name)>`. Routed through
@@ -746,6 +785,43 @@ mod tests {
         // Attributes from both mentions merge.
         assert_eq!(inst.attributes.get("branch"), Some(&serde_json::json!("USAF")));
         assert_eq!(inst.attributes.get("type"), Some(&serde_json::json!("AIRBASE")));
+    }
+
+    #[test]
+    fn coalesce_key_folds_ocr_variants_and_acronym() {
+        // F3: OCR-mangled suffix variants + the WPAFB acronym all fold to
+        // the same canonical base.
+        let canon = "installation|wright patterson";
+        for surface in [
+            "Wright-Patterson AFB",
+            "Wright-Patterson Air Force Base",
+            "Wright-Patterson Aiforce Base",   // OCR: dropped 'r'
+            "Wright-Patterson Air ForceBase",  // OCR: lost space
+            "Wright-Patterson A ir Force Base", // OCR: split 'air'
+            "WPAFB",                            // acronym (gazetteer)
+        ] {
+            assert_eq!(
+                coalesce_key("installation", surface),
+                canon,
+                "surface {surface:?} should fold to {canon}"
+            );
+        }
+        // OCR typo in the suffix ("Basd") still folds.
+        assert_eq!(
+            coalesce_key("installation", "Kirtland Air Force Basd"),
+            "installation|kirtland"
+        );
+    }
+
+    #[test]
+    fn ocr_fold_does_not_over_merge_distinct_bases() {
+        // The OCR-tolerant strip must never collapse two real bases.
+        let wp = coalesce_key("installation", "Wright-Patterson AFB");
+        let edwards = coalesce_key("installation", "Edwards Air Force Base");
+        let patterson_field = coalesce_key("installation", "Patterson Field");
+        assert_ne!(wp, edwards);
+        assert_ne!(wp, patterson_field); // historical alias stays separate
+        assert_eq!(edwards, "installation|edwards");
     }
 
     #[test]

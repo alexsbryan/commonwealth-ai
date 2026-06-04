@@ -1005,6 +1005,22 @@ async fn validate_recipe(recipe: &Recipe, offline: bool) -> ValidationResult {
                 crate::recipe::PatternDecl::RoleOverlap { .. } => {}
             }
         }
+
+        // Investigation enrichment with NO patterns: the entity+relationship
+        // graph still builds, but no pattern findings can fire. This is also
+        // the silent failure mode of a `[[enrichments.patterns]]` typo (note
+        // the plural) — an unknown top-level key is dropped by the parser, so
+        // the threshold vanishes and validation otherwise passes. Surface it.
+        if enr.enrichment_type == "investigation" && enr.patterns.is_empty() {
+            warnings.push(
+                "investigation enrichment declares no [[enrichment.patterns]] — \
+                 entities + relationships are still extracted, but NO pattern \
+                 findings will fire. If you intended a pattern (e.g. a threshold), \
+                 check the table name: `[[enrichment.patterns]]` is correct; a \
+                 `[[enrichments.patterns]]` typo (plural) is silently ignored."
+                    .to_string(),
+            );
+        }
     }
 
     let source_present = !matches!(
@@ -1491,6 +1507,47 @@ comparison = "greater_than"
                 .any(|e| e.contains("edge_type") && e.contains("observed_by")),
             "expected edge_type error naming the valid relationship, got {:?}",
             result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn validate_warns_on_investigation_with_zero_patterns() {
+        // F2: investigation enrichment with no patterns (the silent
+        // manifestation of a `[[enrichments.patterns]]` typo) must warn.
+        let toml = r#"
+[corpus]
+id = "demo"
+name = "demo"
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/data.zip"
+
+[extract]
+type = "jsonl"
+
+[chunk]
+type = "paragraph"
+
+[enrichment]
+enabled = true
+type = "investigation"
+
+[[enrichment.entity_types]]
+name = "case"
+
+[[enrichment.relationship_types]]
+name = "observed_by"
+"#;
+        let recipe = Recipe::from_toml(toml).unwrap();
+        let result = validate_recipe(&recipe, true).await;
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|w| w.contains("no [[enrichment.patterns]]") && w.contains("typo")),
+            "expected zero-patterns warning naming the typo, got {:?}",
+            result.warnings
         );
     }
 
