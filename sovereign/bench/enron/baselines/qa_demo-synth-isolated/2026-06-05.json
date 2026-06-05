@@ -1,0 +1,1236 @@
+{
+  "bank_name": "enron-demo-v0",
+  "corpus": "enron-sample-multi-wide",
+  "limit": 0,
+  "started_at_unix": 1780619438,
+  "results": [
+    {
+      "question_id": "exec_cast",
+      "category": "entity",
+      "question": "Who were the senior executives running Enron, and what was each one\nresponsible for?\n",
+      "retrieved": [
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "EnronOnline Management Report  for June 01, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "EnronOnline Management Report  for June 01, 2001\n\n2001"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Enron",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Enron\n\nFrom: sfink@knowledgeu.com\nTo: kenneth.lay@enron.com\nDate: Tue, 4 Dec 2001 06:35:43 -0800 (PST)\nSubject: Enron\n\n\nYou still have my support.  Let me know if I can be helpful in any way."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "EnronOnline Executive Summary for September 26, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "EnronOnline Executive Summary for September 26, 2001\n\nFrom: fraisy.george@enron.com\nTo: sunil.abraham@enron.com, carlos.alatorre@enron.com, john.allario@enron.com,  marla.barnard@enron.com,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "EnronOnline Executive Summary for September 25, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "EnronOnline Executive Summary for September 25, 2001\n\nFrom: fraisy.george@enron.com\nTo: /o=enron/ou=eu/cn=recipients/cn=mpicker@enron.com, sunil.abraham@enron.com,  carlos.alatorre@enron.com,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "EnronOnline Executive Summary for September 13, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "EnronOnline Executive Summary for September 13, 2001\n\nFrom: fraisy.george@enron.com\nTo: sunil.abraham@enron.com, carlos.alatorre@enron.com, john.allario@enron.com,  marla.barnard@enron.com,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "EnronOnline Executive Summary for September 20, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "EnronOnline Executive Summary for September 20, 2001\n\nFrom: fraisy.george@enron.com\nTo: sunil.abraham@enron.com, carlos.alatorre@enron.com, john.allario@enron.com,  marla.barnard@enron.com,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "EnronOnline Executive Summary for August 27, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "EnronOnline Executive Summary for August 27, 2001\n\nFrom: simone.la@enron.com\nTo: sunil.abraham@enron.com, sally.beck@enron.com, tim.belden@enron.com,  raymond.bowen@enron.com, r..brackett@enron.com, ..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "EnronOnline Executive Summary for June 07, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "EnronOnline Executive Summary for June 07, 2001\n\nFrom: simone.la@enron.com\nTo: sunil.abraham@enron.com, cliff.baxter@enron.com, sally.beck@enron.com,  tim.belden@enron.com, a..bibi@enron.com,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Organization Changes",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Organization Changes\n\n& Construction\n?\tBrian Stanley, President & CEO - EEOS\n?\tSteve Hotte, Vice President & CIO\n?\tJohn Ambler, Vice President, Communications & PR\t\n?\tGary Smith, Vice President,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Rebuild",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Rebuild\n\nby your previous COO and a couple of other top executives you had entrusted.   Those few peo!\nple, one of which you had recently hired, all quit just before the news came out about Enron..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": null,
+          "url": null,
+          "score": 0.0,
+          "snippet": "robinson.richard@enron.com, sadler.scott@enron.com,  samuel.denny@enron.com, sandin.tracy@enron.com, schott.tim@enron.com,  sloat.kevin@enron.com, snodgrass.kathleen@enron.com,  snow.liz@enron.com,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Rebuild",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Rebuild\n\nby your previous COO and a couple of other top executives you had entrusted.   Those few people,!\n one of which you had recently hired, all quit just before the news came out about Enron..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: EnronOnline Executive Summary for May 15, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: EnronOnline Executive Summary for May 15, 2001\n\nPaula \nRieker/ENRON@enronXgate, Jennifer Rosado/ENRON@enronXgate, Justin \nRostant/ENRON@enronXgate, Tammie Schoppe/HOU/ECT@ECT, Stephanie..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Enron Article",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Enron Article\n\nFrom: tracy.ngo@enron.com; Tracy Ngo\nTo: jeffrey.oh@enron.com, kate.symes@enron.com, greg.wolfe@enron.com, chris.foster@enron.com; Jeffrey Oh, Kate Symes, Greg Wolfe, Chris H..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Financial Disclosure of $1.2 Billion Equity Adjustment",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Financial Disclosure of $1.2 Billion Equity Adjustment\n\nIt frightens me that we are out asking customers to let Enron help them \"HEDGE\" their risk when I'm not sure Enron's Senior Management..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "corporate responsibility",
+          "url": null,
+          "score": 0.0,
+          "snippet": "corporate responsibility\n\nFrom: jeff_nolan@yahoo.com\nTo: kenneth.lay@enron.com\nDate: Thu, 1 Nov 2001 13:22:37 -0800 (PST)\nSubject: corporate responsibility\n\nMr Lay,\nTo suggest that I am merely..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "stockholder comments",
+          "url": null,
+          "score": 0.0,
+          "snippet": "stockholder comments\n\nFrom: kenneth.booi@mirant.com\nTo: kenneth.lay@enron.com\nDate: Wed, 31 Oct 2001 06:08:14 -0800 (PST)\nSubject: stockholder comments\n\nDear Dr. Lay:\n\nAs a stockholder, I am as upset..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Upset stockholder",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Upset stockholder\n\nFrom: wjheilman@worldnet.att.net\nTo: kenneth.lay@enron.com\nDate: Tue, 13 Nov 2001 22:59:53 -0800 (PST)\nSubject: Upset stockholder\n\n\r\nI have found the events of the last two months..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "POWER POINTS: Skilling Moves On To Charities, Family",
+          "url": null,
+          "score": 0.0,
+          "snippet": "POWER POINTS: Skilling Moves On To Charities, Family\n\nThe former chief executive totally disagreed with speculation in this\ncolumn\nlast week that Enron Chairman Kenneth Lay, who immediately resumed..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "SF Gate: Enron's secret bid to save deregulation/PRIVATE MEETING: Chairman pitches his plan to prominent Californians",
+          "url": null,
+          "score": 0.0,
+          "snippet": "SF Gate: Enron's secret bid to save deregulation/PRIVATE MEETING: Chairman pitches his plan to prominent Californians\n\nEnergy executive Kenneth Lay, head of powerful Enron Corp., quietly\ncourted..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "Kenneth Lay",
+          "chairman",
+          "Jeffrey Skilling",
+          "chief executive",
+          "Andrew Fastow",
+          "chief financial officer"
+        ],
+        "missing": [],
+        "total_expected": 6,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "enron-sample-multi-wide"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The user is asking about the senior executives running Enron and their responsibilities. I need to look at the retrieved passages for information on this.\n\nLooking through the retrieved content:\n1. There's a \"Organization Changes\" section that mentions some people but doesn't seem comprehensive - it lists Brian Stanley as President & CEO of EEOS, Steve Hotte as VP & CIO, John Ambler as VP Communications & PR, Gary Smith as VP Human Resources, Rob Walls (Deputy General Counsel), Phil Lowry (domestic pipeline operations...), etc. But this seems like just organizational changes, not necessarily all senior execs.\n\n2. The other sources are mostly email headers or fragments about Enron bookkeeping and executives quitting before news came out.\n\n3. I don't see specific information in the retrieved passages about who was running Enron at a high level (like Ken Lay, Jeff Skilling, Andrew Fastow) - though there's mention of \"your previous COO\" which suggests someone is writing to Kenneth Lay based on the email header showing kenneth.lay@enron.com as recipient.\n\nWait, looking more carefully:\n- One source shows an email from sfink@knowledgeu.com TO kenneth.lay@enron.com with subject \"Enron\". This confirms Kenneth Lay was CEO/running Enron around Dec 2001.\n- Another mentions \"Jeff Skilling/Corp/Enron@ENRON\" in a CC list for May 15, 2001 executive summary. So Jeff Skilling was involved (he became CFO later).\n- The \"Organization Changes\" section mentions Brian Stanley as President & CEO - EEOS (Energy Engineering and Operations Services), which suggests he might have been running that division or possibly the whole company? But it says EEOS specifically.\n\nActually, looking at the Organization Changes source more carefully: It lists people under Construction but doesn't clearly state who ran the entire Enron corporation. It seems to be about specific divisions like EEOS.\n\nThe retrieved passages don't seem to contain comprehensive information about all senior executives of Enron Corporation itself - they mostly mention organizational changes within a subsidiary/department (EEOS) and some email headers showing recipients including Kenneth Lay and Jeff Skilling.\n\nGiven this limitation in retrieval, I should acknowledge what is found while being honest about limitations. The user asked for \"senior executives running Enron\" which implies the main corporate leadership team.\n\nFrom general knowledge:\n- Kenneth Lay was Chairman & CEO until Dec 2001 when he resigned\n- Jeffrey Skilling became CFO then CEO after Lay's resignation  \n- Andrew Fastow was Chief Financial Officer (and later exposed as mastermind behind accounting fraud)\n- There were other key figures like Richard Brooks (CFO before Fastow), etc.\n\nBut since my retrieved passages don't clearly list these people with their specific responsibilities at the company level (only",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 26490,
+        "total_latency_ms": 18058,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "enron-sample-multi-wide"
+        ],
+        "retrieved_chunk_count": 20,
+        "chunks_fact_score": {
+          "matched": [
+            "Kenneth Lay",
+            "chairman",
+            "Jeffrey Skilling",
+            "chief executive"
+          ],
+          "missing": [
+            "Andrew Fastow",
+            "chief financial officer"
+          ],
+          "total_expected": 6,
+          "ratio": 0.6666667
+        },
+        "judge_fact_score": {
+          "matched": [
+            "Kenneth Lay",
+            "Jeffrey Skilling"
+          ],
+          "missing": [
+            "chairman",
+            "chief executive",
+            "Andrew Fastow",
+            "chief financial officer"
+          ],
+          "total_expected": 6,
+          "ratio": 0.33333334
+        },
+        "judge_evidence": [
+          {
+            "fact": "Kenneth Lay",
+            "present": true,
+            "evidence": "\"One source shows an email from sfink@knowledgeu.com TO kenneth.lay@enron.com with subject 'Enron'. This confirms Kenneth Lay was CEO/running Enron around Dec 2001.\""
+          },
+          {
+            "fact": "chairman",
+            "present": false,
+            "evidence": "(parse failed)"
+          },
+          {
+            "fact": "Jeffrey Skilling",
+            "present": true,
+            "evidence": "\"Jeff Skilling/Corp/Enron@ENRON\" in a CC list for May 15, 2001 executive summary. So Jeff Skilling was involved (he became CFO later).\""
+          },
+          {
+            "fact": "chief executive",
+            "present": false,
+            "evidence": "(parse failed)"
+          },
+          {
+            "fact": "Andrew Fastow",
+            "present": false,
+            "evidence": "(parse failed)"
+          },
+          {
+            "fact": "chief financial officer",
+            "present": false,
+            "evidence": "(parse failed)"
+          }
+        ]
+      },
+      "meta_atlas_hits": [
+        {
+          "entity": "Enron",
+          "corpus_id": "enron-sample-multi-wide",
+          "articulation": "inventory",
+          "chunks_added": 3
+        }
+      ]
+    },
+    {
+      "question_id": "ljm_fraud",
+      "category": "fraud_structure",
+      "question": "What do these communications reveal about the LJM and Raptor\npartnerships, and which executive was behind them?\n",
+      "retrieved": [
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Saturday Articles",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Saturday Articles\n\nFrom: karen.denne@enron.com\nTo: j..kean@enron.com, pr <.palmer@enron.com>, mark.koenig@enron.com,  jeffrey.mcmahon@enron.com, rex.rogers@enron.com,  james.derrick@enron.com,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Saturday Articles",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Saturday Articles\n\nthe $1.1 billion banked this week.\n\nPalmer could neither confirm nor deny that the company is negotiating further lines of credit with banks but described such actions as \"good..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Saturday Articles",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Saturday Articles\n\nis really the core of their operations,\" Feygin told the Houston Chronicle for Saturday's editions.\n\nCarol Coale, an analyst with Prudential Securities, still sees the move as..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Saturday Articles",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Saturday Articles\n\nlevels of around 10%. By week's end, Enron had drawn down $3 billion in bank credit lines to pay off nearly $2 billion in maturing commercial paper, leaving it only about $1..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Saturday Articles",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Saturday Articles\n\nEnron liabilities that will impair the company's credit ratings. There may also be the need for potential writedowns of various Enron assets, including its money-losing broadband..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Saturday Articles",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Saturday Articles\n\nanalysts pay too little attention to company balance sheets. Until last week, Enron analysts still were more focused on earnings dilution than the more important issue of Enron's..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Saturday Articles",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Saturday Articles\n\nEnron will pay off debts of $2.2 billion and keep another $800,000 in cash. He said: \"We know we have our work cut out for us if we are to rebuild our credibility with the..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Saturday Articles",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Saturday Articles\n\n(TM)\n\nEnron Corp.'s stock price hit its lowest point in more than five years Friday after it tapped into more than $3 billion in revolving credit in an effort to re-assure..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Saturday Articles",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Saturday Articles\n\nCo-Investment, did complex financing and hedging deals with Enron and were formed originally as a way to offset risks associated with some of the company's newer businesses such as..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Saturday Articles",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Saturday Articles\n\nit lets them earn money on cash that would sit idle otherwise and lets them do it through something issued only by companies with top credit ratings and usually backed by bank..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Saturday Articles",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Saturday Articles\n\n\"Our gut feel is that Enron can pull it off.\"\n\nFeygin said he also believes the company will continue to do better in revealing its financial dealings but thinks there may be more..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Saturday Articles",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Saturday Articles\n\n$3 Billion of Debt\n\nEnron, trying to reassure investors that it has ample liquidity, began to repurchase all its outstanding commercial paper, using $3.3 billion it had borrowed..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Important Announcement Regarding Document Preservation",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Important Announcement Regarding Document Preservation\n\nFrom: no.address@enron.com\nDate: Thu, 25 Oct 2001 21:54:55 -0700 (PDT)\nSubject: Important Announcement Regarding Document Preservation\n\n\nAs you..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Rebuild",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Rebuild\n\nby your previous COO and a couple of other top executives you had entrusted.   Those few peo!\nple, one of which you had recently hired, all quit just before the news came out about Enron..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "LJM",
+          "Raptor",
+          "Fastow",
+          "partnership"
+        ],
+        "missing": [
+          "off-balance-sheet"
+        ],
+        "total_expected": 5,
+        "ratio": 0.8
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "enron-sample-multi-wide"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The user is asking about the LJM and Raptor partnerships mentioned in these retrieved communications, specifically what they reveal about these partnerships and which executive was behind them.\n\nLooking at the retrieved passages:\n1. Multiple references to \"LJM Cayman\" and \"LJM2 Co-Investment\" \n2. References to Andrew Fastow as CFO who formed/ran these partnerships with board approval\n3. Mentions of conflicts of interest concerns\n4. Mention of Chewco (another entity) run by Michael Kopper\n5. Reference to $1.2 billion reduction in shareholder equity related to one of its partnerships\n6. SEC inquiry into partnerships managed by Andrew Fastow\n\nHowever, I need to check if Raptor is mentioned anywhere in these specific retrieved documents. Looking through all the chunks... I don't see any mention of \"Raptor\" specifically in these passages. The user asks about both LJM and Raptor, but only LJM appears explicitly named in these communications.\n\nWait, let me look again carefully:\n- \"LJM Cayman and LJM2 Co-Investment\" - yes\n- \"Chewco\" - yes (formed 1997 with $400 million backing)\n- No explicit mention of \"Raptor\" partnerships in these texts.\n\nSo based on what's retrievable here, I can answer about LJM (Cayman and Co-Investment), Andrew Fastow being the executive behind them, conflicts of interest concerns, SEC inquiry into Fastow-managed partnerships, etc. But for Raptor specifically, this retrieved content doesn't contain information about it.\n\nI should be honest that while LJM is clearly discussed extensively across multiple passages, there's no specific reference to a \"Raptor partnership\" in these particular communications. However, given my general knowledge, Enron did have other partnerships like Raptor Energy Partners LP, but since the user asked me to use retrieved content with citations where applicable... \n\nActually, looking at the instructions: I need to cite sources from the retrieved passages when making claims drawn from them. For anything not found in the retrievals (like Raptor), I would normally fall back on parametric/general knowledge without tags. But wait - if the question asks about something not covered by retrieval or confident general knowledge, I should say \"I don't have reliable information.\"\n\nBut actually, Andrew Fastow is mentioned multiple times as being behind LJM Cayman and LJM2. The Chewco mention mentions Michael Kopper running it. There's no explicit mention of a partnership called \"Raptor\" in these texts. \n\nGiven that my training data includes Enron scandal details where Raptor was indeed one of Fastow's partnerships alongside LJM, but this specific retrieved corpus doesn't contain it... I need to be careful here.\n\nThe user wants me to answer using:\n1. Retrieved content with citations [Source: Saturday Articles] \n2. Parametric",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 25876,
+        "total_latency_ms": 17921,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "enron-sample-multi-wide"
+        ],
+        "retrieved_chunk_count": 14,
+        "chunks_fact_score": {
+          "matched": [
+            "off-balance-sheet"
+          ],
+          "missing": [
+            "LJM",
+            "Raptor",
+            "Fastow",
+            "partnership"
+          ],
+          "total_expected": 5,
+          "ratio": 0.2
+        },
+        "judge_fact_score": {
+          "matched": [
+            "Fastow"
+          ],
+          "missing": [
+            "LJM",
+            "Raptor",
+            "off-balance-sheet",
+            "partnership"
+          ],
+          "total_expected": 5,
+          "ratio": 0.2
+        },
+        "judge_evidence": [
+          {
+            "fact": "LJM",
+            "present": false,
+            "evidence": "(parse failed)"
+          },
+          {
+            "fact": "Raptor",
+            "present": false,
+            "evidence": "(parse failed)"
+          },
+          {
+            "fact": "Fastow",
+            "present": true,
+            "evidence": "\"References to Andrew Fastow as CFO who formed/ran these partnerships with board approval\""
+          },
+          {
+            "fact": "off-balance-sheet",
+            "present": false,
+            "evidence": "(parse failed)"
+          },
+          {
+            "fact": "partnership",
+            "present": false,
+            "evidence": "(parse failed)"
+          }
+        ]
+      },
+      "meta_atlas_hits": [
+        {
+          "entity": "LJM",
+          "corpus_id": "enron-sample-multi-wide",
+          "articulation": "inventory",
+          "chunks_added": 3
+        },
+        {
+          "entity": "RAPTOR",
+          "corpus_id": "wikipedia",
+          "articulation": "inventory",
+          "stability": "frozen",
+          "chunks_added": 0
+        }
+      ]
+    },
+    {
+      "question_id": "dynegy_rescue",
+      "category": "deal",
+      "question": "Describe the proposed Dynegy rescue of Enron as it appears in Kenneth\nLay's communications to employees.\n",
+      "retrieved": [
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "EnronOnline Management Report  for June 01, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "EnronOnline Management Report  for June 01, 2001\n\n2001"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "FW: Daily Update",
+          "url": null,
+          "score": 0.0,
+          "snippet": "FW: Daily Update\n\nFrom: aurora.dimacali@enron.com\nTo: kenneth.lay@enron.com\nDate: Wed, 7 Nov 2001 07:49:36 -0800 (PST)\nSubject: FW: Daily Update\n\nI tried to respond to your email below but it came..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Enron",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Enron\n\nFrom: sfink@knowledgeu.com\nTo: kenneth.lay@enron.com\nDate: Tue, 4 Dec 2001 06:35:43 -0800 (PST)\nSubject: Enron\n\n\nYou still have my support.  Let me know if I can be helpful in any way."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: Enron Up",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: Enron Up\n\nFrom: ashok.mehta@enron.com\nTo: kenneth.lay@enron.com\nDate: Tue, 6 Nov 2001 02:27:38 -0800 (PST)\nSubject: Re: Enron Up\n\nDear Dr. Lay,\n\nThe last twelve months have been very difficult..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Information from Ken Lay at Enron",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Information from Ken Lay at Enron\n\nFrom: rosalee.fleming@enron.com\nTo: jimbrulte@aol.com\nDate: Fri, 16 Feb 2001 10:07:00 -0800 (PST)\nSubject: Information from Ken Lay at Enron"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Enron Announces Plans to Merge with Dynegy",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Enron Announces Plans to Merge with Dynegy\n\nFrom: deane.pierce@enron.com\nTo: kenneth.lay@enron.com\nDate: Tue, 13 Nov 2001 21:19:07 -0800 (PST)\nSubject: Enron Announces Plans to Merge with Dynegy\n\nMr..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "RE: Assistance",
+          "url": null,
+          "score": 0.0,
+          "snippet": "RE: Assistance\n\nFrom: slong@exodusenergy.com\nTo: kenneth.lay@enron.com\nDate: Tue, 6 Nov 2001 16:19:43 -0800 (PST)\nSubject: RE: Assistance\n\n\n\n -----Original Message-----\nFrom: \tSean Long..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "RE:",
+          "url": null,
+          "score": 0.0,
+          "snippet": "RE:\n\nFrom: antoinette.beale@enron.com\nTo: kenneth.lay@enron.com\nDate: Tue, 13 Nov 2001 06:44:23 -0800 (PST)\nSubject: RE:\n\nThank you for your response.  When all else fails, stand strong and press..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Information from Ken Lay at Enron",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Information from Ken Lay at Enron\n\nrosalee.fleming@enron.com\nTo: jimbrulte@aol.com\nDate: Fri, 16 Feb 2001 10:07:00 -0800 (PST)\nSubject: Information from Ken Lay at Enron"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Some good ideas.",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Some good ideas.\n\nDear Kenneth,\r\n \r\n    Sorry to have to bother you at  this time.. But maybe this is just what you need. And if things work out, please  consider a meeting with me to talk about a..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": null,
+          "url": null,
+          "score": 0.0,
+          "snippet": "From: terrance.devereaux@enron.com\nTo: kenneth.lay@enron.com\nDate: Thu, 8 Nov 2001 11:28:25 -0800 (PST)\n\nDear Mr. Lay,\nI don't know much about the vast world of business and i'm not extremely..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "RE: Fund raiser for Enron",
+          "url": null,
+          "score": 0.0,
+          "snippet": "RE: Fund raiser for Enron\n\nFrom: delia.walters@enron.com\nTo: kenneth.lay@enron.com\nDate: Mon, 12 Nov 2001 09:00:57 -0800 (PST)\nSubject: RE: Fund raiser for Enron\n\nKen,\n\nI greatly appreciate your..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "SF Gate: Enron's secret bid to save deregulation/PRIVATE MEETING: Chairman pitches his plan to prominent Californians",
+          "url": null,
+          "score": 0.0,
+          "snippet": "SF Gate: Enron's secret bid to save deregulation/PRIVATE MEETING: Chairman pitches his plan to prominent Californians\n\nEnergy executive Kenneth Lay, head of powerful Enron Corp., quietly\ncourted..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Sucker punch",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Sucker punch\n\nMr. Lay\nHave you ever been sucker punched?  In case you haven't let me describe it to you.  First you are stunned and shocked because you didn't see it coming.  Then you realize that..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: FROM JACK TOMPKINS",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: FROM JACK TOMPKINS\n\nFrom: rosalee.fleming@enron.com\nTo: skimmel@iexalt.net\nDate: Tue, 27 Jun 2000 10:36:00 -0700 (PDT)\nSubject: Re: FROM JACK TOMPKINS\n\nHi Sharon -\n\nKen Lay will be out of town. ..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": null,
+          "url": null,
+          "score": 0.0,
+          "snippet": "david.tonsall@enron.com\nTo: kenneth.lay@enron.com\nDate: Tue, 23 Oct 2001 09:26:02 -0700 (PDT)"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Enron Article",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Enron Article\n\nFrom: tracy.ngo@enron.com; Tracy Ngo\nTo: jeffrey.oh@enron.com, kate.symes@enron.com, greg.wolfe@enron.com, chris.foster@enron.com; Jeffrey Oh, Kate Symes, Greg Wolfe, Chris H..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Update for Wednesday/Thursday?",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Update for Wednesday/Thursday?\n\nFrom: amita.gosalia@enron.com\nTo: kenneth.lay@enron.com\nDate: Thu, 8 Nov 2001 10:29:54 -0800 (PST)\nSubject: Update for Wednesday/Thursday?\n\nHello Ken\n\nAs we have not..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Does capitalism have a conscience?",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Does capitalism have a conscience?\n\nFrom: cynthia.boseman-harris@enron.com\nTo: kenneth.lay@enron.com\nDate: Wed, 14 Nov 2001 15:22:52 -0800 (PST)\nSubject: Does capitalism have a conscience?\n\nI heard..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "An Enron Employee's Perspective",
+          "url": null,
+          "score": 0.0,
+          "snippet": "An Enron Employee's Perspective\n\nFrom: robert.davis@enron.com\nTo: kenneth.lay@enron.com\nDate: Thu, 15 Nov 2001 11:48:12 -0800 (PST)\nSubject: An Enron Employee's Perspective\n\nDear Mr. Lay,\n\nIt would..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Enron",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Enron\n\nFrom: swilliam@centramedia.net\nTo: kenneth.lay@enron.com\nDate: Mon, 24 Sep 2001 22:46:31 -0700 (PDT)\nSubject: Enron\n\n\nMr. Lay, as an employee and a stock holder of  Enron, I'm very concerned..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Enron",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Enron\n\nFrom: sbeck9@msn.com\nTo: klay@enron.com\nDate: Fri, 30 Nov 2001 21:07:46 -0800 (PST)\nSubject: Enron\n\n\nMr. Lay:\nI am a former Enron employee.  I used to be proud of Enron.  I believed everything..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Enron",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Enron\n\nFrom: ginger.bissey@enron.com\nTo: kenneth.lay@enron.com\nDate: Fri, 7 Dec 2001 13:59:01 -0800 (PST)\nSubject: Enron\n\nI just want you to know that I appreciate all you have done for our company. ..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: FROM JACK TOMPKINS",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: FROM JACK TOMPKINS\n\nFrom: rosalee.fleming@enron.com\nTo: skimmel@iexalt.net\nDate: Thu, 25 May 2000 01:43:00 -0700 (PDT)\nSubject: Re: FROM JACK TOMPKINS\n\nHi Sharon -\n\nUnfortunately, Ken Lay will be..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: FROM JACK TOMPKINS",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: FROM JACK TOMPKINS\n\n\"Bruce J. \nHarper\" <bharper@harperpearson.com>, \"Bill Wright\" <billw3@hypercon.com>, \n\"Barry G. Flynn\" <bgflynn@swbell.net>, \"Kyle Bergeron\" <emalliance@aol.com>\ncc: ..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "EnronOnline Management Report  for June 01, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "EnronOnline Management Report  for June 01, 2001\n\nFrom: simone.la@enron.com\nTo: sunil.abraham@enron.com, cliff.baxter@enron.com, sally.beck@enron.com,  tim.belden@enron.com, a..bibi@enron.com,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "EnronOnline Management Report  for June 01, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "EnronOnline Management Report  for June 01, 2001\n\nFollowing please find the Daily EnronOnline Executive Summary.\n\nSpecial Announcement! This report can now be accessed directly through the..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "EnronOnline Management Report  for June 01, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "EnronOnline Management Report  for June 01, 2001\n\nFrom: la.rose@enron.com\nTo: sunil.abraham@enron.com, cliff.baxter@enron.com, sally.beck@enron.com,  tim.belden@enron.com, a..bibi@enron.com,..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "Dynegy",
+          "Enron"
+        ],
+        "missing": [
+          "merger",
+          "stock-for-stock"
+        ],
+        "total_expected": 4,
+        "ratio": 0.5
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "enron-sample-multi-wide"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the retrieved communications, specifically an email from employee Tori L. Wells and a reply from Kenneth Lay dated November 12–13, 2001 [Source: RE:], Ken Lay described the proposed Dynegy rescue as **\"the best alternative for Enron\"** given the circumstances.\n\nIn his response to Wells, Lay stated that \"for very practical reasons,\" both management and the Board of Directors decided that merging with Dynegy was the optimal path forward. He framed the decision not necessarily as a success or a \"great opportunity\" in positive terms (a distinction noted by another critic, Deane Pierce, who accused Lay of being out of touch if he viewed it that way) but rather as a necessary strategic choice driven by pragmatic constraints [Source: Re: Enron Up; Source: Enron Announces Plans to Merge with Dynegy].",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 39519,
+        "total_latency_ms": 26527,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "enron-sample-multi-wide"
+        ],
+        "retrieved_chunk_count": 28,
+        "chunks_fact_score": {
+          "matched": [
+            "Dynegy",
+            "Enron",
+            "stock-for-stock"
+          ],
+          "missing": [
+            "merger"
+          ],
+          "total_expected": 4,
+          "ratio": 0.75
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "Dynegy",
+            "merger",
+            "Enron",
+            "stock-for-stock"
+          ],
+          "total_expected": 4,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "Dynegy",
+            "present": false,
+            "evidence": "(parse failed)"
+          },
+          {
+            "fact": "merger",
+            "present": false,
+            "evidence": "(parse failed)"
+          },
+          {
+            "fact": "Enron",
+            "present": false,
+            "evidence": "(parse failed)"
+          },
+          {
+            "fact": "stock-for-stock",
+            "present": false,
+            "evidence": "(parse failed)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "financial_state",
+      "category": "financial_structure",
+      "question": "What was being said internally about Enron's financial condition — its\ncredit ratings, mark-to-market accounting, and off-balance-sheet exposure?\n",
+      "retrieved": [
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "EnronOnline Management Report  for June 01, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "EnronOnline Management Report  for June 01, 2001\n\n2001"
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Enron",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Enron\n\nFrom: sfink@knowledgeu.com\nTo: kenneth.lay@enron.com\nDate: Tue, 4 Dec 2001 06:35:43 -0800 (PST)\nSubject: Enron\n\n\nYou still have my support.  Let me know if I can be helpful in any way."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Moody's and Standard & Poor's",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Moody's and Standard & Poor's\n\ntheir committees.\n\nBased upon the discussions with the analysts held over the last two days it is apparent that several key assurances from Enron senior management are..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Saturday Articles",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Saturday Articles\n\nlevels of around 10%. By week's end, Enron had drawn down $3 billion in bank credit lines to pay off nearly $2 billion in maturing commercial paper, leaving it only about $1..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Saturday Articles",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Saturday Articles\n\nis really the core of their operations,\" Feygin told the Houston Chronicle for Saturday's editions.\n\nCarol Coale, an analyst with Prudential Securities, still sees the move as..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Saturday Articles",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Saturday Articles\n\nEnron liabilities that will impair the company's credit ratings. There may also be the need for potential writedowns of various Enron assets, including its money-losing broadband..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Saturday Articles",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Saturday Articles\n\nanalysts pay too little attention to company balance sheets. Until last week, Enron analysts still were more focused on earnings dilution than the more important issue of Enron's..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "reaction from the credit markets on the earnings call",
+          "url": null,
+          "score": 0.0,
+          "snippet": "reaction from the credit markets on the earnings call\n\nFrom: bryan.seyfried@enron.com\nTo: greg.whalley@enron.com, kenneth.lay@enron.com, mark.frevert@enron.com,  andrew.fastow@enron.com,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "RE:  reaction from the credit markets on the earnings call",
+          "url": null,
+          "score": 0.0,
+          "snippet": "RE:  reaction from the credit markets on the earnings call\n\non the earnings call\n\nJohn thought you might be interested in the following from the credit markets....\n\nPlay by play during the call on..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Yesterday's Call: Feedback",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Yesterday's Call: Feedback\n\nFrom: jeffrey_fountain@bankone.com\nTo: kenneth_lay@enron.com, ken_lay@enron.com, k_lay@enron.com\nDate: Wed, 24 Oct 2001 05:44:16 -0700 (PDT)\nSubject: Yesterday's Call:..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Enron Update",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Enron Update\n\nFrom: no.address@enron.com\nDate: Thu, 1 Nov 2001 21:24:08 -0800 (PST)\nSubject: Enron Update\n\nFollowing our announcement of an additional of $1 billion credit line, Standard & Poor's..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Enron Article",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Enron Article\n\nFrom: tracy.ngo@enron.com; Tracy Ngo\nTo: jeffrey.oh@enron.com, kate.symes@enron.com, greg.wolfe@enron.com, chris.foster@enron.com; Jeffrey Oh, Kate Symes, Greg Wolfe, Chris H..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Financial Disclosure of $1.2 Billion Equity Adjustment",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Financial Disclosure of $1.2 Billion Equity Adjustment\n\nFor the first time in 22 years of service for Enron I'm ashamed to admit that I work for Enron!  I have lost all respect for Enron Senior..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "FW: Enron CEO uses naughty word on conference call",
+          "url": null,
+          "score": 0.0,
+          "snippet": "FW: Enron CEO uses naughty word on conference call\n\nI don't think it is fair to our\n> shareholders to give someone a platform like that they are\n> using for some personal vested interest related to..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "\"remove\"",
+          "url": null,
+          "score": 0.0,
+          "snippet": "\"remove\"\n\nWrite-offs of Long-Lived Assets\n  * CFA Readings in Financial Statement Analysis\n\nHe has also edited:\n  * Credit Analysis of Nontraditional Debt Securities\n  * Off-Balance Sheet Financing..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "The Morning Market Call - Friday Sept 28th, 2001.",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Morning Market Call - Friday Sept 28th, 2001.\n\ngreatly\nreduced) profitability, and its limited general account common stock\nexposure mean that it will see book\nvalue maintained. We are projecting..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "\"remove\"",
+          "url": null,
+          "score": 0.0,
+          "snippet": "\"remove\"\n\nCPA's, VC's, and those\ncharged with any aspect of financial reporting for companies\n\nRSVP:     Jpickard@softrax.com   (by Monday\nNovember 6, 2000)\n\nIn this discussion you will learn the..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "The Morning Market Call - Friday Sept 28th, 2001.",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Morning Market Call - Friday Sept 28th, 2001.\n\nnot as high as Q2.\nq Expenses should be another strongpoint with incentive fees in the mortgage\nbanking area potentially offset\nby lower directors..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "REMOVE FROM E-MAIL LIST!!! Re: BusinessWeek's International Alert: 2 April, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "REMOVE FROM E-MAIL LIST!!! Re: BusinessWeek's International Alert: 2 April, 2001\n\nThe pot: an \r\neconomic rebound in the second half.? At its second policy meeting of 2001, \r\nthe Fed lowered its..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "credit rating",
+          "mark-to-market",
+          "off-balance-sheet"
+        ],
+        "missing": [
+          "bankruptcy"
+        ],
+        "total_expected": 4,
+        "ratio": 0.75
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "enron-sample-multi-wide"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The user is asking about internal communications regarding Enron's financial condition, specifically:\n1. Credit ratings\n2. Mark-to-market accounting  \n3. Off-balance-sheet exposure\n\nI need to look at the retrieved passages for evidence on these specific topics and cite them appropriately with [Source: title] tags where applicable. Then I can add parametric/general knowledge without citations. And any inferences should be hedged.\n\nLet me scan through the retrieved content:\n\nFrom \"Moody's and Standard & Poor's\": Mentions that analysts sought assurances from senior management about maintaining credit ratings, emphasizing they are critical to fundamental businesses (gas and power marketing). Also mentions counterparties/creditors place weight on consistent rating profile. Agencies confident Enron will aggressively defend ratings.\n\nFrom \"Saturday Articles\" (multiple chunks):\n- One chunk says levels of around 10%, $3 billion bank credit lines drawn down to pay off nearly $2 billion maturing commercial paper, leaving only about $1 billion net liquidity.\n- Big energy trading operation hinges on solid credit rating and confidence of trading counterparties. Faces potential debt downgrades but likely remains investment-grade. Moody's Investors Service mentioned.\n- Carol Coale from Prudential Securities sees the move as confusing - they were touting unused lines of credit then tapped them now sends mixed message. Questions if it's to keep rating agencies off their back or for customers.\n- Enron liabilities that will impair company's credit ratings. Potential writedowns of assets including money-losing broadband business.\n- Trades at slight premium to second-quarter book value of $13/share, tangible book excluding goodwill was only $9/share. Book value fell in third quarter by undetermined amount because of $1 billion asset writedown and still-mysterious $1.2 billion reduction in shareholder equity related to one partnership. Third-quarter... (cut off)\n- Analysts pay too little attention to balance sheets until last week. Had about $15 billion debt and preferred stock outstanding at end of Q2 plus undetermined guaranteed off-balance-sheet debt. Clearly ignored importance of balance sheet allowing it to grow enormously over past years. Meager credit lines suggested nobody would doubt financial health but they did.\n\nFrom \"reaction from the credit markets on the earnings call\" / \"RE: reaction\": Morgan Stanley 5yr Enron Credit Default Swaps play-by-play during conference call on Oct 16, 2001. Shows bids getting hit as earnings news looked like cleaning house. Lay indicated near end no ratings action anticipated. Minute ended Moody's watch news released showing bid movement (280). Mentioned 3Q negative cash flow due to contract rolloff.\n\nFrom \"Yesterday's Call: Feedback\": BankOne investor feedback - gives call B-/C+ grade, mentions So Cal Ed had tougher calls that worked better with investors. Honestness and openness kept investors informed.\n\nFrom \"",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 25348,
+        "total_latency_ms": 18382,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "enron-sample-multi-wide"
+        ],
+        "retrieved_chunk_count": 19,
+        "chunks_fact_score": {
+          "matched": [
+            "credit rating",
+            "mark-to-market",
+            "off-balance-sheet"
+          ],
+          "missing": [
+            "bankruptcy"
+          ],
+          "total_expected": 4,
+          "ratio": 0.75
+        },
+        "judge_fact_score": {
+          "matched": [
+            "credit rating"
+          ],
+          "missing": [
+            "mark-to-market",
+            "off-balance-sheet",
+            "bankruptcy"
+          ],
+          "total_expected": 4,
+          "ratio": 0.25
+        },
+        "judge_evidence": [
+          {
+            "fact": "credit rating",
+            "present": true,
+            "evidence": "\"Credit ratings\" appears in the first bullet point of the answer."
+          },
+          {
+            "fact": "mark-to-market",
+            "present": false,
+            "evidence": "(parse failed)"
+          },
+          {
+            "fact": "off-balance-sheet",
+            "present": false,
+            "evidence": "(parse failed)"
+          },
+          {
+            "fact": "bankruptcy",
+            "present": false,
+            "evidence": "(parse failed)"
+          }
+        ]
+      },
+      "meta_atlas_hits": [
+        {
+          "entity": "Enron",
+          "corpus_id": "enron-sample-multi-wide",
+          "articulation": "inventory",
+          "chunks_added": 3
+        }
+      ]
+    },
+    {
+      "question_id": "counterparty_network",
+      "category": "network",
+      "question": "Which energy companies appear as counterparties or competitors in the\nexecutives' correspondence?\n",
+      "retrieved": [
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "#503865.01, 503831.01, 504997.01, 504947.01",
+          "url": null,
+          "score": 0.0,
+          "snippet": "#503865.01, 503831.01, 504997.01, 504947.01\n\nFrom: kimberly.allen@enron.com; Kimberly Allen\nTo: kate.symes@enron.com; Kate Symes\nDate: Tue, 30 Jan 2001 02:55:00 -0800 (PST)\nSubject: #503865.01,..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Power counterparties",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Power counterparties\n\nFrom: rhonda.denton@enron.com; Rhonda L Denton\nTo: kate.symes@enron.com, bill.iii@enron.com; Kate Symes, Bill Williams III\nDate: Thu, 1 Feb 2001 09:15:00 -0800 (PST)\nSubject:..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Deal 459243.01",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Deal 459243.01\n\nFrom: stephanie.piwetz@enron.com; Stephanie Piwetz\nTo: carla.hoffman@enron.com, kate.symes@enron.com; Carla Hoffman, Kate Symes\nDate: Thu, 16 Nov 2000 07:00:00 -0800 (PST)\nSubject:..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "#516506.01",
+          "url": null,
+          "score": 0.0,
+          "snippet": "#516506.01\n\nFrom: kimberly.allen@enron.com; Kimberly Allen\nTo: kate.symes@enron.com; Kate Symes\nDate: Wed, 14 Feb 2001 01:16:00 -0800 (PST)\nSubject: #516506.01\n\nKate, I think Tom Alonso entered this..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: deal 580011",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: deal 580011\n\nFrom: evelyn.metoyer@enron.com; Evelyn Metoyer\nTo: kate.symes@enron.com; Kate Symes\nDate: Thu, 12 Apr 2001 08:34:00 -0700 (PDT)\nSubject: Re: deal 580011\n\nAccording to Rhonda we never..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Lockyer Fires Earthy Attack at Energy Exec",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Lockyer Fires Earthy Attack at Energy Exec\n\nEnron spokesman  Mark Palmer called the comment \"counterproductive rhetoric\" that \"does not  merit a response.\"       But other industry  representatives..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "PowerMarketers.com Daily Power Report for 21 February 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "PowerMarketers.com Daily Power Report for 21 February 2001\n\nEquipment \nWorldwide\n\nFull: Energy East to Buy Rgs Energy for $1.4 Bln\n\nBill Babcock Returns to Charles River Associates; Energy Expert..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Dynegy Discussions",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Dynegy Discussions\n\nFrom: chairman.ken@enron.com\nTo: dl-ga-all_enron_worldwide@enron.com\nDate: Thu, 8 Nov 2001 08:04:34 -0800 (PST)\nSubject: Dynegy Discussions\n\n\nEnron and Dynegy each announced today..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "El Paso Electric Company Deal # 460852",
+          "url": null,
+          "score": 0.0,
+          "snippet": "El Paso Electric Company Deal # 460852\n\nFrom: kimberly.hundl@enron.com; Kimberly Hundl\nTo: kate.symes@enron.com; Kate Symes\nDate: Thu, 16 Nov 2000 07:29:00 -0800 (PST)\nSubject: El Paso Electric..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "PowerMarketers.com Daily Power Report for 29 March 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "PowerMarketers.com Daily Power Report for 29 March 2001\n\nJt Control Of Siemens, E.ON JV\n\nEU/Shell/Siemens/E.ON -2: Will Face Strong Competition\n\nAES/Sri Lanka/Pwr Proj -2: CEB In 20-Yr Pwr Purchase..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "The Source",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Source\n\nFrom: no.address@enron.com\nDate: Mon, 8 Oct 2001 20:00:48 -0700 (PDT)\nSubject: The Source\n\nTHE SOURCE\nThe eSource Bulletin\tOctober 2001\nCOMPANY INFORMATION\n?\tLooking for a..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "NewCo",
+          "url": null,
+          "score": 0.0,
+          "snippet": "NewCo\n\nDear NewCo employees:\r\n \r\nI wanted to send a note giving you my views on the NewCo opportunity and next steps. \r\n \r\nWhat are those opportunities?  In short, to date no competitor has taken..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Re: EnronOnline - Dec 14 Mgt Report",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Re: EnronOnline - Dec 14 Mgt Report\n\nExternal Trading \u0001) December 14, 1999\r\n December 14 To Date\r\n\r\nGas\r\nNumber of Transactions            255           1,987\r\nVolume of Transactions (mmbtu\u0001,s)..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Saturday Articles",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Saturday Articles\n\nlevels of around 10%. By week's end, Enron had drawn down $3 billion in bank credit lines to pay off nearly $2 billion in maturing commercial paper, leaving it only about $1..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Eyeforenergy Announces Next European Events",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Eyeforenergy Announces Next European Events\n\nFrom: arobertshaw@eyeforenergy.com\nTo: jeff.skilling@enron.com\nDate: Wed, 7 Nov 2001 07:37:31 -0800 (PST)\nSubject: Eyeforenergy Announces Next European..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "EnronOnline/Enron Net Works Potential Opportunity with i2",
+          "url": null,
+          "score": 0.0,
+          "snippet": "EnronOnline/Enron Net Works Potential Opportunity with i2\n\nthey outline their preferred deal to Enron.\nENW never received a term sheet or other information on a new price and partnering concept from..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Does capitalism have a conscience?",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Does capitalism have a conscience?\n\nFrom: cynthia.boseman-harris@enron.com\nTo: kenneth.lay@enron.com\nDate: Wed, 14 Nov 2001 15:22:52 -0800 (PST)\nSubject: Does capitalism have a conscience?\n\nI heard..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "The Morning Market Call - Friday September 21st, 2001.",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Morning Market Call - Friday September 21st, 2001.\n\nreiterate our EPS estimates of $3.54/$4.26 for 2001/2002 respectively.\nThe MCN acquisition and fuel\ncost timing weight more income to Q4 vs...."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "The Morning Market Call - Friday June 1st, 2001",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Morning Market Call - Friday June 1st, 2001\n\nvolatility for the NASDAQ 100 (NDX) index\nincreased as the index fell triggered by a reduced profit forecast by SUNW.\nWe believe that the SPX and NDX..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Lockyer Fires Earthy Attack at Energy Exec",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Lockyer Fires Earthy Attack at Energy Exec\n\nFrom: kevinscott@onlinemailbox.net\nTo: jeff.skilling@enron.com\nCc: sherri.sera@enron.com\nDate: Wed, 23 May 2001 05:52:05 -0700 (PDT)\nSubject: Lockyer Fires..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Lockyer Fires Earthy Attack at Energy Exec",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Lockyer Fires Earthy Attack at Energy Exec\n\nJeff\r\n \r\nFYI - Strong and colorful words  from a powerful man.\r\n \r\nGiven Lockyer's abilities,  position and and ambition, I would advise building bridges..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Lockyer Fires Earthy Attack at Energy Exec",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Lockyer Fires Earthy Attack at Energy Exec\n\nTimes Subscription  Services    Subscribe , Change of Address , Vacation Stops , Suspend Delivery , College Discount , Gift Subscriptions , Mail..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "Eyeforenergy Announces Next European Events",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Eyeforenergy Announces Next European Events\n\noffer at the event. It'll be your\nopportunity to discover how to take advantage of this growing opportunity.\n\nFull details can be found at:..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "Dynegy",
+          "El Paso"
+        ],
+        "missing": [
+          "Calpine",
+          "Pacific Gas",
+          "Williams"
+        ],
+        "total_expected": 5,
+        "ratio": 0.4
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "enron-sample-multi-wide"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the retrieved correspondence and documents, here are the energy companies that appear as counterparties or competitors:\n\n**Counterparties (Entities traded with):**\n*   **FPL Energy Power Marketing:** Identified in multiple emails from Kimberly Allen (#503865.01, #516506.01) as a counterparty where there was confusion between it and \"Florida Power & Light\" [Source: #503865.01, 504997.01; Source: #516506.01].\n*   **Peco Energy / Constellation Energy Group:** Stephanie Piwetz questioned whether the counterparty for Deal 459243.01 should be Peco Energy or Constellation (noting that Tom Alonso's confirmation listed Peco while Mark Fischer’s deal listed Constellation) [Source: Deal 459241.01].\n*   **BP Amoco / BP Energy:** Evelyn Metoyer and Kate Symes discussed trading with \"BP Amoco\" versus \"BP Energy,\" noting a potential name change to BP Energy, possibly specific to certain offices like Calgary [Source: Re: deal 580011].\n*   **El Paso Merchant Energy, L.P.:** Kimberly Hundl verified if the counterparty for El Paso Electric Company Deal # 460852 was correctly entered as such [Source: El Paso Electric Company Deal # 360852].\n\n**Competitors (Entities mentioned in competitive or merger contexts):**\n*   **Dynegy:** Ken Lay’s email (\"Dynegy Discussions\") announced that Enron and Dynegy were holding discussions about a possible merger. The email explicitly notes that Dynegy is \"not only a competitor, but also a counterparty of Enron\" [Source: Dynegy Discussions].",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 22024,
+        "total_latency_ms": 16199,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "enron-sample-multi-wide"
+        ],
+        "retrieved_chunk_count": 23,
+        "chunks_fact_score": {
+          "matched": [
+            "Dynegy",
+            "El Paso",
+            "Williams"
+          ],
+          "missing": [
+            "Calpine",
+            "Pacific Gas"
+          ],
+          "total_expected": 5,
+          "ratio": 0.6
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "Dynegy",
+            "Calpine",
+            "Pacific Gas",
+            "El Paso",
+            "Williams"
+          ],
+          "total_expected": 5,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "Dynegy",
+            "present": false,
+            "evidence": "(parse failed)"
+          },
+          {
+            "fact": "Calpine",
+            "present": false,
+            "evidence": "(parse failed)"
+          },
+          {
+            "fact": "Pacific Gas",
+            "present": false,
+            "evidence": "(parse failed)"
+          },
+          {
+            "fact": "El Paso",
+            "present": false,
+            "evidence": "(parse failed)"
+          },
+          {
+            "fact": "Williams",
+            "present": false,
+            "evidence": "(parse failed)"
+          }
+        ]
+      }
+    }
+  ]
+}
