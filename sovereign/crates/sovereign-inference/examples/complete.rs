@@ -72,6 +72,16 @@ struct Args {
 
 #[tokio::main]
 async fn main() {
+    // Glassbox: surface sovereign-inference's RPC registration / prune / split
+    // logs (otherwise dropped — this example had no subscriber). RUST_LOG-driven.
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .with_writer(std::io::stderr)
+        .try_init();
+
     let args = match parse_args() {
         Some(a) => a,
         None => {
