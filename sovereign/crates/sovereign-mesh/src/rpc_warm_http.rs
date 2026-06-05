@@ -33,6 +33,75 @@ use sovereign_inference::embedded::{
 
 use crate::daemon::EmbeddedDaemon;
 
+fn is_private_v4(o: [u8; 4]) -> bool {
+    o[0] == 10 || (o[0] == 172 && (16..=31).contains(&o[1])) || (o[0] == 192 && o[1] == 168)
+}
+
+/// Score how likely a worker at `worker_ip` can reach a host base (`http://IP:port`)
+/// — higher is better. A mesh peer reaches us best on an address in ITS OWN
+/// network: a Tailscale peer (CGNAT `100.x`) reaches our `100.x`, NOT a `192.168.x`
+/// LAN we happen to share but can't route across (WiFi AP client isolation — the
+/// exact failure the cross-machine test hit). `-1` for an unparseable base.
+fn base_reachability_score(base: &str, worker_ip: Option<std::net::IpAddr>) -> i32 {
+    let Some(worker_ip) = worker_ip else {
+        return 0;
+    };
+    let host = base
+        .strip_prefix("http://")
+        .map(|s| s.split('/').next().unwrap_or(s))
+        .and_then(|hp| hp.rsplit_once(':').map(|(h, _)| h))
+        .unwrap_or("")
+        .trim_start_matches('[')
+        .trim_end_matches(']');
+    let Ok(ip) = host.parse::<std::net::IpAddr>() else {
+        return -1;
+    };
+    match (ip, worker_ip) {
+        (std::net::IpAddr::V4(a), std::net::IpAddr::V4(w)) => {
+            let (ao, wo) = (a.octets(), w.octets());
+            if ao[0..2] == wo[0..2] {
+                3 // same /16
+            } else if ao[0] == wo[0] {
+                2 // same /8 (e.g. both Tailscale CGNAT 100.x)
+            } else if is_private_v4(ao) == is_private_v4(wo) {
+                1 // same category (both private, or both not)
+            } else {
+                0 // a private LAN vs the worker's non-private network → try last
+            }
+        }
+        (std::net::IpAddr::V6(_), std::net::IpAddr::V6(_)) => 1,
+        _ => 0, // address-family mismatch
+    }
+}
+
+/// Order a host's fetch bases so the one the worker is most likely to reach comes
+/// first — so the worker hits a routable address immediately instead of burning
+/// its connect budget on an unroutable shared-LAN IP. Stable within a score tier.
+fn order_host_bases(bases: &[String], worker_ip: Option<std::net::IpAddr>) -> Vec<String> {
+    let mut ranked: Vec<(i32, usize, &String)> = bases
+        .iter()
+        .enumerate()
+        .map(|(i, b)| (base_reachability_score(b, worker_ip), i, b))
+        .collect();
+    ranked.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    ranked.into_iter().map(|(_, _, b)| b.clone()).collect()
+}
+
+/// Render an error plus its `source()` chain — reqwest's top-level Display is just
+/// "error sending request for url (…)"; the actual cause (connection refused /
+/// timed out / DNS) lives in the source chain. Glassbox: a warm failure must say
+/// WHY so we don't guess.
+fn error_chain(e: &dyn std::error::Error) -> String {
+    let mut out = e.to_string();
+    let mut src = e.source();
+    while let Some(s) = src {
+        out.push_str(" ← ");
+        out.push_str(&s.to_string());
+        src = s.source();
+    }
+    out
+}
+
 /// The cache dir the in-process RPC worker actually reads — must mirror
 /// `model_slot::rpc_cache_dir` exactly, so the bytes we warm land where the
 /// worker's RPC server looks for `SET_TENSOR_HASH` hits. `Err` when caching is
@@ -251,10 +320,15 @@ impl MeshRpcShardWarmer {
                     .map(|h| Path::new(&h).join(".sovereign").join("models"))
             })
             .unwrap_or_else(|| PathBuf::from(".sovereign/models"));
-        Self {
-            http: reqwest::Client::new(),
-            fetch_dir,
-        }
+        // Short CONNECT timeout so an UNREACHABLE host base (e.g. a LAN IP the
+        // host advertised that we can't route — WiFi client isolation) fails in
+        // seconds and we fall through to the next base, instead of hanging on the
+        // OS's multi-minute SYN-retry budget. The actual download has no timeout.
+        let http = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+        Self { http, fetch_dir }
     }
 
     /// Resolve the GGUF to warm from for the whole-GGUF path: the local copy the
@@ -402,7 +476,14 @@ fn byte_range_mode() -> bool {
 /// `Handle` to bridge the synchronous seam to async HTTP).
 pub fn install_rpc_warm_orchestrator(daemon: Arc<EmbeddedDaemon>) {
     let handle = tokio::runtime::Handle::current();
-    let http = reqwest::Client::new();
+    // Short CONNECT timeout so an unreachable worker fails in seconds (→ the host
+    // falls back to local-only) rather than blocking the whole reload on the OS's
+    // multi-minute SYN-retry budget. NO overall request timeout: a reachable
+    // worker may legitimately take minutes (it fetches the GGUF before warming).
+    let http = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
     sovereign_inference::embedded::set_rpc_warm_orchestrator(move |plan: &RpcWarmPlan| {
         // The seam is synchronous and called from a blocking load thread; bridge
         // to async on the captured runtime handle.
@@ -474,6 +555,12 @@ async fn orchestrate_warm(
             .unwrap_or_else(|| assignment.endpoint.clone());
         let warm_url = format!("http://{worker_ip}:{internal_port}/internal/rpc-warm");
 
+        // Hand THIS worker the bases it's most likely to reach first — its own
+        // network before a shared-but-unroutable LAN (see order_host_bases). The
+        // worker still tries them all, but the reachable one is first so it
+        // doesn't burn its connect budget on a dead LAN IP.
+        let ordered_bases = order_host_bases(&host_bases, worker_ip.parse().ok());
+
         let source = match &manifest {
             Some(m) => {
                 let tensors: Vec<TensorRange> = m
@@ -489,7 +576,7 @@ async fn orchestrate_warm(
                         hash: e.hash,
                     })
                     .collect();
-                let source_urls = host_bases
+                let source_urls = ordered_bases
                     .iter()
                     .map(|b| format!("{b}/internal/v1/models/file/{model_id}"))
                     .collect();
@@ -499,7 +586,7 @@ async fn orchestrate_warm(
                 }
             }
             None => RpcWarmSource::WholeGguf {
-                peer_bases: host_bases.clone(),
+                peer_bases: ordered_bases,
             },
         };
 
@@ -532,7 +619,7 @@ async fn orchestrate_warm(
                     let detail = r.text().await.unwrap_or_default();
                     Err(format!("{label}: warm returned {status}: {detail}"))
                 }
-                Err(e) => Err(format!("{label}: warm request failed: {e}")),
+                Err(e) => Err(format!("{label}: warm request failed: {}", error_chain(&e))),
             }
         });
     }
