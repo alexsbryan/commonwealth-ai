@@ -130,6 +130,10 @@ async function loadEntity(id) {
   const n = node.edges ? node.edges.length : 0;
   $("d-edgecount").textContent = n + (n === 1 ? " cited edge" : " cited edges");
 
+  // For a case/sighting, surface its primary Form-10073 card up front — the
+  // narrative (object, witness, conclusion), not just a link to expand.
+  renderPrimaryCard(node);
+
   const box = $("edges");
   box.replaceChildren();
   if (n === 0) {
@@ -163,16 +167,95 @@ async function loadEntity(id) {
       ex.textContent = "“" + e.excerpt + "”";
       d.appendChild(ex);
     }
+    // The edge `excerpt` is only the fragment the extractor tagged; the WHOLE
+    // OCR'd card sits behind `source_chunk`. Let the reader expand it — the
+    // actual Form-10073 narrative (object, witness, conclusion), warts and all.
     const prov = document.createElement("div");
     prov.className = "prov";
-    prov.textContent =
-      "card chunk " + (e.source_chunk || "—") +
-      (typeof e.confidence === "number" ? " · confidence " + e.confidence.toFixed(2) : "");
-    d.appendChild(prov);
+    if (e.source_chunk) {
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "link";
+      const label = (open) =>
+        (open ? "▾ hide" : "▸ read") + " the full card (chunk " + e.source_chunk + ")";
+      toggle.textContent = label(false);
+      const full = document.createElement("pre");
+      full.className = "card-full";
+      full.hidden = true;
+      let loaded = false;
+      toggle.addEventListener("click", async () => {
+        if (!loaded) {
+          toggle.textContent = "loading card " + e.source_chunk + "…";
+          try {
+            const ch = await window.meshApp.readChunk(CORPUS, String(e.source_chunk));
+            full.textContent = ch && ch.content ? ch.content : "(card is empty)";
+          } catch (err) {
+            full.textContent = "could not load card: " + (err && err.message ? err.message : err);
+          }
+          loaded = true;
+          full.hidden = false;
+        } else {
+          full.hidden = !full.hidden;
+        }
+        toggle.textContent = label(!full.hidden);
+      });
+      prov.appendChild(toggle);
+      if (typeof e.confidence === "number") {
+        prov.appendChild(document.createTextNode(" · confidence " + e.confidence.toFixed(2)));
+      }
+      d.appendChild(prov);
+      d.appendChild(full);
+    } else {
+      prov.textContent =
+        "no source chunk" +
+        (typeof e.confidence === "number" ? " · confidence " + e.confidence.toFixed(2) : "");
+      d.appendChild(prov);
+    }
 
     box.appendChild(d);
   }
   $("detail").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// Auto-surface the primary source card for a narrative entity (case /
+// sighting): the chunk the most of its edges cite is the Form-10073 the
+// case was extracted from. Installations (e.g. the HQ) span many cards, so
+// they get no primary — their per-edge expanders are the right affordance.
+function renderPrimaryCard(node) {
+  const pc = $("primary-card");
+  pc.replaceChildren();
+  const narrative = node.entity_type === "case" || node.entity_type === "sighting";
+  if (!narrative || !node.edges || node.edges.length === 0) return;
+  const counts = {};
+  for (const e of node.edges) {
+    if (e.source_chunk) counts[e.source_chunk] = (counts[e.source_chunk] || 0) + 1;
+  }
+  const primary = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+  if (!primary) return;
+
+  const lbl = document.createElement("div");
+  lbl.className = "label";
+  lbl.style.marginTop = "10px";
+  lbl.appendChild(document.createTextNode("The Air Force's record card "));
+  const chip = document.createElement("span");
+  chip.className = "chip";
+  chip.textContent = "Form-10073 · chunk " + primary;
+  lbl.appendChild(chip);
+
+  const body = document.createElement("pre");
+  body.className = "card-full";
+  body.textContent = "loading card " + primary + "…";
+
+  pc.appendChild(lbl);
+  pc.appendChild(body);
+  window.meshApp
+    .readChunk(CORPUS, String(primary))
+    .then((ch) => {
+      body.textContent = ch && ch.content ? ch.content : "(card is empty)";
+    })
+    .catch((err) => {
+      body.textContent = "could not load card: " + (err && err.message ? err.message : err);
+    });
 }
 
 function fail(msg) {

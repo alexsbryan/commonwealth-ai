@@ -500,6 +500,7 @@ fn main() -> ExitCode {
             commands::meshapp_node,
             commands::meshapp_findings,
             commands::meshapp_search_entities,
+            commands::meshapp_read_chunk,
             commands::meshapp_list_installs,
             commands::meshapp_record_install,
             commands::meshapp_uninstall,

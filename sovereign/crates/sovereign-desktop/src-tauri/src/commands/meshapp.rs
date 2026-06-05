@@ -22,6 +22,7 @@ use crate::state::AppState;
 
 use corpus_engine::enrichment::atlas::analysis::{compute_aggregates, flags, FlagKind};
 use corpus_engine::enrichment::atlas::AtomEnvelope;
+use corpus_engine::index::CorpusIndex;
 use corpus_engine::enrichment::investigation::graph::{
     read_outputs as read_investigation_graph, Entity as InvEntity, PatternFinding, PatternKind,
     Relationship as InvRelationship,
@@ -585,6 +586,67 @@ pub async fn meshapp_search_entities(
     out.sort_by(|a, b| b.degree.cmp(&a.degree));
     out.truncate(limit.unwrap_or(25).min(100));
     Ok(out)
+}
+
+/// Full source-chunk text behind a cited edge. An edge's `excerpt` is the
+/// short fragment the extractor tagged as evidence; this returns the WHOLE
+/// chunk (e.g. an OCR'd Form-10073 card narrative) so a bundle can expand a
+/// citation into the actual document.
+#[derive(Debug, Clone, Serialize)]
+pub struct ChunkDto {
+    pub chunk_id: String,
+    pub content: String,
+    pub title: Option<String>,
+}
+
+/// `window.meshApp.readChunk(corpusId, chunkId)` — gated on
+/// `mesh_store_read`. Reads one chunk's full text from the corpus index by
+/// its (numeric) id — the same id an edge carries in `source_chunk`.
+#[tauri::command]
+pub async fn meshapp_read_chunk(
+    webview: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    chunk_id: String,
+) -> Result<ChunkDto, String> {
+    let installs = state.config.read().await.meshapp_installs.clone();
+    authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
+
+    let id: u64 = chunk_id
+        .trim()
+        .parse()
+        .map_err(|_| format!("chunk id `{chunk_id}` is not a numeric id"))?;
+    let engine = state
+        .corpus_engine
+        .read()
+        .await
+        .as_ref()
+        .map(Arc::clone)
+        .ok_or_else(|| "corpus engine not initialized".to_string())?;
+    let installed = engine
+        .installed_indexes()
+        .await
+        .map_err(|e| format!("installed_indexes: {e}"))?;
+    let entry = installed
+        .iter()
+        .find(|i| i.corpus_id == corpus_id)
+        .ok_or_else(|| format!("corpus `{corpus_id}` is not installed"))?;
+    let index = CorpusIndex::open(&entry.path)
+        .await
+        .map_err(|e| format!("open index `{corpus_id}`: {e}"))?;
+    let chunks = index
+        .get_chunks(&[id])
+        .await
+        .map_err(|e| format!("read chunk {id} from `{corpus_id}`: {e}"))?;
+    let c = chunks
+        .into_iter()
+        .next()
+        .ok_or_else(|| format!("no chunk {id} in `{corpus_id}`"))?;
+    Ok(ChunkDto {
+        chunk_id,
+        content: c.content,
+        title: c.title,
+    })
 }
 
 // ─── Host-side install management ────────────────────────────────────

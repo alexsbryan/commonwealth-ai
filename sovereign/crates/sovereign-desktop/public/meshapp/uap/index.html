@@ -69,6 +69,13 @@
         white-space: pre-wrap; word-break: break-word;
       }
       .prov { color: var(--good); font-size: 11px; font-variant-numeric: tabular-nums; }
+      .prov .link { color: var(--good); }
+      .card-full {
+        white-space: pre-wrap; word-break: break-word; margin: 6px 0 2px;
+        padding: 9px 11px; background: #0c0e12; border: 1px solid var(--line);
+        border-radius: 6px; max-height: 340px; overflow: auto;
+        font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink);
+      }
       .error {
         color: #ff8d8d; background: rgba(255, 90, 90, 0.08);
         border: 1px solid rgba(255, 90, 90, 0.3); border-radius: 10px; padding: 16px;
@@ -117,6 +124,7 @@
           <div class="ent-type" id="d-type"></div>
           <div class="ent-name" id="d-name"></div>
           <div class="meta" id="d-meta"></div>
+          <div id="primary-card"></div>
           <div class="label" style="margin-top: 14px">
             Evidence graph <span class="chip" id="d-edgecount"></span>
           </div>
