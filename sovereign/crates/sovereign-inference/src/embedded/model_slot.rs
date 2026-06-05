@@ -783,10 +783,21 @@ pub(crate) fn serve_rpc_worker_if_configured() {
             .map(|n| n.get() / 2)
             .unwrap_or(4)
             .max(1);
+
+        // Tensor cache: with a cache dir, a reload of the same model loads each
+        // weight tensor from local disk instead of re-receiving it over the
+        // network (llama.cpp hashes weight tensors >10MB and skips the transfer
+        // on a cache hit). So the cold first load pays the wire cost once; every
+        // reload after is hash round-trips only.
+        let cache = rpc_cache_dir();
+        let c_cache = cache
+            .as_ref()
+            .and_then(|p| std::ffi::CString::new(p.to_string_lossy().as_bytes()).ok());
         tracing::info!(
             bind,
             n_devices,
             n_threads,
+            cache = cache.as_ref().map(|p| p.display().to_string()),
             "starting in-process RPC worker (serving local GPU to mesh peers)"
         );
 
@@ -794,12 +805,14 @@ pub(crate) fn serve_rpc_worker_if_configured() {
         // registry) but `*mut` is not Send; wrap to move into the server thread.
         struct Served {
             bind: std::ffi::CString,
+            cache: Option<std::ffi::CString>,
             devices: Vec<crate::llama::sys::ggml_backend_dev_t>,
         }
         // SAFETY: the wrapped pointers reference process-static ggml devices.
         unsafe impl Send for Served {}
         let payload = Served {
             bind: c_bind,
+            cache: c_cache,
             devices,
         };
 
@@ -810,12 +823,16 @@ pub(crate) fn serve_rpc_worker_if_configured() {
                 // wrapper as a unit — Rust 2021 disjoint capture would otherwise
                 // grab the non-Send `Vec<*mut>` field directly.
                 let mut payload = payload;
+                let cache_ptr = payload
+                    .cache
+                    .as_ref()
+                    .map_or(std::ptr::null(), |c| c.as_ptr());
                 // SAFETY: device pointers outlive the process; start_server
                 // blocks here, running the accept loop until the process exits.
                 unsafe {
                     crate::llama::sys::ggml_backend_rpc_start_server(
                         payload.bind.as_ptr(),
-                        std::ptr::null(),
+                        cache_ptr,
                         n_threads,
                         n_devices,
                         payload.devices.as_mut_ptr(),
@@ -827,6 +844,31 @@ pub(crate) fn serve_rpc_worker_if_configured() {
             tracing::warn!(error = %e, "failed to spawn RPC worker thread");
         }
     });
+}
+
+/// Resolve the RPC worker's tensor cache directory — the on-disk store that lets
+/// a model reload skip re-receiving weights over the network. Default:
+/// `~/.sovereign/rpc-cache`. Override with `SOVEREIGN_RPC_CACHE_DIR`; set that to
+/// `off` / `0` / empty to disable caching. Returns `None` (caching off) when the
+/// directory can't be created or no home dir is known.
+fn rpc_cache_dir() -> Option<std::path::PathBuf> {
+    let dir = match std::env::var("SOVEREIGN_RPC_CACHE_DIR") {
+        Ok(v) => {
+            let v = v.trim();
+            if v.is_empty() || v.eq_ignore_ascii_case("off") || v == "0" {
+                return None;
+            }
+            std::path::PathBuf::from(v)
+        }
+        Err(_) => std::path::Path::new(&std::env::var("HOME").ok()?)
+            .join(".sovereign")
+            .join("rpc-cache"),
+    };
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        tracing::warn!(dir = %dir.display(), error = %e, "could not create RPC cache dir — caching disabled");
+        return None;
+    }
+    Some(dir)
 }
 
 impl ModelSlot {

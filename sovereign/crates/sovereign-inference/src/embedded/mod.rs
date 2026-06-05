@@ -9,6 +9,7 @@ mod grammar;
 mod model_slot;
 mod prompt_helpers;
 mod rerank_slot;
+mod rpc_warm_cache;
 mod sampler;
 
 pub use embed_slot::*;
@@ -17,4 +18,5 @@ pub use grammar::*;
 pub use model_slot::*;
 pub use prompt_helpers::*;
 pub use rerank_slot::*;
+pub use rpc_warm_cache::*;
 pub use sampler::*;
