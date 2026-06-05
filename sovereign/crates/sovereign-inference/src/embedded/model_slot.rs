@@ -617,6 +617,108 @@ impl PrimarySiblingPool {
     }
 }
 
+/// Parse `SOVEREIGN_RPC_TENSOR_SPLIT` (comma-separated per-device fractions, in
+/// llama.cpp device order: RPC workers first, then local GPUs) into a split
+/// vector. Returns `None` when unset/empty so llama.cpp keeps its default
+/// memory-proportional split.
+fn rpc_tensor_split() -> Option<Vec<f32>> {
+    let raw = std::env::var("SOVEREIGN_RPC_TENSOR_SPLIT").ok()?;
+    let split: Vec<f32> = raw
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .filter_map(|s| s.parse::<f32>().ok())
+        .collect();
+    (!split.is_empty()).then_some(split)
+}
+
+/// One-shot guard so mesh RPC workers register exactly once per process,
+/// no matter how many `ModelSlot`s load.
+static RPC_WORKERS_REGISTERED: std::sync::Once = std::sync::Once::new();
+
+/// Register mesh RPC workers from `SOVEREIGN_RPC_WORKERS` (comma-separated
+/// `host:port`) into ggml's global backend-device registry, exactly once.
+///
+/// `ggml_backend_rpc_add_server` + `ggml_backend_register` make each remote
+/// `rpc-server` visible to the next `LlamaModel::load_from_file`, whose default
+/// device selection then spreads the model's layers across the local GPU **and**
+/// these workers (llama.cpp pipeline-parallel RPC) — the embedded-host
+/// equivalent of `llama-server --rpc <addrs>`. The per-device proportion is set
+/// by `SOVEREIGN_RPC_TENSOR_SPLIT` (verified: a 0.9 split lands ~90% of the
+/// model on the worker).
+///
+/// Scope: called only from `ModelSlot::load` (the chat/primary path); the embed
+/// and rerank slots load via their own functions and stay local. Opt-in: unset
+/// env → no-op → byte-for-byte the prior local load. Glassbox: every endpoint
+/// logs success or a skip-with-reason; a worker that fails to register is
+/// skipped so the model still loads on whatever devices came up. Per-model
+/// device scoping (so a second `ModelSlot` could opt out) needs an explicit
+/// `devices[]` list on `LlamaModelParams` — tracked as follow-up.
+fn register_rpc_workers() {
+    RPC_WORKERS_REGISTERED.call_once(|| {
+        let Ok(raw) = std::env::var("SOVEREIGN_RPC_WORKERS") else {
+            return;
+        };
+        let endpoints: Vec<&str> = raw
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect();
+        if endpoints.is_empty() {
+            return;
+        }
+        tracing::info!(
+            count = endpoints.len(),
+            workers = %raw,
+            "SOVEREIGN_RPC_WORKERS set — registering mesh RPC devices for distributed inference"
+        );
+        for endpoint in endpoints {
+            let c_endpoint = match std::ffi::CString::new(endpoint) {
+                Ok(c) => c,
+                Err(_) => {
+                    tracing::warn!(endpoint, "RPC endpoint contains an interior NUL — skipping");
+                    continue;
+                }
+            };
+            // SAFETY: `ggml_backend_rpc_add_server` connects to the worker and
+            // returns a backend reg (NULL on unreachable / zero devices); it
+            // dedupes by endpoint, so re-calls are harmless. `ggml_backend_register`
+            // then publishes that reg's devices into ggml's global registry, where
+            // the model loader's default device enumeration (`devices == NULL`)
+            // picks them up as GPU-type devices named "RPC" and splits layers
+            // across local GPU + workers — the exact path `llama-bench --rpc` takes.
+            let reg =
+                unsafe { crate::llama::sys::ggml_backend_rpc_add_server(c_endpoint.as_ptr()) };
+            if reg.is_null() {
+                tracing::warn!(
+                    endpoint,
+                    "rpc-server unreachable or advertised 0 devices — skipping this worker"
+                );
+                continue;
+            }
+            unsafe { crate::llama::sys::ggml_backend_register(reg) };
+            // Glassbox: report the worker's advertised device memory so an
+            // operator can sanity-check `SOVEREIGN_RPC_TENSOR_SPLIT` against the
+            // worker's real capacity.
+            let (mut free, mut total): (usize, usize) = (0, 0);
+            unsafe {
+                crate::llama::sys::ggml_backend_rpc_get_device_memory(
+                    c_endpoint.as_ptr(),
+                    0,
+                    &mut free,
+                    &mut total,
+                );
+            }
+            tracing::info!(
+                endpoint,
+                free_gb = free as f64 / 1e9,
+                total_gb = total as f64 / 1e9,
+                "registered mesh RPC device for distributed inference"
+            );
+        }
+    });
+}
+
 impl ModelSlot {
     pub(crate) fn load(
         backend: &Arc<LlamaBackend>,
@@ -645,7 +747,24 @@ impl ModelSlot {
             .unwrap_or(false);
         let effective_gpu_layers = if force_cpu { 0 } else { n_gpu_layers };
 
-        let model_params = LlamaModelParams::default().with_n_gpu_layers(effective_gpu_layers);
+        // Distributed inference: if `SOVEREIGN_RPC_WORKERS` names remote
+        // rpc-server workers, register them as ggml RPC devices now so the
+        // load below spreads this model's layers across local GPU + workers.
+        register_rpc_workers();
+
+        let mut model_params = LlamaModelParams::default().with_n_gpu_layers(effective_gpu_layers);
+        // A CPU-backed (or memory-underreporting) RPC worker gets ~0 layers
+        // under llama.cpp's default memory-proportional split. `SOVEREIGN_RPC_TENSOR_SPLIT`
+        // forces an explicit per-device split (device order: RPC workers first,
+        // then local GPUs) so distribution is deterministic regardless of what
+        // a worker advertises for free memory.
+        if let Some(split) = rpc_tensor_split() {
+            tracing::info!(
+                ?split,
+                "applying SOVEREIGN_RPC_TENSOR_SPLIT (device order: RPC workers first, then local GPU)"
+            );
+            model_params = model_params.with_tensor_split(&split);
+        }
 
         let model = LlamaModel::load_from_file(backend, model_path, &model_params)
             .map_err(|e| Error::Inference(format!("Failed to load model: {e}")))?;
