@@ -90,12 +90,189 @@ pub async fn run_corpus(args: &[String]) -> i32 {
         "watch-remove-root" => crate::corpus_watch_cmd::run_remove_root(&args[1..]).await,
         "watch-remove" => crate::corpus_watch_cmd::run_remove(&args[1..]).await,
         "stream-axes" => cmd_corpus_stream_axes(&args[1..]).await,
+        "export-parcels" => cmd_corpus_export_parcels(&args[1..]).await,
         other => {
             eprintln!("Unknown corpus subcommand: {other}");
             crate::util::help::print(&HELP_CORPUS);
             1
         }
     }
+}
+
+/// Minimal RFC-4180 field escaping: quote when the cell contains a comma,
+/// quote, or newline, doubling any embedded quote.
+fn csv_escape(s: &str) -> String {
+    if s.contains(',') || s.contains('"') || s.contains('\n') {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
+    }
+}
+
+/// `sovereign corpus export-parcels --corpus <id> [--out <path>]` — write a
+/// corpus's deterministic parcel atoms to CSV so a reader can re-sum the
+/// figures independently (open in Excel, sum `assessed_land_value`). This
+/// is the reproducibility half of the SF-LVT "no confabulated numbers"
+/// guarantee: the exact input set `parcel_analytics` folds over is the same
+/// table exported here, one row per atom, carrying its source-chunk id.
+async fn cmd_corpus_export_parcels(args: &[String]) -> i32 {
+    use corpus_engine::enrichment::atlas::atoms::AtomEnvelope;
+    use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, ATLAS_DIRNAME};
+    use corpus_engine::enrichment::pipeline::atlas::EntityType;
+
+    let mut corpus_id = "sf-assessor-roll".to_string();
+    let mut entity_type = "parcel".to_string();
+    let mut out_path: Option<PathBuf> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--corpus" => {
+                i += 1;
+                if let Some(v) = args.get(i) {
+                    corpus_id = v.clone();
+                }
+            }
+            "--entity-type" => {
+                i += 1;
+                if let Some(v) = args.get(i) {
+                    entity_type = v.clone();
+                }
+            }
+            "--out" => {
+                i += 1;
+                if let Some(v) = args.get(i) {
+                    out_path = Some(PathBuf::from(v));
+                }
+            }
+            "--help" | "-h" => {
+                eprintln!(
+                    "usage: sovereign corpus export-parcels --corpus <id> [--entity-type parcel] [--out <path>]"
+                );
+                return 0;
+            }
+            other => {
+                eprintln!("error: unexpected argument `{other}`");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+
+    let atlas_dir = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.data.dir)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".sovereign")
+        })
+        .join("indexes")
+        .join(&corpus_id)
+        .join(ATLAS_DIRNAME);
+
+    if !atlas_dir.join("atoms.json").exists() {
+        eprintln!(
+            "error: no atoms.json for corpus `{corpus_id}` at {} — is it ingested?",
+            atlas_dir.display()
+        );
+        return 1;
+    }
+    let atoms_file = match read_atlas_atoms(&atlas_dir) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("error: read atoms.json for `{corpus_id}`: {e}");
+            return 1;
+        }
+    };
+
+    let parcels: Vec<_> = atoms_file
+        .atoms
+        .into_iter()
+        .filter_map(|env| match env {
+            AtomEnvelope::Entity(e) => match &e.entity_type {
+                EntityType::Other(t) if *t == entity_type => Some(e),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    if parcels.is_empty() {
+        eprintln!("error: corpus `{corpus_id}` has no `{entity_type}` atoms to export.");
+        return 1;
+    }
+
+    // Stable column order: the sorted union of attribute keys.
+    let attr_keys: Vec<String> = {
+        let mut set = std::collections::BTreeSet::new();
+        for p in &parcels {
+            for k in p.attributes.keys() {
+                set.insert(k.clone());
+            }
+        }
+        set.into_iter().collect()
+    };
+
+    let mut header = vec![
+        "atom_id".to_string(),
+        "parcel_number".to_string(),
+        "source_chunk".to_string(),
+    ];
+    header.extend(attr_keys.iter().cloned());
+    let mut buf = String::new();
+    buf.push_str(
+        &header
+            .iter()
+            .map(|h| csv_escape(h))
+            .collect::<Vec<_>>()
+            .join(","),
+    );
+    buf.push('\n');
+
+    let mut land_sum = 0.0_f64;
+    for p in &parcels {
+        let chunk = p
+            .provenance
+            .source_chunk_id
+            .clone()
+            .unwrap_or_else(|| p.provenance.source_doc_id.clone());
+        let mut row = vec![
+            csv_escape(p.id.as_str()),
+            csv_escape(&p.canonical_name),
+            csv_escape(&chunk),
+        ];
+        for k in &attr_keys {
+            let cell = match p.attributes.get(k) {
+                Some(serde_json::Value::Number(n)) => n.to_string(),
+                Some(serde_json::Value::String(s)) => s.clone(),
+                Some(v) => v.to_string(),
+                None => String::new(),
+            };
+            row.push(csv_escape(&cell));
+        }
+        buf.push_str(&row.join(","));
+        buf.push('\n');
+        if let Some(land) = p.attributes.get("assessed_land_value").and_then(|v| v.as_f64()) {
+            if land > 0.0 {
+                land_sum += land;
+            }
+        }
+    }
+
+    let out_path = out_path.unwrap_or_else(|| PathBuf::from(format!("{corpus_id}-parcels.csv")));
+    if let Err(e) = std::fs::write(&out_path, buf) {
+        eprintln!("error: write {}: {e}", out_path.display());
+        return 1;
+    }
+
+    println!(
+        "Exported {} `{entity_type}` rows from `{corpus_id}` → {}",
+        parcels.len(),
+        out_path.display()
+    );
+    println!("Columns: {}", header.join(", "));
+    println!(
+        "Cross-check: Σ assessed_land_value = ${land_sum:.2} — sum that column in your spreadsheet to match parcel_analytics."
+    );
+    0
 }
 
 const HELP_MESH: crate::util::help::Help = crate::util::help::Help {
@@ -213,6 +390,7 @@ const HELP_CORPUS: crate::util::help::Help = crate::util::help::Help {
             ("watch-add-root <id> <path>", "Layer an additional folder onto an existing watched corpus"),
             ("watch-remove-root <id> <idx>", "Detach an additional folder by 0-based index"),
             ("watch-remove <id>",         "Unregister a watched folder and remove its index (source folder untouched)"),
+            ("export-parcels <id>",       "Export a corpus's deterministic parcel atoms to CSV (--corpus, --out) for independent verification in a spreadsheet"),
         ]),
         crate::util::help::HelpSection::Notes(
             "`reconstruct-manifest` accepts --source-dir <path> (default:\n\

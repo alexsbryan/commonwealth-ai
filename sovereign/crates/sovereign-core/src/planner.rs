@@ -74,6 +74,13 @@ impl Planner for LlmPlanner {
             };
 
             let response = self.inference.complete(&request).await?;
+            // Glassbox: the raw model output is the ground truth for *why*
+            // a plan came out the shape it did. Opt-in via RUST_LOG=planner=debug.
+            tracing::debug!(
+                target: "planner",
+                raw = %response.text.chars().take(800).collect::<String>(),
+                "raw plan output"
+            );
 
             match extract_json(&response.text).and_then(|j| parse_plan_json(&j, goal)) {
                 Ok(plan) => {
@@ -83,6 +90,13 @@ impl Planner for LlmPlanner {
                         plan.edges.len(),
                         attempt + 1,
                     );
+                    // Per-step kind summary. "1 steps" is opaque about
+                    // *what* the step does — and the difference between a
+                    // `tool` step and a `reason` step is the difference
+                    // between a tool firing and a silent no-op answer.
+                    for s in &plan.steps {
+                        eprintln!("[planner]   step {}: {}", s.id, describe_step_kind(&s.kind));
+                    }
                     return Ok(plan);
                 }
                 Err(e) => {
@@ -229,6 +243,55 @@ fn format_behaviour_tag(t: &ToolDescriptor) -> String {
     format!("[{effect} · {scope} · {latency}]")
 }
 
+/// One-line glassbox summary of a planned step's kind, for the planner
+/// log. Surfaces the load-bearing distinction — a `tool` step names the
+/// tool it will invoke; a `reason`/`reason_with_tools` step won't fire a
+/// typed tool at all — so a "1 step" plan is never opaque about whether
+/// the tool the user asked for is actually in the plan.
+fn describe_step_kind(kind: &StepKind) -> String {
+    match kind {
+        StepKind::Tool { tool_id, .. } => format!("tool → {tool_id}"),
+        StepKind::Reason { speed, .. } => format!("reason ({speed:?})"),
+        StepKind::ReasonWithTools {
+            available_tools, ..
+        } => format!("reason_with_tools [{}]", available_tools.join(", ")),
+        StepKind::Branch { .. } => "branch".to_string(),
+        StepKind::UserInput { .. } => "user_input".to_string(),
+        StepKind::AwaitUserInfo { .. } => "await_user_info".to_string(),
+    }
+}
+
+/// Compact hint of a tool's INPUT parameters for the planner prompt:
+/// property names with their JSON-Schema types, required ones marked `*`.
+/// Pairs with the output-keys line so the planner knows both what a tool
+/// accepts and what it returns. `None` when the schema has no properties.
+fn format_param_hint(t: &ToolDescriptor) -> Option<String> {
+    let props = t.parameters.get("properties")?.as_object()?;
+    if props.is_empty() {
+        return None;
+    }
+    let required: std::collections::HashSet<&str> = t
+        .parameters
+        .get("required")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+    let parts: Vec<String> = props
+        .iter()
+        .map(|(name, spec)| {
+            let ty = spec.get("type").and_then(|v| v.as_str()).unwrap_or("any");
+            let star = if required.contains(name.as_str()) { "*" } else { "" };
+            format!("{name}{star} ({ty})")
+        })
+        .collect();
+    let note = if required.is_empty() {
+        " — all optional"
+    } else {
+        " (*=required)"
+    };
+    Some(format!("{}{note}", parts.join(", ")))
+}
+
 fn build_plan_prompt(
     goal: &str,
     context_summary: &str,
@@ -250,6 +313,13 @@ fn build_plan_prompt(
                 // "will persist to disk" mechanically, not by prose parse.
                 let tag = format_behaviour_tag(t);
                 let mut line = format!("- \"{}\" {tag} — {}", t.id, t.description);
+                // Input params. Without this the planner is told only what a
+                // tool RETURNS (output keys, below), never what it ACCEPTS —
+                // so it can't fill `params` and tends to fall back to a
+                // `reason` step instead of calling the tool.
+                if let Some(hint) = format_param_hint(t) {
+                    line.push_str(&format!("\n  Params: {hint}"));
+                }
                 if let Some(ex) = t.examples.first() {
                     if let Ok(json) = serde_json::to_string(&ex.call) {
                         line.push_str(&format!("\n  Example: {json}"));

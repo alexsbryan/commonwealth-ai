@@ -278,6 +278,72 @@ pub struct LlmRouter {
     /// scope to restrict to user-owned corpora when the classifier
     /// fires `Some("personal")`.
     scope_classifier: Option<Arc<crate::scope_classifier::PersonalScopeClassifier>>,
+    /// Cache of L2-normalised embeddings of the registered tools'
+    /// described purposes, keyed by the (order-independent) tool-id set.
+    /// Powers the tool-relevance gate (see `query_best_tool_sim`).
+    /// Computed once per stable tool set — the daemon's set is fixed at
+    /// startup, so this amortises to a single embed pass over the
+    /// process lifetime.
+    tool_embed_cache: std::sync::RwLock<Option<ToolEmbedCache>>,
+}
+
+/// Cached tool-purpose embeddings for the tool-relevance gate.
+struct ToolEmbedCache {
+    /// Order-independent hash of the tool-id set these embeddings cover.
+    key: u64,
+    /// `(tool_id, L2-normalised purpose embedding)` per registered tool.
+    tools: Vec<(String, Vec<f32>)>,
+}
+
+/// Intents that retrieve-or-respond *without* invoking a tool. When the
+/// embed router lands a query on one of these but the query matches a
+/// registered tool's purpose more than any knowledge exemplar, the query
+/// is really a tool invocation — so it is deferred to the tool-aware
+/// Pass-2 rather than committed here. See the tool-relevance gate in
+/// `classify`.
+fn intent_is_toolless(intent: &Intent) -> bool {
+    !matches!(
+        intent,
+        Intent::SimpleAction { .. } | Intent::ComplexTask | Intent::Continuation { .. }
+    )
+}
+
+/// Order-independent hash of a tool set's ids: the embedding cache
+/// survives tool-registration reordering but invalidates if the set
+/// itself changes.
+fn tool_set_key(tools: &[ToolDescriptor]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut ids: Vec<&str> = tools.iter().map(|t| t.id.as_str()).collect();
+    ids.sort_unstable();
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for id in ids {
+        id.hash(&mut h);
+    }
+    h.finish()
+}
+
+/// L2-normalise in place (no-op on a zero vector).
+fn l2_normalize(v: &mut [f32]) {
+    let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm > 0.0 {
+        for x in v.iter_mut() {
+            *x /= norm;
+        }
+    }
+}
+
+/// Best-matching `(tool_id, cosine)` between an L2-normalised query
+/// embedding and a set of L2-normalised tool-purpose embeddings (cosine
+/// = dot product on normalised vectors).
+fn best_tool_cosine(q_normalized: &[f32], tools: &[(String, Vec<f32>)]) -> Option<(String, f32)> {
+    tools
+        .iter()
+        .filter(|(_, e)| e.len() == q_normalized.len())
+        .map(|(id, e)| {
+            let sim: f32 = q_normalized.iter().zip(e).map(|(a, b)| a * b).sum();
+            (id.clone(), sim)
+        })
+        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
 }
 
 impl LlmRouter {
@@ -292,6 +358,7 @@ impl LlmRouter {
             skills,
             embed_router: None,
             scope_classifier: None,
+            tool_embed_cache: std::sync::RwLock::new(None),
         }
     }
 
@@ -301,6 +368,59 @@ impl LlmRouter {
     pub fn with_embed_router(mut self, embed: Arc<EmbedRouter>) -> Self {
         self.embed_router = Some(embed);
         self
+    }
+
+    /// Best `(tool_id, cosine)` between the (already L2-normalised) query
+    /// embedding and any registered tool's described purpose, or `None`
+    /// when there are no tools / embedding is unavailable. Tool-purpose
+    /// embeddings are computed once per stable tool set and cached
+    /// (`tool_embed_cache`), so per-query cost is just N dot products.
+    /// Tools are embedded with `embed_query` — the same space the query
+    /// and the intent exemplars live in — so the cosine is directly
+    /// comparable to the embed router's `top_sim`.
+    async fn query_best_tool_sim(
+        &self,
+        q_normalized: &[f32],
+        tools: &[ToolDescriptor],
+    ) -> Option<(String, f32)> {
+        if tools.is_empty() {
+            return None;
+        }
+        let key = tool_set_key(tools);
+        // Fast path: cached embeddings for this exact tool set.
+        if let Ok(guard) = self.tool_embed_cache.read() {
+            if let Some(cache) = guard.as_ref() {
+                if cache.key == key {
+                    return best_tool_cosine(q_normalized, &cache.tools);
+                }
+            }
+        }
+        // Miss: embed each tool's "name. description" (no lock held across
+        // the await), then cache for the rest of the process.
+        let mut embedded: Vec<(String, Vec<f32>)> = Vec::with_capacity(tools.len());
+        for t in tools {
+            let text = format!("{}. {}", t.name, t.description);
+            match self.inference.embed_query(&text).await {
+                Ok(mut v) => {
+                    l2_normalize(&mut v);
+                    embedded.push((t.id.clone(), v));
+                }
+                Err(e) => tracing::warn!(
+                    target: "router.tool_relevance",
+                    tool = %t.id,
+                    error = %e,
+                    "tool-purpose embed failed; tool excluded from relevance gate"
+                ),
+            }
+        }
+        if embedded.is_empty() {
+            return None;
+        }
+        let best = best_tool_cosine(q_normalized, &embedded);
+        if let Ok(mut guard) = self.tool_embed_cache.write() {
+            *guard = Some(ToolEmbedCache { key, tools: embedded });
+        }
+        best
     }
 
     /// Install a personal-scope binary classifier. Called once per
@@ -1576,6 +1696,63 @@ impl Router for LlmRouter {
                         scope_hint = scope_cls.classify_from_embedding(&query_embedding);
                     }
                     if let Some(verdict) = intent_verdict {
+                        // ── Tool-relevance gate (generalized) ──────────
+                        // The embed router ranks the query against
+                        // KNOWLEDGE/intent exemplars only; it has no view of
+                        // the registered tools. A query whose wording matches
+                        // a tool's described purpose MORE than any knowledge
+                        // exemplar is really a tool invocation (e.g. "compute
+                        // the land-value-tax rate" with a `parcel_analytics`
+                        // tool present). Neither the embed router's tool-less
+                        // verdict nor the LLM coarse pass — which reads such a
+                        // query as "reasoning" — routes it to a tool-capable
+                        // path, so the tool never runs. When a registered tool
+                        // clearly out-matches the nearest exemplar, commit to
+                        // the agentic ComplexTask path here: its planner +
+                        // executor decide which tool(s) to run, and the
+                        // cited-synthesis + numeric-audit gate apply. The
+                        // relative `tool_sim > top_sim` rule keeps this
+                        // targeted — a genuine knowledge question matches a
+                        // knowledge exemplar best and is unaffected.
+                        let tool_match = if intent_is_toolless(&verdict.intent) {
+                            self.query_best_tool_sim(&query_embedding, available_tools)
+                                .await
+                                .filter(|(_, tool_sim)| *tool_sim > verdict.top_sim)
+                        } else {
+                            None
+                        };
+                        if let Some((tool_id, tool_sim)) = tool_match {
+                            let latency_ms = start.elapsed().as_millis() as i64;
+                            let hash = message_hash(message);
+                            let _ = self.store.log_routing(&hash, "ComplexTask", latency_ms).await;
+                            let _ = self
+                                .store
+                                .log_routing_meta(&hash, "TOOL_RELEVANCE", None)
+                                .await;
+                            eprintln!(
+                                "[router] \"{}\" embed→{:?} (sim={:.3}) → ComplexTask: registered tool '{}' matches the query more closely (tool_sim={:.3}); the agentic path will plan the tool call",
+                                &message[..message.len().min(50)],
+                                verdict.intent,
+                                verdict.top_sim,
+                                tool_id,
+                                tool_sim,
+                            );
+                            return Ok(RouterClassification {
+                                primary: IntentCandidate {
+                                    intent: Intent::ComplexTask,
+                                    confidence: 0.9,
+                                },
+                                alternatives: Vec::new(),
+                                rationale: Some(format!(
+                                    "tool-relevance gate: tool '{}' (cosine {:.3}) out-matched nearest exemplar {:?} (cosine {:.3}) — routed to the agentic path",
+                                    tool_id, tool_sim, verdict.nearest_exemplar, verdict.top_sim
+                                )),
+                                coarse_intent: Some("TOOL_RELEVANCE".to_string()),
+                                self_assessment: None,
+                                timing: None,
+                                scope: scope_hint.clone(),
+                            });
+                        }
                         let latency_ms = start.elapsed().as_millis() as i64;
                         let hash = message_hash(message);
                         let intent_str = format!("{:?}", verdict.intent);
@@ -1596,13 +1773,6 @@ impl Router for LlmRouter {
                         return Ok(RouterClassification {
                             primary: IntentCandidate {
                                 intent: verdict.intent,
-                                // Embed verdicts that clear both gates
-                                // are high-confidence by construction.
-                                // Pin to 0.95 (not 1.0) so downstream
-                                // policy still treats this as "very
-                                // likely" rather than "unconditionally
-                                // certain"; leaves room for
-                                // user-driven interpretation-redirect.
                                 confidence: 0.95,
                             },
                             alternatives: Vec::new(),
@@ -2020,6 +2190,33 @@ impl Router for LlmRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tool_relevance_gate_helpers() {
+        // Tool-less intents (retrieve/respond) are gated; tool-capable
+        // intents are not — the gate only ever fires on the former.
+        assert!(intent_is_toolless(&Intent::KnowledgeQuery));
+        assert!(intent_is_toolless(&Intent::DeepQuery));
+        assert!(!intent_is_toolless(&Intent::ComplexTask));
+        assert!(!intent_is_toolless(&Intent::SimpleAction { tool: "x".into() }));
+
+        // l2_normalize + best_tool_cosine: a normalised query matches an
+        // identical tool vector at cosine ≈ 1.0 and picks it over an
+        // orthogonal one (0.0).
+        let mut q = vec![3.0_f32, 4.0];
+        l2_normalize(&mut q); // → (0.6, 0.8)
+        let mut same = vec![3.0_f32, 4.0];
+        l2_normalize(&mut same);
+        let mut orth = vec![4.0_f32, -3.0];
+        l2_normalize(&mut orth);
+        let tools = vec![("orth".to_string(), orth), ("same".to_string(), same)];
+        let (id, sim) = best_tool_cosine(&q, &tools).expect("a best match exists");
+        assert_eq!(id, "same");
+        assert!((sim - 1.0).abs() < 1e-6, "cosine with identical vector ≈ 1.0, got {sim}");
+        // The matched tool's cosine exceeds the orthogonal alternative (0.0),
+        // i.e. it would clear the relative `tool_sim > top_sim` rule.
+        assert!(sim > 0.0);
+    }
 
     #[test]
     fn parse_letter_extracts_correctly() {

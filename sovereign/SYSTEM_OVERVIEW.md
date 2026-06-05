@@ -225,13 +225,28 @@ pipeline. Built-ins per stage:
 The `tabular_atoms` extractor (deterministic, no inference) types each row
 of a structured public dataset into a `parcel`-style `Entity` atom whose
 numeric/string columns land in `Entity::attributes` (atoms.json schema
-2.3); the SF land-value-tax demo folds those atoms into revenue-neutral
+2.3). The SF land-value-tax demo folds those atoms into revenue-neutral
 land-rate aggregates via the `parcel_analytics` lib (`enrichment/atlas/
-analysis/`) + the read-only `parcel_analytics` tool, and the ComplexTask
-synthesizer runs a deterministic numeric-provenance audit
-(`runtime::numeric_audit`) so every dollar/percentage figure in the answer
-traces to a cited tool figure — the "no confabulated numbers" guarantee.
-See `sovereign-recipes/sf-assessor-roll/`.
+analysis/`) + the read-only `parcel_analytics` tool, which emits both
+compact cited figures and a full-precision `derivation` trace. The "no
+confabulated numbers" guarantee — *the model never originates a number* —
+is enforced in three coordinated places: **(1)** the model is shown only
+the COMPACT figures (the step summary prefers a tool's `summary` over raw
+JSON) and narrates with those, never retyping long precise values (which a
+mid-size model corrupts into digit-salad); **(2)** the ComplexTask
+synthesizer appends the tool's `derivation` VERBATIM — rendered by the
+system, not the model — so the reader sees the exact formula, inputs, and
+result; **(3)** a deterministic audit (`runtime::numeric_audit`)
+value-matches every $/% figure in the model's prose against the union of
+the tool's formatted figures and raw numeric outputs (with a fraction↔%
+bridge), flagging only model-originated numbers — a *computed* value is
+provenanced by its computation, not a source chunk. `sovereign corpus
+export-parcels` writes the exact input set to CSV for independent
+re-summing. Routing reaches this agentic path via the router's
+tool-relevance gate (a closely-matching registered tool overrides a
+toolless intent) and the planner's per-tool input-param hints + example
+calls (so a relevant tool is reliably planned as a `tool` step, not a
+`reason` step). See `sovereign-recipes/sf-assessor-roll/`.
 
 The `email` + `described_asset` extractors and the `column_aware`
 extractor land together as the substrate of the architecture-over-Enron

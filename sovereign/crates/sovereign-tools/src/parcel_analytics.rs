@@ -22,6 +22,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::{
     Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext, ToolDescriptor,
+    ToolExample,
 };
 
 use corpus_engine::enrichment::atlas::analysis::{compute_aggregates, flags, FlagKind};
@@ -83,7 +84,15 @@ impl Tool for ParcelAnalyticsTool {
                 },
                 "required": []
             }),
-            examples: vec![],
+            examples: vec![ToolExample {
+                situation: "Compute the revenue-neutral land-value-tax rate and the total \
+                    assessed land value for SF from the parcel roll."
+                    .to_string(),
+                call: json!({
+                    "corpus_id": "sf-assessor-roll",
+                    "business_tax_target": 1_400_000_000
+                }),
+            }],
             effect: Effect::Read,
             idempotency: Idempotency::Idempotent,
             latency: Latency::Fast,
@@ -183,6 +192,45 @@ impl Tool for ParcelAnalyticsTool {
         ];
         let summary = cited_figures.join("\n");
 
+        // Derivation — the show-your-work trace. Each line names the
+        // formula, its inputs, the input-set size, and the result at full
+        // precision, so the synthesis layer can render a "How this was
+        // computed" section and the reader can reproduce every figure. This
+        // is the glassbox half of the "no confabulated numbers" guarantee:
+        // not just *that* the gate passed, but *how* the number was reached.
+        let n = fmt_int(agg.parcel_count as f64);
+        let derivation = vec![
+            format!(
+                "land_value_total = Σ assessed_land_value over {n} parcel atoms ({corpus_id}) = {}",
+                fmt_usd_full(agg.land_value_total)
+            ),
+            format!(
+                "improvement_value_total = Σ assessed_improvement_value over {n} parcel atoms = {}",
+                fmt_usd_full(agg.improvement_value_total)
+            ),
+            format!(
+                "neutral_rate = business_tax_target ÷ land_value_total = {} ÷ {} = {}",
+                fmt_usd_full(agg.business_tax_target),
+                fmt_usd_full(agg.land_value_total),
+                fmt_pct(agg.neutral_rate)
+            ),
+            format!(
+                "high_land_share parcels = #{{ parcels : land ÷ (land+improvement) ≥ 0.60 }} = {} of {n}",
+                fmt_int(high_land as f64)
+            ),
+            format!(
+                "underused parcels = #{{ parcels : improvement ÷ land ≤ 0.10 }} = {} of {n}",
+                fmt_int(underused as f64)
+            ),
+        ];
+        // The reader-facing reproducibility affordance: the exact input set
+        // is exportable to a spreadsheet to re-sum independently.
+        let reproduce = format!(
+            "Reproduce: `sovereign corpus export-parcels --corpus {corpus_id}` writes the \
+             {n}-row input table to CSV; sum the assessed_land_value column to get {}.",
+            fmt_usd_full(agg.land_value_total)
+        );
+
         Ok(StepOutput::Json(json!({
             "corpus_id": agg.corpus_id,
             "parcel_count": agg.parcel_count,
@@ -193,6 +241,8 @@ impl Tool for ParcelAnalyticsTool {
             "high_land_share_count": high_land,
             "underused_count": underused,
             "cited_figures": cited_figures,
+            "derivation": derivation,
+            "reproduce": reproduce,
             "summary": summary,
         })))
     }
@@ -210,6 +260,15 @@ fn fmt_usd(v: f64) -> String {
     } else {
         format!("${v:.0}")
     }
+}
+
+/// `$1,477,806,471.00` — full-precision, comma-grouped USD for the
+/// derivation trace, so the reader can match it against a spreadsheet sum.
+fn fmt_usd_full(v: f64) -> String {
+    let cents = (v * 100.0).round() as i64;
+    let dollars = (cents / 100) as f64;
+    let frac = (cents % 100).abs();
+    format!("${}.{:02}", fmt_int(dollars), frac)
 }
 
 /// `0.81%` — rate rendered as a percentage.
@@ -244,6 +303,8 @@ mod tests {
     fn formatting_helpers() {
         assert_eq!(fmt_usd(172_620_140_416.0), "$172.62B");
         assert_eq!(fmt_usd(1_400_000_000.0), "$1.40B");
+        assert_eq!(fmt_usd_full(1_477_806_471.0), "$1,477,806,471.00");
+        assert_eq!(fmt_usd_full(1_400_000_000.0), "$1,400,000,000.00");
         assert_eq!(fmt_pct(0.008109), "0.81%");
         assert_eq!(fmt_int(207_792.0), "207,792");
         assert_eq!(fmt_int(874.0), "874");

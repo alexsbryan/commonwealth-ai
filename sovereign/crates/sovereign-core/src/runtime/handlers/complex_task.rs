@@ -118,11 +118,20 @@ impl Runtime {
             .filter_map(|(id, output)| match output {
                 StepOutput::Text(t) => Some(format!("Step {id}: {t}")),
                 StepOutput::Json(v) => {
-                    // For search tool output, use the "answer" field.
-                    let text = v.get("answer").and_then(|a| a.as_str()).unwrap_or({
-                        // Fallback: serialize the whole JSON.
-                        ""
-                    });
+                    // Prefer a tool's human-formatted fields over raw JSON:
+                    // `answer` (search tools), then `summary` (the COMPACT
+                    // cited figures from a deterministic figure tool like
+                    // parcel_analytics). Showing the raw JSON would put
+                    // precise multi-digit values (e.g. 1477806471.0) in
+                    // front of the model — which it cannot retype faithfully
+                    // and corrupts into digit-salad. So the model narrates
+                    // from compact figures it can copy; the exact derivation
+                    // is appended verbatim from the tool downstream.
+                    let text = v
+                        .get("answer")
+                        .and_then(|a| a.as_str())
+                        .or_else(|| v.get("summary").and_then(|s| s.as_str()))
+                        .unwrap_or("");
                     if text.is_empty() {
                         Some(format!(
                             "Step {id}: {}",
@@ -154,12 +163,18 @@ impl Runtime {
             crate::runtime::build_response_length_directive(self.inference_config.max_tokens);
         let synthesis_base = format!(
             "Synthesize the given step results into a clear, comprehensive \
-             answer.\n\nProvenance rule: every dollar amount and percentage in \
-             your answer MUST be quoted verbatim from a figure present in the \
-             step results above (for example a `parcel_analytics` cited figure). \
-             Do not compute, round, or estimate numbers yourself, and never \
-             introduce a dollar or percentage figure that is not in the step \
-             results.\n\n{budget_note}"
+             answer.\n\n\
+             Provenance rule: every dollar amount and percentage in your answer \
+             must be a figure that already appears in the step results above \
+             (for example a `parcel_analytics` cited figure). Quote the COMPACT \
+             form exactly as given — `$1.48B`, `94.74%`, `874 parcels`. Do NOT \
+             compute, round, expand, or re-type numbers; in particular never \
+             write out a long exact value like `$1,477,806,471.00`. The exact, \
+             to-the-cent derivation is appended to your answer automatically \
+             from the tool, so narrate only with the compact figures and refer \
+             the reader to the derivation below for the precise numbers. The \
+             tools are the deterministic calculator; you relay their numbers, \
+             you never originate one.\n\n{budget_note}"
         );
         let synthesis_system = self.build_primary_system_message(&synthesis_base, context);
 
@@ -210,12 +225,31 @@ impl Runtime {
         // (e.g. `parcel_analytics`) — the audit set for Layer 3 of the
         // "no confabulated numbers" guarantee.
         let mut cited_figures: Vec<String> = Vec::new();
+        // The raw numeric outputs of the figure-emitting tool(s) — the
+        // exact (un-rounded) side of the audit's allowed set, so a precise
+        // quote of a computed value traces even when the cited string is
+        // the compact form. See `runtime::numeric_audit`.
+        let mut raw_values: Vec<f64> = Vec::new();
+        // The tool's verbatim derivation trace + reproduce hint. Rendered
+        // verbatim into the final answer (NOT retyped by the model, which
+        // corrupts long precise numbers) so the reader sees the exact
+        // formula, inputs, and result — the glassbox half of the guarantee.
+        let mut derivation_lines: Vec<String> = Vec::new();
+        let mut reproduce_hints: Vec<String> = Vec::new();
         for (_step_idx, output) in &task.completed_steps {
             match output {
                 StepOutput::Json(ref val) => {
                     if let Some(figs) = val.get("cited_figures").and_then(|v| v.as_array()) {
                         cited_figures
                             .extend(figs.iter().filter_map(|f| f.as_str().map(String::from)));
+                        crate::runtime::numeric_audit::json_numeric_leaves(val, &mut raw_values);
+                        if let Some(d) = val.get("derivation").and_then(|v| v.as_array()) {
+                            derivation_lines
+                                .extend(d.iter().filter_map(|x| x.as_str().map(String::from)));
+                        }
+                        if let Some(r) = val.get("reproduce").and_then(|v| v.as_str()) {
+                            reproduce_hints.push(r.to_string());
+                        }
                     }
                     if let Some(method) = val.get("search_method").and_then(|v| v.as_str()) {
                         search_method = Some(method.to_string());
@@ -269,18 +303,23 @@ impl Runtime {
         let numeric_audit_note: Option<String> = if cited_figures.is_empty() {
             None
         } else {
-            let violations =
-                crate::runtime::numeric_audit::uncited_numerics(&synthesis.text, &cited_figures);
+            let violations = crate::runtime::numeric_audit::uncited_numerics(
+                &synthesis.text,
+                &cited_figures,
+                &raw_values,
+            );
             if violations.is_empty() {
-                tracing::info!("numeric_audit: all answer figures trace to cited tool output");
+                tracing::info!(
+                    "numeric_audit: every answer figure traces to a tool computation or cited datum"
+                );
                 None
             } else {
                 tracing::warn!(
                     violations = ?violations,
-                    "numeric_audit: answer has figure(s) not traceable to a cited source"
+                    "numeric_audit: answer has figure(s) not traceable to a tool computation or cited datum"
                 );
                 Some(format!(
-                    "Provenance audit flag — {} figure(s) not traceable to a cited source: {}",
+                    "Provenance audit flag — {} figure(s) not traceable to a tool computation or cited datum: {}",
                     violations.len(),
                     violations.join(", ")
                 ))
@@ -314,9 +353,25 @@ impl Runtime {
         // Evidence is the same `step_summaries` the synthesis prompt saw
         // — keeps the gap check grounded in exactly what the model had.
         let evidence = step_summaries.join("\n\n");
-        let final_content = self
+        let mut final_content = self
             .maybe_collaborate(conversation_id, message, &synthesis.text, &evidence)
             .await;
+        // Append the tool's exact derivation VERBATIM. The model narrated
+        // with compact figures it can copy faithfully; this block — rendered
+        // by the system, never retyped by the model — is where the reader
+        // sees the precise, to-the-cent computation that cannot be corrupted.
+        if !derivation_lines.is_empty() {
+            let mut block = String::from(
+                "\n\n**How this was computed** (deterministic — `parcel_analytics`):\n",
+            );
+            for line in &derivation_lines {
+                block.push_str(&format!("- {line}\n"));
+            }
+            for hint in &reproduce_hints {
+                block.push_str(&format!("\n{hint}\n"));
+            }
+            final_content.push_str(&block);
+        }
 
         let assistant_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
