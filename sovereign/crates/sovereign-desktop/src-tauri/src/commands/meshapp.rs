@@ -11,7 +11,7 @@
 //! SF-LVT "no confabulated numbers" guarantee carries onto the desktop
 //! surface: a model never originates a figure here either.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -22,11 +22,22 @@ use crate::state::AppState;
 
 use corpus_engine::enrichment::atlas::analysis::{compute_aggregates, flags, FlagKind};
 use corpus_engine::enrichment::atlas::AtomEnvelope;
+use corpus_engine::enrichment::investigation::graph::{
+    read_outputs as read_investigation_graph, Entity as InvEntity, PatternFinding, PatternKind,
+    Relationship as InvRelationship,
+};
 use corpus_engine::enrichment::pipeline::atlas::EntityType;
 
 /// Default SF business-tax take (~$1.4B) the flat land levy must replace.
 const DEFAULT_BUSINESS_TAX_TARGET: f64 = 1_400_000_000.0;
 const DEFAULT_ENTITY_TYPE: &str = "parcel";
+/// SF's effective secured property-tax rate (the 1% Prop-13 base + voter-
+/// approved add-ons). A labeled estimate — used to derive the revenue-neutral
+/// land-only ("swap") rate, which is the only coherent per-parcel comparison:
+/// today's tax falls on land + improvements; a land-value tax shifts the same
+/// revenue onto land alone, producing real winners (improvement-heavy parcels)
+/// and losers (land-rich / underused parcels).
+const DEFAULT_PROPERTY_TAX_RATE: f64 = 0.0118;
 
 /// One parcel atom for the webview, carrying its provenance handle so the
 /// per-parcel calculator can chip every number back to its source.
@@ -51,6 +62,12 @@ pub struct ParcelAnalyticsDto {
     pub improvement_value_total: f64,
     pub business_tax_target: f64,
     pub neutral_rate: f64,
+    /// Revenue-neutral property-tax → land-only "swap" scenario — the coherent
+    /// per-parcel basis. `property_tax_revenue_est` = (land + improvements) ×
+    /// `property_tax_rate`; `property_tax_swap_rate` = that ÷ land base.
+    pub property_tax_rate: f64,
+    pub property_tax_revenue_est: f64,
+    pub property_tax_swap_rate: f64,
     pub high_land_share_count: usize,
     pub underused_count: usize,
     pub derivation: Vec<String>,
@@ -221,10 +238,18 @@ pub async fn meshapp_parcel_analytics(
         ));
     }
 
-    let agg = compute_aggregates(&parcels, &corpus_id, target);
+    let agg = compute_aggregates(&parcels, &corpus_id, target, DEFAULT_PROPERTY_TAX_RATE);
     let fs = flags(&parcels);
     let high = fs.iter().filter(|f| f.kind == FlagKind::HighLandShare).count();
     let under = fs.iter().filter(|f| f.kind == FlagKind::Underused).count();
+
+    // The revenue-neutral property-tax → land-only swap is computed by the lib
+    // (single source — the chat `parcel_analytics` tool reads the same fields).
+    // Bind locals so the derivation/DTO below render the lib's values.
+    let roll = agg.land_value_total + agg.improvement_value_total;
+    let property_tax_rate = agg.property_tax_rate;
+    let property_tax_revenue_est = agg.property_tax_revenue_est;
+    let property_tax_swap_rate = agg.property_tax_swap_rate;
 
     let n = fmt_int(agg.parcel_count as f64);
     let derivation = vec![
@@ -238,6 +263,18 @@ pub async fn meshapp_parcel_analytics(
             fmt_usd(agg.land_value_total),
             fmt_pct(agg.neutral_rate)
         ),
+        format!(
+            "property_tax_revenue_est = (Σland + Σimprovement) × property_tax_rate = {} × {} = {}",
+            fmt_usd(roll),
+            fmt_pct(property_tax_rate),
+            fmt_usd(property_tax_revenue_est)
+        ),
+        format!(
+            "property_tax_swap_rate = property_tax_revenue_est ÷ land_value_total = {} ÷ {} = {}",
+            fmt_usd(property_tax_revenue_est),
+            fmt_usd(agg.land_value_total),
+            fmt_pct(property_tax_swap_rate)
+        ),
     ];
 
     Ok(ParcelAnalyticsDto {
@@ -247,10 +284,307 @@ pub async fn meshapp_parcel_analytics(
         improvement_value_total: agg.improvement_value_total,
         business_tax_target: agg.business_tax_target,
         neutral_rate: agg.neutral_rate,
+        property_tax_rate,
+        property_tax_revenue_est,
+        property_tax_swap_rate,
         high_land_share_count: high,
         underused_count: under,
         derivation,
     })
+}
+
+// ─── Investigation-graph primitives (reusable: UAP now, Enron next) ───
+// Read a corpus's typed investigation graph — entities + relationships +
+// pattern findings — and shape it for an explorer bundle. Like the parcel
+// ops these are deterministic, read-only, and gated on `mesh_store_read`;
+// every edge carries its verbatim evidence excerpt + source chunk, so the
+// "every link cites its source" guarantee is structural, not a prompt
+// promise. The DTOs are the reusable contract a bundle codes against; a
+// future Enron explorer reads its atlas+reconciliation artifacts into the
+// same shapes.
+
+/// A degree-ranked node from the investigation graph. `degree` = incident
+/// relationships; `alias_count` = surface forms the coalesce phase folded
+/// into this entity (the identity-grade dedup).
+#[derive(Debug, Clone, Serialize)]
+pub struct GraphNodeDto {
+    pub id: String,
+    pub canonical_name: String,
+    pub entity_type: String,
+    pub degree: usize,
+    pub alias_count: usize,
+    pub attributes: serde_json::Map<String, serde_json::Value>,
+}
+
+/// One relationship incident to a node, resolved to its other endpoint and
+/// carrying its cited evidence — the glassbox edge.
+#[derive(Debug, Clone, Serialize)]
+pub struct EdgeDto {
+    pub relationship_type: String,
+    /// `"out"` — this node is the source; `"in"` — this node is the target.
+    pub direction: String,
+    pub other_id: String,
+    pub other_name: String,
+    pub other_type: String,
+    pub excerpt: String,
+    pub source_chunk: String,
+    pub confidence: f32,
+    pub attributes: serde_json::Map<String, serde_json::Value>,
+}
+
+/// A node's full detail: attributes, the folded aliases, and every incident
+/// edge with cited evidence.
+#[derive(Debug, Clone, Serialize)]
+pub struct NodeDetailDto {
+    pub id: String,
+    pub canonical_name: String,
+    pub entity_type: String,
+    pub attributes: serde_json::Map<String, serde_json::Value>,
+    pub aliases: Vec<String>,
+    pub edges: Vec<EdgeDto>,
+}
+
+/// A deterministic pattern finding (e.g. a sighting hotspot), resolved to
+/// its participating entities.
+#[derive(Debug, Clone, Serialize)]
+pub struct FindingDto {
+    pub pattern_name: String,
+    /// Detector family: `threshold` | `role_overlap` | `circular_flow` | `custom_sql`.
+    pub pattern_kind: String,
+    pub entities: Vec<FindingEntityDto>,
+    pub attributes: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FindingEntityDto {
+    pub id: String,
+    pub canonical_name: String,
+    pub entity_type: String,
+}
+
+/// Load a corpus's investigation graph (entities + relationships +
+/// findings) via the canonical reader. Surfaces a reason on error rather
+/// than returning empty.
+async fn load_investigation(
+    state: &State<'_, Arc<AppState>>,
+    corpus_id: &str,
+) -> Result<(Vec<InvEntity>, Vec<InvRelationship>, Vec<PatternFinding>), String> {
+    let engine = state
+        .corpus_engine
+        .read()
+        .await
+        .as_ref()
+        .map(Arc::clone)
+        .ok_or_else(|| "corpus engine not initialized".to_string())?;
+    let installed = engine
+        .installed_indexes()
+        .await
+        .map_err(|e| format!("installed_indexes: {e}"))?;
+    let entry = installed
+        .iter()
+        .find(|i| i.corpus_id == corpus_id)
+        .ok_or_else(|| format!("corpus `{corpus_id}` is not installed"))?;
+    read_investigation_graph(&entry.path)
+        .map_err(|e| format!("read investigation graph for `{corpus_id}`: {e}"))
+}
+
+/// Incident-relationship count per entity id (graph degree).
+fn degree_map(rels: &[InvRelationship]) -> HashMap<&str, usize> {
+    let mut deg: HashMap<&str, usize> = HashMap::new();
+    for r in rels {
+        *deg.entry(r.from_entity_id.as_str()).or_default() += 1;
+        *deg.entry(r.to_entity_id.as_str()).or_default() += 1;
+    }
+    deg
+}
+
+fn pattern_kind_str(kind: &PatternKind) -> &'static str {
+    match kind {
+        PatternKind::CircularFlow => "circular_flow",
+        PatternKind::RoleOverlap => "role_overlap",
+        PatternKind::Threshold => "threshold",
+        PatternKind::CustomSql => "custom_sql",
+    }
+}
+
+fn to_graph_node(e: InvEntity, deg: &HashMap<&str, usize>) -> GraphNodeDto {
+    GraphNodeDto {
+        degree: deg.get(e.id.as_str()).copied().unwrap_or(0),
+        alias_count: e.aliases.len(),
+        id: e.id,
+        canonical_name: e.canonical_name,
+        entity_type: e.entity_type,
+        attributes: e.attributes,
+    }
+}
+
+/// `window.meshApp.graph(corpusId, nodeType?, limit?)` — gated on
+/// `mesh_store_read`. Degree-ranked entities (optionally one type),
+/// highest-degree first. Powers UAP installation hotspots, Enron
+/// counterparty centrality.
+#[tauri::command]
+pub async fn meshapp_graph(
+    webview: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    node_type: Option<String>,
+    limit: Option<usize>,
+) -> Result<Vec<GraphNodeDto>, String> {
+    let installs = state.config.read().await.meshapp_installs.clone();
+    authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
+
+    let (entities, rels, _findings) = load_investigation(&state, &corpus_id).await?;
+    let deg = degree_map(&rels);
+    let want = node_type.as_deref();
+    let mut nodes: Vec<GraphNodeDto> = entities
+        .into_iter()
+        .filter(|e| want.map_or(true, |t| e.entity_type.eq_ignore_ascii_case(t)))
+        .map(|e| to_graph_node(e, &deg))
+        .collect();
+    nodes.sort_by(|a, b| {
+        b.degree
+            .cmp(&a.degree)
+            .then_with(|| b.alias_count.cmp(&a.alias_count))
+    });
+    nodes.truncate(limit.unwrap_or(50).min(500));
+    Ok(nodes)
+}
+
+/// `window.meshApp.node(corpusId, id)` — gated on `mesh_store_read`. One
+/// entity's full detail + every incident edge, each resolved to its other
+/// endpoint and quoting its evidence excerpt + source chunk.
+#[tauri::command]
+pub async fn meshapp_node(
+    webview: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    id: String,
+) -> Result<NodeDetailDto, String> {
+    let installs = state.config.read().await.meshapp_installs.clone();
+    authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
+
+    let (entities, rels, _findings) = load_investigation(&state, &corpus_id).await?;
+    let by_id: HashMap<&str, &InvEntity> = entities.iter().map(|e| (e.id.as_str(), e)).collect();
+    let me = by_id
+        .get(id.as_str())
+        .ok_or_else(|| format!("no entity `{id}` in `{corpus_id}`"))?;
+
+    let mut edges = Vec::new();
+    for r in &rels {
+        let (direction, other_id) = if r.from_entity_id == id {
+            ("out", r.to_entity_id.as_str())
+        } else if r.to_entity_id == id {
+            ("in", r.from_entity_id.as_str())
+        } else {
+            continue;
+        };
+        let (other_name, other_type) = by_id
+            .get(other_id)
+            .map(|e| (e.canonical_name.clone(), e.entity_type.clone()))
+            .unwrap_or_else(|| (other_id.to_string(), String::new()));
+        edges.push(EdgeDto {
+            relationship_type: r.relationship_type.clone(),
+            direction: direction.to_string(),
+            other_id: other_id.to_string(),
+            other_name,
+            other_type,
+            excerpt: r.evidence.excerpt.clone(),
+            source_chunk: r.evidence.chunk_id.clone(),
+            confidence: r.confidence,
+            attributes: r.attributes.clone(),
+        });
+    }
+    Ok(NodeDetailDto {
+        id: me.id.clone(),
+        canonical_name: me.canonical_name.clone(),
+        entity_type: me.entity_type.clone(),
+        attributes: me.attributes.clone(),
+        aliases: me.aliases.clone(),
+        edges,
+    })
+}
+
+/// `window.meshApp.findings(corpusId, pattern?)` — gated on
+/// `mesh_store_read`. Deterministic pattern findings (optionally one
+/// pattern), each resolved to its participating entities' names.
+#[tauri::command]
+pub async fn meshapp_findings(
+    webview: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    pattern: Option<String>,
+) -> Result<Vec<FindingDto>, String> {
+    let installs = state.config.read().await.meshapp_installs.clone();
+    authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
+
+    let (entities, _rels, findings) = load_investigation(&state, &corpus_id).await?;
+    let by_id: HashMap<&str, &InvEntity> = entities.iter().map(|e| (e.id.as_str(), e)).collect();
+    let want = pattern.as_deref();
+    let out = findings
+        .into_iter()
+        .filter(|f| want.map_or(true, |p| f.pattern_name.as_str() == p))
+        .map(|f| FindingDto {
+            entities: f
+                .entity_ids
+                .iter()
+                .map(|eid| {
+                    let e = by_id.get(eid.as_str());
+                    FindingEntityDto {
+                        id: eid.clone(),
+                        canonical_name: e
+                            .map(|x| x.canonical_name.clone())
+                            .unwrap_or_else(|| eid.clone()),
+                        entity_type: e.map(|x| x.entity_type.clone()).unwrap_or_default(),
+                    }
+                })
+                .collect(),
+            pattern_kind: pattern_kind_str(&f.pattern_type).to_string(),
+            pattern_name: f.pattern_name,
+            attributes: f.attributes,
+        })
+        .collect();
+    Ok(out)
+}
+
+/// `window.meshApp.searchEntities(corpusId, query, nodeType?, limit?)` —
+/// gated on `mesh_store_read`. Case-folded substring over an entity's
+/// canonical name, aliases, and string attribute values (find a case by
+/// place, a person by alias). Degree-ranked.
+#[tauri::command]
+pub async fn meshapp_search_entities(
+    webview: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    query: String,
+    node_type: Option<String>,
+    limit: Option<usize>,
+) -> Result<Vec<GraphNodeDto>, String> {
+    let installs = state.config.read().await.meshapp_installs.clone();
+    authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
+
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return Ok(Vec::new());
+    }
+    let (entities, rels, _findings) = load_investigation(&state, &corpus_id).await?;
+    let deg = degree_map(&rels);
+    let want = node_type.as_deref();
+    let mut out: Vec<GraphNodeDto> = entities
+        .into_iter()
+        .filter(|e| want.map_or(true, |t| e.entity_type.eq_ignore_ascii_case(t)))
+        .filter(|e| {
+            e.canonical_name.to_lowercase().contains(&q)
+                || e.aliases.iter().any(|a| a.to_lowercase().contains(&q))
+                || e
+                    .attributes
+                    .values()
+                    .any(|v| v.as_str().is_some_and(|s| s.to_lowercase().contains(&q)))
+        })
+        .map(|e| to_graph_node(e, &deg))
+        .collect();
+    out.sort_by(|a, b| b.degree.cmp(&a.degree));
+    out.truncate(limit.unwrap_or(25).min(100));
+    Ok(out)
 }
 
 // ─── Host-side install management ────────────────────────────────────
