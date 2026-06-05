@@ -13,7 +13,8 @@ binary is built or run** — a node takes a role purely by environment:
 |---|---|---|
 | **Worker** | `SOVEREIGN_RPC_SERVE=0.0.0.0:50052` | Daemon starts an in-process RPC server exposing this node's local GPU to peers. |
 | Worker cache | `SOVEREIGN_RPC_CACHE_DIR=<dir>` | Optional. On-disk tensor cache (default `~/.sovereign/rpc-cache`); set `off`/`0` to disable. See "Transfer cost" below. |
-| **Host** | `SOVEREIGN_RPC_WORKERS=<ip>:50052,<ip2>:50052` | Daemon registers those workers and splits the model's layers across local GPU + workers. |
+| **Host (auto)** | `SOVEREIGN_RPC_DISCOVER=1` | **Auto-discovery** — the host scans online peers' `/status` for advertised workers and registers them automatically. No IP list to maintain. |
+| Host (manual) | `SOVEREIGN_RPC_WORKERS=<ip>:50052,<ip2>:50052` | Explicit worker list (union'd with auto-discovery). Use when you want to pin specific peers. |
 | Host (split) | `SOVEREIGN_RPC_TENSOR_SPLIT=0.7,0.3` | Optional. Per-device fractions, **device order = RPC workers first, then local GPU**. Omit to let llama.cpp split by advertised VRAM. |
 
 A node may be both (set both vars). Unset = ordinary single-node local inference,

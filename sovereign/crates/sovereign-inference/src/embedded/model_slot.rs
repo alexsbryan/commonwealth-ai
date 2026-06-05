@@ -632,91 +632,98 @@ fn rpc_tensor_split() -> Option<Vec<f32>> {
     (!split.is_empty()).then_some(split)
 }
 
-/// One-shot guard so mesh RPC workers register exactly once per process,
-/// no matter how many `ModelSlot`s load.
-static RPC_WORKERS_REGISTERED: std::sync::Once = std::sync::Once::new();
+/// Injected source of mesh RPC worker endpoints (`host:port`), e.g. the daemon's
+/// auto-discovery via peer `/status`. Consulted on every model load in addition
+/// to `SOVEREIGN_RPC_WORKERS`, so a host needs no manual worker list. Set once at
+/// daemon startup — this keeps the engine decoupled from the mesh crate.
+type RpcWorkerProvider = Box<dyn Fn() -> Vec<String> + Send + Sync>;
+static RPC_WORKER_PROVIDER: std::sync::OnceLock<RpcWorkerProvider> = std::sync::OnceLock::new();
 
-/// Register mesh RPC workers from `SOVEREIGN_RPC_WORKERS` (comma-separated
-/// `host:port`) into ggml's global backend-device registry, exactly once.
+/// Inject an auto-discovery source for mesh RPC workers. The daemon wires this to
+/// a peer-`/status` scan so a host node needs no manual `SOVEREIGN_RPC_WORKERS`.
+pub fn set_rpc_worker_provider(provider: impl Fn() -> Vec<String> + Send + Sync + 'static) {
+    if RPC_WORKER_PROVIDER.set(Box::new(provider)).is_err() {
+        tracing::warn!("RPC worker provider already set — ignoring duplicate");
+    }
+}
+
+/// Endpoints already published into ggml's device registry this process.
+/// `add_server` dedupes by endpoint, but `ggml_backend_register` must run at most
+/// once per reg or the device double-appears — so we track and skip.
+static REGISTERED_RPC: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// Register mesh RPC workers into ggml's global backend-device registry so the
+/// next `LlamaModel::load_from_file` spreads the model's layers across the local
+/// GPU **and** those workers (llama.cpp pipeline-parallel RPC) — the embedded-host
+/// equivalent of `llama-server --rpc <addrs>`.
 ///
-/// `ggml_backend_rpc_add_server` + `ggml_backend_register` make each remote
-/// `rpc-server` visible to the next `LlamaModel::load_from_file`, whose default
-/// device selection then spreads the model's layers across the local GPU **and**
-/// these workers (llama.cpp pipeline-parallel RPC) — the embedded-host
-/// equivalent of `llama-server --rpc <addrs>`. The per-device proportion is set
-/// by `SOVEREIGN_RPC_TENSOR_SPLIT` (verified: a 0.9 split lands ~90% of the
-/// model on the worker).
-///
-/// Scope: called only from `ModelSlot::load` (the chat/primary path); the embed
-/// and rerank slots load via their own functions and stay local. Opt-in: unset
-/// env → no-op → byte-for-byte the prior local load. Glassbox: every endpoint
-/// logs success or a skip-with-reason; a worker that fails to register is
-/// skipped so the model still loads on whatever devices came up. Per-model
-/// device scoping (so a second `ModelSlot` could opt out) needs an explicit
-/// `devices[]` list on `LlamaModelParams` — tracked as follow-up.
+/// Endpoints are the union of `SOVEREIGN_RPC_WORKERS` (manual, comma-separated
+/// `host:port`) and the injected auto-discovery provider ([`set_rpc_worker_provider`],
+/// fed by the daemon's peer-`/status` scan) — so the manual list is optional.
+/// Each endpoint registers at most once per process; peers discovered later
+/// register on the next load. Split is by advertised VRAM (default), overridable
+/// with `SOVEREIGN_RPC_TENSOR_SPLIT`. No sources → no-op → unchanged local load.
+/// Glassbox: every endpoint logs success or a skip-with-reason.
 fn register_rpc_workers() {
-    RPC_WORKERS_REGISTERED.call_once(|| {
-        let Ok(raw) = std::env::var("SOVEREIGN_RPC_WORKERS") else {
-            return;
-        };
-        let endpoints: Vec<&str> = raw
-            .split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect();
-        if endpoints.is_empty() {
-            return;
-        }
-        tracing::info!(
-            count = endpoints.len(),
-            workers = %raw,
-            "SOVEREIGN_RPC_WORKERS set — registering mesh RPC devices for distributed inference"
+    let mut endpoints: Vec<String> = Vec::new();
+    if let Ok(raw) = std::env::var("SOVEREIGN_RPC_WORKERS") {
+        endpoints.extend(
+            raw.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
         );
-        for endpoint in endpoints {
-            let c_endpoint = match std::ffi::CString::new(endpoint) {
-                Ok(c) => c,
-                Err(_) => {
-                    tracing::warn!(endpoint, "RPC endpoint contains an interior NUL — skipping");
-                    continue;
-                }
-            };
-            // SAFETY: `ggml_backend_rpc_add_server` connects to the worker and
-            // returns a backend reg (NULL on unreachable / zero devices); it
-            // dedupes by endpoint, so re-calls are harmless. `ggml_backend_register`
-            // then publishes that reg's devices into ggml's global registry, where
-            // the model loader's default device enumeration (`devices == NULL`)
-            // picks them up as GPU-type devices named "RPC" and splits layers
-            // across local GPU + workers — the exact path `llama-bench --rpc` takes.
-            let reg =
-                unsafe { crate::llama::sys::ggml_backend_rpc_add_server(c_endpoint.as_ptr()) };
-            if reg.is_null() {
-                tracing::warn!(
-                    endpoint,
-                    "rpc-server unreachable or advertised 0 devices — skipping this worker"
-                );
+    }
+    if let Some(provider) = RPC_WORKER_PROVIDER.get() {
+        endpoints.extend(provider());
+    }
+    if endpoints.is_empty() {
+        return;
+    }
+
+    let mut registered = REGISTERED_RPC.lock().unwrap_or_else(|e| e.into_inner());
+    for endpoint in endpoints {
+        if registered.iter().any(|e| e == &endpoint) {
+            continue;
+        }
+        let c_endpoint = match std::ffi::CString::new(endpoint.clone()) {
+            Ok(c) => c,
+            Err(_) => {
+                tracing::warn!(endpoint, "RPC endpoint contains an interior NUL — skipping");
                 continue;
             }
-            unsafe { crate::llama::sys::ggml_backend_register(reg) };
-            // Glassbox: report the worker's advertised device memory so an
-            // operator can sanity-check `SOVEREIGN_RPC_TENSOR_SPLIT` against the
-            // worker's real capacity.
-            let (mut free, mut total): (usize, usize) = (0, 0);
-            unsafe {
-                crate::llama::sys::ggml_backend_rpc_get_device_memory(
-                    c_endpoint.as_ptr(),
-                    0,
-                    &mut free,
-                    &mut total,
-                );
-            }
-            tracing::info!(
+        };
+        // SAFETY: `ggml_backend_rpc_add_server` connects to the worker and returns
+        // a backend reg (NULL on unreachable / zero devices), deduped by endpoint;
+        // `ggml_backend_register` publishes its devices into ggml's global registry
+        // where the loader's default device selection picks them up as GPU devices
+        // named "RPC" and splits layers across local GPU + workers.
+        let reg = unsafe { crate::llama::sys::ggml_backend_rpc_add_server(c_endpoint.as_ptr()) };
+        if reg.is_null() {
+            tracing::warn!(
                 endpoint,
-                free_gb = free as f64 / 1e9,
-                total_gb = total as f64 / 1e9,
-                "registered mesh RPC device for distributed inference"
+                "rpc-server unreachable or advertised 0 devices — skipping this worker"
+            );
+            continue;
+        }
+        unsafe { crate::llama::sys::ggml_backend_register(reg) };
+        registered.push(endpoint.clone());
+        // Glassbox: the worker's advertised device memory (drives the default split).
+        let (mut free, mut total): (usize, usize) = (0, 0);
+        unsafe {
+            crate::llama::sys::ggml_backend_rpc_get_device_memory(
+                c_endpoint.as_ptr(),
+                0,
+                &mut free,
+                &mut total,
             );
         }
-    });
+        tracing::info!(
+            endpoint,
+            free_gb = free as f64 / 1e9,
+            total_gb = total as f64 / 1e9,
+            "registered mesh RPC device for distributed inference"
+        );
+    }
 }
 
 /// One-shot guard so the in-process RPC worker starts at most once.

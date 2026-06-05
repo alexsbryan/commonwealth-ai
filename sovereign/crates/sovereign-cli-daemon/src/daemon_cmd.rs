@@ -1349,6 +1349,37 @@ async fn run_daemon(args: &[String]) -> i32 {
     daemon
         .set_inference_provider(Arc::clone(&routed_provider))
         .await;
+
+    // Mesh RPC-worker auto-discovery. With `SOVEREIGN_RPC_DISCOVER` set, this
+    // host periodically scans peers' `/status` for advertised RPC workers and
+    // feeds them to the embedded engine's worker provider — so distributing a
+    // model across the cluster needs no manual `SOVEREIGN_RPC_WORKERS` list.
+    // (Applies on the next model load after discovery populates; an eagerly
+    // loaded model picks workers up on reload — see register_rpc_workers.)
+    if std::env::var("SOVEREIGN_RPC_DISCOVER").is_ok() {
+        let snapshot = Arc::new(std::sync::RwLock::new(Vec::<String>::new()));
+        sovereign_inference::embedded::set_rpc_worker_provider({
+            let snap = Arc::clone(&snapshot);
+            move || snap.read().map(|v| v.clone()).unwrap_or_default()
+        });
+        let daemon_for_disco = Arc::clone(&daemon);
+        tokio::spawn(async move {
+            loop {
+                let workers = daemon_for_disco.discover_rpc_workers().await;
+                if let Ok(mut w) = snapshot.write() {
+                    if *w != workers {
+                        tracing::info!(
+                            count = workers.len(),
+                            workers = ?workers,
+                            "mesh RPC workers discovered"
+                        );
+                        *w = workers;
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+            }
+        });
+    }
     // Push slot aliases from AppState into the mesh provider once
     // the daemon's setup phase has registered model slots. Without
     // this, the mesh layer can't resolve `commonwealth/primary` →
