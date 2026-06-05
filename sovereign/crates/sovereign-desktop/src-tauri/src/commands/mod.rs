@@ -248,6 +248,7 @@ mod hardware;
 mod models;
 mod reading;
 mod recipe_testing;
+mod meshapp;
 
 pub use budget::*;
 pub use chat::*;
@@ -261,6 +262,7 @@ pub use hardware::*;
 pub use models::*;
 pub use reading::*;
 pub use recipe_testing::*;
+pub use meshapp::*;
 
 // ─── Tests ───────────────────────────────────────────────────
 
