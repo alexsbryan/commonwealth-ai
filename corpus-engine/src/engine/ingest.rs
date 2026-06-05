@@ -1286,7 +1286,20 @@ impl CorpusEngine {
 
                     let embed_start = Instant::now();
                     let embed_count = pending_texts.len();
-                    let embeddings = if let Some(ref batch_embed) = self.batch_embed {
+                    // `vector = false` (recipe `[index]`) means no ANN index is
+                    // built — so running the embedding model here, the dominant
+                    // ingest cost, is pure waste. Store correctly-sized zero
+                    // vectors: the chunk schema stays satisfied, FTS still
+                    // indexes the text, and `build_indexes(build_vector=false, …)`
+                    // skips the IVF-PQ build, so these vectors are never read.
+                    // This lets a deterministic, atoms-only corpus (e.g. the SF
+                    // parcel roll, whose analytics read atoms.json, not vectors)
+                    // ingest ~40× faster. Gated on the flag, so every
+                    // `vector = true` ingest is byte-for-byte unchanged.
+                    let embeddings: Vec<Vec<f32>> = if !recipe.index.vector {
+                        let dims = recipe.index.embedding_dimensions.max(1);
+                        vec![vec![0.0f32; dims]; pending_texts.len()]
+                    } else if let Some(ref batch_embed) = self.batch_embed {
                         (batch_embed)(&pending_texts).await?
                     } else {
                         let mut embs = Vec::with_capacity(pending_texts.len());

@@ -115,8 +115,9 @@ type = "passthrough"
 [index]
 fts = true
 # Parcels are structured records; FTS over the rendered line (parcel
-# number, neighborhood, use) covers citation surfacing. Embeddings are
-# enabled for the P0a slice (cheap at ~900 parcels); for the full ~208k
-# roll, consider flipping to false — the deterministic analytics read
-# atoms directly and don't depend on vector retrieval.
-vector = true
+# number, neighborhood, use) covers citation surfacing. Vectors are OFF
+# for the full ~208k roll: the deterministic `parcel_analytics` reads
+# atoms.json directly and never touches vector retrieval, so embedding
+# every parcel would cost minutes of embed-model time for zero analytic
+# value. Flip to true only if semantic parcel search is needed.
+vector = false
