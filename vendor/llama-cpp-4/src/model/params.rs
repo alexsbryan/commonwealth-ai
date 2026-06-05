@@ -22,6 +22,15 @@ pub struct LlamaModelParams {
     /// the lifetime of this params object. Empty ⇒ pointer is null (llama.cpp
     /// enumerates all registered devices).
     devices: Vec<llama_cpp_sys_4::ggml_backend_dev_t>,
+    /// Backing storage for `params.tensor_buft_overrides` — explicit per-tensor
+    /// device placement by name regex (the `-ot` mechanism). Held so the raw,
+    /// null-terminated array pointer handed to llama.cpp stays valid for the
+    /// params' lifetime. Empty ⇒ pointer is null (no overrides).
+    buft_overrides: Vec<llama_cpp_sys_4::llama_model_tensor_buft_override>,
+    /// Backing storage for the override pattern C-strings; the structs in
+    /// `buft_overrides` hold raw `*const c_char` into these, so they must outlive
+    /// the load. Kept in lock-step with `buft_overrides`.
+    buft_override_patterns: Vec<std::ffi::CString>,
 }
 
 impl Debug for LlamaModelParams {
@@ -224,6 +233,49 @@ impl LlamaModelParams {
         self
     }
 
+    /// Sets explicit per-tensor device placement via name-regex overrides — the
+    /// `--override-tensor` (`-ot`) mechanism. Each `(pattern, buft)` pins every
+    /// tensor whose name matches the regex `pattern` (llama.cpp uses
+    /// `std::regex_search`) onto buffer type `buft` (e.g. a specific RPC worker or
+    /// local GPU), **bypassing the proportional layer split**. This lets the
+    /// caller OWN placement deterministically instead of predicting llama.cpp's
+    /// split. An empty slice clears it. The patterns and the override array are
+    /// copied + retained for the params' lifetime; the `buft`s are process-static
+    /// (owned by ggml's device registry), so the caller need not keep them alive.
+    #[must_use]
+    pub fn with_tensor_buft_overrides(
+        mut self,
+        overrides: &[(std::ffi::CString, llama_cpp_sys_4::ggml_backend_buffer_type_t)],
+    ) -> Self {
+        if overrides.is_empty() {
+            self.buft_overrides = Vec::new();
+            self.buft_override_patterns = Vec::new();
+            self.params.tensor_buft_overrides = null();
+            return self;
+        }
+        // Keep the pattern C-strings alive; the override structs borrow their ptrs.
+        self.buft_override_patterns = overrides.iter().map(|(p, _)| p.clone()).collect();
+        let mut raw: Vec<llama_cpp_sys_4::llama_model_tensor_buft_override> = self
+            .buft_override_patterns
+            .iter()
+            .zip(overrides.iter())
+            .map(
+                |(pat, (_, buft))| llama_cpp_sys_4::llama_model_tensor_buft_override {
+                    pattern: pat.as_ptr(),
+                    buft: *buft,
+                },
+            )
+            .collect();
+        // Null-pattern terminator: llama.cpp iterates the array until pattern == NULL.
+        raw.push(llama_cpp_sys_4::llama_model_tensor_buft_override {
+            pattern: null(),
+            buft: std::ptr::null_mut(),
+        });
+        self.params.tensor_buft_overrides = raw.as_ptr();
+        self.buft_overrides = raw;
+        self
+    }
+
 }
 
 /// Default parameters for `LlamaModel`. (as defined in llama.cpp by `llama_model_default_params`)
@@ -254,6 +306,8 @@ impl Default for LlamaModelParams {
             }],
             tensor_split: Vec::new(),
             devices: Vec::new(),
+            buft_overrides: Vec::new(),
+            buft_override_patterns: Vec::new(),
         }
     }
 }
