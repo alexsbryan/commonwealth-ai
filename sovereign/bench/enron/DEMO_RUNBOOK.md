@@ -131,18 +131,54 @@ The five hero questions (`qa_demo.toml`), in narrative order:
 **Lead with `exec_cast` → `ljm_fraud` → `financial_state`** (all strong), then `dynegy_rescue`.
 Capture them live in your dry-run; the citation popover shows the source email for each.
 
+> **Two engineering notes (so the room's numbers hold up):** (1) these are single-run
+> fact-scores and the 35B is non-deterministic (MoE/MTP) — expect ±1 fact run-to-run, so
+> capture the actual run you'll show. (2) The demo config is **atom-enum OFF**
+> (`SOVEREIGN_ATOM_ENUM` unset). It was tested as a multi-entity-recall lever and is a net
+> negative here (it displaces focused-question hits: `exec_cast` 6/6→4/6); multi-entity
+> enumeration is answered from the reconciliation **graph** instead — see `counterparty_network`.
+
 **Say (on `financial_state`):** "One messy, three-part question. The system split it into
 focused sub-queries and chased each thread — the S&P downgrade from one email, the equity
 adjustment from another — instead of averaging them into mush and missing both. That's the
 query decomposition." *(→ Act 3.2.)*
 
 **`counterparty_network` — ask it as a GRAPH question, not a search.** "Which energy
-companies appear as counterparties?" is an *enumeration*, and that's exactly what the
-reconciled entity graph is for — RAG synthesis lists ~2/5, but the graph already resolved
-**Dynegy, Calpine, El Paso, Pacific Gas/PG&E, AES, Aquila** as canonical institutions.
-Answer it from `reconciliation.json` / `enrich query`, not the chat. (Honest gap: "Williams"
-— the energy company — got conflated with person-surnames in extraction; name it as the
-known extraction lever, don't claim it.)
+companies appear as counterparties?" is an *enumeration*, and that's the one shape RAG is
+worst at: a single query vector can't sit near every company, so chat synthesis lists only
+~2/5. The reconciled entity graph answers it directly — rank the institution atoms by how
+central they are to the correspondence (graph degree):
+```sh
+python3 - <<'PY'
+import json, os
+from collections import Counter
+A = os.path.expanduser("~/.sovereign/indexes/enron-sample-multi-wide/atlas")
+atoms = json.load(open(f"{A}/atoms.json"))["atoms"]
+edges = json.load(open(f"{A}/edges.json"))["edges"]
+deg = Counter()
+for e in edges:
+    deg[e.get("source")] += 1; deg[e.get("target")] += 1
+inst = {a["data"]["id"]: a["data"]["canonical_name"] for a in atoms
+        if a.get("atom_type") == "Entity" and a["data"].get("entity_type") == "institution"}
+for dg, n in sorted(((deg.get(i, 0), n) for i, n in inst.items()), reverse=True)[:15]:
+    if n != "Enron":
+        print(f"{dg:4}  {n}")
+PY
+```
+**They see** the real counterparty/competitor cast, ranked: **El Paso 46, Edison International
+17, Dynegy 17, Pacific Gas and Electric 12, Sempra 11, Calpine 10, Duke 9, PacifiCorp 8,
+Mirant 8** (alongside regulators/context like FERC, LADWP). The graph enumerates the set RAG
+buries.
+
+**Say:** "Ask a search engine 'which companies were counterparties' and it lists two or three
+— whatever one query happens to rank. Ask the *graph* — the cast it already reconstructed —
+and you get the field, ranked by how central each was to the traffic. That's reconciliation
+paying off: it built the index of who, so enumeration is a lookup, not a guess."
+
+(Honest gap to own: **"Williams"** — the energy company — got conflated with person-surnames
+in extraction, so it isn't a clean institution here; name it as the known extraction lever.
+And we tested injecting these atoms into the RAG pool instead — it *regressed* the focused
+questions, which is why enumeration is answered from the graph, not forced into chat.)
 
 > **Reproducible terminal alternative** (no GUI, deterministic, offline): the
 > **atlas-directed** brief —
