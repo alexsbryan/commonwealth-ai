@@ -719,6 +719,116 @@ fn register_rpc_workers() {
     });
 }
 
+/// One-shot guard so the in-process RPC worker starts at most once.
+static RPC_SERVE_STARTED: std::sync::Once = std::sync::Once::new();
+
+/// If `SOVEREIGN_RPC_SERVE` is set (e.g. `0.0.0.0:50052`), start an in-process
+/// llama.cpp RPC server on a background thread exposing this node's local GPU
+/// device(s) to mesh peers — the **distributable** counterpart of running a
+/// standalone `rpc-server` binary, with **no separate build**: the daemon
+/// already links ggml with `GGML_RPC=ON`. An operator turns their node into a
+/// worker by running the daemon they already run, plus one env var.
+///
+/// Must be called after `LlamaBackend::init()` (so ggml's device registry is
+/// populated). Serves every local non-CPU device, skipping any remote "RPC"
+/// device, mirroring stock `rpc-server`'s default selection.
+/// `ggml_backend_rpc_start_server` blocks, so it owns a dedicated thread for
+/// the life of the process.
+pub(crate) fn serve_rpc_worker_if_configured() {
+    RPC_SERVE_STARTED.call_once(|| {
+        let Ok(bind) = std::env::var("SOVEREIGN_RPC_SERVE") else {
+            return;
+        };
+        let bind = bind.trim().to_string();
+        if bind.is_empty() {
+            return;
+        }
+
+        // Collect local GPU devices (skip CPU and any already-registered remote
+        // RPC devices, so a host+worker hybrid never re-serves a peer).
+        let mut devices: Vec<crate::llama::sys::ggml_backend_dev_t> = Vec::new();
+        let n = unsafe { crate::llama::sys::ggml_backend_dev_count() };
+        for i in 0..n {
+            let dev = unsafe { crate::llama::sys::ggml_backend_dev_get(i) };
+            if unsafe { crate::llama::sys::ggml_backend_dev_type(dev) }
+                == crate::llama::sys::GGML_BACKEND_DEVICE_TYPE_CPU
+            {
+                continue;
+            }
+            let reg = unsafe { crate::llama::sys::ggml_backend_dev_backend_reg(dev) };
+            let reg_name =
+                unsafe { std::ffi::CStr::from_ptr(crate::llama::sys::ggml_backend_reg_name(reg)) }
+                    .to_string_lossy();
+            if reg_name == "RPC" {
+                continue;
+            }
+            devices.push(dev);
+        }
+        if devices.is_empty() {
+            tracing::warn!(
+                bind,
+                "SOVEREIGN_RPC_SERVE set but no local GPU device found — RPC worker not started"
+            );
+            return;
+        }
+        let c_bind = match std::ffi::CString::new(bind.clone()) {
+            Ok(c) => c,
+            Err(_) => {
+                tracing::warn!(bind, "RPC bind contains an interior NUL — worker not started");
+                return;
+            }
+        };
+        let n_devices = devices.len();
+        let n_threads = std::thread::available_parallelism()
+            .map(|n| n.get() / 2)
+            .unwrap_or(4)
+            .max(1);
+        tracing::info!(
+            bind,
+            n_devices,
+            n_threads,
+            "starting in-process RPC worker (serving local GPU to mesh peers)"
+        );
+
+        // Device pointers are valid for the process lifetime (owned by ggml's
+        // registry) but `*mut` is not Send; wrap to move into the server thread.
+        struct Served {
+            bind: std::ffi::CString,
+            devices: Vec<crate::llama::sys::ggml_backend_dev_t>,
+        }
+        // SAFETY: the wrapped pointers reference process-static ggml devices.
+        unsafe impl Send for Served {}
+        let payload = Served {
+            bind: c_bind,
+            devices,
+        };
+
+        let spawned = std::thread::Builder::new()
+            .name("rpc-worker".into())
+            .spawn(move || {
+                // Re-bind the whole `payload` so the closure captures the Send
+                // wrapper as a unit — Rust 2021 disjoint capture would otherwise
+                // grab the non-Send `Vec<*mut>` field directly.
+                let mut payload = payload;
+                // SAFETY: device pointers outlive the process; start_server
+                // blocks here, running the accept loop until the process exits.
+                unsafe {
+                    crate::llama::sys::ggml_backend_rpc_start_server(
+                        payload.bind.as_ptr(),
+                        std::ptr::null(),
+                        n_threads,
+                        n_devices,
+                        payload.devices.as_mut_ptr(),
+                    );
+                }
+                tracing::warn!("in-process RPC worker server loop exited");
+            });
+        if let Err(e) = spawned {
+            tracing::warn!(error = %e, "failed to spawn RPC worker thread");
+        }
+    });
+}
+
 impl ModelSlot {
     pub(crate) fn load(
         backend: &Arc<LlamaBackend>,

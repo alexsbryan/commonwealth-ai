@@ -633,6 +633,12 @@ impl EmbeddedLlamaCpp {
         }
         let backend = Arc::new(backend);
 
+        // Distributable mesh worker: if SOVEREIGN_RPC_SERVE is set, expose this
+        // node's local GPU to peers via an in-process RPC server (no separate
+        // rpc-server binary to build/run). Safe here — the ggml device registry
+        // is populated now that LlamaBackend is initialized.
+        super::model_slot::serve_rpc_worker_if_configured();
+
         tracing::info!(slot = "fast", family = ?fast_family, "loading slot");
         let fast = Arc::new(ModelSlot::load(
             &backend,
