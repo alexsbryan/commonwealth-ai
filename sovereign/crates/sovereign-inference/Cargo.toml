@@ -80,6 +80,7 @@ llama-cpp-sys-4 = { version = "0.2.57", features = ["rpc"] }
 
 [dev-dependencies]
 tempfile = "3"
+tracing-subscriber = { workspace = true }
 
 [[example]]
 name = "complete"

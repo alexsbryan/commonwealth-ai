@@ -94,3 +94,14 @@ place_headers = ["city", "state", "country", "location"]
 [display]
 category = "email"
 icon = "mail"
+
+# Prebuilt cold-start: `sovereign corpus install enron-sample-multi-wide` restores the
+# enriched index (chunks + the 6,101-atom atlas + reconciliation graph, B³ P=1.0 / F1 0.835)
+# from HuggingFace in seconds — no re-enrich. The mesh `corpus pull` path is blocked on a
+# stale canonical fingerprint after the atlas-resolve mutations; the snapshot manifest
+# carries its own sha256, so this install sidesteps that. Snapshot built 2026-06-05.
+[prebuilt]
+hf_repo = "svrnmesh/enron-sample-multi-wide"
+hf_filename = "enron-sample-multi-wide-qwen-embedding-0.6b-2026-06-05.tar.zst"
+sha256 = "27b664ee33e4c8829b0c18ac75818e0821c3a7e2eb2c47adb4334e395ae8e080"
+compatible_embedding_model = "qwen-embedding-0.6b"
