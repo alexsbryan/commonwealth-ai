@@ -156,6 +156,36 @@ async fn run_turn(
         .await
     {
         Ok(h) => h,
+        // Non-streamable intents (ComplexTask, document-attached, …) are not
+        // token-streamable: the runtime signals this with a NotImplemented
+        // "Streaming not supported for this intent" and expects the caller to
+        // fall back to the non-streaming turn (the same contract the desktop
+        // honors). Run `handle_turn`, which dispatches the agentic path
+        // (planner → executor → cited synthesis + the numeric-audit gate),
+        // and render its Response exactly like the streamed path.
+        Err(e) if e.to_string().contains("Streaming not supported") => {
+            eprintln!();
+            eprintln!("· non-streamed agentic turn (planning + tool calls — output appears once complete) ·");
+            return match session.runtime.handle_turn(question, conversation_id).await {
+                Ok(resp) => {
+                    let raw = resp.message.content.clone();
+                    let metadata = resp.message.metadata.clone();
+                    match format {
+                        OutputFormat::Text => {
+                            render_text(&raw, metadata.as_ref(), show_reasoning)
+                        }
+                        OutputFormat::Json => {
+                            render_json(&resp.message.id, conversation_id, &raw, metadata.as_ref())
+                        }
+                    }
+                    0
+                }
+                Err(e) => {
+                    eprintln!("turn failed: {e}");
+                    1
+                }
+            };
+        }
         Err(e) => {
             eprintln!("stream start failed: {e}");
             return 1;

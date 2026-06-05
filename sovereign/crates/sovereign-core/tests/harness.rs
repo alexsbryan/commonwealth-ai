@@ -111,9 +111,11 @@ impl InferenceProvider for DeterministicInference {
         } else if prompt_lower.contains("working memory") || prompt_lower.contains("current goal") {
             // Working memory compression
             r#"{"current_goal": null, "facts": [], "active_documents": []}"#.to_string()
-        } else if prompt_lower.contains("write a short, specific title") {
+        } else if prompt_lower.contains("short title") {
             // Title generation — deterministic output so tests can assert.
-            // Prompt asks for no quotes / no period; return clean title.
+            // Matches the current prompt ("Give each conversation a short
+            // title of a few words"); the prior matcher ("write a short,
+            // specific title") drifted dead when the prompt was reworded.
             "Test conversation title".to_string()
         } else if prompt_lower.contains("extract the topic and domain") {
             // Topic context extraction — derive topic and domain from message content.
