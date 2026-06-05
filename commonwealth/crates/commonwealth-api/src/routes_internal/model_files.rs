@@ -193,10 +193,54 @@ pub async fn list_model_files(State(state): State<AppState>) -> Json<ListRespons
     Json(ListResponse { files })
 }
 
-/// GET /internal/v1/models/file/{name} — stream a model file.
+/// Parse a single HTTP byte-range header (`bytes=START-END`, open-ended
+/// `bytes=START-`, or suffix `bytes=-N`) into an inclusive `(start, end)` clamped
+/// to `[0, size)`. Returns `None` for a multi-range header, a non-`bytes` unit, or
+/// an unsatisfiable range — the caller then serves the whole file (200). Pure +
+/// unit-tested. The byte-range warm path (`#5b`) only ever sends explicit
+/// `START-END` ranges, but a correct parser handles the other RFC-7233 forms too.
+fn parse_single_byte_range(header: &str, size: u64) -> Option<(u64, u64)> {
+    let spec = header.trim().strip_prefix("bytes=")?;
+    if spec.contains(',') || size == 0 {
+        // Multi-range needs multipart/byteranges (not worth it here); an empty
+        // file has no satisfiable range.
+        return None;
+    }
+    let (start_s, end_s) = spec.split_once('-')?;
+    let (start_s, end_s) = (start_s.trim(), end_s.trim());
+    let (start, end) = match (start_s.is_empty(), end_s.is_empty()) {
+        // `bytes=-N` — the final N bytes.
+        (true, false) => {
+            let n: u64 = end_s.parse().ok()?;
+            if n == 0 {
+                return None;
+            }
+            (size.saturating_sub(n), size - 1)
+        }
+        // `bytes=START-` — START to EOF.
+        (false, true) => (start_s.parse().ok()?, size - 1),
+        // `bytes=START-END` (END clamped to the last byte).
+        (false, false) => {
+            let s: u64 = start_s.parse().ok()?;
+            let e: u64 = end_s.parse().ok()?;
+            (s, e.min(size - 1))
+        }
+        (true, true) => return None,
+    };
+    if start > end || start >= size {
+        return None; // unsatisfiable
+    }
+    Some((start, end))
+}
+
+/// GET /internal/v1/models/file/{name} — stream a model file, or a single byte
+/// range when the client sends `Range: bytes=START-END`. Range support is what
+/// lets a distributed worker fetch ONLY its shard's tensors (the `#5b` byte-range
+/// warm path) instead of the whole GGUF, keeping it at O(model/N) on disk.
 pub async fn serve_model_file(
     State(state): State<AppState>,
     AxumPath(name): AxumPath<String>,
+    headers_in: HeaderMap,
 ) -> Result<Response, (StatusCode, Json<ErrorBody>)> {
     let allowlist = state.inner.servable_model_files.load();
     if allowlist.is_empty() {
@@ -232,7 +276,62 @@ pub async fn serve_model_file(
             }),
         )
     })?;
-    // Cheap: the cache should be warm from the prior list. We do
+
+    // Range request → 206 Partial Content. Skip the whole-file SHA entirely: it
+    // reads the whole file (defeating the point of a range fetch) and is
+    // irrelevant to a partial body — the byte-range warmer verifies each tensor's
+    // own FNV hash, not a file digest.
+    if let Some((start, end)) = headers_in
+        .get(axum::http::header::RANGE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|h| parse_single_byte_range(h, size_bytes))
+    {
+        let length = end - start + 1;
+        let mut file = tokio::fs::File::open(&path).await.map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    error: format!("open: {e}"),
+                }),
+            )
+        })?;
+        use tokio::io::{AsyncReadExt, AsyncSeekExt};
+        file.seek(std::io::SeekFrom::Start(start)).await.map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    error: format!("seek: {e}"),
+                }),
+            )
+        })?;
+        tracing::debug!(
+            path = %path.display(),
+            name = %name,
+            start,
+            end,
+            length,
+            "model_files: serving byte range to peer"
+        );
+        let body = Body::from_stream(ReaderStream::new(file.take(length)));
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::CONTENT_TYPE,
+            HeaderValue::from_static("application/octet-stream"),
+        );
+        headers.insert(axum::http::header::CONTENT_LENGTH, HeaderValue::from(length));
+        headers.insert(
+            axum::http::header::ACCEPT_RANGES,
+            HeaderValue::from_static("bytes"),
+        );
+        headers.insert(
+            axum::http::header::CONTENT_RANGE,
+            HeaderValue::from_str(&format!("bytes {start}-{end}/{size_bytes}"))
+                .unwrap_or(HeaderValue::from_static("")),
+        );
+        return Ok((StatusCode::PARTIAL_CONTENT, headers, body).into_response());
+    }
+
+    // Whole-file. Cheap: the cache should be warm from the prior list. We do
     // this so the X-Sha256 header reflects the *current* bytes —
     // a swap-on-disk between list and serve invalidates the cache
     // and we'd recompute. Slow path is fine; correctness > latency.
@@ -284,6 +383,11 @@ pub async fn serve_model_file(
         axum::http::header::CONTENT_LENGTH,
         HeaderValue::from(size_bytes),
     );
+    // Advertise range support so a worker knows it can shard-fetch.
+    headers.insert(
+        axum::http::header::ACCEPT_RANGES,
+        HeaderValue::from_static("bytes"),
+    );
     headers.insert(
         "X-Sha256",
         HeaderValue::from_str(&sha).unwrap_or(HeaderValue::from_static("")),
@@ -304,6 +408,29 @@ mod tests {
     use commonwealth_core::mesh::Mesh;
     use std::io::Write;
     use tower::util::ServiceExt;
+
+    #[test]
+    fn parse_single_byte_range_covers_rfc7233_forms() {
+        let size = 1000;
+        // Explicit START-END (inclusive) — the form the byte-range warmer sends.
+        assert_eq!(parse_single_byte_range("bytes=0-99", size), Some((0, 99)));
+        assert_eq!(parse_single_byte_range("bytes=100-199", size), Some((100, 199)));
+        // END past EOF clamps to the last byte.
+        assert_eq!(parse_single_byte_range("bytes=900-5000", size), Some((900, 999)));
+        // Open-ended START- → to EOF.
+        assert_eq!(parse_single_byte_range("bytes=500-", size), Some((500, 999)));
+        // Suffix -N → final N bytes.
+        assert_eq!(parse_single_byte_range("bytes=-200", size), Some((800, 999)));
+        // Whitespace tolerated.
+        assert_eq!(parse_single_byte_range(" bytes=0-9 ", size), Some((0, 9)));
+        // Unsatisfiable / unsupported → None (caller serves the whole file).
+        assert_eq!(parse_single_byte_range("bytes=1000-1001", size), None); // start >= size
+        assert_eq!(parse_single_byte_range("bytes=50-10", size), None); // start > end
+        assert_eq!(parse_single_byte_range("bytes=0-10,20-30", size), None); // multi-range
+        assert_eq!(parse_single_byte_range("items=0-10", size), None); // wrong unit
+        assert_eq!(parse_single_byte_range("bytes=abc", size), None); // garbage
+        assert_eq!(parse_single_byte_range("bytes=0-0", 0), None); // empty file
+    }
 
     fn fixture_state(files: Vec<PathBuf>) -> AppState {
         let mesh = Mesh {

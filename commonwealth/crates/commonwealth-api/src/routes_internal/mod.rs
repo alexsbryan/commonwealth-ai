@@ -26,6 +26,7 @@ mod mesh_admin;
 mod model_files;
 mod newsworthy_status;
 mod pipeline_pause;
+mod rpc_warm;
 
 pub use atlas_status::{atlas_status, AtlasStatusResponse};
 pub use corpus_collaborate::{corpus_collaborate, CollaborateRequest};
@@ -71,6 +72,7 @@ pub use newsworthy_status::{
 pub use pipeline_pause::{
     pipeline_pause, NodePauseResult, PipelinePauseRequest, PipelinePauseResponse,
 };
+pub use rpc_warm::rpc_warm;
 
 // Queue helpers re-exported intra-module so `corpus_collaborate` can keep
 // reaching for `super::find_local_handoff_for_corpus` /

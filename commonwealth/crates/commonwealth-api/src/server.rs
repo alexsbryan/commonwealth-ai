@@ -92,6 +92,10 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/v1/models/file/{name}",
             get(routes_internal::serve_model_file),
         )
+        // Distributed-inference auto-warm: a host asks this worker to seed its
+        // RPC tensor cache with its shard before a distributed load. The worker
+        // fetches the GGUF (or its byte ranges) from the model-file route above.
+        .route("/internal/rpc-warm", post(routes_internal::rpc_warm))
         .route(
             "/internal/index/transfer",
             post(routes_internal::index_transfer),

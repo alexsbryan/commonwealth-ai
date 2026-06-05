@@ -207,12 +207,41 @@ fn tensor_nbytes(t: &TensorInfo) -> u64 {
     n
 }
 
-#[inline]
-fn fnv1a_update(hash: &mut u64, bytes: &[u8]) {
-    for &b in bytes {
-        *hash ^= b as u64;
-        *hash = hash.wrapping_mul(FNV_PRIME);
+/// Streaming FNV-1a (64-bit) — byte-for-byte the hash the RPC worker names its
+/// cache files with (`%016x`) and the host computes in `set_tensor_hash`. Public
+/// so the byte-range warmer (`#5b`, sovereign-mesh) can hash a tensor as it
+/// streams in from an HTTP range-GET and name its cache file identically — one
+/// hash implementation shared by every warm path, so they can never diverge
+/// (the correctness basis for the whole cache).
+#[derive(Debug, Clone)]
+pub struct Fnv1a(u64);
+
+impl Default for Fnv1a {
+    fn default() -> Self {
+        Self(FNV_OFFSET)
     }
+}
+
+impl Fnv1a {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    #[inline]
+    pub fn update(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 ^= b as u64;
+            self.0 = self.0.wrapping_mul(FNV_PRIME);
+        }
+    }
+    pub fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+/// The RPC cache filename for a tensor's content hash — `"%016x"`, matching
+/// `ggml-rpc.cpp`. The single place this format lives, shared by every warm path.
+pub fn cache_file_name(hash: u64) -> String {
+    format!("{hash:016x}")
 }
 
 /// Transformer-block index parsed from a GGUF tensor name (`blk.<N>.…`).
@@ -229,7 +258,11 @@ pub fn tensor_layer(name: &str) -> Option<u32> {
 /// and lets every other node fetch + warm ONLY its assigned shard — never the
 /// whole model. This is what makes a 500GB model across N nodes tenable: each
 /// node materializes ~size/N, not the full model.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Serializable: the host serves the precomputed manifest (`#5b` byte-range
+/// fetch) so a worker can select its tensors by `tensor_device` and range-GET
+/// exactly its shard without re-hashing the whole file.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TensorManifestEntry {
     pub name: String,
     /// `blk.<N>` index, or `None` for a global (non-layer) tensor.
@@ -257,15 +290,15 @@ fn hash_tensor_at(
     buf: &mut [u8],
 ) -> std::io::Result<u64> {
     file.seek(SeekFrom::Start(start))?;
-    let mut hash = FNV_OFFSET;
+    let mut hash = Fnv1a::new();
     let mut remaining = nbytes;
     while remaining > 0 {
         let take = remaining.min(buf.len() as u64) as usize;
         file.read_exact(&mut buf[..take])?;
-        fnv1a_update(&mut hash, &buf[..take]);
+        hash.update(&buf[..take]);
         remaining -= take as u64;
     }
-    Ok(hash)
+    Ok(hash.finish())
 }
 
 /// Build the full tensor manifest from a local GGUF — name, layer, content hash,
@@ -337,7 +370,7 @@ pub fn warm_cache_slice(
 
         let start = data_offset + t.offset;
         let hash = hash_tensor_at(&mut file, start, nbytes, &mut buf)?;
-        let hash_str = format!("{hash:016x}");
+        let hash_str = cache_file_name(hash);
         let cache_file = cache_dir.join(&hash_str);
 
         // Idempotent: skip if already present with the right size.
@@ -384,7 +417,12 @@ pub fn warm_cache_from_gguf(gguf_path: &Path, cache_dir: &Path) -> std::io::Resu
 /// `device_index` is the position in the RPC-first device list (matching
 /// `with_devices` / `SOVEREIGN_RPC_TENSOR_SPLIT`). The input embedding always
 /// stays on the host CPU (llama.cpp does this unconditionally) so it's never a shard.
-#[derive(Debug, Clone, PartialEq)]
+///
+/// Serializable: the host computes the plan ONCE and ships it whole to each
+/// worker (the auto-warm orchestration), so warm-time placement and load-time
+/// `-ot` overrides derive from the identical plan and cannot diverge — the
+/// plan-agreement invariant that keeps every weight a cache hit (no bulk send).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NodeShard {
     pub device_index: usize,
     /// Inclusive `(first, last)` block range, or `None` if this device got no blocks.
@@ -580,10 +618,20 @@ mod tests {
         // The canonical FNV-1a/64 test vector for "a" — also exactly what
         // ggml-rpc.cpp's fnv_hash produces, which is the whole correctness basis
         // for the cache (host hash == warm-file name).
-        let mut h = FNV_OFFSET;
-        fnv1a_update(&mut h, b"a");
-        assert_eq!(h, 0xaf63_dc4c_8601_ec8c);
+        let mut h = Fnv1a::new();
+        h.update(b"a");
+        assert_eq!(h.finish(), 0xaf63_dc4c_8601_ec8c);
         // Empty input is the offset basis.
-        assert_eq!(FNV_OFFSET, 0xcbf2_9ce4_8422_2325);
+        assert_eq!(Fnv1a::new().finish(), 0xcbf2_9ce4_8422_2325);
+        // Streaming in pieces must equal hashing the whole — the property the
+        // byte-range warmer relies on when it hashes HTTP chunks incrementally.
+        let mut split = Fnv1a::new();
+        split.update(b"he");
+        split.update(b"llo");
+        let mut whole = Fnv1a::new();
+        whole.update(b"hello");
+        assert_eq!(split.finish(), whole.finish());
+        // Cache filename is the zero-padded 16-hex of the hash.
+        assert_eq!(cache_file_name(0xaf63_dc4c_8601_ec8c), "af63dc4c8601ec8c");
     }
 }

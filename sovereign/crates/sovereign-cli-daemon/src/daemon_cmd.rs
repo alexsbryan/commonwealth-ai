@@ -1356,6 +1356,15 @@ async fn run_daemon(args: &[String]) -> i32 {
         .set_inference_provider(Arc::clone(&routed_provider))
         .await;
 
+    // Host side of distributed-inference auto-warm. When this node distributes a
+    // large primary across mesh workers, the embedded engine calls this seam to
+    // seed each worker's shard BEFORE loading — so the load is all cache hits and
+    // never streams a large weight share (the upload deadlock). This retires the
+    // manual `SOVEREIGN_RPC_ASSUME_WARMED` for the common case. Installed
+    // unconditionally (harmless on a node that never distributes) so both
+    // auto-discovered and manual (`SOVEREIGN_RPC_WORKERS`) hosts auto-warm.
+    sovereign_mesh::rpc_warm_http::install_rpc_warm_orchestrator(Arc::clone(&daemon));
+
     // Mesh RPC-worker auto-discovery. With `SOVEREIGN_RPC_DISCOVER` set, this
     // host periodically scans peers' `/status` for advertised RPC workers and
     // feeds them to the embedded engine's worker provider — so distributing a

@@ -44,6 +44,7 @@ pub mod reading_formatters;
 pub mod reading_http;
 #[cfg(feature = "treesitter")]
 pub mod reindexer;
+pub mod rpc_warm_http;
 pub mod source_content_validator;
 pub mod state;
 pub mod supervised_task;

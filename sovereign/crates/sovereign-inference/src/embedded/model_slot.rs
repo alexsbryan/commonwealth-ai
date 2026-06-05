@@ -647,6 +647,78 @@ pub fn set_rpc_worker_provider(provider: impl Fn() -> Vec<String> + Send + Sync 
     }
 }
 
+/// The mesh RPC worker endpoints (`host:port`) for this load: the union of
+/// `SOVEREIGN_RPC_WORKERS` (manual, comma-separated) and the injected
+/// auto-discovery provider. The single source every distribution decision reads
+/// — registration, dead-worker pruning, the has-workers gate — so they can't
+/// disagree about which workers exist.
+fn gather_rpc_endpoints() -> Vec<String> {
+    let mut endpoints: Vec<String> = Vec::new();
+    if let Ok(raw) = std::env::var("SOVEREIGN_RPC_WORKERS") {
+        endpoints.extend(
+            raw.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+        );
+    }
+    if let Some(provider) = RPC_WORKER_PROVIDER.get() {
+        endpoints.extend(provider());
+    }
+    endpoints
+}
+
+/// Are any mesh RPC workers available to distribute to? Gate read before paying
+/// to compute a plan or warm a shard — no workers means an ordinary local load.
+fn rpc_workers_present() -> bool {
+    !gather_rpc_endpoints().is_empty()
+}
+
+/// One worker's warm assignment under a distributed primary load: its RPC
+/// endpoint (`host:port`) and the device index it occupies in the RPC-first
+/// plan. The orchestrator turns each into a peer call — "warm device `i` of
+/// model M with this plan."
+#[derive(Debug, Clone)]
+pub struct RpcWarmAssignment {
+    pub endpoint: String,
+    pub device_index: usize,
+}
+
+/// Everything the injected orchestrator needs to seed every worker's shard
+/// before a distributed override-load: the host's model file, the ONE plan
+/// (shipped whole, so warm-time placement and the load-time `-ot` overrides
+/// derive from the identical assignment and cannot diverge), and the per-worker
+/// device assignments.
+#[derive(Debug, Clone)]
+pub struct RpcWarmPlan {
+    pub model_path: PathBuf,
+    pub plan: Vec<NodeShard>,
+    pub assignments: Vec<RpcWarmAssignment>,
+}
+
+/// Injected auto-warm orchestrator. Given the plan, ensure EVERY worker has
+/// warmed its shard (fetched + cached its slice of the GGUF) so the host's
+/// subsequent `-ot` load is all `SET_TENSOR_HASH` cache hits — no bulk weight
+/// send, so no upload deadlock. Blocking: it's called from the load's blocking
+/// context and must not return until the workers are warm (or it gives up).
+/// Returns `Ok(())` iff every worker is warm; an `Err` means "do NOT distribute
+/// — fall back to a local-only load" (never wedge). The daemon wires this to a
+/// peer-`/internal/rpc-warm` fan-out; sovereign-inference stays decoupled from
+/// the mesh/HTTP crate, exactly as with [`set_rpc_worker_provider`].
+type RpcWarmOrchestrator =
+    Box<dyn Fn(&RpcWarmPlan) -> std::result::Result<(), String> + Send + Sync>;
+static RPC_WARM_ORCHESTRATOR: std::sync::OnceLock<RpcWarmOrchestrator> = std::sync::OnceLock::new();
+
+/// Inject the auto-warm orchestrator (once, at daemon startup). This is what
+/// retires the manual `SOVEREIGN_RPC_ASSUME_WARMED` for the common case: a large
+/// primary now seeds each worker's shard automatically, then loads across them.
+pub fn set_rpc_warm_orchestrator(
+    orchestrator: impl Fn(&RpcWarmPlan) -> std::result::Result<(), String> + Send + Sync + 'static,
+) {
+    if RPC_WARM_ORCHESTRATOR.set(Box::new(orchestrator)).is_err() {
+        tracing::warn!("RPC warm orchestrator already set — ignoring duplicate");
+    }
+}
+
 /// Endpoints already published into ggml's device registry this process.
 /// `add_server` dedupes by endpoint, but `ggml_backend_register` must run at most
 /// once per reg or the device double-appears — so we track and skip.
@@ -665,17 +737,7 @@ static REGISTERED_RPC: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec
 /// with `SOVEREIGN_RPC_TENSOR_SPLIT`. No sources → no-op → unchanged local load.
 /// Glassbox: every endpoint logs success or a skip-with-reason.
 fn register_rpc_workers() {
-    let mut endpoints: Vec<String> = Vec::new();
-    if let Ok(raw) = std::env::var("SOVEREIGN_RPC_WORKERS") {
-        endpoints.extend(
-            raw.split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty()),
-        );
-    }
-    if let Some(provider) = RPC_WORKER_PROVIDER.get() {
-        endpoints.extend(provider());
-    }
+    let endpoints = gather_rpc_endpoints();
     if endpoints.is_empty() {
         return;
     }
@@ -735,18 +797,8 @@ fn register_rpc_workers() {
 /// auto-enumeration path. Device order matches llama.cpp's NULL path — RPC first,
 /// then local GPU — so `SOVEREIGN_RPC_TENSOR_SPLIT` semantics are unchanged.
 fn live_device_list_if_pruning_needed() -> Option<Vec<crate::llama::sys::ggml_backend_dev_t>> {
-    // Live endpoints = env ∪ provider — the same sources register_rpc_workers uses.
-    let mut live: std::collections::HashSet<String> = std::collections::HashSet::new();
-    if let Ok(raw) = std::env::var("SOVEREIGN_RPC_WORKERS") {
-        live.extend(
-            raw.split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty()),
-        );
-    }
-    if let Some(provider) = RPC_WORKER_PROVIDER.get() {
-        live.extend(provider());
-    }
+    // Live endpoints = env ∪ provider — the same source register_rpc_workers uses.
+    let live: std::collections::HashSet<String> = gather_rpc_endpoints().into_iter().collect();
 
     let n = unsafe { crate::llama::sys::ggml_backend_dev_count() };
     let mut rpc_live: Vec<crate::llama::sys::ggml_backend_dev_t> = Vec::new();
@@ -831,10 +883,6 @@ fn rpc_distribution_safe_decision(model_bytes: u64, safe_bytes: u64, assume_warm
     assume_warmed || model_bytes <= safe_bytes
 }
 
-fn rpc_distribution_safe(model_bytes: u64) -> bool {
-    rpc_distribution_safe_decision(model_bytes, safe_rpc_stream_bytes(), rpc_assume_warmed())
-}
-
 /// The local (non-RPC) GPU devices, in registry order. Used to force a load onto
 /// the local GPU only — robust even when an RPC worker was registered by a prior
 /// (smaller) load and still sits in ggml's global device registry.
@@ -861,20 +909,38 @@ fn local_gpu_device_list() -> Vec<crate::llama::sys::ggml_backend_dev_t> {
     local
 }
 
-/// Build the explicit device list + `-ot` tensor-placement overrides for a
-/// distributed, warm-shard load. Enumerates the RPC-first device set, weights the
-/// per-block split by each device's advertised VRAM, runs our `plan_shards`
-/// policy, and maps it to `(regex, buffer_type)` overrides llama.cpp honors
-/// verbatim — so placement is OURS (no prediction of llama.cpp's split) and the
-/// warm slices + the load agree by construction. `None` when there is no RPC
-/// worker to distribute to, or the GGUF's block count can't be read (the caller
-/// then falls back to the streaming split path).
-fn build_buft_overrides_for_load(
-    model_path: &Path,
-) -> Option<(
-    Vec<crate::llama::sys::ggml_backend_dev_t>,
-    Vec<(std::ffi::CString, crate::llama::sys::ggml_backend_buffer_type_t)>,
-)> {
+/// A fully-resolved distributed placement for one model load: the explicit
+/// RPC-first device list, the per-block `-ot` overrides that ENFORCE it, the
+/// underlying shard `plan` (shipped to workers so warm-time placement equals
+/// load-time placement), and the per-worker warm assignments (endpoint ↔ device
+/// index). Computed ONCE and consumed for both warming and loading, so the two
+/// cannot disagree — the plan-agreement invariant that keeps every distributed
+/// weight a `SET_TENSOR_HASH` cache hit (no bulk send, no deadlock).
+struct DistributionPlan {
+    devs: Vec<crate::llama::sys::ggml_backend_dev_t>,
+    overrides: Vec<(std::ffi::CString, crate::llama::sys::ggml_backend_buffer_type_t)>,
+    plan: Vec<NodeShard>,
+    assignments: Vec<RpcWarmAssignment>,
+}
+
+/// Compute the distributed placement for `model_path`. Enumerates the RPC-first
+/// device set, weights the per-block split by each device's advertised VRAM, runs
+/// our `plan_shards` policy, and derives BOTH the `(regex, buffer_type)` overrides
+/// llama.cpp honors verbatim AND the per-worker warm assignments from the same
+/// `plan`. Placement is OURS (no prediction of llama.cpp's split), and warm + load
+/// read the identical plan, so a worker's cached shard is exactly what the host
+/// pins onto it.
+///
+/// The endpoint for each RPC device comes from `REGISTERED_RPC` in registration
+/// order — which is the order ggml appends RPC devices to its registry — so RPC
+/// device index `i` (the plan's device order) is `REGISTERED_RPC[i]`. Only RPC
+/// devices get a warm assignment; the local GPU (`devs[n_rpc..]`) loads its shard
+/// straight from the host's own GGUF and needs no cache.
+///
+/// `None` when there is no RPC worker to distribute to, the GGUF's block count
+/// can't be read, or an RPC device can't be mapped to an endpoint — in every case
+/// the caller falls back to a local-only load (never wedge).
+fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
     // Ordered device set: RPC workers first, then local GPU — the order
     // `plan_shards` indexes and `with_devices` expects.
     let count = unsafe { crate::llama::sys::ggml_backend_dev_count() };
@@ -899,7 +965,8 @@ fn build_buft_overrides_for_load(
             local.push(dev);
         }
     }
-    if rpc.is_empty() {
+    let n_rpc = rpc.len();
+    if n_rpc == 0 {
         return None; // nothing to distribute to — not a distributed load
     }
     let mut devs = rpc;
@@ -930,7 +997,181 @@ fn build_buft_overrides_for_load(
                 Some((c, buft))
             })
             .collect();
-    Some((devs, overrides))
+
+    // Map each RPC device index → its endpoint. ggml appends RPC devices to its
+    // registry in the order `register_rpc_workers` registered them, which is the
+    // order they were pushed to REGISTERED_RPC — so index `i` is endpoint `i`.
+    // (Assumes one device per worker, which our mesh workers advertise; if a
+    // worker ever advertised several, n_rpc would exceed the endpoint count and
+    // we conservatively decline to distribute rather than mis-map a shard.)
+    let registered = REGISTERED_RPC.lock().unwrap_or_else(|e| e.into_inner());
+    if registered.len() < n_rpc {
+        tracing::warn!(
+            rpc_devices = n_rpc,
+            registered = registered.len(),
+            "cannot map every RPC device to an endpoint (multi-device worker?) — not distributing"
+        );
+        return None;
+    }
+    let assignments: Vec<RpcWarmAssignment> = (0..n_rpc)
+        .map(|i| RpcWarmAssignment {
+            endpoint: registered[i].clone(),
+            device_index: i,
+        })
+        .collect();
+    drop(registered);
+
+    Some(DistributionPlan {
+        devs,
+        overrides,
+        plan,
+        assignments,
+    })
+}
+
+/// The device strategy for one model load — resolved up front, then applied.
+/// Making the decision a value (not a tangle of booleans threaded through the
+/// load) keeps every branch named and the never-wedge default explicit.
+enum LoadPlacement {
+    /// Local GPU only — never wedges. The default for a non-distributable slot,
+    /// no workers present, a large model with no warm path, or any plan/warm
+    /// failure.
+    LocalOnly,
+    /// Small enough that streaming each worker its share can't hit the send()
+    /// deadlock — the proven path (prune dead workers + optional split).
+    StreamSplit,
+    /// Owned per-block placement: the workers hold their shards warm, so the host
+    /// loads with `-ot` overrides and sends only tensor hashes (cache hits).
+    OwnedOverrides(DistributionPlan),
+}
+
+/// The placement decision as a PURE function of its inputs — split out so the
+/// whole gate is unit-testable without touching ggml or the network.
+/// `resolve_placement` gathers the inputs, calls this, then performs the effects.
+#[derive(Debug, PartialEq, Eq)]
+enum PlacementDecision {
+    LocalOnly,
+    StreamSplit,
+    /// Distribute via owned `-ot` overrides. `auto_warm` = seed the workers'
+    /// caches first (false means the operator asserted they're already warm).
+    OwnedOverrides { auto_warm: bool },
+}
+
+/// The never-wedge decision tree. Distribute ONLY a distributable (primary) slot,
+/// ONLY when workers exist. A small model streams safely; a large model must NOT
+/// stream (the send() deadlock) — it distributes only against warm caches, which
+/// we either auto-warm (orchestrator present) or trust (`assume_warmed`).
+/// Everything else is LocalOnly — the load never wedges.
+fn classify_placement(
+    distributable: bool,
+    has_workers: bool,
+    model_bytes: u64,
+    safe_bytes: u64,
+    assume_warmed: bool,
+    has_orchestrator: bool,
+) -> PlacementDecision {
+    // §4.0 gate: only the primary distributes, and only when workers exist. This
+    // keeps non-primary slots (fast / embed / code) off the RPC path — the
+    // multi-slot crash — and means an idle mesh never touches a worker.
+    if !distributable || !has_workers {
+        return PlacementDecision::LocalOnly;
+    }
+    // `(.., assume_warmed=false)` is exactly `model_bytes <= safe_bytes`: small
+    // enough that no shard reaches the upload deadlock, so streaming is safe.
+    if rpc_distribution_safe_decision(model_bytes, safe_bytes, false) {
+        return PlacementDecision::StreamSplit;
+    }
+    // Large model — owned placement against warm caches is the only safe path.
+    if assume_warmed {
+        return PlacementDecision::OwnedOverrides { auto_warm: false };
+    }
+    if has_orchestrator {
+        return PlacementDecision::OwnedOverrides { auto_warm: true };
+    }
+    // Large primary, workers present, but no way to get the shards warm — never
+    // wedge. The daemon wires the orchestrator; a bare example binary does not.
+    PlacementDecision::LocalOnly
+}
+
+/// Resolve how to place `model_path` across the local GPU and any mesh RPC
+/// workers. NOT pure: when it intends to distribute it registers the workers (so
+/// the plan can enumerate their devices), and for the auto-warm path it DRIVES
+/// the orchestrator to seed every worker's shard before returning the override
+/// plan. Glassbox: every branch logs the decision and its reason.
+fn resolve_placement(model_path: &Path, model_bytes: u64, distributable: bool) -> LoadPlacement {
+    let decision = classify_placement(
+        distributable,
+        rpc_workers_present(),
+        model_bytes,
+        safe_rpc_stream_bytes(),
+        rpc_assume_warmed(),
+        RPC_WARM_ORCHESTRATOR.get().is_some(),
+    );
+
+    let auto_warm = match decision {
+        PlacementDecision::LocalOnly => return LoadPlacement::LocalOnly,
+        PlacementDecision::StreamSplit => {
+            // Publish the workers so the stream path can enumerate + split them.
+            register_rpc_workers();
+            return LoadPlacement::StreamSplit;
+        }
+        PlacementDecision::OwnedOverrides { auto_warm } => auto_warm,
+    };
+
+    // Owned-override path. Publish the workers, then plan the shards ONCE (shared
+    // by warm + load, so they can't diverge — the plan-agreement invariant).
+    register_rpc_workers();
+    let Some(dist) = plan_distribution(model_path) else {
+        tracing::warn!(
+            model_mb = model_bytes / (1024 * 1024),
+            "wanted to distribute a large primary but couldn't plan the shards (no RPC \
+             device, GGUF block count unreadable, or unmappable worker) — loading local-only"
+        );
+        return LoadPlacement::LocalOnly;
+    };
+
+    if !auto_warm {
+        tracing::info!(
+            workers = dist.assignments.len(),
+            "SOVEREIGN_RPC_ASSUME_WARMED set — trusting worker shards are warm (skipping auto-warm)"
+        );
+        return LoadPlacement::OwnedOverrides(dist);
+    }
+
+    // Auto-warm: ask the injected orchestrator to seed every worker's shard. It
+    // blocks until they're warm (or gives up). Any failure → local-only (never
+    // wedge); a later reload retries once the worker(s) are reachable.
+    let Some(orchestrator) = RPC_WARM_ORCHESTRATOR.get() else {
+        // classify_placement only returns auto_warm when an orchestrator is
+        // present, so this is unreachable in practice — but never wedge.
+        return LoadPlacement::LocalOnly;
+    };
+    let req = RpcWarmPlan {
+        model_path: model_path.to_path_buf(),
+        plan: dist.plan.clone(),
+        assignments: dist.assignments.clone(),
+    };
+    tracing::info!(
+        model_mb = model_bytes / (1024 * 1024),
+        workers = req.assignments.len(),
+        "auto-warming worker shards before distributed load"
+    );
+    match orchestrator(&req) {
+        Ok(()) => {
+            tracing::info!(
+                "auto-warm complete — all worker shards seeded; loading with -ot overrides"
+            );
+            LoadPlacement::OwnedOverrides(dist)
+        }
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "auto-warm failed — loading the primary local-only (never wedge); a later \
+                 reload will retry once the worker(s) are reachable"
+            );
+            LoadPlacement::LocalOnly
+        }
+    }
 }
 
 /// One-shot guard so the in-process RPC worker starts at most once.
@@ -1146,6 +1387,7 @@ impl ModelSlot {
         model_path: &Path,
         context_size: u32,
         n_gpu_layers: u32,
+        distributable: bool,
     ) -> Result<Self> {
         // Operator escape hatch: `SOVEREIGN_FORCE_CPU_CHAT=1` forces
         // the chat slot fully onto CPU. The known-safe CPU config (per
@@ -1170,56 +1412,28 @@ impl ModelSlot {
 
         // Distributed inference + never-wedge guard. Streaming a large model's
         // weight share to a remote RPC worker wedges the host in send() (the
-        // load-time RPC set_tensor deadlock, >~800MB share). So we only stream-
-        // distribute when it can't deadlock — a model small enough that any share
-        // is safe, or workers the operator/orchestrator asserts are cache-warm.
-        // Otherwise the model loads on the LOCAL GPU ONLY — never wedging.
+        // load-time RPC set_tensor deadlock, >~800MB share). We never stream a
+        // large shard: instead a worker holds its shard's bytes in its RPC cache,
+        // so the host sends only a hash per tensor — a cache hit, zero bulk send.
+        // `resolve_placement` decides the strategy (and, for the auto-warm path,
+        // seeds the workers' caches first); we then just apply it. The default in
+        // every uncertain case is LocalOnly — the load NEVER wedges.
         let model_bytes = std::fs::metadata(model_path).map(|m| m.len()).unwrap_or(u64::MAX);
-        let distribute = rpc_distribution_safe(model_bytes);
-        if distribute {
-            register_rpc_workers();
-        } else {
-            tracing::warn!(
-                model_mb = model_bytes / (1024 * 1024),
-                safe_mb = safe_rpc_stream_bytes() / (1024 * 1024),
-                "RPC distribution skipped (would risk the host send() deadlock): model \
-                 exceeds the safe stream size and workers aren't asserted warm — loading \
-                 on the local GPU only. Warm the workers' shards and set \
-                 SOVEREIGN_RPC_ASSUME_WARMED=1 to distribute."
-            );
-        }
+        let placement = resolve_placement(model_path, model_bytes, distributable);
 
         let mut model_params = LlamaModelParams::default().with_n_gpu_layers(effective_gpu_layers);
-        if !distribute {
-            // Never-wedge: load on the local GPU only, excluding any RPC device a
-            // prior (smaller) load registered into ggml's global registry.
-            let local = local_gpu_device_list();
-            if !local.is_empty() {
-                model_params = model_params.with_devices(&local);
+        match &placement {
+            LoadPlacement::LocalOnly => {
+                // Load on the local GPU only, excluding any RPC device a prior
+                // (smaller) load left in ggml's global registry.
+                let local = local_gpu_device_list();
+                if !local.is_empty() {
+                    model_params = model_params.with_devices(&local);
+                }
             }
-        } else {
-            // Distributing. When workers are asserted warm, OWN the placement:
-            // explicit per-block `-ot` overrides pin each block onto its device's
-            // buffer type, so every weight is a SET_TENSOR_HASH cache hit (no bulk
-            // send) — deterministic, with no prediction of llama.cpp's split.
-            // Otherwise (a small model, safe to stream) keep the proven path:
-            // prune dead workers + optional memory-proportional split.
-            let overrides = if rpc_assume_warmed() {
-                build_buft_overrides_for_load(model_path)
-            } else {
-                None
-            };
-            if let Some((devs, ov)) = overrides {
-                tracing::info!(
-                    devices = devs.len(),
-                    overrides = ov.len(),
-                    "distributed load: explicit tensor placement via -ot overrides \
-                     (warm shards expected — host skips the bulk weight send)"
-                );
-                model_params = model_params
-                    .with_devices(&devs)
-                    .with_tensor_buft_overrides(&ov);
-            } else {
+            LoadPlacement::StreamSplit => {
+                // Small model, safe to stream: prune any dead worker and apply the
+                // optional memory-proportional split (the proven path).
                 if let Some(devices) = live_device_list_if_pruning_needed() {
                     model_params = model_params.with_devices(&devices);
                 }
@@ -1230,6 +1444,21 @@ impl ModelSlot {
                     );
                     model_params = model_params.with_tensor_split(&split);
                 }
+            }
+            LoadPlacement::OwnedOverrides(dist) => {
+                // Workers hold their shards warm: OWN the placement with explicit
+                // per-block `-ot` overrides so every weight is a SET_TENSOR_HASH
+                // cache hit — no bulk send, no deadlock.
+                tracing::info!(
+                    devices = dist.devs.len(),
+                    overrides = dist.overrides.len(),
+                    workers = dist.assignments.len(),
+                    "distributed load: explicit tensor placement via -ot overrides \
+                     (warm shards — host skips the bulk weight send)"
+                );
+                model_params = model_params
+                    .with_devices(&dist.devs)
+                    .with_tensor_buft_overrides(&dist.overrides);
             }
         }
 
@@ -3960,6 +4189,62 @@ mod rpc_prune_tests {
         assert!(!rpc_distribution_safe_decision(30_000 * mb, 512 * mb, false));
         // Large + asserted-warm: safe (host skips the bulk send via cache hits).
         assert!(rpc_distribution_safe_decision(30_000 * mb, 512 * mb, true));
+    }
+
+    #[test]
+    fn classify_placement_is_the_never_wedge_gate() {
+        use PlacementDecision::*;
+        let mb = 1024 * 1024;
+        let safe = 512 * mb;
+        let small = 100 * mb;
+        let large = 30_000 * mb;
+
+        // §4.0: a non-distributable slot NEVER distributes — regardless of size,
+        // workers, warm-state, or orchestrator. This is the multi-slot-crash guard.
+        assert_eq!(
+            classify_placement(false, true, large, safe, true, true),
+            LocalOnly
+        );
+        assert_eq!(
+            classify_placement(false, true, small, safe, false, true),
+            LocalOnly
+        );
+
+        // No workers → local, even for the primary.
+        assert_eq!(
+            classify_placement(true, false, large, safe, true, true),
+            LocalOnly
+        );
+
+        // Small primary + workers → safe to stream.
+        assert_eq!(
+            classify_placement(true, true, small, safe, false, false),
+            StreamSplit
+        );
+
+        // Large primary, asserted warm → owned overrides, NO auto-warm needed.
+        assert_eq!(
+            classify_placement(true, true, large, safe, true, false),
+            OwnedOverrides { auto_warm: false }
+        );
+        // assume_warmed wins even when an orchestrator exists (operator override).
+        assert_eq!(
+            classify_placement(true, true, large, safe, true, true),
+            OwnedOverrides { auto_warm: false }
+        );
+
+        // Large primary, cold, orchestrator present → auto-warm then overrides.
+        assert_eq!(
+            classify_placement(true, true, large, safe, false, true),
+            OwnedOverrides { auto_warm: true }
+        );
+
+        // Large primary, cold, NO orchestrator and NOT asserted warm → the
+        // never-wedge default: local-only (a later reload retries).
+        assert_eq!(
+            classify_placement(true, true, large, safe, false, false),
+            LocalOnly
+        );
     }
 
     #[test]
