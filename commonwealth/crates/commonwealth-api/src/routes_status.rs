@@ -64,7 +64,22 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             hosted_corpora: vec![],
             total_chunks_searchable: 0,
         },
+        rpc_worker: rpc_worker_port().map(|port| RpcWorkerStatus { port }),
     })
+}
+
+/// The TCP port this node's in-process RPC inference worker is serving, parsed
+/// from `SOVEREIGN_RPC_SERVE` (e.g. `0.0.0.0:50052` → 50052). `None` when this
+/// node is not configured as a worker. Advertised on `/status` so a host can
+/// **auto-discover** workers (no manual `SOVEREIGN_RPC_WORKERS` list).
+fn rpc_worker_port() -> Option<u16> {
+    std::env::var("SOVEREIGN_RPC_SERVE")
+        .ok()?
+        .trim()
+        .rsplit(':')
+        .next()?
+        .parse()
+        .ok()
 }
 
 #[derive(Debug, Serialize)]
@@ -73,6 +88,15 @@ pub struct StatusResponse {
     pub mesh: MeshStatus,
     pub inference: InferenceStatus,
     pub knowledge: KnowledgeStatus,
+    /// Present when this node serves an in-process RPC inference worker.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rpc_worker: Option<RpcWorkerStatus>,
+}
+
+/// Advertised RPC inference-worker endpoint for mesh auto-discovery.
+#[derive(Debug, Serialize)]
+pub struct RpcWorkerStatus {
+    pub port: u16,
 }
 
 #[derive(Debug, Serialize)]

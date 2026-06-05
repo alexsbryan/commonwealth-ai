@@ -1197,6 +1197,81 @@ impl EmbeddedDaemon {
             .collect()
     }
 
+    /// Auto-discover mesh RPC inference workers: probe each online peer's
+    /// `/status` for an advertised `rpc_worker.port` and return reachable
+    /// `ip:port` RPC endpoints. Fed to the embedded engine's worker provider so
+    /// a host needs no manual `SOVEREIGN_RPC_WORKERS`. Best-effort — peers that
+    /// don't respond or aren't serving a worker are simply omitted.
+    pub async fn discover_rpc_workers(&self) -> Vec<String> {
+        let (peer_client_port, _) = self.resolved_ports().await;
+        let members: Vec<(String, Vec<std::net::SocketAddr>)> = {
+            let state = self.state.read().await;
+            let app_state = match &*state {
+                DaemonState::Running { app_state, .. } => app_state.clone(),
+                DaemonState::Stopped => return Vec::new(),
+            };
+            drop(state);
+            let mesh = app_state.inner.mesh.read().await;
+            let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
+            mesh.members
+                .values()
+                .filter(|m| m.node_id != self_id)
+                .filter(|m| {
+                    matches!(
+                        m.status,
+                        commonwealth_core::mesh::NodeStatus::Online
+                            | commonwealth_core::mesh::NodeStatus::Busy
+                    )
+                })
+                .filter(|m| !m.addresses.is_empty())
+                .map(|m| {
+                    (
+                        m.name.clone(),
+                        commonwealth_core::peer_addr::sorted_addresses(&m.addresses.to_vec()),
+                    )
+                })
+                .collect()
+        };
+
+        let client = match reqwest::Client::builder()
+            .timeout(std::time::Duration::from_millis(800))
+            .build()
+        {
+            Ok(c) => c,
+            Err(_) => return Vec::new(),
+        };
+
+        let mut out = Vec::new();
+        for (name, addrs) in members {
+            for addr in addrs {
+                let ip = addr.ip();
+                let host = if ip.is_ipv6() {
+                    format!("[{ip}]")
+                } else {
+                    format!("{ip}")
+                };
+                let status_url = format!("http://{host}:{peer_client_port}/status");
+                if let Ok(resp) = client.get(&status_url).send().await {
+                    if resp.status().is_success() {
+                        if let Ok(json) = resp.json::<serde_json::Value>().await {
+                            if let Some(port) = json
+                                .get("rpc_worker")
+                                .and_then(|w| w.get("port"))
+                                .and_then(|p| p.as_u64())
+                            {
+                                let ep = format!("{host}:{port}");
+                                tracing::debug!(peer = %name, endpoint = %ep, "discovered mesh RPC worker");
+                                out.push(ep);
+                                break; // one reachable address per peer suffices
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        out
+    }
+
     // ── Private ─────────────────────────────────────────
 
     async fn start_daemon(&self, mesh: Mesh, node_id: NodeId) -> Result<(), MeshError> {
