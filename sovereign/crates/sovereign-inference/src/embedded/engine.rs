@@ -645,6 +645,7 @@ impl EmbeddedLlamaCpp {
             fast_model_path,
             context_size,
             n_gpu_layers,
+            false, // fast slot stays local — never distributed across the mesh
         )?);
         tracing::info!(slot = "fast", family = ?fast_family, "slot loaded");
 
@@ -828,7 +829,11 @@ impl EmbeddedLlamaCpp {
                 path = %primary_path.display(),
                 "building primary sibling pool — loading weights once + N contexts"
             );
-            let primary_0 = ModelSlot::load(&backend, primary_path, context_size, n_gpu_layers)?;
+            // The sibling pool is a LOCAL weight-sharing optimization (one
+            // resident copy, N contexts) — incoherent with distribution, which
+            // splits the weights across remote workers. Keep it local.
+            let primary_0 =
+                ModelSlot::load(&backend, primary_path, context_size, n_gpu_layers, false)?;
             let shared_model = Arc::clone(&primary_0.model);
             let shared_id = primary_0.model_id.clone();
             let shared_size = primary_0.size_bytes;
@@ -994,7 +999,8 @@ impl EmbeddedLlamaCpp {
                 path = %path.display(),
                 "loading extras slot"
             );
-            match ModelSlot::load(&self.primary_backend, &path, context_size, self.gpu_layers) {
+            match ModelSlot::load(&self.primary_backend, &path, context_size, self.gpu_layers, false)
+            {
                 Ok(slot) => {
                     let model_id = slot.model_id.clone();
                     let arc = Arc::new(slot);
@@ -1139,7 +1145,8 @@ impl EmbeddedLlamaCpp {
             self.evict_extras_for_new_load(&slot_name, new_size, budget)?;
         }
 
-        let slot = ModelSlot::load(&self.primary_backend, &path, context_size, self.gpu_layers)?;
+        let slot =
+            ModelSlot::load(&self.primary_backend, &path, context_size, self.gpu_layers, false)?;
         let model_id = slot.model_id.clone();
         let arc = Arc::new(slot);
 
@@ -1656,6 +1663,8 @@ impl EmbeddedLlamaCpp {
         let Some(target_path) = self.primary_path.clone() else {
             return Ok(());
         };
+        // This path always targets the configured primary, so it is distributable.
+        let distributable = true;
         let _permit = self
             .lazy_inflight
             .clone()
@@ -1680,7 +1689,7 @@ impl EmbeddedLlamaCpp {
             // enumeration includes the just-registered RPC worker(s).
             *primary = None;
             let started = Instant::now();
-            let s = ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers)?;
+            let s = ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers, distributable)?;
             *primary = Some(s);
             *loaded = Some(target_path.clone());
             tracing::info!(
@@ -1955,6 +1964,10 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         };
 
         if let Some((target_path, quirks, slot_label)) = lazy_target {
+            // Distribute only when this lazy load targets the configured PRIMARY
+            // model — the shared lazy slot also hot-swaps in the code model, which
+            // must stay local (distributing a non-primary slot is the §3 crash).
+            let distributable = self.primary_path.as_deref() == Some(target_path.as_path());
             // Throttle lazy-slot dispatch to 1 inflight at the async
             // layer; otherwise concurrent callers stack up blocking
             // threads waiting on `primary.blocking_lock()`. See the
@@ -1998,7 +2011,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                             );
                         }
                         *primary = None;
-                        let s = ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers)?;
+                        let s = ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers, distributable)?;
                         *primary = Some(s);
                         *loaded = Some(target_path.clone());
                     }
@@ -2263,6 +2276,10 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         };
 
         if let Some((target_path, quirks, slot_label)) = lazy_target {
+            // Distribute only when this lazy load targets the configured PRIMARY
+            // model — the shared lazy slot also hot-swaps in the code model, which
+            // must stay local (distributing a non-primary slot is the §3 crash).
+            let distributable = self.primary_path.as_deref() == Some(target_path.as_path());
             let _permit = self
                 .lazy_inflight
                 .clone()
@@ -2305,7 +2322,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     }
                     *primary = None;
                     *loaded = None;
-                    match ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers) {
+                    match ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers, distributable) {
                         Ok(slot) => {
                             *primary = Some(slot);
                             *loaded = Some(target_path.clone());
@@ -2473,6 +2490,10 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         };
 
         if let Some((target_path, quirks, slot_label)) = lazy_target {
+            // Distribute only when this lazy load targets the configured PRIMARY
+            // model — the shared lazy slot also hot-swaps in the code model, which
+            // must stay local (distributing a non-primary slot is the §3 crash).
+            let distributable = self.primary_path.as_deref() == Some(target_path.as_path());
             let _permit = self
                 .lazy_inflight
                 .clone()
@@ -2510,7 +2531,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     }
                     *primary = None;
                     *loaded = None;
-                    match ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers) {
+                    match ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers, distributable) {
                         Ok(slot) => {
                             *primary = Some(slot);
                             *loaded = Some(target_path.clone());
@@ -2869,6 +2890,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         let Some(target_path) = self.primary_path.clone() else {
             return Ok(());
         };
+        // This path always targets the configured primary, so it is distributable.
+        let distributable = true;
 
         // Acquire the same lazy-slot inflight permit `complete()` /
         // `complete_stream()` use, so a warmup can't race a hot-swap
@@ -2909,7 +2932,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             // path runs on hot-swap.
             *primary = None;
             let started = Instant::now();
-            let s = ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers)?;
+            let s = ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers, distributable)?;
             *primary = Some(s);
             *loaded = Some(target_path.clone());
             tracing::info!(

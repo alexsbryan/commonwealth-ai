@@ -109,6 +109,41 @@ size (streams tensor-by-tensor, no VRAM). Two distribution patterns:
 Note: LAN / direct-cable transfers between co-located machines never touch your
 ISP — pre-warming matters only when workers are *remote* (the real 8-node case).
 
+## Automatic shard warming (the host seeds the workers)
+
+The cache above makes a distributed *load* cheap — but a **large** model can't
+even take the cold streaming path: the host wedges in `send()` when it streams a
+worker's share over a real network above ~800 MB (an upstream llama.cpp RPC
+flow-control deadlock; `-dio` / `--no-mmap` don't fix it). So the daemon **never
+streams a large shard**. Instead, before a distributed load, the host **auto-warms**
+each worker's cache and then loads with explicit placement — no manual step:
+
+1. **Never-wedge guard.** `ModelSlot::load` decides per model: a small model
+   (≤ `SOVEREIGN_RPC_SAFE_STREAM_MB`, default 512) streams safely; a large model
+   distributes **only** against warm caches; anything uncertain loads
+   **local-only** — the load never wedges. Only the **primary** slot ever
+   distributes (fast / embed / code stay local — distributing them is what
+   crashed the worker under concurrent multi-slot load).
+2. **One plan.** The host computes a contiguous block→device placement once
+   (`plan_shards`, weighted by each worker's advertised VRAM) and derives BOTH
+   the load-time `-ot` overrides AND each worker's warm assignment from that same
+   plan — so warm-time and load-time placement can't diverge (every weight a hit).
+3. **Seed each worker.** The host `POST`s `/internal/rpc-warm` to each worker
+   (internal port, tailnet-only) with its `device_index` + the plan. The worker
+   warms its shard:
+   - **whole-GGUF** (default): warm from the model it already holds (or fetches
+     once from the host), hashing only its own blocks; or
+   - **byte-range** (`SOVEREIGN_RPC_SHARD_FETCH=ranges`): `Range`-GET only its
+     tensors from the host's `serve_model_file` and verify each by hash —
+     `O(model/N)` on disk, the 500 GB × N-node endgame.
+4. **Load.** Once every worker reports warm, the host loads with the overrides —
+   all `SET_TENSOR_HASH` cache hits, zero bulk send, no deadlock.
+
+This **retires the manual `SOVEREIGN_RPC_ASSUME_WARMED`** for the common case (it
+remains an operator escape hatch to skip the warm step and assert the shards are
+already warm). The demo-natural topology now just works: join mesh → the host
+distributes the big primary → workers seed their shards → tokens.
+
 ## Notes & limits
 
 - **Protocol match:** host and worker must run the **same llama.cpp version**
@@ -122,9 +157,27 @@ ISP — pre-warming matters only when workers are *remote* (the real 8-node case
 - **Fallback (no daemon):** `scripts/build-rpc-worker.sh` builds a standalone,
   version-matched `rpc-server` if you need a worker without running the daemon.
 
-## Roadmap
+## Tuning env vars (host side)
 
-This is the manual-env increment. Next: advertise the worker endpoint + GPU
-memory through mesh `NodeCapabilities` gossip so the host **auto-discovers**
-workers (no `SOVEREIGN_RPC_WORKERS`) and derives the split from advertised VRAM —
-fully zero-config (join mesh → share GPU → cluster uses it).
+| Env | Default | Effect |
+|---|---|---|
+| `SOVEREIGN_RPC_SAFE_STREAM_MB` | `512` | Below this the model streams (safe); above it distributes only against warm caches, else loads local-only. |
+| `SOVEREIGN_RPC_ASSUME_WARMED` | unset | Escape hatch: assert the workers' shards are already warm and skip auto-warm. |
+| `SOVEREIGN_RPC_SHARD_FETCH` | `whole` | `ranges` → workers byte-range-fetch only their shard (`O(model/N)` disk) instead of holding the whole GGUF. |
+| `SOVEREIGN_RPC_MODELS_DIR` | `~/.sovereign/models` | Where a worker fetches a whole GGUF into when it doesn't already hold the model. |
+
+## Status
+
+- ✅ **Manual env** — `SOVEREIGN_RPC_WORKERS` + optional `SOVEREIGN_RPC_TENSOR_SPLIT`.
+- ✅ **Auto-discovery** — the host scans peers' `/status` for advertised workers
+  (`SOVEREIGN_RPC_DISCOVER=1`); no manual list, split derived from advertised VRAM.
+- ✅ **Never-wedge guard + auto-warm** — large models never stream (no `send()`
+  deadlock); the host seeds each worker's shard, then loads with owned `-ot`
+  placement. Primary-slot-only. Retires the manual `SOVEREIGN_RPC_ASSUME_WARMED`.
+- ✅ **Byte-range shard fetch** (`SOVEREIGN_RPC_SHARD_FETCH=ranges`) — a worker
+  materializes only `O(model/N)` on disk; for models too big for one node.
+
+Open: prune a dead worker from the auto-warm plan (today a dead worker fails the
+warm → the host falls back to local-only until the next reload); per-tensor
+`SET_TENSOR_HASH` round-trips dominate load time on high-RTT links (a perf note
+for large models, not a correctness issue).

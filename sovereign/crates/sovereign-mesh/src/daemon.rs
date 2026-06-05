@@ -371,7 +371,7 @@ impl EmbeddedDaemon {
     /// uniformly. Mixed-port mesh deployments need a wire-protocol
     /// change (a `client_port` field on `MemberRecord`) and are
     /// tracked separately in §10.1.
-    async fn resolved_ports(&self) -> (u16, u16) {
+    pub(crate) async fn resolved_ports(&self) -> (u16, u16) {
         if let Some(cfg) = self.setup_config.read().await.as_ref() {
             (cfg.daemon.client_port, cfg.daemon.internal_port)
         } else {
@@ -1351,7 +1351,13 @@ impl EmbeddedDaemon {
                 crate::inference_adapter::SovereignInferenceAdapter::new(provider.clone()),
             );
             info!("inference adapter: wired into /v1/chat/completions");
-            app_state.with_local_inference(adapter)
+            // Worker side of distributed-inference auto-warm: this node can seed
+            // its RPC tensor cache with a shard on request (`POST /internal/
+            // rpc-warm`). Installed alongside local inference — a node that can
+            // serve chat can serve as an RPC worker. See `rpc_warm_http`.
+            let warmer: Arc<dyn commonwealth_api::state::RpcShardWarmer> =
+                Arc::new(crate::rpc_warm_http::MeshRpcShardWarmer::new());
+            app_state.with_local_inference(adapter).with_rpc_shard_warmer(warmer)
         } else {
             app_state
         };

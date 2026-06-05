@@ -118,6 +118,31 @@ pub trait LocalInferenceService: Send + Sync {
     }
 }
 
+/// Worker side of the distributed-inference auto-warm orchestration. When a host
+/// distributes a large primary across the mesh, it asks each worker (this node)
+/// to seed its RPC tensor cache with ITS shard of the model — so the host's
+/// subsequent `-ot` load is all `SET_TENSOR_HASH` cache hits and never streams a
+/// large weight share (the upload deadlock). The impl (sovereign-mesh) holds an
+/// HTTP client so it can fetch the GGUF — or, for the byte-range path, only its
+/// shard's tensors — and the warm primitives from sovereign-inference. Injected
+/// by the daemon; `None` on a node with no local inference.
+///
+/// Defined as an OPAQUE-JSON seam (`request`/return are the wire bodies, an
+/// `RpcWarmShardRequest`/`RpcWarmShardResponse` defined in sovereign-mesh) so
+/// commonwealth-api needn't depend on sovereign-inference's plan types — the same
+/// decoupling [`LocalInferenceService`] gives the chat path. The route handler
+/// resolves `model_id` → `local_model_path` against the servable allowlist (which
+/// lives here) and passes it in, so the warmer can warm a model the node already
+/// holds without re-fetching. Route: `POST /internal/rpc-warm`.
+#[async_trait]
+pub trait RpcShardWarmer: Send + Sync {
+    async fn warm_shard(
+        &self,
+        request: serde_json::Value,
+        local_model_path: Option<std::path::PathBuf>,
+    ) -> Result<serde_json::Value, String>;
+}
+
 /// Callback the route handlers fire whenever they mutate `Mesh` —
 /// `/internal/join` (accepting a new member), `/internal/gossip`
 /// (merging a peer's view). `sovereign-mesh::EmbeddedDaemon` installs
@@ -257,6 +282,10 @@ pub struct AppStateInner {
     /// Commonwealth daemon — that path routes via the orchestrator
     /// to spawned `llama-server` processes instead.
     pub local_inference: Option<std::sync::Arc<dyn LocalInferenceService>>,
+    /// Worker-side auto-warm hook for distributed inference. Installed by the
+    /// daemon alongside `local_inference`; drives `POST /internal/rpc-warm`.
+    /// `None` on a node that isn't an inference worker. See [`RpcShardWarmer`].
+    pub rpc_shard_warmer: Option<std::sync::Arc<dyn RpcShardWarmer>>,
     /// Pull-based corpus ingestion work queues keyed by `HandoffId`.
     /// The coordinator's `corpus_collaborate` handler populates this with
     /// a unit list; peers pull units via `POST /internal/corpus/next_unit`.
@@ -566,6 +595,7 @@ impl AppState {
                 local_inference_capable: std::sync::atomic::AtomicBool::new(false),
                 on_mesh_mutation: None,
                 local_inference: None,
+                rpc_shard_warmer: None,
                 work_queue: Arc::new(WorkQueueManager::new()),
                 active_pull_loops: RwLock::new(HashSet::new()),
                 // 0 sentinel = no foreground activity observed yet.
@@ -710,6 +740,29 @@ impl AppState {
                      (e.g. AppStateYieldHook::new) before this point. \
                      Move the with_* installer above any inner.clone() in \
                      EmbeddedDaemon::start_daemon."
+                );
+            }
+        }
+        self
+    }
+
+    /// Install the worker-side RPC shard warmer ([`RpcShardWarmer`]) — the
+    /// `POST /internal/rpc-warm` backend. Same contract as `with_local_inference`:
+    /// call before cloning AppState into the HTTP servers (uses `Arc::get_mut`).
+    pub fn with_rpc_shard_warmer(
+        mut self,
+        warmer: std::sync::Arc<dyn RpcShardWarmer>,
+    ) -> Self {
+        match Arc::get_mut(&mut self.inner) {
+            Some(inner) => {
+                inner.rpc_shard_warmer = Some(warmer);
+            }
+            None => {
+                tracing::error!(
+                    strong_count = Arc::strong_count(&self.inner),
+                    "with_rpc_shard_warmer called on shared AppState — auto-warm \
+                     orchestration disabled; a distributed primary load will fall \
+                     back to local-only. Move the installer above any inner.clone()."
                 );
             }
         }
