@@ -26,20 +26,62 @@ const ANALYTICS = {
   ],
 };
 
-// Inject the host bridge shim BEFORE the bundle's app.js runs.
+// Representative parcel atoms (the shape of a `read_corpus` row), from a
+// real export sample — two on the same street so the address search can
+// return both (the pick-list path) or one (exact parcel-number path).
+const PARCEL = {
+  atom_id: "entity-c187b57689b19f18",
+  parcel_number: "1301001",
+  source_chunk: "1301001",
+  attributes: {
+    assessed_land_value: 3033872,
+    assessed_improvement_value: 1069136,
+    property_location: "0000 0004 25TH AV",
+    analysis_neighborhood: "Seacliff",
+    use_definition: "Single Family Residential",
+  },
+};
+const PARCEL2 = {
+  atom_id: "entity-2nd",
+  parcel_number: "1301002",
+  source_chunk: "1301002",
+  attributes: {
+    assessed_land_value: 5000000,
+    assessed_improvement_value: 2000000,
+    property_location: "0000 0006 25TH AV",
+    analysis_neighborhood: "Seacliff",
+    use_definition: "Single Family Residential",
+  },
+};
+
+type Parcel = typeof PARCEL;
+
+// Inject the host bridge mock BEFORE the bundle's app.js runs. searchParcels
+// mirrors the Rust op: exact parcel-number OR substring on property_location
+// (case-folded).
 async function installBridge(page: Page) {
-  await page.addInitScript((a) => {
-    (window as unknown as { meshApp: unknown }).meshApp = {
-      capabilities: async () => ({
-        mesh_store_read: true,
-        mesh_store_write: false,
-        inference_access: false,
-        knowledge_access: false,
-      }),
-      readCorpus: async () => [],
-      parcelAnalytics: async () => a,
-    };
-  }, ANALYTICS);
+  await page.addInitScript(
+    (data) => {
+      const { analytics, parcels } = data as { analytics: unknown; parcels: Parcel[] };
+      const match = (p: Parcel, q: string) =>
+        p.parcel_number.toUpperCase() === q ||
+        String(p.attributes.property_location ?? "").toUpperCase().includes(q);
+      (window as unknown as { meshApp: unknown }).meshApp = {
+        capabilities: async () => ({
+          mesh_store_read: true,
+          mesh_store_write: false,
+          inference_access: false,
+          knowledge_access: false,
+        }),
+        readCorpus: async (_corpusId: string, ids: string[]) =>
+          parcels.filter((p) => ids.includes(p.parcel_number) || ids.includes(p.atom_id)),
+        searchParcels: async (_corpusId: string, query: string) =>
+          parcels.filter((p) => match(p, String(query).toUpperCase())),
+        parcelAnalytics: async () => analytics,
+      };
+    },
+    { analytics: ANALYTICS, parcels: [PARCEL, PARCEL2] },
+  );
 }
 
 test.describe("SF-LVT mesh app bundle", () => {
@@ -89,6 +131,43 @@ test.describe("SF-LVT mesh app bundle", () => {
     });
     await expect(page.locator("#revenue")).toHaveText("$1.74B");
     await expect(page.locator("#rate-meta")).toContainText("surplus");
+  });
+
+  test("per-parcel: an exact parcel-number search loads + computes the LVT delta", async ({ page }) => {
+    await installBridge(page);
+    await page.goto("/meshapp/lvt/index.html");
+
+    await page.getByRole("textbox", { name: /address or parcel number/i }).fill("1301001");
+    await page.getByRole("button", { name: /^search$/i }).click();
+
+    await expect(page.locator("#parcel-result")).toBeVisible();
+    await expect(page.locator("#p-land")).toHaveText("$3.03M"); // cited from the atom
+    await expect(page.locator("#p-impr")).toHaveText("$1.07M");
+    // At the default 0.80% rate: 0.008 × $3.03M ≈ $24.3K (client multiply
+    // over a cited base — same discipline as the macro slider).
+    await expect(page.locator("#p-lvt")).toContainText("$24");
+    await expect(page.locator("#p-delta")).toContainText(/Winner|Loser/);
+    // Plain-English summary + the Prop-13 honesty caveat (the trust story).
+    await expect(page.locator("#p-plain")).toContainText("assessed at");
+    await expect(page.getByText(/Prop-13-frozen/)).toBeVisible();
+    await expect(page.locator("#p-chip")).toContainText("entity-c187b57689b19f18");
+  });
+
+  test("per-parcel: a street search shows a pick-list; choosing one loads it", async ({ page }) => {
+    await installBridge(page);
+    await page.goto("/meshapp/lvt/index.html");
+
+    // Both sample parcels are on 25TH AV → two matches → pick-list.
+    await page.getByRole("textbox", { name: /address or parcel number/i }).fill("25TH");
+    await page.getByRole("button", { name: /^search$/i }).click();
+
+    const matches = page.locator("#parcel-matches .match-row");
+    await expect(matches).toHaveCount(2);
+    // Choosing the second loads its (distinct) cited figures.
+    await matches.nth(1).click();
+    await expect(page.locator("#parcel-result")).toBeVisible();
+    await expect(page.locator("#p-land")).toHaveText("$5.00M");
+    await expect(page.locator("#p-chip")).toContainText("entity-2nd");
   });
 
   test("a bridge denial fails closed — no figures, a clear message", async ({ page }) => {

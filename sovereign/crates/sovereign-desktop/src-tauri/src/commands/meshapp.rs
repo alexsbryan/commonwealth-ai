@@ -100,8 +100,11 @@ pub async fn meshapp_capabilities(
         .unwrap_or_default())
 }
 
-/// `window.meshApp.readCorpus(corpusId, atomIds)` — gated on
-/// `mesh_store_read`. Returns the requested parcel atoms with provenance.
+/// `window.meshApp.readCorpus(corpusId, ids)` — gated on `mesh_store_read`.
+/// Returns the requested parcel atoms with provenance. Each id matches by
+/// EITHER the atom id (content-hash) OR the parcel number (canonical
+/// name) — so a UI that knows only a human parcel number (e.g. a blklot)
+/// can look it up without deriving the host-side hash.
 #[tauri::command]
 pub async fn meshapp_read_corpus(
     webview: WebviewWindow,
@@ -117,15 +120,71 @@ pub async fn meshapp_read_corpus(
     let out = atoms
         .into_iter()
         .filter_map(|env| match env {
-            AtomEnvelope::Entity(e) if want.contains(e.id.as_str()) => Some(ParcelDto {
-                atom_id: e.id.as_str().to_string(),
-                parcel_number: e.canonical_name.clone(),
-                source_chunk: e.provenance.source_chunk_id.clone(),
-                attributes: e.attributes.clone(),
-            }),
+            AtomEnvelope::Entity(e)
+                if want.contains(e.id.as_str())
+                    || want.contains(e.canonical_name.as_str()) =>
+            {
+                Some(ParcelDto {
+                    atom_id: e.id.as_str().to_string(),
+                    parcel_number: e.canonical_name.clone(),
+                    source_chunk: e.provenance.source_chunk_id.clone(),
+                    attributes: e.attributes.clone(),
+                })
+            }
             _ => None,
         })
         .collect();
+    Ok(out)
+}
+
+/// `window.meshApp.searchParcels(corpusId, query, limit?)` — gated on
+/// `mesh_store_read`. Substring/number search over parcel atoms so a UI
+/// (a homeowner) can find their parcel by street name or number without
+/// knowing the atom-id. Matches the parcel number (exact, case-folded) OR
+/// `property_location` (substring, case-folded); capped at `limit` (≤100).
+#[tauri::command]
+pub async fn meshapp_search_parcels(
+    webview: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<ParcelDto>, String> {
+    let installs = state.config.read().await.meshapp_installs.clone();
+    authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
+
+    let q = query.trim().to_uppercase();
+    if q.is_empty() {
+        return Ok(Vec::new());
+    }
+    let cap = limit.unwrap_or(25).min(100);
+    let atoms = load_atoms(&state, &corpus_id).await?;
+    let mut out: Vec<ParcelDto> = atoms
+        .into_iter()
+        .filter_map(|env| match env {
+            AtomEnvelope::Entity(e) => {
+                let num_match = e.canonical_name.to_uppercase() == q;
+                let addr_match = e
+                    .attributes
+                    .get("property_location")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_uppercase().contains(&q))
+                    .unwrap_or(false);
+                if num_match || addr_match {
+                    Some(ParcelDto {
+                        atom_id: e.id.as_str().to_string(),
+                        parcel_number: e.canonical_name.clone(),
+                        source_chunk: e.provenance.source_chunk_id.clone(),
+                        attributes: e.attributes.clone(),
+                    })
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        })
+        .collect();
+    out.truncate(cap);
     Ok(out)
 }
 
