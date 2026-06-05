@@ -28,6 +28,7 @@
   import KnowledgeStatus from "./KnowledgeStatus.svelte";
   import LocalKnowledgeSection from "./local-knowledge/LocalKnowledgeSection.svelte";
   import MeshSettings from "./MeshSettings.svelte";
+  import MeshAppsSection from "./MeshAppsSection.svelte";
   import SharingSection from "./SharingSection.svelte";
   import ConnectSection from "./ConnectSection.svelte";
   import ModelSelector from "../setup/ModelSelector.svelte";
@@ -1277,6 +1278,7 @@
           <h2 class="doc-h2">Mesh</h2>
           <p class="doc-intro">Pool compute and knowledge with people you trust. Spare cycles and shared libraries — no central server, no broker.</p>
           <MeshSettings />
+          <MeshAppsSection />
         </section>
       {/if}
 

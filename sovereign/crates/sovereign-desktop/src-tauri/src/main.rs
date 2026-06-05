@@ -494,6 +494,7 @@ fn main() -> ExitCode {
             update_commands::install_update,
             commands::meshapp_capabilities,
             commands::meshapp_read_corpus,
+            commands::meshapp_search_parcels,
             commands::meshapp_parcel_analytics,
             commands::meshapp_list_installs,
             commands::meshapp_record_install,

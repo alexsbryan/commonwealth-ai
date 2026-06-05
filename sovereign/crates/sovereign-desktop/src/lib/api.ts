@@ -640,6 +640,43 @@ export interface MeshQuiesceState {
   quiesced: boolean;
 }
 
+// ─── Mesh apps (sandboxed webview apps reached via the meshapp bridge) ──
+
+export interface MeshAppPermissions {
+  mesh_store_read: boolean;
+  mesh_store_write: boolean;
+  inference_access: boolean;
+  knowledge_access: boolean;
+}
+
+export interface MeshAppInstall {
+  app_id: string;
+  name: string;
+  granted: MeshAppPermissions;
+  trust: string;
+  recorded_at_unix: number;
+}
+
+export async function listMeshApps(): Promise<MeshAppInstall[]> {
+  return invoke("meshapp_list_installs");
+}
+
+export async function recordMeshAppInstall(
+  appId: string,
+  name: string,
+  granted: MeshAppPermissions,
+): Promise<MeshAppInstall> {
+  return invoke("meshapp_record_install", { appId, name, granted });
+}
+
+export async function openMeshApp(appId: string): Promise<void> {
+  return invoke("meshapp_open", { appId });
+}
+
+export async function uninstallMeshApp(appId: string): Promise<void> {
+  return invoke("meshapp_uninstall", { appId });
+}
+
 export async function getMeshQuiesced(): Promise<MeshQuiesceState> {
   return invoke("get_mesh_quiesced");
 }

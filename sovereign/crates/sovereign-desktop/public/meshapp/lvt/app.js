@@ -9,6 +9,11 @@
 
 const CORPUS = "sf-assessor-roll";
 const TARGET = 1_400_000_000; // ~$1.4B SF business-tax take to replace.
+// ≈ SF effective secured property-tax rate — a LABELED estimate, not from
+// the roll (which carries assessed values, not tax paid). Used only for the
+// per-parcel "current tax" comparison; never an LVT figure.
+const PROPERTY_TAX_RATE = 0.0118;
+let loadedParcel = null; // the parcel the per-parcel calculator is showing.
 
 const $ = (id) => document.getElementById(id);
 
@@ -74,9 +79,117 @@ async function main() {
         : (delta > 0 ? "surplus " : "shortfall ") +
           usd(Math.abs(delta)) +
           " vs the " + usd(a.business_tax_target) + " target";
+    renderParcel(); // keep a loaded parcel's levy in sync with the rate
   };
   slider.addEventListener("input", update);
   update();
+
+  // Per-parcel calculator — find a parcel, then compute at the slider rate.
+  $("parcel-search").addEventListener("click", () =>
+    searchAndShow($("parcel-query").value.trim()),
+  );
+  $("parcel-query").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") searchAndShow($("parcel-query").value.trim());
+  });
+}
+
+// Search parcels by street name or number; load the single match, or show
+// a clickable pick-list when several match — so a homeowner finds their own
+// parcel without knowing its block/lot.
+async function searchAndShow(query) {
+  if (!query) return;
+  $("parcel-error").textContent = "";
+  $("parcel-matches").hidden = true;
+  let matches;
+  try {
+    matches = await window.meshApp.searchParcels(CORPUS, query, 25);
+  } catch (e) {
+    $("parcel-error").textContent = "search failed: " + (e && e.message ? e.message : e);
+    return;
+  }
+  if (!matches || matches.length === 0) {
+    $("parcel-result").hidden = true;
+    loadedParcel = null;
+    $("parcel-error").textContent = "no parcel matching '" + query + "' in " + CORPUS;
+    return;
+  }
+  if (matches.length === 1) {
+    loadedParcel = matches[0];
+    renderParcel();
+    return;
+  }
+  renderMatches(matches);
+  if (matches.length >= 25) {
+    $("parcel-error").textContent =
+      "Showing the first 25 — add your street number to narrow.";
+  }
+}
+
+// A clickable pick-list of matches; choosing one loads it into the result.
+function renderMatches(matches) {
+  const box = $("parcel-matches");
+  box.replaceChildren();
+  $("parcel-result").hidden = true;
+  for (const m of matches) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "match-row";
+    const loc = m.attributes.property_location || m.parcel_number;
+    const nb = m.attributes.analysis_neighborhood || "";
+    row.textContent = [loc, nb, "#" + m.parcel_number].filter(Boolean).join(" · ");
+    row.addEventListener("click", () => {
+      loadedParcel = m;
+      box.hidden = true;
+      $("parcel-error").textContent = "";
+      renderParcel();
+    });
+    box.appendChild(row);
+  }
+  box.hidden = false;
+}
+
+// Render the loaded parcel at the macro slider's current rate. The land /
+// improvement values are CITED (from the atom); the only arithmetic is
+// land × rate and (land+improvement) × the labeled property-tax estimate.
+function renderParcel() {
+  if (!loadedParcel) return;
+  const p = loadedParcel;
+  const land = Number(p.attributes.assessed_land_value) || 0;
+  const impr = Number(p.attributes.assessed_improvement_value) || 0;
+  const rate = parseFloat($("rate").value); // % from the macro slider
+  const lvt = (rate / 100) * land;
+  const cur = (land + impr) * PROPERTY_TAX_RATE;
+  const delta = lvt - cur;
+
+  $("parcel-result").hidden = false;
+  $("parcel-loc").textContent = [
+    p.attributes.property_location,
+    p.attributes.analysis_neighborhood,
+    p.attributes.use_definition,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  $("p-plain").textContent =
+    "Your land is assessed at " + usd(land) + ". Under a flat " + rate.toFixed(2) +
+    "% land tax you'd pay about " + usd(lvt) + "/yr, vs about " + usd(cur) +
+    " in property tax today — " +
+    (delta <= 0 ? "a saving of " + usd(-delta) : "an increase of " + usd(delta)) + ".";
+  $("p-land").textContent = usd(land);
+  $("p-impr").textContent = usd(impr);
+  $("p-rate").textContent = rate.toFixed(2);
+  $("p-lvt").textContent = usd(lvt);
+  $("p-cur").textContent = usd(cur);
+  const d = $("p-delta");
+  if (delta <= 0) {
+    d.textContent = "Winner: " + usd(-delta) + " less under LVT";
+    d.className = "win";
+  } else {
+    d.textContent = "Loser: " + usd(delta) + " more under LVT";
+    d.className = "lose";
+  }
+  $("p-chip").textContent =
+    "parcel " + p.parcel_number + " · atom " + p.atom_id +
+    (p.source_chunk ? " · chunk " + p.source_chunk : "");
 }
 
 function fail(msg) {

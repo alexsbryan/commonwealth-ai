@@ -16,6 +16,8 @@
   window.meshApp = {
     capabilities: () => invoke("meshapp_capabilities"),
     readCorpus: (corpusId, atomIds) => invoke("meshapp_read_corpus", { corpusId, atomIds }),
+    searchParcels: (corpusId, query, limit) =>
+      invoke("meshapp_search_parcels", { corpusId, query, limit }),
     parcelAnalytics: (corpusId, businessTaxTarget) =>
       invoke("meshapp_parcel_analytics", { corpusId, businessTaxTarget }),
   };
