@@ -1,10 +1,27 @@
 # Demo Runbook — "The Enron Task Force, in an afternoon"
 
 **Audience:** open-source foundation / partners (mission- and credibility-driven, technically literate).
-**Length:** ~10–12 min. **Surface:** terminal (controllable) + one backing slide.
+**Length:** ~10–12 min.
 **One-line goal:** show that forensic-grade email investigation — identity resolution + grounded, cited answers — runs *locally, in seconds, on a laptop*, fully inspectable. The capability that costs a Fortune-500 legal team an e-discovery vendor and months of paralegals, democratized.
 
 > **The foundation hook:** today this lives behind Relativity/Concordance + cloud AI — expensive, proprietary, your data leaves the building. We do it **sovereign** (nothing leaves the machine), **open** (every step inspectable, public-domain corpus), on **commodity hardware**. A journalist, a public defender, a watchdog — not just a megafirm — can run this.
+
+---
+
+## Surfaces — what you drive, and where each thing is shown
+
+Two windows. Unlike a scanned-document demo, **Enron sources are text emails**, so the
+desktop chat is *self-contained* — a citation popover shows the actual source email, no
+browser tab needed.
+
+| Window | Used for | Why (verified) |
+|---|---|---|
+| **Terminal** | Act 1 reconcile · the B³ measurement · the atlas-directed `enrich query` brief · the distillation counts | Reconciliation + B³ + atlas query are **CLI** and deterministic (no LLM) — fast and reproducible live. |
+| **Sovereign Desktop app** | Act 2 grounded chat — ask a question, get a cited prose answer, click a citation → popover with the **actual source email** (subject + passage) | Grounded retrieval + citations is the desktop/server **Runtime** path (`SourceAttribution` + `SourcePopover`). The bare daemon's `/v1/chat/completions` is raw inference with **no retrieval**, so this is the app, not a CLI one-liner. |
+
+> **Honest gaps to know:** the desktop **Atlas View** renders v2 atoms generically but is
+> not tuned for this corpus's reconciliation/graph story — the **reconciliation + B³ +
+> atlas-query** views are the terminal. Plan on terminal for Acts 1 & 3, desktop for Act 2.
 
 ---
 
@@ -16,98 +33,216 @@
 
 ---
 
-## Pre-flight (do this BEFORE the room)
+## Provenance (the credibility spine)
 
-1. **Daemon up, models loaded** (watcher disabled for stability):
-   ```sh
-   sovereign daemon status        # expect /v1/models to list embed + a chat model
-   curl -s localhost:9741/v1/models | head
-   ```
-2. **Corpus indexed:** `~/.sovereign/indexes/enron-sample-multi-wide/` present (chunks.lance + atlas/atoms.json).
-3. **Demo config (env):** `export SOVEREIGN_TITLE_EXPAND=1 SOVEREIGN_DECOMP_DECAY=0.6`
-4. **CAPTURE the hero answers ahead of time** (27B synth is ~2 min/question — too slow to stare at live). See **§Capture**. Have the captured answers + their cited sources on screen, ready to reveal.
-5. **Backing slide ready:** the numbers from `CAPABILITY_BRIEF.md` (B³ 0.80 / P=1.0; QA +11pt keyword).
+- **Corpus:** public-domain Enron email (EDRM / CMU set), the **Lay + Skilling sent+inbox
+  slice** — **8,829 indexed chunks** after boilerplate stripping (signatures, quoted
+  replies, disclaimers removed). 2 custodians, not the full 150.
+- **No human in the loop:** extraction → resolve → reconcile runs from the raw mail.
+- **Reconciliation is deterministic** — no LLM — so Act 1 and the B³ number are exactly
+  reproducible. The QA answers (Act 2) are model synthesis over retrieved chunks.
 
 ---
 
-## Act 1 — Reconstruct the cast *(LIVE — it's genuinely ~15s)*
+## Pre-flight (do this BEFORE the room — and once as a full dry-run)
+
+1. **Build** (so the bundled recipe + any fixes are current): `cargo build -p sovereign-cli-llm`.
+2. **Daemon up, models loaded:** `sovereign daemon status` → expect an embed slot + a chat
+   slot (this box runs the 35B `primary`). `curl -s localhost:9741/v1/models | head`.
+3. **Corpus present:** `~/.sovereign/indexes/enron-sample-multi-wide/` with
+   `atlas/atoms.json` (6,101 atoms) + `atlas/reconciliation.json`. Verify:
+   `sovereign enrich reconcile enron-sample-multi-wide` → `1,730 → 35 merges` (see Act 1).
+4. **Demo env (query decomposition + title expansion):**
+   `export SOVEREIGN_TITLE_EXPAND=1 SOVEREIGN_DECOMP_DECAY=0.6`
+5. **Desktop retrieval reachable:** launch the app (dev: `npm run dev` in
+   `sovereign/crates/sovereign-desktop/`, then `tauri dev`; or the packaged `.app`). It
+   attaches to the daemon on `:9741`. **Dry-run the Act 2 question** and confirm a citation
+   popover shows the source email.
+6. **CAPTURE the hero answers ahead of time** (35B synth is slow live). See **§Capture**.
+7. **Fallback:** a pre-recorded screen capture of the full run. Never demo live without it.
+
+---
+
+## Act 1 — Reconstruct the cast *(LIVE — deterministic, ~15s)*
 
 **Run:**
 ```sh
 sovereign enrich reconcile enron-sample-multi-wide
 ```
-**They see:** `18,833 entity mentions → 17,293 canonical (935 audited merges)` in ~15 seconds.
+**They see (verbatim):**
+```
+input entity atoms : 1730
+canonical entities : 1689  (41 atoms collapsed into 35 multi-source clusters)
+oplog merges       : 35
+```
 
-**Say:** "It just read both inboxes and reconstructed the cast. `klay@enron.com`, `K. Lay`, `Kenneth L. Lay`, `chairman.ken@` — the system knows those are **one person**. Skilling, Fastow, every counterparty — collapsed to canonical identities, with the communication graph between them."
+**Say:** "It read both inboxes and reconstructed the cast. From ~8,800 message chunks the
+system distilled **1,730 real entities** — people, companies, places — and resolved their
+cross-inbox aliases into canonical identities. `klay@enron.com`, `K. Lay`, `Kenneth L.
+Lay` collapse to **one person**; `Calpine`, `Calpine Corp`, `Calpine Corporation` to one
+company."
 
-**The two lines that land with anyone legal** (show `atlas/reconciliation.json` + the oplog):
-- **Precision = 1.0. Zero false merges.** "It never attributes one person's mail to another. When unsure, it leaves them apart — it misses a link before it invents one. That's the *only* admissible error direction for evidence."
-- **Glass-box:** open `atlas/reconciliation_oplog.jsonl` → "every merge carries its reason — shared email header, name fold, corroborated role. 935 of them. Defensible as an exhibit, not a black box."
+**The merges are real, named entities** (show `atlas/reconciliation.json`): Calpine
+Corporation, El Paso Corporation, AES Corporation, Aquila Inc., Standard & Poor's, the
+Midwest ISO — actual Enron counterparties, plus people like Annie R. Jones. **35
+cross-inbox merges, 47.7% of surface forms collapsed.**
+
+**The two lines that land with anyone legal:**
+- **Precision = 1.0 on held-aside identities. Zero false merges.** "It never attributes one
+  person's mail to another. When unsure, it leaves them apart — it misses a link before it
+  invents one. That's the *only* admissible error direction for evidence." (Measured — Act 3.)
+- **Glass-box:** open `atlas/reconciliation_oplog.jsonl` → "every merge carries its reason —
+  shared email header, name fold, corroborated role. Defensible as an exhibit, not a black box."
+
+> **The honest distillation story (this is a strength, lead with it):** raw entity
+> extraction is *noisy* — it pulls document titles, dollar amounts, quoted fragments. The
+> pipeline's **resolve** step distills that pile into **6,101 typed atoms** (1,730 entities
+> + events, states, relations, claims, questions), and reconcile operates on the clean
+> entities. So 35 merges of *named, real* counterparties beats "hundreds of merges" that
+> were half document-titles. The number is smaller because it's **signal, not noise.**
 
 ---
 
-## Act 2 — Follow the fraud *(grounded, cited — PRE-CAPTURED real answers, reveal one at a time)*
+## Act 2 — Follow the fraud *(grounded, cited — Sovereign Desktop)*
 
-Three questions, each answered in grounded prose **citing the actual source email**. (Captured 2026-05-31; regenerate via §Capture.)
+**Surface: the desktop app**, `enron-sample-multi-wide` selected. Ask live; the answer
+streams in grounded prose, then a **"Sources:"** block — click a citation → a popover with
+the **actual source email** (subject + the quoted passage). Because Enron sources are text,
+the card *is* the email — no second window.
 
-**Q2.1 — the fraud core** *(fact recall 1.0):* *"What do these emails reveal about the LJM and Raptor partnerships, and who was behind them?"*
-> "**Andrew Fastow formed and ran two investment partnerships — LJM Cayman and LJM2 Co-Investment — with Enron board approval, creating a conflict-of-interest issue.** It also mentions **$1.1 billion banked this week** and Palmer's comments on credit lines **[Source: Saturday Articles]**."
+The five hero questions (`qa_demo.toml`), in narrative order:
 
-**Say:** "It names the executive, the exact vehicles — LJM Cayman, LJM2 — the *board's* role, the conflict of interest, and the dollar figure. Pulled from the mail, cited. That's the heart of the case."
+1. **`exec_cast`** — *"Who were the senior executives running Enron, and what was each responsible for?"* (entity resolution → the cast: Lay/chairman, Skilling/CEO, Fastow/CFO)
+2. **`ljm_fraud`** — *"What do these communications reveal about the LJM and Raptor partnerships, and which executive was behind them?"* (the fraud core)
+3. **`dynegy_rescue`** — *"Describe the proposed Dynegy rescue of Enron as it appears in Kenneth Lay's communications to employees."* (the money shot — Lay's Nov-2001 mail)
+4. **`financial_state`** — *"What was being said internally about Enron's financial condition — credit ratings, mark-to-market accounting, and off-balance-sheet exposure?"* (COMPOUND → query decomposition)
+5. **`counterparty_network`** — *"Which energy companies appear as counterparties or competitors?"* (exercises the reconciled org entities)
 
-**Q2.2 — the money shot** *(fact recall 1.0):* *"Describe the proposed Dynegy rescue of Enron as it appears in Ken Lay's communications."*
-> "Based on Kenneth Lay's communications to employees, particularly the email sent **November 9, 2001, titled 'Enron Announces Plans to Merge with Dynegy,'** … management and the Board concluded that merging with Dynegy — a major energy player and **one of Enron's largest counterparties** — was the **best alternative [Source: Enron Announces Plans to Merge with Dynegy]**. He argued it would rebuild investor and market confidence, strengthen Enron's balance sheet, and preserve the core businesses."
+**Lead with 2–4** (the strongest, captured answers in §Capture). **Say (on Q4):** "One
+messy, three-part question. The system split it into focused sub-queries and chased each
+thread — the S&P downgrade from one email, the equity adjustment from another — instead of
+averaging them into mush and missing both. That's the query decomposition; we measured the
+lift." *(→ Act 3.2.)*
 
-**Say:** "Lay's actual November-9 email to employees. Every claim carries its source. *This* is the 'who-knew-what-when' a prosecutor builds a case on — seconds, not a review team."
-
-**Q2.3 — the compound question** *(this is where the new retrieval tech shows — fact recall 0.75):* *"What was being said internally about Enron's financial condition — credit ratings, mark-to-market accounting, and off-balance-sheet exposure?"*
-> "Enron faced significant downgrades. **Standard & Poor's downgraded Enron's long-term rating one notch from BBB+ to BBB, and its short-term rating from A2 to A3 [Source: Enron Update]** … [and] a **$1.2 billion equity adjustment [Source: Financial Disclosure of $1.2 Billion Equity Adjustment]**."
-
-**Say:** "One messy, three-part question. The system pulled the *specific* S&P downgrade — BBB+ to BBB — from one email **and** the $1.2 billion equity adjustment from another. That's the **query decomposition** at work: it split the compound question and chased each thread, instead of averaging them into mush and missing both. We measured that lift: +11 points of fact coverage." *(→ flows straight into Act 3.2.)*
+> **Reproducible terminal alternative** (no GUI, deterministic, offline): the
+> **atlas-directed** brief —
+> ```sh
+> sovereign enrich query enron-sample-multi-wide "LJM and Raptor partnerships and who ran them"
+> ```
+> returns a structured brief: `Entity: LJM … "related party previously managed by our
+> chief financial officer" … controlled_by …` — i.e. it ties LJM to **Fastow** straight off
+> the resolved graph. Good as a backup if the desktop isn't available, or to show the
+> graph-grounded path beneath the prose.
 
 ---
 
-## Act 3 — Show the work *(turn "magic" into "credible engineering" — 2 glass-box reveals)*
+## Act 3 — Show the work *(turn "magic" into "credible engineering")*
 
-**3.1 — Reconciliation pays off in retrieval.** "A naive search for *Lay* misses `klay@`, `K. Lay`, `chairman.ken@`. Because the system resolved them to one identity, one question finds **everything** the man wrote, across 40 surface forms. That's the difference between a keyword grep and an investigation."
+**3.1 — The reconciliation is measured, on identities it was never tuned against.**
+```sh
+sovereign bench enron run --corpus enron-sample-multi-wide --split test
+```
+**They see (verbatim):**
+```
+B³ precision/recall/F1 : 1.000 / 0.717 / 0.835   (n_aligned=10)
+surface-form collapse  : 47.7%
+delta vs pre-recon F1  : +0.220
+merge signal histogram : name_similarity 35 · email_header 1
+```
+**Say:** "**Perfect precision — zero false merges — on a sealed test set.** Recall 0.717:
+it surfaced ~72% of the true identity links; the third it misses are abbreviated names and
+place-name variants — gaps that *widen the review net*, never *misattribute*. +0.220 F1
+over the no-reconciliation floor. This is the number a prosecutor cares about."
 
-**3.2 — It decomposes messy questions.** Re-show Q2.3 with its glass-box trace: "A human asks a sloppy, three-part question. The system **split it into focused sub-queries** — one per aspect — because the broad question, embedded whole, buries each fact below rank 100; decomposed, each sits at rank 2–11. We measured it: **+11 points** of fact coverage in the answer. It doesn't miss the buried thread."
+**3.2 — Reconciliation + decomposition pay off in retrieval.** "A naive search for *Lay*
+misses `klay@`, `K. Lay`, `chairman.ken@`. Because the system resolved them to one
+identity, one question finds **everything** the man wrote. And it **decomposes** messy
+multi-part questions into focused sub-queries — the broad question embedded whole buries
+each fact below rank 100; decomposed, each sits at rank 2–11. We measured **+11 points** of
+fact coverage." *(The same atlas-directed retrieval lifts buried counterparties: in the
+counterparty question, atlas guidance moved gold recall from 1/5 → 3/5.)*
 
 ---
 
 ## The close
 
 "To recap, fully local, on a laptop, in an afternoon:
-- **Reconstructed the identity + communication graph** — 18,833 mentions → the canonical cast — at **perfect precision**, every merge auditable.
-- **Answered the investigator's questions** in grounded prose, **each claim citing its source email**.
+- **Reconstructed the identity graph** — 8,800 message-chunks distilled to 1,730 real
+  entities, cross-inbox aliases resolved at **perfect precision (B³ P=1.0)**, every merge
+  auditable.
+- **Answered the investigator's questions** in grounded prose, **each claim citing its
+  source email**.
 - **Nothing left the machine.** No cloud, no vendor, no data egress — sovereign by construction.
 
-What the Enron Task Force did in months of paralegal review is a coffee break here — and *more* defensible, because every link carries its evidence. And it's open: this corpus is public-domain, the pipeline is inspectable, the methodology is a committed benchmark. This isn't a megafirm capability anymore."
+What the Enron Task Force did in months of paralegal review is a coffee break here — and
+*more* defensible, because every link carries its evidence. The corpus is public-domain,
+the pipeline inspectable, the methodology a committed benchmark."
 
 ---
 
-## §Capture (run before the demo; ~10–12 min on the 27B)
+## §Capture (run before the demo)
 
+The reconcile + B³ + `enrich query` outputs are deterministic terminal output — re-run live
+or screenshot. **Capture ahead** the **grounded chat answers** (35B synth is slow live):
 ```sh
 export SOVEREIGN_TITLE_EXPAND=1 SOVEREIGN_DECOMP_DECAY=0.6
 sovereign bench all --synth --isolate --filter enron/qa_demo
-# extract the synthesized answers + cited sources from the run JSON it writes
+# writes the synthesized answers + cited sources to baselines/qa-synth-isolated/latest.json
 ```
-Paste each answer + its `[Source: …]` citations into Act 2 above. **Faster alternative for a snappy *live* run:** force the 9B fast slot (lower latency, still grounded) instead of pre-capturing.
+Pull each answer + its `[Source: …]` citations into Act 2. The model on this box is the
+35B (the prior captured prose was a 27B run — **re-capture fresh** so the on-screen answer
+matches what you read). In the desktop app, screenshot the citation popover (the source
+email) for each hero answer.
 
 ---
 
 ## Fallbacks
 
-- **Daemon down / jetsam:** `sovereign daemon restart`, wait ~50s for models. Keep a **pre-recorded screen capture** of the full run as the ultimate backstop — never demo live without it.
-- **Latency too slow live:** pre-captured answers (default) or 9B fast slot.
-- **Strongest answers (verified 2026-05-31 capture):** **LJM/Raptor, Dynegy, financial-condition** — all grounded, cited, specific (fact 0.75–1.0). Lead with these three.
-- **Demote/skip:** `exec_cast` hedges ("fragmented excerpts") — Act 1's `reconcile` shows the cast better, so don't ask it as QA. `counterparty_network` only reliably surfaces **Dynegy** (fact 0.20 — the known multi-entity recall gap); skip it, or use it *honestly* to make a virtue of the glass-box: "it tells you what it found and cites it, rather than confabulating the rest" — but only if the room is technical and you want to show the precision discipline.
+- **Daemon down / jetsam:** `sovereign daemon restart`, wait ~50s for models. Keep a
+  **pre-recorded screen capture** of the full run as the ultimate backstop.
+- **Latency too slow live:** pre-captured answers (default), or the offline `enrich query`
+  brief, or force the 9B fast slot.
+- **Strongest answers:** LJM/Raptor, Dynegy, financial-condition — grounded, cited,
+  specific. Lead with these three.
+- **`counterparty_network`** only reliably surfaces a few orgs (the known multi-entity
+  recall gap). Use it *honestly* — "it tells you what it found and cites it, rather than
+  confabulating the rest" — only if the room is technical.
 
 ---
 
-## Honesty guardrails (so it survives Q&A)
+## Honesty guardrails & anticipated skeptic questions
 
-- This is a **2-custodian slice** (Lay + Skilling), not the full 150-custodian corpus. Frame 500k/150 as the **vision/extrapolation**, explicitly — the slice is proof-of-mechanism. The blocking design is sub-quadratic, so per-custodian cost holds, but say "expected, not yet measured at full scale."
-- Entity resolution is **measured** (B³ 0.80 / P=1.0 on held-aside identities). QA quality is real but **single-corpus**; don't claim universal — the query-expansion config is gated precisely because it's a targeted (not universal) win.
-- Every number on the backing slide traces to `CAPABILITY_BRIEF.md` + the committed bench. If asked "is this cherry-picked?" — the answer is the held-out test split + the public corpus + the committed methodology.
+Lead with the framing; every number is reproducible (`sovereign enrich reconcile` /
+`sovereign bench enron run`).
+
+**Q: "1,730 entities, only 35 merges? That seems small."** It's small because it's
+**distilled signal.** Raw extraction surfaces a noisy pile — document titles, dollar
+amounts, quoted fragments. The resolve step distills 8,829 chunks → **6,101 typed atoms**
+(1,730 entities); reconcile then makes 35 cross-inbox merges of *real, named* counterparties
+(Calpine, El Paso, AES, S&P, Fastow's LJM…) at **P=1.0**. An earlier pipeline reported
+hundreds of merges — but a sample showed ≥15% were document titles / filenames / fragments.
+Fewer, named, zero-false-merge is the *stronger* forensic story.
+
+**Q: "Precision 1.0 — isn't that just because you merged almost nothing?"** No: it's
+measured on a **sealed test set** of canonical identities with B³ (cluster-level precision),
+and recall is **0.717** — it's making the true links, not avoiding them. The error
+asymmetry (miss before misattribute) is the only admissible one for evidence.
+
+**Q: "Is this cherry-picked?"** The B³ is a **held-out test split** scored on a public
+corpus with a committed methodology; reconciliation is **deterministic** (re-run it). A
+second sealed holdout remains unspent for an independent generalization estimate.
+
+**Q: "Does it scale past 2 custodians?"** Honest answer: **not yet measured at full scale.**
+This is a 2-custodian slice (Lay + Skilling). The 500k-email / 150-custodian figure frames
+the *matter*, not our run. The blocking is sub-quadratic, so per-custodian cost is *expected*
+to hold — say "expected, not yet measured."
+
+**Q: "The answers — is the model making them up?"** Every Act 2 answer is grounded in
+retrieved chunks and **cites the source email**; click the citation to read it. The
+atlas-directed `enrich query` path shows the same grounding without the LLM at all (entity →
+relations → trajectory, straight off the resolved graph).
+
+**Q: "Recall 0.717 — what's the missing third?"** Abbreviated names (`R. Mark`), place
+variants (`Houston, TX` vs `Houston, Texas`), and entities the upstream text extractor never
+surfaced. These *widen the net to review*, they don't misattribute — and the extractor gap
+is a separate, known lever (a re-enrichment pass).
