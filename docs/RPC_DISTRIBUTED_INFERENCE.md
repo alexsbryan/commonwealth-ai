@@ -12,6 +12,7 @@ binary is built or run** — a node takes a role purely by environment:
 | Role | Env var | What it does |
 |---|---|---|
 | **Worker** | `SOVEREIGN_RPC_SERVE=0.0.0.0:50052` | Daemon starts an in-process RPC server exposing this node's local GPU to peers. |
+| Worker cache | `SOVEREIGN_RPC_CACHE_DIR=<dir>` | Optional. On-disk tensor cache (default `~/.sovereign/rpc-cache`); set `off`/`0` to disable. See "Transfer cost" below. |
 | **Host** | `SOVEREIGN_RPC_WORKERS=<ip>:50052,<ip2>:50052` | Daemon registers those workers and splits the model's layers across local GPU + workers. |
 | Host (split) | `SOVEREIGN_RPC_TENSOR_SPLIT=0.7,0.3` | Optional. Per-device fractions, **device order = RPC workers first, then local GPU**. Omit to let llama.cpp split by advertised VRAM. |
 
@@ -59,6 +60,53 @@ tok/s is **not** a reliable signal (a fast CPU/loopback hides offload). Use the
 by ~the split fraction of the model, and its daemon logs `Accepted client
 connection` held for the duration. On the Mac, the same is observable as worker
 process RSS (e.g. split `0.9` → worker holds ~90% of the model).
+
+## Transfer cost (and the cache)
+
+llama.cpp RPC is **host-loads-all**: the host opens the GGUF and streams each
+worker's layer weights to it at load time. So a cold load transfers
+`split_fraction × model_size` to each worker (e.g. 0.8 × 30GB = 24GB). Important:
+
+- **Not per request.** Once loaded, the worker holds its shard resident; every
+  subsequent inference reuses it. Per-token traffic is just layer-boundary
+  **activations** (KB).
+- **Not per reload, if cached.** The worker caches received weight tensors
+  (>10MB) to local disk by content hash. On a warm reload the host sends hashes;
+  the worker already has them ⇒ **zero weight transfer** (measured: a 9B model
+  cached 98 tensors / 3.6GB cold, re-sent 0 on reload). The cache is **on by
+  default** at `~/.sovereign/rpc-cache`; `SOVEREIGN_RPC_CACHE_DIR=off` disables it.
+
+So the cold first-load is the only time the weights cross the wire. This is why
+distribution earns its keep on **can't-fit-one-node** models (MiniMax-M2.7 140GB,
+Kimi K2.6) — the one-time transfer amortizes over a long-lived load — and is a
+*net loss* for a model that already fits one node (you've added a network hop).
+
+## Offline cache pre-warming (no cold transfer at all)
+
+If even the cold transfer is a problem — remote nodes on a **metered/throttled
+ISP link** — you can eliminate it. The cache is just content-addressed files
+(`<016x FNV-1a of the tensor bytes>`), and those hashes can be computed **directly
+from the GGUF**, offline:
+
+```bash
+# hand the node the GGUF on a thumbdrive / over a direct cable, then:
+sovereign mesh warm-cache <model.gguf>      # → ~/.sovereign/rpc-cache, no network, no GPU
+```
+
+This parses the GGUF and writes one cache file per weight tensor >10MB. When the
+cluster runs, the host's tensor-hash requests are all cache hits and **zero
+weight bytes cross the wire** — verified: a GGUF-warmed cache served a real load
+re-sending 0 tensors. It's effectively "the worker reads its own GGUF" (which
+mainline RPC can't do directly), achieved offline via the cache. Scales to any
+size (streams tensor-by-tensor, no VRAM). Two distribution patterns:
+
+- **Sneakernet the cache:** generate it once on any node, copy `~/.sovereign/rpc-cache/`
+  to a thumbdrive, drop it on every node (content-addressed ⇒ one cache fits all).
+- **Sneakernet the GGUF + warm locally:** ship the GGUF, run `warm-cache` on each
+  node. Same result, smaller to carry if nodes already have the GGUF.
+
+Note: LAN / direct-cable transfers between co-located machines never touch your
+ISP — pre-warming matters only when workers are *remote* (the real 8-node case).
 
 ## Notes & limits
 
