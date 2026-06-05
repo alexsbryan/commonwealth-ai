@@ -20,5 +20,10 @@
       invoke("meshapp_search_parcels", { corpusId, query, limit }),
     parcelAnalytics: (corpusId, businessTaxTarget) =>
       invoke("meshapp_parcel_analytics", { corpusId, businessTaxTarget }),
+    graph: (corpusId, nodeType, limit) => invoke("meshapp_graph", { corpusId, nodeType, limit }),
+    node: (corpusId, id) => invoke("meshapp_node", { corpusId, id }),
+    findings: (corpusId, pattern) => invoke("meshapp_findings", { corpusId, pattern }),
+    searchEntities: (corpusId, query, nodeType, limit) =>
+      invoke("meshapp_search_entities", { corpusId, query, nodeType, limit }),
   };
 })();

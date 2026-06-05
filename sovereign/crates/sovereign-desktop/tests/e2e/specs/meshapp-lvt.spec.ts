@@ -17,12 +17,17 @@ const ANALYTICS = {
   land_value_total: 174097946887,
   improvement_value_total: 170058850999,
   business_tax_target: 1400000000,
-  neutral_rate: 1400000000 / 174097946887, // 0.0080414…
+  neutral_rate: 1400000000 / 174097946887, // 0.0080414… (business-tax-only)
+  property_tax_rate: 0.0118,
+  property_tax_revenue_est: (174097946887 + 170058850999) * 0.0118, // ≈ $4.06B
+  property_tax_swap_rate: ((174097946887 + 170058850999) * 0.0118) / 174097946887, // ≈ 2.33%
   high_land_share_count: 89175,
   underused_count: 2856,
   derivation: [
     "land_value_total = Σ assessed_land_value over 208,666 parcel atoms (sf-assessor-roll) = $174,097,946,887.00",
     "neutral_rate = business_tax_target ÷ land_value_total = $1,400,000,000.00 ÷ $174,097,946,887.00 = 0.80%",
+    "property_tax_revenue_est = (Σland + Σimprovement) × property_tax_rate = $344,156,797,886.00 × 1.18% = $4,061,050,215.05",
+    "property_tax_swap_rate = property_tax_revenue_est ÷ land_value_total = $4,061,050,215.05 ÷ $174,097,946,887.00 = 2.33%",
   ],
 };
 
@@ -93,23 +98,28 @@ test.describe("SF-LVT mesh app bundle", () => {
     // the input-set size.
     await expect(page.getByText("$174.10B")).toBeVisible();
     await expect(page.getByText(/Σ over 208,666 parcel atoms/)).toBeVisible();
-    await expect(page.locator("#neutral-rate")).toHaveText("0.80%");
+    // Primary reform = the revenue-neutral property-tax swap rate.
+    await expect(page.locator("#swap-rate")).toHaveText("2.33%");
+    // The business-tax "stable base" insight carries the computed figures.
+    await expect(page.locator("#biz-rate")).toHaveText("0.80%");
+    await expect(page.locator("#biz-target")).toHaveText("$1.40B");
 
     // Flag counts.
     await expect(page.locator("#high")).toHaveText("89,175");
     await expect(page.locator("#under")).toHaveText("2,856");
 
     // The verbatim derivation block: rendered by the system, carrying the
-    // exact (un-rounded) figure — the show-your-work guarantee.
-    await expect(page.locator("#derivation li")).toHaveCount(2);
+    // exact (un-rounded) figures — the show-your-work guarantee.
+    await expect(page.locator("#derivation li")).toHaveCount(4);
     await expect(page.locator("#derivation")).toContainText("$174,097,946,887.00");
+    await expect(page.locator("#derivation")).toContainText("property_tax_swap_rate");
 
     // Loading replaced by the app; no error.
     await expect(page.locator("#loading")).toBeHidden();
     await expect(page.locator("#error")).toBeHidden();
   });
 
-  test("rate slider drives revenue deterministically (cited base × rate)", async ({ page }) => {
+  test("rate slider drives revenue, framed against the property tax it replaces", async ({ page }) => {
     await installBridge(page);
     await page.goto("/meshapp/lvt/index.html");
 
@@ -117,23 +127,24 @@ test.describe("SF-LVT mesh app bundle", () => {
     const slider = page.getByRole("slider", { name: /flat land-only rate/i });
     await expect(slider).toBeVisible();
 
-    // Default sits at the neutral rate → ≈ the $1.4B target. (Range
-    // inputs canonicalize the value, so "0.80" reads back as "0.8".)
-    await expect(slider).toHaveValue("0.8");
-    await expect(page.locator("#revenue")).toHaveText("$1.39B");
+    // Default sits at the revenue-neutral SWAP rate → ≈ the $4.06B property tax.
+    await expect(slider).toHaveValue("2.33");
+    await expect(page.locator("#revenue")).toHaveText("$4.06B");
     await expect(page.locator("#rate-meta")).toContainText("revenue-neutral");
 
-    // Drive it to 1.00% → 1.00% × $174.10B base = $1.74B (a surplus).
-    // (Playwright's fill() rejects range inputs; set value + fire input.)
+    // Drive it DOWN to 0.80% (the business-tax-only rate) → $1.39B: a
+    // shortfall vs the property tax. The honesty mechanism — a low rate reads
+    // as a city-wide CUT, not a free lunch. (Playwright's fill() rejects range
+    // inputs; set value + fire input.)
     await slider.evaluate((el: HTMLInputElement) => {
-      el.value = "1";
+      el.value = "0.8";
       el.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    await expect(page.locator("#revenue")).toHaveText("$1.74B");
-    await expect(page.locator("#rate-meta")).toContainText("surplus");
+    await expect(page.locator("#revenue")).toHaveText("$1.39B");
+    await expect(page.locator("#rate-meta")).toContainText("shortfall");
   });
 
-  test("per-parcel: an exact parcel-number search loads + computes the LVT delta", async ({ page }) => {
+  test("per-parcel: an exact search computes the revenue-neutral swap outcome", async ({ page }) => {
     await installBridge(page);
     await page.goto("/meshapp/lvt/index.html");
 
@@ -143,12 +154,15 @@ test.describe("SF-LVT mesh app bundle", () => {
     await expect(page.locator("#parcel-result")).toBeVisible();
     await expect(page.locator("#p-land")).toHaveText("$3.03M"); // cited from the atom
     await expect(page.locator("#p-impr")).toHaveText("$1.07M");
-    // At the default 0.80% rate: 0.008 × $3.03M ≈ $24.3K (client multiply
-    // over a cited base — same discipline as the macro slider).
-    await expect(page.locator("#p-lvt")).toContainText("$24");
-    await expect(page.locator("#p-delta")).toContainText(/Winner|Loser/);
-    // Plain-English summary + the Prop-13 honesty caveat (the trust story).
-    await expect(page.locator("#p-plain")).toContainText("assessed at");
+    // The comparison is the revenue-neutral SWAP, anchored to the swap rate
+    // (2.33%), NOT the macro slider: 0.0233 × $3.03M land ≈ $70.8K, vs $48.4K
+    // property tax today on land+building → a LOSER (land-rich Seacliff).
+    await expect(page.locator("#p-rate")).toHaveText("2.33");
+    await expect(page.locator("#p-lvt")).toContainText("$70");
+    await expect(page.locator("#p-cur")).toContainText("$48");
+    await expect(page.locator("#p-delta")).toContainText("Loser");
+    // Plain-English (property-tax swap framing) + the Prop-13 honesty caveat.
+    await expect(page.locator("#p-plain")).toContainText("property tax");
     await expect(page.getByText(/Prop-13-frozen/)).toBeVisible();
     await expect(page.locator("#p-chip")).toContainText("entity-c187b57689b19f18");
   });

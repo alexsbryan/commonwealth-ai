@@ -57,14 +57,17 @@ impl Tool for ParcelAnalyticsTool {
         ToolDescriptor {
             id: "parcel_analytics".to_string(),
             name: "Parcel Analytics (Land-Value Tax)".to_string(),
-            description: "Compute the revenue-neutral land-value-tax rate and \
-                land-base aggregates DETERMINISTICALLY from a corpus of parcel \
-                atoms (default `sf-assessor-roll`). Returns pre-cited figures — \
-                land value total, the neutral rate, parcel count, and \
-                land-share / underuse flag counts — that MUST be quoted verbatim: \
-                each number is summed from source parcels, never estimated. Use \
-                this for any land-value-tax dollar figure, rate, or count instead \
-                of doing the arithmetic yourself."
+            description: "Compute land-value-tax rates and land-base aggregates \
+                DETERMINISTICALLY from a corpus of parcel atoms (default \
+                `sf-assessor-roll`). Returns pre-cited figures for TWO reforms — \
+                (a) the property-tax SWAP: the revenue-neutral rate for a \
+                land-only tax replacing today's property tax \
+                (property_tax_swap_rate, on land+improvements), and (b) the \
+                business-tax replacement (neutral_rate) — plus land value total, \
+                parcel count, and land-share / underuse flag counts. Every figure \
+                MUST be quoted verbatim: each is summed from source parcels, never \
+                estimated. Use this for any land-value-tax dollar figure, rate, or \
+                count instead of doing the arithmetic yourself."
                 .to_string(),
             parameters: json!({
                 "type": "object",
@@ -105,7 +108,9 @@ impl Tool for ParcelAnalyticsTool {
                     "land_value_total": {"type": "number"},
                     "improvement_value_total": {"type": "number"},
                     "business_tax_target": {"type": "number"},
-                    "neutral_rate": {"type": "number", "description": "= business_tax_target / land_value_total, on the LAND base"},
+                    "neutral_rate": {"type": "number", "description": "= business_tax_target / land_value_total, on the LAND base (business-tax replacement)"},
+                    "property_tax_revenue_est": {"type": "number", "description": "= (land + improvement) × property_tax_rate — est. revenue today's property tax raises"},
+                    "property_tax_swap_rate": {"type": "number", "description": "= property_tax_revenue_est / land_value_total — revenue-neutral land-ONLY rate replacing the property tax (the swap)"},
                     "high_land_share_count": {"type": "number"},
                     "underused_count": {"type": "number"},
                     "cited_figures": {"type": "array", "description": "Pre-formatted figures with [corpus: …] citations — quote these verbatim."},
@@ -129,7 +134,7 @@ impl Tool for ParcelAnalyticsTool {
             .get("business_tax_target")
             .and_then(|v| v.as_f64())
             .unwrap_or(DEFAULT_BUSINESS_TAX_TARGET);
-        let _property_tax_rate = params
+        let property_tax_rate = params
             .get("current_property_tax_rate")
             .and_then(|v| v.as_f64())
             .unwrap_or(DEFAULT_PROPERTY_TAX_RATE);
@@ -165,7 +170,7 @@ impl Tool for ParcelAnalyticsTool {
             )));
         }
 
-        let agg = compute_aggregates(&parcels, &corpus_id, business_tax_target);
+        let agg = compute_aggregates(&parcels, &corpus_id, business_tax_target, property_tax_rate);
         let fs = flags(&parcels);
         let high_land = fs.iter().filter(|f| f.kind == FlagKind::HighLandShare).count();
         let underused = fs.iter().filter(|f| f.kind == FlagKind::Underused).count();
@@ -185,6 +190,19 @@ impl Tool for ParcelAnalyticsTool {
                 "neutral_rate = {} [= business_tax_target {} ÷ land_value_total {}]",
                 fmt_pct(agg.neutral_rate),
                 fmt_usd(agg.business_tax_target),
+                fmt_usd(agg.land_value_total)
+            ),
+            format!(
+                "property_tax_revenue_est = {} [= (land {} + improvement {}) × property_tax_rate {}]",
+                fmt_usd(agg.property_tax_revenue_est),
+                fmt_usd(agg.land_value_total),
+                fmt_usd(agg.improvement_value_total),
+                fmt_pct(agg.property_tax_rate)
+            ),
+            format!(
+                "property_tax_swap_rate = {} [= property_tax_revenue_est {} ÷ land_value_total {}]",
+                fmt_pct(agg.property_tax_swap_rate),
+                fmt_usd(agg.property_tax_revenue_est),
                 fmt_usd(agg.land_value_total)
             ),
             format!("high_land_share parcels = {} {cite}", fmt_int(high_land as f64)),
@@ -215,6 +233,19 @@ impl Tool for ParcelAnalyticsTool {
                 fmt_pct(agg.neutral_rate)
             ),
             format!(
+                "property_tax_revenue_est = (land_value_total + improvement_value_total) × property_tax_rate = ({} + {}) × {} = {}",
+                fmt_usd_full(agg.land_value_total),
+                fmt_usd_full(agg.improvement_value_total),
+                fmt_pct(agg.property_tax_rate),
+                fmt_usd_full(agg.property_tax_revenue_est)
+            ),
+            format!(
+                "property_tax_swap_rate = property_tax_revenue_est ÷ land_value_total = {} ÷ {} = {}",
+                fmt_usd_full(agg.property_tax_revenue_est),
+                fmt_usd_full(agg.land_value_total),
+                fmt_pct(agg.property_tax_swap_rate)
+            ),
+            format!(
                 "high_land_share parcels = #{{ parcels : land ÷ (land+improvement) ≥ 0.60 }} = {} of {n}",
                 fmt_int(high_land as f64)
             ),
@@ -238,6 +269,9 @@ impl Tool for ParcelAnalyticsTool {
             "improvement_value_total": agg.improvement_value_total,
             "business_tax_target": agg.business_tax_target,
             "neutral_rate": agg.neutral_rate,
+            "property_tax_rate": agg.property_tax_rate,
+            "property_tax_revenue_est": agg.property_tax_revenue_est,
+            "property_tax_swap_rate": agg.property_tax_swap_rate,
             "high_land_share_count": high_land,
             "underused_count": underused,
             "cited_figures": cited_figures,

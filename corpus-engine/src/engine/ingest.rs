@@ -136,51 +136,44 @@ impl CorpusEngine {
 
         // ── Prebuilt-snapshot restore: short-circuit to download+extract ──
         //
-        // Recipes declaring `[prebuilt]` ship a pre-built .tar.zst
-        // snapshot of the index (+ optional atlas). When the model the
-        // snapshot was built with matches what's loaded here, the
-        // restorer downloads the archive, verifies its sha256, and
-        // extracts it under `~/.sovereign/` — bypassing the entire
-        // acquire/extract/chunk/embed pipeline. On model mismatch we
-        // log a clear warning and fall through to a normal ingest, so
-        // the recipe still works for users on a different embedding
-        // stack (Option B path).
+        // Recipes declaring `[prebuilt]` ship a pre-built .tar.zst snapshot
+        // of the index (+ optional atlas). The restorer downloads the
+        // archive, verifies its sha256, and extracts it under
+        // `~/.sovereign/` — bypassing the acquire/extract/chunk/embed
+        // pipeline. Compatibility is decided on the SPACE, not the label:
+        // dimensions are a hard floor, an exact model-name match is
+        // trusted, and a name-only mismatch is VERIFIED by re-embedding
+        // sample chunks (the probe in `try_restore_prebuilt`). `Ok(None)`
+        // means "incompatible — rebuild with the local model" (Option B);
+        // a hard error (download/sha/extract) aborts.
         if let Some(prebuilt) = recipe.prebuilt.as_ref() {
-            if prebuilt.compatible_embedding_model == self.expected_embedding_model {
-                let started = Instant::now();
-                match self
-                    .try_restore_prebuilt(&recipe, prebuilt, &progress)
-                    .await
-                {
-                    Ok(restored) => {
-                        let duration_secs = started.elapsed().as_secs();
-                        tracing::info!(
-                            corpus_id = %recipe.corpus.id,
-                            chunks = restored.chunks_created,
-                            duration_secs,
-                            "ingest: prebuilt snapshot restored — skipped full pipeline"
-                        );
-                        return Ok(IngestResult {
-                            duration_secs,
-                            ..restored
-                        });
-                    }
-                    Err(e) => {
-                        // A failed restore is a hard failure — we
-                        // already committed to using a known-good
-                        // snapshot. Falling through to a full ingest
-                        // here would hide the failure and silently do
-                        // hours of unwanted embedding work.
-                        return Err(e);
-                    }
+            let started = Instant::now();
+            match self
+                .try_restore_prebuilt(&recipe, prebuilt, &progress)
+                .await
+            {
+                Ok(Some(restored)) => {
+                    let duration_secs = started.elapsed().as_secs();
+                    tracing::info!(
+                        corpus_id = %recipe.corpus.id,
+                        chunks = restored.chunks_created,
+                        duration_secs,
+                        "ingest: prebuilt snapshot restored — skipped full pipeline"
+                    );
+                    return Ok(IngestResult {
+                        duration_secs,
+                        ..restored
+                    });
                 }
-            } else {
-                tracing::warn!(
-                    corpus_id = %recipe.corpus.id,
-                    snapshot_model = %prebuilt.compatible_embedding_model,
-                    local_model = %self.expected_embedding_model,
-                    "ingest: skipping prebuilt snapshot (model mismatch) — running full ingest"
-                );
+                Ok(None) => {
+                    tracing::warn!(
+                        corpus_id = %recipe.corpus.id,
+                        local_model = %self.expected_embedding_model,
+                        "ingest: prebuilt snapshot not usable with the local embedding model — running full ingest"
+                    );
+                    // fall through to the full acquire/extract/chunk/embed pipeline
+                }
+                Err(e) => return Err(e),
             }
         }
 

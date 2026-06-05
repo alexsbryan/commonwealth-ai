@@ -50,6 +50,15 @@ pub enum Error {
         path: PathBuf,
     },
 
+    /// A prebuilt snapshot's embedding space is incompatible with the
+    /// locally-loaded model — different vector dimensions, or a model-name
+    /// mismatch whose re-embedding probe fell below the similarity
+    /// threshold (the spaces genuinely differ). Distinct variant so
+    /// `ingest()` can fall through to a full ingest (rebuild with the
+    /// local model) instead of hard-failing.
+    #[error("Snapshot incompatible with local embedding model: {0}")]
+    SnapshotIncompatible(String),
+
     #[error("Safety violation: {0}")]
     Safety(String),
 

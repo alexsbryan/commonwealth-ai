@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use crate::error::{Error, Result};
 use crate::snapshot::{
     hash_and_size, read_manifest_from_archive, snapshot_enrichment_path, snapshot_index_path,
-    SnapshotManifest, SNAPSHOT_ENRICHMENT_PREFIX, SNAPSHOT_INDEX_PREFIX,
+    EmbeddingCompat, SnapshotManifest, SNAPSHOT_ENRICHMENT_PREFIX, SNAPSHOT_INDEX_PREFIX,
     SNAPSHOT_MANIFEST_FILENAME,
 };
 
@@ -29,6 +29,11 @@ pub struct RestoreOutcome {
     pub enrichment_dir: Option<PathBuf>,
     /// Bytes consumed verifying the archive sha256 (== archive size).
     pub archive_size_bytes: u64,
+    /// How the snapshot's embedding identity compared to the local model.
+    /// `Exact` → trust; `NameMismatch` → the caller must VERIFY by probe
+    /// before trusting (dims already matched — a dims mismatch is an Err,
+    /// never an outcome).
+    pub embedding_compat: EmbeddingCompat,
 }
 
 /// Extract a `.tar.zst` snapshot under `sovereign_data_dir` and return
@@ -86,7 +91,18 @@ pub fn restore_snapshot_archive(
     }
 
     let manifest = read_manifest_from_archive(archive_path)?;
-    manifest.check_embedding_compatibility(local_embedding_model, local_embedding_dimensions)?;
+    // Dimensions are the hard floor — mismatched-dim vectors can't be
+    // compared at all, so refuse before extracting. A name-only mismatch
+    // is carried out in the outcome for the caller to VERIFY by probe
+    // (model names drift across dir/stem/repo/quant for the same model).
+    let embedding_compat =
+        manifest.check_embedding_compatibility(local_embedding_model, local_embedding_dimensions);
+    if embedding_compat == EmbeddingCompat::DimsMismatch {
+        return Err(Error::SnapshotIncompatible(format!(
+            "snapshot built with {}-dim vectors but local model '{}' emits {}-dim",
+            manifest.embedding_dimensions, local_embedding_model, local_embedding_dimensions
+        )));
+    }
     let archive_corpus_id = manifest.corpus_id.clone();
     let renaming = archive_corpus_id != target_corpus_id;
     if renaming {
@@ -132,6 +148,7 @@ pub fn restore_snapshot_archive(
         index_dir,
         enrichment_dir,
         archive_size_bytes,
+        embedding_compat,
     })
 }
 

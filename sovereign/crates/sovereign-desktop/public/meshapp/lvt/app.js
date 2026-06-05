@@ -12,8 +12,9 @@ const TARGET = 1_400_000_000; // ~$1.4B SF business-tax take to replace.
 // ≈ SF effective secured property-tax rate — a LABELED estimate, not from
 // the roll (which carries assessed values, not tax paid). Used only for the
 // per-parcel "current tax" comparison; never an LVT figure.
-const PROPERTY_TAX_RATE = 0.0118;
+const PROPERTY_TAX_RATE = 0.0118; // fallback only; the host now supplies this.
 let loadedParcel = null; // the parcel the per-parcel calculator is showing.
+let analytics = null; // the host's parcelAnalytics result (rates + totals).
 
 const $ = (id) => document.getElementById(id);
 
@@ -44,6 +45,7 @@ async function main() {
   $("loading").hidden = true;
   $("app").hidden = false;
   $("source").textContent = "Source: " + a.corpus_id;
+  analytics = a; // expose to renderParcel (the swap rate + the property-tax rate)
 
   // Headline land base — cited to the deterministic fold.
   $("land-base").textContent = usd(a.land_value_total);
@@ -52,7 +54,15 @@ async function main() {
     a.land_value_total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   $("land-chip").textContent = "Σ over " + intc(a.parcel_count) + " parcel atoms";
 
-  $("neutral-rate").textContent = (a.neutral_rate * 100).toFixed(2) + "%";
+  // Primary reform: the revenue-neutral property-tax → land-only swap.
+  $("swap-rate").textContent = (a.property_tax_swap_rate * 100).toFixed(2) + "%";
+  $("swap-meta").textContent =
+    "a flat land-only tax raising the same ~" + usd(a.property_tax_revenue_est) +
+    " as today's property tax — shifting the levy off buildings onto land";
+  // Secondary insight: land's stability lets a far smaller rate cover the
+  // narrower business-tax base.
+  $("biz-rate").textContent = (a.neutral_rate * 100).toFixed(2) + "%";
+  $("biz-target").textContent = usd(a.business_tax_target);
   $("high").textContent = intc(a.high_land_share_count);
   $("under").textContent = intc(a.underused_count);
 
@@ -63,23 +73,24 @@ async function main() {
     $("derivation").appendChild(li);
   }
 
-  // Rate slider: revenue = rate × land_base. The base is cited; the
-  // multiply is the only client-side arithmetic.
+  // Rate slider: revenue = rate × land_base. The base is cited; the multiply
+  // is the only client-side arithmetic. Default = the revenue-neutral swap
+  // rate; the meta compares the take to the property-tax revenue it replaces,
+  // so a LOW rate reads as a city-wide cut, not a free lunch.
   const slider = $("rate");
-  slider.value = (a.neutral_rate * 100).toFixed(2);
+  slider.value = (a.property_tax_swap_rate * 100).toFixed(2);
   const update = () => {
     const pct = parseFloat(slider.value);
     const revenue = (pct / 100) * a.land_value_total;
     $("rate-val").textContent = pct.toFixed(2);
     $("revenue").textContent = usd(revenue);
-    const delta = revenue - a.business_tax_target;
+    const delta = revenue - a.property_tax_revenue_est;
     $("rate-meta").textContent =
-      Math.abs(delta) < a.business_tax_target * 0.01
-        ? "≈ revenue-neutral — matches the " + usd(a.business_tax_target) + " target"
+      Math.abs(delta) < a.property_tax_revenue_est * 0.01
+        ? "≈ revenue-neutral with today's " + usd(a.property_tax_revenue_est) + " property tax"
         : (delta > 0 ? "surplus " : "shortfall ") +
           usd(Math.abs(delta)) +
-          " vs the " + usd(a.business_tax_target) + " target";
-    renderParcel(); // keep a loaded parcel's levy in sync with the rate
+          " vs the " + usd(a.property_tax_revenue_est) + " property tax";
   };
   slider.addEventListener("input", update);
   update();
@@ -152,13 +163,18 @@ function renderMatches(matches) {
 // improvement values are CITED (from the atom); the only arithmetic is
 // land × rate and (land+improvement) × the labeled property-tax estimate.
 function renderParcel() {
-  if (!loadedParcel) return;
+  if (!loadedParcel || !analytics) return;
   const p = loadedParcel;
   const land = Number(p.attributes.assessed_land_value) || 0;
   const impr = Number(p.attributes.assessed_improvement_value) || 0;
-  const rate = parseFloat($("rate").value); // % from the macro slider
-  const lvt = (rate / 100) * land;
-  const cur = (land + impr) * PROPERTY_TAX_RATE;
+  // The per-parcel comparison is the REVENUE-NEUTRAL swap: a land-only tax at
+  // the swap rate vs your current property tax (on land + improvements). It's
+  // anchored to the swap rate, NOT the macro slider — so "revenue-neutral" is
+  // always true here and the winner/loser verdict is honest.
+  const swapRate = analytics.property_tax_swap_rate;
+  const ptRate = analytics.property_tax_rate || PROPERTY_TAX_RATE;
+  const lvt = swapRate * land; // land only, at the swap rate
+  const cur = (land + impr) * ptRate; // land + improvements, today
   const delta = lvt - cur;
 
   $("parcel-result").hidden = false;
@@ -170,21 +186,22 @@ function renderParcel() {
     .filter(Boolean)
     .join(" · ");
   $("p-plain").textContent =
-    "Your land is assessed at " + usd(land) + ". Under a flat " + rate.toFixed(2) +
-    "% land tax you'd pay about " + usd(lvt) + "/yr, vs about " + usd(cur) +
-    " in property tax today — " +
-    (delta <= 0 ? "a saving of " + usd(-delta) : "an increase of " + usd(delta)) + ".";
+    "Today you pay about " + usd(cur) + " in property tax — on your land AND " +
+    "your building. A revenue-neutral land-only tax (" + (swapRate * 100).toFixed(2) +
+    "%) would charge about " + usd(lvt) + " on your land alone, so you'd pay " +
+    (delta <= 0 ? usd(-delta) + " LESS" : usd(delta) + " MORE") + " each year.";
   $("p-land").textContent = usd(land);
   $("p-impr").textContent = usd(impr);
-  $("p-rate").textContent = rate.toFixed(2);
+  $("p-rate").textContent = (swapRate * 100).toFixed(2);
+  $("p-cur-rate").textContent = (ptRate * 100).toFixed(2);
   $("p-lvt").textContent = usd(lvt);
   $("p-cur").textContent = usd(cur);
   const d = $("p-delta");
   if (delta <= 0) {
-    d.textContent = "Winner: " + usd(-delta) + " less under LVT";
+    d.textContent = "Winner: " + usd(-delta) + " less under a land-only tax";
     d.className = "win";
   } else {
-    d.textContent = "Loser: " + usd(delta) + " more under LVT";
+    d.textContent = "Loser: " + usd(delta) + " more under a land-only tax";
     d.className = "lose";
   }
   $("p-chip").textContent =

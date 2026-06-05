@@ -60,6 +60,23 @@ pub const SNAPSHOT_ENRICHMENT_PREFIX: &str = "enrichment";
 /// - **Contents** (`chunk_count`, `atlas_included`, `residual_gap_pct`,
 ///   `archive_size_bytes`, `archive_sha256`, `notes`): describe what
 ///   the archive contains and any known gaps the user is opting into.
+
+/// Verdict of comparing a snapshot manifest's embedding identity against
+/// the locally-loaded model. Dimensions are the hard floor (mismatched
+/// dims can't be compared at all); a name mismatch with matching dims is
+/// only *plausibly* incompatible — the same model under a different
+/// label/quant looks identical here — so the restorer VERIFIES it by
+/// re-embedding sample chunks before trusting the snapshot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmbeddingCompat {
+    /// Model name AND dimensions match the local model.
+    Exact,
+    /// Dimensions match, model name differs — verify the space by probe.
+    NameMismatch,
+    /// Dimensions differ — vectors are not comparable; never usable.
+    DimsMismatch,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnapshotManifest {
     /// Schema version — must equal [`SNAPSHOT_SCHEMA_VERSION`] for the
@@ -197,28 +214,23 @@ impl SnapshotManifest {
         Ok(manifest)
     }
 
-    /// Verify this manifest is compatible with the locally-loaded
-    /// embedding model. Returns `Ok(())` on match, `Err` with a
-    /// human-readable message otherwise.
+    /// Classify this manifest's embedding identity against the
+    /// locally-loaded model. Dimensions are the hard floor; a name-only
+    /// mismatch returns [`EmbeddingCompat::NameMismatch`] for the caller
+    /// to VERIFY by probe rather than trust or reject on the label alone
+    /// — model names drift across dir/stem/repo/quant for the same model.
     pub fn check_embedding_compatibility(
         &self,
         local_model: &str,
         local_dimensions: usize,
-    ) -> Result<()> {
-        if self.embedding_model != local_model {
-            return Err(Error::InvalidInput(format!(
-                "snapshot was built with embedding model '{}' but local model is '{}'; \
-                 restore would poison the vector index — falling through to full ingest",
-                self.embedding_model, local_model
-            )));
-        }
+    ) -> EmbeddingCompat {
         if self.embedding_dimensions != local_dimensions {
-            return Err(Error::InvalidInput(format!(
-                "snapshot built with {}-dim vectors but local model emits {}-dim",
-                self.embedding_dimensions, local_dimensions
-            )));
+            EmbeddingCompat::DimsMismatch
+        } else if self.embedding_model == local_model {
+            EmbeddingCompat::Exact
+        } else {
+            EmbeddingCompat::NameMismatch
         }
-        Ok(())
     }
 }
 
@@ -947,30 +959,33 @@ mod tests {
     }
 
     #[test]
-    fn embedding_compatibility_blocks_model_mismatch() {
+    fn embedding_compatibility_flags_model_name_mismatch() {
         let m = sample_manifest();
-        let err = m
-            .check_embedding_compatibility("jina-v2-en", 1024)
-            .unwrap_err();
-        assert!(err.to_string().contains("qwen3-embedding-0.6b"));
-        assert!(err.to_string().contains("jina-v2-en"));
+        // Same dims (1024), different name → NameMismatch: verify by probe,
+        // do NOT reject on the label alone.
+        assert_eq!(
+            m.check_embedding_compatibility("jina-v2-en", 1024),
+            EmbeddingCompat::NameMismatch
+        );
     }
 
     #[test]
     fn embedding_compatibility_blocks_dimension_mismatch() {
         let m = sample_manifest();
-        let err = m
-            .check_embedding_compatibility("qwen3-embedding-0.6b", 768)
-            .unwrap_err();
-        assert!(err.to_string().contains("1024"));
-        assert!(err.to_string().contains("768"));
+        // Different dims → DimsMismatch: the hard floor, never usable.
+        assert_eq!(
+            m.check_embedding_compatibility("qwen3-embedding-0.6b", 768),
+            EmbeddingCompat::DimsMismatch
+        );
     }
 
     #[test]
     fn embedding_compatibility_accepts_exact_match() {
         let m = sample_manifest();
-        m.check_embedding_compatibility("qwen3-embedding-0.6b", 1024)
-            .unwrap();
+        assert_eq!(
+            m.check_embedding_compatibility("qwen3-embedding-0.6b", 1024),
+            EmbeddingCompat::Exact
+        );
     }
 
     #[test]

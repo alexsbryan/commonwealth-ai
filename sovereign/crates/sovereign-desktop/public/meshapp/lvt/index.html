@@ -91,13 +91,26 @@
 
         <div class="card">
           <div class="label">Revenue-neutral land-value-tax rate</div>
-          <div class="figure" id="neutral-rate">—</div>
-          <div class="meta">a flat land-only rate that replaces the ~$1.4B business-tax take</div>
+          <div class="figure" id="swap-rate">—</div>
+          <div class="meta" id="swap-meta">
+            a flat land-only tax raising the same as today's property tax —
+            shifting the levy off buildings onto land
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="label">Why land? It's the stable base</div>
+          <div class="meta" id="biz-insight">
+            Land is the city's steadiest base. Just <strong id="biz-rate">—</strong>
+            — about a quarter of the swap rate — would raise the
+            <span id="biz-target">—</span> that SF now collects from its narrower,
+            more volatile business tax.
+          </div>
         </div>
 
         <div class="card slider-card">
           <div class="label" id="rate-label">Try a flat land-only rate</div>
-          <input type="range" id="rate" min="0" max="2" step="0.01"
+          <input type="range" id="rate" min="0" max="3" step="0.01"
                  aria-labelledby="rate-label" />
           <div class="figure" id="revenue-line" role="status" aria-live="polite">
             <span id="rate-val"></span>% &rarr; <span id="revenue"></span>/yr
@@ -124,8 +137,8 @@
             <div class="parcel-rows">
               <div>Assessed land: <strong id="p-land"></strong></div>
               <div>Assessed improvement: <strong id="p-impr"></strong></div>
-              <div>LVT levy @ <span id="p-rate"></span>%: <strong id="p-lvt"></strong></div>
-              <div>Current property tax (est. @ 1.18%): <strong id="p-cur"></strong></div>
+              <div>Land-only tax @ <span id="p-rate"></span>% (revenue-neutral): <strong id="p-lvt"></strong></div>
+              <div>Your property tax today (est. @ <span id="p-cur-rate"></span>%): <strong id="p-cur"></strong></div>
               <div id="p-delta"></div>
             </div>
             <div class="caveat">

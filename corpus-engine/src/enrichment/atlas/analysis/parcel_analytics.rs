@@ -40,6 +40,17 @@ pub struct ParcelAggregates {
     /// `business_tax_target / land_value_total` — the revenue-neutral
     /// rate on the LAND base.
     pub neutral_rate: f64,
+    /// Effective property-tax rate used to derive the swap scenario — a
+    /// labelled estimate (the roll carries assessed values, not tax paid).
+    pub property_tax_rate: f64,
+    /// `(land + improvement) × property_tax_rate` — estimated revenue today's
+    /// property tax raises (it falls on land + improvements).
+    pub property_tax_revenue_est: f64,
+    /// `property_tax_revenue_est / land_value_total` — the revenue-neutral
+    /// rate for a land-ONLY tax replacing the property tax. The coherent
+    /// per-parcel comparison: shift the SAME revenue off improvements onto
+    /// land alone (winners = improvement-heavy, losers = land-rich).
+    pub property_tax_swap_rate: f64,
     /// Every parcel atom that fed the sum — the citation handle for the
     /// headline figures.
     pub atom_ids: Vec<String>,
@@ -94,6 +105,7 @@ pub fn compute_aggregates(
     atoms: &[Entity],
     corpus_id: &str,
     business_tax_target: f64,
+    property_tax_rate: f64,
 ) -> ParcelAggregates {
     let mut land_value_total = 0.0;
     let mut improvement_value_total = 0.0;
@@ -112,6 +124,15 @@ pub fn compute_aggregates(
     } else {
         0.0
     };
+    // Revenue-neutral property-tax → land-only swap: the rate at which a
+    // land-only tax raises the SAME as today's property tax (which falls on
+    // land + improvements). The coherent per-parcel comparison.
+    let property_tax_revenue_est = (land_value_total + improvement_value_total) * property_tax_rate;
+    let property_tax_swap_rate = if land_value_total > 0.0 {
+        property_tax_revenue_est / land_value_total
+    } else {
+        0.0
+    };
     tracing::info!(
         corpus = %corpus_id,
         parcels = atom_ids.len(),
@@ -119,6 +140,9 @@ pub fn compute_aggregates(
         improvement_value_total,
         business_tax_target,
         neutral_rate,
+        property_tax_rate,
+        property_tax_revenue_est,
+        property_tax_swap_rate,
         "parcel_analytics: computed revenue-neutral land levy aggregates"
     );
     ParcelAggregates {
@@ -128,6 +152,9 @@ pub fn compute_aggregates(
         improvement_value_total,
         business_tax_target,
         neutral_rate,
+        property_tax_rate,
+        property_tax_revenue_est,
+        property_tax_swap_rate,
         atom_ids,
     }
 }
@@ -235,13 +262,18 @@ mod tests {
     fn aggregates_sum_land_base_and_derive_neutral_rate() {
         // p3 has zero land → excluded from the base.
         let atoms = parcels(&[("p1", 1000.0, 500.0), ("p2", 2000.0, 100.0), ("p3", 0.0, 0.0)]);
-        let agg = compute_aggregates(&atoms, "sf-assessor-roll", 300.0);
+        let agg = compute_aggregates(&atoms, "sf-assessor-roll", 300.0, 0.0118);
         assert_eq!(agg.parcel_count, 2);
         assert_eq!(agg.land_value_total, 3000.0);
         assert_eq!(agg.improvement_value_total, 600.0);
         // 300 / 3000 = 0.10 — neutral rate is on the LAND base, not the
         // total roll (which would be 300 / 3600 ≈ 0.083).
         assert!((agg.neutral_rate - 0.10).abs() < 1e-9, "rate = {}", agg.neutral_rate);
+        // Swap scenario: revenue = (3000 + 600) × 0.0118 = 42.48; swap rate =
+        // 42.48 / 3000 = 0.01416 (on the LAND base).
+        assert_eq!(agg.property_tax_rate, 0.0118);
+        assert!((agg.property_tax_revenue_est - 42.48).abs() < 1e-9);
+        assert!((agg.property_tax_swap_rate - 0.01416).abs() < 1e-9);
         assert_eq!(agg.atom_ids.len(), 2, "atom_ids is the citation set");
     }
 
