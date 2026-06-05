@@ -183,3 +183,66 @@ The Strix's primary slot is likely **wedged** (reload_primary holding `lazy_infl
 hung load). A daemon restart on the Strix is the clean reset before re-testing. Per the toolbx
 node-id volatility caveat, bind-mount `~/.sovereign/` so the mesh node_id survives a container
 rebuild.
+
+---
+
+## RESOLUTION (2026-06-05, Strix-side investigation, with live Mac-agent co-debugging)
+
+**The hang is NOT Metal-specific. Root cause: a host-side `send()` deadlock in
+llama.cpp's RPC weight-upload path, triggered by upload volume (~800 MB), and
+reproduced with a plain CPU worker.** Metal was a red herring.
+
+### Evidence chain (each step isolates one variable)
+
+1. **Strix Vulkan host → localhost CPU worker** (stock `llama-bench` *and* the daemon,
+   full 28 GB 35B): ✅ loads + infers. → host side and the daemon load path are healthy.
+2. **Strix Vulkan host → Mac CPU worker over Tailscale, 0.8 B (736 MB)**: ✅ loads split
+   50/50 and runs inference (pp 26.6 / tg 5.74 t/s) over a **direct-LAN** path.
+   → **cross-machine RPC genuinely works.**
+3. **Same cross-machine path, 35B/4B with >~800 MB to the worker**: ❌ wedges. gdb host
+   backtrace, identical across two dumps:
+   `send() → socket_t::impl::send_data → ggml_backend_rpc_buffer_set_tensor →
+   llama_model_loader::load_all_data → llama_model_load_from_file → main`.
+   Host is blocked **writing weights to the socket during load**; Mac worker is
+   ESTABLISHED, idle in `recv`, queues empty, **0 accept failures, healthy**.
+4. **Flag sweep on the failing 4B/1.7 GB case**: baseline ❌, `--no-mmap` ❌, `-dio 1` ❌
+   — **all wedge**. So this is **not** the #19745 mmap/UMA mechanism (`-dio` fixes that);
+   it is a genuine RPC `set_tensor` transport flow-control deadlock. Tensors >10 MB take
+   a `SET_TENSOR_HASH` round-trip then one full-data `send()` (`ggml-rpc.cpp:461-481`) —
+   that send is where it blocks.
+
+Why the original briefing pointed at Metal: the Mac's in-process **Metal worker (:50052)
+had separately died** (Bug A/B below) and stopped listening, so discovery kept *skipping*
+it — masking the real failure. When a worker WAS reachable, the host hit the same
+`send()` deadlock regardless of backend.
+
+### Secondary worker-resilience bugs (independent; worth fixing regardless)
+
+- **Bug A (ggml, upstream):** the rpc-server accept loop `return`s on a single
+  `accept()` failure — `ggml-rpc.cpp:1744` (vendored llama-cpp-sys-4 0.2.57, b9180).
+  One transient `ECONNABORTED` permanently kills the worker. Should `continue`.
+- **Bug B (ours):** `serve_rpc_worker_if_configured` (`model_slot.rs:899-925`) calls
+  `ggml_backend_rpc_start_server` once, logs `"in-process RPC worker server loop exited"`,
+  and never restarts — while `/status` keeps advertising `rpc_worker.port`. Should
+  supervise/restart the server thread and tie the advertisement to actual liveness.
+
+### What works today / what doesn't
+
+- ✅ Strix hosts alone (35B; the 122B fits 128 GB).
+- ✅ Small models distribute cross-machine (≤ ~800 MB uploaded to the worker).
+- ❌ Large-model network distribution — the `send()` deadlock. Upstream llama.cpp issue.
+
+### Fix directions for large-model distribution (in rough order of effort)
+
+1. **Worker-side tensor cache pre-warmed from a local GGUF** — if the worker has the
+   model file and warms its cache, every weight's `SET_TENSOR_HASH` *hits* and the host
+   **skips the data send entirely** (`ggml-rpc.cpp:469-471`), sidestepping the deadlock.
+   (`SOVEREIGN_RPC_CACHE_DIR` / commit 9336c381 "offline warm-from-GGUF" is the hook.)
+2. **Vendored-ggml patch**: chunk/throttle `set_tensor` data sends, and/or enlarge
+   `SO_SNDBUF`/`SO_RCVBUF`, and fix Bug A (`continue` on `accept()` failure).
+3. **Upstream llama.cpp fix** for RPC large-tensor transport robustness.
+4. **Avoid it**: host on the Strix alone (122B fits), or the proven flip topology
+   (Mac Metal host + Strix Vulkan worker) — neither uses the broken large-upload path
+   over the network from the Strix.
+
+Flag-level remedies (`-dio`, `--no-mmap`) do **not** help.
