@@ -3716,3 +3716,127 @@ impl ModelSlot {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod rpc_prune_tests {
+    use super::*;
+
+    /// Move raw ggml device pointers + the bind CString into the worker thread.
+    struct SendArgs(std::ffi::CString, Vec<crate::llama::sys::ggml_backend_dev_t>);
+    // SAFETY: the wrapped device pointer is a process-static ggml CPU device.
+    unsafe impl Send for SendArgs {}
+
+    /// Spawn an in-process RPC worker serving the local **CPU** device on
+    /// `endpoint` (CPU, not GPU, so same-process loopback can't alias a GPU).
+    /// Returns false if the CPU device or thread can't be obtained.
+    fn start_cpu_rpc_worker(endpoint: &str) -> bool {
+        let cpu = unsafe {
+            crate::llama::sys::ggml_backend_dev_by_type(
+                crate::llama::sys::GGML_BACKEND_DEVICE_TYPE_CPU,
+            )
+        };
+        if cpu.is_null() {
+            return false;
+        }
+        let args = SendArgs(std::ffi::CString::new(endpoint).unwrap(), vec![cpu]);
+        std::thread::Builder::new()
+            .name("test-rpc-worker".into())
+            .spawn(move || {
+                // Force whole-struct capture (Rust 2021 disjoint capture would
+                // otherwise grab the non-Send `Vec<*mut>` field directly).
+                let args = args;
+                let SendArgs(ep, mut devs) = args;
+                // Blocks for the life of the (test) process.
+                unsafe {
+                    crate::llama::sys::ggml_backend_rpc_start_server(
+                        ep.as_ptr(),
+                        std::ptr::null(),
+                        2,
+                        devs.len(),
+                        devs.as_mut_ptr(),
+                    );
+                }
+            })
+            .is_ok()
+    }
+
+    fn wait_listening(addr: &str, secs: u64) -> bool {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+        while std::time::Instant::now() < deadline {
+            if std::net::TcpStream::connect(addr).is_ok() {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        false
+    }
+
+    /// The set-shrink core: an RPC device's **description is its endpoint**, and
+    /// `live_device_list_if_pruning_needed` prunes a worker that has left the live
+    /// set (returning an explicit device list without it) while leaving the
+    /// proven NULL-devices path (`None`) in place when the worker is present.
+    ///
+    /// Uses a real in-process CPU RPC worker — no model, no GPU. Skips (passes)
+    /// gracefully if the environment can't bring an RPC worker up.
+    #[test]
+    fn pruning_excludes_a_dead_rpc_worker() {
+        let endpoint = "127.0.0.1:51099";
+        if !start_cpu_rpc_worker(endpoint) || !wait_listening(endpoint, 5) {
+            eprintln!("skipped: could not start an in-process RPC worker here");
+            return;
+        }
+
+        // Register the worker as an RPC device in ggml's global registry.
+        let c = std::ffi::CString::new(endpoint).unwrap();
+        let reg = unsafe { crate::llama::sys::ggml_backend_rpc_add_server(c.as_ptr()) };
+        if reg.is_null() {
+            eprintln!("skipped: add_server returned null (RPC unavailable here)");
+            return;
+        }
+        unsafe { crate::llama::sys::ggml_backend_register(reg) };
+
+        // Find the RPC device and assert its description == the endpoint — the
+        // load-bearing fact set-shrink uses to identify a specific worker.
+        let mut rpc_dev: Option<crate::llama::sys::ggml_backend_dev_t> = None;
+        let n = unsafe { crate::llama::sys::ggml_backend_dev_count() };
+        for i in 0..n {
+            let dev = unsafe { crate::llama::sys::ggml_backend_dev_get(i) };
+            let dreg = unsafe { crate::llama::sys::ggml_backend_dev_backend_reg(dev) };
+            let reg_name =
+                unsafe { std::ffi::CStr::from_ptr(crate::llama::sys::ggml_backend_reg_name(dreg)) }
+                    .to_string_lossy();
+            if reg_name == "RPC" {
+                let desc = unsafe {
+                    std::ffi::CStr::from_ptr(crate::llama::sys::ggml_backend_dev_description(dev))
+                }
+                .to_string_lossy()
+                .into_owned();
+                if desc == endpoint {
+                    rpc_dev = Some(dev);
+                }
+            }
+        }
+        let rpc_dev =
+            rpc_dev.expect("RPC device with the endpoint as its description was not registered");
+
+        // Worker LIVE → provider returns the endpoint → nothing to prune.
+        let live = std::sync::Arc::new(std::sync::RwLock::new(vec![endpoint.to_string()]));
+        set_rpc_worker_provider({
+            let l = std::sync::Arc::clone(&live);
+            move || l.read().unwrap().clone()
+        });
+        assert!(
+            live_device_list_if_pruning_needed().is_none(),
+            "a worker present in the live set must not trigger pruning",
+        );
+
+        // Worker DEAD → provider drops it → an explicit list excluding it.
+        *live.write().unwrap() = Vec::new();
+        let pruned = live_device_list_if_pruning_needed()
+            .expect("a dead worker must produce an explicit pruned device list");
+        assert!(
+            !pruned.contains(&rpc_dev),
+            "the pruned device list must exclude the dead RPC worker",
+        );
+    }
+}
