@@ -67,12 +67,28 @@ const NODES: Record<string, unknown> = {
   },
 };
 
+// Full OCR'd card narratives behind the edges' source_chunk ids — the rich
+// content a citation expands into (vs. the short edge excerpt).
+const CARDS: Record<string, string> = {
+  "BB-955-p3":
+    "OBJECT SIGHTED 18 JUL 54 ... SHAPED LIKE DISC. SIZE OF GRAPEFRUIT. " +
+    "YELLOWISH GOLD STAR BRIGHTNESS ... MOVED STEADILY S OR SW AT 30,000 TO " +
+    "40,000 FT ... 3 TO 5 MIN ... ST LOUIS ILL, CIV.",
+  "BB-955-p1":
+    "29 March 53 · Spooner, Wisconsin · SOURCE: Civilians · CONCLUSION: " +
+    "UNIDENTIFIED · Circular aluminum-colored object approx 1/2 size of moon.",
+};
+
 type Node = { entity_type: string; canonical_name: string; id: string; aliases: string[]; edges: unknown[] };
 
 async function installBridge(page: Page) {
   await page.addInitScript(
     (data) => {
-      const { hotspots, nodes } = data as { hotspots: unknown[]; nodes: Record<string, Node> };
+      const { hotspots, nodes, cards } = data as {
+        hotspots: unknown[];
+        nodes: Record<string, Node>;
+        cards: Record<string, string>;
+      };
       (window as unknown as { meshApp: unknown }).meshApp = {
         capabilities: async () => ({
           mesh_store_read: true,
@@ -98,9 +114,14 @@ async function installBridge(page: Page) {
         },
         node: async (_c: string, id: string) =>
           nodes[id] ?? { id, canonical_name: id, entity_type: "?", attributes: {}, aliases: [], edges: [] },
+        readChunk: async (_c: string, chunkId: string) => ({
+          chunk_id: String(chunkId),
+          content: cards[String(chunkId)] ?? "",
+          title: null,
+        }),
       };
     },
-    { hotspots: HOTSPOTS, nodes: NODES },
+    { hotspots: HOTSPOTS, nodes: NODES, cards: CARDS },
   );
 }
 
@@ -131,6 +152,35 @@ test.describe("Project Blue Book mesh app bundle", () => {
     await expect(edge).toContainText("occurred_near");
     await expect(edge.locator(".excerpt")).toContainText("radar-confirmed");
     await expect(edge.locator(".prov")).toContainText("BB-955-p3");
+    // An installation (the HQ) spans many cards → no single primary auto-card.
+    await expect(page.locator("#primary-card")).toBeEmpty();
+  });
+
+  test("a case/sighting auto-surfaces its primary Form-10073 card", async ({ page }) => {
+    await installBridge(page);
+    await page.goto("/meshapp/uap/index.html");
+
+    await page.locator("#hotspots .hot", { hasText: "Wright-Patterson" }).click();
+    await page.locator("#edges .edge .link", { hasText: "0 OCT 56" }).click(); // → sighting s-1
+    await expect(page.locator("#d-type")).toHaveText("sighting");
+    // Shown automatically — no click — for a narrative entity.
+    await expect(page.locator("#primary-card")).toContainText("Form-10073");
+    await expect(page.locator("#primary-card .card-full")).toContainText("UNIDENTIFIED");
+  });
+
+  test("expanding a citation reveals the full OCR'd card narrative", async ({ page }) => {
+    await installBridge(page);
+    await page.goto("/meshapp/uap/index.html");
+
+    await page.locator("#hotspots .hot", { hasText: "Wright-Patterson" }).click();
+    const edge = page.locator("#edges .edge").first();
+    // The card is collapsed until asked — the bundle shows only the excerpt.
+    await expect(edge.locator(".card-full")).toBeHidden();
+    await edge.getByRole("button", { name: /read the full card/i }).click();
+    // ... then the whole Form-10073 narrative (object, altitude, witness).
+    await expect(edge.locator(".card-full")).toBeVisible();
+    await expect(edge.locator(".card-full")).toContainText("SHAPED LIKE DISC");
+    await expect(edge.locator(".card-full")).toContainText("ST LOUIS ILL");
   });
 
   test("navigating an edge traverses the graph to the next entity", async ({ page }) => {

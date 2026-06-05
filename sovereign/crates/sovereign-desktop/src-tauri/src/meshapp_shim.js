@@ -25,5 +25,6 @@
     findings: (corpusId, pattern) => invoke("meshapp_findings", { corpusId, pattern }),
     searchEntities: (corpusId, query, nodeType, limit) =>
       invoke("meshapp_search_entities", { corpusId, query, nodeType, limit }),
+    readChunk: (corpusId, chunkId) => invoke("meshapp_read_chunk", { corpusId, chunkId }),
   };
 })();
