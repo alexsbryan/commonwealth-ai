@@ -385,3 +385,66 @@ instruction = 2
 # "embed.normalize"            = "Server"
 # "embed.append_eos_token"     = false
 # "embed.output_dimensions"    = 1024
+
+# ─────────────────────────────────────────────────────────────────────
+# Cluster (distributed-only) models.
+#
+# This is NOT a hardware profile. The `cluster` key is intentionally not a
+# `ProfileName` variant, so it is never auto-selected by hardware detection
+# nor surfaced in the single-node setup catalog (`build_primary_catalog`) —
+# a 140 GB model can't run on one node, and offering it there would only
+# mislead. It declares the canonical metadata for a model that runs ONLY
+# across the mesh via RPC layer-distribution.
+#
+# To run it: download all 4 split parts (co-located), point [models].primary
+# at the first part, run each worker with SOVEREIGN_RPC_SERVE=0.0.0.0:50052,
+# and start the host daemon with SOVEREIGN_RPC_DISCOVER=1. The host then
+# splits the model across the mesh's pooled VRAM. See
+# docs/RPC_DISTRIBUTED_INFERENCE.md.
+# Active cluster model for the FIRST distributed-inference iteration:
+# Qwen3.5-122B-A10B (MTP), UD-Q6_K. Chosen because the Strix worker box
+# already has it on disk — no 140 GB download to start. 122B MoE / ~10B
+# active, `qwen35moe` arch (the bundled llama.cpp loads it — same family as
+# the 35B-A3B). ~104 GB across 4 split parts; fits the Strix's 128 GB alone
+# but distributes across the mesh for KV headroom + to exercise the RPC path.
+[profiles.cluster.thoughtful]
+repo      = "unsloth/Qwen3.5-122B-A10B-MTP-GGUF"
+# Split GGUF (4 parts) — point [models].primary at the first part; llama.cpp
+# follows the rest, so all 4 must be co-located.
+file      = "UD-Q6_K/Qwen3.5-122B-A10B-UD-Q6_K-00001-of-00004.gguf"
+family    = "Qwen35"
+quant     = "UD-Q6_K"
+size_gb   = 104.0
+thinking  = true
+hf_url    = "https://huggingface.co/unsloth/Qwen3.5-122B-A10B-MTP-GGUF"
+base_name = "Qwen3.5-122B-A10B"
+[profiles.cluster.thoughtful.capabilities]
+general     = 4
+analysis    = 4
+code        = 4
+instruction = 4
+math        = 4
+creative    = 4
+
+# Eventual FINAL cluster test: MiniMax-M2.7, UD-Q4_K_M (~140 GB, 4 split
+# parts). 229B MoE / ~10B active — exceeds every single node here (Mac
+# 64 GB, Strix 128 GB), so it *requires* the distributed path (that's the
+# point). No MiniMax family yet → GGUF-embedded chat template + generic
+# sampling (follow-up: add a MiniMax family). The bundled llama.cpp (b9180)
+# supports the `minimax-m2` arch. ~17 t/s on a 2-node Strix cluster.
+[profiles.cluster_minimax.thoughtful]
+repo      = "unsloth/MiniMax-M2.7-GGUF"
+file      = "UD-Q4_K_M/MiniMax-M2.7-UD-Q4_K_M-00001-of-00004.gguf"
+family    = "Unknown"
+quant     = "UD-Q4_K_M"
+size_gb   = 140.0
+thinking  = true
+hf_url    = "https://huggingface.co/unsloth/MiniMax-M2.7-GGUF"
+base_name = "MiniMax-M2.7"
+[profiles.cluster_minimax.thoughtful.capabilities]
+general     = 4
+analysis    = 4
+code        = 4
+instruction = 4
+math        = 4
+creative    = 4
