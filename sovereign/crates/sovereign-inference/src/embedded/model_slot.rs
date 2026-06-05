@@ -799,6 +799,140 @@ fn live_device_list_if_pruning_needed() -> Option<Vec<crate::llama::sys::ggml_ba
     Some(list)
 }
 
+/// Conservative safety floor for distributed loads. Streaming a model's weight
+/// share to a remote RPC worker deadlocks the host in `send()` above ~800MB
+/// (observed root cause). Until each worker's shard is warmed — so the host skips
+/// the bulk send via `SET_TENSOR_HASH` hits — we only stream-distribute models
+/// small enough that even a 100% share can't approach the deadlock. Override the
+/// threshold with `SOVEREIGN_RPC_SAFE_STREAM_MB`.
+const SAFE_RPC_STREAM_BYTES: u64 = 512 * 1024 * 1024;
+
+fn safe_rpc_stream_bytes() -> u64 {
+    std::env::var("SOVEREIGN_RPC_SAFE_STREAM_MB")
+        .ok()
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .map(|mb| mb.saturating_mul(1024 * 1024))
+        .unwrap_or(SAFE_RPC_STREAM_BYTES)
+}
+
+/// The operator/orchestrator asserts the discovered workers' shards are already
+/// warm (so a distributed load is all cache-hits, no bulk send). Set by the
+/// auto-warm orchestration once shards are seeded; a manual escape hatch until then.
+fn rpc_assume_warmed() -> bool {
+    std::env::var("SOVEREIGN_RPC_ASSUME_WARMED")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// Pure decision: is it safe to stream-distribute a `model_bytes` model to remote
+/// workers without risking the `send()` deadlock? Safe iff small enough that any
+/// share stays under the floor, or the caller asserts the workers are warm.
+fn rpc_distribution_safe_decision(model_bytes: u64, safe_bytes: u64, assume_warmed: bool) -> bool {
+    assume_warmed || model_bytes <= safe_bytes
+}
+
+fn rpc_distribution_safe(model_bytes: u64) -> bool {
+    rpc_distribution_safe_decision(model_bytes, safe_rpc_stream_bytes(), rpc_assume_warmed())
+}
+
+/// The local (non-RPC) GPU devices, in registry order. Used to force a load onto
+/// the local GPU only — robust even when an RPC worker was registered by a prior
+/// (smaller) load and still sits in ggml's global device registry.
+fn local_gpu_device_list() -> Vec<crate::llama::sys::ggml_backend_dev_t> {
+    let n = unsafe { crate::llama::sys::ggml_backend_dev_count() };
+    let mut local = Vec::new();
+    for i in 0..n {
+        let dev = unsafe { crate::llama::sys::ggml_backend_dev_get(i) };
+        let dtype = unsafe { crate::llama::sys::ggml_backend_dev_type(dev) };
+        if dtype == crate::llama::sys::GGML_BACKEND_DEVICE_TYPE_CPU
+            || dtype == crate::llama::sys::GGML_BACKEND_DEVICE_TYPE_ACCEL
+            || dtype == crate::llama::sys::GGML_BACKEND_DEVICE_TYPE_META
+        {
+            continue;
+        }
+        let reg = unsafe { crate::llama::sys::ggml_backend_dev_backend_reg(dev) };
+        let reg_name =
+            unsafe { std::ffi::CStr::from_ptr(crate::llama::sys::ggml_backend_reg_name(reg)) }
+                .to_string_lossy();
+        if reg_name != "RPC" {
+            local.push(dev);
+        }
+    }
+    local
+}
+
+/// Build the explicit device list + `-ot` tensor-placement overrides for a
+/// distributed, warm-shard load. Enumerates the RPC-first device set, weights the
+/// per-block split by each device's advertised VRAM, runs our `plan_shards`
+/// policy, and maps it to `(regex, buffer_type)` overrides llama.cpp honors
+/// verbatim — so placement is OURS (no prediction of llama.cpp's split) and the
+/// warm slices + the load agree by construction. `None` when there is no RPC
+/// worker to distribute to, or the GGUF's block count can't be read (the caller
+/// then falls back to the streaming split path).
+fn build_buft_overrides_for_load(
+    model_path: &Path,
+) -> Option<(
+    Vec<crate::llama::sys::ggml_backend_dev_t>,
+    Vec<(std::ffi::CString, crate::llama::sys::ggml_backend_buffer_type_t)>,
+)> {
+    // Ordered device set: RPC workers first, then local GPU — the order
+    // `plan_shards` indexes and `with_devices` expects.
+    let count = unsafe { crate::llama::sys::ggml_backend_dev_count() };
+    let mut rpc = Vec::new();
+    let mut local = Vec::new();
+    for i in 0..count {
+        let dev = unsafe { crate::llama::sys::ggml_backend_dev_get(i) };
+        let dtype = unsafe { crate::llama::sys::ggml_backend_dev_type(dev) };
+        if dtype == crate::llama::sys::GGML_BACKEND_DEVICE_TYPE_CPU
+            || dtype == crate::llama::sys::GGML_BACKEND_DEVICE_TYPE_ACCEL
+            || dtype == crate::llama::sys::GGML_BACKEND_DEVICE_TYPE_META
+        {
+            continue;
+        }
+        let reg = unsafe { crate::llama::sys::ggml_backend_dev_backend_reg(dev) };
+        let reg_name =
+            unsafe { std::ffi::CStr::from_ptr(crate::llama::sys::ggml_backend_reg_name(reg)) }
+                .to_string_lossy();
+        if reg_name == "RPC" {
+            rpc.push(dev);
+        } else {
+            local.push(dev);
+        }
+    }
+    if rpc.is_empty() {
+        return None; // nothing to distribute to — not a distributed load
+    }
+    let mut devs = rpc;
+    devs.extend(local);
+
+    let n_layer = match gguf_block_count(model_path) {
+        Ok(Some(n)) if n > 0 => n,
+        _ => return None, // can't plan deterministically without the layer count
+    };
+
+    // Weight the split by advertised free VRAM (host RAM for a CPU-backed worker).
+    let weights: Vec<f32> = devs
+        .iter()
+        .map(|&d| {
+            let (mut free, mut total): (usize, usize) = (0, 0);
+            unsafe { crate::llama::sys::ggml_backend_dev_memory(d, &mut free, &mut total) };
+            (if free > 0 { free } else { total }) as f32
+        })
+        .collect();
+
+    let plan = plan_shards(n_layer, &weights);
+    let overrides: Vec<(std::ffi::CString, crate::llama::sys::ggml_backend_buffer_type_t)> =
+        override_patterns(&plan)
+            .into_iter()
+            .filter_map(|(pattern, di)| {
+                let c = std::ffi::CString::new(pattern).ok()?;
+                let buft = unsafe { crate::llama::sys::ggml_backend_dev_buffer_type(devs[di]) };
+                Some((c, buft))
+            })
+            .collect();
+    Some((devs, overrides))
+}
+
 /// One-shot guard so the in-process RPC worker starts at most once.
 static RPC_SERVE_STARTED: std::sync::Once = std::sync::Once::new();
 
@@ -1034,30 +1168,69 @@ impl ModelSlot {
             .unwrap_or(false);
         let effective_gpu_layers = if force_cpu { 0 } else { n_gpu_layers };
 
-        // Distributed inference: if `SOVEREIGN_RPC_WORKERS` names remote
-        // rpc-server workers, register them as ggml RPC devices now so the
-        // load below spreads this model's layers across local GPU + workers.
-        register_rpc_workers();
+        // Distributed inference + never-wedge guard. Streaming a large model's
+        // weight share to a remote RPC worker wedges the host in send() (the
+        // load-time RPC set_tensor deadlock, >~800MB share). So we only stream-
+        // distribute when it can't deadlock — a model small enough that any share
+        // is safe, or workers the operator/orchestrator asserts are cache-warm.
+        // Otherwise the model loads on the LOCAL GPU ONLY — never wedging.
+        let model_bytes = std::fs::metadata(model_path).map(|m| m.len()).unwrap_or(u64::MAX);
+        let distribute = rpc_distribution_safe(model_bytes);
+        if distribute {
+            register_rpc_workers();
+        } else {
+            tracing::warn!(
+                model_mb = model_bytes / (1024 * 1024),
+                safe_mb = safe_rpc_stream_bytes() / (1024 * 1024),
+                "RPC distribution skipped (would risk the host send() deadlock): model \
+                 exceeds the safe stream size and workers aren't asserted warm — loading \
+                 on the local GPU only. Warm the workers' shards and set \
+                 SOVEREIGN_RPC_ASSUME_WARMED=1 to distribute."
+            );
+        }
 
         let mut model_params = LlamaModelParams::default().with_n_gpu_layers(effective_gpu_layers);
-        // Prune any dead RPC worker (one that left the discovery set) from the
-        // device set — ggml can't unregister, so we pass an explicit live-only
-        // device list. `None` (the common case) keeps the default all-registered-
-        // devices enumeration untouched.
-        if let Some(devices) = live_device_list_if_pruning_needed() {
-            model_params = model_params.with_devices(&devices);
-        }
-        // A CPU-backed (or memory-underreporting) RPC worker gets ~0 layers
-        // under llama.cpp's default memory-proportional split. `SOVEREIGN_RPC_TENSOR_SPLIT`
-        // forces an explicit per-device split (device order: RPC workers first,
-        // then local GPUs) so distribution is deterministic regardless of what
-        // a worker advertises for free memory.
-        if let Some(split) = rpc_tensor_split() {
-            tracing::info!(
-                ?split,
-                "applying SOVEREIGN_RPC_TENSOR_SPLIT (device order: RPC workers first, then local GPU)"
-            );
-            model_params = model_params.with_tensor_split(&split);
+        if !distribute {
+            // Never-wedge: load on the local GPU only, excluding any RPC device a
+            // prior (smaller) load registered into ggml's global registry.
+            let local = local_gpu_device_list();
+            if !local.is_empty() {
+                model_params = model_params.with_devices(&local);
+            }
+        } else {
+            // Distributing. When workers are asserted warm, OWN the placement:
+            // explicit per-block `-ot` overrides pin each block onto its device's
+            // buffer type, so every weight is a SET_TENSOR_HASH cache hit (no bulk
+            // send) — deterministic, with no prediction of llama.cpp's split.
+            // Otherwise (a small model, safe to stream) keep the proven path:
+            // prune dead workers + optional memory-proportional split.
+            let overrides = if rpc_assume_warmed() {
+                build_buft_overrides_for_load(model_path)
+            } else {
+                None
+            };
+            if let Some((devs, ov)) = overrides {
+                tracing::info!(
+                    devices = devs.len(),
+                    overrides = ov.len(),
+                    "distributed load: explicit tensor placement via -ot overrides \
+                     (warm shards expected — host skips the bulk weight send)"
+                );
+                model_params = model_params
+                    .with_devices(&devs)
+                    .with_tensor_buft_overrides(&ov);
+            } else {
+                if let Some(devices) = live_device_list_if_pruning_needed() {
+                    model_params = model_params.with_devices(&devices);
+                }
+                if let Some(split) = rpc_tensor_split() {
+                    tracing::info!(
+                        ?split,
+                        "applying SOVEREIGN_RPC_TENSOR_SPLIT (device order: RPC workers first, then local GPU)"
+                    );
+                    model_params = model_params.with_tensor_split(&split);
+                }
+            }
         }
 
         let model = LlamaModel::load_from_file(backend, model_path, &model_params)
@@ -3775,6 +3948,19 @@ impl ModelSlot {
 #[cfg(test)]
 mod rpc_prune_tests {
     use super::*;
+
+    #[test]
+    fn rpc_distribution_safe_decision_is_a_never_wedge_floor() {
+        let mb = 1024 * 1024;
+        // Small model: any share is under the deadlock point → safe to stream.
+        assert!(rpc_distribution_safe_decision(100 * mb, 512 * mb, false));
+        // At the threshold: safe (<=).
+        assert!(rpc_distribution_safe_decision(512 * mb, 512 * mb, false));
+        // Large + cold cache: NOT safe → caller loads local-only, never wedges.
+        assert!(!rpc_distribution_safe_decision(30_000 * mb, 512 * mb, false));
+        // Large + asserted-warm: safe (host skips the bulk send via cache hits).
+        assert!(rpc_distribution_safe_decision(30_000 * mb, 512 * mb, true));
+    }
 
     #[test]
     fn rpc_worker_restart_backoff_is_bounded_and_monotonic() {
