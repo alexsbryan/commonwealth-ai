@@ -24,7 +24,7 @@ name = "UAP Blue Book Case Metadata"
 description = "U.S. Air Force UAP adjudication records (Sign/Grudge/Blue Book) + modern RG615/AARO, as a typed investigation graph (case/sighting/object/witness/installation/body/adjudication) with a sighting-hotspot threshold."
 license = "public-domain"
 schema_version = 1
-mesh_sharing = false
+mesh_sharing = true
 size_compressed_gb = 0.001
 size_indexed_gb = 0.01
 

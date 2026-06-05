@@ -42,7 +42,7 @@ name = "Enron Email (Lay+Skilling exec + symes-k trade desk)"
 description = "Stage C cross-origin substrate exerciser — Lay + Skilling sent+inbox exec slices plus four symes-k trade-desk folders (counterparty substrate: ctpy_contacts/confirms/deal_communication/power_marketer). ~4450 messages, 8 X-Origin folds."
 license = "public-domain"
 schema_version = 1
-mesh_sharing = false
+mesh_sharing = true
 size_compressed_gb = 0.025
 size_indexed_gb = 0.35
 

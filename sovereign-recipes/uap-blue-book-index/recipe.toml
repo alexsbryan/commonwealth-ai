@@ -14,7 +14,7 @@ description = "All ~10,750 digitized Project Blue Book cases as searchable metad
 license = "public-domain"
 schema_version = 1
 parent_corpus_id = "uap-blue-book"
-mesh_sharing = false
+mesh_sharing = true
 size_compressed_gb = 0.04
 size_indexed_gb = 0.05
 

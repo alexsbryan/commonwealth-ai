@@ -1644,6 +1644,55 @@ impl EmbeddedLlamaCpp {
             }
         });
     }
+
+    /// Force-reload the primary slot using the existing backend, even when the
+    /// same model is already resident. Used by mesh RPC-worker auto-discovery:
+    /// registering a newly-discovered worker device only affects the *next*
+    /// load, so we drop + reload the primary so its layers redistribute across
+    /// the updated device set (local GPU + all registered RPC workers). No-op
+    /// when no primary is configured. Holds the lazy-slot permit so it can't
+    /// race an in-flight request.
+    pub async fn reload_primary(&self) -> Result<()> {
+        let Some(target_path) = self.primary_path.clone() else {
+            return Ok(());
+        };
+        let _permit = self
+            .lazy_inflight
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|e| Error::Inference(format!("lazy slot permit closed: {e}")))?;
+        let primary_lock = Arc::clone(&self.primary);
+        let backend = Arc::clone(&self.primary_backend);
+        let ctx_size = self.primary_ctx_size;
+        let gpu_layers = self.gpu_layers;
+        let loaded_path = Arc::clone(&self.primary_loaded_path);
+
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let mut primary = primary_lock.blocking_lock();
+            let mut loaded = loaded_path.blocking_lock();
+            tracing::info!(
+                slot = "primary",
+                to = %target_path.display(),
+                "reload_primary: redistributing across updated RPC device set"
+            );
+            // Drop the resident slot before reloading so the new load's device
+            // enumeration includes the just-registered RPC worker(s).
+            *primary = None;
+            let started = Instant::now();
+            let s = ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers)?;
+            *primary = Some(s);
+            *loaded = Some(target_path.clone());
+            tracing::info!(
+                slot = "primary",
+                latency_ms = started.elapsed().as_millis() as u64,
+                "reload_primary: slot reloaded across device set"
+            );
+            Ok(())
+        })
+        .await
+        .map_err(|e| Error::Inference(format!("reload join failed: {e}")))?
+    }
 }
 
 #[async_trait]
