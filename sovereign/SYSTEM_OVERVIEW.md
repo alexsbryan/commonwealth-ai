@@ -961,6 +961,26 @@ work pins the GPU while the user is chatting. Components:
   `~/Desktop/sovereign-crash-<ts>.md`, prefilled `mailto:`. No
   auto-upload; v1 ships transparency.
 
+**MeshApp bridge (first-party sandboxed apps).** A mesh app runs in a
+`meshapp-<id>` webview reached only through a permission-gated bridge.
+`src/meshapp.rs` owns authorization — the app id is derived from the
+host-set webview LABEL (unspoofable from JS) and checked fail-closed by
+`authorize` against the granted subset in `DesktopConfig.meshapp_installs`.
+`src/commands/meshapp.rs` exposes the `meshapp_*` commands: deterministic,
+read-only `read_corpus` / `parcel_analytics` (reusing corpus-engine's
+`compute_aggregates`, so no model originates a figure on the desktop
+surface either), host-only install management, and `meshapp_open`
+(`WebviewWindowBuilder` + the `meshapp_shim.js` `window.meshApp` shim over
+`__TAURI_INTERNALS__` + a per-window strict CSP set in
+`on_web_resource_request`). The SF-LVT explorer (`public/meshapp/lvt/`) is
+the reference app. **Isolation caveat:** Tauri v2 does not gate app
+commands per-window (tauri#9227) — a webview with IPC can invoke any
+registered command — so `capabilities/meshapp.json` only narrows the
+core/plugin surface; true isolation for UNTRUSTED third-party apps needs a
+no-IPC bridge (custom protocol / postMessage), a deferred platform
+milestone. The bundle is verified headlessly by
+`tests/e2e/specs/meshapp-lvt.spec.ts` (Playwright, a11y locators).
+
 Control routes (loopback-only, on the internal port :9742):
 `GET /internal/contribution/status`,
 `POST /internal/contribution/ceiling`,

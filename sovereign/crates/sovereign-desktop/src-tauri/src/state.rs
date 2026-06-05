@@ -211,6 +211,11 @@ pub struct DesktopConfig {
     /// reset.
     #[serde(default)]
     pub first_mesh_consent: Option<FirstMeshConsent>,
+    /// Installed mesh apps + the permission subset the user granted each
+    /// at its consent sheet. The bridge (`crate::meshapp`) enforces these
+    /// grants; an app absent here is denied every bridge op (fail-closed).
+    #[serde(default)]
+    pub meshapp_installs: Vec<crate::meshapp::MeshAppInstall>,
 }
 
 /// Persisted result of the W4 consent dialog. Captures both the
@@ -361,6 +366,7 @@ impl Default for DesktopConfig {
             enable_recipe_authoring: false,
             auto_escalate_to_web: false,
             first_mesh_consent: None,
+            meshapp_installs: Vec::new(),
         }
     }
 }

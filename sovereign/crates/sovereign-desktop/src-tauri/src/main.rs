@@ -9,6 +9,7 @@ mod import_commands;
 mod insight_commands;
 mod local_corpus_commands;
 mod mesh_commands;
+mod meshapp;
 mod recipe_author_commands;
 mod recipe_commands;
 mod routing_events;
@@ -491,6 +492,13 @@ fn main() -> ExitCode {
             enrich_commands::mark_first_run_complete,
             update_commands::check_for_update,
             update_commands::install_update,
+            commands::meshapp_capabilities,
+            commands::meshapp_read_corpus,
+            commands::meshapp_parcel_analytics,
+            commands::meshapp_list_installs,
+            commands::meshapp_record_install,
+            commands::meshapp_uninstall,
+            commands::meshapp_open,
         ])
         .run(tauri::generate_context!())
         .expect("error running Sovereign");
