@@ -118,11 +118,31 @@ The five hero questions (`qa_demo.toml`), in narrative order:
 4. **`financial_state`** — *"What was being said internally about Enron's financial condition — credit ratings, mark-to-market accounting, and off-balance-sheet exposure?"* (COMPOUND → query decomposition)
 5. **`counterparty_network`** — *"Which energy companies appear as counterparties or competitors?"* (exercises the reconciled org entities)
 
-**Lead with 2–4** (the strongest, captured answers in §Capture). **Say (on Q4):** "One
-messy, three-part question. The system split it into focused sub-queries and chased each
-thread — the S&P downgrade from one email, the equity adjustment from another — instead of
-averaging them into mush and missing both. That's the query decomposition; we measured the
-lift." *(→ Act 3.2.)*
+**Measured quality (fresh 35B run, `sovereign bench all --synth --filter enron/qa_demo`):**
+**answer-equivalence 0.83** across the set, per-question facts recovered —
+
+| Question | facts | note |
+|---|---|---|
+| `exec_cast` | **6/6** | the cast, perfect — Lay/chairman, Skilling/CEO, Fastow/CFO |
+| `ljm_fraud` | **4/5** | LJM, Raptor, Fastow, partnership; the 5th is borderline |
+| `financial_state` | **3/4** | the compound question — decomposition at work |
+| `dynegy_rescue` | **~3/4** | grounded in Lay's Nov-2001 mail; "stock-for-stock" is sparse in this slice |
+
+**Lead with `exec_cast` → `ljm_fraud` → `financial_state`** (all strong), then `dynegy_rescue`.
+Capture them live in your dry-run; the citation popover shows the source email for each.
+
+**Say (on `financial_state`):** "One messy, three-part question. The system split it into
+focused sub-queries and chased each thread — the S&P downgrade from one email, the equity
+adjustment from another — instead of averaging them into mush and missing both. That's the
+query decomposition." *(→ Act 3.2.)*
+
+**`counterparty_network` — ask it as a GRAPH question, not a search.** "Which energy
+companies appear as counterparties?" is an *enumeration*, and that's exactly what the
+reconciled entity graph is for — RAG synthesis lists ~2/5, but the graph already resolved
+**Dynegy, Calpine, El Paso, Pacific Gas/PG&E, AES, Aquila** as canonical institutions.
+Answer it from `reconciliation.json` / `enrich query`, not the chat. (Honest gap: "Williams"
+— the energy company — got conflated with person-surnames in extraction; name it as the
+known extraction lever, don't claim it.)
 
 > **Reproducible terminal alternative** (no GUI, deterministic, offline): the
 > **atlas-directed** brief —
@@ -158,9 +178,10 @@ over the no-reconciliation floor. This is the number a prosecutor cares about."
 misses `klay@`, `K. Lay`, `chairman.ken@`. Because the system resolved them to one
 identity, one question finds **everything** the man wrote. And it **decomposes** messy
 multi-part questions into focused sub-queries — the broad question embedded whole buries
-each fact below rank 100; decomposed, each sits at rank 2–11. We measured **+11 points** of
-fact coverage." *(The same atlas-directed retrieval lifts buried counterparties: in the
-counterparty question, atlas guidance moved gold recall from 1/5 → 3/5.)*
+each fact below rank 100; decomposed, each sits at rank 2–11." The current set scores
+**keyword-match 0.69** (verified this run). *Prior committed A/Bs* quantified the levers:
+query decomposition added **+11 pts** of fact coverage, and atlas-directed retrieval moved
+counterparty gold recall **1/5 → 3/5** — cite them as the measured deltas, not re-run today.
 
 ---
 

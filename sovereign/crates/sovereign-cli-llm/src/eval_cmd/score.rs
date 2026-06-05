@@ -337,24 +337,94 @@ pub async fn score_facts_judge(
 /// shape, so the only failure mode is a daemon-side fallthrough (rare
 /// post-resolution of the alpha-blocker). Returns `None` on parse
 /// failure so the caller can log + treat as a miss.
+/// Parse the fact-judge's reply, tolerant of the shapes a thinking model
+/// actually emits: a `<think>…</think>` preamble, a leading ```json fence, and
+/// — observed on the 35B — a correct `{"present":…}` object followed by stray
+/// `</think>` + a SECOND, differently-schemed `{"concept_present":…}` fenced
+/// block. We strip any think block, then read the FIRST JSON value (ignoring
+/// trailing junk), and accept `present`/`concept_present` as a yes/no string
+/// OR a boolean. Robustness here is load-bearing: a parse miss silently scores
+/// the fact ABSENT, deflating the measured answer quality.
 fn parse_judge(raw: &str) -> Option<(bool, String)> {
-    let trimmed = raw
-        .trim()
-        .trim_start_matches("```json")
-        .trim_start_matches("```")
-        .trim_end_matches("```")
-        .trim();
-    let v: serde_json::Value = serde_json::from_str(trimmed).ok()?;
-    let present = v.get("present")?.as_str()?;
+    // Strip a *complete* `<think>…</think>` block (its braces would derail the
+    // parse). A stray bare `</think>` with no opening tag is left alone: in that
+    // case the real answer PRECEDES it (model emits `{json}</think>…junk`), so
+    // discarding the head would throw away the answer.
+    let body: std::borrow::Cow<str> = match (raw.find("<think>"), raw.find("</think>")) {
+        (Some(open), Some(rel)) if rel + "</think>".len() > open => {
+            let close = rel + "</think>".len();
+            format!("{}{}", &raw[..open], &raw[close..]).into()
+        }
+        _ => raw.into(),
+    };
+    // Seek the first JSON object and deserialize just that value — the model
+    // sometimes appends a second object/fence after the real answer.
+    let start = body.find('{')?;
+    let mut stream =
+        serde_json::Deserializer::from_str(&body[start..]).into_iter::<serde_json::Value>();
+    let v: serde_json::Value = stream.next()?.ok()?;
+
     let evidence = v
         .get("evidence")
         .and_then(|e| e.as_str())
         .unwrap_or("")
         .to_string();
-    match present.to_ascii_lowercase().as_str() {
-        "yes" => Some((true, evidence)),
-        "no" => Some((false, evidence)),
-        _ => None,
+    // Accept either schema key, as string or bool.
+    let present_val = v.get("present").or_else(|| v.get("concept_present"))?;
+    let present = match present_val {
+        serde_json::Value::Bool(b) => *b,
+        serde_json::Value::String(s) => match s.trim().to_ascii_lowercase().as_str() {
+            "yes" | "true" | "present" => true,
+            "no" | "false" | "absent" => false,
+            _ => return None,
+        },
+        _ => return None,
+    };
+    Some((present, evidence))
+}
+
+#[cfg(test)]
+mod parse_judge_tests {
+    use super::parse_judge;
+
+    #[test]
+    fn plain_yes() {
+        assert_eq!(
+            parse_judge(r#"{"present": "yes", "evidence": "x"}"#),
+            Some((true, "x".into()))
+        );
+    }
+
+    #[test]
+    fn trailing_think_and_second_fenced_object() {
+        // The real 35B failure mode: correct object, then stray </think> + a
+        // second differently-schemed fenced block.
+        let raw = "{\"present\": \"yes\", \"evidence\": \"the best alternative\"}\n</think>\n\n```json\n{\"concept_present\": true}\n```";
+        assert_eq!(
+            parse_judge(raw),
+            Some((true, "the best alternative".into()))
+        );
+    }
+
+    #[test]
+    fn think_block_then_json() {
+        let raw = "<think>let me reason {with braces}</think>\n{\"present\":\"no\",\"evidence\":\"(absent)\"}";
+        assert_eq!(parse_judge(raw), Some((false, "(absent)".into())));
+    }
+
+    #[test]
+    fn boolean_present_field() {
+        assert_eq!(parse_judge(r#"{"present": true}"#), Some((true, String::new())));
+    }
+
+    #[test]
+    fn concept_present_fallback_key() {
+        assert_eq!(
+            parse_judge(r#"```json
+{"concept_present": false, "evidence": "(absent)"}
+```"#),
+            Some((false, "(absent)".into()))
+        );
     }
 }
 
