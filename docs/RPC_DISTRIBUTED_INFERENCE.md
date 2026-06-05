@@ -13,7 +13,7 @@ binary is built or run** — a node takes a role purely by environment:
 |---|---|---|
 | **Worker** | `SOVEREIGN_RPC_SERVE=0.0.0.0:50052` | Daemon starts an in-process RPC server exposing this node's local GPU to peers. |
 | Worker cache | `SOVEREIGN_RPC_CACHE_DIR=<dir>` | Optional. On-disk tensor cache (default `~/.sovereign/rpc-cache`); set `off`/`0` to disable. See "Transfer cost" below. |
-| **Host (auto)** | `SOVEREIGN_RPC_DISCOVER=1` | **Auto-discovery** — the host scans online peers' `/status` for advertised workers and registers them automatically. No IP list to maintain. |
+| **Host (auto)** | `SOVEREIGN_RPC_DISCOVER=1` | **Auto-discovery + auto-reload** — the host scans peers' `/status` for advertised workers (no IP list). When the worker set **changes** — a worker joins *or dies* — and settles (~20s debounce), it **force-reloads the primary** so the model redistributes; a dead worker is pruned from the device set (ggml has no unregister, so the reload passes an explicit live-only device list). |
 | Host (manual) | `SOVEREIGN_RPC_WORKERS=<ip>:50052,<ip2>:50052` | Explicit worker list (union'd with auto-discovery). Use when you want to pin specific peers. |
 | Host (split) | `SOVEREIGN_RPC_TENSOR_SPLIT=0.7,0.3` | Optional. Per-device fractions, **device order = RPC workers first, then local GPU**. Omit to let llama.cpp split by advertised VRAM. |
 

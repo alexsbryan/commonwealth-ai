@@ -25,7 +25,7 @@ description = "Archival UAP documents (scanned Blue Book microfilm + born-digita
 license = "public-domain"
 schema_version = 1
 parent_corpus_id = "uap-blue-book"
-mesh_sharing = false
+mesh_sharing = true
 size_compressed_gb = 0.05
 size_indexed_gb = 0.05
 

@@ -726,6 +726,79 @@ fn register_rpc_workers() {
     }
 }
 
+/// When a previously-registered RPC worker is no longer live (its endpoint left
+/// the env+provider set — the peer died or dropped off the mesh), the model must
+/// not load across its now-dead device. ggml has no unregister, so we build an
+/// explicit device list of only the LIVE devices (local GPU + live RPC) and pass
+/// it via `with_devices`, pruning the dead one. Returns `None` when no pruning is
+/// needed (no dead RPC device) so the caller keeps the proven NULL-`devices`
+/// auto-enumeration path. Device order matches llama.cpp's NULL path — RPC first,
+/// then local GPU — so `SOVEREIGN_RPC_TENSOR_SPLIT` semantics are unchanged.
+fn live_device_list_if_pruning_needed() -> Option<Vec<crate::llama::sys::ggml_backend_dev_t>> {
+    // Live endpoints = env ∪ provider — the same sources register_rpc_workers uses.
+    let mut live: std::collections::HashSet<String> = std::collections::HashSet::new();
+    if let Ok(raw) = std::env::var("SOVEREIGN_RPC_WORKERS") {
+        live.extend(
+            raw.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+        );
+    }
+    if let Some(provider) = RPC_WORKER_PROVIDER.get() {
+        live.extend(provider());
+    }
+
+    let n = unsafe { crate::llama::sys::ggml_backend_dev_count() };
+    let mut rpc_live: Vec<crate::llama::sys::ggml_backend_dev_t> = Vec::new();
+    let mut local_gpu: Vec<crate::llama::sys::ggml_backend_dev_t> = Vec::new();
+    let mut dead = 0usize;
+    for i in 0..n {
+        let dev = unsafe { crate::llama::sys::ggml_backend_dev_get(i) };
+        let dtype = unsafe { crate::llama::sys::ggml_backend_dev_type(dev) };
+        // Keep GPU (1) and IGPU (2) — a Strix Halo host GPU reports as IGPU.
+        // CPU / accel / meta are handled separately by llama.cpp.
+        if dtype == crate::llama::sys::GGML_BACKEND_DEVICE_TYPE_CPU
+            || dtype == crate::llama::sys::GGML_BACKEND_DEVICE_TYPE_ACCEL
+            || dtype == crate::llama::sys::GGML_BACKEND_DEVICE_TYPE_META
+        {
+            continue;
+        }
+        let reg = unsafe { crate::llama::sys::ggml_backend_dev_backend_reg(dev) };
+        let reg_name =
+            unsafe { std::ffi::CStr::from_ptr(crate::llama::sys::ggml_backend_reg_name(reg)) }
+                .to_string_lossy();
+        if reg_name == "RPC" {
+            // The RPC device's description is the endpoint it was registered with.
+            let desc = unsafe {
+                std::ffi::CStr::from_ptr(crate::llama::sys::ggml_backend_dev_description(dev))
+            }
+            .to_string_lossy()
+            .into_owned();
+            if live.contains(&desc) {
+                rpc_live.push(dev);
+            } else {
+                dead += 1;
+            }
+        } else {
+            local_gpu.push(dev);
+        }
+    }
+
+    if dead == 0 {
+        return None; // nothing dead → keep the proven NULL-devices path
+    }
+    tracing::warn!(
+        dead,
+        live_rpc = rpc_live.len(),
+        local_gpu = local_gpu.len(),
+        "pruning dead RPC worker(s) from the model device set"
+    );
+    // RPC devices first, then local GPU — matches llama.cpp's NULL-path order.
+    let mut list = rpc_live;
+    list.extend(local_gpu);
+    Some(list)
+}
+
 /// One-shot guard so the in-process RPC worker starts at most once.
 static RPC_SERVE_STARTED: std::sync::Once = std::sync::Once::new();
 
@@ -912,6 +985,13 @@ impl ModelSlot {
         register_rpc_workers();
 
         let mut model_params = LlamaModelParams::default().with_n_gpu_layers(effective_gpu_layers);
+        // Prune any dead RPC worker (one that left the discovery set) from the
+        // device set — ggml can't unregister, so we pass an explicit live-only
+        // device list. `None` (the common case) keeps the default all-registered-
+        // devices enumeration untouched.
+        if let Some(devices) = live_device_list_if_pruning_needed() {
+            model_params = model_params.with_devices(&devices);
+        }
         // A CPU-backed (or memory-underreporting) RPC worker gets ~0 layers
         // under llama.cpp's default memory-proportional split. `SOVEREIGN_RPC_TENSOR_SPLIT`
         // forces an explicit per-device split (device order: RPC workers first,

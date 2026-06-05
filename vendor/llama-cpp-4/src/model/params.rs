@@ -17,6 +17,11 @@ pub struct LlamaModelParams {
     /// Held here so the raw `*const f32` handed to llama.cpp stays valid for
     /// the whole lifetime of this params object. Empty ⇒ pointer is null.
     tensor_split: Vec<f32>,
+    /// Backing storage for `params.devices` (explicit, null-terminated device
+    /// list). Held here so the raw pointer handed to llama.cpp stays valid for
+    /// the lifetime of this params object. Empty ⇒ pointer is null (llama.cpp
+    /// enumerates all registered devices).
+    devices: Vec<llama_cpp_sys_4::ggml_backend_dev_t>,
 }
 
 impl Debug for LlamaModelParams {
@@ -185,6 +190,26 @@ impl LlamaModelParams {
         self
     }
 
+    /// Sets the explicit device list the model loads across, as a
+    /// null-terminated `ggml_backend_dev_t` array. Order matters and must match
+    /// `with_tensor_split`'s expectation (RPC devices first, then local GPUs).
+    /// An empty slice clears it, so llama.cpp falls back to enumerating all
+    /// registered devices. The pointers are copied and retained for the params'
+    /// lifetime; the pointed-to ggml devices are process-static, so the caller
+    /// need not keep anything else alive.
+    #[must_use]
+    pub fn with_devices(mut self, devices: &[llama_cpp_sys_4::ggml_backend_dev_t]) -> Self {
+        if devices.is_empty() {
+            self.devices = Vec::new();
+            self.params.devices = std::ptr::null_mut();
+            return self;
+        }
+        self.devices = devices.to_vec();
+        self.devices.push(std::ptr::null_mut()); // null terminator
+        self.params.devices = self.devices.as_ptr() as *mut llama_cpp_sys_4::ggml_backend_dev_t;
+        self
+    }
+
     /// sets `vocab_only`
     #[must_use]
     pub fn with_vocab_only(mut self, vocab_only: bool) -> Self {
@@ -228,6 +253,7 @@ impl Default for LlamaModelParams {
                 },
             }],
             tensor_split: Vec::new(),
+            devices: Vec::new(),
         }
     }
 }

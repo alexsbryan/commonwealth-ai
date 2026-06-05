@@ -392,6 +392,11 @@ async fn run_daemon(args: &[String]) -> i32 {
             sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_family_for_file(name)
         })
         .unwrap_or(ModelFamily::Unknown);
+    // Typed handle to the embedded engine, captured for RPC-worker auto-reload:
+    // the mesh discovery task force-reloads the primary when the worker set grows
+    // so an eagerly-loaded model redistributes onto newly-arrived workers.
+    // Deferred-init: assigned in the Ok arm below (the Err arm returns).
+    let engine_handle: Option<Arc<EmbeddedLlamaCpp>>;
     let provider: Arc<dyn InferenceProvider> = match EmbeddedLlamaCpp::load_full_with_families(
         config.models.fast_path(),
         Some(&config.models.primary),
@@ -434,6 +439,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     ) {
         Ok(p) => {
             let arc = Arc::new(p);
+            engine_handle = Some(Arc::clone(&arc));
             // Wire the optional LRU memory budget BEFORE installing
             // extras. With a budget set, each `load_extra` call
             // (including the eager startup loads from `[models.extra]`)
@@ -1363,17 +1369,43 @@ async fn run_daemon(args: &[String]) -> i32 {
             move || snap.read().map(|v| v.clone()).unwrap_or_default()
         });
         let daemon_for_disco = Arc::clone(&daemon);
+        let engine_for_reload = engine_handle.clone();
         tokio::spawn(async move {
+            // `last_loaded` = worker set the resident primary was loaded across;
+            // `current` = set seen last tick (for debounce — wait for it to stop
+            // changing before paying a reload).
+            let mut last_loaded: Vec<String> = Vec::new();
+            let mut current: Vec<String> = Vec::new();
+            let mut stable_since = std::time::Instant::now();
+            const STABLE: std::time::Duration = std::time::Duration::from_secs(20);
             loop {
-                let workers = daemon_for_disco.discover_rpc_workers().await;
+                let mut workers = daemon_for_disco.discover_rpc_workers().await;
+                workers.sort();
+                workers.dedup();
                 if let Ok(mut w) = snapshot.write() {
-                    if *w != workers {
-                        tracing::info!(
-                            count = workers.len(),
-                            workers = ?workers,
-                            "mesh RPC workers discovered"
-                        );
-                        *w = workers;
+                    *w = workers.clone();
+                }
+                if workers != current {
+                    tracing::info!(count = workers.len(), workers = ?workers, "mesh RPC workers changed");
+                    current = workers.clone();
+                    stable_since = std::time::Instant::now();
+                }
+                // Reload when the worker set CHANGES (grow or shrink) vs what's
+                // loaded, once it's been stable briefly. A shrink prunes the dead
+                // worker's device on reload (live_device_list_if_pruning_needed).
+                let changed = current != last_loaded;
+                if changed && stable_since.elapsed() >= STABLE {
+                    match &engine_for_reload {
+                        Some(engine) => {
+                            tracing::info!(workers = ?current, "RPC worker set changed — reloading primary to redistribute");
+                            match engine.reload_primary().await {
+                                Ok(()) => last_loaded = current.clone(),
+                                Err(e) => tracing::warn!(error = %e, "reload_primary failed; will retry next tick"),
+                            }
+                        }
+                        // No primary handle (provider build failed) — keep the
+                        // snapshot fresh so a later manual load still picks workers up.
+                        None => last_loaded = current.clone(),
                     }
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(15)).await;
