@@ -25,20 +25,25 @@ identity — corrupts the evidentiary record.
 ## What we measured
 
 We ran the system over a **two-custodian slice** of the public Enron corpus — the sent
-and inbox folders of **Kenneth Lay and Jeffrey Skilling, ~3,172 messages** after
-boilerplate stripping (signatures, quoted replies, legal disclaimers removed).
+and inbox folders of **Kenneth Lay and Jeffrey Skilling**, ~3,172 messages → **8,829
+indexed chunks** after boilerplate stripping (signatures, quoted replies, legal
+disclaimers removed).
 
-From that raw mail the system extracted, with **no human in the loop**:
+From that raw mail the system extracted and then **distilled** — with no human in the
+loop — a typed knowledge atlas. Raw entity extraction is noisy (it surfaces document
+titles, dollar amounts, quoted fragments); the resolve step distills it to signal:
 
 | Quantity | Count |
 |---|---|
-| Entity mentions (people, orgs, places) | **18,833** |
-| Distinct surface forms of those entities | **25,616** |
-| Participation edges (which entity appears in which message) | **14,309** |
-| Logged, auditable merge decisions | **5,104** |
+| Typed atoms (entities / events / states / relations / claims / questions) | **6,101** |
+| — of which **entities** (people, orgs, places, concepts, works) | **1,730** |
+| Canonical entities after reconciliation | **1,689** |
+| Cross-inbox identity merges (each logged + signal-justified) | **35** |
+| Surface forms collapsed | **47.7%** |
 
-It then reconciled those surface forms into canonical identities — collapsing names,
-emails, and aliases across *both* inboxes into single people and organizations.
+It reconciled surface forms into canonical identities — collapsing names, emails, and
+aliases across *both* inboxes into single, **named** people and organizations (Calpine
+Corporation, El Paso Corporation, Standard & Poor's, Aquila Inc., AES Corporation, …).
 
 ### The result, on identities the system was never tuned against
 
@@ -48,9 +53,9 @@ and score the reconciliation against it with the standard B³ clustering metric:
 | Metric | Score |
 |---|---|
 | **Precision** | **1.000** |
-| Recall | 0.667 |
-| B³ F1 | 0.800 |
-| Improvement over the no-reconciliation floor | **+0.185 F1** |
+| Recall | 0.717 |
+| B³ F1 | 0.835 |
+| Improvement over the no-reconciliation floor | **+0.220 F1** |
 
 Runtime: **~15 seconds** on a single workstation (Apple M2 Max), using candidate-pair
 blocking so the cost grows far slower than the naive all-pairs comparison.
@@ -61,18 +66,19 @@ blocking so the cost grows far slower than the naive all-pairs comparison.
 number that matters in a legal context. The system did not, on the held-aside set, fabricate
 a single identity link. When it was uncertain, it left two surface forms apart rather than
 guessing them together. That error asymmetry — *miss a link before you invent one* — is the
-only one admissible when the output feeds an evidentiary chain. Recall of 0.667 means it
-surfaced two-thirds of the true identity links; the third it missed are abbreviated names
+only one admissible when the output feeds an evidentiary chain. Recall of 0.717 means it
+surfaced ~72% of the true identity links; the rest it missed are abbreviated names
 (`"R. Mark"`), place-name variants (`"Houston, TX"` vs `"Houston, Texas"`), and entities the
 upstream text extraction never surfaced — gaps that *widen the net to review*, never
 *misattribute*.
 
 **Every decision is glass-box.** Reconciliation runs as a step of the enrichment pipeline
 and writes two artifacts beside the raw atoms: a canonical clustering and an append-only
-audit log. On this corpus it collapsed 1,540 surface atoms into 935 canonical-entity merges,
-each logged with the signal that justified it — a shared email header, a normalized name
-match, a corroborated organizational role — and at least two independent signals are required
-before two surface forms from different inboxes are fused. An analyst can ask the system *why*
+audit log. On this corpus it made **35 cross-inbox canonical-entity merges** (47.7% of
+surface forms collapsed), each logged with the signal that justified it — a shared email
+header, a normalized name match, a corroborated organizational role — and at least two
+independent signals are required before two surface forms from different inboxes are fused.
+An analyst can ask the system *why*
 it ruled `"K. Lay"` and `klay@enron.com` the same person and get a concrete, reviewable
 answer. The raw per-mention atoms are never destroyed, so the evidence underneath every merge
 remains inspectable. That is the difference between a black box and a defensible exhibit.
@@ -89,7 +95,7 @@ This brief deliberately under-claims. To keep it credible:
   500k-email / 150-custodian figure is the *public record of the matter*, cited to frame scale.
   We have not yet run the full set; the blocking design is sub-quadratic, so we expect the
   per-custodian cost to hold, but that is an **expectation, not a measurement**.
-- **The 0.800 F1 is reconciliation quality.** It assumes the upstream extraction surfaced the
+- **The 0.835 F1 is reconciliation quality.** It assumes the upstream extraction surfaced the
   entity in the first place; entities the text extractor missed (a handful of counterparties)
   cap recall and are a separate, known lever (a full re-enrichment pass).
 - **A second sealed holdout remains untouched** for an eventual independent generalization
@@ -97,11 +103,12 @@ This brief deliberately under-claims. To keep it credible:
 
 ## The claim, stated plainly
 
-> On a real slice of the Enron archive, with no human intervention, the system reconstructed
-> the cross-inbox identity graph — 18,833 entity mentions, 14,309 participation links —
-> and resolved aliases into canonical people and organizations at **80% F1 with perfect
-> precision on held-aside identities, in fifteen seconds, with every merge decision logged
-> and auditable.** Had the Enron Task Force possessed this, the weeks of paralegal alias-coding
+> On a real slice of the Enron archive, with no human intervention, the system distilled
+> ~8,800 message-chunks into a typed atlas of 6,101 atoms (1,730 entities), reconstructed
+> the cross-inbox identity graph, and resolved aliases into canonical people and
+> organizations at **83.5% B³ F1 with perfect precision (recall 0.717) on held-aside
+> identities, in fifteen seconds, with every merge decision logged and auditable.** Had the
+> Enron Task Force possessed this, the weeks of paralegal alias-coding
 > that precede any "who-knew-what-when" analysis would have been a coffee break — and the
 > result would have been *more* defensible, not less, because every link carries its evidence.
 

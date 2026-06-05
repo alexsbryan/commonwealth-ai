@@ -2,18 +2,36 @@
 
 **Audience:** open-source foundation / partners + the genuinely curious public
 (UAP has broad reach; the credibility bar is *higher*, not lower).
-**Length:** ~10–12 min. **Surface:** terminal (controllable) + one backing slide.
+**Length:** ~10–12 min.
 **One-line goal:** show that the real, public Project Blue Book archive — the U.S.
 Air Force's own 17-year UFO investigation — can be **downloaded, structured into a
 queryable evidence graph, and interrogated with grounded citations, locally, on a
-laptop**, with a special light on the **701 cases the Air Force itself filed as
-UNIDENTIFIED**. Nothing leaves the machine; every claim cites its source card.
+laptop**, with a special light on the cases the Air Force itself filed as
+UNIDENTIFIED. Nothing leaves the machine; every claim cites its source card.
 
 > **The hook:** this isn't a believer's mixtape or a debunker's hit piece. It's the
 > government's own record — 10,750 digitized case files, 126,000 scanned pages —
 > turned into something you can *actually ask questions of*, with the answer always
-> pointing back at the Air Force's own Form-10073 record card. The honest middle:
-> here's what the record shows, including what it explicitly could not explain.
+> pointing back at the Air Force's own Form-10073 record card.
+
+---
+
+## Surfaces — what you drive, and where each thing is shown
+
+This demo uses **three windows**. Be deliberate about which is on screen — it's the
+difference between "smooth" and "where is that again?".
+
+| Window | Used for | Why (verified) |
+|---|---|---|
+| **Terminal** | install · the evidence graph (`enrich investigation show`) · the bench | The investigation graph + hotspots + bench are **CLI-only** today. The desktop Atlas View renders v2 *atlas atoms*, **not** the `investigation/` graph this corpus produces. |
+| **Sovereign Desktop app** | the **grounded chat** (Act 2) — ask a question, get a cited answer, click a citation → popover with the quoted card text | Grounded retrieval + citations is the desktop/server **Runtime** path (`SourceAttribution` + `SourcePopover`). The bare daemon's `/v1/chat/completions` is raw inference with **no retrieval** — so this step is the app, not a CLI one-liner. |
+| **Browser tab** | the **scanned Form-10073 card** (Act 1) | Neither the CLI nor the desktop app renders images. The scan lives at a NARA URL; open it in a browser. (Optional upgrade below makes citations link to it directly.) |
+
+> **Honest gaps to know before the room** (don't get caught): the desktop app has
+> **no corpus-catalog/install UI** (install is the terminal), **no investigation-graph
+> view** (terminal), and **no image viewer** (browser). The chat citation popover shows
+> the quoted text and a "View source" link *only if the chunk carries a url* — this
+> corpus's chunks don't (see "Optional upgrade"), so the scan is the browser tab.
 
 ---
 
@@ -41,101 +59,146 @@ UNIDENTIFIED**. Nothing leaves the machine; every claim cites its source card.
   Sparks' catalog, joined to the NARA cases on location + year to mark
   `is_unidentified` (**270** distinct unknowns matched → **401** file-units).
 - **OCR:** the Air Force Form-10073 record cards (1950s microfilm) read locally with
-  **PaddleOCR**, not a cloud service. Noisy but faithful — disposition, date, length
-  of observation, and the brief summary are recovered straight off the card.
+  **PaddleOCR**, not a cloud service. The structured spine (case identity, location,
+  date, disposition) is NARA catalog + roster data; OCR produces only the narrative.
 
 ---
 
-## Pre-flight (do this BEFORE the room)
+## Pre-flight (do this BEFORE the room — and once as a full dry-run)
 
-1. **Daemon up, models loaded:** `sovereign daemon status` → embed + a 35B chat slot.
-2. **Corpora installed:**
-   - `uap-blue-book` — the **401 image-backed UNIDENTIFIED hero cases**, deep
-     (OCR narrative + investigation graph). `~/.sovereign/indexes/uap-blue-book/`.
-   - `uap-blue-book-index` — all **10,750 cases** as searchable metadata (breadth).
-3. **CAPTURE the hero answers ahead of time** (35B synth is slow live). See §Capture.
-4. **Backing slide:** the numbers from `CAPABILITY_BRIEF.md`.
-5. **Fallback:** a pre-recorded screen capture of the full run. Never demo live without it.
+1. **Build so the new recipes are vendored** (the `[prebuilt]` blocks are embedded at
+   compile time): `cargo build -p sovereign-cli-llm`. If you'll attach the desktop to a
+   freshly-built daemon, also `cargo build -p sovereign-cli-daemon` and restart it.
+2. **Daemon up, models loaded:** `sovereign daemon status` → expect an embed slot + a
+   35B chat slot (the demo box runs `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL` as `primary`).
+3. **Install both corpora** (terminal):
+   ```sh
+   sovereign corpus install uap-blue-book          # enriched hero: 710 chunks + graph, seconds from HF
+   sovereign corpus install uap-blue-book-index    # breadth: 10,750 metadata cases
+   ```
+   Verify: `sovereign enrich investigation show uap-blue-book` prints `Entities: 5598 /
+   Relationships: 3386 / Pattern findings: 15`.
+4. **Desktop retrieval reachable:** launch the app (dev: `npm run dev` in
+   `sovereign/crates/sovereign-desktop/` then `tauri dev`; or the packaged `.app`). It
+   attaches to the daemon on `:9741`. Confirm `uap-blue-book` is retrievable — if you've
+   set `[retrieval] corpora` allow-list anywhere, `uap-blue-book` must be in it (empty =
+   all). **Dry-run the Act 2 question and confirm a citation popover appears.**
+5. **CAPTURE the hero answers ahead of time** (35B synth is slow live). See §Capture.
+6. **Fallback:** a pre-recorded screen capture of the full run. Never demo live without it.
 
 ---
 
-## Act 1 — From 126,000 scanned pages to a structured archive *(the "before/after")*
+## Act 1 — From a scanned card to a structured case *(the "before/after")*
 
-**Show:** a raw scanned Form-10073 card (a JPG from NARA) next to the structured record
-the pipeline pulled from it.
+**The exemplar: case BB-955 — Albuquerque, New Mexico, 25 Aug 1951.** Chosen because it
+sits next to the Sandia/Kirtland nuclear complex (it sets up Act 3's nuclear cluster)
+and its card is legible.
 
-**Say:** "This is what the Air Force left us — a scanned microfilm card. The system read
-it locally, pulled the date, the location, the length of observation, the conclusion
-checkbox, and the summary, and filed it as a typed case. Times **10,750**. No cloud
-touched it; the corpus is a single download."
+**1a. Show the raw card (browser).** Open the NARA catalog page for the case:
+```
+https://catalog.archives.gov/id/28939405      # BB-955, 33 scanned pages (Form-10073 + attachments)
+```
+**Say:** "This is what the Air Force left us — a scanned 1950s microfilm card. Date,
+location, length of observation, a row of conclusion checkboxes, a typed summary."
 
-**Run (install-in-seconds from the prebuilt snapshot):**
+**1b. Install the structured corpus (terminal).**
 ```sh
 sovereign corpus install uap-blue-book        # pulls the prebuilt enriched index from HF
 ```
-**They see:** the enriched corpus (graph + 401 hero cases) restored in seconds — *the
-35B work already done, shipped, reproducible.*
+**They see:** the enriched corpus (graph + 401 hero cases) restored in **seconds** — the
+35B work already done, shipped, reproducible. No GPU, no API key, no cloud.
+
+**1c. Show the same card as a typed record (terminal).** The pipeline read that scan
+locally and filed BB-955 as: location *Albuquerque, New Mexico*, date *25 Aug 1951*,
+study *Blue Book*, and linked it to a sighting, an observed object, a witness, an
+installation, and an adjudication — every edge quoting the card.
+
+**Say:** "Same card. The system read it locally, pulled the fields, and filed it as a
+typed case wired into an evidence graph — times **10,750**. The corpus is a single download."
 
 ---
 
-## Act 2 — The 701: surface what stayed unexplained *(the hero)*
+## Act 2 — The 701: ask what stayed unexplained *(the hero — Sovereign Desktop)*
 
-Three real UNIDENTIFIED cases, verified in the hero set (199 of the 401 mention
-radar). Capture the grounded answers live per §Capture:
-- **Albuquerque, N.M., Aug 1951** (BB-955) — radar, near the Sandia / Los Alamos
-  nuclear complex; ties straight into Act 3's nuclear-site cluster.
+**Surface: the desktop app.** Select the `uap-blue-book` corpus and ask (type it live):
+
+> *"What did the Air Force conclude about the Albuquerque, New Mexico sighting of
+> August 1951, and what evidence is in the file?"*
+
+**They see:** the answer streams in, grounded in the OCR'd card, followed by a
+**"Sources:"** block. Click a citation → a **popover** shows the exact quoted passage
+from BB-955's Form-10073 + the corpus badge. The answer surfaces the real evidence —
+a Sandia Base security guard and his wife, a "flying-wing"-type object, the Kirtland
+AFB radar station — and that the file closed **UNIDENTIFIED**.
+
+**Then flip to the browser tab (the scan from Act 1)** and say: "And here's the actual
+card it's quoting." That's the loop: grounded answer → citation → the government's own page.
+
+**Two more in the can** (capture ahead, same flow):
 - **Iwo Jima, 24 June 1953** (BB-2605) — ground + radar, military witnesses.
 - **Bohol Island, Philippines, May 1958** (BB-5800) — 90-sec falling object, smoke trail.
 
-For each, show the **grounded, cited answer** + the **typed graph** (the sighting, the
-observed object's shape/motion, the witness role, the installation, the adjudication =
-UNIDENTIFIED), every claim pointing back at the Form-10073 card.
+**Say:** "Ask it what the Air Force couldn't explain — and it doesn't hand-wave. It pulls
+the specific case, the radar, the witnesses, and quotes the card it's citing. This is
+the 701, legible."
 
-**Say:** "Ask it *what the Air Force could not explain near military installations in
-1952* — and it doesn't hand-wave. It pulls the specific cases, the radar confirmation,
-the witness roles, and shows you the actual card it's citing. This is the 701, legible."
+> **Supporting structure (optional, terminal):** `enrich investigation show` exposes the
+> typed graph. BB-955's clean edges — `occurred_near` → *Kirtland AFB radar station*,
+> `observed_by` → *Sandia Base security guard and his wife*, `has_sighting` →
+> *flying-wing object* — are demo-grade. Don't feature the `officially_resolved_as`
+> edges for a single case: `adjudication` is the noisy type (the OCR checkbox row), and
+> it shows. The aggregate (Act 3) is where the graph shines.
 
 ---
 
 ## Act 3 — The hotspot map + the disposition bench *(turn "spooky" into "measured")*
 
-**3.1 — Hotspots (descriptive geography, à la AARO's own maps).** The
-`sighting_hotspots` threshold over the unidentified set surfaces **15** installations
-that recur most. The headline:
+**3.1 — Hotspots (terminal).**
+```sh
+sovereign enrich investigation show uap-blue-book
+```
+**They see** the 15 `sighting_hotspots` findings. The headline (verbatim from the output):
 
 | Installation | Unidentified sightings nearby |
 |---|---|
-| **Wright-Patterson AFB** (Blue Book HQ / ATIC) | 15 |
-| **Washington, D.C.** (the 1952 Capitol radar-visual flap) | 7 |
-| Kelly AFB · San Antonio | 7 |
-| Kirtland AFB | 6 |
-| Lake Charles · George AFB | 5 |
-| **Los Alamos · Oak Ridge** (the nuclear-site cluster) | 4 |
+| **Wright-Patterson AFB, Ohio** (Blue Book HQ / ATIC) | **15** |
+| Kelly AFB · San Antonio, TX · **Washington, D.C.** (the '52 Capitol flap) | 7 |
+| Kirtland AFB, N.M. · Dallas, Pa. | 6 |
+| Andrews AFB · George AFB · Lake Charles AFB | 5 |
+| **Los Alamos, N.M. · Oak Ridge, Tenn.** (the nuclear-site cluster) · Arlington · Chicago · Columbus · McChord | 4 |
 
-**Say:** "Two things jump out. Wright-Patterson — the Air Force's own UFO HQ — tops
-the list. And there's a cluster over the *atomic* sites, Los Alamos and Oak Ridge.
-That's not us editorializing; it's the threshold detector counting the Air Force's
-own files." Then show the **coalescing**: the Wright-Patterson node merged **24**
-OCR / location / org spelling variants (`Wright-Patterson AFB`, `WPAFB`,
-`Wright-Patterson Air Forca Base`, `ATIC WPAFB Ohio`, …) into one installation —
-open the node and show the alias list. The fold is identity-grade, so 15 is a *floor*.
+**Say:** "Two things jump out. Wright-Patterson — the Air Force's own UFO HQ — tops the
+list. And there's a cluster over the *atomic* sites, Los Alamos and Oak Ridge. That's
+not us editorializing; it's the threshold detector counting the AF's own files."
 
-**3.2 — Can a local model adjudicate like Blue Book did?** Run the disposition bench:
-the model classifies a case's disposition from its narrative, **era-aware** (it can't
-say "Starlink" for 1952), scored against the Air Force's own ruling. 12-category
-taxonomy, labeled fixture spanning all categories (the hero corpus is all-UNIDENTIFIED,
-so the *variety* lives in the fixture).
+**Show the coalescing** (this is the credibility moment) — the Wright-Patterson node
+absorbed **24** OCR/location/org spelling variants into one installation:
 ```sh
-sovereign bench uap run --split test --policy tuned    # accuracy 0.917 / macro-F1 0.889
-sovereign bench uap diagnose --split test              # confusion matrix + worst confusions
+python3 -c "
+import json, os
+ents = json.load(open(os.path.expanduser('~/.sovereign/indexes/uap-blue-book/investigation/entities.json')))
+wp = max((e for e in ents if e['entity_type']=='installation' and 'wright-patterson' in e['canonical_name'].lower()),
+         key=lambda e: len(e['aliases']))
+print(wp['canonical_name'], '— count', wp['attributes'].get('sighting_count'), '—', len(wp['aliases']), 'variants')
+for a in wp['aliases']: print('  ', a)
+"
 ```
-**They see:** a near-perfect diagonal confusion matrix — **11 of 12 correct** — with
-the one miss being **SENSOR_ARTIFACT → ATMOSPHERIC**.
+**Say:** "`Wright-Patterson AFB`, `WPAFB`, `Wright-Patterson Air Forca Base`,
+`ATIC WPAFB Ohio` — 24 ways the OCR spelled one base, folded into one node. The fold is
+identity-grade — it merges spellings, never distinct bases — so **15 is a floor**."
 
-**Say:** "We measured it: 0.917 accuracy. And the one mistake is the *exact* kind a
-human investigator made — a radar/sensor artifact read as an atmospheric effect.
-That's the tell that it's doing the real adjudication task, not pattern-matching a
-keyword."
+**3.2 — Can a local model adjudicate like Blue Book did? (terminal).**
+```sh
+sovereign bench uap run --split test --policy tuned       # accuracy 0.917 / macro-F1 0.889
+sovereign bench uap diagnose --split test                 # confusion matrix + worst confusions
+```
+**They see** a near-perfect diagonal confusion matrix — **11 of 12 correct** — the one
+miss being **SENSOR_ARTIFACT → ATMOSPHERIC**. (Robustness, if pushed: `--split train`
+→ 0.962; `--policy baseline` → still 0.917, i.e. no tuning lift.)
+
+**Say:** "We measured it: 0.917, and 0.962 on the larger split. The one mistake is the
+*exact* kind a human investigator made — a sensor artifact read as an atmospheric
+effect. That's the tell it's doing the real adjudication task, not keyword-matching."
 
 ---
 
@@ -144,8 +207,8 @@ keyword."
 "Fully local, on a laptop:
 - **The government's own UFO archive** — 10,750 cases, 126,000 scanned pages — turned
   into a **queryable evidence graph**, downloaded in seconds.
-- **The 701 it couldn't explain**, surfaced with their structured evidence and **every
-  claim citing the Air Force's own record card**.
+- **The cases it couldn't explain**, surfaced with their structured evidence and **every
+  claim quoting the Air Force's own record card**.
 - **Nothing left the machine.** Public-domain source, local OCR, local inference,
   inspectable pipeline — and the corpus is one `sovereign corpus install` away for
   anyone who wants to dig in themselves."
@@ -153,14 +216,30 @@ keyword."
 ---
 
 ## §Capture (run before the demo)
-Hotspot + bench numbers are final and live in `CAPABILITY_BRIEF.md` (Acts 3.1/3.2
-above quote them). The one remaining live capture is the **3 hero answers** (Act 2):
-ask each case via the chat path against `uap-blue-book`, and save the grounded answer +
-its `[Source: …]` Form-10073 citations (35B synth is slow live — capture ahead). Suggested
-prompts: "What did the Air Force conclude about the Albuquerque sighting of August 1951,
-and what evidence is in the file?" / same for Iwo Jima (June 1953) and Bohol Island (May
-1958). Reproduce the rest: `sovereign enrich investigation show uap-blue-book` (graph +
-hotspots) and `sovereign bench uap run --split test --policy tuned` (the 0.917 number).
+
+The graph + hotspot + bench numbers are reproducible terminal output — re-run them live
+or screenshot. The one thing to **capture ahead** is the **3 hero chat answers** (Act 2),
+because 35B synthesis is slow live:
+
+1. In the desktop app (or sovereign-server `/v1/chat/completions` with `uap-blue-book`
+   enabled — the same Runtime retrieval path), ask each of the three prompts (Albuquerque
+   Aug 1951 / Iwo Jima Jun 1953 / Bohol Island May 1958).
+2. Save each grounded answer **and** its citation popover (screenshot the quoted passage).
+3. Have the matching NARA card tab pre-opened: BB-955 →
+   `https://catalog.archives.gov/id/28939405` (look up BB-2605 / BB-5800 by their naId
+   in `dataprep/cases_real.jsonl` the same way).
+
+---
+
+## Optional upgrade (tighter demo, not required) — clickable citations → the scan
+
+Today the chat citation popover shows the quoted card *text* but no "View source" link,
+because the ingested hero chunks carry no `url`. To make a citation click open the actual
+NARA scan: add the case's NARA URL (or first `image_url` from `dataprep/metadata.jsonl`)
+as a `url`/source field on each record in `dataprep/cases_real.jsonl`, re-ingest +
+re-enrich the hero corpus, and re-publish the snapshot. This is a full hero rebuild
+(~4 h enrich) — schedule it only if "click the citation → see the card" is worth it for
+the audience. Without it, the browser tab covers the scan.
 
 ---
 
@@ -195,8 +274,8 @@ not OCR** — case identity, location, date, and the unidentified disposition co
 from NARA's catalog + the NICAP roster (clean, structured). OCR only produces the
 *narrative prose*. (2) That prose is better than "1950s microfilm" implies: **all
 401/401** hero narratives are non-empty, **median ~2,074 chars** (min 171). We show
-the **raw Form-10073 card alongside** every answer — nothing hidden, the room judges
-the OCR itself.
+the **raw Form-10073 card** in a browser tab — nothing hidden, the room judges the
+OCR itself.
 
 **Q: it's a 35B-built graph — how do I know the entities/edges aren't hallucinated?**
 Every relationship carries its **evidence**: a verbatim excerpt + the `chunk_id` of
