@@ -13,6 +13,10 @@ pub mod kv_overrides;
 pub struct LlamaModelParams {
     pub(crate) params: llama_cpp_sys_4::llama_model_params,
     kv_overrides: Vec<llama_cpp_sys_4::llama_model_kv_override>,
+    /// Backing storage for `params.tensor_split` (the per-device layer split).
+    /// Held here so the raw `*const f32` handed to llama.cpp stays valid for
+    /// the whole lifetime of this params object. Empty ⇒ pointer is null.
+    tensor_split: Vec<f32>,
 }
 
 impl Debug for LlamaModelParams {
@@ -161,6 +165,26 @@ impl LlamaModelParams {
         self
     }
 
+    /// Sets the tensor split: the per-device fraction of the model when
+    /// splitting layers across multiple devices. The order matches llama.cpp's
+    /// assembled device list (RPC devices first, then local GPUs). An empty
+    /// slice clears it, so llama.cpp falls back to its memory-proportional
+    /// default.
+    ///
+    /// The values are copied and retained inside this params object for the
+    /// duration of model loading, so the caller does not need to keep the
+    /// slice alive.
+    #[must_use]
+    pub fn with_tensor_split(mut self, split: &[f32]) -> Self {
+        self.tensor_split = split.to_vec();
+        self.params.tensor_split = if self.tensor_split.is_empty() {
+            null()
+        } else {
+            self.tensor_split.as_ptr()
+        };
+        self
+    }
+
     /// sets `vocab_only`
     #[must_use]
     pub fn with_vocab_only(mut self, vocab_only: bool) -> Self {
@@ -203,6 +227,7 @@ impl Default for LlamaModelParams {
                     val_i64: 0,
                 },
             }],
+            tensor_split: Vec::new(),
         }
     }
 }
