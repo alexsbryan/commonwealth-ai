@@ -907,23 +907,78 @@ pub(crate) fn serve_rpc_worker_if_configured() {
                     .cache
                     .as_ref()
                     .map_or(std::ptr::null(), |c| c.as_ptr());
-                // SAFETY: device pointers outlive the process; start_server
-                // blocks here, running the accept loop until the process exits.
-                unsafe {
-                    crate::llama::sys::ggml_backend_rpc_start_server(
-                        payload.bind.as_ptr(),
-                        cache_ptr,
-                        n_threads,
+                let bind_str = payload.bind.to_string_lossy().into_owned();
+                // Supervisor loop. `ggml_backend_rpc_start_server` runs ggml's
+                // accept loop and blocks — but ggml `return`s from it on a SINGLE
+                // failed `accept()` (ggml-rpc.cpp: a transient ECONNABORTED from a
+                // peer that connected then reset tears the whole worker down — it
+                // `return`s rather than `continue`s). A one-shot call therefore
+                // left the worker permanently dead while `/status` still
+                // advertised the port, so every host kept connecting and skipping
+                // it. We supervise instead: when the server loop returns, re-create
+                // it (re-binding the freed port) with exponential backoff — a
+                // transient error recovers in ~100ms, while a persistent fault
+                // (e.g. the port is already held) can't hot-loop. Runs for the life
+                // of the process; the only exit is process teardown.
+                let mut consecutive_fast_exits: u32 = 0;
+                loop {
+                    let started = Instant::now();
+                    tracing::info!(
+                        bind = %bind_str,
                         n_devices,
-                        payload.devices.as_mut_ptr(),
+                        "in-process RPC worker: entering ggml server accept loop"
                     );
+                    // SAFETY: device pointers outlive the process; start_server
+                    // blocks here until its accept loop tears down, then returns.
+                    unsafe {
+                        crate::llama::sys::ggml_backend_rpc_start_server(
+                            payload.bind.as_ptr(),
+                            cache_ptr,
+                            n_threads,
+                            n_devices,
+                            payload.devices.as_mut_ptr(),
+                        );
+                    }
+                    // A loop that ran a meaningful while was healthy; reset the flap
+                    // counter so the next teardown recovers quickly. A loop that
+                    // exits fast is flapping → back off harder each time.
+                    let ran_for = started.elapsed();
+                    consecutive_fast_exits = if ran_for >= std::time::Duration::from_secs(30) {
+                        0
+                    } else {
+                        consecutive_fast_exits.saturating_add(1)
+                    };
+                    let backoff = rpc_worker_restart_backoff(consecutive_fast_exits);
+                    tracing::warn!(
+                        bind = %bind_str,
+                        ran_secs = ran_for.as_secs_f64(),
+                        consecutive_fast_exits,
+                        backoff_ms = backoff.as_millis() as u64,
+                        "in-process RPC worker server loop exited — restarting \
+                         (ggml tears its accept loop down on a transient accept() error)"
+                    );
+                    std::thread::sleep(backoff);
                 }
-                tracing::warn!("in-process RPC worker server loop exited");
             });
         if let Err(e) = spawned {
             tracing::warn!(error = %e, "failed to spawn RPC worker thread");
         }
     });
+}
+
+/// Restart backoff for the in-process RPC worker supervisor. The first restart
+/// after a healthy run is near-instant (a transient `accept()` error recovers as
+/// soon as the freed port is re-bound); each successive *fast* exit — a persistent
+/// fault such as the port already being held — backs off exponentially to a 5s
+/// cap so the supervisor can never hot-loop. Pure fn so the schedule is
+/// unit-testable without standing up a real worker.
+fn rpc_worker_restart_backoff(consecutive_fast_exits: u32) -> std::time::Duration {
+    let ms = match consecutive_fast_exits {
+        0 => 100,
+        // 200, 400, 800, 1600, 3200, then capped at 5000.
+        n => (100u64 << n.min(6)).min(5_000),
+    };
+    std::time::Duration::from_millis(ms)
 }
 
 /// Resolve the RPC worker's tensor cache directory — the on-disk store that lets
@@ -3720,6 +3775,25 @@ impl ModelSlot {
 #[cfg(test)]
 mod rpc_prune_tests {
     use super::*;
+
+    #[test]
+    fn rpc_worker_restart_backoff_is_bounded_and_monotonic() {
+        use std::time::Duration;
+        // First restart after a healthy run recovers fast.
+        assert_eq!(rpc_worker_restart_backoff(0), Duration::from_millis(100));
+        // Repeated fast exits back off monotonically and never exceed the 5s cap —
+        // this is the guarantee that the supervisor can never hot-loop.
+        let mut last = Duration::ZERO;
+        for n in 0..=20 {
+            let b = rpc_worker_restart_backoff(n);
+            assert!(b >= last, "backoff must be non-decreasing (n={n})");
+            assert!(b <= Duration::from_secs(5), "backoff must be capped at 5s (n={n})");
+            last = b;
+        }
+        // Saturates at the cap rather than growing unboundedly.
+        assert_eq!(rpc_worker_restart_backoff(6), Duration::from_secs(5));
+        assert_eq!(rpc_worker_restart_backoff(100), Duration::from_secs(5));
+    }
 
     /// Move raw ggml device pointers + the bind CString into the worker thread.
     struct SendArgs(std::ffi::CString, Vec<crate::llama::sys::ggml_backend_dev_t>);
