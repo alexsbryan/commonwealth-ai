@@ -36,9 +36,8 @@ async function main() {
     a = await window.meshApp.parcelAnalytics(CORPUS, TARGET);
   } catch (e) {
     return fail(
-      "Bridge call failed: " + (e && e.message ? e.message : e) +
-      "  (is the LVT app installed with mesh_store_read granted, and is the " +
-      CORPUS + " corpus present?)"
+      "Couldn't load the assessor roll — " + (e && e.message ? e.message : e) +
+      "  (make sure the data is downloaded and this app is allowed to read it.)"
     );
   }
 
@@ -52,7 +51,7 @@ async function main() {
   $("land-meta").textContent =
     "exact: $" +
     a.land_value_total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  $("land-chip").textContent = "Σ over " + intc(a.parcel_count) + " parcel atoms";
+  $("land-chip").textContent = "across " + intc(a.parcel_count) + " parcels";
 
   // Primary reform: the revenue-neutral property-tax → land-only swap.
   $("swap-rate").textContent = (a.property_tax_swap_rate * 100).toFixed(2) + "%";

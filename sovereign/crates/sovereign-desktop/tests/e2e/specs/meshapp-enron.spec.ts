@@ -203,14 +203,14 @@ test.describe("Enron mesh app bundle", () => {
     const merges = page.locator("#merges .merge");
     await expect(merges).toHaveCount(2);
     const calpine = merges.filter({ hasText: "Calpine Corporation" });
-    await expect(calpine.locator(".chip.signal")).toContainText("name_similarity");
+    await expect(calpine.locator(".chip.signal")).toContainText("matching name");
     // Clicking the row plays the reveal.
     await calpine.click();
     await expect(calpine.locator(".reveal")).toHaveClass(/on/);
     // Clicking the canonical name opens the entity (with its merge provenance).
     await calpine.locator(".canon").click();
     await expect(page.locator("#d-name")).toHaveText("Calpine Corporation");
-    await expect(page.locator("#d-recon")).toContainText("3 surface forms");
+    await expect(page.locator("#d-recon")).toContainText("3 different names");
   });
 
   test("drilling into a company shows reconciliation provenance + cited email", async ({ page }) => {
@@ -219,7 +219,7 @@ test.describe("Enron mesh app bundle", () => {
     await page.getByRole("textbox", { name: /search entities/i }).fill("El Paso");
     await page.getByRole("button", { name: /^search$/i }).click();
     await page.locator("#matches .match", { hasText: "El Paso" }).click();
-    await expect(page.locator("#d-recon")).toContainText("Reconciled identity");
+    await expect(page.locator("#d-recon")).toContainText("One identity");
     const edge = page.locator("#edges .edge").first();
     await expect(edge).toContainText("counterparty_of");
     await edge.getByRole("button", { name: /read the source email/i }).click();

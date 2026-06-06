@@ -336,6 +336,7 @@ fn content_type(file: &Path) -> &'static str {
         Some("css") => "text/css; charset=utf-8",
         Some("json") => "application/json",
         Some("svg") => "image/svg+xml",
+        Some("woff2") => "font/woff2",
         _ => "application/octet-stream",
     }
 }

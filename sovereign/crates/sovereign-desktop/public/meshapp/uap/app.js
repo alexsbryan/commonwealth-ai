@@ -20,9 +20,8 @@ async function main() {
     findings = await bridge.findings("sighting_hotspots");
   } catch (e) {
     return fail(
-      "Bridge call failed: " + emsg(e) +
-      "  (is the Blue Book app installed with mesh_store_read granted, and is the " +
-      CORPUS + " corpus present?)"
+      "Couldn't load the archive — " + emsg(e) +
+      "  (make sure the data is downloaded and this app is allowed to read it.)"
     );
   }
 

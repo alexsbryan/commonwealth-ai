@@ -49,7 +49,7 @@ export function forceGraph(container, data, opts = {}) {
   const radius = (n) => 5 + 14 * Math.sqrt((n.degree || 1) / maxDeg);
 
   const linkEls = links.map(() => {
-    const ln = svg("line", { stroke: "#2c3340", "stroke-width": "1" });
+    const ln = svg("line", { stroke: "#3a2f5c", "stroke-width": "1", "stroke-opacity": "0.8" });
     root.appendChild(ln);
     return ln;
   });
@@ -57,7 +57,7 @@ export function forceGraph(container, data, opts = {}) {
   let dragging = null, downAt = null, moved = false;
   for (const n of nodes) {
     const g = svg("g");
-    g.appendChild(svg("circle", { r: radius(n), fill: colorOf(n), stroke: "#0c0e12", "stroke-width": "1.5" }));
+    g.appendChild(svg("circle", { r: radius(n), fill: colorOf(n), stroke: "#0e0b15", "stroke-width": "1.5" }));
     if (radius(n) >= 9) {
       const nm = n.canonical_name || n.id;
       const t = svg("text", { class: "nlabel", "text-anchor": "middle" });

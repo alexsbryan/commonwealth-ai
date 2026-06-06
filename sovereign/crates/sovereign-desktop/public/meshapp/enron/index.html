@@ -31,43 +31,44 @@
         </div>
 
         <div class="card">
-          <div class="label">The web of dealings <span class="chip">atlas edges → live graph</span></div>
-          <div class="meta">Who dealt with whom, sized by how central they are to the traffic. Drag to explore; click a node to pull its emails.</div>
+          <div class="label">The web of dealings <span class="chip">who dealt with whom</span></div>
+          <div class="meta">Each circle is a person or company; the bigger it is, the more central it was to the traffic. Drag to explore — click anyone to pull up their emails.</div>
           <div id="map-toggle" class="toggle"></div>
           <div id="map" class="map"></div>
           <div id="map-msg" class="meta"></div>
         </div>
 
         <div class="card">
-          <div class="label">The collapse, by the month <span class="chip">parsed from email dates</span></div>
-          <div class="meta">Email volume across the year. Click a month to read what was being said as it happened.</div>
+          <div class="label">The collapse, by the month <span class="chip">2001, month by month</span></div>
+          <div class="meta">How much mail moved each month as the company came apart. Click a month to read what people were saying as it happened.</div>
           <div id="timeline" class="timeline"></div>
           <div id="timeline-msg" class="meta"></div>
           <div id="timeline-detail" class="tl-detail"></div>
         </div>
 
         <div class="card">
-          <div class="label">Reconciled identities <span class="chip">every merge carries its reason</span></div>
+          <div class="label">One person, many names <span class="chip">and why they're the same</span></div>
           <div class="meta">
-            Separately-extracted aliases the machine folded into one person or
-            company — click a row to watch it collapse, and see the signal that
-            fired. Perfect precision on the aligned set (B³ P = 1.0).
+            The same person or company turns up written a dozen different ways
+            across mailboxes — <code>klay@enron.com</code>, <em>K. Lay</em>,
+            <em>Kenneth L. Lay</em>. The machine folded each set into one, and
+            shows you why. Click a row to watch the names collapse together.
           </div>
           <div id="merges" class="merges"></div>
           <div id="merges-msg" class="meta"></div>
         </div>
 
         <div class="card">
-          <div class="label">Find anyone <span class="chip">searchEntities</span></div>
+          <div class="label">Find anyone <span class="chip">people · companies · places</span></div>
           <div id="search-host"></div>
         </div>
 
         <div id="detail" class="card" hidden></div>
 
         <p class="foot">
-          What the Enron Task Force did in months of paralegal review is a coffee
-          break here — extract → resolve → reconcile runs from the raw mail, and
-          every link dereferences to the verbatim source email it came from.
+          What the Enron Task Force did in months of paralegal review takes a
+          coffee break here — all of it pieced together from the raw mail, with
+          every link opening the actual email it came from.
         </p>
       </section>
 

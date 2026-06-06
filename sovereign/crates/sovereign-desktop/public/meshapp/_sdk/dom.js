@@ -60,3 +60,13 @@ export const emsg = (e) => (e && e.message ? e.message : String(e));
 
 /** Comma-grouped integer, e.g. 3722 → "3,722". */
 export const fmtInt = (n) => (Number(n) || 0).toLocaleString("en-US");
+
+/** A human label for a reconciliation signal key (the "why two names are the
+ * same"), so the UI never shows raw `snake_case` internals. */
+const SIGNAL_LABELS = {
+  name_similarity: "matching name",
+  shared_email_header: "shared email header",
+  alias_overlap: "overlapping nicknames",
+  judge: "reviewed by the model",
+};
+export const friendlySignal = (s) => SIGNAL_LABELS[s] || String(s).replace(/_/g, " ");
