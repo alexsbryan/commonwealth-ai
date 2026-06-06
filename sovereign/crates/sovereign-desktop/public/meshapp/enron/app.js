@@ -33,9 +33,8 @@ async function main() {
     await bridge.subgraph("institution", 1);
   } catch (e) {
     return fail(
-      "Bridge call failed: " + emsg(e) +
-      "  (is the Enron app installed with mesh_store_read granted, and is the " +
-      CORPUS + " corpus present?)"
+      "Couldn't load the data — " + emsg(e) +
+      "  (make sure the data is downloaded and this app is allowed to read it.)"
     );
   }
   $("loading").hidden = true;
@@ -135,7 +134,7 @@ async function loadReconciliation() {
   let merges;
   try { merges = await bridge.reconciliation(); } catch (e) { msg.textContent = "reconciliation unavailable: " + emsg(e); return; }
   if (!merges || !merges.length) { msg.textContent = "no reconciliation merges recorded for this corpus."; return; }
-  msg.textContent = merges.length + " cross-inbox merges.";
+  msg.textContent = merges.length + " identities folded together — click any to see why.";
   reconciliationList($("merges"), merges, { onOpen: openEntity });
 }
 

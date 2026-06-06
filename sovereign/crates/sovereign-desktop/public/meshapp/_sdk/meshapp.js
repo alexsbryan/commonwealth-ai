@@ -7,7 +7,7 @@
 // The SDK turns a mesh-app bundle from ~600 lines of hand-rolled DOM into a
 // short composition over the host's permission-gated `window.meshApp` bridge.
 
-export { $, clear, el, append, svg, emsg, fmtInt } from "./dom.js";
+export { $, clear, el, append, svg, emsg, fmtInt, friendlySignal } from "./dom.js";
 export { hasBridge, connect, describe } from "./bridge.js";
 export { forceGraph } from "./graph.js";
 export { citationExpander, citedEdge, entityDetail } from "./detail.js";

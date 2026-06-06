@@ -6,7 +6,7 @@
 // an on-ramp thread list, a degree/hotspot bar list, a timeline, and the
 // reconciliation list with its reveal.
 
-import { el, clear, emsg, fmtInt } from "./dom.js";
+import { el, clear, emsg, fmtInt, friendlySignal } from "./dom.js";
 import { describe } from "./bridge.js";
 
 /** Scale/provenance banner. `items`: `{num, cap, glow?}` objects, or "→". */
@@ -163,7 +163,7 @@ export function reconciliationList(container, merges, opts = {}) {
     const canon = el("div", { class: "canon", text: m.canonical_name, style: { cursor: "pointer" }, title: "open this entity" });
     canon.addEventListener("click", (e) => { e.stopPropagation(); opts.onOpen && opts.onOpen(m.canonical_id); });
     for (const s of m.signals_fired || []) {
-      canon.appendChild(el("span", { class: "chip signal", style: { marginLeft: "8px" }, text: s }));
+      canon.appendChild(el("span", { class: "chip signal", style: { marginLeft: "8px" }, text: friendlySignal(s) }));
     }
     const reveal = el("div", { class: "reveal" });
     (m.surface_forms || []).forEach((sf, i) => {

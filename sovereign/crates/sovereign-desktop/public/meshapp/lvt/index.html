@@ -5,15 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SF Land-Value Tax — Legibility Explorer</title>
     <style>
+      @font-face { font-family: "IBM Plex Sans Variable"; font-weight: 100 700; font-display: swap; src: url("../_sdk/fonts/ibm-plex-sans.woff2") format("woff2"); }
+      @font-face { font-family: "IBM Plex Mono"; font-weight: 400; font-display: swap; src: url("../_sdk/fonts/ibm-plex-mono.woff2") format("woff2"); }
       :root {
-        --bg: #0f1115; --card: #181b22; --line: #262b35;
-        --ink: #e8eaed; --dim: #9aa3b2; --accent: #6ea8fe; --good: #5bd6a0;
+        --bg: #130f1b; --card: #1c1729; --line: #1e1832; --line-bright: #3d3364;
+        --ink: #ede8f6; --dim: #afa3cd; --muted: #6b6087;
+        --accent: #c9a84c; --accent-light: #dfc068; --lavender: #9b87c4; --lavender-light: #c4b8e8; --good: #79c478;
+        --font-sans: "IBM Plex Sans Variable", system-ui, sans-serif;
+        --font-mono: "IBM Plex Mono", ui-monospace, monospace;
       }
       * { box-sizing: border-box; }
       body {
-        margin: 0; background: var(--bg); color: var(--ink);
-        font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        margin: 0; color: var(--ink); background-color: #0e0b15;
+        background-image:
+          radial-gradient(ellipse 62% 50% at 88% 4%, rgba(155, 135, 196, 0.13) 0%, transparent 70%),
+          radial-gradient(ellipse 52% 44% at 8% 96%, rgba(201, 168, 76, 0.10) 0%, transparent 65%);
+        background-attachment: fixed;
+        font-family: var(--font-sans);
+        font-feature-settings: "ss03", "ss05", "calt", "liga"; font-weight: 420; letter-spacing: -0.003em;
+        font-size: 15px; line-height: 1.55;
       }
+      body::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 9999; opacity: 0.03; mix-blend-mode: overlay; background-repeat: repeat; background-size: 192px 192px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.80' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
       main { max-width: 720px; margin: 0 auto; padding: 28px 22px 48px; }
       h1 { font-size: 22px; margin: 0 0 4px; }
       .sub { color: var(--dim); margin: 0 0 20px; font-size: 13px; }
@@ -23,12 +35,12 @@
         border-radius: 10px; padding: 16px 18px; margin: 12px 0;
       }
       .label { color: var(--dim); font-size: 13px; display: flex; align-items: center; gap: 8px; }
-      .figure { font-size: 30px; font-weight: 650; margin-top: 4px; letter-spacing: -0.01em; }
-      .figure-sm { font-size: 20px; font-weight: 650; }
+      .figure { font-family: var(--font-mono); font-size: 30px; font-weight: 500; margin-top: 4px; letter-spacing: -0.01em; color: var(--accent-light); }
+      .figure-sm { font-family: var(--font-mono); font-size: 20px; font-weight: 500; }
       .meta { color: var(--dim); font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; }
       .chip {
-        font-size: 11px; font-weight: 500; color: var(--good);
-        background: rgba(91, 214, 160, 0.12); border: 1px solid rgba(91, 214, 160, 0.25);
+        font-size: 10.5px; font-weight: 500; color: var(--lavender-light);
+        background: rgba(155, 135, 196, 0.14); border: 1px solid rgba(155, 135, 196, 0.3);
         border-radius: 999px; padding: 2px 9px; white-space: nowrap;
       }
       .slider-card input[type="range"] { width: 100%; margin: 14px 0 8px; accent-color: var(--accent); }
@@ -73,11 +85,12 @@
     <main>
       <h1>San Francisco Land-Value Tax</h1>
       <p class="sub">
-        Every figure is computed deterministically by the host from the parcel
-        roll — no model originates a number. <span class="src" id="source"></span>
+        Every figure here is computed from San Francisco's public assessor roll —
+        no model invents a number, and you can check the math.
+        <span class="src" id="source"></span>
       </p>
 
-      <section id="loading">Loading parcel analytics from the host…</section>
+      <section id="loading">Crunching the assessor roll…</section>
 
       <section id="app" hidden>
         <div class="card">
@@ -119,7 +132,7 @@
         </div>
 
         <div class="card">
-          <div class="label">Find your property <span class="chip">readCorpus → your cited atom</span></div>
+          <div class="label">Find your property <span class="chip">your parcel, cited</span></div>
           <div class="parcel-input">
             <input type="text" id="parcel-query"
                    placeholder="street name or parcel number, e.g. 25TH or 1301001"
@@ -153,7 +166,7 @@
         </div>
 
         <div class="card">
-          <div class="label">How this was computed <span class="chip">deterministic · parcel_analytics</span></div>
+          <div class="label">How this was computed <span class="chip">every step, shown</span></div>
           <ul id="derivation" class="derivation"></ul>
         </div>
 
@@ -163,10 +176,11 @@
         </div>
 
         <p class="foot">
-          The host fold over typed parcel atoms is read-only and auditable.
-          Export the exact input table with
+          Every figure comes from the public assessor roll and nothing else — no
+          model invents a number. To check the headline land base yourself, export
+          the input table with
           <code>sovereign corpus export-parcels --corpus sf-assessor-roll</code>
-          and sum the <code>assessed_land_value</code> column to reproduce the base.
+          and add up the land-value column.
         </p>
       </section>
 

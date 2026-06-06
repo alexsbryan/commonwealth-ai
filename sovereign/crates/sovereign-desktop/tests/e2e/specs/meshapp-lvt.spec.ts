@@ -97,7 +97,7 @@ test.describe("SF-LVT mesh app bundle", () => {
     // Headline land base (compact, cited) + the provenance chip naming
     // the input-set size.
     await expect(page.getByText("$174.10B")).toBeVisible();
-    await expect(page.getByText(/Σ over 208,666 parcel atoms/)).toBeVisible();
+    await expect(page.getByText(/across 208,666 parcels/)).toBeVisible();
     // Primary reform = the revenue-neutral property-tax swap rate.
     await expect(page.locator("#swap-rate")).toHaveText("2.33%");
     // The business-tax "stable base" insight carries the computed figures.

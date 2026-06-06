@@ -7,7 +7,7 @@
 // cited edges); apps with a bespoke detail compose `citedEdge` +
 // `citationExpander` directly (the UAP Blue Book does, to auto-surface a card).
 
-import { el, clear, emsg } from "./dom.js";
+import { el, clear, emsg, friendlySignal } from "./dom.js";
 import { describe } from "./bridge.js";
 
 /**
@@ -99,9 +99,9 @@ export function entityDetail(container, node, opts = {}) {
   const recon = el("div", { id: "d-recon" });
   const r = node.attributes && node.attributes.reconciliation;
   if (r && Array.isArray(r.surface_forms) && r.surface_forms.length) {
-    const signals = (r.signals_fired || []).join(", ") || "name match";
+    const why = (r.signals_fired || []).map(friendlySignal).join(", ") || "a name match";
     recon.appendChild(el("div", { class: "recon-box" },
-      el("div", { text: "Reconciled identity — folded " + r.surface_forms.length + " surface forms (signal: " + signals + ")" }),
+      el("div", { text: "One identity — the machine recognized " + r.surface_forms.length + " different names as the same person, by " + why + "." }),
       el("div", { class: "forms", text: r.surface_forms.join("  ·  ") })));
   }
   if (node.aliases && node.aliases.length) {
