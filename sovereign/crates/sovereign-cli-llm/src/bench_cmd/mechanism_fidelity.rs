@@ -431,11 +431,13 @@ async fn run(args: Args) -> i32 {
         }
         let (case, _p_struct) = &variant_case[&(probe.case_idx, probe.variant)];
         let prompt = render_prompt(case, probe.render, probe.paraphrase);
+        let model_name = args.models[probe.model_idx].as_str();
         let agg = if args.logprob {
-            elicit_logprob(providers[probe.model_idx].as_ref(), &prompt).await
+            elicit_logprob(providers[probe.model_idx].as_ref(), model_name, &prompt).await
         } else {
             elicit(
                 providers[probe.model_idx].as_ref(),
+                model_name,
                 &prompt,
                 args.k,
                 args.concurrency,
@@ -475,9 +477,9 @@ async fn preflight(
     let prompt = render_prompt(&Case::base_example(), RenderMode::Full, false);
     for (p, name) in providers.iter().zip(models) {
         let agg = if logprob {
-            elicit_logprob(p.as_ref(), &prompt).await
+            elicit_logprob(p.as_ref(), name, &prompt).await
         } else {
-            elicit(p.as_ref(), &prompt, 1, 1).await
+            elicit(p.as_ref(), name, &prompt, 1, 1).await
         };
         if agg.eff_k == 0 {
             return Err(format!(
@@ -498,7 +500,7 @@ async fn preflight(
 /// candidate set as a sentinel in `structured_output`; the daemon's
 /// embedded path reads the next-token distribution over A/B/C and
 /// returns it as JSON in `text`. `p_relocate = P(A) + ½·P(C)`.
-async fn elicit_logprob(model: &dyn InferenceProvider, prompt: &str) -> Agg {
+async fn elicit_logprob(model: &dyn InferenceProvider, model_id: &str, prompt: &str) -> Agg {
     let schema = serde_json::json!({
         "type": "string",
         "enum": ["A", "B", "C"],
@@ -516,6 +518,10 @@ async fn elicit_logprob(model: &dyn InferenceProvider, prompt: &str) -> Agg {
         structured_output: Some(schema),
         think_budget: Some(0),
         enable_thinking: Some(false),
+        // Pin the slot by name — `build_request` routes on `model_id`,
+        // NOT the provider's own id, so without this both models collapse
+        // onto the daemon's default slot.
+        model_id: Some(model_id.to_string()),
         ..Default::default()
     };
     let start = Instant::now();
@@ -715,6 +721,7 @@ fn probe_key(p: &Probe) -> (usize, usize, u8, bool, u8) {
 /// vote-frequency probability and a mean verbalized confidence.
 async fn elicit(
     model: &dyn InferenceProvider,
+    model_id: &str,
     prompt: &str,
     k: u32,
     concurrency: usize,
@@ -734,6 +741,8 @@ async fn elicit(
                 structured_output: Some(schema.clone()),
                 think_budget: Some(0),
                 enable_thinking: Some(false),
+                // Pin the slot by name (build_request routes on model_id).
+                model_id: Some(model_id.to_string()),
                 ..Default::default()
             };
             async move {

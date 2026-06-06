@@ -44,6 +44,27 @@ k_train = 64
 k_dev = 64
 k_test = 200
 
+# ── Early-stopping (PRE-REGISTERED; only `n` is adaptive) ────────────
+# Anytime-valid early-stopping via an empirical-Bernstein interval read
+# only at the `checkpoints` below, with `alpha` Bonferroni-split across
+# them. The union bound over this frozen schedule controls the family-wise
+# false-decision rate, so stopping at the first checkpoint that clears a
+# band does NOT inflate the error rate above `alpha`. The first checkpoint
+# is the `n_min` warmup floor; the last is the `n_max` cap (a still-
+# straddling interval there → Inconclusive). Applies to Train/Dev only —
+# the sacred Test pool runs a fixed pre-registered `n`. `flat_pass_fraction`
+# / `inv_pass_fraction` are the per-class pass-rates the flat/invariance
+# band tests must clear.
+[stopping]
+alpha = 0.05
+checkpoints = [16, 32, 64, 128, 200]
+flat_pass_fraction = 0.90
+inv_pass_fraction = 0.90
+mag_pass_fraction = 0.80
+# Mesh draw-batch size: draw this many cases between CS re-evaluations
+# (trades ≤B-case overshoot for fan-out parallelism).
+batch = 8
+
 # ── Scoring bands (LOADED by the orchestrator) ───────────────────────
 # |d_agent| must reach collapse_min on a large predicted move; stay below
 # flat_max on a predicted-flat (saturation) DIR case; stay below inv_max

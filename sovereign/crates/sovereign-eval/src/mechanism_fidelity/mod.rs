@@ -30,6 +30,7 @@
 pub mod case;
 pub mod perturb;
 pub mod score;
+pub mod stopping;
 pub mod structural;
 
 pub use case::{generate_cases, Case};
