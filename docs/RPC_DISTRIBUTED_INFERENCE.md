@@ -165,6 +165,35 @@ distributes the big primary → workers seed their shards → tokens.
 | `SOVEREIGN_RPC_ASSUME_WARMED` | unset | Escape hatch: assert the workers' shards are already warm and skip auto-warm. |
 | `SOVEREIGN_RPC_SHARD_FETCH` | `whole` | `ranges` → workers byte-range-fetch only their shard (`O(model/N)` disk) instead of holding the whole GGUF. |
 | `SOVEREIGN_RPC_MODELS_DIR` | `~/.sovereign/models` | Where a worker fetches a whole GGUF into when it doesn't already hold the model. |
+| `SOVEREIGN_RPC_WORKER_SETTLE_SECS` | `90` | A discovered worker must be continuously advertised this long before the host distributes to it (eligibility settle). |
+| `SOVEREIGN_RPC_WORKER_FLAP_THRESHOLD` / `…_FLAP_WINDOW_SECS` | `3` / `600` | Appear↔disappear cycles within the window that quarantine a worker. |
+| `SOVEREIGN_RPC_WORKER_COOLDOWN_SECS` / `…_MAX_COOLDOWN_SECS` | `60` / `600` | Quarantine cooldown — linear backoff `cooldown × count`, capped. |
+
+## Robustness — worker eligibility + the supervision contract
+
+Distributed inference couples the host's stability to the remote worker: if a
+worker's RPC server crashes **during graph compute**, ggml's RPC client
+`GGML_ABORT`s (`ggml-rpc.cpp` `RPC_STATUS_ASSERT`) — upstream and **uncatchable
+in-process**, so it kills the **whole host daemon** (the in-flight request is
+lost). The defences:
+
+- **Eligibility gate** (`sovereign-mesh::worker_eligibility`). The host
+  distributes only to PROVEN-STABLE workers. A freshly-discovered worker is
+  *Probationary* until continuously advertised for `…_SETTLE_SECS`; a worker that
+  flaps (`…_FLAP_THRESHOLD` cycles in `…_FLAP_WINDOW_SECS`) is *Quarantined* with
+  linear backoff. Only eligible workers reach the reload decision **and** the
+  `-ot` plan, so a flapping worker can neither thrash the reload loop nor get a
+  shard pinned onto it. (Before this, one flapping worker drove **11 reloads in
+  27 min** and aborted the host mid-benchmark.) Transitions log at INFO
+  (`worker-eligibility: …`) and show in `sovereign mesh status`.
+- **Host supervision is required.** Because the abort is uncatchable, run the
+  daemon under a supervisor that restarts it — `sovereign install-service`
+  installs exactly that (systemd `Restart=on-failure`; launchd `KeepAlive`). The
+  eligibility gate minimizes how often it fires.
+- **Stable shard plan.** The plan is cached per `(model, eligible worker set)`
+  and VRAM is quantized to coarse buckets, so a reload across the same workers
+  reuses the identical assignment — workers' warm caches stay valid (no re-warm
+  churn that the live-VRAM re-plan used to cause).
 
 ## Status
 
@@ -176,8 +205,11 @@ distributes the big primary → workers seed their shards → tokens.
   placement. Primary-slot-only. Retires the manual `SOVEREIGN_RPC_ASSUME_WARMED`.
 - ✅ **Byte-range shard fetch** (`SOVEREIGN_RPC_SHARD_FETCH=ranges`) — a worker
   materializes only `O(model/N)` on disk; for models too big for one node.
+- ✅ **Worker eligibility + plan stability** — distribute only to proven-stable
+  workers (settle + flap-quarantine); reload + `-ot` plan exclude quarantined
+  workers; shard plan cached per worker set. See *Robustness* above.
 
-Open: prune a dead worker from the auto-warm plan (today a dead worker fails the
-warm → the host falls back to local-only until the next reload); per-tensor
-`SET_TENSOR_HASH` round-trips dominate load time on high-RTT links (a perf note
-for large models, not a correctness issue).
+Open: per-tensor `SET_TENSOR_HASH` round-trips dominate load time on high-RTT
+links (a perf note for large models, not a correctness issue); a mid-compute
+remote crash still aborts the host (upstream ggml) — mitigated by the eligibility
+gate + required host supervision, not eliminated.

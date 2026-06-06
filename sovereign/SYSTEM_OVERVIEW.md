@@ -794,7 +794,7 @@ needs peer reachability)
 | `POST /internal/scheduling/intent`  | Scheduling decision notification |
 | `POST /internal/scheduling/plan`    | New shard plan distribution      |
 | `POST /internal/model/transfer`     | Model file transfer (peer-to-peer) |
-| `POST /internal/rpc-warm`           | Distributed inference: host asks a worker to seed its RPC tensor-cache shard before a distributed load (auto-warm). `serve_model_file` now honors `Range` so a worker can fetch only its shard's tensors. |
+| `POST /internal/rpc-warm`           | Distributed inference: host asks a worker to seed its RPC tensor-cache shard before a distributed load (auto-warm). `serve_model_file` honors `Range` for shard-only fetch. The host distributes only to ELIGIBLE workers (`sovereign-mesh::worker_eligibility` — settle + flap-quarantine, surfaced in `sovereign mesh status`); a remote crash mid-compute `GGML_ABORT`s the host, so distributed inference requires host supervision. See `docs/RPC_DISTRIBUTED_INFERENCE.md`. |
 | `POST /internal/index/transfer`     | Corpus shard upload (push)       |
 | `GET  /internal/index/serve`        | Corpus shard download (pull)     |
 | `POST /internal/knowledge/search`   | Inter-node shard query (fan-out target) |

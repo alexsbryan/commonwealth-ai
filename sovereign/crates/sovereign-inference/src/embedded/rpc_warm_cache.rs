@@ -433,6 +433,20 @@ pub struct NodeShard {
     pub fraction: f32,
 }
 
+/// Round a device's free-VRAM weight to a coarse bucket (4 GiB) so transient
+/// fluctuation can't change the shard apportionment when the device set is
+/// unchanged. A belt alongside the per-device-set plan cache: small allocator
+/// churn between reloads stays in-bucket → `plan_shards` returns the same split →
+/// workers' warm caches stay valid. A nonzero-but-tiny device still gets one
+/// bucket so it isn't apportioned to zero. Pure.
+pub fn quantize_vram(bytes: u64) -> u64 {
+    const BUCKET: u64 = 4 * 1024 * 1024 * 1024; // 4 GiB
+    if bytes == 0 {
+        return 0;
+    }
+    (((bytes + BUCKET / 2) / BUCKET).max(1)) * BUCKET
+}
+
 /// Our OWN contiguous placement policy: apportion `n_layer` transformer blocks
 /// across devices proportional to `weights` (RPC-first order), with exact integer
 /// counts via largest-remainder so they sum to `n_layer`. The output head goes on
@@ -585,6 +599,22 @@ mod tests {
         let p = plan_shards(4, &[0.0, 0.0]);
         assert_eq!(p[0].blocks, Some((0, 1)));
         assert_eq!(p[1].blocks, Some((2, 3)));
+    }
+
+    #[test]
+    fn quantize_vram_is_stable_within_a_bucket() {
+        let gb = 1024 * 1024 * 1024u64;
+        assert_eq!(quantize_vram(0), 0);
+        // ~44.8GB and ~45.1GB land in the same bucket → stable plan across a
+        // reload where free VRAM jittered by a few hundred MB.
+        assert_eq!(
+            quantize_vram(44_800 * 1024 * 1024),
+            quantize_vram(45_100 * 1024 * 1024)
+        );
+        // A tiny-but-nonzero device still gets one bucket (never apportioned to 0).
+        assert_eq!(quantize_vram(200 * 1024 * 1024), 4 * gb);
+        // Monotonic across buckets.
+        assert!(quantize_vram(50 * gb) >= quantize_vram(44 * gb));
     }
 
     #[test]

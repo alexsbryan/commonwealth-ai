@@ -923,6 +923,20 @@ struct DistributionPlan {
     assignments: Vec<RpcWarmAssignment>,
 }
 
+/// Process-wide cache of the shard plan, keyed by `(model_id, sorted RPC
+/// endpoints)`. The plan was recomputed from LIVE free VRAM on every reload, but a
+/// worker's free VRAM swings by its loaded shard size between reloads, so the
+/// split drifted — invalidating workers' warm caches (`already=20` vs `36`).
+/// Keying by the model + the stable worker set means a reload across the same
+/// workers reuses the exact assignment; a real topology change is a new key →
+/// recompute.
+fn plan_cache() -> &'static std::sync::Mutex<HashMap<(String, Vec<String>), Vec<NodeShard>>> {
+    static C: std::sync::OnceLock<
+        std::sync::Mutex<HashMap<(String, Vec<String>), Vec<NodeShard>>>,
+    > = std::sync::OnceLock::new();
+    C.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
 /// Compute the distributed placement for `model_path`. Enumerates the RPC-first
 /// device set, weights the per-block split by each device's advertised VRAM, runs
 /// our `plan_shards` policy, and derives BOTH the `(regex, buffer_type)` overrides
@@ -969,41 +983,21 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
     if n_rpc == 0 {
         return None; // nothing to distribute to — not a distributed load
     }
-    let mut devs = rpc;
-    devs.extend(local);
 
     let n_layer = match gguf_block_count(model_path) {
         Ok(Some(n)) if n > 0 => n,
         _ => return None, // can't plan deterministically without the layer count
     };
 
-    // Weight the split by advertised free VRAM (host RAM for a CPU-backed worker).
-    let weights: Vec<f32> = devs
-        .iter()
-        .map(|&d| {
-            let (mut free, mut total): (usize, usize) = (0, 0);
-            unsafe { crate::llama::sys::ggml_backend_dev_memory(d, &mut free, &mut total) };
-            (if free > 0 { free } else { total }) as f32
-        })
-        .collect();
-
-    let plan = plan_shards(n_layer, &weights);
-    let overrides: Vec<(std::ffi::CString, crate::llama::sys::ggml_backend_buffer_type_t)> =
-        override_patterns(&plan)
-            .into_iter()
-            .filter_map(|(pattern, di)| {
-                let c = std::ffi::CString::new(pattern).ok()?;
-                let buft = unsafe { crate::llama::sys::ggml_backend_dev_buffer_type(devs[di]) };
-                Some((c, buft))
-            })
-            .collect();
-
-    // Map each RPC device index → its endpoint. ggml appends RPC devices to its
-    // registry in the order `register_rpc_workers` registered them, which is the
-    // order they were pushed to REGISTERED_RPC — so index `i` is endpoint `i`.
-    // (Assumes one device per worker, which our mesh workers advertise; if a
-    // worker ever advertised several, n_rpc would exceed the endpoint count and
-    // we conservatively decline to distribute rather than mis-map a shard.)
+    // Map each RPC device to its endpoint, then KEEP ONLY ELIGIBLE workers. ggml
+    // appends RPC devices in registration order (the order pushed to
+    // REGISTERED_RPC), so the k-th enumerated RPC device is REGISTERED_RPC[k]. A
+    // worker the eligibility gate quarantined is dropped from the provider, but its
+    // ggml device lingers (ggml has no unregister) — so we filter to the live
+    // (env ∪ provider = eligible) endpoints and RENUMBER, exactly as the stream
+    // path's `live_device_list_if_pruning_needed` does, so OwnedOverrides never
+    // pins a shard onto a quarantined worker. (One device per worker: if a worker
+    // advertised several, n_rpc would exceed the endpoint count → decline.)
     let registered = REGISTERED_RPC.lock().unwrap_or_else(|e| e.into_inner());
     if registered.len() < n_rpc {
         tracing::warn!(
@@ -1013,13 +1007,75 @@ fn plan_distribution(model_path: &Path) -> Option<DistributionPlan> {
         );
         return None;
     }
-    let assignments: Vec<RpcWarmAssignment> = (0..n_rpc)
-        .map(|i| RpcWarmAssignment {
-            endpoint: registered[i].clone(),
+    let live: std::collections::HashSet<String> = gather_rpc_endpoints().into_iter().collect();
+    let eligible_rpc: Vec<(crate::llama::sys::ggml_backend_dev_t, String)> = rpc
+        .into_iter()
+        .zip(registered.iter().cloned())
+        .filter(|(_, ep)| live.contains(ep))
+        .collect();
+    drop(registered);
+    if eligible_rpc.is_empty() {
+        return None; // every RPC device is ineligible (quarantined/left) → local-only
+    }
+    let assignments: Vec<RpcWarmAssignment> = eligible_rpc
+        .iter()
+        .enumerate()
+        .map(|(i, (_, ep))| RpcWarmAssignment {
+            endpoint: ep.clone(),
             device_index: i,
         })
         .collect();
-    drop(registered);
+    // RPC-first device list (eligible only), then local GPU — the order
+    // `plan_shards`/`with_devices` index, and the order `assignments` renumbered.
+    let mut devs: Vec<crate::llama::sys::ggml_backend_dev_t> =
+        eligible_rpc.into_iter().map(|(d, _)| d).collect();
+    devs.extend(local);
+
+    // ONE stable shard plan per (model, worker set). Reuse the cached plan across
+    // reloads with the same workers so each worker's warm cache stays valid; only
+    // recompute when the model or the eligible worker set actually changes. VRAM is
+    // quantized as a belt so a re-plan after a topology change doesn't churn on
+    // sub-bucket jitter.
+    let model_id = model_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown")
+        .to_string();
+    let mut rpc_endpoints: Vec<String> = assignments.iter().map(|a| a.endpoint.clone()).collect();
+    rpc_endpoints.sort();
+    let key = (model_id, rpc_endpoints);
+    let plan: Vec<NodeShard> = {
+        let mut cache = plan_cache().lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(cached) = cache.get(&key) {
+            tracing::debug!(model = %key.0, "plan_distribution: reusing cached shard plan (stable worker set)");
+            cached.clone()
+        } else {
+            // Weight by advertised free VRAM (host RAM for a CPU-backed worker),
+            // quantized to coarse buckets.
+            let weights: Vec<f32> = devs
+                .iter()
+                .map(|&d| {
+                    let (mut free, mut total): (usize, usize) = (0, 0);
+                    unsafe { crate::llama::sys::ggml_backend_dev_memory(d, &mut free, &mut total) };
+                    quantize_vram((if free > 0 { free } else { total }) as u64) as f32
+                })
+                .collect();
+            let computed = plan_shards(n_layer, &weights);
+            tracing::info!(model = %key.0, devices = devs.len(), "plan_distribution: computed new shard plan");
+            cache.insert(key.clone(), computed.clone());
+            computed
+        }
+    };
+
+    let overrides: Vec<(std::ffi::CString, crate::llama::sys::ggml_backend_buffer_type_t)> =
+        override_patterns(&plan)
+            .into_iter()
+            .filter_map(|(pattern, di)| {
+                let c = std::ffi::CString::new(pattern).ok()?;
+                let buft = unsafe { crate::llama::sys::ggml_backend_dev_buffer_type(devs[di]) };
+                Some((c, buft))
+            })
+            .collect();
 
     Some(DistributionPlan {
         devs,
