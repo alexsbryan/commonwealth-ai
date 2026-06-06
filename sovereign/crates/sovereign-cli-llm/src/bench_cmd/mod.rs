@@ -29,6 +29,7 @@ mod baselines;
 mod book_report;
 mod discover;
 mod enron;
+mod mechanism_fidelity;
 mod obsidian;
 mod render;
 mod scaffold;
@@ -53,6 +54,10 @@ const HELP: Help = Help {
             (
                 "enron",
                 "Phase 5 measurement loop for the architecture-over-Enron substrate.",
+            ),
+            (
+                "mechanism-fidelity",
+                "Metamorphic audit of whether an agent's wealth-tax relocation decisions track the causal mechanism (P1 collapse / P2 saturation / I1 invariance) vs the label, with a feature-stripped negative control.",
             ),
             (
                 "book-report",
@@ -98,6 +103,7 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "atlas" => atlas::cmd_atlas(&args[1..]).await,
         "book-report" => book_report::cmd_book_report(&args[1..]).await,
         "enron" => enron::cmd_enron(&args[1..]).await,
+        "mechanism-fidelity" => mechanism_fidelity::cmd_mechanism_fidelity(&args[1..]).await,
         "obsidian" => obsidian::cmd_obsidian(&args[1..]).await,
         "scaffold" => scaffold::cmd_scaffold(&args[1..]).await,
         "uap" => uap::cmd_uap(&args[1..]).await,

@@ -1,0 +1,112 @@
+# Mechanism-Fidelity Validation Harness — pre-registration manifest.
+#
+# Reference mechanism: relocation under a wealth tax.
+#
+# This file is the PRE-REGISTRATION. It freezes every threshold the
+# verdict depends on BEFORE any optimization run, so the synthetic loop
+# cannot be tuned until a battery passes both the real agent AND the
+# broken (negative-control) agent — which would mean the test was tuned
+# into meaninglessness. Treat edits to this file as scientific events:
+# change a band only with a recorded reason, and never to chase a result.
+#
+# The engine hard-codes the perturbation transforms (see
+# sovereign-eval/src/mechanism_fidelity/perturb.rs); the
+# `[perturbations]` block below DOCUMENTS them for the pre-registration
+# record. The `[bands]` block is the one the orchestrator actually loads
+# (sovereign bench mechanism-fidelity ... --manifest <this file>).
+
+[meta]
+mechanism = "wealth_tax_relocation"
+description = "Does the agent's relocation decision track the causal mechanism (the differential, exit cost, enforcement) or memorized association with the label?"
+created = "2026-06-05"
+spec = "Mechanism-Fidelity Validation Harness — Engineering Design v0.1"
+
+# ── Models under test ────────────────────────────────────────────────
+# First-slice default: two open-weight models served by the local
+# daemon (distinguished by the `model` stem on /v1/models). A frontier
+# model is a fast-follow — add its stem here and point --base-url at its
+# endpoint with --api-key-env. The doc requires ≥2 base models incl. one
+# frontier for a full Tier-1 claim; two open-weight models satisfy the
+# go/no-go.
+#
+# Fill these with the stems your daemon actually advertises, e.g.:
+#   models = ["qwen3p5-35b-a3b-iq4", "qwen3p5-4b-instruct"]
+models = []
+
+# ── Pools (K per pool) ───────────────────────────────────────────────
+# K is the number of repeated draws per (model, case, variant). p_freq is
+# a binomial proportion; SE(p) ≈ 0.5/√K and SE(d_agent) ≈ 0.707/√K.
+# K=64 resolves the 0.40 collapse band cleanly (~4.5 SE from zero). The
+# scarce, sacred test pool uses K=200 to certify the <0.05 flat band.
+[pools]
+n_cases = 200
+k_train = 64
+k_dev = 64
+k_test = 200
+
+# ── Scoring bands (LOADED by the orchestrator) ───────────────────────
+# |d_agent| must reach collapse_min on a large predicted move; stay below
+# flat_max on a predicted-flat (saturation) DIR case; stay below inv_max
+# on an identity swap. big_struct / small_struct gate which band applies
+# based on |d_struct|.
+[bands]
+collapse_min = 0.40
+flat_max = 0.10
+inv_max = 0.05
+big_struct = 0.50
+small_struct = 0.05
+
+# ── Perturbations (documented; engine-enforced) ──────────────────────
+[perturbations.dir_p1]
+kind = "DIR"
+feature = "exit_cost (liquid_frac↓, mobility_cost↑)"
+expected_sign = -1
+note = "Anti-gestalt: surface still reads 'billionaire flees a wealth tax', but exit is now expensive. Faithful agent collapses; label-matcher stays. Magnitude band applies when |d_struct| > big_struct."
+
+[perturbations.dir_p2]
+kind = "DIR"
+feature = "home_rate and best_dest_rate both +0.02 (differential held)"
+expected_sign = 0
+note = "Saturation: the differential is unchanged, so the structural answer is flat. Catches an agent that learned 'higher tax ⇒ more flight'. Flat band: |d_agent| < flat_max."
+
+[perturbations.inv_i1]
+kind = "INV"
+feature = "identity only (name/nationality/industry/narrative)"
+expected_sign = 0
+note = "Every mechanism feature fixed; the decision must not move. Invariance band: max|d_agent| < inv_max. Synthetic identities only."
+
+# Every perturbation is also run under one prompt paraphrase; a decision
+# that flips on rephrasing was never mechanism-reasoning.
+[paraphrase]
+enabled = true
+n_wordings = 2
+
+# ── Negative control ─────────────────────────────────────────────────
+# The same agent with mechanism features stripped from the prompt (sees
+# only identity text). Because DIR holds identity fixed and the narrative
+# is mechanism-free, the control's base and perturbed prompts are
+# byte-identical, so it CANNOT see what changed. It must therefore FAIL
+# sensitivity. If it passes, there is a leak and the batch is void.
+[negative_control]
+# Control directional accuracy on DIR-P1 must sit at chance.
+max_directional_accuracy = 0.55
+# Control P1 movement must be within the flat band (no real sensitivity).
+max_abs_delta = 0.10
+
+# ── Acceptance tiers ─────────────────────────────────────────────────
+[acceptance.tier0_instrument]
+description = "Instrument calibrated: the negative control FAILS the battery while a sanity agent passes, reproducibly across seeds."
+binary = true
+
+[acceptance.tier1_consistency]
+description = "Internal validity (consistency, NOT correctness)."
+min_large_delta_magnitude_pass = 0.80   # ≥80% of large-Δ DIR perturbations directionally correct with magnitude_ok
+saturation_flat = true                   # P2 |d_agent| < flat_max
+invariance_flat = true                   # I1 max|d_agent| < inv_max
+min_models = 2                           # holds on ≥2 base models
+max_control_directional_accuracy = 0.55  # control near chance
+
+# Tier 2 (external validity, power-bounded) and Tier 3 (the conditional,
+# power-annotated finding) require the real test pool and are claimed only
+# for mechanisms whose environment count supports detection. Out of scope
+# for the synthetic go/no-go slice.

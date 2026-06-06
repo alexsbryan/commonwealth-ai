@@ -197,6 +197,21 @@ per-corpus question banks) live under `sovereign/bench/`, not here — the gym
 *commands* (`sovereign search-gym`, `knowledge-gym`) still exist; only their
 fixtures moved.
 
+The **Mechanism-Fidelity Validation Harness** (`sovereign bench
+mechanism-fidelity`) is a different shape of bench: a *metamorphic* audit of
+whether an agent's policy decisions track a causal mechanism or a memorized
+label. Pure logic (case schema, logistic structural prior, perturbation engine
+— DIR-P1 anti-gestalt collapse / DIR-P2 saturation / INV-I1 identity invariance
+— scorer, three-pool discipline) lives in
+`sovereign-eval/src/mechanism_fidelity/`; the inference-coupled orchestrator
+(`bench_cmd/mechanism_fidelity.rs`) elicits a relocation probability by repeated
+sampling (no logprobs exist — K structured ternary draws at temperature → vote
+frequency) from N daemon models, runs a feature-stripped **negative control**
+that must fail sensitivity, and emits `ResultRow` JSONL read by the Python
+verdict sidecar. It reuses `entity_resolution_bench::PeekBudget` for the sacred
+test pool. Reference mechanism: relocation under a wealth tax. See
+`sovereign/bench/mechanism_fidelity/README.md`.
+
 ---
 
 ## 3. corpus-engine — the shared knowledge layer
