@@ -25,8 +25,17 @@ impl ApiClient {
         } else {
             format!("http://{trimmed}")
         };
+        // Bound the dial so an unreachable/misdialed host fails fast (→ a quick
+        // `HostDown` for the connectivity banner) instead of hanging on the OS
+        // TCP timeout. The request cap is generous — REST calls are small, and
+        // the long-running chat stream rides a separate WS path, not this client.
+        let http = Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(6))
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|_| Client::new());
         Self {
-            http: Client::new(),
+            http,
             base_url,
             token,
         }
