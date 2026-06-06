@@ -276,6 +276,63 @@ pub async fn list_corpora(state: State<'_, Arc<AppState>>) -> Result<Vec<CorpusE
         });
     }
 
+    // Local corpora — installed indexes that are NOT in the built-in
+    // catalog (recipe-installed, snapshot-restored, or CLI-acquired; a
+    // mesh app's `sf-assessor-roll` is the canonical case). This command's
+    // contract (see the doc comment above) is a UNION of built-ins and
+    // installed indexes. Emitting only built-ins made any such corpus
+    // report as *missing* even when fully present on disk, so the
+    // mesh-app "Get data" flow re-staged + re-installed it and its
+    // completion poll — which waits for `status == "installed"` to appear
+    // in this list — never matched, producing a silent ~15-minute hang.
+    //
+    // We tag these `catalog_status = "hidden"` so they satisfy the
+    // installed-status checks (mesh-app readiness, the acquire poll)
+    // without crowding the knowledge picker's "Coming soon" rail, which
+    // renders the `preview` tier. `installed` is already fetched above —
+    // no extra index scan.
+    let builtin_ids: std::collections::HashSet<&str> =
+        builtins.iter().map(|b| b.id.as_str()).collect();
+    for info in &installed {
+        if info.is_shard || builtin_ids.contains(info.corpus_id.as_str()) {
+            continue;
+        }
+        entries.push(CorpusEntry {
+            id: info.corpus_id.clone(),
+            name: if info.corpus_name.is_empty() {
+                info.corpus_id.clone()
+            } else {
+                info.corpus_name.clone()
+            },
+            description: String::new(),
+            size_compressed_gb: 0.0,
+            size_indexed_gb: info.index_size_bytes as f64 / 1e9,
+            license: String::new(),
+            tiers: tiers_for(&info.corpus_id),
+            status: "installed".to_string(),
+            chunks_count: Some(info.chunk_count),
+            enrichment_enabled: info.enrichment_enabled,
+            indexed_at: Some(info.created_at),
+            embedding_model: Some(info.embedding_model.clone()),
+            embedding_dimensions: Some(info.embedding_dimensions),
+            vector_index_ready: info.vector_index_built,
+            registry_url: None,
+            schema_version: Some(1),
+            parent_corpus_id: info.parent_corpus_id.clone(),
+            catalog_status: Some("hidden".to_string()),
+        });
+    }
+
+    // Glassbox: make the union observable. A mesh app reporting its data
+    // as "missing" when it is present on disk shows up here as a corpus
+    // absent from `local_installed` — set `RUST_LOG=sovereign_desktop=debug`.
+    tracing::debug!(
+        builtins = builtins.len(),
+        installed_on_disk = installed.len(),
+        local_installed = entries.len().saturating_sub(builtins.len()),
+        "list_corpora: catalog ∪ installed-local corpora",
+    );
+
     Ok(entries)
 }
 

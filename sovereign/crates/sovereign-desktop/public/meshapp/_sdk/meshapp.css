@@ -130,12 +130,13 @@ h1 { font-size: 25px; font-weight: 600; letter-spacing: -0.012em; margin: 0 0 6p
 .map-tip .td { color: var(--ink-2); font-size: 11px; margin-top: 3px; line-height: 1.5; }
 
 /* Timeline */
-.timeline { display: flex; align-items: flex-end; gap: 3px; height: 150px; margin: 10px 0 4px; }
-.tl-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; cursor: pointer; background: none; border: 0; padding: 0; }
+.timeline { display: flex; align-items: stretch; gap: 3px; height: 160px; margin: 10px 0 10px; }
+.tl-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; height: 100%; cursor: pointer; background: none; border: 0; padding: 0; }
+.tl-track { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
 .tl-bar { width: 100%; max-width: 26px; background: var(--lavender); border-radius: 3px 3px 0 0; opacity: 0.7; min-height: 2px; transition: opacity 0.15s, background 0.15s; }
 .tl-col:hover .tl-bar { opacity: 1; }
 .tl-col[aria-pressed="true"] .tl-bar { background: linear-gradient(180deg, var(--accent-light), var(--accent)); opacity: 1; }
-.tl-lab { font-family: var(--font-mono); font-size: 9px; color: var(--ink-muted); margin-top: 5px; white-space: nowrap; transform: rotate(-45deg); transform-origin: center; height: 16px; }
+.tl-lab { flex: 0 0 auto; font-family: var(--font-mono); font-size: 9px; color: var(--ink-muted); margin-top: 6px; white-space: nowrap; transform: rotate(-45deg); transform-origin: center; height: 14px; }
 .tl-detail { margin-top: 8px; }
 
 /* Reconciliation list + reveal */
