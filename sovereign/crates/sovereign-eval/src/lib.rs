@@ -21,6 +21,7 @@ pub mod finalize;
 pub mod judge;
 pub mod manifest;
 pub mod mechanical;
+pub mod mechanism_fidelity;
 pub mod regression;
 pub mod scope;
 pub mod tool_grader;
