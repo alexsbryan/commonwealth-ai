@@ -110,6 +110,12 @@ pub struct StatusResponse {
     pub join_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub join_link: Option<String>,
+    /// RPC inference workers + their eligibility state (host side; empty on a
+    /// node not running RPC discovery). Lets an operator see WHY a worker isn't
+    /// being distributed to — e.g. `quarantined` with a cooldown after flapping.
+    /// See `crate::worker_eligibility`.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub rpc_workers: Vec<crate::worker_eligibility::WorkerStatusView>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -151,6 +157,11 @@ async fn mesh_status(
     }
 
     let running = daemon.is_running().await;
+    // RPC worker eligibility (host side) — the same tracker the discovery loop
+    // gates on, so the operator sees the live state without DEBUG logs.
+    let rpc_workers = crate::worker_eligibility::global()
+        .map(|e| e.status_views(std::time::Instant::now()))
+        .unwrap_or_default();
     let Some(s) = daemon.mesh_state().await else {
         // Running but no mesh — e.g. the daemon started solo and the
         // user hasn't run `mesh create` yet. Empty but valid payload
@@ -166,6 +177,7 @@ async fn mesh_status(
                     members: vec![],
                     join_key: None,
                     join_link: None,
+                    rpc_workers,
                 })
                 .unwrap(),
             ),
@@ -210,6 +222,7 @@ async fn mesh_status(
                 members,
                 join_key,
                 join_link,
+                rpc_workers,
             })
             .unwrap(),
         ),

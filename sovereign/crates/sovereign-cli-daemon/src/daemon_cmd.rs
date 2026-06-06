@@ -1377,25 +1377,42 @@ async fn run_daemon(args: &[String]) -> i32 {
             let snap = Arc::clone(&snapshot);
             move || snap.read().map(|v| v.clone()).unwrap_or_default()
         });
+        // Worker eligibility gate — only distribute to PROVEN-STABLE workers, so a
+        // flapping worker can neither thrash the reload loop nor (by crashing
+        // mid-compute) GGML_ABORT the host. See `sovereign_mesh::worker_eligibility`.
+        let eligibility = std::sync::Arc::new(
+            sovereign_mesh::worker_eligibility::WorkerEligibility::default(),
+        );
+        sovereign_mesh::worker_eligibility::set_global(std::sync::Arc::clone(&eligibility));
         let daemon_for_disco = Arc::clone(&daemon);
         let engine_for_reload = engine_handle.clone();
         tokio::spawn(async move {
             // `last_loaded` = worker set the resident primary was loaded across;
-            // `current` = set seen last tick (for debounce — wait for it to stop
-            // changing before paying a reload).
+            // `current` = ELIGIBLE set seen last tick (for debounce — wait for it
+            // to stop changing before paying a reload).
             let mut last_loaded: Vec<String> = Vec::new();
             let mut current: Vec<String> = Vec::new();
             let mut stable_since = std::time::Instant::now();
             const STABLE: std::time::Duration = std::time::Duration::from_secs(20);
             loop {
-                let mut workers = daemon_for_disco.discover_rpc_workers().await;
-                workers.sort();
-                workers.dedup();
+                // Raw discovery → eligibility gate → only PROVEN-STABLE workers
+                // reach the provider + the reload decision. A flapping worker stays
+                // out of `workers`, so the set the debounce compares never
+                // oscillates on a flap — the source of the 11-reloads-in-27min thrash.
+                let raw = daemon_for_disco.discover_rpc_workers().await;
+                let now = std::time::Instant::now();
+                eligibility.observe(&raw, now);
+                let workers = eligibility.eligible(now); // sorted + deduped, eligible-only
                 if let Ok(mut w) = snapshot.write() {
                     *w = workers.clone();
                 }
                 if workers != current {
-                    tracing::info!(count = workers.len(), workers = ?workers, "mesh RPC workers changed");
+                    tracing::info!(
+                        eligible = workers.len(),
+                        discovered = raw.len(),
+                        workers = ?workers,
+                        "mesh RPC eligible-worker set changed"
+                    );
                     current = workers.clone();
                     stable_since = std::time::Instant::now();
                 }
