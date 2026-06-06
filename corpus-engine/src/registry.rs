@@ -522,8 +522,9 @@ mod tests {
         // workspace) + wikipedia-newsworthy (Portal:Current_events
         // freshness daemon) + the 2026-05 conversations-anthropic
         // recipe (private threaded-turn ingest) + the uap-blue-book trio
-        // (hero / scans / metadata index).
-        assert_eq!(entries.len(), 26, "snapshot should have 26 entries");
+        // (hero / scans / metadata index) + the 2026-06
+        // conversations-chatgpt recipe (private ChatGPT import).
+        assert_eq!(entries.len(), 27, "snapshot should have 27 entries");
     }
 
     #[test]
@@ -634,10 +635,12 @@ sha256 = ""
         //   (chat-with-everything) + alignment (mesh-replicated
         //   workspace) + wikipedia-newsworthy (Portal:Current_events
         //   daemon) + conversations-anthropic (2026-05 threaded-turn
-        //   ingest) + the uap-blue-book trio (hero / scans / index).
-        assert_eq!(catalog.len(), 26);
+        //   ingest) + the uap-blue-book trio (hero / scans / index) +
+        //   conversations-chatgpt (2026-06 ChatGPT import).
+        assert_eq!(catalog.len(), 27);
         assert!(catalog.iter().any(|c| c.id == "uap-blue-book"));
         assert!(catalog.iter().any(|c| c.id == "uap-blue-book-index"));
+        assert!(catalog.iter().any(|c| c.id == "conversations-chatgpt"));
         assert!(catalog.iter().any(|c| c.id == "wikipedia"));
         assert!(catalog.iter().any(|c| c.id == "wikipedia-simple"));
         assert!(catalog.iter().any(|c| c.id == "wikipedia-catalog"));

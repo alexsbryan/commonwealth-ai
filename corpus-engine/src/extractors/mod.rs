@@ -1,5 +1,6 @@
 pub mod alignment_workspace;
 pub mod anthropic_export;
+pub mod chatgpt_export;
 pub mod column_aware;
 pub mod csv;
 pub mod custom_file;
@@ -82,6 +83,25 @@ pub(crate) fn slug(text: &str) -> String {
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>()
         .join("-")
+}
+
+/// Collapse newlines and truncate `body` to at most `max` characters,
+/// appending an ellipsis when truncated. Used as the fallback document
+/// title for untitled conversations — shared by the chat-export
+/// extractors ([`anthropic_export`], [`chatgpt_export`]) so both render
+/// an identical legible title in retrieval surfaces. Character-aware
+/// (not byte-aware) so multibyte titles never split mid-codepoint.
+pub(crate) fn short_summary(body: &str, max: usize) -> String {
+    let cleaned: String = body
+        .chars()
+        .map(|c| if c == '\n' { ' ' } else { c })
+        .collect();
+    let trimmed = cleaned.trim();
+    if trimmed.chars().count() <= max {
+        return trimmed.to_string();
+    }
+    let cut: String = trimmed.chars().take(max).collect();
+    format!("{}…", cut.trim_end())
 }
 
 /// Reconstruct text from an OpenAlex inverted-index JSON value.

@@ -409,8 +409,11 @@ test.describe("Settings → Imports", () => {
     await page.getByRole("button", { name: "Imports" }).click();
     await page.getByTestId("imports-resume-banner").waitFor();
 
-    // Picker is gone; resume banner + progress card are up.
-    await expect(page.getByTestId("imports-sources")).toHaveCount(0);
+    // Claude's picker is suppressed; its resume banner + progress card
+    // are up. Multi-source: ChatGPT's picker stays available alongside
+    // (the shared `imports-sources` wrapper no longer vanishes).
+    await expect(page.getByTestId("imports-pick-claude")).toHaveCount(0);
+    await expect(page.getByTestId("imports-pick-chatgpt")).toBeVisible();
     await expect(page.getByTestId("imports-resume-banner")).toBeVisible();
     await expect(page.getByTestId("imports-progress-card")).toBeVisible();
     await expect(page.getByText(/10,500 messages/)).toBeVisible();
@@ -491,5 +494,85 @@ test.describe("Settings → Imports", () => {
       /conversations\.json/,
     );
     await expect(page.getByTestId("imports-retry")).toBeVisible();
+  });
+
+  // ─── ChatGPT (OpenAI) source ────────────────────────────────────
+  //
+  // The ChatGPT card shares ConversationImportCard + the import state
+  // machine with Claude; only the corpus id, import command, and
+  // test-id prefix (`imports-chatgpt`) differ. This pins that the
+  // second source drives its own progress AND stays independent of the
+  // Claude card — the load-bearing property of the multi-source
+  // refactor (each store filters the shared `corpus-progress` channel
+  // to its own corpus id).
+  test("ChatGPT import drives its own progress, independent of the Claude card", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await openSettings(page, chat);
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __sovereign_test__: {
+          setHandler: (cmd: string, fn: (args: unknown) => unknown) => void;
+        };
+      };
+      w.__sovereign_test__.setHandler("plugin:dialog|open", () => {
+        return "/tmp/test-chatgpt-export.zip";
+      });
+      w.__sovereign_test__.setHandler("import_chatgpt_zip", () => ({
+        kind: "started",
+        corpus_id: "conversations-chatgpt",
+        total_messages: 8_000,
+        estimated_minutes: 53,
+        canonical_path:
+          "/home/test/.sovereign/conversations-chatgpt/conversations.json",
+      }));
+    });
+    await clickImportsTab(page);
+
+    await page.getByTestId("imports-pick-chatgpt").click();
+
+    // ChatGPT's own progress card is up with its message count.
+    await expect(page.getByTestId("imports-chatgpt-progress-card")).toBeVisible();
+    await expect(page.getByText(/8,000 messages/)).toBeVisible();
+
+    // Independence: the Claude card is untouched — its picker is still
+    // offered and no Claude progress card exists.
+    await expect(page.getByTestId("imports-pick-claude")).toBeVisible();
+    await expect(page.getByTestId("imports-progress-card")).toHaveCount(0);
+
+    // A `corpus-progress` tick for the ChatGPT corpus advances only the
+    // ChatGPT card.
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __sovereign_test__: { emit: (eventName: string, payload: unknown) => number };
+      };
+      w.__sovereign_test__.emit("corpus-progress", {
+        corpus_id: "conversations-chatgpt",
+        phase: "extracting",
+        percent: 20,
+        chunks_processed: 1600,
+      });
+    });
+    await expect(page.getByTestId("imports-chatgpt-phase-label")).toContainText(
+      /Extracting conversations/,
+    );
+
+    // Cross-talk guard: a tick for the *Claude* corpus must NOT leak
+    // into the ChatGPT card (it filters by corpus id).
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __sovereign_test__: { emit: (eventName: string, payload: unknown) => number };
+      };
+      w.__sovereign_test__.emit("corpus-progress", {
+        corpus_id: "conversations-anthropic",
+        phase: "embedding",
+        percent: 90,
+        chunks_processed: 9000,
+      });
+    });
+    await expect(page.getByTestId("imports-chatgpt-phase-label")).toContainText(
+      /Extracting conversations/,
+    );
   });
 });

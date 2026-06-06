@@ -24,12 +24,61 @@ use serde::{Deserialize, Serialize};
 
 const DAEMON_INTERNAL_URL: &str = "http://127.0.0.1:9742";
 
-/// Anthropic-export landing zone. Matches the `[acquire] path`
-/// declared by `sovereign-recipes/conversations-anthropic/recipe.toml`.
-/// Resolved at runtime so the Imports tab works regardless of where
-/// `~` resolves on the host.
-const CANONICAL_REL_DIR: &str = ".sovereign/conversations";
 const CANONICAL_FILE: &str = "conversations.json";
+
+/// Which chat vendor's export we're importing. The import flow is
+/// byte-for-byte identical across vendors — pick the zip, land
+/// `conversations.json`, post the install — so only these per-source
+/// bindings differ. Everything downstream (chunking, conversational
+/// enrichment, Atlas-View "Conversations" grouping) keys on the
+/// recipe's chunker/domain/`[display] category`, NOT the corpus id, so
+/// adding a vendor is just another arm here plus its extractor + recipe
+/// (`SYSTEM_OVERVIEW §10.1`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportSource {
+    Anthropic,
+    Chatgpt,
+}
+
+impl ImportSource {
+    /// Corpus id == recipe id installed for this source.
+    fn corpus_id(self) -> &'static str {
+        match self {
+            ImportSource::Anthropic => "conversations-anthropic",
+            ImportSource::Chatgpt => "conversations-chatgpt",
+        }
+    }
+
+    /// Landing dir (relative to `~`) the matching recipe's `[acquire]`
+    /// path reads from. Resolved at runtime so the tab works regardless
+    /// of where `~` resolves. SEPARATE dirs per vendor because both name
+    /// the export file `conversations.json` — a shared dir would clobber.
+    fn canonical_rel_dir(self) -> &'static str {
+        match self {
+            ImportSource::Anthropic => ".sovereign/conversations",
+            ImportSource::Chatgpt => ".sovereign/conversations-chatgpt",
+        }
+    }
+
+    /// Per-message byte marker for the best-effort pre-flight count.
+    /// Anthropic emits one `"sender"` per message; ChatGPT one
+    /// `"author"` per message node. Off by at most a handful when the
+    /// token appears inside message text — the ETA is a ±30% band.
+    fn count_needle(self) -> &'static [u8] {
+        match self {
+            ImportSource::Anthropic => b"\"sender\"",
+            ImportSource::Chatgpt => b"\"author\"",
+        }
+    }
+
+    /// Human label for picker/error copy.
+    fn display_name(self) -> &'static str {
+        match self {
+            ImportSource::Anthropic => "Anthropic",
+            ImportSource::Chatgpt => "ChatGPT",
+        }
+    }
+}
 
 /// Seconds per message — baked benchmark constant from one
 /// calibration run of the conversation_atlas pipeline against the
@@ -86,27 +135,49 @@ pub enum ImportStartResponse {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct ImportAnthropicZipRequest {
+pub struct ImportConversationsZipRequest {
     pub zip_path: PathBuf,
     /// `true` ⇒ wipe any existing
-    /// `~/.sovereign/indexes/conversations-anthropic/` directory
-    /// before posting the install. The UI sends this on the second
-    /// invocation after the user confirms the destructive prompt.
+    /// `~/.sovereign/indexes/<corpus_id>/` directory before posting the
+    /// install. The UI sends this on the second invocation after the
+    /// user confirms the destructive prompt.
     #[serde(default)]
     pub reset_partial: bool,
 }
 
-/// Tauri command: unpack the Anthropic export the user picked,
-/// land its `conversations.json` at the canonical path the
-/// `conversations-anthropic` recipe reads from, and kick off the
-/// daemon install. The progress + ETA UX after this returns is
-/// driven by the existing `corpus-progress` event stream — this
-/// command is just the entry hop.
+/// Tauri command: import the user's **Claude (Anthropic)** chat export.
+/// Thin wrapper over [`run_conversation_import`] — see it for the flow.
 #[tauri::command]
 pub async fn import_anthropic_zip(
     app_handle: tauri::AppHandle,
     state: tauri::State<'_, std::sync::Arc<crate::state::AppState>>,
-    request: ImportAnthropicZipRequest,
+    request: ImportConversationsZipRequest,
+) -> Result<ImportStartResponse, String> {
+    run_conversation_import(ImportSource::Anthropic, app_handle, state, request).await
+}
+
+/// Tauri command: import the user's **ChatGPT (OpenAI)** chat export.
+/// Thin wrapper over [`run_conversation_import`] — see it for the flow.
+#[tauri::command]
+pub async fn import_chatgpt_zip(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, std::sync::Arc<crate::state::AppState>>,
+    request: ImportConversationsZipRequest,
+) -> Result<ImportStartResponse, String> {
+    run_conversation_import(ImportSource::Chatgpt, app_handle, state, request).await
+}
+
+/// Unpack the chat export the user picked, land its `conversations.json`
+/// at the canonical path the matching recipe reads from, and kick off
+/// the daemon install. The progress + ETA UX after this returns is
+/// driven by the existing `corpus-progress` event stream — this is just
+/// the entry hop. Vendor-neutral: all per-source differences are behind
+/// [`ImportSource`].
+async fn run_conversation_import(
+    source: ImportSource,
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, std::sync::Arc<crate::state::AppState>>,
+    request: ImportConversationsZipRequest,
 ) -> Result<ImportStartResponse, String> {
     let zip_path = request.zip_path;
     if !zip_path.exists() {
@@ -119,7 +190,8 @@ pub async fn import_anthropic_zip(
         Some(ext) if ext.eq_ignore_ascii_case("zip") => {}
         _ => {
             return Err(format!(
-                "Imports expects an Anthropic export .zip; got {}",
+                "Imports expects a {} export .zip; got {}",
+                source.display_name(),
                 zip_path
                     .extension()
                     .and_then(|s| s.to_str())
@@ -128,7 +200,7 @@ pub async fn import_anthropic_zip(
         }
     }
 
-    let canonical_path = canonical_landing_path()?;
+    let canonical_path = canonical_landing_path(source)?;
     let extracted_bytes =
         tokio::task::spawn_blocking(move || unpack_conversations_json(&zip_path, &canonical_path))
             .await
@@ -142,7 +214,7 @@ pub async fn import_anthropic_zip(
     );
 
     let total_messages =
-        count_messages_in_file(&extracted_bytes.canonical_path).unwrap_or_else(|e| {
+        count_messages_in_file(&extracted_bytes.canonical_path, source.count_needle()).unwrap_or_else(|e| {
             // Counting is best-effort. We have the file at the
             // canonical path either way; the ETA just degrades to
             // "we don't know" rather than blocking the install.
@@ -160,7 +232,7 @@ pub async fn import_anthropic_zip(
         0.0
     };
 
-    let corpus_id = "conversations-anthropic".to_string();
+    let corpus_id = source.corpus_id().to_string();
 
     // Early-return when the daemon is already ingesting this corpus.
     // Two reasons:
@@ -204,7 +276,7 @@ pub async fn import_anthropic_zip(
     // with new-shape rows; the only way to a clean result is to
     // wipe the partial dir. We require an explicit confirmation
     // to do that — `reset_partial: true` on the request.
-    let index_dir = conversations_anthropic_index_dir()?;
+    let index_dir = conversations_index_dir(source)?;
     if index_dir.exists() && index_has_content(&index_dir) {
         if !request.reset_partial {
             return Ok(ImportStartResponse::PartialIndexExists {
@@ -306,17 +378,16 @@ pub async fn import_anthropic_zip(
     })
 }
 
-/// Resolve the canonical on-disk index dir for the
-/// `conversations-anthropic` corpus. Mirrors the path
-/// `~/.sovereign/indexes/<corpus_id>` the daemon's `CorpusEngine`
-/// uses by convention (see `state.rs::build_app_state`).
-fn conversations_anthropic_index_dir() -> Result<PathBuf, String> {
+/// Resolve the canonical on-disk index dir for `source`'s corpus.
+/// Mirrors the path `~/.sovereign/indexes/<corpus_id>` the daemon's
+/// `CorpusEngine` uses by convention (see `state.rs::build_app_state`).
+fn conversations_index_dir(source: ImportSource) -> Result<PathBuf, String> {
     let home =
         dirs::home_dir().ok_or_else(|| "HOME is not set; cannot resolve index dir".to_string())?;
     Ok(home
         .join(".sovereign")
         .join("indexes")
-        .join("conversations-anthropic"))
+        .join(source.corpus_id()))
 }
 
 /// `true` ⇔ `dir` looks like a real partial-or-complete index (has
@@ -357,10 +428,10 @@ struct ExtractedEntry {
     archive_entry_bytes: u64,
 }
 
-fn canonical_landing_path() -> Result<PathBuf, String> {
+fn canonical_landing_path(source: ImportSource) -> Result<PathBuf, String> {
     let home = dirs::home_dir()
-        .ok_or_else(|| "HOME is not set; cannot resolve ~/.sovereign/conversations/".to_string())?;
-    let dir = home.join(CANONICAL_REL_DIR);
+        .ok_or_else(|| "HOME is not set; cannot resolve the conversations landing dir".to_string())?;
+    let dir = home.join(source.canonical_rel_dir());
     fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
     Ok(dir.join(CANONICAL_FILE))
 }
@@ -404,7 +475,7 @@ fn unpack_conversations_json(zip_path: &Path, dest: &Path) -> Result<ExtractedEn
         })
         .ok_or_else(|| {
             format!(
-                "no `{CANONICAL_FILE}` entry inside {}; is this an Anthropic export?",
+                "no `{CANONICAL_FILE}` entry inside {}; is this a chat export?",
                 zip_path.display()
             )
         })?;
@@ -455,20 +526,19 @@ fn unpack_conversations_json(zip_path: &Path, dest: &Path) -> Result<ExtractedEn
     })
 }
 
-/// Counts the total `chat_messages` across every conversation in
-/// the export. Reads the file in chunks rather than slurping it
-/// whole — a Claude power-user export is easily 100+ MB.
+/// Counts the messages across every conversation in the export by
+/// scanning for `needle` — a per-message field marker the caller picks
+/// per source (`"sender"` for Anthropic, `"author"` for ChatGPT; see
+/// [`ImportSource::count_needle`]). Reads the file in chunks rather than
+/// slurping it whole — a power-user export is easily 100+ MB.
 ///
-/// "Best effort": counts occurrences of `"sender"` field markers,
-/// which appear exactly once per message in the Anthropic schema
-/// (per `corpus-engine/src/extractors/anthropic_export.rs`). Wrong
-/// by at most a handful when the dataset embeds the word "sender"
-/// inside message text — the pre-flight ETA is a `±30%` band
-/// anyway, so a few stray matches don't matter.
-fn count_messages_in_file(path: &Path) -> Result<u64, String> {
+/// "Best effort": the marker appears ~once per message in each vendor's
+/// schema. Wrong by at most a handful when the token appears inside
+/// message text — the pre-flight ETA is a `±30%` band anyway, so a few
+/// stray matches don't matter.
+fn count_messages_in_file(path: &Path, needle: &[u8]) -> Result<u64, String> {
     let file = fs::File::open(path).map_err(|e| format!("open {}: {e}", path.display()))?;
     let mut reader = std::io::BufReader::new(file);
-    let needle = b"\"sender\"";
     let mut total: u64 = 0;
     let mut carry: Vec<u8> = Vec::with_capacity(needle.len() - 1);
     let mut buf = vec![0u8; 256 * 1024];
@@ -600,7 +670,58 @@ mod tests {
           ]}
         ]"#;
         fs::write(&path, payload).unwrap();
-        assert_eq!(count_messages_in_file(&path).unwrap(), 3);
+        assert_eq!(
+            count_messages_in_file(&path, ImportSource::Anthropic.count_needle()).unwrap(),
+            3
+        );
+    }
+
+    #[test]
+    fn count_messages_counts_author_markers_chatgpt() {
+        // ChatGPT message nodes each carry one `"author"` key; the root
+        // node (message: null) and conversation scalars do not.
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("conversations.json");
+        let payload = br#"[{
+          "title": "t", "current_node": "u",
+          "mapping": {
+            "root": {"id": "root", "parent": null, "message": null},
+            "u": {"id": "u", "parent": "root", "message": {
+              "author": {"role": "user"}, "content": {"content_type": "text", "parts": ["hi"]}
+            }},
+            "a": {"id": "a", "parent": "u", "message": {
+              "author": {"role": "assistant"}, "content": {"content_type": "text", "parts": ["yo"]}
+            }}
+          }
+        }]"#;
+        fs::write(&path, payload).unwrap();
+        assert_eq!(
+            count_messages_in_file(&path, ImportSource::Chatgpt.count_needle()).unwrap(),
+            2
+        );
+    }
+
+    #[test]
+    fn import_source_bindings_are_distinct() {
+        // The two sources must never collide on corpus id or landing
+        // dir — both vendors name the export file `conversations.json`,
+        // so a shared dir would clobber on re-import across vendors.
+        assert_eq!(ImportSource::Anthropic.corpus_id(), "conversations-anthropic");
+        assert_eq!(ImportSource::Chatgpt.corpus_id(), "conversations-chatgpt");
+        assert_ne!(
+            ImportSource::Anthropic.canonical_rel_dir(),
+            ImportSource::Chatgpt.canonical_rel_dir()
+        );
+        assert_eq!(ImportSource::Chatgpt.count_needle(), b"\"author\"");
+    }
+
+    #[test]
+    fn index_dir_tracks_source_corpus_id() {
+        // Smoke: the index dir resolves under the source's corpus id.
+        let anthropic = conversations_index_dir(ImportSource::Anthropic).unwrap();
+        let chatgpt = conversations_index_dir(ImportSource::Chatgpt).unwrap();
+        assert!(anthropic.ends_with("conversations-anthropic"));
+        assert!(chatgpt.ends_with("conversations-chatgpt"));
     }
 
     #[test]

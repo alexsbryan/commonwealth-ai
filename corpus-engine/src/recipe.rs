@@ -1776,6 +1776,21 @@ pub enum ExtractorConfig {
     /// [`crate::extractors::anthropic_export::AnthropicExportExtractor`].
     #[serde(rename = "anthropic_export")]
     AnthropicExport {},
+    /// OpenAI ChatGPT chat-export extractor. Parses the
+    /// `conversations.json` file produced by ChatGPT's "Export data"
+    /// download and emits one
+    /// [`ExtractedDoc`](crate::extractors::ExtractedDoc) per
+    /// conversation (`source_id = conversation_id`) with content
+    /// rendered as the *same* `### [YYYY-MM-DD HH:MM] {user|assistant}`
+    /// turn blocks as [`ExtractorConfig::AnthropicExport`]. Unlike the
+    /// Anthropic flat list, ChatGPT stores messages as a `mapping`
+    /// tree; the extractor reconstructs the current thread by walking
+    /// `parent` pointers up from `current_node`. Private-Use-Area
+    /// inline markers (entity/url annotations) are cleaned to readable
+    /// text. Pair with [`ChunkerConfig::ThreadedTurns`]. See
+    /// [`crate::extractors::chatgpt_export::ChatgptExportExtractor`].
+    #[serde(rename = "chatgpt_export")]
+    ChatgptExport {},
 }
 
 fn default_code_context_lines() -> usize {

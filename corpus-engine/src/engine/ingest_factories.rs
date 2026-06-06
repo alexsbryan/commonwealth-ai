@@ -321,6 +321,9 @@ impl CorpusEngine {
             ExtractorConfig::AnthropicExport {} => {
                 Box::new(extractors::anthropic_export::AnthropicExportExtractor)
             }
+            ExtractorConfig::ChatgptExport {} => {
+                Box::new(extractors::chatgpt_export::ChatgptExportExtractor)
+            }
             ExtractorConfig::XmlSections {
                 element,
                 title_attr,

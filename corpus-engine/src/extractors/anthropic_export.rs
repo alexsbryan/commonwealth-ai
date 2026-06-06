@@ -51,7 +51,7 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use super::{ExtractedDoc, Extractor};
+use super::{short_summary, ExtractedDoc, Extractor};
 use crate::error::{Error, Result};
 
 #[derive(Debug, Deserialize)]
@@ -243,19 +243,6 @@ fn short_ts(raw: &str) -> String {
         return format!("{} {}", date, time);
     }
     raw.to_string()
-}
-
-fn short_summary(body: &str, max: usize) -> String {
-    let cleaned: String = body
-        .chars()
-        .map(|c| if c == '\n' { ' ' } else { c })
-        .collect();
-    let trimmed = cleaned.trim();
-    if trimmed.chars().count() <= max {
-        return trimmed.to_string();
-    }
-    let cut: String = trimmed.chars().take(max).collect();
-    format!("{}…", cut.trim_end())
 }
 
 #[cfg(test)]
