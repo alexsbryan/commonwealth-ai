@@ -608,7 +608,7 @@ pub struct AppState {
     /// runs; aborting the handle drops the run future and the in-flight child's
     /// `kill_on_drop(true)` SIGKILLs `sovereign-server` — that's the toggle-off
     /// path. `None` when Mobile access is off. See [`crate::mobile_host_setup`].
-    pub mobile_host_supervisor: RwLock<Option<tokio::task::JoinHandle<()>>>,
+    pub mobile_host_supervisor: RwLock<Option<tauri::async_runtime::JoinHandle<()>>>,
 }
 
 impl AppState {

@@ -117,6 +117,11 @@ def pass_frac(rows, key):
     return sum(1 for v in vals if v) / len(vals), len(vals)
 
 
+def finite(x):
+    """True only for a real, finite number — None / null / NaN are not."""
+    return x is not None and isinstance(x, (int, float)) and math.isfinite(x)
+
+
 def sign(x):
     return (x > 0) - (x < 0)
 
@@ -151,11 +156,14 @@ def summarize_model(rows, model, t):
     p2_pass, _ = pass_frac(p2, "flat_ok")
     inv_pass, _ = pass_frac(inv, "invariance_ok")
 
-    # Control directional accuracy on P1: should sit at chance.
+    # Control directional accuracy on P1: should sit at chance. A failed
+    # elicitation serializes d_agent as JSON null -> None here, so guard
+    # against it (math.isfinite(None) would raise) rather than letting one
+    # flaky probe crash the whole verdict.
     ctrl_dir = [
         sign(r["d_agent"]) == sign(r["d_struct"])
         for r in p1_ctrl
-        if math.isfinite(r["d_agent"]) and r["d_struct"] != 0
+        if finite(r["d_agent"]) and finite(r["d_struct"]) and r["d_struct"] != 0
     ]
     ctrl_dir_acc = (sum(ctrl_dir) / len(ctrl_dir)) if ctrl_dir else float("nan")
 
@@ -163,16 +171,16 @@ def summarize_model(rows, model, t):
         "model": model,
         "k_med": k_med,
         "se_d": se_d,
-        "p1_delta": mean([r["d_agent"] for r in p1]),
-        "p1_delta_sem": sem([r["d_agent"] for r in p1]),
+        "p1_delta": mean([r["d_agent"] for r in p1 if finite(r["d_agent"])]),
+        "p1_delta_sem": sem([r["d_agent"] for r in p1 if finite(r["d_agent"])]),
         "p1_mag_pass": mag_pass,
         "p1_mag_n": mag_n,
         "p1_dir_pass": dir_pass,
-        "p2_abs": mean([abs(r["d_agent"]) for r in p2]),
+        "p2_abs": mean([abs(r["d_agent"]) for r in p2 if finite(r["d_agent"])]),
         "p2_flat_pass": p2_pass,
-        "inv_abs": mean([abs(r["d_agent"]) for r in inv]),
+        "inv_abs": mean([abs(r["d_agent"]) for r in inv if finite(r["d_agent"])]),
         "inv_flat_pass": inv_pass,
-        "ctrl_p1_delta": mean([r["d_agent"] for r in p1_ctrl]),
+        "ctrl_p1_delta": mean([r["d_agent"] for r in p1_ctrl if finite(r["d_agent"])]),
         "ctrl_dir_acc": ctrl_dir_acc,
         "n_cases": len({r["case_id"].split("~")[0] for r in p1}),
     }
@@ -243,14 +251,27 @@ def main():
             f"{fmt(s['ctrl_p1_delta']):>7} {pct(s['ctrl_dir_acc']):>7} {s['k_med']:>4}"
         )
 
-    # Power annotation.
+    # Power annotation. The logprob path is deterministic — one forward
+    # pass per probe, K=1 — so the binomial per-probe SE (0.707/√K) the
+    # K-sampling path reported is meaningless here; the binding uncertainty
+    # is across cases (the ±sem column). Detect the mode and report the
+    # honest quantity.
     k_med = max((s["k_med"] for s in summaries), default=0)
-    se_d = 0.707 / math.sqrt(k_med) if k_med else float("nan")
     n_cases = max((s["n_cases"] for s in summaries), default=0)
-    print(
-        f"\npower: K≈{k_med} draws/probe  ->  per-probe SE(d_agent)≈{se_d:.3f}; "
-        f"min detectable mean effect ≈ {2*se_d:.3f} at one probe, far finer across {n_cases} cases."
-    )
+    if k_med <= 1:
+        sems = [s["p1_delta_sem"] for s in summaries if math.isfinite(s["p1_delta_sem"])]
+        typ = mean(sems) if sems else float("nan")
+        print(
+            f"\npower: forced-choice logprob (deterministic, 1 pass/probe) — no per-probe "
+            f"sampling variance. Across-case SE(P1 Δ̄)≈{typ:.3f} over {n_cases} cases; "
+            f"the ±sem column is the binding uncertainty."
+        )
+    else:
+        se_d = 0.707 / math.sqrt(k_med) if k_med else float("nan")
+        print(
+            f"\npower: K≈{k_med} draws/probe  ->  per-probe SE(d_agent)≈{se_d:.3f}; "
+            f"min detectable mean effect ≈ {2*se_d:.3f} at one probe, far finer across {n_cases} cases."
+        )
     print(
         "  (synthetic side is high-power by construction; the binding constraint is the\n"
         "   real test pool, out of scope for this go/no-go. This verdict is CONSISTENCY,\n"

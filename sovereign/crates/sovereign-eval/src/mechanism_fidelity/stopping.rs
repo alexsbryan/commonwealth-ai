@@ -154,11 +154,39 @@ impl Verdict {
 
 /// Decide the verdict for `m` against `threshold`/`side`. A verdict is only
 /// returned AT a pre-registered checkpoint (otherwise `Continue`); at the
-/// `n_max` cap a straddling interval yields `Inconclusive`.
+/// `n_max` cap a straddling interval yields `Inconclusive`. The schedule is
+/// keyed on the mean's own observation count `m.n()`.
 pub fn decide(m: &BoundedMean, cfg: &StoppingConfig, threshold: f64, side: Side) -> Verdict {
     let at_checkpoint = cfg.checkpoints.contains(&m.n());
     let at_max = m.n() >= cfg.n_max();
+    decide_at(m, cfg, threshold, side, at_checkpoint, at_max)
+}
+
+/// Like [`decide`], but the caller supplies whether this read is at a
+/// checkpoint / the cap. Use this when the checkpoint schedule is driven by
+/// an *external* counter — e.g. the number of synthetic **cases** drawn —
+/// rather than the mean's own observation count. The two diverge for a
+/// conditionally-updated mean like the magnitude band (`μ_mag` only takes an
+/// observation on a large-Δ case, so its `n()` lags the case counter and
+/// would skip the exact checkpoint values entirely). Driving every per-model
+/// mean off the shared case counter keeps them resolving on the same
+/// pre-registered schedule.
+pub fn decide_at(
+    m: &BoundedMean,
+    cfg: &StoppingConfig,
+    threshold: f64,
+    side: Side,
+    at_checkpoint: bool,
+    at_max: bool,
+) -> Verdict {
     if !at_checkpoint && !at_max {
+        return Verdict::Continue;
+    }
+    // A mean with < 2 observations has no usable variance estimate; never
+    // resolve it on data alone (only the cap can force a read, as
+    // Inconclusive). Guards the NaN-mean edge when μ_mag has seen no
+    // large-Δ case yet.
+    if m.n() < 2 && !at_max {
         return Verdict::Continue;
     }
     let (lo, hi) = m.interval(cfg);

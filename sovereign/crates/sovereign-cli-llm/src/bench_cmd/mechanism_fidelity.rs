@@ -1,49 +1,51 @@
 //! `sovereign bench mechanism-fidelity run …` — the elicitation +
-//! scoring orchestrator for the Mechanism-Fidelity Validation Harness.
+//! scoring orchestrator for the Reasoning-Fidelity Validation Harness.
 //!
-//! The pure logic (case schema, structural prior, perturbation engine,
-//! scorer, pools) lives in `sovereign_eval::mechanism_fidelity`; this
-//! file is the only inference-coupled surface. It:
+//! The pure logic (case schemas, structural priors, perturbation engine,
+//! scorer, pools, early-stopping, the [`ReasoningClass`] registry) lives
+//! in `sovereign_eval::mechanism_fidelity`; this file is the only
+//! inference-coupled surface. It is **class-generic** — it drives any
+//! registered reasoning class through the same loop:
 //!
-//!   1. generates synthetic cases for a pool,
-//!   2. for each base case builds the probe matrix — variants {base,
-//!      dir_p1, dir_p2, inv_i1} × render {full, stripped-control} ×
-//!      paraphrase — eliciting a relocation probability from each model,
-//!   3. estimates that probability by **repeated sampling** (no logprobs
-//!      exist on either the local or frontier path): K structured draws
-//!      of a forced ternary choice at temperature, `p_freq = (#relocate
-//!      + ½·#indifferent) / K`, with verbalized confidence co-elicited
-//!      for free,
-//!   4. scores each perturbation's `d_agent` against the structural
+//!   1. resolve `--class <id>` to a [`ReasoningClass`],
+//!   2. ask it to `build_probes()` — a flat list of finished, letter-
+//!      anchored [`RenderedProbe`]s (base case + its perturbations ×
+//!      render {full, stripped-control} × paraphrase), each carrying the
+//!      structural-prior probability the scorer needs,
+//!   3. elicit a forced-choice **logprob** distribution from each model in
+//!      ONE forward pass per probe (no K-sampling — the candidate set
+//!      rides inside `structured_output` as a sentinel the daemon's
+//!      embedded path reads off the masked next-token logits), then map it
+//!      to a scalar target probability via `class.target_prob()`,
+//!   4. score each perturbation's `d_agent` against the structural
 //!      `d_struct`, and
-//!   5. emits one [`ResultRow`] per probe as JSONL for the Python
-//!      verdict sidecar.
+//!   5. emit one [`ResultRow`] per probe as JSONL for the Python verdict.
 //!
-//! The sacred `test` pool refuses to run without `--unseal-test` and
-//! burns a [`PeekBudget`] counter when it does — the same discipline the
-//! entity-resolution holdout uses.
+//! On Train/Dev the loop runs **anytime-valid early-stopping** (empirical-
+//! Bernstein confidence intervals read at a pre-registered checkpoint
+//! schedule): a model that has obviously passed or failed every band is
+//! resolved and its remaining cases are skipped. The sacred `test` pool
+//! runs a fixed pre-registered `n` and refuses to run without
+//! `--unseal-test` (burning a [`PeekBudget`] counter) — the same
+//! discipline the entity-resolution holdout uses.
 //!
 //! Models are selected by `--models a,b` (stems advertised on the
-//! daemon's `/v1/models`). Two open-weight models is the first-slice
-//! default; a frontier model plugs in by pointing `--base-url` at its
-//! endpoint with `--api-key-env`.
+//! daemon's `/v1/models`). `request.model_id` is pinned per call —
+//! `RemoteApiProvider::build_request` routes on it, so without it every
+//! model collapses onto the daemon's default slot.
 
 use std::collections::HashMap;
 use std::io::Write as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-use futures::stream::{self, StreamExt};
-use rand::rngs::StdRng;
-use rand::SeedableRng;
-use serde::Deserialize;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Speed};
 use sovereign_eval::entity_resolution_bench::PeekBudget;
 use sovereign_eval::mechanism_fidelity::{
-    generate_cases, render_prompt, score, structural_p_relocate, Bands, Case, Pool, RenderMode,
-    ResultRow, Variant,
+    by_id, class_ids, decide_at, grade_class, score, Bands, BoundedMean, FidelityCard,
+    GradeThresholds, Pool, RenderedProbe, ResultRow, Scores, Side, StoppingConfig, Verdict,
 };
 use sovereign_inference::remote::RemoteApiProvider;
 
@@ -51,29 +53,31 @@ use crate::util::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign bench mechanism-fidelity",
-    summary: "Metamorphic mechanism-fidelity audit of LLM relocation decisions under a wealth tax.",
+    summary: "Metamorphic reasoning-fidelity audit: does a frozen LLM reason from the causal mechanism or from memorized label-association?",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench mechanism-fidelity run --models <a,b> [--logprob] [--pool {train|dev|test}] [--k N] [--n-cases N] [--seed N] [--no-paraphrase] [--concurrency N] [--base-url URL] [--api-key-env VAR] [--manifest PATH] [--out PATH] [--unseal-test --reason \"…\"]",
+            "sovereign bench mechanism-fidelity run --models <a,b> [--class <id>] [--corpus <dir>] [--pool {train|dev|test}] [--n-cases N] [--seed N] [--concurrency N] [--base-url URL] [--api-key-env VAR] [--manifest PATH] [--out PATH] [--unseal-test --reason \"…\"]",
         ),
         HelpSection::Subcommands(&[(
             "run",
-            "Generate cases, elicit decisions from each model by repeated sampling, score, and write ResultRow JSONL.",
+            "Resolve the class, build its probe matrix, elicit a forced-choice logprob distribution from each model, score against the structural prior, and write ResultRow JSONL.",
         )]),
         HelpSection::Notes(
-            "Operates against the running daemon at localhost:9741 by default; the models under test are the --models stems (see `/v1/models`). p_relocate is estimated by K structured draws of a ternary choice at temperature (no logprobs exist). The `test` pool is sacred: it needs --unseal-test and burns a peek in baselines/mechanism_fidelity/peek_budget.json. Read the result with sovereign/bench/mechanism_fidelity/verdict.py.",
+            "Operates against the running daemon at localhost:9741 by default; the models under test are the --models stems (see `/v1/models`). Elicitation is forced-choice logprob — ONE forward pass per probe — and requires a daemon built with the embedded forced-choice path. Train/Dev use anytime-valid early-stopping; the `test` pool is sacred (needs --unseal-test and burns a peek in baselines/mechanism_fidelity/peek_budget.json). Default --class is wealth_tax_relocation. Read the result with sovereign/bench/mechanism_fidelity/verdict.py.",
         ),
     ],
 };
 
-/// Per-draw decoding budget. The JSON object is tiny; cap hard.
-const DRAW_MAX_TOKENS: usize = 64;
-/// Sampling temperature for the repeated-draw estimator. T=0 would
-/// collapse K draws to one point and destroy the frequency. This is the
-/// one sampling param the remote `build_request` actually forwards.
-const DRAW_TEMPERATURE: f32 = 0.7;
 /// Declared context window for the daemon-backed provider.
 const PROVIDER_CTX: u32 = 8192;
+/// Forced-choice attempts per probe before giving up. The embedded MTP
+/// path on the large slot occasionally returns a transient error or an
+/// unparseable body (the §7 "MTP process(verify) failed 503" class — the
+/// daemon survives, the single call doesn't). Without retry these surface
+/// as NaN probes that silently shrink the instrument's effective n;
+/// retry-with-backoff recovers them so a flaky slot doesn't masquerade as
+/// a low-fidelity finding.
+const ELICIT_ATTEMPTS: usize = 4;
 
 pub async fn cmd_mechanism_fidelity(args: &[String]) -> i32 {
     if args.is_empty() {
@@ -107,16 +111,12 @@ pub async fn cmd_mechanism_fidelity(args: &[String]) -> i32 {
 #[derive(Debug)]
 struct Args {
     models: Vec<String>,
+    class: String,
+    corpus: Option<PathBuf>,
     pool: Pool,
-    k: u32,
     n_cases: usize,
     seed: u64,
-    paraphrase: bool,
     concurrency: usize,
-    /// Forced-choice logprob elicitation (one forward pass) instead of
-    /// K repeated draws. Requires a daemon built with the forced-choice
-    /// embedded path; ~30–200× cheaper.
-    logprob: bool,
     base_url: String,
     api_key_env: Option<String>,
     manifest: PathBuf,
@@ -127,25 +127,23 @@ struct Args {
 
 fn parse_args(args: &[String]) -> Result<Args, String> {
     let mut models: Vec<String> = Vec::new();
+    let mut class = "wealth_tax_relocation".to_string();
+    let mut corpus: Option<PathBuf> = None;
     let mut pool = Pool::Dev;
-    let mut k: u32 = 64;
     let mut n_cases: usize = 200;
     let mut seed: u64 = 0;
-    let mut paraphrase = true;
     let mut concurrency: usize = 8;
-    let mut logprob = false;
     let mut base_url = "http://localhost:9741".to_string();
     let mut api_key_env: Option<String> = None;
-    let mut manifest =
-        PathBuf::from("sovereign/bench/mechanism_fidelity/manifest.toml");
+    let mut manifest = PathBuf::from("sovereign/bench/mechanism_fidelity/manifest.toml");
     let mut out: Option<PathBuf> = None;
     let mut unseal_test = false;
     let mut reason: Option<String> = None;
 
     // Inline value-fetch — a macro (not a closure) so it doesn't hold a
     // persistent `&mut i` borrow that would conflict with the loop's
-    // `i += 1`. Mirrors the explicit-index style in `enron.rs`. Defined
-    // after `i` so macro_rules hygiene resolves the captured local.
+    // `i += 1`. Defined after `i` so macro_rules hygiene resolves the
+    // captured local.
     let mut i = 0;
     macro_rules! val {
         ($label:expr) => {{
@@ -165,19 +163,29 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
                     .filter(|s| !s.is_empty())
                     .collect();
             }
+            "--class" => class = val!("--class"),
+            "--corpus" => corpus = Some(PathBuf::from(val!("--corpus"))),
             "--pool" => {
                 let v = val!("--pool");
                 pool = Pool::parse(&v).ok_or_else(|| format!("invalid --pool `{v}`"))?;
             }
-            "--k" => k = val!("--k").parse().map_err(|_| "--k must be a u32")?,
             "--n-cases" => {
                 n_cases = val!("--n-cases")
                     .parse()
                     .map_err(|_| "--n-cases must be a usize")?
             }
             "--seed" => seed = val!("--seed").parse().map_err(|_| "--seed must be a u64")?,
-            "--no-paraphrase" => paraphrase = false,
-            "--logprob" => logprob = true,
+            // The generic class path is logprob-only — `--logprob` is the
+            // default and is accepted as a no-op for command compatibility.
+            "--logprob" => {}
+            "--no-logprob" => {
+                return Err(
+                    "K-sampling elicitation is deprecated; the generic class path is \
+                     logprob-only (the remote/frontier sampling fallback is a later \
+                     package). Drop --no-logprob."
+                        .into(),
+                )
+            }
             "--concurrency" => {
                 concurrency = val!("--concurrency")
                     .parse::<usize>()
@@ -198,18 +206,14 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
     if models.is_empty() {
         return Err("--models is required (comma-separated daemon model stems)".into());
     }
-    if k == 0 {
-        return Err("--k must be ≥ 1".into());
-    }
     Ok(Args {
         models,
+        class,
+        corpus,
         pool,
-        k,
         n_cases,
         seed,
-        paraphrase,
         concurrency,
-        logprob,
         base_url,
         api_key_env,
         manifest,
@@ -219,42 +223,9 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
     })
 }
 
-// ── The probe matrix ────────────────────────────────────────────────
-
-/// One elicitation unit: a (model, base case, variant, render,
-/// paraphrase) tuple. The base variant in each context is the reference
-/// the perturbations' deltas are measured against.
-#[derive(Debug, Clone)]
-struct Probe {
-    model_idx: usize,
-    case_idx: usize,
-    variant: Variant,
-    render: RenderMode,
-    paraphrase: bool,
-}
-
-/// Context key for locating a probe's reference (base) result — same
-/// model, case, render, and wording.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, std::hash::Hash)]
-struct Ctx {
-    model_idx: usize,
-    case_idx: usize,
-    render: u8,
-    paraphrase: bool,
-}
-
-impl Probe {
-    fn ctx(&self) -> Ctx {
-        Ctx {
-            model_idx: self.model_idx,
-            case_idx: self.case_idx,
-            render: self.render as u8,
-            paraphrase: self.paraphrase,
-        }
-    }
-}
-
-/// Aggregated repeated-sampling estimate for one probe.
+/// Aggregated elicitation estimate for one probe. In the logprob path
+/// `p_verbal == p_freq` (one deterministic forward pass; the verbalized
+/// estimator is a K-sampling artifact kept only for the JSONL contract).
 #[derive(Debug, Clone, Copy)]
 struct Agg {
     p_freq: f64,
@@ -263,15 +234,62 @@ struct Agg {
     latency_ms: u64,
 }
 
-/// One model's decision draw, parsed from the structured output.
-#[derive(Debug, Deserialize)]
-struct Decision {
-    decision: String,
-    #[serde(default)]
-    confidence: f64,
+impl Agg {
+    fn missing() -> Self {
+        Agg { p_freq: f64::NAN, p_verbal: f64::NAN, eff_k: 0, latency_ms: 0 }
+    }
+    fn from_p(p: f64, latency_ms: u64) -> Self {
+        Agg { p_freq: p, p_verbal: p, eff_k: 1, latency_ms }
+    }
+}
+
+/// Per-model early-stopping state: the four bounded means whose verdicts
+/// gate resolution, plus the provenance stamped onto every ResultRow.
+#[derive(Default)]
+struct ModelStop {
+    /// μ_mag — DIR-P1 magnitude_ok among large-Δ cases (AtLeast band).
+    mag: BoundedMean,
+    /// μ_flat_p2 — DIR-P2 saturation flat_ok (AtLeast band).
+    flat_p2: BoundedMean,
+    /// μ_inv — INV invariance_ok (AtLeast band).
+    inv: BoundedMean,
+    /// μ_ctrl — negative control directional accuracy on P1 (AtMost band).
+    ctrl: BoundedMean,
+    resolved: bool,
+    n_drawn: usize,
+    stopped_early: bool,
+    cs_lower: Option<f64>,
+    cs_upper: Option<f64>,
+}
+
+/// Pre-registered early-stopping parameters loaded from `[stopping]` +
+/// `[negative_control]`.
+struct StopParams {
+    cfg: StoppingConfig,
+    /// μ_mag pass-fraction (AtLeast).
+    mag: f64,
+    /// μ_flat_p2 pass-fraction (AtLeast).
+    flat: f64,
+    /// μ_inv pass-fraction (AtLeast).
+    inv: f64,
+    /// μ_ctrl max directional accuracy (AtMost).
+    ctrl: f64,
 }
 
 async fn run(args: Args) -> i32 {
+    // ── Resolve the reasoning class ──
+    let class = match by_id(&args.class) {
+        Some(c) => c,
+        None => {
+            eprintln!(
+                "error: unknown --class `{}`. Registered classes: {}",
+                args.class,
+                class_ids().join(", ")
+            );
+            return 2;
+        }
+    };
+
     // ── Pool gating (the sacred test pool) ──
     if args.pool.requires_unseal() && !args.unseal_test {
         eprintln!(
@@ -287,8 +305,9 @@ async fn run(args: Args) -> i32 {
             .reason
             .clone()
             .unwrap_or_else(|| "(no reason given)".to_string());
-        let peek_path =
-            PathBuf::from("sovereign/bench/mechanism_fidelity/baselines/mechanism_fidelity/peek_budget.json");
+        let peek_path = PathBuf::from(
+            "sovereign/bench/mechanism_fidelity/baselines/mechanism_fidelity/peek_budget.json",
+        );
         let mut budget = match PeekBudget::load(&peek_path) {
             Ok(b) => b,
             Err(e) => {
@@ -304,12 +323,25 @@ async fn run(args: Args) -> i32 {
         eprintln!("[unseal] burned test peek #{n} (logged to {peek_path:?})");
     }
 
-    // ── Bands (pre-registration manifest, or the doc defaults) ──
+    // ── Bands + early-stopping (pre-registration manifest, or doc defaults) ──
     let bands = load_bands(&args.manifest);
     eprintln!(
         "[manifest] bands: collapse_min={} flat_max={} inv_max={} big_struct={} small_struct={}",
         bands.collapse_min, bands.flat_max, bands.inv_max, bands.big_struct, bands.small_struct
     );
+    let sp = load_stopping(&args.manifest);
+    // Early-stopping is Train/Dev only — the sacred Test pool runs a fixed
+    // pre-registered n. The logprob path is deterministic, which is what
+    // makes peeking honest under the empirical-Bernstein construction.
+    let stopping_on = !matches!(args.pool, Pool::Test);
+    if stopping_on {
+        eprintln!(
+            "[stopping] alpha={} checkpoints={:?} mag≥{} flat≥{} inv≥{} ctrl≤{}",
+            sp.cfg.alpha, sp.cfg.checkpoints, sp.mag, sp.flat, sp.inv, sp.ctrl
+        );
+    } else {
+        eprintln!("[stopping] off (sacred test pool runs fixed n={})", args.n_cases);
+    }
 
     // ── Providers (one per model, all pointed at --base-url/v1) ──
     let api_key = args
@@ -321,96 +353,80 @@ async fn run(args: Args) -> i32 {
         .models
         .iter()
         .map(|m| {
-            Arc::new(RemoteApiProvider::new(
-                &v1,
-                api_key.clone(),
-                m,
-                PROVIDER_CTX,
-            )) as Arc<dyn InferenceProvider>
+            Arc::new(RemoteApiProvider::new(&v1, api_key.clone(), m, PROVIDER_CTX))
+                as Arc<dyn InferenceProvider>
         })
         .collect();
 
+    // ── Build the probe matrix from the class ──
+    let candidates = class.candidates();
+    let system_prompt = class.system_prompt();
+    let probes = class.build_probes(args.n_cases, args.seed, args.corpus.as_deref());
+    if probes.is_empty() {
+        eprintln!(
+            "error: class `{}` produced no probes (n_cases={}, corpus={:?})",
+            class.id(),
+            args.n_cases,
+            args.corpus
+        );
+        return 1;
+    }
+    let spans = case_spans(&probes);
+
     // ── Preflight: one parseable draw per model before spending the run ──
-    // A full K×probe run is ~10^5 calls; fail fast on a bad model stem or
-    // an unreachable daemon rather than erroring every draw.
-    if let Err(e) = preflight(&providers, &args.models, args.logprob).await {
+    if let Err(e) = preflight(&providers, &args.models, &probes[0], &candidates, system_prompt).await
+    {
         eprintln!("preflight failed: {e}");
         eprintln!("  (check the daemon is up at {v1} and the --models stems appear on /v1/models)");
         return 1;
     }
 
-    // ── Cases + precomputed per-(case, variant) transformed cases ──
-    let cases = generate_cases(args.n_cases, args.seed);
-    // (case_idx, variant) -> (transformed Case, structural p). InvI1
-    // identity swap is seeded deterministically per case so the swapped
-    // subject is stable across draws and runs.
-    let mut variant_case: HashMap<(usize, Variant), (Case, f64)> = HashMap::new();
-    for (ci, base) in cases.iter().enumerate() {
-        for v in Variant::all() {
-            let mut rng = StdRng::seed_from_u64(
-                args.seed
-                    .wrapping_mul(1_000_003)
-                    .wrapping_add(ci as u64)
-                    .wrapping_add(v as u64 * 97),
-            );
-            let c = v.apply(base, &mut rng);
-            let p = structural_p_relocate(&c);
-            variant_case.insert((ci, v), (c, p));
-        }
-    }
-
     eprintln!(
-        "[estimator] {}",
-        if args.logprob {
-            "forced-choice logprob — ONE forward pass per probe (the K-killer)"
-        } else {
-            "repeated sampling — K draws per probe"
-        }
+        "[estimator] forced-choice logprob — ONE forward pass per probe (the K-killer), elicited \
+         sequentially for determinism"
     );
-
-    // ── Enumerate probes ──
-    let probes = enumerate_probes(args.models.len(), cases.len(), args.paraphrase);
-    let total_draws = probes.len() as u64 * args.k as u64;
+    if args.concurrency > 1 {
+        eprintln!(
+            "[note] --concurrency {} ignored: logprob elicitation is sequential so byte-identical \
+             control prompts stay deterministic (the negative-control validity invariant).",
+            args.concurrency
+        );
+    }
     eprintln!(
-        "[plan] {} models × {} cases → {} probes × K={} = {} draws (pool={}, concurrency={})",
+        "[plan] class={} · {} models × {} cases → {} probes/model ({} total) (pool={})",
+        class.id(),
         args.models.len(),
-        cases.len(),
+        spans.len(),
         probes.len(),
-        args.k,
-        total_draws,
+        probes.len() * args.models.len(),
         args.pool.as_str(),
-        args.concurrency
     );
 
     // ── Checkpoint + resume ──
-    // The expensive artifact is the elicitation, not the scoring. We
-    // append one raw aggregate per probe to a `.partial.jsonl` sidecar as
-    // it completes; on restart with identical generation args we reload
-    // it and skip finished probes. The final scored ResultRow file is
-    // always recomputed (cheap, pure) from the full aggregate set — so
-    // re-running with a different --manifest re-scores without re-eliciting.
+    // The expensive artifact is the elicitation. We append one raw
+    // aggregate per probe to a `.partial.jsonl` sidecar as it completes;
+    // on restart with identical generation args we reload it and skip
+    // finished probes. The scored ResultRow file is always recomputed
+    // (cheap, pure) from the full aggregate set — re-running with a
+    // different --manifest re-scores without re-eliciting.
     let out_path = args.out.clone().unwrap_or_else(|| {
         PathBuf::from(format!("target/mechanism-fidelity/{}.jsonl", args.pool.as_str()))
     });
     let ckpt_path = checkpoint_path(&out_path);
-    let sig = run_signature(&args);
-    let mut aggs: HashMap<(usize, usize, u8, bool, u8), Agg> =
-        match load_checkpoint(&ckpt_path, &sig) {
-            Ok(loaded) => {
-                if !loaded.is_empty() {
-                    eprintln!(
-                        "[resume] loaded {} completed probes from {ckpt_path:?}",
-                        loaded.len()
-                    );
-                }
-                loaded
+    let sig = run_signature(&args, class.id());
+    let mut aggs: HashMap<String, Agg> = match load_checkpoint(&ckpt_path, &sig) {
+        Ok(loaded) => {
+            if !loaded.is_empty() {
+                eprintln!("[resume] loaded {} completed probes from {ckpt_path:?}", loaded.len());
             }
-            Err(e) => {
-                eprintln!("error: {e}");
-                eprintln!("  (remove {ckpt_path:?} to start fresh, or restore the original args)");
-                return 1;
-            }
-        };
+            loaded
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            eprintln!("  (remove {ckpt_path:?} to start fresh, or restore the original args)");
+            return 1;
+        }
+    };
     let mut ckpt = match open_checkpoint(&ckpt_path, &sig) {
         Ok(f) => f,
         Err(e) => {
@@ -419,167 +435,492 @@ async fn run(args: Args) -> i32 {
         }
     };
 
-    // ── Elicit every probe (K concurrent draws per probe) ──
+    // ── Elicit, case-grouped per model, with early-stopping ──
+    let mut model_stops: Vec<ModelStop> = Vec::with_capacity(providers.len());
+    let total_probes = probes.len() * providers.len();
     let mut done = 0usize;
-    let mut skipped = 0usize;
-    for probe in &probes {
-        let key = probe_key(probe);
-        if aggs.contains_key(&key) {
-            skipped += 1;
-            done += 1;
-            continue;
+    for model_idx in 0..providers.len() {
+        let model_name = args.models[model_idx].as_str();
+        let mut stop = ModelStop::default();
+        let mut cases_done = 0usize;
+        let mut resolved = false;
+
+        for span in &spans {
+            let group = &probes[span.clone()];
+
+            // Elicit this case's not-yet-done probes SEQUENTIALLY. This is
+            // load-bearing for instrument validity, not just simplicity:
+            // the negative control's "provably blind" guarantee (§7) rests
+            // on the stripped base and stripped perturbed prompts being
+            // byte-identical → identical logprobs → d_agent == exactly 0.
+            // Concurrent same-slot requests get batched together, and the
+            // daemon's batched matmul reductions are not bit-invariant to
+            // batch composition — so two byte-identical prompts elicited in
+            // different batches return slightly different logits, breaking
+            // control == 0 and the deterministic-peeking premise of early-
+            // stopping. The candidate set + system prompt come from the
+            // class; the prompt is already letter-anchored by build_probes
+            // (we do NOT append a legend here).
+            for gi in span.start..span.end {
+                if aggs.contains_key(&agg_key(model_idx, &probes[gi])) {
+                    continue; // resumed from checkpoint
+                }
+                let (dist, lat) = elicit_logprob(
+                    providers[model_idx].as_ref(),
+                    model_name,
+                    &probes[gi].prompt,
+                    &candidates,
+                    system_prompt,
+                )
+                .await;
+                let agg = match dist {
+                    Some(d) => Agg::from_p(class.target_prob(&d), lat),
+                    None => Agg::missing(),
+                };
+                if let Err(e) = append_checkpoint(&mut ckpt, model_idx, &probes[gi], &agg) {
+                    eprintln!("warning: checkpoint append failed (continuing in-memory): {e}");
+                }
+                aggs.insert(agg_key(model_idx, &probes[gi]), agg);
+            }
+            done += group.len();
+            cases_done += 1;
+            if done % 100 < group.len() || done == total_probes {
+                eprintln!("  [elicit] {done}/{total_probes} probes");
+            }
+
+            // ── Early-stopping decision at this case ──
+            if stopping_on {
+                let contrib = case_contrib(group, model_idx, &aggs, &bands);
+                if let Some(v) = contrib.mag {
+                    stop.mag.push(v);
+                }
+                if let Some(v) = contrib.flat_p2 {
+                    stop.flat_p2.push(v);
+                }
+                if let Some(v) = contrib.inv {
+                    stop.inv.push(v);
+                }
+                if let Some(v) = contrib.ctrl {
+                    stop.ctrl.push(v);
+                }
+
+                let at_cp = sp.cfg.checkpoints.contains(&cases_done);
+                let at_max = cases_done >= sp.cfg.n_max();
+                let vm = decide_at(&stop.mag, &sp.cfg, sp.mag, Side::AtLeast, at_cp, at_max);
+                let vp2 = decide_at(&stop.flat_p2, &sp.cfg, sp.flat, Side::AtLeast, at_cp, at_max);
+                let vi = decide_at(&stop.inv, &sp.cfg, sp.inv, Side::AtLeast, at_cp, at_max);
+                let vc = decide_at(&stop.ctrl, &sp.cfg, sp.ctrl, Side::AtMost, at_cp, at_max);
+
+                // Stop the instant the OVERALL verdict is decided, not when
+                // every band individually resolves: a NO-GO needs only one
+                // required band to FAIL (an unfaithful model that doesn't
+                // collapse is settled the moment μ_mag fails, regardless of
+                // whether the flat/invariance bands have tightened yet); a GO
+                // needs ALL four to PASS. The flat/invariance AtLeast-0.90
+                // bands can straddle indefinitely on a good-but-imperfect
+                // model, so waiting for them to resolve would defeat early-
+                // stopping entirely (observed: a model whose μ_mag failed at
+                // n=32 still ran to n=200). At the cap we stop unconditionally
+                // — a straddling band there is Inconclusive.
+                let bands_v = [vm, vp2, vi, vc];
+                let any_fail = bands_v.iter().any(|v| matches!(v, Verdict::Fail));
+                let all_pass = bands_v.iter().all(|v| matches!(v, Verdict::Pass));
+                let resolved_by_verdict = any_fail || all_pass;
+                if resolved_by_verdict || at_max {
+                    resolved = true;
+                    stop.resolved = true;
+                    stop.stopped_early = resolved_by_verdict && cases_done < args.n_cases;
+                    stop.n_drawn = cases_done;
+                    let (lo, hi) = stop.mag.interval(&sp.cfg);
+                    stop.cs_lower = Some(lo);
+                    stop.cs_upper = Some(hi);
+                    let outcome = if all_pass {
+                        "GO (all bands pass)"
+                    } else if any_fail {
+                        "NO-GO (a band failed)"
+                    } else {
+                        "Inconclusive (hit cap)"
+                    };
+                    eprintln!(
+                        "[stop] {model_name}: {outcome} at {cases_done}/{} cases  (mag={vm:?} p2={vp2:?} inv={vi:?} ctrl={vc:?})",
+                        args.n_cases
+                    );
+                    break;
+                }
+            }
         }
-        let (case, _p_struct) = &variant_case[&(probe.case_idx, probe.variant)];
-        let prompt = render_prompt(case, probe.render, probe.paraphrase);
-        let model_name = args.models[probe.model_idx].as_str();
-        let agg = if args.logprob {
-            elicit_logprob(providers[probe.model_idx].as_ref(), model_name, &prompt).await
-        } else {
-            elicit(
-                providers[probe.model_idx].as_ref(),
-                model_name,
-                &prompt,
-                args.k,
-                args.concurrency,
-            )
-            .await
-        };
-        // Durably record the elicitation before moving on.
-        if let Err(e) = append_checkpoint(&mut ckpt, probe, &agg) {
-            eprintln!("warning: checkpoint append failed (continuing in-memory): {e}");
+
+        if !resolved {
+            stop.n_drawn = cases_done;
+            stop.stopped_early = false;
+            if stopping_on {
+                let (lo, hi) = stop.mag.interval(&sp.cfg);
+                stop.cs_lower = Some(lo);
+                stop.cs_upper = Some(hi);
+            }
         }
-        aggs.insert(key, agg);
-        done += 1;
-        if done % 25 == 0 || done == probes.len() {
-            eprintln!("  [elicit] {done}/{} probes ({skipped} resumed)", probes.len());
-        }
+        model_stops.push(stop);
     }
 
     // ── Score + emit ResultRows (recomputed from the full aggregate set) ──
-    let rows = build_rows(&args, &probes, &aggs, &variant_case, &bands);
+    let rows = build_rows(&args, class.id(), &probes, &aggs, &model_stops, &bands);
     if let Err(e) = write_jsonl(&out_path, &rows) {
         eprintln!("error: could not write {out_path:?}: {e}");
         return 1;
     }
     eprintln!("[out] wrote {} rows → {out_path:?}", rows.len());
     print_glassbox_summary(&args, &rows);
+
+    // ── Characterize once: distill each model's verdict into its card ──
+    // The "read free per query" artifact. Stamped with the manifest
+    // fingerprint so a reader can detect a card graded under stale bands.
+    let fp = manifest_fingerprint(&args.manifest);
+    let th = grade_thresholds(&bands, &sp);
+    let now = chrono::Utc::now().to_rfc3339();
+    let card_dir = FidelityCard::default_dir();
+    for m in &args.models {
+        let entry = grade_class(
+            &rows,
+            m,
+            class.id(),
+            args.pool.as_str(),
+            &th,
+            &bands,
+            &fp,
+            now.clone(),
+        );
+        let grade = entry.grade;
+        let conf = entry.confidence;
+        let mut card = FidelityCard::load_or_new(&card_dir, m);
+        card.upsert(entry);
+        match card.save(&card_dir) {
+            Ok(p) => eprintln!(
+                "[card] {m}: {grade:?} (conf {conf:.2}) on {} → {p:?}",
+                class.id()
+            ),
+            Err(e) => eprintln!("[card] {m}: could not write card: {e}"),
+        }
+    }
     0
 }
 
-/// One parseable draw per model, on the canonical base case, before the
-/// expensive run begins. Fails fast on an unreachable daemon or a model
-/// stem the daemon doesn't serve.
+/// One parseable forced-choice draw per model, on the first probe, before
+/// the expensive run begins. Fails fast on an unreachable daemon or a
+/// model stem the daemon doesn't serve.
 async fn preflight(
     providers: &[Arc<dyn InferenceProvider>],
     models: &[String],
-    logprob: bool,
+    probe: &RenderedProbe,
+    candidates: &[String],
+    system_prompt: &str,
 ) -> Result<(), String> {
-    let prompt = render_prompt(&Case::base_example(), RenderMode::Full, false);
     for (p, name) in providers.iter().zip(models) {
-        let agg = if logprob {
-            elicit_logprob(p.as_ref(), name, &prompt).await
-        } else {
-            elicit(p.as_ref(), name, &prompt, 1, 1).await
-        };
-        if agg.eff_k == 0 {
-            return Err(format!(
-                "model `{name}` returned no parseable decision{}",
-                if logprob {
-                    " (is the daemon built with the forced-choice path?)"
-                } else {
-                    ""
-                }
-            ));
+        let (dist, _) =
+            elicit_logprob(p.as_ref(), name, &probe.prompt, candidates, system_prompt).await;
+        match dist {
+            Some(_) => eprintln!("[preflight] {name}: ok"),
+            None => {
+                return Err(format!(
+                    "model `{name}` returned no parseable forced-choice distribution \
+                     (is the daemon built with the forced-choice embedded path?)"
+                ))
+            }
         }
-        eprintln!("[preflight] {name}: ok (base p_freq={:.2})", agg.p_freq);
     }
     Ok(())
 }
 
 /// Forced-choice logprob elicitation — ONE forward pass. Carries the
 /// candidate set as a sentinel in `structured_output`; the daemon's
-/// embedded path reads the next-token distribution over A/B/C and
-/// returns it as JSON in `text`. `p_relocate = P(A) + ½·P(C)`.
-async fn elicit_logprob(model: &dyn InferenceProvider, model_id: &str, prompt: &str) -> Agg {
+/// embedded path reads the next-token distribution over the candidates and
+/// returns it as JSON in `text`. Returns the per-candidate distribution
+/// (the caller maps it to a scalar via `class.target_prob`).
+async fn elicit_logprob(
+    model: &dyn InferenceProvider,
+    model_id: &str,
+    prompt: &str,
+    candidates: &[String],
+    system_prompt: &str,
+) -> (Option<Vec<(String, f64)>>, u64) {
     let schema = serde_json::json!({
         "type": "string",
-        "enum": ["A", "B", "C"],
+        "enum": candidates,
         "x_forced_choice": true
     });
     let req = CompletionRequest {
-        prompt: format!(
-            "{prompt}\n\nAnswer with exactly one letter — A = relocate, B = stay, C = indifferent."
-        ),
-        system_message: Some(
-            "You are a careful economic analyst. Answer with a single letter.".to_string(),
-        ),
+        prompt: prompt.to_string(),
+        system_message: Some(system_prompt.to_string()),
         preferred_speed: Speed::Medium,
         max_tokens: Some(1),
         structured_output: Some(schema),
         think_budget: Some(0),
         enable_thinking: Some(false),
-        // Pin the slot by name — `build_request` routes on `model_id`,
-        // NOT the provider's own id, so without this both models collapse
+        // Pin the slot by name — `build_request` routes on `model_id`, NOT
+        // the provider's own id, so without this every model collapses
         // onto the daemon's default slot.
         model_id: Some(model_id.to_string()),
         ..Default::default()
     };
     let start = Instant::now();
-    match model.complete(&req).await {
-        Ok(resp) => match parse_forced_choice(&resp.text) {
-            Some((pa, _pb, pc)) => {
-                let p = pa + 0.5 * pc;
-                Agg {
-                    p_freq: p,
-                    p_verbal: p,
-                    eff_k: 1,
-                    latency_ms: start.elapsed().as_millis() as u64,
+    let mut last_err = String::new();
+    for attempt in 0..ELICIT_ATTEMPTS {
+        match model.complete(&req).await {
+            Ok(resp) => match parse_forced_choice_dist(&resp.text, candidates) {
+                Some(dist) => return (Some(dist), start.elapsed().as_millis() as u64),
+                None => {
+                    last_err =
+                        format!("parse failed: {:?}", &resp.text[..resp.text.len().min(80)]);
                 }
-            }
-            None => {
-                eprintln!(
-                    "    [logprob] parse failed: {:?}",
-                    &resp.text[..resp.text.len().min(80)]
-                );
-                Agg { p_freq: f64::NAN, p_verbal: f64::NAN, eff_k: 0, latency_ms: 0 }
-            }
-        },
-        Err(e) => {
-            eprintln!("    [logprob] inference error: {e}");
-            Agg { p_freq: f64::NAN, p_verbal: f64::NAN, eff_k: 0, latency_ms: 0 }
+            },
+            Err(e) => last_err = format!("inference error: {e}"),
         }
+        // Exponential-ish backoff; the transient class clears in well under
+        // a second, so 200/400/600ms is ample without stalling the run.
+        if attempt + 1 < ELICIT_ATTEMPTS {
+            tokio::time::sleep(Duration::from_millis(200 * (attempt as u64 + 1))).await;
+        }
+    }
+    eprintln!("    [logprob] {model_id} failed after {ELICIT_ATTEMPTS} attempts: {last_err}");
+    (None, 0)
+}
+
+/// Parse the forced-choice probability JSON `{"A":..,"B":..}` into a
+/// distribution over `candidates` (missing keys default to 0 — a model
+/// that never puts mass on a candidate contributes nothing to it).
+fn parse_forced_choice_dist(text: &str, candidates: &[String]) -> Option<Vec<(String, f64)>> {
+    let m: HashMap<String, f64> = serde_json::from_str(text.trim()).ok()?;
+    Some(
+        candidates
+            .iter()
+            .map(|c| (c.clone(), m.get(c).copied().unwrap_or(0.0)))
+            .collect(),
+    )
+}
+
+// ── Probe grouping + keys ────────────────────────────────────────────
+
+/// Contiguous spans of probes sharing a `case_id`. `build_probes` emits a
+/// case's probes back-to-back, so a single pass groups them.
+fn case_spans(probes: &[RenderedProbe]) -> Vec<std::ops::Range<usize>> {
+    let mut spans = Vec::new();
+    if probes.is_empty() {
+        return spans;
+    }
+    let mut start = 0usize;
+    for i in 1..=probes.len() {
+        if i == probes.len() || probes[i].case_id != probes[start].case_id {
+            spans.push(start..i);
+            start = i;
+        }
+    }
+    spans
+}
+
+/// The aggregate-map / checkpoint key: `model|case|render|paraphrase|variant`.
+fn agg_key(model_idx: usize, rp: &RenderedProbe) -> String {
+    format!(
+        "{model_idx}|{}|{}|{}|{}",
+        rp.case_id, rp.render, rp.paraphrase, rp.variant
+    )
+}
+
+/// The base (reference) probe's key for a given context.
+fn base_key(model_idx: usize, case_id: &str, render: &str, paraphrase: bool) -> String {
+    format!("{model_idx}|{case_id}|{render}|{paraphrase}|base")
+}
+
+// ── Scoring ──────────────────────────────────────────────────────────
+
+/// Signed agent + structural deltas and the metamorphic scores for one
+/// probe, relative to its context's base. The single scoring authority —
+/// both `build_rows` and the early-stopping contribution call it, so the
+/// loop's stop decisions and the emitted rows can never disagree.
+fn delta_score(
+    rp: &RenderedProbe,
+    p_agent: f64,
+    base_p: f64,
+    base_sp: f64,
+    bands: &Bands,
+) -> (f64, f64, Scores) {
+    if rp.is_base() {
+        (0.0, 0.0, Scores::none())
+    } else {
+        let d_agent = p_agent - base_p;
+        let d_struct = rp.structural_p - base_sp;
+        (d_agent, d_struct, score(rp.kind, d_agent, d_struct, bands))
     }
 }
 
-/// Parse the forced-choice probability JSON `{"A":..,"B":..,"C":..}`.
-fn parse_forced_choice(text: &str) -> Option<(f64, f64, f64)> {
-    let m: std::collections::HashMap<String, f64> = serde_json::from_str(text.trim()).ok()?;
-    Some((
-        m.get("A").copied().unwrap_or(0.0),
-        m.get("B").copied().unwrap_or(0.0),
-        m.get("C").copied().unwrap_or(0.0),
-    ))
+/// One case's contribution to the four early-stopping means (full,
+/// non-paraphrase signals + the control's directional accuracy). Mirrors
+/// `verdict.py`'s band selections so the stop decision matches the final
+/// verdict.
+struct CaseContrib {
+    /// μ_mag — only `Some` on a large-Δ P1 case (the magnitude band applies).
+    mag: Option<f64>,
+    flat_p2: Option<f64>,
+    inv: Option<f64>,
+    ctrl: Option<f64>,
 }
 
+fn case_contrib(
+    group: &[RenderedProbe],
+    model_idx: usize,
+    aggs: &HashMap<String, Agg>,
+    bands: &Bands,
+) -> CaseContrib {
+    // Base (agent p, structural p) per (render, paraphrase) context.
+    let mut base_p: HashMap<(String, bool), f64> = HashMap::new();
+    let mut base_sp: HashMap<(String, bool), f64> = HashMap::new();
+    for rp in group {
+        if rp.is_base() {
+            base_sp.insert((rp.render.clone(), rp.paraphrase), rp.structural_p);
+            if let Some(a) = aggs.get(&agg_key(model_idx, rp)) {
+                base_p.insert((rp.render.clone(), rp.paraphrase), a.p_freq);
+            }
+        }
+    }
+
+    let mut out = CaseContrib { mag: None, flat_p2: None, inv: None, ctrl: None };
+    for rp in group {
+        let Some(a) = aggs.get(&agg_key(model_idx, rp)) else { continue };
+        let ctx = (rp.render.clone(), rp.paraphrase);
+        let bp = base_p.get(&ctx).copied().unwrap_or(f64::NAN);
+        let bsp = base_sp.get(&ctx).copied().unwrap_or(f64::NAN);
+        let (d_agent, d_struct, s) = delta_score(rp, a.p_freq, bp, bsp, bands);
+
+        if rp.render == "full" && !rp.paraphrase {
+            match rp.variant.as_str() {
+                "dir_p1" => {
+                    if let Some(ok) = s.magnitude_ok {
+                        out.mag = Some(b2f(ok));
+                    }
+                }
+                "dir_p2" => {
+                    if let Some(ok) = s.flat_ok {
+                        out.flat_p2 = Some(b2f(ok));
+                    }
+                }
+                "inv_i1" => {
+                    if let Some(ok) = s.invariance_ok {
+                        out.inv = Some(b2f(ok));
+                    }
+                }
+                _ => {}
+            }
+        }
+        // Control (stripped) directional accuracy on P1: must sit at chance.
+        if rp.is_control() && rp.variant == "dir_p1" && d_agent.is_finite() && d_struct != 0.0 {
+            out.ctrl = Some(b2f(sign(d_agent) == sign(d_struct)));
+        }
+    }
+    out
+}
+
+fn build_rows(
+    args: &Args,
+    class_id: &str,
+    probes: &[RenderedProbe],
+    aggs: &HashMap<String, Agg>,
+    model_stops: &[ModelStop],
+    bands: &Bands,
+) -> Vec<ResultRow> {
+    let n_models = args.models.len();
+    // Base structural p per (case, render, paraphrase) — model-independent.
+    let mut base_sp: HashMap<(String, String, bool), f64> = HashMap::new();
+    for rp in probes {
+        if rp.is_base() {
+            base_sp.insert(
+                (rp.case_id.clone(), rp.render.clone(), rp.paraphrase),
+                rp.structural_p,
+            );
+        }
+    }
+    // Base agent p per (model, case, render, paraphrase).
+    let mut base_p: HashMap<String, f64> = HashMap::new();
+    for model_idx in 0..n_models {
+        for rp in probes {
+            if rp.is_base() {
+                if let Some(a) = aggs.get(&agg_key(model_idx, rp)) {
+                    base_p.insert(
+                        base_key(model_idx, &rp.case_id, &rp.render, rp.paraphrase),
+                        a.p_freq,
+                    );
+                }
+            }
+        }
+    }
+
+    let mut rows = Vec::new();
+    for model_idx in 0..n_models {
+        let st = &model_stops[model_idx];
+        for rp in probes {
+            let Some(agg) = aggs.get(&agg_key(model_idx, rp)) else { continue };
+            let bp = base_p
+                .get(&base_key(model_idx, &rp.case_id, &rp.render, rp.paraphrase))
+                .copied()
+                .unwrap_or(f64::NAN);
+            let bsp = base_sp
+                .get(&(rp.case_id.clone(), rp.render.clone(), rp.paraphrase))
+                .copied()
+                .unwrap_or(f64::NAN);
+            let (d_agent, d_struct, scores) = delta_score(rp, agg.p_freq, bp, bsp, bands);
+
+            rows.push(ResultRow {
+                model_id: args.models[model_idx].clone(),
+                class: class_id.to_string(),
+                case_id: rp.case_id.clone(),
+                pool: args.pool.as_str().to_string(),
+                variant: rp.variant.clone(),
+                render: rp.render.clone(),
+                paraphrase: rp.paraphrase,
+                control: rp.is_control(),
+                expected_sign: rp.expected_sign,
+                k_draws: agg.eff_k,
+                p_freq: agg.p_freq,
+                p_verbal: agg.p_verbal,
+                d_agent,
+                d_struct,
+                direction_ok: scores.direction_ok,
+                magnitude_ok: scores.magnitude_ok,
+                flat_ok: scores.flat_ok,
+                invariance_ok: scores.invariance_ok,
+                seed: args.seed,
+                latency_ms: agg.latency_ms,
+                n_drawn: st.n_drawn,
+                stopped_early: st.stopped_early,
+                cs_lower: st.cs_lower,
+                cs_upper: st.cs_upper,
+            });
+        }
+    }
+    rows
+}
+
+// ── Checkpoint / resume ──────────────────────────────────────────────
+
 /// `<out>.partial.jsonl` — the resumable elicitation sidecar.
-fn checkpoint_path(out: &std::path::Path) -> PathBuf {
+fn checkpoint_path(out: &Path) -> PathBuf {
     let mut s = out.as_os_str().to_os_string();
     s.push(".partial.jsonl");
     PathBuf::from(s)
 }
 
 /// A run is resumable only against identical generation args; otherwise
-/// `case_idx`/`model_idx` would misalign. This signature is the first
-/// line of the checkpoint and is checked on resume.
-fn run_signature(args: &Args) -> String {
+/// the case/model alignment would break. This signature is the first line
+/// of the checkpoint and is checked on resume.
+fn run_signature(args: &Args, class_id: &str) -> String {
     format!(
-        "models={}|seed={}|n_cases={}|k={}|paraphrase={}|pool={}",
+        "models={}|class={}|seed={}|n_cases={}|pool={}|corpus={}",
         args.models.join(","),
+        class_id,
         args.seed,
         args.n_cases,
-        args.k,
-        args.paraphrase,
-        args.pool.as_str()
+        args.pool.as_str(),
+        args.corpus
+            .as_deref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default()
     )
 }
 
@@ -588,9 +929,9 @@ fn run_signature(args: &Args) -> String {
 #[derive(serde::Serialize, serde::Deserialize)]
 struct CheckpointAgg {
     model_idx: usize,
-    case_idx: usize,
-    variant: Variant,
-    render: RenderMode,
+    case_id: String,
+    variant: String,
+    render: String,
     paraphrase: bool,
     p_freq: f64,
     p_verbal: f64,
@@ -600,10 +941,7 @@ struct CheckpointAgg {
 
 /// Load completed probes from the checkpoint, if any. Errors on a
 /// signature mismatch (different args ⇒ unsafe to resume).
-fn load_checkpoint(
-    path: &std::path::Path,
-    sig: &str,
-) -> Result<HashMap<(usize, usize, u8, bool, u8), Agg>, String> {
+fn load_checkpoint(path: &Path, sig: &str) -> Result<HashMap<String, Agg>, String> {
     let mut out = HashMap::new();
     let Ok(text) = std::fs::read_to_string(path) else {
         return Ok(out); // no checkpoint yet
@@ -628,12 +966,9 @@ fn load_checkpoint(
         }
         let c: CheckpointAgg = serde_json::from_str(line)
             .map_err(|e| format!("bad checkpoint line in {path:?}: {e}"))?;
-        let key = (
-            c.model_idx,
-            c.case_idx,
-            c.render as u8,
-            c.paraphrase,
-            c.variant as u8,
+        let key = format!(
+            "{}|{}|{}|{}|{}",
+            c.model_idx, c.case_id, c.render, c.paraphrase, c.variant
         );
         out.insert(
             key,
@@ -650,7 +985,7 @@ fn load_checkpoint(
 
 /// Open the checkpoint for appending, writing the signature header when
 /// the file is new.
-fn open_checkpoint(path: &std::path::Path, sig: &str) -> std::io::Result<std::fs::File> {
+fn open_checkpoint(path: &Path, sig: &str) -> std::io::Result<std::fs::File> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -663,13 +998,18 @@ fn open_checkpoint(path: &std::path::Path, sig: &str) -> std::io::Result<std::fs
     Ok(f)
 }
 
-fn append_checkpoint(f: &mut std::fs::File, probe: &Probe, agg: &Agg) -> std::io::Result<()> {
+fn append_checkpoint(
+    f: &mut std::fs::File,
+    model_idx: usize,
+    rp: &RenderedProbe,
+    agg: &Agg,
+) -> std::io::Result<()> {
     let rec = CheckpointAgg {
-        model_idx: probe.model_idx,
-        case_idx: probe.case_idx,
-        variant: probe.variant,
-        render: probe.render,
-        paraphrase: probe.paraphrase,
+        model_idx,
+        case_id: rp.case_id.clone(),
+        variant: rp.variant.clone(),
+        render: rp.render.clone(),
+        paraphrase: rp.paraphrase,
         p_freq: agg.p_freq,
         p_verbal: agg.p_verbal,
         eff_k: agg.eff_k,
@@ -681,196 +1021,9 @@ fn append_checkpoint(f: &mut std::fs::File, probe: &Probe, agg: &Agg) -> std::io
     f.flush()
 }
 
-/// Build the probe list. Base variant first within each context so the
-/// scorer always has a reference. Full render carries all four variants
-/// (and the paraphrase arm when enabled); the stripped control carries
-/// only the DIR variants + base (an INV swap is visible to the control,
-/// so it is not a control probe).
-fn enumerate_probes(n_models: usize, n_cases: usize, paraphrase: bool) -> Vec<Probe> {
-    let mut out = Vec::new();
-    let full_variants = Variant::all();
-    let control_variants = [Variant::Base, Variant::DirP1, Variant::DirP2];
-    for model_idx in 0..n_models {
-        for case_idx in 0..n_cases {
-            // Full render, primary wording.
-            for &v in &full_variants {
-                out.push(Probe { model_idx, case_idx, variant: v, render: RenderMode::Full, paraphrase: false });
-            }
-            // Full render, paraphrase wording.
-            if paraphrase {
-                for &v in &full_variants {
-                    out.push(Probe { model_idx, case_idx, variant: v, render: RenderMode::Full, paraphrase: true });
-                }
-            }
-            // Stripped render — the negative control.
-            for &v in &control_variants {
-                out.push(Probe { model_idx, case_idx, variant: v, render: RenderMode::Stripped, paraphrase: false });
-            }
-        }
-    }
-    // Base-first ordering within each context is preserved by Variant::all()
-    // listing Base first and control_variants starting with Base.
-    out
-}
+// ── Output ───────────────────────────────────────────────────────────
 
-fn probe_key(p: &Probe) -> (usize, usize, u8, bool, u8) {
-    (p.model_idx, p.case_idx, p.render as u8, p.paraphrase, p.variant as u8)
-}
-
-/// Elicit one probe by K structured draws, aggregating to a
-/// vote-frequency probability and a mean verbalized confidence.
-async fn elicit(
-    model: &dyn InferenceProvider,
-    model_id: &str,
-    prompt: &str,
-    k: u32,
-    concurrency: usize,
-) -> Agg {
-    let schema = decision_schema();
-    let draws: Vec<Option<(f64, f64, u64)>> = stream::iter(0..k)
-        .map(|_| {
-            let req = CompletionRequest {
-                prompt: prompt.to_string(),
-                system_message: Some(
-                    "You are a careful economic analyst. Decide and respond with JSON only."
-                        .to_string(),
-                ),
-                preferred_speed: Speed::Medium,
-                max_tokens: Some(DRAW_MAX_TOKENS),
-                temperature: Some(DRAW_TEMPERATURE),
-                structured_output: Some(schema.clone()),
-                think_budget: Some(0),
-                enable_thinking: Some(false),
-                // Pin the slot by name (build_request routes on model_id).
-                model_id: Some(model_id.to_string()),
-                ..Default::default()
-            };
-            async move {
-                let start = Instant::now();
-                match model.complete(&req).await {
-                    Ok(resp) => parse_decision(&resp.text).map(|(vote, verbal)| {
-                        (vote, verbal, start.elapsed().as_millis() as u64)
-                    }),
-                    Err(e) => {
-                        eprintln!("    [draw] inference error: {e}");
-                        None
-                    }
-                }
-            }
-        })
-        .buffer_unordered(concurrency.min(k as usize).max(1))
-        .collect()
-        .await;
-
-    let mut votes = 0.0f64;
-    let mut verbal = 0.0f64;
-    let mut eff = 0u32;
-    let mut lat = 0u64;
-    for d in draws.into_iter().flatten() {
-        votes += d.0;
-        verbal += d.1;
-        lat += d.2;
-        eff += 1;
-    }
-    if eff == 0 {
-        return Agg { p_freq: f64::NAN, p_verbal: f64::NAN, eff_k: 0, latency_ms: 0 };
-    }
-    Agg {
-        p_freq: votes / eff as f64,
-        p_verbal: verbal / eff as f64,
-        eff_k: eff,
-        latency_ms: lat / eff as u64,
-    }
-}
-
-/// Parse one draw → (relocate vote ∈ {0, .5, 1}, verbalized P(relocate)).
-fn parse_decision(text: &str) -> Option<(f64, f64)> {
-    let d: Decision = serde_json::from_str(text.trim()).ok()?;
-    let conf = d.confidence.clamp(0.0, 1.0);
-    match d.decision.to_lowercase().as_str() {
-        "relocate" => Some((1.0, conf)),
-        "stay" => Some((0.0, 1.0 - conf)),
-        "indifferent" => Some((0.5, 0.5)),
-        _ => None,
-    }
-}
-
-fn decision_schema() -> serde_json::Value {
-    serde_json::json!({
-        "type": "object",
-        "properties": {
-            "decision": {"type": "string", "enum": ["relocate", "stay", "indifferent"]},
-            "confidence": {"type": "number", "minimum": 0, "maximum": 1}
-        },
-        "required": ["decision", "confidence"],
-        "additionalProperties": false
-    })
-}
-
-#[allow(clippy::type_complexity)]
-fn build_rows(
-    args: &Args,
-    probes: &[Probe],
-    aggs: &HashMap<(usize, usize, u8, bool, u8), Agg>,
-    variant_case: &HashMap<(usize, Variant), (Case, f64)>,
-    bands: &Bands,
-) -> Vec<ResultRow> {
-    // Reference (base) p_freq + structural p per context.
-    let mut base_freq: HashMap<Ctx, f64> = HashMap::new();
-    let mut base_struct: HashMap<usize, f64> = HashMap::new();
-    for p in probes {
-        if p.variant == Variant::Base {
-            if let Some(a) = aggs.get(&probe_key(p)) {
-                base_freq.insert(p.ctx(), a.p_freq);
-            }
-        }
-    }
-    for ci in 0..args.n_cases {
-        if let Some((_, ps)) = variant_case.get(&(ci, Variant::Base)) {
-            base_struct.insert(ci, *ps);
-        }
-    }
-
-    let mut rows = Vec::with_capacity(probes.len());
-    for p in probes {
-        let Some(agg) = aggs.get(&probe_key(p)) else { continue };
-        let (_, p_struct) = &variant_case[&(p.case_idx, p.variant)];
-        let base_p = base_freq.get(&p.ctx()).copied().unwrap_or(f64::NAN);
-        let base_s = base_struct.get(&p.case_idx).copied().unwrap_or(f64::NAN);
-
-        let (d_agent, d_struct) = if p.variant == Variant::Base {
-            (0.0, 0.0)
-        } else {
-            (agg.p_freq - base_p, p_struct - base_s)
-        };
-        let scores = score(p.variant.kind(), d_agent, d_struct, bands);
-
-        rows.push(ResultRow {
-            model_id: args.models[p.model_idx].clone(),
-            case_id: variant_case[&(p.case_idx, p.variant)].0.id.clone(),
-            pool: args.pool.as_str().to_string(),
-            variant: p.variant.label().to_string(),
-            render: p.render.label().to_string(),
-            paraphrase: p.paraphrase,
-            control: p.render.is_control(),
-            expected_sign: p.variant.expected_sign(),
-            k_draws: agg.eff_k,
-            p_freq: agg.p_freq,
-            p_verbal: agg.p_verbal,
-            d_agent,
-            d_struct,
-            direction_ok: scores.direction_ok,
-            magnitude_ok: scores.magnitude_ok,
-            flat_ok: scores.flat_ok,
-            invariance_ok: scores.invariance_ok,
-            seed: args.seed,
-            latency_ms: agg.latency_ms,
-        });
-    }
-    rows
-}
-
-fn write_jsonl(path: &PathBuf, rows: &[ResultRow]) -> std::io::Result<()> {
+fn write_jsonl(path: &Path, rows: &[ResultRow]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -883,12 +1036,15 @@ fn write_jsonl(path: &PathBuf, rows: &[ResultRow]) -> std::io::Result<()> {
     Ok(())
 }
 
-/// A compact, glass-box read of the run printed to stderr — per model,
-/// the mean full-render P1 collapse and the control's P1 movement, so a
-/// leak (control showing sensitivity) is visible at a glance without the
-/// Python sidecar.
+/// A compact, glass-box read of the run printed to stderr — per model, the
+/// mean full-render P1 collapse and the control's P1 movement (so a leak
+/// is visible at a glance), plus the early-stopping outcome.
 fn print_glassbox_summary(args: &Args, rows: &[ResultRow]) {
-    eprintln!("\n── mechanism-fidelity summary (pool={}) ──", args.pool.as_str());
+    eprintln!(
+        "\n── reasoning-fidelity summary (class={}, pool={}) ──",
+        args.class,
+        args.pool.as_str()
+    );
     for m in &args.models {
         let p1_full: Vec<f64> = rows
             .iter()
@@ -923,6 +1079,19 @@ fn print_glassbox_summary(args: &Args, rows: &[ResultRow]) {
             mean(&p2_full),
             mean(&inv_full),
         );
+        // Early-stopping provenance (identical across a model's rows).
+        if let Some(r) = rows.iter().find(|r| &r.model_id == m) {
+            let cs = match (r.cs_lower, r.cs_upper) {
+                (Some(lo), Some(hi)) => format!("  mag CS=[{lo:.2},{hi:.2}]"),
+                _ => String::new(),
+            };
+            eprintln!(
+                "      cases drawn: {}{}{}",
+                r.n_drawn,
+                if r.stopped_early { " (stopped early)" } else { "" },
+                cs
+            );
+        }
     }
     eprintln!(
         "  (faithful: P1 Δ̄ strongly negative, control P1 Δ̄≈0, P2/INV |Δ̄| small. Read the\n   power-annotated verdict with sovereign/bench/mechanism_fidelity/verdict.py.)"
@@ -936,10 +1105,30 @@ fn mean(xs: &[f64]) -> f64 {
     xs.iter().sum::<f64>() / xs.len() as f64
 }
 
+fn b2f(b: bool) -> f64 {
+    if b {
+        1.0
+    } else {
+        0.0
+    }
+}
+
+fn sign(x: f64) -> i32 {
+    if x > 0.0 {
+        1
+    } else if x < 0.0 {
+        -1
+    } else {
+        0
+    }
+}
+
+// ── Manifest loading ─────────────────────────────────────────────────
+
 /// Load the `[bands]` table from the pre-registration manifest, falling
 /// back to the doc defaults when the file is absent. Unknown/missing keys
 /// inherit the default so a partial manifest still loads.
-fn load_bands(path: &PathBuf) -> Bands {
+fn load_bands(path: &Path) -> Bands {
     let mut bands = Bands::default();
     let Ok(text) = std::fs::read_to_string(path) else {
         eprintln!("[manifest] {path:?} not found — using doc default bands");
@@ -960,6 +1149,75 @@ fn load_bands(path: &PathBuf) -> Bands {
     bands
 }
 
+/// Load the `[stopping]` block + the `[negative_control]` control band,
+/// falling back to the [`StoppingConfig`] / doc defaults.
+fn load_stopping(path: &Path) -> StopParams {
+    let mut p = StopParams {
+        cfg: StoppingConfig::default(),
+        mag: 0.80,
+        flat: 0.90,
+        inv: 0.90,
+        ctrl: 0.55,
+    };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return p;
+    };
+    let Ok(val) = text.parse::<toml::Value>() else {
+        return p;
+    };
+    if let Some(t) = val.get("stopping").and_then(|b| b.as_table()) {
+        if let Some(a) = t.get("alpha").and_then(|v| v.as_float()) {
+            p.cfg.alpha = a;
+        }
+        if let Some(arr) = t.get("checkpoints").and_then(|v| v.as_array()) {
+            let cps: Vec<usize> = arr
+                .iter()
+                .filter_map(|x| x.as_integer())
+                .map(|i| i as usize)
+                .collect();
+            if !cps.is_empty() {
+                p.cfg.checkpoints = cps;
+            }
+        }
+        let g = |k: &str, d: f64| t.get(k).and_then(|v| v.as_float()).unwrap_or(d);
+        p.mag = g("mag_pass_fraction", p.mag);
+        p.flat = g("flat_pass_fraction", p.flat);
+        p.inv = g("inv_pass_fraction", p.inv);
+    }
+    if let Some(nc) = val.get("negative_control").and_then(|b| b.as_table()) {
+        if let Some(v) = nc.get("max_directional_accuracy").and_then(|v| v.as_float()) {
+            p.ctrl = v;
+        }
+    }
+    p
+}
+
+/// A stable fingerprint of the manifest's content — stamped onto each card
+/// so a reader can tell whether the bands a card was graded under still
+/// match the current pre-registration. Not cryptographic; it only needs to
+/// change when the manifest changes.
+fn manifest_fingerprint(path: &Path) -> String {
+    use std::hash::{Hash, Hasher};
+    let text = std::fs::read_to_string(path).unwrap_or_default();
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    text.hash(&mut h);
+    format!("{:016x}", h.finish())
+}
+
+/// Assemble the card-grading thresholds from the loaded bands + stopping
+/// pass-fractions (the same numbers the verdict and early-stopping use).
+fn grade_thresholds(bands: &Bands, sp: &StopParams) -> GradeThresholds {
+    GradeThresholds {
+        collapse_min: bands.collapse_min,
+        flat_max: bands.flat_max,
+        mag_pass: sp.mag,
+        flat_pass: sp.flat,
+        inv_pass: sp.inv,
+        control_max_dir_acc: sp.ctrl,
+        min_cases: GradeThresholds::default().min_cases,
+    }
+}
+
 fn git_commit_hash() -> Option<String> {
     let out = std::process::Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
@@ -976,46 +1234,50 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_decision_maps_choices() {
-        assert_eq!(
-            parse_decision("{\"decision\":\"relocate\",\"confidence\":0.8}"),
-            Some((1.0, 0.8))
-        );
-        // 'stay' with 0.25 confidence-of-stay ⇒ P(relocate)=0.75.
-        // (0.25/0.75 are exact in binary f64, so the equality is clean.)
-        assert_eq!(
-            parse_decision("{\"decision\":\"stay\",\"confidence\":0.25}"),
-            Some((0.0, 0.75f64))
-        );
-        assert_eq!(
-            parse_decision("{\"decision\":\"indifferent\",\"confidence\":0.3}"),
-            Some((0.5, 0.5))
-        );
-        assert_eq!(parse_decision("not json"), None);
+    fn parse_forced_choice_dist_reads_distribution() {
+        let cands = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+        let d = parse_forced_choice_dist("{\"A\":0.6,\"B\":0.3,\"C\":0.1}", &cands).unwrap();
+        assert_eq!(d, vec![("A".into(), 0.6), ("B".into(), 0.3), ("C".into(), 0.1)]);
+        // Missing keys default to 0.
+        let d = parse_forced_choice_dist("{\"A\":1.0}", &cands).unwrap();
+        assert_eq!(d, vec![("A".into(), 1.0), ("B".into(), 0.0), ("C".into(), 0.0)]);
+        assert!(parse_forced_choice_dist("garbage", &cands).is_none());
     }
 
     #[test]
-    fn parse_forced_choice_reads_distribution() {
-        assert_eq!(
-            parse_forced_choice("{\"A\":0.6,\"B\":0.3,\"C\":0.1}"),
-            Some((0.6, 0.3, 0.1))
-        );
-        // Missing keys default to 0 (a model that never puts mass on a
-        // letter just contributes nothing to that arm).
-        assert_eq!(parse_forced_choice("{\"A\":1.0}"), Some((1.0, 0.0, 0.0)));
-        assert_eq!(parse_forced_choice("garbage"), None);
+    fn case_spans_groups_contiguous_cases() {
+        use sovereign_eval::mechanism_fidelity::registry;
+        let cls = &registry()[0];
+        let probes = cls.build_probes(3, 0, None);
+        let spans = case_spans(&probes);
+        assert_eq!(spans.len(), 3, "one span per base case");
+        // Every probe in a span shares the same case_id.
+        for span in &spans {
+            let id = &probes[span.start].case_id;
+            assert!(probes[span.clone()].iter().all(|p| &p.case_id == id));
+        }
+        // Spans tile the probe list with no gaps.
+        assert_eq!(spans[0].start, 0);
+        assert_eq!(spans.last().unwrap().end, probes.len());
     }
 
     #[test]
-    fn probe_matrix_shape() {
-        // 1 model, 2 cases, paraphrase on:
-        //   full×4 + full-para×4 + control×3 = 11 probes/case.
-        let probes = enumerate_probes(1, 2, true);
-        assert_eq!(probes.len(), 22);
-        // Base must be the first probe of each context (scorer needs the
-        // reference before the perturbations).
-        assert_eq!(probes[0].variant, Variant::Base);
-        // Without paraphrase: full×4 + control×3 = 7/case.
-        assert_eq!(enumerate_probes(1, 2, false).len(), 14);
+    fn agg_key_matches_checkpoint_reconstruction() {
+        use sovereign_eval::mechanism_fidelity::registry;
+        let cls = &registry()[0];
+        let probes = cls.build_probes(1, 0, None);
+        let rp = &probes[0];
+        let key = agg_key(1, rp);
+        // The checkpoint round-trip rebuilds the same key string.
+        let reconstructed = format!(
+            "{}|{}|{}|{}|{}",
+            1, rp.case_id, rp.render, rp.paraphrase, rp.variant
+        );
+        assert_eq!(key, reconstructed);
+        // base_key agrees with the base probe's agg_key.
+        assert_eq!(
+            agg_key(1, rp),
+            base_key(1, &rp.case_id, &rp.render, rp.paraphrase)
+        );
     }
 }
