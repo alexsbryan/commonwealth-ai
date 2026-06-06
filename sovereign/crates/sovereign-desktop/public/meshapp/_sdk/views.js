@@ -140,7 +140,8 @@ export function timelineChart(container, buckets, opts = {}) {
       type: "button", class: "tl-col", "aria-pressed": "false",
       title: b.count + " in " + monthLabel(b.ym),
     },
-      el("div", { class: "tl-bar", style: { height: Math.max(2, Math.round((b.count / max) * 100)) + "%" } }),
+      el("div", { class: "tl-track" },
+        el("div", { class: "tl-bar", style: { height: Math.max(2, Math.round((b.count / max) * 100)) + "%" } })),
       el("div", { class: "tl-lab", text: monthLabel(b.ym) }));
     col.addEventListener("click", () => {
       for (const c of container.children) c.setAttribute("aria-pressed", "false");
