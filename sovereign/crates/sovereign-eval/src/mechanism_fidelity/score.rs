@@ -125,6 +125,10 @@ fn same_sign(a: f64, b: f64) -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResultRow {
     pub model_id: String,
+    /// The reasoning class id (e.g. `wealth_tax_relocation`). Lets one
+    /// JSONL hold rows from several classes and a reader group by it.
+    #[serde(default)]
+    pub class: String,
     pub case_id: String,
     /// `train` | `dev` | `test`.
     pub pool: String,
@@ -154,6 +158,21 @@ pub struct ResultRow {
     pub invariance_ok: Option<bool>,
     pub seed: u64,
     pub latency_ms: u64,
+    // ── Early-stopping provenance (Train/Dev, logprob path) ──
+    /// Cases actually elicited for this model before its verdict resolved
+    /// (or the full battery when stopping did not trigger / Test pool).
+    /// Same value across all of a model's rows.
+    #[serde(default)]
+    pub n_drawn: usize,
+    /// True when this model resolved and skipped its remaining cases.
+    #[serde(default)]
+    pub stopped_early: bool,
+    /// The headline magnitude-band (μ_mag) confidence interval at the
+    /// model's stop point. `None` when stopping was off (Test pool).
+    #[serde(default)]
+    pub cs_lower: Option<f64>,
+    #[serde(default)]
+    pub cs_upper: Option<f64>,
 }
 
 #[cfg(test)]

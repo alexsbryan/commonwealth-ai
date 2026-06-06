@@ -27,15 +27,23 @@
 //! correspondence to reality. Nothing here should be read as the agent
 //! getting closer to truth.
 
+pub mod card;
 pub mod case;
+pub mod class;
+pub mod classes;
 pub mod perturb;
+pub mod registry;
 pub mod score;
 pub mod stopping;
 pub mod structural;
 
+pub use card::{grade_class, CardEntry, FidelityCard, Grade, GradeThresholds};
 pub use case::{generate_cases, Case};
+pub use class::{prob_of, ReasoningClass, RenderedProbe};
 pub use perturb::{render_prompt, PerturbKind, RenderMode, Variant};
+pub use registry::{by_id, class_ids, registry};
 pub use score::{score, Bands, ResultRow, Scores};
+pub use stopping::{decide, decide_at, BoundedMean, Side, StoppingConfig, Verdict};
 pub use structural::structural_p_relocate;
 
 use serde::{Deserialize, Serialize};

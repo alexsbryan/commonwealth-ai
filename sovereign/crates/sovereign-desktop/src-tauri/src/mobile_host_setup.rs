@@ -17,7 +17,12 @@ use std::time::Duration;
 
 use sovereign_core::mobile_host::{self, MobileHostConfig};
 use sovereign_core::setup_config::SetupConfig;
-use tokio::task::JoinHandle;
+// `tauri::async_runtime::spawn` (NOT `tokio::spawn`): `start` is called from the
+// Tauri `setup()` closure, which runs in the app-delegate's
+// `did_finish_launching` with no ambient Tokio runtime on that thread —
+// `tokio::spawn` panics there ("no reactor running"). Tauri's handle works from
+// any context. (Same reasoning as the mobile crate's `connectivity::monitor`.)
+use tauri::async_runtime::{self, JoinHandle};
 use tracing::info;
 
 use crate::supervisor::{Supervisor, SupervisorConfig};
@@ -59,7 +64,12 @@ pub fn start() -> Result<JoinHandle<()>, String> {
         crash_log_dir,
         heartbeat_interval: Duration::from_secs(5),
         heartbeat_timeout: Duration::from_secs(5),
-        heartbeat_failure_threshold: 3,
+        // sovereign-server binds its listener LAST — only after loading the
+        // meta-atlas (~18s) — and the supervisor has no startup grace (it
+        // counts failures from spawn). A short threshold would kill the child
+        // mid-startup before it ever binds. 12 × 5s = 60s tolerates a cold
+        // meta-atlas load; a genuine crash is still caught within a minute.
+        heartbeat_failure_threshold: 12,
         backoff_schedule: vec![
             Duration::from_secs(1),
             Duration::from_secs(5),
@@ -72,7 +82,7 @@ pub fn start() -> Result<JoinHandle<()>, String> {
     };
 
     let supervisor = Arc::new(Supervisor::new(config));
-    let handle = tokio::spawn(async move { supervisor.run().await });
+    let handle = async_runtime::spawn(async move { supervisor.run().await });
     info!(
         port,
         "mobile-access: supervised sovereign-server started (inference delegated to the daemon; no models loaded)"
