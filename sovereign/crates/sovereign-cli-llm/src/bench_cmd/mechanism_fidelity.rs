@@ -54,7 +54,7 @@ const HELP: Help = Help {
     summary: "Metamorphic mechanism-fidelity audit of LLM relocation decisions under a wealth tax.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench mechanism-fidelity run --models <a,b> [--pool {train|dev|test}] [--k N] [--n-cases N] [--seed N] [--no-paraphrase] [--concurrency N] [--base-url URL] [--api-key-env VAR] [--manifest PATH] [--out PATH] [--unseal-test --reason \"…\"]",
+            "sovereign bench mechanism-fidelity run --models <a,b> [--logprob] [--pool {train|dev|test}] [--k N] [--n-cases N] [--seed N] [--no-paraphrase] [--concurrency N] [--base-url URL] [--api-key-env VAR] [--manifest PATH] [--out PATH] [--unseal-test --reason \"…\"]",
         ),
         HelpSection::Subcommands(&[(
             "run",
@@ -113,6 +113,10 @@ struct Args {
     seed: u64,
     paraphrase: bool,
     concurrency: usize,
+    /// Forced-choice logprob elicitation (one forward pass) instead of
+    /// K repeated draws. Requires a daemon built with the forced-choice
+    /// embedded path; ~30–200× cheaper.
+    logprob: bool,
     base_url: String,
     api_key_env: Option<String>,
     manifest: PathBuf,
@@ -129,6 +133,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
     let mut seed: u64 = 0;
     let mut paraphrase = true;
     let mut concurrency: usize = 8;
+    let mut logprob = false;
     let mut base_url = "http://localhost:9741".to_string();
     let mut api_key_env: Option<String> = None;
     let mut manifest =
@@ -172,6 +177,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
             }
             "--seed" => seed = val!("--seed").parse().map_err(|_| "--seed must be a u64")?,
             "--no-paraphrase" => paraphrase = false,
+            "--logprob" => logprob = true,
             "--concurrency" => {
                 concurrency = val!("--concurrency")
                     .parse::<usize>()
@@ -203,6 +209,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         seed,
         paraphrase,
         concurrency,
+        logprob,
         base_url,
         api_key_env,
         manifest,
@@ -323,6 +330,15 @@ async fn run(args: Args) -> i32 {
         })
         .collect();
 
+    // ── Preflight: one parseable draw per model before spending the run ──
+    // A full K×probe run is ~10^5 calls; fail fast on a bad model stem or
+    // an unreachable daemon rather than erroring every draw.
+    if let Err(e) = preflight(&providers, &args.models, args.logprob).await {
+        eprintln!("preflight failed: {e}");
+        eprintln!("  (check the daemon is up at {v1} and the --models stems appear on /v1/models)");
+        return 1;
+    }
+
     // ── Cases + precomputed per-(case, variant) transformed cases ──
     let cases = generate_cases(args.n_cases, args.seed);
     // (case_idx, variant) -> (transformed Case, structural p). InvI1
@@ -343,6 +359,15 @@ async fn run(args: Args) -> i32 {
         }
     }
 
+    eprintln!(
+        "[estimator] {}",
+        if args.logprob {
+            "forced-choice logprob — ONE forward pass per probe (the K-killer)"
+        } else {
+            "repeated sampling — K draws per probe"
+        }
+    );
+
     // ── Enumerate probes ──
     let probes = enumerate_probes(args.models.len(), cases.len(), args.paraphrase);
     let total_draws = probes.len() as u64 * args.k as u64;
@@ -357,32 +382,79 @@ async fn run(args: Args) -> i32 {
         args.concurrency
     );
 
-    // ── Elicit every probe (K concurrent draws per probe) ──
-    let mut aggs: HashMap<(usize, usize, u8, bool, u8), Agg> = HashMap::new();
-    let mut done = 0usize;
-    for probe in &probes {
-        let (case, _p_struct) = &variant_case[&(probe.case_idx, probe.variant)];
-        let prompt = render_prompt(case, probe.render, probe.paraphrase);
-        let agg = elicit(
-            providers[probe.model_idx].as_ref(),
-            &prompt,
-            args.k,
-            args.concurrency,
-        )
-        .await;
-        aggs.insert(probe_key(probe), agg);
-        done += 1;
-        if done % 25 == 0 || done == probes.len() {
-            eprintln!("  [elicit] {done}/{} probes done", probes.len());
-        }
-    }
-
-    // ── Score + emit ResultRows ──
-    let rows = build_rows(&args, &probes, &aggs, &variant_case, &bands);
-
+    // ── Checkpoint + resume ──
+    // The expensive artifact is the elicitation, not the scoring. We
+    // append one raw aggregate per probe to a `.partial.jsonl` sidecar as
+    // it completes; on restart with identical generation args we reload
+    // it and skip finished probes. The final scored ResultRow file is
+    // always recomputed (cheap, pure) from the full aggregate set — so
+    // re-running with a different --manifest re-scores without re-eliciting.
     let out_path = args.out.clone().unwrap_or_else(|| {
         PathBuf::from(format!("target/mechanism-fidelity/{}.jsonl", args.pool.as_str()))
     });
+    let ckpt_path = checkpoint_path(&out_path);
+    let sig = run_signature(&args);
+    let mut aggs: HashMap<(usize, usize, u8, bool, u8), Agg> =
+        match load_checkpoint(&ckpt_path, &sig) {
+            Ok(loaded) => {
+                if !loaded.is_empty() {
+                    eprintln!(
+                        "[resume] loaded {} completed probes from {ckpt_path:?}",
+                        loaded.len()
+                    );
+                }
+                loaded
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                eprintln!("  (remove {ckpt_path:?} to start fresh, or restore the original args)");
+                return 1;
+            }
+        };
+    let mut ckpt = match open_checkpoint(&ckpt_path, &sig) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("error: could not open checkpoint {ckpt_path:?}: {e}");
+            return 1;
+        }
+    };
+
+    // ── Elicit every probe (K concurrent draws per probe) ──
+    let mut done = 0usize;
+    let mut skipped = 0usize;
+    for probe in &probes {
+        let key = probe_key(probe);
+        if aggs.contains_key(&key) {
+            skipped += 1;
+            done += 1;
+            continue;
+        }
+        let (case, _p_struct) = &variant_case[&(probe.case_idx, probe.variant)];
+        let prompt = render_prompt(case, probe.render, probe.paraphrase);
+        let agg = if args.logprob {
+            elicit_logprob(providers[probe.model_idx].as_ref(), &prompt).await
+        } else {
+            elicit(
+                providers[probe.model_idx].as_ref(),
+                &prompt,
+                args.k,
+                args.concurrency,
+            )
+            .await
+        };
+        // Durably record the elicitation before moving on.
+        if let Err(e) = append_checkpoint(&mut ckpt, probe, &agg) {
+            eprintln!("warning: checkpoint append failed (continuing in-memory): {e}");
+        }
+        aggs.insert(key, agg);
+        done += 1;
+        if done % 25 == 0 || done == probes.len() {
+            eprintln!("  [elicit] {done}/{} probes ({skipped} resumed)", probes.len());
+        }
+    }
+
+    // ── Score + emit ResultRows (recomputed from the full aggregate set) ──
+    let rows = build_rows(&args, &probes, &aggs, &variant_case, &bands);
     if let Err(e) = write_jsonl(&out_path, &rows) {
         eprintln!("error: could not write {out_path:?}: {e}");
         return 1;
@@ -390,6 +462,217 @@ async fn run(args: Args) -> i32 {
     eprintln!("[out] wrote {} rows → {out_path:?}", rows.len());
     print_glassbox_summary(&args, &rows);
     0
+}
+
+/// One parseable draw per model, on the canonical base case, before the
+/// expensive run begins. Fails fast on an unreachable daemon or a model
+/// stem the daemon doesn't serve.
+async fn preflight(
+    providers: &[Arc<dyn InferenceProvider>],
+    models: &[String],
+    logprob: bool,
+) -> Result<(), String> {
+    let prompt = render_prompt(&Case::base_example(), RenderMode::Full, false);
+    for (p, name) in providers.iter().zip(models) {
+        let agg = if logprob {
+            elicit_logprob(p.as_ref(), &prompt).await
+        } else {
+            elicit(p.as_ref(), &prompt, 1, 1).await
+        };
+        if agg.eff_k == 0 {
+            return Err(format!(
+                "model `{name}` returned no parseable decision{}",
+                if logprob {
+                    " (is the daemon built with the forced-choice path?)"
+                } else {
+                    ""
+                }
+            ));
+        }
+        eprintln!("[preflight] {name}: ok (base p_freq={:.2})", agg.p_freq);
+    }
+    Ok(())
+}
+
+/// Forced-choice logprob elicitation — ONE forward pass. Carries the
+/// candidate set as a sentinel in `structured_output`; the daemon's
+/// embedded path reads the next-token distribution over A/B/C and
+/// returns it as JSON in `text`. `p_relocate = P(A) + ½·P(C)`.
+async fn elicit_logprob(model: &dyn InferenceProvider, prompt: &str) -> Agg {
+    let schema = serde_json::json!({
+        "type": "string",
+        "enum": ["A", "B", "C"],
+        "x_forced_choice": true
+    });
+    let req = CompletionRequest {
+        prompt: format!(
+            "{prompt}\n\nAnswer with exactly one letter — A = relocate, B = stay, C = indifferent."
+        ),
+        system_message: Some(
+            "You are a careful economic analyst. Answer with a single letter.".to_string(),
+        ),
+        preferred_speed: Speed::Medium,
+        max_tokens: Some(1),
+        structured_output: Some(schema),
+        think_budget: Some(0),
+        enable_thinking: Some(false),
+        ..Default::default()
+    };
+    let start = Instant::now();
+    match model.complete(&req).await {
+        Ok(resp) => match parse_forced_choice(&resp.text) {
+            Some((pa, _pb, pc)) => {
+                let p = pa + 0.5 * pc;
+                Agg {
+                    p_freq: p,
+                    p_verbal: p,
+                    eff_k: 1,
+                    latency_ms: start.elapsed().as_millis() as u64,
+                }
+            }
+            None => {
+                eprintln!(
+                    "    [logprob] parse failed: {:?}",
+                    &resp.text[..resp.text.len().min(80)]
+                );
+                Agg { p_freq: f64::NAN, p_verbal: f64::NAN, eff_k: 0, latency_ms: 0 }
+            }
+        },
+        Err(e) => {
+            eprintln!("    [logprob] inference error: {e}");
+            Agg { p_freq: f64::NAN, p_verbal: f64::NAN, eff_k: 0, latency_ms: 0 }
+        }
+    }
+}
+
+/// Parse the forced-choice probability JSON `{"A":..,"B":..,"C":..}`.
+fn parse_forced_choice(text: &str) -> Option<(f64, f64, f64)> {
+    let m: std::collections::HashMap<String, f64> = serde_json::from_str(text.trim()).ok()?;
+    Some((
+        m.get("A").copied().unwrap_or(0.0),
+        m.get("B").copied().unwrap_or(0.0),
+        m.get("C").copied().unwrap_or(0.0),
+    ))
+}
+
+/// `<out>.partial.jsonl` — the resumable elicitation sidecar.
+fn checkpoint_path(out: &std::path::Path) -> PathBuf {
+    let mut s = out.as_os_str().to_os_string();
+    s.push(".partial.jsonl");
+    PathBuf::from(s)
+}
+
+/// A run is resumable only against identical generation args; otherwise
+/// `case_idx`/`model_idx` would misalign. This signature is the first
+/// line of the checkpoint and is checked on resume.
+fn run_signature(args: &Args) -> String {
+    format!(
+        "models={}|seed={}|n_cases={}|k={}|paraphrase={}|pool={}",
+        args.models.join(","),
+        args.seed,
+        args.n_cases,
+        args.k,
+        args.paraphrase,
+        args.pool.as_str()
+    )
+}
+
+/// One durable elicitation record. Keyed fields reconstruct the in-memory
+/// `aggs` key on resume.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CheckpointAgg {
+    model_idx: usize,
+    case_idx: usize,
+    variant: Variant,
+    render: RenderMode,
+    paraphrase: bool,
+    p_freq: f64,
+    p_verbal: f64,
+    eff_k: u32,
+    latency_ms: u64,
+}
+
+/// Load completed probes from the checkpoint, if any. Errors on a
+/// signature mismatch (different args ⇒ unsafe to resume).
+fn load_checkpoint(
+    path: &std::path::Path,
+    sig: &str,
+) -> Result<HashMap<(usize, usize, u8, bool, u8), Agg>, String> {
+    let mut out = HashMap::new();
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Ok(out); // no checkpoint yet
+    };
+    let mut lines = text.lines();
+    match lines.next() {
+        Some(first) => {
+            let header: serde_json::Value = serde_json::from_str(first)
+                .map_err(|e| format!("malformed checkpoint header in {path:?}: {e}"))?;
+            let found = header.get("_sig").and_then(|v| v.as_str()).unwrap_or("");
+            if found != sig {
+                return Err(format!(
+                    "checkpoint {path:?} was written for different args\n    have: {sig}\n    file: {found}"
+                ));
+            }
+        }
+        None => return Ok(out),
+    }
+    for line in lines {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let c: CheckpointAgg = serde_json::from_str(line)
+            .map_err(|e| format!("bad checkpoint line in {path:?}: {e}"))?;
+        let key = (
+            c.model_idx,
+            c.case_idx,
+            c.render as u8,
+            c.paraphrase,
+            c.variant as u8,
+        );
+        out.insert(
+            key,
+            Agg {
+                p_freq: c.p_freq,
+                p_verbal: c.p_verbal,
+                eff_k: c.eff_k,
+                latency_ms: c.latency_ms,
+            },
+        );
+    }
+    Ok(out)
+}
+
+/// Open the checkpoint for appending, writing the signature header when
+/// the file is new.
+fn open_checkpoint(path: &std::path::Path, sig: &str) -> std::io::Result<std::fs::File> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let fresh = !path.exists();
+    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
+    if fresh {
+        writeln!(f, "{}", serde_json::json!({ "_sig": sig }))?;
+        f.flush()?;
+    }
+    Ok(f)
+}
+
+fn append_checkpoint(f: &mut std::fs::File, probe: &Probe, agg: &Agg) -> std::io::Result<()> {
+    let rec = CheckpointAgg {
+        model_idx: probe.model_idx,
+        case_idx: probe.case_idx,
+        variant: probe.variant,
+        render: probe.render,
+        paraphrase: probe.paraphrase,
+        p_freq: agg.p_freq,
+        p_verbal: agg.p_verbal,
+        eff_k: agg.eff_k,
+        latency_ms: agg.latency_ms,
+    };
+    let line = serde_json::to_string(&rec)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
+    writeln!(f, "{line}")?;
+    f.flush()
 }
 
 /// Build the probe list. Base variant first within each context so the
@@ -700,6 +983,18 @@ mod tests {
             Some((0.5, 0.5))
         );
         assert_eq!(parse_decision("not json"), None);
+    }
+
+    #[test]
+    fn parse_forced_choice_reads_distribution() {
+        assert_eq!(
+            parse_forced_choice("{\"A\":0.6,\"B\":0.3,\"C\":0.1}"),
+            Some((0.6, 0.3, 0.1))
+        );
+        // Missing keys default to 0 (a model that never puts mass on a
+        // letter just contributes nothing to that arm).
+        assert_eq!(parse_forced_choice("{\"A\":1.0}"), Some((1.0, 0.0, 0.0)));
+        assert_eq!(parse_forced_choice("garbage"), None);
     }
 
     #[test]
