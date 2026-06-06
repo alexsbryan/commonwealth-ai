@@ -141,6 +141,42 @@ pub fn generate_token() -> String {
     format!("sk-mobile-{}", uuid::Uuid::new_v4().simple())
 }
 
+/// Turn a bind address into one the phone can actually dial. A wildcard host
+/// (`0.0.0.0` / `::`) is replaced with this node's Tailscale IPv4 (`tailscale
+/// ip -4`) when available, since the phone reaches the host over the tailnet;
+/// an explicit host is returned unchanged. Used by both the CLI pairing card
+/// and the desktop Mobile-access panel.
+pub fn dialable_address(bind: &str) -> String {
+    let port = bind
+        .rsplit_once(':')
+        .and_then(|(_, p)| p.parse::<u16>().ok())
+        .unwrap_or(8080);
+    let host = bind.rsplit_once(':').map(|(h, _)| h).unwrap_or(bind);
+    if host == "0.0.0.0" || host == "::" || host.is_empty() {
+        if let Some(ip) = tailscale_ipv4() {
+            return format!("{ip}:{port}");
+        }
+        return format!("<this-node-tailnet-ip>:{port}");
+    }
+    bind.to_string()
+}
+
+/// First IPv4 from `tailscale ip -4`, if the CLI is present and logged in.
+fn tailscale_ipv4() -> Option<String> {
+    let out = std::process::Command::new("tailscale")
+        .args(["ip", "-4"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .next()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
 /// Locate the `sovereign-server` binary to run. Order: `SOVEREIGN_SERVER_PATH`
 /// env override, then a sibling of the current executable (the install layout
 /// puts every `sovereign-*` binary side-by-side, and the dev `target/debug`

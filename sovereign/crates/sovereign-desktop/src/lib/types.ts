@@ -167,6 +167,10 @@ export interface DesktopConfig {
    *  default), the workspace switcher is hidden in the chat sidebar.
    *  Toggled from Settings → Advanced. */
   enable_recipe_authoring: boolean;
+  /** Opt-in: serve the phone-facing sovereign-server API so the Sovereign
+   *  mobile app can pair over the tailnet. The host delegates inference to the
+   *  daemon (no second model load). Toggled from Settings → Mobile access. */
+  mobile_access_enabled: boolean;
 }
 
 /** Snapshot of the canonical chat-slot context window state, sourced
@@ -212,6 +216,7 @@ export interface SetupConfig {
    *  wizard step that doesn't surface the toggle preserves the
    *  existing config value rather than silently defaulting to false. */
   enable_recipe_authoring?: boolean;
+  mobile_access_enabled?: boolean;
 }
 
 /** Snapshot of the desktop's bootstrap probe. Emitted by the

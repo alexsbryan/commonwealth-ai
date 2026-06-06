@@ -21,6 +21,30 @@ pub async fn get_config(state: State<'_, Arc<AppState>>) -> Result<DesktopConfig
     Ok(state.config.read().await.clone())
 }
 
+/// Pairing card for the Settings → Mobile access panel (address + tenant +
+/// token the phone enters). Reads/creates `~/.sovereign/mobile-host.toml`.
+#[tauri::command]
+pub async fn get_mobile_pairing() -> Result<crate::mobile_host_setup::MobilePairing, String> {
+    crate::mobile_host_setup::pairing()
+}
+
+/// Start or stop the supervised mobile host at runtime (the toggle's runtime
+/// half — persistence rides the normal `save_config`). Starting spawns a
+/// `sovereign-server` child that delegates inference to the daemon; stopping
+/// aborts the supervise task, whose `kill_on_drop` SIGKILLs the child.
+#[tauri::command]
+pub async fn set_mobile_access(state: State<'_, Arc<AppState>>, enabled: bool) -> Result<(), String> {
+    let mut guard = state.mobile_host_supervisor.write().await;
+    if enabled {
+        if guard.is_none() {
+            *guard = Some(crate::mobile_host_setup::start()?);
+        }
+    } else if let Some(handle) = guard.take() {
+        handle.abort();
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn save_config(
     state: State<'_, Arc<AppState>>,

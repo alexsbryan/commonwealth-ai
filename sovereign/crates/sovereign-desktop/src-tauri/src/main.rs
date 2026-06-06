@@ -10,6 +10,7 @@ mod insight_commands;
 mod local_corpus_commands;
 mod mesh_commands;
 mod meshapp;
+mod mobile_host_setup;
 mod recipe_author_commands;
 mod recipe_commands;
 mod routing_events;
@@ -170,6 +171,29 @@ fn main() -> ExitCode {
                 AppState::new_with_mode(Arc::clone(&approval), bootstrap_mode, supervisor);
             let app_state = Arc::new(app_state);
             app.manage(app_state.clone());
+
+            // Opt-in Mobile access: if enabled in the desktop config, start the
+            // supervised `sovereign-server` host at launch. It delegates all
+            // inference to the local daemon, so it loads no models of its own.
+            {
+                let st = Arc::clone(&app_state);
+                let enabled = tauri::async_runtime::block_on(async {
+                    st.config.read().await.mobile_access_enabled
+                });
+                if enabled {
+                    match mobile_host_setup::start() {
+                        Ok(h) => {
+                            tauri::async_runtime::block_on(async {
+                                *st.mobile_host_supervisor.write().await = Some(h);
+                            });
+                            tracing::info!("mobile-access: started at launch (config enabled)");
+                        }
+                        Err(e) => {
+                            tracing::warn!("mobile-access: failed to start at launch: {e}")
+                        }
+                    }
+                }
+            }
 
             // Set up system tray.
             if let Err(e) = tray::setup_tray(app) {
@@ -342,6 +366,8 @@ fn main() -> ExitCode {
             commands::weaken_memory,
             commands::get_config,
             commands::save_config,
+            commands::get_mobile_pairing,
+            commands::set_mobile_access,
             commands::get_setup_context_size,
             commands::set_setup_context_size,
             commands::is_setup_complete,
