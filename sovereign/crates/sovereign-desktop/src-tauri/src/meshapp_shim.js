@@ -26,6 +26,10 @@
     searchEntities: (corpusId, query, nodeType, limit) =>
       invoke("meshapp_search_entities", { corpusId, query, nodeType, limit }),
     reconciliation: (corpusId) => invoke("meshapp_reconciliation", { corpusId }),
+    subgraph: (corpusId, nodeType, limit) =>
+      invoke("meshapp_subgraph", { corpusId, nodeType, limit }),
+    corpusStats: (corpusId) => invoke("meshapp_corpus_stats", { corpusId }),
+    timeline: (corpusId) => invoke("meshapp_timeline", { corpusId }),
     readChunk: (corpusId, chunkId) => invoke("meshapp_read_chunk", { corpusId, chunkId }),
   };
 })();

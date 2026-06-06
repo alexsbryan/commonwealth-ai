@@ -971,8 +971,11 @@ host-set webview LABEL (unspoofable from JS) and checked fail-closed by
 read-only `read_corpus` / `parcel_analytics` (reusing corpus-engine's
 `compute_aggregates`, so no model originates a figure on the desktop
 surface either); the graph-explorer family `graph` / `node` / `findings` /
-`search_entities` / `reconciliation` / `read_chunk`; host-only install
-management; and `meshapp_open` (`WebviewWindowBuilder` + the
+`search_entities` / `reconciliation` / `subgraph` (top-degree nodes + induced
+edges, for a node-link map) / `corpus_stats` (scale/provenance counts) /
+`timeline` (documents bucketed by month, parsed from the `Date:` header every
+email chunk carries) / `read_chunk`; host-only install management; and
+`meshapp_open` (`WebviewWindowBuilder` + the
 `meshapp_shim.js` `window.meshApp` shim over `__TAURI_INTERNALS__` + a
 per-window strict CSP set in `on_web_resource_request`). The graph ops are
 **backend-agnostic**: `load_investigation` dispatches on what the index
@@ -987,7 +990,9 @@ cross-origin merge log (canonical + folded surface forms + the signal that
 fired) as the identity glassbox. Three first-party explorers ship on this
 surface: SF-LVT (`public/meshapp/lvt/`, deterministic parcel compute), UAP
 Blue Book (`public/meshapp/uap/`, investigation graph), and Enron
-(`public/meshapp/enron/`, atlas identity + counterparty graph). Adding one
+(`public/meshapp/enron/`, a story-first atlas experience: scale banner +
+description-led on-ramp + CSP-safe force-graph + collapse timeline +
+reconciliation reveal + cited drill-down). Adding one
 is a bundle + a `MeshAppsSection.svelte` CATALOG entry (+ an atlas reader
 when the backend differs). **Isolation caveat:** Tauri v2 does not gate app
 commands per-window (tauri#9227) — a webview with IPC can invoke any

@@ -628,31 +628,42 @@ fn push_pairwise_edges(
     }
 }
 
-/// `sec_NNNNN` → first numeric `chunks.lance` row id (as a string), read from
-/// `<index>/chapters.json`. The atlas stamps atom evidence with the section
-/// id; this resolves it to the chunk id `read_chunk` dereferences. Absent
-/// file → empty map (resolution falls back to the raw section id).
-fn read_chapter_chunk_map(index_path: &Path) -> Result<HashMap<String, String>, String> {
+/// One `chapters.json` row — an ingested document (here, one email) and the
+/// `chunks.lance` rows it produced. Other fields (title, word_count, …) are
+/// ignored.
+#[derive(Deserialize)]
+struct ChapterRow {
+    id: String,
+    #[serde(default)]
+    chunk_ids: Vec<u64>,
+}
+
+/// Read `<index>/chapters.json` rows (the per-document → chunk-id map). Absent
+/// file → empty (the atlas evidence resolver and timeline both degrade to no
+/// mapping rather than erroring).
+fn read_chapters(index_path: &Path) -> Result<Vec<ChapterRow>, String> {
     #[derive(Deserialize)]
     struct ChaptersFile {
         #[serde(default)]
         chapters: Vec<ChapterRow>,
     }
-    #[derive(Deserialize)]
-    struct ChapterRow {
-        id: String,
-        #[serde(default)]
-        chunk_ids: Vec<u64>,
-    }
     let path = index_path.join("chapters.json");
     if !path.exists() {
-        return Ok(HashMap::new());
+        return Ok(Vec::new());
     }
     let bytes = std::fs::read(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
     let file: ChaptersFile =
         serde_json::from_slice(&bytes).map_err(|e| format!("parse {}: {e}", path.display()))?;
-    let mut map = HashMap::with_capacity(file.chapters.len());
-    for c in file.chapters {
+    Ok(file.chapters)
+}
+
+/// `sec_NNNNN` → first numeric `chunks.lance` row id (as a string). The atlas
+/// stamps atom evidence with the section id; this resolves it to the chunk id
+/// `read_chunk` dereferences.
+fn read_chapter_chunk_map(index_path: &Path) -> Result<HashMap<String, String>, String> {
+    let chapters = read_chapters(index_path)?;
+    let mut map = HashMap::with_capacity(chapters.len());
+    for c in chapters {
         if let Some(first) = c.chunk_ids.first() {
             map.insert(c.id, first.to_string());
         }
@@ -940,6 +951,303 @@ pub async fn meshapp_reconciliation(
 
     let path = resolve_index_path(&state, &corpus_id).await?;
     Ok(reconciliation_merges(&path.join("atlas")))
+}
+
+// ─── Network map (subgraph) ──────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SubEdgeDto {
+    pub source: String,
+    pub target: String,
+    pub relationship_type: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SubgraphDto {
+    pub nodes: Vec<GraphNodeDto>,
+    pub edges: Vec<SubEdgeDto>,
+}
+
+/// `window.meshApp.subgraph(corpusId, nodeType?, limit?)` — gated on
+/// `mesh_store_read`. The top-degree nodes (optionally one type) plus the
+/// edges induced among them — everything a node-link visualization needs in
+/// one round-trip. Backend-agnostic via `load_investigation`. Undirected pairs
+/// are de-duplicated and the edge list is capped so a dense hub can't return
+/// thousands of links.
+#[tauri::command]
+pub async fn meshapp_subgraph(
+    webview: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    node_type: Option<String>,
+    limit: Option<usize>,
+) -> Result<SubgraphDto, String> {
+    let installs = state.config.read().await.meshapp_installs.clone();
+    authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
+
+    let (entities, rels, _findings) = load_investigation(&state, &corpus_id).await?;
+    Ok(build_subgraph(
+        entities,
+        &rels,
+        node_type.as_deref(),
+        limit.unwrap_or(30).min(80),
+    ))
+}
+
+/// Top-`limit` nodes by degree (optionally one type) + the de-duplicated,
+/// capped edges induced among them. Pure so it's unit-testable without Tauri.
+fn build_subgraph(
+    entities: Vec<InvEntity>,
+    rels: &[InvRelationship],
+    node_type: Option<&str>,
+    limit: usize,
+) -> SubgraphDto {
+    let deg = degree_map(rels);
+    let mut nodes: Vec<GraphNodeDto> = entities
+        .into_iter()
+        .filter(|e| node_type.map_or(true, |t| e.entity_type.eq_ignore_ascii_case(t)))
+        .map(|e| to_graph_node(e, &deg))
+        .collect();
+    nodes.sort_by(|a, b| {
+        b.degree
+            .cmp(&a.degree)
+            .then_with(|| b.alias_count.cmp(&a.alias_count))
+    });
+    nodes.truncate(limit);
+
+    let keep: HashSet<&str> = nodes.iter().map(|n| n.id.as_str()).collect();
+    let mut seen: HashSet<(&str, &str)> = HashSet::new();
+    let mut edges = Vec::new();
+    for r in rels {
+        let (a, b) = (r.from_entity_id.as_str(), r.to_entity_id.as_str());
+        if a == b || !keep.contains(a) || !keep.contains(b) {
+            continue;
+        }
+        let key = if a <= b { (a, b) } else { (b, a) };
+        if seen.insert(key) {
+            edges.push(SubEdgeDto {
+                source: r.from_entity_id.clone(),
+                target: r.to_entity_id.clone(),
+                relationship_type: r.relationship_type.clone(),
+            });
+            if edges.len() >= 400 {
+                break;
+            }
+        }
+    }
+    SubgraphDto { nodes, edges }
+}
+
+// ─── Scale / provenance stats ────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct CorpusStatsDto {
+    pub atoms: usize,
+    pub entities: usize,
+    pub events: usize,
+    pub states: usize,
+    pub relations: usize,
+    pub claims: usize,
+    pub questions: usize,
+    pub edges: usize,
+    pub reconciled_merges: usize,
+    pub documents: usize,
+}
+
+/// `window.meshApp.corpusStats(corpusId)` — gated on `mesh_store_read`. The
+/// headline counts for a scale/provenance banner, read from the atlas summary
+/// + sidecars. Every field defaults to 0 for a corpus missing the atlas, so a
+/// bundle can render a partial banner rather than erroring.
+#[tauri::command]
+pub async fn meshapp_corpus_stats(
+    webview: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<CorpusStatsDto, String> {
+    let installs = state.config.read().await.meshapp_installs.clone();
+    authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
+    let path = resolve_index_path(&state, &corpus_id).await?;
+    Ok(corpus_stats(&path))
+}
+
+fn corpus_stats(index_path: &Path) -> CorpusStatsDto {
+    let atlas = index_path.join("atlas");
+    let mut s = CorpusStatsDto::default();
+    if let Ok(bytes) = std::fs::read(atlas.join("_summary.json")) {
+        #[derive(Deserialize, Default)]
+        struct Summary {
+            #[serde(default)]
+            atom_count: usize,
+            #[serde(default)]
+            atom_counts: HashMap<String, usize>,
+        }
+        if let Ok(sm) = serde_json::from_slice::<Summary>(&bytes) {
+            let c = |k: &str| sm.atom_counts.get(k).copied().unwrap_or(0);
+            s.atoms = sm.atom_count;
+            s.entities = c("Entity");
+            s.events = c("Event");
+            s.states = c("State");
+            s.relations = c("Relation");
+            s.claims = c("Claim");
+            s.questions = c("Question");
+        }
+    }
+    // Count the edges.json array without deserializing the Edge schema — we
+    // only need the length, and this stays robust to atlas-schema drift.
+    s.edges = std::fs::read(atlas.join("edges.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+        .and_then(|v| v.get("edges").and_then(|a| a.as_array()).map(|a| a.len()))
+        .unwrap_or(0);
+    s.reconciled_merges = read_reconciliation_rows(&atlas).len();
+    s.documents = read_chapters(index_path).map(|c| c.len()).unwrap_or(0);
+    s
+}
+
+// ─── Timeline (email dates → monthly buckets) ────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TimelineBucketDto {
+    /// `YYYY-MM`.
+    pub ym: String,
+    pub count: usize,
+    /// A capped sample of chunk ids in this month, for click-to-drill.
+    pub chunk_ids: Vec<u64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TimelineDto {
+    pub buckets: Vec<TimelineBucketDto>,
+    pub dated: usize,
+    pub total: usize,
+}
+
+/// `window.meshApp.timeline(corpusId)` — gated on `mesh_store_read`. Buckets
+/// the corpus's documents by month, parsed from the `Date:` header every email
+/// chunk carries (the extractor prepends an RFC5322 preamble to each chunk).
+/// Chronological; each bucket carries a capped chunk-id sample for drill-in.
+/// Empty when the corpus has no `chapters.json` (non-document corpora).
+#[tauri::command]
+pub async fn meshapp_timeline(
+    webview: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<TimelineDto, String> {
+    let installs = state.config.read().await.meshapp_installs.clone();
+    authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
+    let path = resolve_index_path(&state, &corpus_id).await?;
+
+    let chapters = read_chapters(&path)?;
+    let first_ids: Vec<u64> = chapters
+        .iter()
+        .filter_map(|c| c.chunk_ids.first().copied())
+        .collect();
+    let total = first_ids.len();
+    if first_ids.is_empty() {
+        return Ok(TimelineDto {
+            buckets: Vec::new(),
+            dated: 0,
+            total: 0,
+        });
+    }
+
+    let index = CorpusIndex::open(&path)
+        .await
+        .map_err(|e| format!("open index `{corpus_id}`: {e}"))?;
+    let chunks = index
+        .get_chunks(&first_ids)
+        .await
+        .map_err(|e| format!("read chunks from `{corpus_id}`: {e}"))?;
+
+    let mut by_ym: std::collections::BTreeMap<String, (usize, Vec<u64>)> =
+        std::collections::BTreeMap::new();
+    let mut dated = 0;
+    for c in &chunks {
+        if let Some(ym) = parse_email_year_month(&c.content) {
+            let e = by_ym.entry(ym).or_default();
+            e.0 += 1;
+            if e.1.len() < 40 {
+                e.1.push(c.id);
+            }
+            dated += 1;
+        }
+    }
+    let buckets = by_ym
+        .into_iter()
+        .map(|(ym, (count, chunk_ids))| TimelineBucketDto {
+            ym,
+            count,
+            chunk_ids,
+        })
+        .collect();
+    Ok(TimelineDto {
+        buckets,
+        dated,
+        total,
+    })
+}
+
+/// Pull `YYYY-MM` from the `Date:` line of an email chunk's RFC5322 preamble.
+/// Tolerant of both `Thu, 26 Jul 2001 …` and `Friday, November 09, 2001`.
+fn parse_email_year_month(content: &str) -> Option<String> {
+    let head = &content[..content.len().min(600)];
+    for line in head.lines() {
+        if let Some(rest) = line.trim_start().strip_prefix("Date:") {
+            if let Some(ym) = year_month_from_rfc5322(rest) {
+                return Some(ym);
+            }
+        }
+    }
+    None
+}
+
+/// Scan a date string for a 3-letter month name and an in-range 4-digit year.
+/// Order-independent within `(month before year)` RFC5322 / US long forms.
+fn year_month_from_rfc5322(s: &str) -> Option<String> {
+    let mut month: Option<u32> = None;
+    let mut year: Option<i32> = None;
+    for tok in s.split(|c: char| !c.is_ascii_alphanumeric()) {
+        if tok.is_empty() {
+            continue;
+        }
+        if month.is_none() {
+            if let Some(m) = month_num(tok) {
+                month = Some(m);
+                continue;
+            }
+        }
+        if year.is_none() && tok.len() == 4 {
+            if let Ok(y) = tok.parse::<i32>() {
+                if (1990..=2010).contains(&y) {
+                    year = Some(y);
+                }
+            }
+        }
+    }
+    match (year, month) {
+        (Some(y), Some(m)) => Some(format!("{y:04}-{m:02}")),
+        _ => None,
+    }
+}
+
+fn month_num(tok: &str) -> Option<u32> {
+    let t = tok.to_ascii_lowercase();
+    let prefix = &t[..t.len().min(3)];
+    Some(match prefix {
+        "jan" => 1,
+        "feb" => 2,
+        "mar" => 3,
+        "apr" => 4,
+        "may" => 5,
+        "jun" => 6,
+        "jul" => 7,
+        "aug" => 8,
+        "sep" => 9,
+        "oct" => 10,
+        "nov" => 11,
+        "dec" => 12,
+        _ => return None,
+    })
 }
 
 /// Full source-chunk text behind a cited edge. An edge's `excerpt` is the
@@ -1239,6 +1547,21 @@ mod tests {
             ]}"#,
         )
         .unwrap();
+        std::fs::write(
+            atlas.join("_summary.json"),
+            r#"{"schema_version":2,"atom_count":4,
+                "atom_counts":{"Entity":2,"Relation":1,"Event":1,
+                               "State":0,"Claim":0,"Question":0}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            atlas.join("edges.json"),
+            r#"{"schema_version":1,"edges":[
+                {"id":"edge-1","edge_type":"Involves","source":"event-pqr","target":"entity-aaa","confidence":1.0,"provenance":"derived"},
+                {"id":"edge-2","edge_type":"Involves","source":"event-pqr","target":"entity-bbb","confidence":1.0,"provenance":"derived"}
+            ]}"#,
+        )
+        .unwrap();
     }
 
     #[test]
@@ -1340,5 +1663,85 @@ mod tests {
         assert_eq!(rel.evidence.chunk_id, "sec_00002");
         // The reconciliation op returns empty rather than erroring.
         assert!(reconciliation_merges(&tmp.path().join("atlas")).is_empty());
+    }
+
+    #[test]
+    fn corpus_stats_reads_summary_edges_recon_and_documents() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fixture(tmp.path());
+        let s = corpus_stats(tmp.path());
+        assert_eq!(s.atoms, 4);
+        assert_eq!(s.entities, 2);
+        assert_eq!(s.relations, 1);
+        assert_eq!(s.events, 1);
+        assert_eq!(s.edges, 2); // edges.json length
+        assert_eq!(s.reconciled_merges, 1); // one merge cluster
+        assert_eq!(s.documents, 2); // two chapters
+    }
+
+    #[test]
+    fn build_subgraph_keeps_top_nodes_and_induced_deduped_edges() {
+        let ent = |id: &str, t: &str| InvEntity {
+            id: id.into(),
+            canonical_name: id.into(),
+            entity_type: t.into(),
+            attributes: serde_json::Map::new(),
+            aliases: Vec::new(),
+        };
+        let mk_entities =
+            || vec![ent("A", "institution"), ent("B", "institution"), ent("C", "person")];
+        let edge = |from: &str, to: &str| InvRelationship {
+            id: format!("{from}-{to}"),
+            from_entity_id: from.into(),
+            to_entity_id: to.into(),
+            relationship_type: "rel".into(),
+            attributes: serde_json::Map::new(),
+            evidence: InvEvidence {
+                chunk_id: "1".into(),
+                excerpt: String::new(),
+            },
+            confidence: 1.0,
+        };
+        // A: A-B,A-C,A-B(dup)=3 · B: A-B,B-C,A-B=3 · C: A-C,B-C=2
+        let rels = vec![edge("A", "B"), edge("A", "C"), edge("B", "C"), edge("A", "B")];
+
+        // limit 2 → keep the two degree-3 nodes; the duplicate A-B folds to one edge.
+        let g = build_subgraph(mk_entities(), &rels, None, 2);
+        assert_eq!(g.nodes.len(), 2);
+        let kept: HashSet<&str> = g.nodes.iter().map(|n| n.id.as_str()).collect();
+        assert_eq!(kept, HashSet::from(["A", "B"]));
+        assert_eq!(g.edges.len(), 1);
+
+        // type filter drops the person; the induced A-B edge survives.
+        let g2 = build_subgraph(mk_entities(), &rels, Some("institution"), 10);
+        assert!(g2.nodes.iter().all(|n| n.entity_type == "institution"));
+        assert_eq!(g2.nodes.len(), 2);
+        assert_eq!(g2.edges.len(), 1);
+    }
+
+    #[test]
+    fn email_date_parsing_handles_rfc5322_and_us_long_form() {
+        assert_eq!(month_num("Jul"), Some(7));
+        assert_eq!(month_num("November"), Some(11));
+        assert_eq!(month_num("Thu"), None);
+
+        assert_eq!(
+            year_month_from_rfc5322("Thu, 26 Jul 2001 09:34:00 -0700").as_deref(),
+            Some("2001-07")
+        );
+        assert_eq!(
+            year_month_from_rfc5322(" Friday, November 09, 2001").as_deref(),
+            Some("2001-11")
+        );
+        assert_eq!(
+            year_month_from_rfc5322("Mon, 30 Apr 2001").as_deref(),
+            Some("2001-04")
+        );
+        assert_eq!(year_month_from_rfc5322("no date here"), None);
+
+        let email = "From: a@x.com\nTo: b@y.com\nDate: Thu, 26 Jul 2001 09:34:00 -0700\n\
+                     Subject: hi\n\nbody text mentioning 1999 should not override the header";
+        assert_eq!(parse_email_year_month(email).as_deref(), Some("2001-07"));
+        assert_eq!(parse_email_year_month("just a body, no headers"), None);
     }
 }
