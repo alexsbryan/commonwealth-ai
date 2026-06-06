@@ -185,6 +185,10 @@ const HELP: Help = Help {
             ),
             ("mesh", "Mesh management (create / join / rotate / status)"),
             (
+                "mobile",
+                "Serve the phone-facing API, riding on the daemon's models (serve / status / pair)",
+            ),
+            (
                 "alignment",
                 "Mesh-replicated workspace migrate / status (~/.claude + notes.db)",
             ),
@@ -498,8 +502,8 @@ async fn async_main() {
             // execs into it without setting up a tracing subscriber —
             // the sibling's main() installs the appropriate filter for
             // each verb.
-            "mesh" | "alignment" | "corpus" | "meta-atlas" | "mcp" | "recipe" | "pipeline"
-            | "recipe-agent" | "maintainer" => {
+            "mesh" | "mobile" | "alignment" | "corpus" | "meta-atlas" | "mcp" | "recipe"
+            | "pipeline" | "recipe-agent" | "maintainer" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }
