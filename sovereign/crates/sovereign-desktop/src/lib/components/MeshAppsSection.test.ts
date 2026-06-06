@@ -37,9 +37,10 @@ describe("MeshAppsSection", () => {
   it("lists every catalog app with Install & Open, and wires the grant + open", async () => {
     render(MeshAppsSection);
     const btns = await screen.findAllByRole("button", { name: /install & open/i });
-    expect(btns.length).toBe(2); // LVT + Blue Book
+    expect(btns.length).toBe(3); // LVT + Blue Book + Enron
     expect(screen.getByText("SF Land-Value Tax")).toBeInTheDocument();
     expect(screen.getByText("Project Blue Book")).toBeInTheDocument();
+    expect(screen.getByText("Enron Task Force")).toBeInTheDocument();
     // Click the first card (LVT) → records lvt grant + opens lvt.
     await fireEvent.click(btns[0]);
     await vi.waitFor(() => {
@@ -64,6 +65,21 @@ describe("MeshAppsSection", () => {
         expect.objectContaining({ mesh_store_read: true }),
       );
       expect(api.openMeshApp).toHaveBeenCalledWith("uap");
+    });
+  });
+
+  it("installs the Enron app from its own card", async () => {
+    render(MeshAppsSection);
+    const card = (await screen.findByText("Enron Task Force")).closest(".app-card") as HTMLElement;
+    const btn = within(card).getByRole("button", { name: /install & open/i });
+    await fireEvent.click(btn);
+    await vi.waitFor(() => {
+      expect(api.recordMeshAppInstall).toHaveBeenCalledWith(
+        "enron",
+        "Enron Task Force",
+        expect.objectContaining({ mesh_store_read: true }),
+      );
+      expect(api.openMeshApp).toHaveBeenCalledWith("enron");
     });
   });
 
