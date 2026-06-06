@@ -1408,7 +1408,34 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn restore_refuses_embedding_model_mismatch() {
+    async fn restore_allows_name_mismatch_with_compat_flag() {
+        // A model-NAME mismatch at the SAME dimensions is no longer
+        // fatal: names drift across dir/stem/repo/quant for one model,
+        // so restore extracts and carries `NameMismatch` in the outcome
+        // for the caller to VERIFY by cosine probe (compat-by-space, not
+        // by name — see `restore_snapshot_archive`).
+        let pub_tmp = tempfile::tempdir().unwrap();
+        let (archive_path, outcome) = publish_to(pub_tmp.path()).await;
+        let restore_tmp = tempfile::tempdir().unwrap();
+        let restored = restore_snapshot_archive(
+            &archive_path,
+            restore_tmp.path(),
+            "wikitest",
+            Some(&outcome.archive_sha256),
+            "jina-v2-en",
+            1024,
+        )
+        .expect("name-only mismatch must not refuse restore");
+        assert_eq!(restored.embedding_compat, EmbeddingCompat::NameMismatch);
+        // Extraction proceeded — the index is on disk for the probe.
+        assert!(restore_tmp.path().join("indexes/wikitest").exists());
+    }
+
+    #[tokio::test]
+    async fn restore_refuses_embedding_dims_mismatch() {
+        // A DIMENSION mismatch is the hard floor — mismatched-dim
+        // vectors can't be compared at all, so restore refuses BEFORE
+        // extracting anything.
         let pub_tmp = tempfile::tempdir().unwrap();
         let (archive_path, outcome) = publish_to(pub_tmp.path()).await;
         let restore_tmp = tempfile::tempdir().unwrap();
@@ -1417,12 +1444,13 @@ mod tests {
             restore_tmp.path(),
             "wikitest",
             Some(&outcome.archive_sha256),
-            "jina-v2-en",
-            1024,
+            "qwen3-embedding-0.6b",
+            768,
         )
         .unwrap_err();
-        assert!(err.to_string().contains("qwen3-embedding-0.6b"));
-        assert!(err.to_string().contains("jina-v2-en"));
+        let msg = err.to_string();
+        assert!(msg.contains("1024"), "error must name the archive dims: {msg}");
+        assert!(msg.contains("768"), "error must name the local dims: {msg}");
         // Pre-extract gate — directory should not appear.
         assert!(!restore_tmp.path().join("indexes/wikitest").exists());
     }

@@ -155,10 +155,19 @@ fn build_app(
         .layer(middleware::from_fn(crate::auth::auth_middleware))
         .layer(Extension(AuthState::disabled()));
 
+    // Mirror main.rs's router Extensions: `ws::ws_handler` extracts the
+    // turn-narration broadcast Sender. These tests assert token/complete
+    // frames from the message stream (not runtime-originated narration),
+    // so a standalone channel satisfies the handler's Extension contract
+    // — the handler `.subscribe()`s its own receiver regardless.
+    let (narration_tx, _narration_rx) =
+        tokio::sync::broadcast::channel::<sovereign_core::types::TurnNarration>(64);
+
     authed
         .layer(Extension(runtime))
         .layer(Extension(approval))
         .layer(Extension(busy))
+        .layer(Extension(narration_tx))
 }
 
 async fn body_json(resp: axum::response::Response) -> serde_json::Value {
