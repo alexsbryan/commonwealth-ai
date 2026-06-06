@@ -337,6 +337,18 @@ edge_type = "occurred_near"
 attribute = "sighting_count"
 threshold = 3.0
 comparison = "greater_than"
+
+# Facility fold — collapses Air Force base name variants so the four
+# Wright-Patterson surface forms coalesce: the trailing suffix run
+# (air/force/base/afb) is stripped to the "wright patterson" base, and
+# the WPAFB acronym maps to it too. Identity-grade: only the suffix run
+# folds, base tokens stay exact, so Edwards never merges with WP.
+[enrichment.normalization]
+
+[[enrichment.normalization.fold]]
+types = ["installation"]
+aliases = [["wpafb", "wright patterson"], ["wp afb", "wright patterson"]]
+trailing_suffixes = ["air", "force", "base", "afb", "field"]
 "#;
 
 /// UAP demo path: exercises Phase A end-to-end —

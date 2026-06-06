@@ -178,9 +178,10 @@ test.describe("preparing-state rotation", () => {
     await page.waitForTimeout(800);
     await expect(slot).not.toContainText("still working");
 
-    // Past threshold + auto-wait slack: suffix appended, original
-    // text retained.
-    await expect(slot).toContainText("still working", { timeout: 1_500 });
+    // Past the stale threshold (ChatView STALE_INTERVAL_MS = 3500ms)
+    // + auto-wait slack for parallel-worker drift: suffix appended,
+    // original text retained.
+    await expect(slot).toContainText("still working", { timeout: 5_000 });
     await expect(slot).toContainText("Drafting.");
   });
 
@@ -206,8 +207,9 @@ test.describe("preparing-state rotation", () => {
       '.doc-progress-indicator[data-source="narration"] .progress-text',
     );
     // Wait past rotation, see suffix. Generous timeout absorbs
-    // parallel-worker drift on the 1500ms interval.
-    await expect(slot).toContainText("still working", { timeout: 2_500 });
+    // parallel-worker drift on the 3500ms interval (ChatView
+    // STALE_INTERVAL_MS).
+    await expect(slot).toContainText("still working", { timeout: 5_000 });
 
     // New narration replaces text and resets the rotation timer —
     // suffix should disappear, fresh text shows alone.

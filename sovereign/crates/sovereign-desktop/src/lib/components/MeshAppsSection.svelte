@@ -68,7 +68,10 @@
   let corpusProgress = $state<Record<string, CorpusProgressPayload>>({});
 
   function installOf(id: string): MeshAppInstall | null {
-    return installs.find((a) => a.app_id === id) ?? null;
+    // Guard against a non-array (a Tauri command that resolves
+    // `undefined` rather than throwing) so one unavailable meshapp
+    // command can't crash the whole SettingsPanel.
+    return (installs ?? []).find((a) => a.app_id === id) ?? null;
   }
   const corpusReady = (app: CatalogApp) => installedCorpora.has(app.corpus);
   const sizeLabel = (app: CatalogApp) => {
@@ -78,10 +81,13 @@
   };
 
   async function refresh() {
-    try { installs = await listMeshApps(); } catch (e) { error = String(e); }
+    // Coerce a `undefined`/null resolve to `[]` — a resolved-but-empty
+    // command (or one the host doesn't implement) must leave `installs`
+    // an array, not crash `installOf`/the `{#each}` on the next render.
+    try { installs = (await listMeshApps()) ?? []; } catch (e) { error = String(e); }
   }
   async function refreshCatalog() {
-    try { catalog = (await loadCatalog()).map(toCatalogApp); } catch (e) { error = String(e); }
+    try { catalog = ((await loadCatalog()) ?? []).map(toCatalogApp); } catch (e) { error = String(e); }
   }
   async function refreshCorpora() {
     try {
