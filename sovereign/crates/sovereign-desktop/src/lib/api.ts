@@ -996,12 +996,10 @@ export type ImportStartResponse =
       canonical_path: string;
     };
 
-/** Settings → Imports: unpack the Anthropic export `.zip` the user
- *  picks, drop its `conversations.json` at the canonical landing
- *  path the `conversations-anthropic` recipe reads from, and
- *  trigger ingest. v1 ships Anthropic only — ChatGPT + Gemini
- *  land as sibling commands once their extractors exist
- *  (SYSTEM_OVERVIEW §10.1).
+/** Settings → Imports: unpack the Anthropic (Claude) export `.zip` the
+ *  user picks, drop its `conversations.json` at the canonical landing
+ *  path the `conversations-anthropic` recipe reads from, and trigger
+ *  ingest.
  *
  *  Pass `resetPartial: true` after the user confirms the
  *  destructive-reset prompt. Without it, an existing partial
@@ -1013,6 +1011,20 @@ export async function importAnthropicZip(
   resetPartial = false,
 ): Promise<ImportStartResponse> {
   return invoke("import_anthropic_zip", {
+    request: { zip_path: zipPath, reset_partial: resetPartial },
+  });
+}
+
+/** Settings → Imports: unpack the ChatGPT (OpenAI) export `.zip` and
+ *  drive ingest of the `conversations-chatgpt` corpus. Sibling of
+ *  {@link importAnthropicZip} — same request/response shape, different
+ *  extractor + landing dir behind the daemon. Pass `resetPartial: true`
+ *  after the user confirms the destructive-reset prompt. */
+export async function importChatgptZip(
+  zipPath: string,
+  resetPartial = false,
+): Promise<ImportStartResponse> {
+  return invoke("import_chatgpt_zip", {
     request: { zip_path: zipPath, reset_partial: resetPartial },
   });
 }

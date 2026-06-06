@@ -188,6 +188,7 @@ Current set: `wikipedia`, `wikipedia-simple`, `wikipedia-newsworthy`,
 `wikipedia-article`, `wikipedia-catalog`, `sep`, `stackexchange`,
 `stackexchange-knowledge`, `openalex`, `gutenberg`, `gutenberg-work`,
 `crs_reports`, `alignment`, `codebase`, `conversations-anthropic`,
+`conversations-chatgpt`,
 `scotus-opinions`, `olc-opinions`, `federal-register-presidential`,
 `us-code`, `arch-principles`, `system-overview`. Underscore directories like
 `_templates` carry scaffolding.
@@ -1350,7 +1351,7 @@ an entry is sequenced work.
 | `found.rs` split | `sovereign-cli-dev/src/found.rs` (~2750 lines) | `sovereign project found` four-stage founding conversation. Splits one-file-per-stage when the founding flow stabilises. |
 | `MemberRecord.client_port` wire field | `commonwealth-core/src/mesh.rs` + `commonwealth-discovery/src/membership.rs` + `sovereign-mesh/src/daemon.rs::peer_inference_endpoints` + `sovereign-mesh/src/auto_ingest.rs` | Local-side port plumbing landed; **peer-uniformity assumption** remains: `peer_inference_endpoints` rewrites every peer URL with this daemon's client_port, and `auto_ingest` pins port `9742`. Mixed-port mesh deployments need a `client_port` field on `MemberRecord` and a matching slot in the join handshake. Until then, operators who set a non-default `client_port` should configure every peer the same. |
 | Atlas inspector Phase 2 — curation overlay | `sovereign-tools/src/atlas_view/` | Phase 1 ships read-only inspection. Phase 2 adds an `atlas/overlay.sqlite` keyed by `StableAtomKey` (content-hash) so user edits and approval state survive re-extraction. Forward-compat fields (`curation_status`, `overlay_supports`) already on every DTO. |
-| Imports tab — ChatGPT + Gemini extractors | `corpus-engine/src/extractors/` + `sovereign-recipes/conversations-{chatgpt,gemini}/` | v1 of Settings → Imports ships Anthropic only. Plumbing is source-agnostic; lights up once a new `<source>_export` extractor + recipe register. |
+| Imports tab — Gemini extractor | `corpus-engine/src/extractors/` + `sovereign-recipes/conversations-gemini/` | Settings → Imports ships **Anthropic + ChatGPT** (2026-06). Gemini (Google Takeout) remains: the plumbing is source-agnostic — a new `<source>_export` extractor + recipe + `ImportSource` arm + `<ConversationImportCard>` is all it takes. ChatGPT pattern (mapping-tree walk-up, PUA marker cleaning, source-aware `import_commands.rs`) is the template. |
 | Imports tab — KQ chip label for conversation corpora | `sovereign-core/src/runtime.rs` `KnowledgeQueryPlan` | DeepQuery path threads `display_categories`; streaming KQ + metalingual locator pass `None`. Sub-page UX polish. |
 
 ### 10.1b corpus-engine deferrals

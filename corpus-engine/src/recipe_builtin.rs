@@ -48,6 +48,13 @@ pub enum RecipeId {
     /// `mesh_sharing = false`. See
     /// `sovereign-recipes/conversations-anthropic/README.md`.
     ConversationsAnthropic,
+    /// Local-only ingest of the user's ChatGPT chat export. Driven by
+    /// the desktop Settings → Imports tab. Private corpus —
+    /// `mesh_sharing = false`. Sibling of [`Self::ConversationsAnthropic`]
+    /// sharing the threaded-turn chunker + conversational enrichment;
+    /// only the extractor front-end differs. See
+    /// `sovereign-recipes/conversations-chatgpt/README.md`.
+    ConversationsChatgpt,
     /// Architecture-over-Enron Phase 5 forcing function — all 150
     /// mailboxes from the CMU 2015-05-07 snapshot (~500k messages).
     /// Operator downloads the tarball manually; see
@@ -112,6 +119,7 @@ impl RecipeId {
             Self::OlcOpinions => "olc-opinions",
             Self::ScotusOpinions => "scotus-opinions",
             Self::ConversationsAnthropic => "conversations-anthropic",
+            Self::ConversationsChatgpt => "conversations-chatgpt",
             Self::EnronSample => "enron-sample",
             Self::EnronSampleOneMailbox => "enron-sample-onemailbox",
             Self::EnronSampleTiny => "enron-sample-tiny",
@@ -145,6 +153,7 @@ impl RecipeId {
             "olc-opinions" => Some(Self::OlcOpinions),
             "scotus-opinions" => Some(Self::ScotusOpinions),
             "conversations-anthropic" => Some(Self::ConversationsAnthropic),
+            "conversations-chatgpt" => Some(Self::ConversationsChatgpt),
             "enron-sample" => Some(Self::EnronSample),
             "enron-sample-onemailbox" => Some(Self::EnronSampleOneMailbox),
             "enron-sample-tiny" => Some(Self::EnronSampleTiny),
@@ -248,6 +257,12 @@ impl RecipeId {
                     "/recipes/conversations-anthropic/recipe.toml"
                 ))
             }
+            Self::ConversationsChatgpt => {
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/conversations-chatgpt/recipe.toml"
+                ))
+            }
             Self::EnronSample => {
                 include_str!(concat!(
                     env!("OUT_DIR"),
@@ -318,6 +333,7 @@ impl RecipeId {
         Self::OlcOpinions,
         Self::ScotusOpinions,
         Self::ConversationsAnthropic,
+        Self::ConversationsChatgpt,
         Self::EnronSample,
         Self::EnronSampleOneMailbox,
         Self::EnronSampleTiny,

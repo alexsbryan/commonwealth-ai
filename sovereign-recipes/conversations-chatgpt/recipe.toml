@@ -1,0 +1,52 @@
+[corpus]
+id = "conversations-chatgpt"
+name = "ChatGPT conversations"
+description = "Local-only ingest of the user's ChatGPT chat export. Settings → Imports installs this recipe by unzipping the OpenAI export the user picks and dropping its `conversations.json` at the canonical path below. NEVER share — third parties the user discussed have not consented to gossip."
+license = "private"
+mesh_sharing = false
+size_compressed_gb = 0
+size_indexed_gb = 0
+
+# Canonical landing zone. The desktop's Settings → Imports tab
+# (`sovereign-desktop/src-tauri/src/import_commands.rs`, ChatGPT source)
+# extracts the `conversations.json` entry from the user-picked ChatGPT
+# export zip and writes it here before kicking off the install. A
+# SEPARATE directory from `conversations-anthropic` because both
+# exports name the file `conversations.json`. CLI users may symlink
+# manually:
+#
+#   ln -sf ~/Downloads/<chatgpt-export>/conversations.json \
+#          ~/.sovereign/conversations-chatgpt/conversations.json
+#
+[acquire]
+type = "local_file"
+path = "~/.sovereign/conversations-chatgpt/conversations.json"
+
+[extract]
+type = "chatgpt_export"
+
+[chunk]
+type = "threaded_turns"
+
+[index]
+fts = true
+vector = true
+
+# Tiered retrieval port — identical to `conversations-anthropic`. The
+# ChatGPT extractor emits the same `### [ts] {user|assistant}` turn
+# blocks, so the tiered runner (`corpus-engine/src/enrichment/tiered.rs`)
+# runs per-conversation T2 entity-graph + T3 RAPTOR + motifs against the
+# SQLite sidecar tables `conv_skeletons` / `conv_raptor_nodes` /
+# `conv_motifs` without any source-specific code.
+[enrichment]
+enabled = true
+type = "tiered"
+domain = "conversational"
+
+# Atlas View rail groups corpora sharing this category under one
+# "Conversations" header, so the user's imported ChatGPT chats live
+# side by side with their Claude chats (`conversations-anthropic`) and
+# Sovereign-internal chats (`conversation-history`) regardless of source.
+[display]
+category = "conversation"
+icon = "chat-bubble"
