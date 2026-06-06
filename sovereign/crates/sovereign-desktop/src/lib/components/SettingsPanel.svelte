@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import {
     detectBootstrap,
     detectHardware,
@@ -54,6 +55,7 @@
     | "connect"
     | "paths"
     | "recipes"
+    | "mobile"
     | "about";
   let activeTab: Tab = $state("models");
 
@@ -62,6 +64,44 @@
   let saveMessage = $state("");
   let dirty = $state(false);
   let bootstrap = $state<BootstrapSnapshot | null>(null);
+
+  // ── Mobile access (opt-in phone host) ─────────────────────────
+  // Toggle serves the Sovereign mobile app from this machine. The host
+  // (`sovereign-server`) delegates all inference to the running daemon, so it
+  // loads no second copy of the models. Pairing card = address + tenant + token.
+  let mobilePairing = $state<{ address: string; tenant: string; token: string } | null>(null);
+  let mobileError = $state("");
+
+  async function loadMobilePairing() {
+    try {
+      mobilePairing = await invoke("get_mobile_pairing");
+    } catch (e) {
+      mobileError = String(e);
+    }
+  }
+
+  async function onMobileToggle() {
+    if (!config) return;
+    mobileError = "";
+    const enabled = config.mobile_access_enabled;
+    try {
+      await invoke("set_mobile_access", { enabled });
+      markDirty("mobile_access");
+      await handleSave(); // persist immediately, like the Recipe Author toggle
+      if (enabled) await loadMobilePairing();
+      else mobilePairing = null;
+    } catch (e) {
+      mobileError = String(e);
+      config.mobile_access_enabled = !enabled; // revert on failure
+    }
+  }
+
+  // Load the pairing card when the Mobile tab opens with access already on.
+  $effect(() => {
+    if (activeTab === "mobile" && config?.mobile_access_enabled && !mobilePairing) {
+      void loadMobilePairing();
+    }
+  });
 
   // ── Canonical chat-slot context window ───────────────────────
   // Sourced from `~/.sovereign/config.toml` via the
@@ -456,6 +496,7 @@
     { id: "connect",         label: "Connect",          keywords: ["codex", "openai", "api", "external", "connect", "claude", "endpoint"] },
     { id: "paths",           label: "Paths",            keywords: ["path", "directory", "folder", "data dir", "skills dir"] },
     { id: "recipes",         label: "Recipes",          keywords: ["recipe", "corpus", "acquire", "pipeline", "toml", "author", "workspace", "authoring"] },
+    { id: "mobile",          label: "Mobile access",    keywords: ["mobile", "phone", "ios", "android", "app", "pair", "pairing", "tailnet", "tailscale", "token", "host"] },
     { id: "about",           label: "About",            keywords: ["about", "version", "update", "updates", "upgrade", "check", "release"] },
   ];
 
@@ -1483,6 +1524,54 @@
                 </span>
               </label>
             </div>
+          {/if}
+        </section>
+      {/if}
+
+      <!-- ──────────── MOBILE ACCESS (opt-in phone host) ──────────── -->
+      {#if activeTab === "mobile" && config}
+        <section class="doc-section">
+          <h2 class="doc-h2">Mobile access</h2>
+          <p class="doc-intro">Serve the Sovereign mobile app from this machine. The app pairs over your Tailscale tailnet and reaches a lightweight host here that forwards every chat and search to your already-running models — it loads no second copy of them.</p>
+
+          <div class="cfg-entry cfg-entry--toggle">
+            <label class="cfg-toggle-row">
+              <input
+                type="checkbox"
+                bind:checked={config.mobile_access_enabled}
+                onchange={onMobileToggle}
+                class="cfg-checkbox"
+                data-testid="settings-mobile-access-toggle"
+              />
+              <span class="cfg-toggle-body">
+                <span class="cfg-toggle-label">Enable mobile access</span>
+                <span class="cfg-toggle-sub">Starts a phone-facing host on this node, supervised + auto-restarted. Requires your daemon to be running — the host delegates all inference to it.</span>
+              </span>
+            </label>
+          </div>
+
+          {#if config.mobile_access_enabled && mobilePairing}
+            <div class="doc-divider"></div>
+            <h3 class="doc-h3">Pair your phone</h3>
+            <p class="doc-body">In the app's “Connect to your host” screen, enter:</p>
+            <dl style="display:grid; gap:0.5rem; margin:0.6rem 0 0.4rem;">
+              <div style="display:flex; gap:0.9rem; align-items:baseline;">
+                <dt style="min-width:5.5rem; opacity:0.66;">Address</dt>
+                <dd style="font-family:var(--font-mono, ui-monospace, monospace); user-select:all;">{mobilePairing.address}</dd>
+              </div>
+              <div style="display:flex; gap:0.9rem; align-items:baseline;">
+                <dt style="min-width:5.5rem; opacity:0.66;">Tenant</dt>
+                <dd style="font-family:var(--font-mono, ui-monospace, monospace); user-select:all;">{mobilePairing.tenant}</dd>
+              </div>
+              <div style="display:flex; gap:0.9rem; align-items:baseline;">
+                <dt style="min-width:5.5rem; opacity:0.66;">Token</dt>
+                <dd style="font-family:var(--font-mono, ui-monospace, monospace); user-select:all; word-break:break-all;">{mobilePairing.token}</dd>
+              </div>
+            </dl>
+            <p class="doc-body" style="opacity:0.66;">Both this machine and your phone must be on the same Tailscale tailnet.</p>
+          {/if}
+          {#if mobileError}
+            <p class="doc-body" style="color:var(--danger, #e5837a);">{mobileError}</p>
           {/if}
         </section>
       {/if}

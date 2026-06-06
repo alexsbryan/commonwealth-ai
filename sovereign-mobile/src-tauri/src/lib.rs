@@ -59,6 +59,7 @@ pub fn run() {
             commands::host::add_host_connection,
             commands::host::list_host_connections,
             commands::host::set_default_host,
+            commands::host::remove_host_connection,
             commands::host::get_connectivity,
             commands::conversation::create_conversation,
             commands::conversation::list_conversations,

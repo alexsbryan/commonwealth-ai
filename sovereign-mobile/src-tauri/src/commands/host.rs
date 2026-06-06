@@ -72,6 +72,24 @@ pub async fn set_default_host(state: State<'_, AppState>, id: String) -> Result<
     conn_store::set_default(&conn, &id)
 }
 
+/// Remove a host connection: token out of the keychain, `credential` +
+/// `host_connection` rows out of SQLite. The connectivity monitor for
+/// this host self-terminates on its next tick (it polls `store::exists`).
+/// Removing the only/default host returns the app to the pairing screen
+/// (App.svelte keys on `hosts.length`), so this is the "change host" path
+/// too — remove, then pair again. Cached conversations for the host stay
+/// (offline-readable) until overwritten by a future reconcile.
+#[tauri::command]
+pub async fn remove_host_connection(state: State<'_, AppState>, id: String) -> Result<()> {
+    state.credentials.delete_token(&id)?;
+    let conn = state.db.lock().map_err(|_| Error::Other("db poisoned".into()))?;
+    conn.execute(
+        "DELETE FROM credential WHERE host_connection_id = ?1",
+        rusqlite::params![id],
+    )?;
+    conn_store::delete(&conn, &id)
+}
+
 /// Current persisted status for the active host (`reachable` /
 /// `host_down` / `off_tailnet`). The monitor keeps it fresh; the UI
 /// reads this on cold launch and then follows `connectivity-changed`.
