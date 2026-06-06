@@ -171,11 +171,16 @@ distributes the big primary → workers seed their shards → tokens.
 
 ## Robustness — worker eligibility + the supervision contract
 
-Distributed inference couples the host's stability to the remote worker: if a
-worker's RPC server crashes **during graph compute**, ggml's RPC client
-`GGML_ABORT`s (`ggml-rpc.cpp` `RPC_STATUS_ASSERT`) — upstream and **uncatchable
-in-process**, so it kills the **whole host daemon** (the in-flight request is
-lost). The defences:
+Distributed inference couples the host's stability to the remote worker: **any
+RPC touch of a worker that has died** makes ggml's RPC client `GGML_ABORT`
+(`RPC_STATUS_ASSERT`) — upstream and **uncatchable in-process** — killing the
+**whole host daemon**. This has *two* faces, both observed live cross-machine
+(2026-06-06): **graph compute** against the dead worker (`ggml-rpc.cpp:491`; an
+inference hit a worker that had died mid-session), **and** the buffer-free /
+device-query during model **teardown on the next reload** (`ggml-rpc.cpp:379`) —
+which fired with **no inference in flight**, when the prune-reload tore down a
+model still sharded across the just-dead worker (and is nondeterministic: an
+earlier identical prune got lucky). Any in-flight request is lost. The defences:
 
 - **Eligibility gate** (`sovereign-mesh::worker_eligibility`). The host
   distributes only to PROVEN-STABLE workers. A freshly-discovered worker is
@@ -210,6 +215,14 @@ lost). The defences:
   workers; shard plan cached per worker set. See *Robustness* above.
 
 Open: per-tensor `SET_TENSOR_HASH` round-trips dominate load time on high-RTT
-links (a perf note for large models, not a correctness issue); a mid-compute
-remote crash still aborts the host (upstream ggml) — mitigated by the eligibility
-gate + required host supervision, not eliminated.
+links (a perf note for large models, not a correctness issue); a worker that dies
+while a model is sharded across it still aborts the host (upstream ggml) on the
+next RPC touch — graph compute (`:491`) or the prune-reload's teardown (`:379`) —
+mitigated by the eligibility gate + required host supervision, not eliminated. Two
+deferred follow-ups would *narrow* (not close) this exposure: **(1)
+shrink-fast-prune** — prune a disappeared worker immediately, skipping the
+grow-debounce for shrinks only (quarantine still prevents re-add thrash), cutting
+the inference-abort window from ~one discovery+debounce cycle to ~one discovery
+tick; **(2) dead-backend teardown** (vendor `llama-cpp-4` / ggml) — mark a crashed
+RPC backend so its buffer-frees no-op, the only thing that eliminates the `:379`
+teardown-abort. Supervision remains the contract until then.
