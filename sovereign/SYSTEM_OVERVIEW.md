@@ -992,9 +992,17 @@ surface: SF-LVT (`public/meshapp/lvt/`, deterministic parcel compute), UAP
 Blue Book (`public/meshapp/uap/`, investigation graph), and Enron
 (`public/meshapp/enron/`, a story-first atlas experience: scale banner +
 description-led on-ramp + CSP-safe force-graph + collapse timeline +
-reconciliation reveal + cited drill-down). Adding one
-is a bundle + a `MeshAppsSection.svelte` CATALOG entry (+ an atlas reader
-when the backend differs). **Isolation caveat:** Tauri v2 does not gate app
+reconciliation reveal + cited drill-down). Bundles compose the **MeshApp SDK**
+(`public/meshapp/_sdk/`, dependency-free ES modules served under the CSP): a
+corpus-bound `connect()` bridge client, CSP-safe DOM helpers, and the reusable
+views (force-graph, timeline, reconciliation reveal, entity-detail, cited-edge,
+search, scale-banner) + `meshapp.css` — Enron's bundle is ~150 lines of
+composition, not ~600 of hand-rolled DOM. Each bundle carries a self-describing
+`meshapp.json` manifest (id/name/corpus/grants/entry/trust — the unit a registry
+distributes); `scripts/gen-meshapp-catalog.mjs` (pre{dev,build}) aggregates them
+into `meshapp/catalog.json`, and `MeshAppsSection` discovers apps from it via
+`loadCatalog()` rather than a hard-coded list. So adding an app is a bundle + a
+manifest (+ an atlas reader only when the backend differs) — no host code edit. **Isolation caveat:** Tauri v2 does not gate app
 commands per-window (tauri#9227) — a webview with IPC can invoke any
 registered command — so `capabilities/meshapp.json` only narrows the
 core/plugin surface; true isolation for UNTRUSTED third-party apps needs a

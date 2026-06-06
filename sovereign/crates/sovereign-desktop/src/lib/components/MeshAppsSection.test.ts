@@ -10,7 +10,23 @@ vi.mock("../api", () => ({
   recordMeshAppInstall: vi.fn(),
   openMeshApp: vi.fn(),
   uninstallMeshApp: vi.fn(),
+  loadCatalog: vi.fn(),
 }));
+
+const READ_GRANTS = {
+  mesh_store_read: true,
+  mesh_store_write: false,
+  inference_access: false,
+  knowledge_access: false,
+};
+
+// The catalog is manifest-driven: the component renders whatever loadCatalog
+// returns. These three manifests stand in for the bundled meshapp.json files.
+const MANIFESTS = [
+  { id: "lvt", name: "SF Land-Value Tax", version: "0.1.0", blurb: "Parcels.", corpus: "sf-assessor-roll", entry: "index.html", grants: READ_GRANTS, trust: "unsigned" },
+  { id: "uap", name: "Project Blue Book", version: "0.1.0", blurb: "UFO archive.", corpus: "uap-blue-book", entry: "index.html", grants: READ_GRANTS, trust: "unsigned" },
+  { id: "enron", name: "Enron Task Force", version: "0.2.0", blurb: "Enron email.", corpus: "enron-sample-multi-wide", entry: "index.html", grants: READ_GRANTS, trust: "unsigned" },
+];
 
 const INSTALL = {
   app_id: "lvt",
@@ -32,6 +48,7 @@ describe("MeshAppsSection", () => {
     vi.mocked(api.recordMeshAppInstall).mockResolvedValue(INSTALL);
     vi.mocked(api.openMeshApp).mockResolvedValue(undefined);
     vi.mocked(api.uninstallMeshApp).mockResolvedValue(undefined);
+    vi.mocked(api.loadCatalog).mockResolvedValue(MANIFESTS);
   });
 
   it("lists every catalog app with Install & Open, and wires the grant + open", async () => {

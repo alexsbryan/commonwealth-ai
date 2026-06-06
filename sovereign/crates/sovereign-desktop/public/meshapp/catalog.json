@@ -1,0 +1,47 @@
+[
+  {
+    "id": "enron",
+    "name": "Enron Task Force",
+    "version": "0.2.0",
+    "blurb": "A sandboxed explorer over thousands of Enron emails, resolved into one identity graph. Cross-inbox aliases collapse to canonical people and companies; counterparty centrality is graph degree, the collapse is a timeline, and every relationship cites its source email — no inference.",
+    "corpus": "enron-sample-multi-wide",
+    "entry": "index.html",
+    "grants": {
+      "mesh_store_read": true,
+      "mesh_store_write": false,
+      "inference_access": false,
+      "knowledge_access": false
+    },
+    "trust": "unsigned"
+  },
+  {
+    "id": "lvt",
+    "name": "SF Land-Value Tax",
+    "version": "0.1.0",
+    "blurb": "A sandboxed explorer over the SF assessor roll. Every figure is computed by the host and cited — no model originates a number.",
+    "corpus": "sf-assessor-roll",
+    "entry": "index.html",
+    "grants": {
+      "mesh_store_read": true,
+      "mesh_store_write": false,
+      "inference_access": false,
+      "knowledge_access": false
+    },
+    "trust": "unsigned"
+  },
+  {
+    "id": "uap",
+    "name": "Project Blue Book",
+    "version": "0.1.0",
+    "blurb": "A sandboxed explorer over the Air Force's UFO archive. The hotspot ranking and every edge are a deterministic fold over the investigation graph — each claim quotes its Form-10073 card.",
+    "corpus": "uap-blue-book",
+    "entry": "index.html",
+    "grants": {
+      "mesh_store_read": true,
+      "mesh_store_write": false,
+      "inference_access": false,
+      "knowledge_access": false
+    },
+    "trust": "unsigned"
+  }
+]

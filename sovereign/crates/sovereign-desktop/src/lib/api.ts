@@ -677,6 +677,33 @@ export async function uninstallMeshApp(appId: string): Promise<void> {
   return invoke("meshapp_uninstall", { appId });
 }
 
+/** A first-party mesh-app manifest (`public/meshapp/<id>/meshapp.json`) — the
+ * self-describing unit a registry distributes. The host discovers apps by
+ * reading these rather than hard-coding a catalog. */
+export interface MeshAppManifest {
+  id: string;
+  name: string;
+  version: string;
+  blurb: string;
+  /** The corpus this app reads (its data dependency). */
+  corpus: string;
+  /** Entry document, relative to the bundle (default `index.html`). */
+  entry: string;
+  /** The permission subset the app requests at install. */
+  grants: MeshAppPermissions;
+  /** Provenance/trust level (`unsigned` until a curated registry signs it). */
+  trust?: string;
+}
+
+/** Load the available-apps catalog: the build-time index aggregated from each
+ * bundle's `meshapp.json`. (Installed third-party apps will merge in via a host
+ * scan in a later phase.) */
+export async function loadCatalog(): Promise<MeshAppManifest[]> {
+  const res = await fetch("/meshapp/catalog.json");
+  if (!res.ok) throw new Error(`load meshapp catalog: ${res.status}`);
+  return res.json();
+}
+
 export async function getMeshQuiesced(): Promise<MeshQuiesceState> {
   return invoke("get_mesh_quiesced");
 }
