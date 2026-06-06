@@ -687,6 +687,13 @@ export interface MeshAppManifest {
   blurb: string;
   /** The corpus this app reads (its data dependency). */
   corpus: string;
+  /** How to acquire the corpus: its indexed size (for the UI) + the recipe
+   * file the bundle ships (with a `[prebuilt]` HF snapshot block), staged into
+   * the local-override recipes dir so the desktop can one-click install it. */
+  corpus_data?: {
+    size_indexed_gb?: number;
+    recipe?: string;
+  };
   /** Entry document, relative to the bundle (default `index.html`). */
   entry: string;
   /** The permission subset the app requests at install. */
@@ -702,6 +709,12 @@ export async function loadCatalog(): Promise<MeshAppManifest[]> {
   const res = await fetch("/meshapp/catalog.json");
   if (!res.ok) throw new Error(`load meshapp catalog: ${res.status}`);
   return res.json();
+}
+
+/** Stage a mesh app's corpus recipe (shipped in its bundle) into the
+ * local-override recipes dir so `installCorpus` can resolve + install it. */
+export async function stageCorpusRecipe(corpusId: string, recipeToml: string): Promise<void> {
+  return invoke("meshapp_stage_corpus_recipe", { corpusId, recipeToml });
 }
 
 export async function getMeshQuiesced(): Promise<MeshQuiesceState> {

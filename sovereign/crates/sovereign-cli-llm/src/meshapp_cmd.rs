@@ -27,16 +27,94 @@ struct DevCtx {
 
 pub async fn run(args: &[String]) -> i32 {
     match args.first().map(String::as_str) {
+        Some("new") => run_new(&args[1..]),
         Some("dev") => run_dev(&args[1..]).await,
+        Some("publish") => crate::meshapp_registry::publish(&args[1..]),
+        Some("install") => crate::meshapp_registry::install(&args[1..]).await,
+        Some("list") => crate::meshapp_registry::list(&args[1..]),
         _ => {
             eprintln!(
-                "usage: sovereign meshapp dev <app-id> [--dir <bundle-dir>] [--index <index-dir>] [--port <n>]\n\n\
-                 Serves a mesh-app bundle with a live `window.meshApp` backed by a local corpus,\n\
-                 so you can develop the bundle against real data without the desktop app."
+                "usage:\n\
+                 \x20 sovereign meshapp new <id> --corpus <corpus-id> [--name <title>] [--dir <base>]\n\
+                 \x20 sovereign meshapp dev <id> [--dir <bundle-dir>] [--index <index-dir>] [--port <n>]\n\
+                 \x20 sovereign meshapp publish <id> [--dir <bundle-dir>] [--out <dir>]\n\
+                 \x20 sovereign meshapp install <id> [--from <path|url>]\n\
+                 \x20 sovereign meshapp list\n\n\
+                 new      scaffold an SDK-composed bundle (index.html + app.js + meshapp.json).\n\
+                 dev      serve a bundle with a live `window.meshApp` over a local corpus.\n\
+                 publish  pack a bundle (+ _sdk) into a tar.zst + register it.\n\
+                 install  fetch + verify + unpack an app into ~/.sovereign/meshapps/.\n\
+                 list     show the registry + installed apps."
             );
             2
         }
     }
+}
+
+fn run_new(args: &[String]) -> i32 {
+    let mut app_id: Option<String> = None;
+    let mut corpus: Option<String> = None;
+    let mut name: Option<String> = None;
+    let mut base: Option<PathBuf> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--corpus" => { corpus = args.get(i + 1).cloned(); i += 2; }
+            "--name" => { name = args.get(i + 1).cloned(); i += 2; }
+            "--dir" => { base = args.get(i + 1).map(PathBuf::from); i += 2; }
+            other if app_id.is_none() && !other.starts_with("--") => { app_id = Some(other.to_string()); i += 1; }
+            other => { eprintln!("meshapp new: unexpected argument `{other}`"); return 2; }
+        }
+    }
+    let (Some(app_id), Some(corpus)) = (app_id, corpus) else {
+        eprintln!("meshapp new: need <app-id> and --corpus <corpus-id>");
+        return 2;
+    };
+    if !app_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        eprintln!("meshapp new: app-id must be a slug (a-z 0-9 - _)");
+        return 2;
+    }
+    let name = name.unwrap_or_else(|| title_case(&app_id));
+    let base = base.unwrap_or_else(|| PathBuf::from("sovereign/crates/sovereign-desktop/public/meshapp"));
+    let dir = base.join(&app_id);
+    if dir.exists() {
+        eprintln!("meshapp new: {} already exists", dir.display());
+        return 1;
+    }
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        eprintln!("meshapp new: create {}: {e}", dir.display());
+        return 1;
+    }
+    let render = |t: &str| t.replace("{{ID}}", &app_id).replace("{{NAME}}", &name).replace("{{CORPUS}}", &corpus);
+    for (file, tmpl) in [
+        ("index.html", STARTER_INDEX_HTML),
+        ("app.js", STARTER_APP_JS),
+        ("meshapp.json", STARTER_MANIFEST),
+    ] {
+        if let Err(e) = std::fs::write(dir.join(file), render(tmpl)) {
+            eprintln!("meshapp new: write {file}: {e}");
+            return 1;
+        }
+    }
+    println!("scaffolded mesh app `{app_id}` → {}", dir.display());
+    println!("  next:");
+    println!("    sovereign meshapp dev {app_id}      # serve it against your local `{corpus}` corpus");
+    println!("  then, to ship it so others can one-click the data:");
+    println!("    1. publish your corpus snapshot:  sovereign corpus snapshot publish {corpus}");
+    println!("    2. copy your recipe into the bundle as recipe.toml (it carries the [prebuilt] HF block)");
+    println!("    3. add to meshapp.json:  \"corpus_data\": {{ \"size_indexed_gb\": <n>, \"recipe\": \"recipe.toml\" }}");
+    0
+}
+
+fn title_case(slug: &str) -> String {
+    slug.split(['-', '_'])
+        .filter(|w| !w.is_empty())
+        .map(|w| {
+            let mut c = w.chars();
+            c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 async fn run_dev(args: &[String]) -> i32 {
@@ -75,13 +153,22 @@ async fn run_dev(args: &[String]) -> i32 {
         return 2;
     };
 
-    // Bundle dir: --dir, else the in-repo default (run from repo root).
-    let bundle_dir = dir.unwrap_or_else(|| {
-        PathBuf::from("sovereign/crates/sovereign-desktop/public/meshapp").join(&app_id)
-    });
+    // Bundle dir: --dir, else the in-repo default (run from repo root), else an
+    // installed app under ~/.sovereign/meshapps/<id>/.
+    let bundle_dir = match dir {
+        Some(d) => d,
+        None => {
+            let in_repo = PathBuf::from("sovereign/crates/sovereign-desktop/public/meshapp").join(&app_id);
+            if in_repo.join("index.html").is_file() {
+                in_repo
+            } else {
+                sovereign_cli_shared::dirs::sovereign_meshapps().join(&app_id)
+            }
+        }
+    };
     if !bundle_dir.join("index.html").is_file() {
         eprintln!(
-            "meshapp dev: no index.html in {} — pass --dir <bundle-dir> (or run from the repo root)",
+            "meshapp dev: no index.html in {} — `sovereign meshapp install {app_id}` first, or pass --dir",
             bundle_dir.display()
         );
         return 1;
@@ -280,4 +367,132 @@ const DEV_SHIM: &str = r#"(function () {
     readChunk: (c, chunkId) => call('read_chunk', { chunk_id: String(chunkId) }),
   };
 })();
+"#;
+
+// ─── `meshapp new` scaffold templates ────────────────────────────────
+
+const STARTER_INDEX_HTML: &str = r#"<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{NAME}}</title>
+    <link rel="stylesheet" href="../_sdk/meshapp.css" />
+  </head>
+  <body>
+    <main>
+      <h1>{{NAME}}</h1>
+      <p class="sub">
+        An explorer over the <span class="src">{{CORPUS}}</span> corpus — every
+        link cites its source. <span class="src" id="source"></span>
+      </p>
+
+      <section id="loading">Loading…</section>
+
+      <section id="app" hidden>
+        <div id="banner" class="banner"></div>
+
+        <div class="card">
+          <div class="label">The graph <span class="chip">atlas edges</span></div>
+          <div id="map-toggle" class="toggle"></div>
+          <div id="map" class="map"></div>
+          <div id="map-msg" class="meta"></div>
+        </div>
+
+        <div class="card">
+          <div class="label">Find anything <span class="chip">search</span></div>
+          <div id="search-host"></div>
+        </div>
+
+        <div id="detail" class="card" hidden></div>
+      </section>
+
+      <section id="error" hidden class="error"></section>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
+"#;
+
+const STARTER_APP_JS: &str = r#"// {{NAME}} — scaffolded by `sovereign meshapp new`.
+// Edit me, then run `sovereign meshapp dev {{ID}}` to see changes against real
+// data. Everything is composed from the MeshApp SDK; the only host channel is
+// the permission-gated `window.meshApp` bridge (no inference).
+import {
+  $, connect, hasBridge, emsg, fmtInt,
+  scaleBanner, typeToggle, forceGraph, searchBox, entityDetail,
+} from "../_sdk/meshapp.js";
+
+const CORPUS = "{{CORPUS}}";
+let bridge;
+
+async function main() {
+  if (!hasBridge()) return fail("window.meshApp is not available.");
+  bridge = connect(CORPUS);
+  $("source").textContent = "Source: " + CORPUS;
+  try {
+    await bridge.subgraph(null, 1); // probe — fails if the corpus isn't present/granted
+  } catch (e) {
+    return fail("Bridge failed: " + emsg(e) + "  (is `" + CORPUS + "` installed and granted?)");
+  }
+  $("loading").hidden = true;
+  $("app").hidden = false;
+
+  loadBanner();
+  loadMap(null);
+  typeToggle($("map-toggle"), [
+    { type: "all", label: "All" },
+    { type: "person", label: "People" },
+    { type: "institution", label: "Orgs" },
+  ], { initial: "all", onChange: loadMap });
+  searchBox($("search-host"), bridge, { placeholder: "search…", ariaLabel: "Search", onPick: openEntity });
+}
+
+async function loadBanner() {
+  let s;
+  try { s = await bridge.corpusStats(); } catch { return; }
+  scaleBanner($("banner"), [
+    { num: fmtInt(s.entities), cap: "entities" },
+    { num: fmtInt(s.edges), cap: "relationships" },
+    { num: fmtInt(s.claims), cap: "claims" },
+    { num: fmtInt(s.documents), cap: "documents" },
+  ]);
+}
+
+async function loadMap(type) {
+  const msg = $("map-msg");
+  msg.textContent = "";
+  let g;
+  try { g = await bridge.subgraph(type, 40); } catch (e) { msg.textContent = "map failed: " + emsg(e); return; }
+  if (!(g.nodes || []).length) { $("map").replaceChildren(); msg.textContent = "no graph for this type."; return; }
+  forceGraph($("map"), g, { onNodeClick: openEntity });
+  msg.textContent = g.nodes.length + " nodes · " + (g.edges || []).length + " links · drag, click to open";
+}
+
+async function openEntity(id) {
+  let node;
+  try { node = await bridge.node(id); } catch (e) { return; }
+  entityDetail($("detail"), node, { bridge, onOpen: openEntity, citationLabel: "the source" });
+}
+
+function fail(msg) {
+  $("loading").hidden = true;
+  const e = $("error");
+  e.hidden = false;
+  e.textContent = msg;
+}
+
+main();
+"#;
+
+const STARTER_MANIFEST: &str = r#"{
+  "id": "{{ID}}",
+  "name": "{{NAME}}",
+  "version": "0.1.0",
+  "blurb": "An explorer over the {{CORPUS}} corpus.",
+  "corpus": "{{CORPUS}}",
+  "entry": "index.html",
+  "grants": { "mesh_store_read": true, "mesh_store_write": false, "inference_access": false, "knowledge_access": false },
+  "trust": "unsigned"
+}
 "#;

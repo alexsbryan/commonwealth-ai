@@ -4,16 +4,21 @@
   // subset (the consent), then opens the sandboxed window. Driven by a
   // small CATALOG so adding an app (e.g. Enron next) is one entry.
   import { onMount } from "svelte";
+  import { listen } from "@tauri-apps/api/event";
   import {
     listMeshApps,
     recordMeshAppInstall,
     openMeshApp,
     uninstallMeshApp,
     loadCatalog,
+    listCorpora,
+    installCorpus,
+    stageCorpusRecipe,
     type MeshAppInstall,
     type MeshAppManifest,
     type MeshAppPermissions,
   } from "../api";
+  import type { CorpusProgressPayload } from "../types";
 
   type CatalogApp = {
     id: string;
@@ -23,6 +28,7 @@
     grant: MeshAppPermissions;
     grantLabel: string;
     requestLabel: string;
+    corpusData?: { size_indexed_gb?: number; recipe?: string };
   };
 
   // The catalog is discovered from each bundle's manifest (build-time
@@ -48,57 +54,99 @@
     const labels = keys.map((k) => PERM_LABELS[k] ?? k);
     const grantLabel = labels.join(", ") || "no permissions";
     const requestLabel = keys.length ? `${labels.join(", ")} (${keys.join(", ")})` : "no permissions";
-    return { id: m.id, name: m.name, blurb: m.blurb, corpus: m.corpus, grant: m.grants, grantLabel, requestLabel };
+    return {
+      id: m.id, name: m.name, blurb: m.blurb, corpus: m.corpus,
+      grant: m.grants, grantLabel, requestLabel, corpusData: m.corpus_data,
+    };
   }
 
   let installs = $state<MeshAppInstall[]>([]);
-  let busy = $state(""); // app id currently busy, or "" when idle
+  let busy = $state(""); // app id currently launching, or "" when idle
+  let acquiring = $state(""); // app id whose corpus is downloading
   let error = $state("");
+  let installedCorpora = $state<Set<string>>(new Set());
+  let corpusProgress = $state<Record<string, CorpusProgressPayload>>({});
 
   function installOf(id: string): MeshAppInstall | null {
     return installs.find((a) => a.app_id === id) ?? null;
   }
+  const corpusReady = (app: CatalogApp) => installedCorpora.has(app.corpus);
+  const sizeLabel = (app: CatalogApp) => {
+    const gb = app.corpusData?.size_indexed_gb;
+    if (!gb) return "";
+    return gb < 1 ? `${Math.round(gb * 1000)} MB` : `${gb.toFixed(1)} GB`;
+  };
 
   async function refresh() {
-    try {
-      installs = await listMeshApps();
-    } catch (e) {
-      error = String(e);
-    }
+    try { installs = await listMeshApps(); } catch (e) { error = String(e); }
   }
-
   async function refreshCatalog() {
+    try { catalog = (await loadCatalog()).map(toCatalogApp); } catch (e) { error = String(e); }
+  }
+  async function refreshCorpora() {
     try {
-      catalog = (await loadCatalog()).map(toCatalogApp);
-    } catch (e) {
-      error = String(e);
+      const corpora = await listCorpora();
+      installedCorpora = new Set(corpora.filter((c) => c.status === "installed").map((c) => c.id));
+    } catch {
+      /* the data badge is best-effort */
     }
   }
 
   onMount(() => {
     refresh();
     refreshCatalog();
+    refreshCorpora();
+    let unlisten: (() => void) | undefined;
+    listen<CorpusProgressPayload>("corpus-progress", (e) => {
+      corpusProgress = { ...corpusProgress, [e.payload.corpus_id]: e.payload };
+    }).then((u) => (unlisten = u));
+    return () => unlisten?.();
   });
 
-  async function installAndOpen(app: CatalogApp) {
-    busy = app.id;
-    error = "";
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  /** Acquire a mesh app's corpus: stage its bundled recipe (so the daemon can
+   * resolve it), kick the install, and poll until the prebuilt snapshot is
+   * restored. The bar reads the `corpus-progress` events; completion is polled
+   * from listCorpora (robust to a missed terminal event). */
+  async function acquireCorpus(app: CatalogApp): Promise<void> {
+    acquiring = app.id;
     try {
-      await recordMeshAppInstall(app.id, app.name, app.grant);
-      await refresh();
-      await openMeshApp(app.id);
-    } catch (e) {
-      error = String(e);
+      const recipeFile = app.corpusData?.recipe || "recipe.toml";
+      const res = await fetch(`/meshapp/${app.id}/${recipeFile}`);
+      if (!res.ok) throw new Error(`fetch corpus recipe: ${res.status}`);
+      await stageCorpusRecipe(app.corpus, await res.text());
+      await installCorpus(app.corpus);
+      const deadline = Date.now() + 15 * 60 * 1000;
+      while (Date.now() < deadline) {
+        await sleep(1500);
+        if (corpusProgress[app.corpus]?.phase === "failed") {
+          throw new Error(corpusProgress[app.corpus]?.message || "corpus install failed");
+        }
+        const corpora = await listCorpora();
+        if (corpora.some((c) => c.id === app.corpus && c.status === "installed")) {
+          await refreshCorpora();
+          return;
+        }
+      }
+      throw new Error("corpus install timed out");
     } finally {
-      busy = "";
+      acquiring = "";
     }
   }
 
-  async function open(id: string) {
-    busy = id;
+  /** The one button: record consent (if new), acquire the corpus (if missing),
+   * then open the sandboxed window. */
+  async function launch(app: CatalogApp) {
+    busy = app.id;
     error = "";
     try {
-      await openMeshApp(id);
+      if (!installOf(app.id)) {
+        await recordMeshAppInstall(app.id, app.name, app.grant);
+        await refresh();
+      }
+      if (!corpusReady(app)) await acquireCorpus(app);
+      await openMeshApp(app.id);
     } catch (e) {
       error = String(e);
     } finally {
@@ -124,25 +172,38 @@
   <h3 class="mesh-apps-h">Mesh apps</h3>
   {#each catalog as app (app.id)}
     {@const inst = installOf(app.id)}
+    {@const ready = corpusReady(app)}
+    {@const downloading = acquiring === app.id}
+    {@const prog = corpusProgress[app.corpus]}
     <div class="app-card">
       <div class="app-name">{app.name}</div>
       <div class="app-sub">{app.blurb}</div>
-      {#if inst}
-        <div class="app-perms">Granted: {app.grantLabel}</div>
-        <div class="app-actions">
-          <button onclick={() => open(app.id)} disabled={busy !== ""}>Open</button>
-          <button class="ghost" onclick={() => uninstall(app.id)} disabled={busy !== ""}>
-            Uninstall
-          </button>
+      <div class="app-perms">
+        {#if ready}
+          Data: <span class="ok">✓ on this machine</span>
+        {:else}
+          Data: not downloaded{sizeLabel(app) ? ` · ${sizeLabel(app)}` : ""}
+        {/if}
+        · {inst ? `granted ${app.grantLabel}` : `requests ${app.requestLabel}`}
+      </div>
+
+      {#if downloading}
+        <div class="app-progress">
+          <div class="bar"><div class="fill" style="width: {prog?.percent ?? 0}%"></div></div>
+          <div class="prog-label">{prog?.phase ?? "starting"}… {Math.round(prog?.percent ?? 0)}%</div>
         </div>
       {:else}
-        <div class="app-perms">
-          Requests: {app.requestLabel} · needs the <code>{app.corpus}</code> corpus
-        </div>
         <div class="app-actions">
-          <button onclick={() => installAndOpen(app)} disabled={busy !== ""}>
-            Install &amp; Open
+          <button onclick={() => launch(app)} disabled={busy !== ""}>
+            {#if !ready}Get data{sizeLabel(app) ? ` (${sizeLabel(app)})` : ""} &amp; Open
+            {:else if inst}Open
+            {:else}Install &amp; Open{/if}
           </button>
+          {#if inst}
+            <button class="ghost" onclick={() => uninstall(app.id)} disabled={busy !== ""}>
+              Uninstall
+            </button>
+          {/if}
         </div>
       {/if}
     </div>
@@ -174,6 +235,17 @@
     background: transparent;
     border: 1px solid var(--border, #2a2f3a);
     color: var(--text-dim, #9aa3b2);
+  }
+  .app-perms .ok { color: var(--good, #5bd6a0); }
+  .app-progress { margin-top: 12px; }
+  .app-progress .bar {
+    height: 6px; background: #0c0e12;
+    border: 1px solid var(--border, #2a2f3a); border-radius: 4px; overflow: hidden;
+  }
+  .app-progress .fill { height: 100%; background: var(--accent, #6ea8fe); transition: width 0.3s; }
+  .app-progress .prog-label {
+    color: var(--text-dim, #9aa3b2); font-size: 11px; margin-top: 5px;
+    font-variant-numeric: tabular-nums;
   }
   .app-error { color: #ff8d8d; font-size: 12px; margin-top: 8px; }
 </style>

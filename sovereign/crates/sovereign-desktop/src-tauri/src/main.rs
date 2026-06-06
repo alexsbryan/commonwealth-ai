@@ -508,6 +508,8 @@ fn main() -> ExitCode {
             commands::meshapp_list_installs,
             commands::meshapp_record_install,
             commands::meshapp_uninstall,
+            commands::meshapp_stage_corpus_recipe,
+            commands::meshapp_installed_apps,
             commands::meshapp_open,
         ])
         .run(tauri::generate_context!())

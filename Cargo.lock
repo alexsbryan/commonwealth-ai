@@ -10863,6 +10863,7 @@ dependencies = [
  "sovereign-store",
  "sovereign-tools",
  "sovereign-work-atlas",
+ "tar",
  "tempfile",
  "tokio",
  "toml 0.8.2",
@@ -10871,6 +10872,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "which",
+ "zstd",
 ]
 
 [[package]]

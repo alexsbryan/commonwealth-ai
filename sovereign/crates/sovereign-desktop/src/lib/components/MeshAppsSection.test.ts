@@ -11,7 +11,19 @@ vi.mock("../api", () => ({
   openMeshApp: vi.fn(),
   uninstallMeshApp: vi.fn(),
   loadCatalog: vi.fn(),
+  listCorpora: vi.fn(),
+  installCorpus: vi.fn(),
+  stageCorpusRecipe: vi.fn(),
 }));
+
+// The component subscribes to `corpus-progress`; stub the event module.
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(() => {}),
+}));
+
+// Minimal CorpusEntry stand-ins (the component reads only id + status).
+const corpora = (status: string) =>
+  ["sf-assessor-roll", "uap-blue-book", "enron-sample-multi-wide"].map((id) => ({ id, status })) as never;
 
 const READ_GRANTS = {
   mesh_store_read: true,
@@ -49,6 +61,17 @@ describe("MeshAppsSection", () => {
     vi.mocked(api.openMeshApp).mockResolvedValue(undefined);
     vi.mocked(api.uninstallMeshApp).mockResolvedValue(undefined);
     vi.mocked(api.loadCatalog).mockResolvedValue(MANIFESTS);
+    // Default: the apps' corpora are already present → "Install & Open" / "Open".
+    vi.mocked(api.listCorpora).mockResolvedValue(corpora("installed"));
+    vi.mocked(api.installCorpus).mockResolvedValue(undefined);
+    vi.mocked(api.stageCorpusRecipe).mockResolvedValue(undefined);
+  });
+
+  it("offers 'Get data' when the corpus isn't downloaded yet", async () => {
+    vi.mocked(api.listCorpora).mockResolvedValue(corpora("not_installed"));
+    render(MeshAppsSection);
+    const btns = await screen.findAllByRole("button", { name: /get data/i });
+    expect(btns.length).toBe(3); // no corpus present → all three prompt to download
   });
 
   it("lists every catalog app with Install & Open, and wires the grant + open", async () => {
