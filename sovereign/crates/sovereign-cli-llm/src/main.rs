@@ -23,6 +23,7 @@ mod gym_judge;
 mod knowledge_gym_cmd;
 mod mcp_cmd;
 mod mesh_cmd;
+mod meshapp_cmd;
 mod meta_atlas_cmd;
 mod newsworthy_cmd;
 mod pipeline_cmd;
@@ -86,6 +87,7 @@ async fn async_main() {
         "knowledge-gym" => knowledge_gym_cmd::run_knowledge_gym(rest).await,
         "atlas" => atlas_cmd::run_atlas(rest).await,
         "meta-atlas" => meta_atlas_cmd::run_meta_atlas(rest).await,
+        "meshapp" => meshapp_cmd::run(rest).await,
         "enrich" => enrich_cmd::run_enrich(rest).await,
         "newsworthy" => newsworthy_cmd::run(rest).await,
         "recipe" => recipe_cmd::run_recipe(rest).await,

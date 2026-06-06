@@ -10858,6 +10858,7 @@ dependencies = [
  "sovereign-eval",
  "sovereign-inference",
  "sovereign-mesh",
+ "sovereign-meshapp",
  "sovereign-pipeline",
  "sovereign-store",
  "sovereign-tools",
@@ -10936,6 +10937,7 @@ dependencies = [
  "sovereign-core",
  "sovereign-inference",
  "sovereign-mesh",
+ "sovereign-meshapp",
  "sovereign-store",
  "sovereign-tools",
  "tauri",
@@ -11056,6 +11058,16 @@ dependencies = [
  "tracing-subscriber",
  "urlencoding",
  "uuid",
+]
+
+[[package]]
+name = "sovereign-meshapp"
+version = "0.1.16"
+dependencies = [
+ "corpus-engine",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

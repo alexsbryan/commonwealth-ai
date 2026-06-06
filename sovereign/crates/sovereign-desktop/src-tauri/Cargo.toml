@@ -8,6 +8,9 @@ sovereign-core = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter", "gliner-ner"] }
+# Explorer graph ops (atlas/investigation projections) — the meshapp Tauri
+# commands are thin wrappers over this shared lib.
+sovereign-meshapp = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
 # Mesh Health surfaces (peer preferences, dimensional contributions) —
 # Tauri commands access the in-process AppState's accessors. The

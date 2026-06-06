@@ -6,29 +6,32 @@
 //! is host-assigned at window creation and unspoofable from inside the
 //! sandbox). Only after the grant check does a command touch host state.
 //!
-//! The numeric ops (`read_corpus`, `parcel_analytics`) are deterministic
-//! and read-only — folds over typed parcel atoms, no inference — so the
-//! SF-LVT "no confabulated numbers" guarantee carries onto the desktop
-//! surface: a model never originates a figure here either.
+//! The explorer graph ops are THIN wrappers: the projection logic lives in
+//! the `sovereign-meshapp` library so the desktop host and the
+//! `sovereign meshapp dev` CLI server share one source of truth. Each command
+//! here adds only the permission gate + resolving the corpus's on-disk index
+//! from host state. The numeric LVT ops (`read_corpus`, `parcel_analytics`)
+//! stay here — they fold corpus-engine's `compute_aggregates`, so the SF-LVT
+//! "no confabulated numbers" guarantee carries onto the desktop surface.
 
-use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::meshapp::{app_id_from_label, authorize, resolve_grant, MeshAppPermissions, Permission};
 use crate::state::AppState;
 
 use corpus_engine::enrichment::atlas::analysis::{compute_aggregates, flags, FlagKind};
-use corpus_engine::enrichment::atlas::{AtomEnvelope, AtomId, ChunkRef};
-use corpus_engine::index::CorpusIndex;
-use corpus_engine::enrichment::investigation::graph::{
-    read_outputs as read_investigation_graph, Entity as InvEntity, Evidence as InvEvidence,
-    PatternFinding, PatternKind, Relationship as InvRelationship, INVESTIGATION_DIRNAME,
-};
+use corpus_engine::enrichment::atlas::AtomEnvelope;
 use corpus_engine::enrichment::pipeline::atlas::EntityType;
+
+use sovereign_meshapp::{
+    ChunkDto, CorpusStatsDto, FindingDto, GraphNodeDto, NodeDetailDto, ReconciliationMergeDto,
+    SubgraphDto, TimelineDto,
+};
 
 /// Default SF business-tax take (~$1.4B) the flat land levy must replace.
 const DEFAULT_BUSINESS_TAX_TARGET: f64 = 1_400_000_000.0;
@@ -295,77 +298,14 @@ pub async fn meshapp_parcel_analytics(
     })
 }
 
-// ─── Investigation-graph primitives (reusable: UAP now, Enron next) ───
-// Read a corpus's typed investigation graph — entities + relationships +
-// pattern findings — and shape it for an explorer bundle. Like the parcel
-// ops these are deterministic, read-only, and gated on `mesh_store_read`;
-// every edge carries its verbatim evidence excerpt + source chunk, so the
-// "every link cites its source" guarantee is structural, not a prompt
-// promise. The DTOs are the reusable contract a bundle codes against; a
-// future Enron explorer reads its atlas+reconciliation artifacts into the
-// same shapes.
-
-/// A degree-ranked node from the investigation graph. `degree` = incident
-/// relationships; `alias_count` = surface forms the coalesce phase folded
-/// into this entity (the identity-grade dedup).
-#[derive(Debug, Clone, Serialize)]
-pub struct GraphNodeDto {
-    pub id: String,
-    pub canonical_name: String,
-    pub entity_type: String,
-    pub degree: usize,
-    pub alias_count: usize,
-    pub attributes: serde_json::Map<String, serde_json::Value>,
-}
-
-/// One relationship incident to a node, resolved to its other endpoint and
-/// carrying its cited evidence — the glassbox edge.
-#[derive(Debug, Clone, Serialize)]
-pub struct EdgeDto {
-    pub relationship_type: String,
-    /// `"out"` — this node is the source; `"in"` — this node is the target.
-    pub direction: String,
-    pub other_id: String,
-    pub other_name: String,
-    pub other_type: String,
-    pub excerpt: String,
-    pub source_chunk: String,
-    pub confidence: f32,
-    pub attributes: serde_json::Map<String, serde_json::Value>,
-}
-
-/// A node's full detail: attributes, the folded aliases, and every incident
-/// edge with cited evidence.
-#[derive(Debug, Clone, Serialize)]
-pub struct NodeDetailDto {
-    pub id: String,
-    pub canonical_name: String,
-    pub entity_type: String,
-    pub attributes: serde_json::Map<String, serde_json::Value>,
-    pub aliases: Vec<String>,
-    pub edges: Vec<EdgeDto>,
-}
-
-/// A deterministic pattern finding (e.g. a sighting hotspot), resolved to
-/// its participating entities.
-#[derive(Debug, Clone, Serialize)]
-pub struct FindingDto {
-    pub pattern_name: String,
-    /// Detector family: `threshold` | `role_overlap` | `circular_flow` | `custom_sql`.
-    pub pattern_kind: String,
-    pub entities: Vec<FindingEntityDto>,
-    pub attributes: serde_json::Map<String, serde_json::Value>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct FindingEntityDto {
-    pub id: String,
-    pub canonical_name: String,
-    pub entity_type: String,
-}
+// ─── Explorer graph ops — thin wrappers over `sovereign-meshapp` ─────
+// The projection logic (atlas/investigation dispatch, degree ranking, edge
+// resolution, the subgraph/timeline/stats/reconciliation reads) lives in the
+// `sovereign-meshapp` lib. Each command's only added responsibility is the
+// `mesh_store_read` gate + resolving the corpus's on-disk index from host
+// state. The DTOs are re-used from the lib so the wire contract is identical.
 
 /// Resolve an installed corpus's on-disk index directory, or a reason.
-/// Shared by the graph/atlas/reconciliation readers below.
 async fn resolve_index_path(
     state: &State<'_, Arc<AppState>>,
     corpus_id: &str,
@@ -388,372 +328,8 @@ async fn resolve_index_path(
         .ok_or_else(|| format!("corpus `{corpus_id}` is not installed"))
 }
 
-/// Load a corpus's entity graph as (entities, relationships, findings),
-/// dispatching on what the index carries: a deterministic `investigation/`
-/// graph (UAP Blue Book) or an `atlas/` enrichment (Enron). Both project
-/// into the SAME shapes, so the four graph ops below are source-agnostic —
-/// a bundle codes against one DTO contract regardless of backend. Surfaces a
-/// reason on error rather than returning empty.
-async fn load_investigation(
-    state: &State<'_, Arc<AppState>>,
-    corpus_id: &str,
-) -> Result<(Vec<InvEntity>, Vec<InvRelationship>, Vec<PatternFinding>), String> {
-    let path = resolve_index_path(state, corpus_id).await?;
-    if path.join(INVESTIGATION_DIRNAME).is_dir() {
-        return read_investigation_graph(&path)
-            .map_err(|e| format!("read investigation graph for `{corpus_id}`: {e}"));
-    }
-    if path.join("atlas").is_dir() {
-        return load_atlas_as_investigation(&path)
-            .map_err(|e| format!("read atlas graph for `{corpus_id}`: {e}"));
-    }
-    Err(format!(
-        "corpus `{corpus_id}` has neither an investigation graph nor an atlas to explore"
-    ))
-}
-
-// ─── Atlas → investigation-graph adapter ─────────────────────────────
-// An `atlas/` enrichment carries a richer, typed atom set (Entity / Event /
-// State / Relation / Claim / Question). To let the same graph ops drive an
-// atlas-backed explorer, we project the slice the ops need — entities and the
-// entity-to-entity edges with their cited evidence — into the investigation
-// shapes. The atlas owns the reconciliation story separately (see
-// [`meshapp_reconciliation`]); pattern findings have no atlas analogue.
-
-/// Cap on participants paired into edges from a single Relation/Event atom.
-/// Most carry exactly two; a large multi-party event would otherwise emit
-/// O(n²) edges and over-inflate a node's degree. Pairing the first few
-/// preserves the centrality signal without the blow-up.
-const MAX_ATLAS_EDGE_PARTICIPANTS: usize = 8;
-
-/// canonical_id → the cross-origin reconciliation reason, stamped onto the
-/// canonical entity's `attributes.reconciliation` so a drill-down shows WHY a
-/// merge happened (surface forms folded + signals that fired).
-struct MergeRecord {
-    surface_forms: Vec<String>,
-    signals_fired: Vec<String>,
-    source_count: usize,
-}
-
-#[derive(Deserialize)]
-struct ReconFile {
-    #[serde(default)]
-    merged_entities: Vec<MergedEntityRow>,
-}
-
-#[derive(Deserialize)]
-struct MergedEntityRow {
-    canonical_id: String,
-    #[serde(default)]
-    canonical_name: String,
-    /// `[[surface_form, {signal_kind: …}], …]` — we keep only the form name.
-    #[serde(default)]
-    surface_forms: Vec<(String, serde_json::Value)>,
-    #[serde(default)]
-    signals_fired: Vec<String>,
-    #[serde(default)]
-    source_atom_ids: Vec<String>,
-}
-
-/// Adapt an `atlas/` enrichment (atoms + chapters + reconciliation) into the
-/// investigation-graph shapes the graph ops consume:
-/// - Entity atoms → nodes. Coalesce `aliases` carry through; the cross-origin
-///   reconciliation reason lands in `attributes.reconciliation`.
-/// - Relation + Event atoms → edges between their entity participants, each
-///   quoting its `passage_preview` and resolving its `sec_NNNNN` source to the
-///   numeric `chunks.lance` row id (via `chapters.json`) so `read_chunk`
-///   dereferences the source email unchanged.
-/// - Findings → empty: the atlas identity story is served by
-///   [`meshapp_reconciliation`], not pattern findings.
-fn load_atlas_as_investigation(
-    index_path: &Path,
-) -> Result<(Vec<InvEntity>, Vec<InvRelationship>, Vec<PatternFinding>), String> {
-    let atlas_dir = index_path.join("atlas");
-    let file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
-        .map_err(|e| format!("read atoms: {e}"))?;
-    let sec_to_chunk = read_chapter_chunk_map(index_path)?;
-    let recon = read_reconciliation_index(&atlas_dir);
-
-    // Entities — and the id set that gates which participants become edges.
-    let mut entities = Vec::new();
-    let mut entity_ids: HashSet<String> = HashSet::new();
-    for env in &file.atoms {
-        if let AtomEnvelope::Entity(e) = env {
-            let id = e.id.as_str().to_string();
-            entity_ids.insert(id.clone());
-            let mut attributes = serde_json::Map::new();
-            if !e.description.is_empty() {
-                attributes.insert("description".into(), e.description.clone().into());
-            }
-            attributes.insert("salience".into(), (e.salience as f64).into());
-            if let Some(m) = recon.get(&id) {
-                attributes.insert(
-                    "reconciliation".into(),
-                    serde_json::json!({
-                        "surface_forms": m.surface_forms,
-                        "signals_fired": m.signals_fired,
-                        "source_count": m.source_count,
-                    }),
-                );
-            }
-            entities.push(InvEntity {
-                id,
-                canonical_name: e.canonical_name.clone(),
-                entity_type: e.entity_type.as_str_repr().to_string(),
-                attributes,
-                aliases: e.aliases.clone(),
-            });
-        }
-    }
-
-    // Edges — Relation + Event atoms, pairwise over their entity participants.
-    // Both extractions are inlined per-arm: `AtomId`/`ChunkRef` are not
-    // imported here, so we touch them only through `.as_str()` and public
-    // field access, never by type name.
-    let mut rels = Vec::new();
-    for env in &file.atoms {
-        match env {
-            AtomEnvelope::Relation(r) => {
-                let participants = entity_participants(&r.participants, &entity_ids);
-                if participants.len() < 2 {
-                    continue;
-                }
-                let (excerpt, chunk) = first_evidence(r.evidence.first(), &sec_to_chunk);
-                let rtype = if r.label.trim().is_empty() {
-                    r.relation_type.as_str_repr().to_string()
-                } else {
-                    r.label.clone()
-                };
-                push_pairwise_edges(
-                    &mut rels,
-                    r.id.as_str(),
-                    &participants,
-                    &rtype,
-                    &excerpt,
-                    &chunk,
-                    &serde_json::Map::new(),
-                );
-            }
-            AtomEnvelope::Event(ev) => {
-                let participants = entity_participants(&ev.participants, &entity_ids);
-                if participants.len() < 2 {
-                    continue;
-                }
-                let (excerpt, chunk) = first_evidence(ev.evidence.first(), &sec_to_chunk);
-                let mut attrs = serde_json::Map::new();
-                if !ev.description.is_empty() {
-                    attrs.insert("description".into(), ev.description.clone().into());
-                }
-                push_pairwise_edges(
-                    &mut rels,
-                    ev.id.as_str(),
-                    &participants,
-                    ev.event_type.as_str_repr(),
-                    &excerpt,
-                    &chunk,
-                    &attrs,
-                );
-            }
-            _ => {}
-        }
-    }
-
-    Ok((entities, rels, Vec::new()))
-}
-
-/// The participant ids that are real entities (drop dangling refs), capped so
-/// one big multi-party atom can't dominate the degree distribution.
-fn entity_participants<'a>(
-    participants: &'a [AtomId],
-    entity_ids: &HashSet<String>,
-) -> Vec<&'a str> {
-    participants
-        .iter()
-        .map(|p| p.as_str())
-        .filter(|p| entity_ids.contains(*p))
-        .take(MAX_ATLAS_EDGE_PARTICIPANTS)
-        .collect()
-}
-
-/// Resolve an atom's first evidence ref into `(excerpt, source_chunk)`, where
-/// `source_chunk` is the numeric `chunks.lance` row id the section maps to
-/// (via `chapters.json`) — falling back to the raw section id when unmapped,
-/// so the excerpt still renders even if the full chunk can't be fetched.
-fn first_evidence(
-    evidence: Option<&ChunkRef>,
-    sec_to_chunk: &HashMap<String, String>,
-) -> (String, String) {
-    match evidence {
-        Some(cr) => {
-            let excerpt = cr.passage_preview.clone().unwrap_or_default();
-            let chunk = sec_to_chunk
-                .get(&cr.chunk_id)
-                .cloned()
-                .unwrap_or_else(|| cr.chunk_id.clone());
-            (excerpt, chunk)
-        }
-        None => (String::new(), String::new()),
-    }
-}
-
-/// Emit one undirected edge per participant pair (`n choose 2`), each carrying
-/// the same cited evidence. Edge ids are `<atom_id>#<k>` so a multi-pair atom
-/// stays addressable.
-fn push_pairwise_edges(
-    out: &mut Vec<InvRelationship>,
-    atom_id: &str,
-    participants: &[&str],
-    relationship_type: &str,
-    excerpt: &str,
-    chunk_id: &str,
-    attributes: &serde_json::Map<String, serde_json::Value>,
-) {
-    let mut k = 0usize;
-    for i in 0..participants.len() {
-        for j in (i + 1)..participants.len() {
-            out.push(InvRelationship {
-                id: format!("{atom_id}#{k}"),
-                from_entity_id: participants[i].to_string(),
-                to_entity_id: participants[j].to_string(),
-                relationship_type: relationship_type.to_string(),
-                attributes: attributes.clone(),
-                evidence: InvEvidence {
-                    chunk_id: chunk_id.to_string(),
-                    excerpt: excerpt.to_string(),
-                },
-                confidence: 1.0,
-            });
-            k += 1;
-        }
-    }
-}
-
-/// One `chapters.json` row — an ingested document (here, one email) and the
-/// `chunks.lance` rows it produced. Other fields (title, word_count, …) are
-/// ignored.
-#[derive(Deserialize)]
-struct ChapterRow {
-    id: String,
-    #[serde(default)]
-    chunk_ids: Vec<u64>,
-}
-
-/// Read `<index>/chapters.json` rows (the per-document → chunk-id map). Absent
-/// file → empty (the atlas evidence resolver and timeline both degrade to no
-/// mapping rather than erroring).
-fn read_chapters(index_path: &Path) -> Result<Vec<ChapterRow>, String> {
-    #[derive(Deserialize)]
-    struct ChaptersFile {
-        #[serde(default)]
-        chapters: Vec<ChapterRow>,
-    }
-    let path = index_path.join("chapters.json");
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    let bytes = std::fs::read(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    let file: ChaptersFile =
-        serde_json::from_slice(&bytes).map_err(|e| format!("parse {}: {e}", path.display()))?;
-    Ok(file.chapters)
-}
-
-/// `sec_NNNNN` → first numeric `chunks.lance` row id (as a string). The atlas
-/// stamps atom evidence with the section id; this resolves it to the chunk id
-/// `read_chunk` dereferences.
-fn read_chapter_chunk_map(index_path: &Path) -> Result<HashMap<String, String>, String> {
-    let chapters = read_chapters(index_path)?;
-    let mut map = HashMap::with_capacity(chapters.len());
-    for c in chapters {
-        if let Some(first) = c.chunk_ids.first() {
-            map.insert(c.id, first.to_string());
-        }
-    }
-    Ok(map)
-}
-
-/// Parse `atlas/reconciliation.json` into its merge rows. Missing file or
-/// parse error → empty (reconciliation is an optional enrichment pass).
-fn read_reconciliation_rows(atlas_dir: &Path) -> Vec<MergedEntityRow> {
-    let path = atlas_dir.join("reconciliation.json");
-    let Ok(bytes) = std::fs::read(path) else {
-        return Vec::new();
-    };
-    serde_json::from_slice::<ReconFile>(&bytes)
-        .map(|f| f.merged_entities)
-        .unwrap_or_default()
-}
-
-/// canonical_id → [`MergeRecord`], for stamping entity attributes.
-fn read_reconciliation_index(atlas_dir: &Path) -> HashMap<String, MergeRecord> {
-    read_reconciliation_rows(atlas_dir)
-        .into_iter()
-        .map(|r| {
-            let source_count = r.source_atom_ids.len();
-            (
-                r.canonical_id,
-                MergeRecord {
-                    surface_forms: r.surface_forms.into_iter().map(|(name, _)| name).collect(),
-                    signals_fired: r.signals_fired,
-                    source_count,
-                },
-            )
-        })
-        .collect()
-}
-
-/// The reconciliation merges as DTOs, richest (most surface forms) first.
-fn reconciliation_merges(atlas_dir: &Path) -> Vec<ReconciliationMergeDto> {
-    let mut out: Vec<ReconciliationMergeDto> = read_reconciliation_rows(atlas_dir)
-        .into_iter()
-        .map(|r| {
-            let source_count = r.source_atom_ids.len();
-            ReconciliationMergeDto {
-                canonical_id: r.canonical_id,
-                canonical_name: r.canonical_name,
-                surface_forms: r.surface_forms.into_iter().map(|(name, _)| name).collect(),
-                signals_fired: r.signals_fired,
-                source_count,
-            }
-        })
-        .collect();
-    out.sort_by(|a, b| b.surface_forms.len().cmp(&a.surface_forms.len()));
-    out
-}
-
-/// Incident-relationship count per entity id (graph degree).
-fn degree_map(rels: &[InvRelationship]) -> HashMap<&str, usize> {
-    let mut deg: HashMap<&str, usize> = HashMap::new();
-    for r in rels {
-        *deg.entry(r.from_entity_id.as_str()).or_default() += 1;
-        *deg.entry(r.to_entity_id.as_str()).or_default() += 1;
-    }
-    deg
-}
-
-fn pattern_kind_str(kind: &PatternKind) -> &'static str {
-    match kind {
-        PatternKind::CircularFlow => "circular_flow",
-        PatternKind::RoleOverlap => "role_overlap",
-        PatternKind::Threshold => "threshold",
-        PatternKind::CustomSql => "custom_sql",
-    }
-}
-
-fn to_graph_node(e: InvEntity, deg: &HashMap<&str, usize>) -> GraphNodeDto {
-    GraphNodeDto {
-        degree: deg.get(e.id.as_str()).copied().unwrap_or(0),
-        alias_count: e.aliases.len(),
-        id: e.id,
-        canonical_name: e.canonical_name,
-        entity_type: e.entity_type,
-        attributes: e.attributes,
-    }
-}
-
 /// `window.meshApp.graph(corpusId, nodeType?, limit?)` — gated on
-/// `mesh_store_read`. Degree-ranked entities (optionally one type),
-/// highest-degree first. Powers UAP installation hotspots, Enron
-/// counterparty centrality.
+/// `mesh_store_read`. Degree-ranked entities, highest-degree first.
 #[tauri::command]
 pub async fn meshapp_graph(
     webview: WebviewWindow,
@@ -764,27 +340,13 @@ pub async fn meshapp_graph(
 ) -> Result<Vec<GraphNodeDto>, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-
-    let (entities, rels, _findings) = load_investigation(&state, &corpus_id).await?;
-    let deg = degree_map(&rels);
-    let want = node_type.as_deref();
-    let mut nodes: Vec<GraphNodeDto> = entities
-        .into_iter()
-        .filter(|e| want.map_or(true, |t| e.entity_type.eq_ignore_ascii_case(t)))
-        .map(|e| to_graph_node(e, &deg))
-        .collect();
-    nodes.sort_by(|a, b| {
-        b.degree
-            .cmp(&a.degree)
-            .then_with(|| b.alias_count.cmp(&a.alias_count))
-    });
-    nodes.truncate(limit.unwrap_or(50).min(500));
-    Ok(nodes)
+    let path = resolve_index_path(&state, &corpus_id).await?;
+    let g = sovereign_meshapp::load_graph(&path).map_err(|e| format!("`{corpus_id}`: {e}"))?;
+    Ok(sovereign_meshapp::graph_nodes(&g, node_type.as_deref(), limit.unwrap_or(50).min(500)))
 }
 
 /// `window.meshApp.node(corpusId, id)` — gated on `mesh_store_read`. One
-/// entity's full detail + every incident edge, each resolved to its other
-/// endpoint and quoting its evidence excerpt + source chunk.
+/// entity's full detail + every incident edge, each quoting its evidence.
 #[tauri::command]
 pub async fn meshapp_node(
     webview: WebviewWindow,
@@ -794,51 +356,12 @@ pub async fn meshapp_node(
 ) -> Result<NodeDetailDto, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-
-    let (entities, rels, _findings) = load_investigation(&state, &corpus_id).await?;
-    let by_id: HashMap<&str, &InvEntity> = entities.iter().map(|e| (e.id.as_str(), e)).collect();
-    let me = by_id
-        .get(id.as_str())
-        .ok_or_else(|| format!("no entity `{id}` in `{corpus_id}`"))?;
-
-    let mut edges = Vec::new();
-    for r in &rels {
-        let (direction, other_id) = if r.from_entity_id == id {
-            ("out", r.to_entity_id.as_str())
-        } else if r.to_entity_id == id {
-            ("in", r.from_entity_id.as_str())
-        } else {
-            continue;
-        };
-        let (other_name, other_type) = by_id
-            .get(other_id)
-            .map(|e| (e.canonical_name.clone(), e.entity_type.clone()))
-            .unwrap_or_else(|| (other_id.to_string(), String::new()));
-        edges.push(EdgeDto {
-            relationship_type: r.relationship_type.clone(),
-            direction: direction.to_string(),
-            other_id: other_id.to_string(),
-            other_name,
-            other_type,
-            excerpt: r.evidence.excerpt.clone(),
-            source_chunk: r.evidence.chunk_id.clone(),
-            confidence: r.confidence,
-            attributes: r.attributes.clone(),
-        });
-    }
-    Ok(NodeDetailDto {
-        id: me.id.clone(),
-        canonical_name: me.canonical_name.clone(),
-        entity_type: me.entity_type.clone(),
-        attributes: me.attributes.clone(),
-        aliases: me.aliases.clone(),
-        edges,
-    })
+    let path = resolve_index_path(&state, &corpus_id).await?;
+    let g = sovereign_meshapp::load_graph(&path).map_err(|e| format!("`{corpus_id}`: {e}"))?;
+    sovereign_meshapp::node_detail(&g, &id).map_err(|e| format!("`{corpus_id}`: {e}"))
 }
 
-/// `window.meshApp.findings(corpusId, pattern?)` — gated on
-/// `mesh_store_read`. Deterministic pattern findings (optionally one
-/// pattern), each resolved to its participating entities' names.
+/// `window.meshApp.findings(corpusId, pattern?)` — gated on `mesh_store_read`.
 #[tauri::command]
 pub async fn meshapp_findings(
     webview: WebviewWindow,
@@ -848,40 +371,13 @@ pub async fn meshapp_findings(
 ) -> Result<Vec<FindingDto>, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-
-    let (entities, _rels, findings) = load_investigation(&state, &corpus_id).await?;
-    let by_id: HashMap<&str, &InvEntity> = entities.iter().map(|e| (e.id.as_str(), e)).collect();
-    let want = pattern.as_deref();
-    let out = findings
-        .into_iter()
-        .filter(|f| want.map_or(true, |p| f.pattern_name.as_str() == p))
-        .map(|f| FindingDto {
-            entities: f
-                .entity_ids
-                .iter()
-                .map(|eid| {
-                    let e = by_id.get(eid.as_str());
-                    FindingEntityDto {
-                        id: eid.clone(),
-                        canonical_name: e
-                            .map(|x| x.canonical_name.clone())
-                            .unwrap_or_else(|| eid.clone()),
-                        entity_type: e.map(|x| x.entity_type.clone()).unwrap_or_default(),
-                    }
-                })
-                .collect(),
-            pattern_kind: pattern_kind_str(&f.pattern_type).to_string(),
-            pattern_name: f.pattern_name,
-            attributes: f.attributes,
-        })
-        .collect();
-    Ok(out)
+    let path = resolve_index_path(&state, &corpus_id).await?;
+    let g = sovereign_meshapp::load_graph(&path).map_err(|e| format!("`{corpus_id}`: {e}"))?;
+    Ok(sovereign_meshapp::findings(&g, pattern.as_deref()))
 }
 
 /// `window.meshApp.searchEntities(corpusId, query, nodeType?, limit?)` —
-/// gated on `mesh_store_read`. Case-folded substring over an entity's
-/// canonical name, aliases, and string attribute values (find a case by
-/// place, a person by alias). Degree-ranked.
+/// gated on `mesh_store_read`. Case-folded substring over name/aliases/attrs.
 #[tauri::command]
 pub async fn meshapp_search_entities(
     webview: WebviewWindow,
@@ -893,53 +389,16 @@ pub async fn meshapp_search_entities(
 ) -> Result<Vec<GraphNodeDto>, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-
-    let q = query.trim().to_lowercase();
-    if q.is_empty() {
+    if query.trim().is_empty() {
         return Ok(Vec::new());
     }
-    let (entities, rels, _findings) = load_investigation(&state, &corpus_id).await?;
-    let deg = degree_map(&rels);
-    let want = node_type.as_deref();
-    let mut out: Vec<GraphNodeDto> = entities
-        .into_iter()
-        .filter(|e| want.map_or(true, |t| e.entity_type.eq_ignore_ascii_case(t)))
-        .filter(|e| {
-            e.canonical_name.to_lowercase().contains(&q)
-                || e.aliases.iter().any(|a| a.to_lowercase().contains(&q))
-                || e
-                    .attributes
-                    .values()
-                    .any(|v| v.as_str().is_some_and(|s| s.to_lowercase().contains(&q)))
-        })
-        .map(|e| to_graph_node(e, &deg))
-        .collect();
-    out.sort_by(|a, b| b.degree.cmp(&a.degree));
-    out.truncate(limit.unwrap_or(25).min(100));
-    Ok(out)
-}
-
-/// One cross-origin identity merge from the atlas reconciliation pass: a
-/// canonical entity, the surface forms folded into it, and the signals that
-/// fired (the glassbox reason). This is a SEPARATE mechanism from an entity's
-/// coalesce `aliases` — reconciliation merges atoms that were extracted
-/// independently (e.g. across mailboxes), and every merge carries why.
-#[derive(Debug, Clone, Serialize)]
-pub struct ReconciliationMergeDto {
-    pub canonical_id: String,
-    pub canonical_name: String,
-    pub surface_forms: Vec<String>,
-    pub signals_fired: Vec<String>,
-    pub source_count: usize,
+    let path = resolve_index_path(&state, &corpus_id).await?;
+    let g = sovereign_meshapp::load_graph(&path).map_err(|e| format!("`{corpus_id}`: {e}"))?;
+    Ok(sovereign_meshapp::search_entities(&g, &query, node_type.as_deref(), limit.unwrap_or(25).min(100)))
 }
 
 /// `window.meshApp.reconciliation(corpusId)` — gated on `mesh_store_read`.
-/// The atlas cross-origin identity merges, richest (most surface forms)
-/// first. Each carries the surface forms it folded and the signals that fired
-/// — "every merge carries its reason." Returns `[]` for a corpus with no
-/// `atlas/reconciliation.json` (e.g. an investigation-graph corpus), so a
-/// bundle can probe-and-degrade rather than error. Powers the Enron
-/// explorer's reconciled-identities view.
+/// The atlas cross-origin identity merges, richest first.
 #[tauri::command]
 pub async fn meshapp_reconciliation(
     webview: WebviewWindow,
@@ -948,32 +407,12 @@ pub async fn meshapp_reconciliation(
 ) -> Result<Vec<ReconciliationMergeDto>, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-
     let path = resolve_index_path(&state, &corpus_id).await?;
-    Ok(reconciliation_merges(&path.join("atlas")))
-}
-
-// ─── Network map (subgraph) ──────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize)]
-pub struct SubEdgeDto {
-    pub source: String,
-    pub target: String,
-    pub relationship_type: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct SubgraphDto {
-    pub nodes: Vec<GraphNodeDto>,
-    pub edges: Vec<SubEdgeDto>,
+    Ok(sovereign_meshapp::reconciliation(&path))
 }
 
 /// `window.meshApp.subgraph(corpusId, nodeType?, limit?)` — gated on
-/// `mesh_store_read`. The top-degree nodes (optionally one type) plus the
-/// edges induced among them — everything a node-link visualization needs in
-/// one round-trip. Backend-agnostic via `load_investigation`. Undirected pairs
-/// are de-duplicated and the edge list is capped so a dense hub can't return
-/// thousands of links.
+/// `mesh_store_read`. Top-degree nodes + induced edges, for a node-link map.
 #[tauri::command]
 pub async fn meshapp_subgraph(
     webview: WebviewWindow,
@@ -984,80 +423,13 @@ pub async fn meshapp_subgraph(
 ) -> Result<SubgraphDto, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-
-    let (entities, rels, _findings) = load_investigation(&state, &corpus_id).await?;
-    Ok(build_subgraph(
-        entities,
-        &rels,
-        node_type.as_deref(),
-        limit.unwrap_or(30).min(80),
-    ))
+    let path = resolve_index_path(&state, &corpus_id).await?;
+    let g = sovereign_meshapp::load_graph(&path).map_err(|e| format!("`{corpus_id}`: {e}"))?;
+    Ok(sovereign_meshapp::subgraph(&g, node_type.as_deref(), limit.unwrap_or(30).min(80)))
 }
 
-/// Top-`limit` nodes by degree (optionally one type) + the de-duplicated,
-/// capped edges induced among them. Pure so it's unit-testable without Tauri.
-fn build_subgraph(
-    entities: Vec<InvEntity>,
-    rels: &[InvRelationship],
-    node_type: Option<&str>,
-    limit: usize,
-) -> SubgraphDto {
-    let deg = degree_map(rels);
-    let mut nodes: Vec<GraphNodeDto> = entities
-        .into_iter()
-        .filter(|e| node_type.map_or(true, |t| e.entity_type.eq_ignore_ascii_case(t)))
-        .map(|e| to_graph_node(e, &deg))
-        .collect();
-    nodes.sort_by(|a, b| {
-        b.degree
-            .cmp(&a.degree)
-            .then_with(|| b.alias_count.cmp(&a.alias_count))
-    });
-    nodes.truncate(limit);
-
-    let keep: HashSet<&str> = nodes.iter().map(|n| n.id.as_str()).collect();
-    let mut seen: HashSet<(&str, &str)> = HashSet::new();
-    let mut edges = Vec::new();
-    for r in rels {
-        let (a, b) = (r.from_entity_id.as_str(), r.to_entity_id.as_str());
-        if a == b || !keep.contains(a) || !keep.contains(b) {
-            continue;
-        }
-        let key = if a <= b { (a, b) } else { (b, a) };
-        if seen.insert(key) {
-            edges.push(SubEdgeDto {
-                source: r.from_entity_id.clone(),
-                target: r.to_entity_id.clone(),
-                relationship_type: r.relationship_type.clone(),
-            });
-            if edges.len() >= 400 {
-                break;
-            }
-        }
-    }
-    SubgraphDto { nodes, edges }
-}
-
-// ─── Scale / provenance stats ────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Default)]
-pub struct CorpusStatsDto {
-    pub atoms: usize,
-    pub entities: usize,
-    pub events: usize,
-    pub states: usize,
-    pub relations: usize,
-    pub claims: usize,
-    pub questions: usize,
-    pub edges: usize,
-    pub reconciled_merges: usize,
-    pub documents: usize,
-}
-
-/// `window.meshApp.corpusStats(corpusId)` — gated on `mesh_store_read`. The
-/// headline counts for a scale/provenance banner, read from the atlas summary
-/// + sidecars. Every field defaults to 0 for a corpus missing the atlas, so a
-/// bundle can render a partial banner rather than erroring.
+/// `window.meshApp.corpusStats(corpusId)` — gated on `mesh_store_read`.
+/// Headline scale/provenance counts for a banner.
 #[tauri::command]
 pub async fn meshapp_corpus_stats(
     webview: WebviewWindow,
@@ -1067,66 +439,11 @@ pub async fn meshapp_corpus_stats(
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
     let path = resolve_index_path(&state, &corpus_id).await?;
-    Ok(corpus_stats(&path))
+    Ok(sovereign_meshapp::corpus_stats(&path))
 }
 
-fn corpus_stats(index_path: &Path) -> CorpusStatsDto {
-    let atlas = index_path.join("atlas");
-    let mut s = CorpusStatsDto::default();
-    if let Ok(bytes) = std::fs::read(atlas.join("_summary.json")) {
-        #[derive(Deserialize, Default)]
-        struct Summary {
-            #[serde(default)]
-            atom_count: usize,
-            #[serde(default)]
-            atom_counts: HashMap<String, usize>,
-        }
-        if let Ok(sm) = serde_json::from_slice::<Summary>(&bytes) {
-            let c = |k: &str| sm.atom_counts.get(k).copied().unwrap_or(0);
-            s.atoms = sm.atom_count;
-            s.entities = c("Entity");
-            s.events = c("Event");
-            s.states = c("State");
-            s.relations = c("Relation");
-            s.claims = c("Claim");
-            s.questions = c("Question");
-        }
-    }
-    // Count the edges.json array without deserializing the Edge schema — we
-    // only need the length, and this stays robust to atlas-schema drift.
-    s.edges = std::fs::read(atlas.join("edges.json"))
-        .ok()
-        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
-        .and_then(|v| v.get("edges").and_then(|a| a.as_array()).map(|a| a.len()))
-        .unwrap_or(0);
-    s.reconciled_merges = read_reconciliation_rows(&atlas).len();
-    s.documents = read_chapters(index_path).map(|c| c.len()).unwrap_or(0);
-    s
-}
-
-// ─── Timeline (email dates → monthly buckets) ────────────────────────
-
-#[derive(Debug, Clone, Serialize)]
-pub struct TimelineBucketDto {
-    /// `YYYY-MM`.
-    pub ym: String,
-    pub count: usize,
-    /// A capped sample of chunk ids in this month, for click-to-drill.
-    pub chunk_ids: Vec<u64>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct TimelineDto {
-    pub buckets: Vec<TimelineBucketDto>,
-    pub dated: usize,
-    pub total: usize,
-}
-
-/// `window.meshApp.timeline(corpusId)` — gated on `mesh_store_read`. Buckets
-/// the corpus's documents by month, parsed from the `Date:` header every email
-/// chunk carries (the extractor prepends an RFC5322 preamble to each chunk).
-/// Chronological; each bucket carries a capped chunk-id sample for drill-in.
-/// Empty when the corpus has no `chapters.json` (non-document corpora).
+/// `window.meshApp.timeline(corpusId)` — gated on `mesh_store_read`.
+/// Documents bucketed by month, parsed from each email chunk's `Date:` header.
 #[tauri::command]
 pub async fn meshapp_timeline(
     webview: WebviewWindow,
@@ -1136,134 +453,13 @@ pub async fn meshapp_timeline(
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
     let path = resolve_index_path(&state, &corpus_id).await?;
-
-    let chapters = read_chapters(&path)?;
-    let first_ids: Vec<u64> = chapters
-        .iter()
-        .filter_map(|c| c.chunk_ids.first().copied())
-        .collect();
-    let total = first_ids.len();
-    if first_ids.is_empty() {
-        return Ok(TimelineDto {
-            buckets: Vec::new(),
-            dated: 0,
-            total: 0,
-        });
-    }
-
-    let index = CorpusIndex::open(&path)
+    sovereign_meshapp::timeline(&path)
         .await
-        .map_err(|e| format!("open index `{corpus_id}`: {e}"))?;
-    let chunks = index
-        .get_chunks(&first_ids)
-        .await
-        .map_err(|e| format!("read chunks from `{corpus_id}`: {e}"))?;
-
-    let mut by_ym: std::collections::BTreeMap<String, (usize, Vec<u64>)> =
-        std::collections::BTreeMap::new();
-    let mut dated = 0;
-    for c in &chunks {
-        if let Some(ym) = parse_email_year_month(&c.content) {
-            let e = by_ym.entry(ym).or_default();
-            e.0 += 1;
-            if e.1.len() < 40 {
-                e.1.push(c.id);
-            }
-            dated += 1;
-        }
-    }
-    let buckets = by_ym
-        .into_iter()
-        .map(|(ym, (count, chunk_ids))| TimelineBucketDto {
-            ym,
-            count,
-            chunk_ids,
-        })
-        .collect();
-    Ok(TimelineDto {
-        buckets,
-        dated,
-        total,
-    })
+        .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
 
-/// Pull `YYYY-MM` from the `Date:` line of an email chunk's RFC5322 preamble.
-/// Tolerant of both `Thu, 26 Jul 2001 …` and `Friday, November 09, 2001`.
-fn parse_email_year_month(content: &str) -> Option<String> {
-    let head = &content[..content.len().min(600)];
-    for line in head.lines() {
-        if let Some(rest) = line.trim_start().strip_prefix("Date:") {
-            if let Some(ym) = year_month_from_rfc5322(rest) {
-                return Some(ym);
-            }
-        }
-    }
-    None
-}
-
-/// Scan a date string for a 3-letter month name and an in-range 4-digit year.
-/// Order-independent within `(month before year)` RFC5322 / US long forms.
-fn year_month_from_rfc5322(s: &str) -> Option<String> {
-    let mut month: Option<u32> = None;
-    let mut year: Option<i32> = None;
-    for tok in s.split(|c: char| !c.is_ascii_alphanumeric()) {
-        if tok.is_empty() {
-            continue;
-        }
-        if month.is_none() {
-            if let Some(m) = month_num(tok) {
-                month = Some(m);
-                continue;
-            }
-        }
-        if year.is_none() && tok.len() == 4 {
-            if let Ok(y) = tok.parse::<i32>() {
-                if (1990..=2010).contains(&y) {
-                    year = Some(y);
-                }
-            }
-        }
-    }
-    match (year, month) {
-        (Some(y), Some(m)) => Some(format!("{y:04}-{m:02}")),
-        _ => None,
-    }
-}
-
-fn month_num(tok: &str) -> Option<u32> {
-    let t = tok.to_ascii_lowercase();
-    let prefix = &t[..t.len().min(3)];
-    Some(match prefix {
-        "jan" => 1,
-        "feb" => 2,
-        "mar" => 3,
-        "apr" => 4,
-        "may" => 5,
-        "jun" => 6,
-        "jul" => 7,
-        "aug" => 8,
-        "sep" => 9,
-        "oct" => 10,
-        "nov" => 11,
-        "dec" => 12,
-        _ => return None,
-    })
-}
-
-/// Full source-chunk text behind a cited edge. An edge's `excerpt` is the
-/// short fragment the extractor tagged as evidence; this returns the WHOLE
-/// chunk (e.g. an OCR'd Form-10073 card narrative) so a bundle can expand a
-/// citation into the actual document.
-#[derive(Debug, Clone, Serialize)]
-pub struct ChunkDto {
-    pub chunk_id: String,
-    pub content: String,
-    pub title: Option<String>,
-}
-
-/// `window.meshApp.readChunk(corpusId, chunkId)` — gated on
-/// `mesh_store_read`. Reads one chunk's full text from the corpus index by
-/// its (numeric) id — the same id an edge carries in `source_chunk`.
+/// `window.meshApp.readChunk(corpusId, chunkId)` — gated on `mesh_store_read`.
+/// One chunk's full text by its numeric id (the id an edge carries).
 #[tauri::command]
 pub async fn meshapp_read_chunk(
     webview: WebviewWindow,
@@ -1273,42 +469,14 @@ pub async fn meshapp_read_chunk(
 ) -> Result<ChunkDto, String> {
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
-
     let id: u64 = chunk_id
         .trim()
         .parse()
         .map_err(|_| format!("chunk id `{chunk_id}` is not a numeric id"))?;
-    let engine = state
-        .corpus_engine
-        .read()
+    let path = resolve_index_path(&state, &corpus_id).await?;
+    sovereign_meshapp::read_chunk(&path, id)
         .await
-        .as_ref()
-        .map(Arc::clone)
-        .ok_or_else(|| "corpus engine not initialized".to_string())?;
-    let installed = engine
-        .installed_indexes()
-        .await
-        .map_err(|e| format!("installed_indexes: {e}"))?;
-    let entry = installed
-        .iter()
-        .find(|i| i.corpus_id == corpus_id)
-        .ok_or_else(|| format!("corpus `{corpus_id}` is not installed"))?;
-    let index = CorpusIndex::open(&entry.path)
-        .await
-        .map_err(|e| format!("open index `{corpus_id}`: {e}"))?;
-    let chunks = index
-        .get_chunks(&[id])
-        .await
-        .map_err(|e| format!("read chunk {id} from `{corpus_id}`: {e}"))?;
-    let c = chunks
-        .into_iter()
-        .next()
-        .ok_or_else(|| format!("no chunk {id} in `{corpus_id}`"))?;
-    Ok(ChunkDto {
-        chunk_id,
-        content: c.content,
-        title: c.title,
-    })
+        .map_err(|e| format!("`{corpus_id}`: {e}"))
 }
 
 // ─── Host-side install management ────────────────────────────────────
@@ -1486,262 +654,5 @@ fn fmt_int(v: f64) -> String {
         format!("-{out}")
     } else {
         out
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A minimal but real-shaped atlas: two entities, one Relation and one
-    /// Event edge (the Event references a dangling `entity-ghost` to prove
-    /// non-entity participants are dropped), a `chapters.json` that maps the
-    /// two sections to non-trivial chunk ids, and one reconciliation merge.
-    fn write_fixture(dir: &Path) {
-        let atlas = dir.join("atlas");
-        std::fs::create_dir_all(&atlas).unwrap();
-        std::fs::write(
-            atlas.join("atoms.json"),
-            r#"{
-              "schema_version": "2.3",
-              "atoms": [
-                {"atom_type":"Entity","data":{
-                  "id":"entity-aaa","canonical_name":"El Paso","entity_type":"institution",
-                  "first_appearance":{"chunk_id":"sec_00002","passage_preview":"El Paso Corp."},
-                  "description":"Energy company.","salience":0.5,"enrichment_depth":"extracted",
-                  "aliases":["El Paso Corp.","PGET"]}},
-                {"atom_type":"Entity","data":{
-                  "id":"entity-bbb","canonical_name":"Kenneth Lay","entity_type":"person",
-                  "first_appearance":{"chunk_id":"sec_00001","passage_preview":"Ken Lay"},
-                  "description":"Chairman.","salience":0.9,"enrichment_depth":"extracted"}},
-                {"atom_type":"Relation","data":{
-                  "id":"relation-xyz","label":"counterparty_of",
-                  "participants":["entity-aaa","entity-bbb"],"relation_type":"association",
-                  "evidence":[{"chunk_id":"sec_00002","passage_preview":"El Paso and Lay discussed terms"}],
-                  "section_range":{"start":"sec_00002","end":"sec_00002"},"enrichment_depth":"extracted"}},
-                {"atom_type":"Event","data":{
-                  "id":"event-pqr","description":"Lay emailed El Paso","event_type":"unspecified",
-                  "participants":["entity-bbb","entity-aaa","entity-ghost"],
-                  "evidence":[{"chunk_id":"sec_00001","passage_preview":"Date: Thu, 26 Jul 2001"}],
-                  "section_position":{"section_id":"sec_00001"},"enrichment_depth":"extracted"}}
-              ]
-            }"#,
-        )
-        .unwrap();
-        std::fs::write(
-            dir.join("chapters.json"),
-            r#"{"corpus_id":"t","schema_version":"1.0","chapters":[
-                {"id":"sec_00001","title":"Email A","chapter":1,"chunk_ids":[100]},
-                {"id":"sec_00002","title":"Email B","chapter":2,"chunk_ids":[200,201]}
-            ]}"#,
-        )
-        .unwrap();
-        std::fs::write(
-            atlas.join("reconciliation.json"),
-            r#"{"schema_version":1,"corpus":"t","merged_entities":[
-                {"canonical_id":"entity-aaa","canonical_name":"El Paso",
-                 "surface_forms":[["El Paso",{"signal_kind":"llm_batch"}],
-                                  ["El Paso Corp.",{"signal_kind":"llm_batch"}]],
-                 "signals_fired":["name_similarity"],
-                 "source_atom_ids":["entity-aaa","entity-zzz"]}
-            ]}"#,
-        )
-        .unwrap();
-        std::fs::write(
-            atlas.join("_summary.json"),
-            r#"{"schema_version":2,"atom_count":4,
-                "atom_counts":{"Entity":2,"Relation":1,"Event":1,
-                               "State":0,"Claim":0,"Question":0}}"#,
-        )
-        .unwrap();
-        std::fs::write(
-            atlas.join("edges.json"),
-            r#"{"schema_version":1,"edges":[
-                {"id":"edge-1","edge_type":"Involves","source":"event-pqr","target":"entity-aaa","confidence":1.0,"provenance":"derived"},
-                {"id":"edge-2","edge_type":"Involves","source":"event-pqr","target":"entity-bbb","confidence":1.0,"provenance":"derived"}
-            ]}"#,
-        )
-        .unwrap();
-    }
-
-    #[test]
-    fn atlas_entities_map_with_type_aliases_and_reconciliation() {
-        let tmp = tempfile::tempdir().unwrap();
-        write_fixture(tmp.path());
-        let (entities, _rels, findings) = load_atlas_as_investigation(tmp.path()).unwrap();
-
-        assert_eq!(entities.len(), 2);
-        assert!(findings.is_empty(), "atlas has no pattern findings");
-
-        let el_paso = entities.iter().find(|e| e.id == "entity-aaa").unwrap();
-        assert_eq!(el_paso.entity_type, "institution");
-        assert_eq!(el_paso.aliases, vec!["El Paso Corp.", "PGET"]);
-        assert_eq!(
-            el_paso.attributes.get("description").unwrap().as_str(),
-            Some("Energy company.")
-        );
-        // Cross-origin reconciliation reason is stamped onto the canonical.
-        let recon = el_paso.attributes.get("reconciliation").unwrap();
-        assert_eq!(recon["surface_forms"].as_array().unwrap().len(), 2);
-        assert_eq!(recon["signals_fired"][0], "name_similarity");
-        assert_eq!(recon["source_count"], 2);
-
-        // An entity NOT in the merge log carries no reconciliation key.
-        let lay = entities.iter().find(|e| e.id == "entity-bbb").unwrap();
-        assert!(lay.attributes.get("reconciliation").is_none());
-    }
-
-    #[test]
-    fn atlas_edges_resolve_sec_to_chunk_and_drop_dangling_participants() {
-        let tmp = tempfile::tempdir().unwrap();
-        write_fixture(tmp.path());
-        let (_entities, rels, _findings) = load_atlas_as_investigation(tmp.path()).unwrap();
-
-        // One Relation pair + one Event pair (ghost participant dropped) = 2.
-        assert_eq!(rels.len(), 2);
-
-        let rel = rels
-            .iter()
-            .find(|r| r.relationship_type == "counterparty_of")
-            .unwrap();
-        let pair: HashSet<&str> = [rel.from_entity_id.as_str(), rel.to_entity_id.as_str()]
-            .into_iter()
-            .collect();
-        assert_eq!(pair, HashSet::from(["entity-aaa", "entity-bbb"]));
-        // sec_00002 → first chunk id (200), the form `read_chunk` parses.
-        assert_eq!(rel.evidence.chunk_id, "200");
-        assert_eq!(rel.evidence.excerpt, "El Paso and Lay discussed terms");
-
-        let ev = rels
-            .iter()
-            .find(|r| r.relationship_type == "unspecified")
-            .unwrap();
-        // The Event's LLM description rides along in attributes for the label.
-        assert_eq!(
-            ev.attributes.get("description").unwrap().as_str(),
-            Some("Lay emailed El Paso")
-        );
-        assert_eq!(ev.evidence.chunk_id, "100"); // sec_00001 → 100
-        let ev_pair: HashSet<&str> = [ev.from_entity_id.as_str(), ev.to_entity_id.as_str()]
-            .into_iter()
-            .collect();
-        assert_eq!(ev_pair, HashSet::from(["entity-aaa", "entity-bbb"]));
-    }
-
-    #[test]
-    fn reconciliation_merges_read_sorted_with_reasons() {
-        let tmp = tempfile::tempdir().unwrap();
-        write_fixture(tmp.path());
-        let merges = reconciliation_merges(&tmp.path().join("atlas"));
-        assert_eq!(merges.len(), 1);
-        let m = &merges[0];
-        assert_eq!(m.canonical_name, "El Paso");
-        assert_eq!(m.surface_forms, vec!["El Paso", "El Paso Corp."]);
-        assert_eq!(m.signals_fired, vec!["name_similarity"]);
-        assert_eq!(m.source_count, 2);
-    }
-
-    #[test]
-    fn missing_sidecars_degrade_gracefully() {
-        // Atlas with atoms only — no chapters.json, no reconciliation.json.
-        let tmp = tempfile::tempdir().unwrap();
-        write_fixture(tmp.path());
-        std::fs::remove_file(tmp.path().join("chapters.json")).unwrap();
-        std::fs::remove_file(tmp.path().join("atlas").join("reconciliation.json")).unwrap();
-
-        let (entities, rels, _f) = load_atlas_as_investigation(tmp.path()).unwrap();
-        // Entities still map; no reconciliation key now.
-        assert_eq!(entities.len(), 2);
-        assert!(entities
-            .iter()
-            .all(|e| e.attributes.get("reconciliation").is_none()));
-        // Edges still emit; chunk id falls back to the raw section id.
-        let rel = rels
-            .iter()
-            .find(|r| r.relationship_type == "counterparty_of")
-            .unwrap();
-        assert_eq!(rel.evidence.chunk_id, "sec_00002");
-        // The reconciliation op returns empty rather than erroring.
-        assert!(reconciliation_merges(&tmp.path().join("atlas")).is_empty());
-    }
-
-    #[test]
-    fn corpus_stats_reads_summary_edges_recon_and_documents() {
-        let tmp = tempfile::tempdir().unwrap();
-        write_fixture(tmp.path());
-        let s = corpus_stats(tmp.path());
-        assert_eq!(s.atoms, 4);
-        assert_eq!(s.entities, 2);
-        assert_eq!(s.relations, 1);
-        assert_eq!(s.events, 1);
-        assert_eq!(s.edges, 2); // edges.json length
-        assert_eq!(s.reconciled_merges, 1); // one merge cluster
-        assert_eq!(s.documents, 2); // two chapters
-    }
-
-    #[test]
-    fn build_subgraph_keeps_top_nodes_and_induced_deduped_edges() {
-        let ent = |id: &str, t: &str| InvEntity {
-            id: id.into(),
-            canonical_name: id.into(),
-            entity_type: t.into(),
-            attributes: serde_json::Map::new(),
-            aliases: Vec::new(),
-        };
-        let mk_entities =
-            || vec![ent("A", "institution"), ent("B", "institution"), ent("C", "person")];
-        let edge = |from: &str, to: &str| InvRelationship {
-            id: format!("{from}-{to}"),
-            from_entity_id: from.into(),
-            to_entity_id: to.into(),
-            relationship_type: "rel".into(),
-            attributes: serde_json::Map::new(),
-            evidence: InvEvidence {
-                chunk_id: "1".into(),
-                excerpt: String::new(),
-            },
-            confidence: 1.0,
-        };
-        // A: A-B,A-C,A-B(dup)=3 · B: A-B,B-C,A-B=3 · C: A-C,B-C=2
-        let rels = vec![edge("A", "B"), edge("A", "C"), edge("B", "C"), edge("A", "B")];
-
-        // limit 2 → keep the two degree-3 nodes; the duplicate A-B folds to one edge.
-        let g = build_subgraph(mk_entities(), &rels, None, 2);
-        assert_eq!(g.nodes.len(), 2);
-        let kept: HashSet<&str> = g.nodes.iter().map(|n| n.id.as_str()).collect();
-        assert_eq!(kept, HashSet::from(["A", "B"]));
-        assert_eq!(g.edges.len(), 1);
-
-        // type filter drops the person; the induced A-B edge survives.
-        let g2 = build_subgraph(mk_entities(), &rels, Some("institution"), 10);
-        assert!(g2.nodes.iter().all(|n| n.entity_type == "institution"));
-        assert_eq!(g2.nodes.len(), 2);
-        assert_eq!(g2.edges.len(), 1);
-    }
-
-    #[test]
-    fn email_date_parsing_handles_rfc5322_and_us_long_form() {
-        assert_eq!(month_num("Jul"), Some(7));
-        assert_eq!(month_num("November"), Some(11));
-        assert_eq!(month_num("Thu"), None);
-
-        assert_eq!(
-            year_month_from_rfc5322("Thu, 26 Jul 2001 09:34:00 -0700").as_deref(),
-            Some("2001-07")
-        );
-        assert_eq!(
-            year_month_from_rfc5322(" Friday, November 09, 2001").as_deref(),
-            Some("2001-11")
-        );
-        assert_eq!(
-            year_month_from_rfc5322("Mon, 30 Apr 2001").as_deref(),
-            Some("2001-04")
-        );
-        assert_eq!(year_month_from_rfc5322("no date here"), None);
-
-        let email = "From: a@x.com\nTo: b@y.com\nDate: Thu, 26 Jul 2001 09:34:00 -0700\n\
-                     Subject: hi\n\nbody text mentioning 1999 should not override the header";
-        assert_eq!(parse_email_year_month(email).as_deref(), Some("2001-07"));
-        assert_eq!(parse_email_year_month("just a body, no headers"), None);
     }
 }

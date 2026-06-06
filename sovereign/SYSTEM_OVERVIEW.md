@@ -977,12 +977,15 @@ edges, for a node-link map) / `corpus_stats` (scale/provenance counts) /
 email chunk carries) / `read_chunk`; host-only install management; and
 `meshapp_open` (`WebviewWindowBuilder` + the
 `meshapp_shim.js` `window.meshApp` shim over `__TAURI_INTERNALS__` + a
-per-window strict CSP set in `on_web_resource_request`). The graph ops are
-**backend-agnostic**: `load_investigation` dispatches on what the index
+per-window strict CSP set in `on_web_resource_request`). The graph ops'
+LOGIC lives in the **`sovereign-meshapp`** library crate (pure path-in /
+DTO-out, Tauri-free) so the desktop host and the `sovereign meshapp dev`
+CLI server share one source of truth; the Tauri commands are thin wrappers
+(permission gate + resolve the corpus's on-disk index). The ops are
+**backend-agnostic**: `load_graph` dispatches on what the index
 carries — a deterministic `investigation/` graph (UAP) or an `atlas/`
 enrichment (Enron), projecting both into one DTO contract
-(`GraphNodeDto` / `EdgeDto` / `NodeDetailDto`). The atlas adapter
-(`load_atlas_as_investigation`) maps Entity atoms → nodes and
+(`GraphNodeDto` / `EdgeDto` / `NodeDetailDto`). The atlas adapter maps Entity atoms → nodes and
 Relation/Event atoms → cited edges, resolving each `sec_NNNNN` evidence id
 to a numeric `chunks.lance` row via `chapters.json` so `read_chunk`
 dereferences the source document unchanged; `reconciliation` surfaces the
@@ -1002,7 +1005,12 @@ composition, not ~600 of hand-rolled DOM. Each bundle carries a self-describing
 distributes); `scripts/gen-meshapp-catalog.mjs` (pre{dev,build}) aggregates them
 into `meshapp/catalog.json`, and `MeshAppsSection` discovers apps from it via
 `loadCatalog()` rather than a hard-coded list. So adding an app is a bundle + a
-manifest (+ an atlas reader only when the backend differs) — no host code edit. **Isolation caveat:** Tauri v2 does not gate app
+manifest (+ an atlas reader only when the backend differs) — no host code edit.
+**Local dev loop:** `sovereign meshapp dev <id>` (sovereign-cli-llm) serves a
+bundle + its `_sdk/` and injects a `window.meshApp` that proxies the explorer
+ops over HTTP to the same `sovereign-meshapp` functions, reading a local corpus
+index — so a bundle is iterable against real data without the desktop.
+**Isolation caveat:** Tauri v2 does not gate app
 commands per-window (tauri#9227) — a webview with IPC can invoke any
 registered command — so `capabilities/meshapp.json` only narrows the
 core/plugin surface; true isolation for UNTRUSTED third-party apps needs a

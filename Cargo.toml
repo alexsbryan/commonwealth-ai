@@ -26,6 +26,9 @@ members = [
     "sovereign/crates/sovereign-inference",
     "sovereign/crates/sovereign-store",
     "sovereign/crates/sovereign-tools",
+    # MeshApp explorer ops — pure path-in/DTO-out projections shared by the
+    # desktop Tauri host and the `sovereign meshapp dev` CLI server.
+    "sovereign/crates/sovereign-meshapp",
     "sovereign/crates/sovereign-mesh",
     "sovereign/crates/sovereign-server",
     "sovereign/crates/sovereign-desktop/src-tauri",
@@ -102,6 +105,7 @@ sovereign-core = { path = "sovereign/crates/sovereign-core" }
 sovereign-inference = { path = "sovereign/crates/sovereign-inference" }
 sovereign-store = { path = "sovereign/crates/sovereign-store" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
+sovereign-meshapp = { path = "sovereign/crates/sovereign-meshapp" }
 sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
 sovereign-atos = { path = "sovereign/crates/sovereign-atos" }
 sovereign-cli-shared = { path = "sovereign/crates/sovereign-cli-shared" }
