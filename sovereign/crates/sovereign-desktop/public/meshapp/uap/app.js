@@ -1,25 +1,26 @@
-// Project Blue Book evidence explorer — a first-party mesh app.
+// Project Blue Book evidence explorer — composed from the MeshApp SDK.
 //
-// Reads the host's deterministic investigation graph through the
-// permission-gated `window.meshApp` bridge (findings / searchEntities /
-// node). There is NO inference here: the hotspot ranking is a fold over
-// typed pattern findings, and every edge in a drill-down quotes the
-// Form-10073 card it was extracted from (verbatim excerpt + chunk id).
-// The bundle's only channel to the host is `window.meshApp`.
+// Reads the host's deterministic investigation graph through the permission-
+// gated `window.meshApp` bridge (no inference). It composes the SDK's shared
+// pieces — search box, cited-edge rows, the citation expander — but keeps its
+// own hotspot ranking (a fold over typed pattern findings) and its
+// auto-surfaced primary Form-10073 card, which are Blue-Book-specific. That's
+// the SDK as a toolkit: take the shared parts, add what's yours.
+
+import { $, connect, hasBridge, emsg, el, barList, searchBox, citedEdge } from "../_sdk/meshapp.js";
 
 const CORPUS = "uap-blue-book";
-const $ = (id) => document.getElementById(id);
+let bridge;
 
 async function main() {
-  if (!window.meshApp) {
-    return fail("window.meshApp is not available — the host bridge shim did not load.");
-  }
+  if (!hasBridge()) return fail("window.meshApp is not available — the host bridge shim did not load.");
+  bridge = connect(CORPUS);
   let findings;
   try {
-    findings = await window.meshApp.findings(CORPUS, "sighting_hotspots");
+    findings = await bridge.findings("sighting_hotspots");
   } catch (e) {
     return fail(
-      "Bridge call failed: " + (e && e.message ? e.message : e) +
+      "Bridge call failed: " + emsg(e) +
       "  (is the Blue Book app installed with mesh_store_read granted, and is the " +
       CORPUS + " corpus present?)"
     );
@@ -30,232 +31,78 @@ async function main() {
   $("source").textContent = "Source: " + CORPUS;
 
   renderHotspots(findings);
-
-  $("search").addEventListener("click", () => doSearch($("q").value.trim()));
-  $("q").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") doSearch($("q").value.trim());
+  searchBox($("search-host"), bridge, {
+    placeholder: "e.g. Kirtland, Wright-Patterson, Los Alamos",
+    ariaLabel: "Search installations",
+    nodeType: "installation",
+    onPick: loadEntity,
   });
 }
 
-// Each `sighting_hotspots` finding is one installation entity + a
-// sighting_count in `attributes.value`. Rank by count; click → drill in.
+// Each `sighting_hotspots` finding is one installation + a sighting_count in
+// `attributes.value`. Rank by count; click → drill in.
 function renderHotspots(findings) {
   const rows = (findings || [])
-    .map((f) => ({
-      ent: (f.entities && f.entities[0]) || null,
-      count: Number((f.attributes && f.attributes.value) || 0),
-    }))
+    .map((f) => ({ ent: (f.entities && f.entities[0]) || null, count: Number((f.attributes && f.attributes.value) || 0) }))
     .filter((r) => r.ent)
-    .sort((a, b) => b.count - a.count);
-  const max = rows.reduce((m, r) => Math.max(m, r.count), 1);
-  const box = $("hotspots");
-  box.replaceChildren();
-  if (rows.length === 0) {
-    const m = document.createElement("div");
-    m.className = "meta";
-    m.textContent = "no hotspot findings in this corpus.";
-    box.appendChild(m);
-    return;
-  }
-  for (const r of rows) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "hot";
-    const left = document.createElement("div");
-    const nm = document.createElement("div");
-    nm.textContent = r.ent.canonical_name;
-    const bar = document.createElement("div");
-    bar.className = "bar";
-    bar.style.width = Math.max(8, Math.round((r.count / max) * 100)) + "%";
-    left.appendChild(nm);
-    left.appendChild(bar);
-    const cnt = document.createElement("div");
-    cnt.className = "cnt";
-    cnt.textContent = r.count + " unexplained";
-    btn.appendChild(left);
-    btn.appendChild(cnt);
-    btn.addEventListener("click", () => loadEntity(r.ent.id));
-    box.appendChild(btn);
-  }
+    .sort((a, b) => b.count - a.count)
+    .map((r) => ({ id: r.ent.id, name: r.ent.canonical_name, value: r.count }));
+  barList($("hotspots"), rows, { onPick: loadEntity, countSuffix: " unexplained", empty: "no hotspot findings in this corpus." });
 }
 
-async function doSearch(q) {
-  $("search-msg").textContent = "";
-  $("matches").replaceChildren();
-  if (!q) return;
-  let hits;
-  try {
-    hits = await window.meshApp.searchEntities(CORPUS, q, "installation", 25);
-  } catch (e) {
-    $("search-msg").textContent = "search failed: " + (e && e.message ? e.message : e);
-    return;
-  }
-  if (!hits || hits.length === 0) {
-    $("search-msg").textContent = "no installation matching '" + q + "'";
-    return;
-  }
-  const box = $("matches");
-  for (const h of hits) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "match";
-    b.textContent = h.canonical_name + "  ·  " + h.degree + " links";
-    b.addEventListener("click", () => loadEntity(h.id));
-    box.appendChild(b);
-  }
-}
-
-// Drill into one entity: its attributes, folded OCR aliases, and every
-// incident edge — each resolved to its other endpoint (clickable, so you
-// can walk the graph) and quoting its cited card excerpt + chunk.
+// Drill into one entity: attributes, folded OCR aliases, the primary card, and
+// every incident cited edge (each resolved to its other endpoint + quoting its
+// card). The detail shape is Blue-Book-specific; the edges are SDK `citedEdge`s.
 async function loadEntity(id) {
   let node;
   try {
-    node = await window.meshApp.node(CORPUS, id);
+    node = await bridge.node(id);
   } catch (e) {
-    $("search-msg").textContent = "load failed: " + (e && e.message ? e.message : e);
+    const m = $("search-msg");
+    if (m) m.textContent = "load failed: " + emsg(e);
     return;
   }
+
   $("detail").hidden = false;
   $("d-type").textContent = node.entity_type;
   $("d-name").textContent = node.canonical_name;
-  const attrs = Object.entries(node.attributes || {})
-    .map(([k, v]) => k + ": " + v)
-    .join("  ·  ");
-  const aliasNote =
-    node.aliases && node.aliases.length
-      ? node.aliases.length + " folded OCR variant(s)"
-      : "";
+  const attrs = Object.entries(node.attributes || {}).map(([k, v]) => k + ": " + v).join("  ·  ");
+  const aliasNote = node.aliases && node.aliases.length ? node.aliases.length + " folded OCR variant(s)" : "";
   $("d-meta").textContent = [attrs, aliasNote].filter(Boolean).join("  ·  ");
   const n = node.edges ? node.edges.length : 0;
   $("d-edgecount").textContent = n + (n === 1 ? " cited edge" : " cited edges");
 
-  // For a case/sighting, surface its primary Form-10073 card up front — the
-  // narrative (object, witness, conclusion), not just a link to expand.
   renderPrimaryCard(node);
 
   const box = $("edges");
   box.replaceChildren();
-  if (n === 0) {
-    const m = document.createElement("div");
-    m.className = "meta";
-    m.textContent = "no edges recorded for this entity.";
-    box.appendChild(m);
-  }
+  if (n === 0) box.appendChild(el("div", { class: "meta", text: "no edges recorded for this entity." }));
   for (const e of node.edges || []) {
-    const d = document.createElement("div");
-    d.className = "edge";
-
-    const head = document.createElement("div");
-    head.className = "edge-head";
-    const rel = document.createElement("span");
-    rel.className = "rel";
-    rel.textContent = e.relationship_type;
-    head.appendChild(rel);
-    head.appendChild(document.createTextNode(" " + (e.direction === "out" ? "→" : "←") + " "));
-    const other = document.createElement("button");
-    other.type = "button";
-    other.className = "link";
-    other.textContent = e.other_name + (e.other_type ? " (" + e.other_type + ")" : "");
-    other.addEventListener("click", () => loadEntity(e.other_id));
-    head.appendChild(other);
-    d.appendChild(head);
-
-    if (e.excerpt) {
-      const ex = document.createElement("div");
-      ex.className = "excerpt";
-      ex.textContent = "“" + e.excerpt + "”";
-      d.appendChild(ex);
-    }
-    // The edge `excerpt` is only the fragment the extractor tagged; the WHOLE
-    // OCR'd card sits behind `source_chunk`. Let the reader expand it — the
-    // actual Form-10073 narrative (object, witness, conclusion), warts and all.
-    const prov = document.createElement("div");
-    prov.className = "prov";
-    if (e.source_chunk) {
-      const toggle = document.createElement("button");
-      toggle.type = "button";
-      toggle.className = "link";
-      const label = (open) =>
-        (open ? "▾ hide" : "▸ read") + " the full card (chunk " + e.source_chunk + ")";
-      toggle.textContent = label(false);
-      const full = document.createElement("pre");
-      full.className = "card-full";
-      full.hidden = true;
-      let loaded = false;
-      toggle.addEventListener("click", async () => {
-        if (!loaded) {
-          toggle.textContent = "loading card " + e.source_chunk + "…";
-          try {
-            const ch = await window.meshApp.readChunk(CORPUS, String(e.source_chunk));
-            full.textContent = ch && ch.content ? ch.content : "(card is empty)";
-          } catch (err) {
-            full.textContent = "could not load card: " + (err && err.message ? err.message : err);
-          }
-          loaded = true;
-          full.hidden = false;
-        } else {
-          full.hidden = !full.hidden;
-        }
-        toggle.textContent = label(!full.hidden);
-      });
-      prov.appendChild(toggle);
-      if (typeof e.confidence === "number") {
-        prov.appendChild(document.createTextNode(" · confidence " + e.confidence.toFixed(2)));
-      }
-      d.appendChild(prov);
-      d.appendChild(full);
-    } else {
-      prov.textContent =
-        "no source chunk" +
-        (typeof e.confidence === "number" ? " · confidence " + e.confidence.toFixed(2) : "");
-      d.appendChild(prov);
-    }
-
-    box.appendChild(d);
+    box.appendChild(citedEdge(bridge, e, { onOpen: loadEntity, citationLabel: "the full card" }));
   }
   $("detail").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// Auto-surface the primary source card for a narrative entity (case /
-// sighting): the chunk the most of its edges cite is the Form-10073 the
-// case was extracted from. Installations (e.g. the HQ) span many cards, so
-// they get no primary — their per-edge expanders are the right affordance.
+// Auto-surface the primary source card for a narrative entity (case/sighting):
+// the chunk most of its edges cite. Installations span many cards → no primary.
 function renderPrimaryCard(node) {
   const pc = $("primary-card");
   pc.replaceChildren();
   const narrative = node.entity_type === "case" || node.entity_type === "sighting";
-  if (!narrative || !node.edges || node.edges.length === 0) return;
+  if (!narrative || !node.edges || !node.edges.length) return;
   const counts = {};
-  for (const e of node.edges) {
-    if (e.source_chunk) counts[e.source_chunk] = (counts[e.source_chunk] || 0) + 1;
-  }
+  for (const e of node.edges) if (e.source_chunk) counts[e.source_chunk] = (counts[e.source_chunk] || 0) + 1;
   const primary = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
   if (!primary) return;
 
-  const lbl = document.createElement("div");
-  lbl.className = "label";
-  lbl.style.marginTop = "10px";
-  lbl.appendChild(document.createTextNode("The Air Force's record card "));
-  const chip = document.createElement("span");
-  chip.className = "chip";
-  chip.textContent = "Form-10073 · chunk " + primary;
-  lbl.appendChild(chip);
-
-  const body = document.createElement("pre");
-  body.className = "card-full";
-  body.textContent = "loading card " + primary + "…";
-
-  pc.appendChild(lbl);
+  pc.appendChild(el("div", { class: "label", style: { marginTop: "10px" } },
+    "The Air Force's record card ",
+    el("span", { class: "chip", text: "Form-10073 · chunk " + primary })));
+  const body = el("pre", { class: "card-full", text: "loading card " + primary + "…" });
   pc.appendChild(body);
-  window.meshApp
-    .readChunk(CORPUS, String(primary))
-    .then((ch) => {
-      body.textContent = ch && ch.content ? ch.content : "(card is empty)";
-    })
-    .catch((err) => {
-      body.textContent = "could not load card: " + (err && err.message ? err.message : err);
-    });
+  bridge.readChunk(primary)
+    .then((ch) => { body.textContent = ch && ch.content ? ch.content : "(card is empty)"; })
+    .catch((err) => { body.textContent = "could not load card: " + emsg(err); });
 }
 
 function fail(msg) {

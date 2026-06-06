@@ -1,0 +1,10 @@
+{
+  "id": "enron",
+  "name": "Enron Task Force",
+  "version": "0.2.0",
+  "blurb": "A sandboxed explorer over thousands of Enron emails, resolved into one identity graph. Cross-inbox aliases collapse to canonical people and companies; counterparty centrality is graph degree, the collapse is a timeline, and every relationship cites its source email — no inference.",
+  "corpus": "enron-sample-multi-wide",
+  "entry": "index.html",
+  "grants": { "mesh_store_read": true, "mesh_store_write": false, "inference_access": false, "knowledge_access": false },
+  "trust": "unsigned"
+}

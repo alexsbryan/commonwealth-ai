@@ -1,0 +1,10 @@
+{
+  "id": "lvt",
+  "name": "SF Land-Value Tax",
+  "version": "0.1.0",
+  "blurb": "A sandboxed explorer over the SF assessor roll. Every figure is computed by the host and cited — no model originates a number.",
+  "corpus": "sf-assessor-roll",
+  "entry": "index.html",
+  "grants": { "mesh_store_read": true, "mesh_store_write": false, "inference_access": false, "knowledge_access": false },
+  "trust": "unsigned"
+}

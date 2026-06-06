@@ -1,0 +1,10 @@
+{
+  "id": "uap",
+  "name": "Project Blue Book",
+  "version": "0.1.0",
+  "blurb": "A sandboxed explorer over the Air Force's UFO archive. The hotspot ranking and every edge are a deterministic fold over the investigation graph — each claim quotes its Form-10073 card.",
+  "corpus": "uap-blue-book",
+  "entry": "index.html",
+  "grants": { "mesh_store_read": true, "mesh_store_write": false, "inference_access": false, "knowledge_access": false },
+  "trust": "unsigned"
+}

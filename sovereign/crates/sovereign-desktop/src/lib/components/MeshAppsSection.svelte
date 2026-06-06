@@ -9,7 +9,9 @@
     recordMeshAppInstall,
     openMeshApp,
     uninstallMeshApp,
+    loadCatalog,
     type MeshAppInstall,
+    type MeshAppManifest,
     type MeshAppPermissions,
   } from "../api";
 
@@ -23,51 +25,31 @@
     requestLabel: string;
   };
 
-  const READ_ONLY: MeshAppPermissions = {
-    mesh_store_read: true,
-    mesh_store_write: false,
-    inference_access: false,
-    knowledge_access: false,
+  // The catalog is discovered from each bundle's manifest (build-time
+  // `meshapp/catalog.json`), not hard-coded — adding an app is dropping a
+  // bundle + a meshapp.json, no edit here.
+  let catalog = $state<CatalogApp[]>([]);
+
+  const PERM_LABELS: Record<string, string> = {
+    mesh_store_read: "read corpus atoms",
+    mesh_store_write: "write to the mesh store",
+    inference_access: "run inference",
+    knowledge_access: "read your knowledge base",
   };
 
-  const CATALOG: CatalogApp[] = [
-    {
-      id: "lvt",
-      name: "SF Land-Value Tax",
-      blurb:
-        "A sandboxed explorer over the SF assessor roll. Every figure is computed " +
-        "by the host and cited — no model originates a number.",
-      corpus: "sf-assessor-roll",
-      grant: READ_ONLY,
-      grantLabel: "read corpus atoms",
-      requestLabel: "read corpus atoms (mesh_store_read)",
-    },
-    {
-      id: "uap",
-      name: "Project Blue Book",
-      blurb:
-        "A sandboxed explorer over the Air Force's UFO archive. The hotspot " +
-        "ranking and every edge are a deterministic fold over the investigation " +
-        "graph — each claim quotes its Form-10073 card.",
-      corpus: "uap-blue-book",
-      grant: READ_ONLY,
-      grantLabel: "read corpus atoms",
-      requestLabel: "read corpus atoms (mesh_store_read)",
-    },
-    {
-      id: "enron",
-      name: "Enron Task Force",
-      blurb:
-        "A sandboxed explorer over ~4,450 Enron emails, resolved into one " +
-        "identity graph. Cross-inbox aliases collapse to canonical people and " +
-        "companies; counterparty centrality is graph degree, and every " +
-        "relationship cites its source email — no inference.",
-      corpus: "enron-sample-multi-wide",
-      grant: READ_ONLY,
-      grantLabel: "read corpus atoms",
-      requestLabel: "read corpus atoms (mesh_store_read)",
-    },
-  ];
+  function grantedKeys(g: MeshAppPermissions): string[] {
+    return Object.entries(g).filter(([, v]) => v).map(([k]) => k);
+  }
+
+  /** Project a manifest into the rendered catalog shape, deriving the consent
+   * labels from its granted permission set. */
+  function toCatalogApp(m: MeshAppManifest): CatalogApp {
+    const keys = grantedKeys(m.grants);
+    const labels = keys.map((k) => PERM_LABELS[k] ?? k);
+    const grantLabel = labels.join(", ") || "no permissions";
+    const requestLabel = keys.length ? `${labels.join(", ")} (${keys.join(", ")})` : "no permissions";
+    return { id: m.id, name: m.name, blurb: m.blurb, corpus: m.corpus, grant: m.grants, grantLabel, requestLabel };
+  }
 
   let installs = $state<MeshAppInstall[]>([]);
   let busy = $state(""); // app id currently busy, or "" when idle
@@ -84,7 +66,19 @@
       error = String(e);
     }
   }
-  onMount(refresh);
+
+  async function refreshCatalog() {
+    try {
+      catalog = (await loadCatalog()).map(toCatalogApp);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  onMount(() => {
+    refresh();
+    refreshCatalog();
+  });
 
   async function installAndOpen(app: CatalogApp) {
     busy = app.id;
@@ -128,7 +122,7 @@
 
 <section class="mesh-apps">
   <h3 class="mesh-apps-h">Mesh apps</h3>
-  {#each CATALOG as app (app.id)}
+  {#each catalog as app (app.id)}
     {@const inst = installOf(app.id)}
     <div class="app-card">
       <div class="app-name">{app.name}</div>
