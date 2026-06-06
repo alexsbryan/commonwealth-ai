@@ -970,17 +970,33 @@ host-set webview LABEL (unspoofable from JS) and checked fail-closed by
 `src/commands/meshapp.rs` exposes the `meshapp_*` commands: deterministic,
 read-only `read_corpus` / `parcel_analytics` (reusing corpus-engine's
 `compute_aggregates`, so no model originates a figure on the desktop
-surface either), host-only install management, and `meshapp_open`
-(`WebviewWindowBuilder` + the `meshapp_shim.js` `window.meshApp` shim over
-`__TAURI_INTERNALS__` + a per-window strict CSP set in
-`on_web_resource_request`). The SF-LVT explorer (`public/meshapp/lvt/`) is
-the reference app. **Isolation caveat:** Tauri v2 does not gate app
+surface either); the graph-explorer family `graph` / `node` / `findings` /
+`search_entities` / `reconciliation` / `read_chunk`; host-only install
+management; and `meshapp_open` (`WebviewWindowBuilder` + the
+`meshapp_shim.js` `window.meshApp` shim over `__TAURI_INTERNALS__` + a
+per-window strict CSP set in `on_web_resource_request`). The graph ops are
+**backend-agnostic**: `load_investigation` dispatches on what the index
+carries — a deterministic `investigation/` graph (UAP) or an `atlas/`
+enrichment (Enron), projecting both into one DTO contract
+(`GraphNodeDto` / `EdgeDto` / `NodeDetailDto`). The atlas adapter
+(`load_atlas_as_investigation`) maps Entity atoms → nodes and
+Relation/Event atoms → cited edges, resolving each `sec_NNNNN` evidence id
+to a numeric `chunks.lance` row via `chapters.json` so `read_chunk`
+dereferences the source document unchanged; `reconciliation` surfaces the
+cross-origin merge log (canonical + folded surface forms + the signal that
+fired) as the identity glassbox. Three first-party explorers ship on this
+surface: SF-LVT (`public/meshapp/lvt/`, deterministic parcel compute), UAP
+Blue Book (`public/meshapp/uap/`, investigation graph), and Enron
+(`public/meshapp/enron/`, atlas identity + counterparty graph). Adding one
+is a bundle + a `MeshAppsSection.svelte` CATALOG entry (+ an atlas reader
+when the backend differs). **Isolation caveat:** Tauri v2 does not gate app
 commands per-window (tauri#9227) — a webview with IPC can invoke any
 registered command — so `capabilities/meshapp.json` only narrows the
 core/plugin surface; true isolation for UNTRUSTED third-party apps needs a
 no-IPC bridge (custom protocol / postMessage), a deferred platform
-milestone. The bundle is verified headlessly by
-`tests/e2e/specs/meshapp-lvt.spec.ts` (Playwright, a11y locators).
+milestone. The bundles are verified headlessly by
+`tests/e2e/specs/meshapp-{lvt,uap,enron}.spec.ts` (Playwright, a11y
+locators), each mocking `window.meshApp` + one real-shim→IPC wiring test.
 
 Control routes (loopback-only, on the internal port :9742):
 `GET /internal/contribution/status`,

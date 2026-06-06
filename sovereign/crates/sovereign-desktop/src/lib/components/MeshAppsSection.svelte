@@ -54,6 +54,19 @@
       grantLabel: "read corpus atoms",
       requestLabel: "read corpus atoms (mesh_store_read)",
     },
+    {
+      id: "enron",
+      name: "Enron Task Force",
+      blurb:
+        "A sandboxed explorer over ~4,450 Enron emails, resolved into one " +
+        "identity graph. Cross-inbox aliases collapse to canonical people and " +
+        "companies; counterparty centrality is graph degree, and every " +
+        "relationship cites its source email — no inference.",
+      corpus: "enron-sample-multi-wide",
+      grant: READ_ONLY,
+      grantLabel: "read corpus atoms",
+      requestLabel: "read corpus atoms (mesh_store_read)",
+    },
   ];
 
   let installs = $state<MeshAppInstall[]>([]);
