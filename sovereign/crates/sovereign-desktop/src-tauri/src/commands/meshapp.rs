@@ -550,6 +550,78 @@ pub async fn meshapp_uninstall(
     Ok(())
 }
 
+/// `meshapp_stage_corpus_recipe(corpusId, recipeToml)` — host-only. A mesh app
+/// declares a `corpus` dependency and ships that corpus's recipe (with its
+/// `[prebuilt]` HuggingFace-snapshot block) in its bundle. This writes the
+/// recipe to the local-override recipes dir (`~/.sovereign/recipes/<id>.toml`),
+/// which the daemon checks FIRST when resolving a corpus to install — so "Get
+/// data" works even though the corpus isn't in the shipped registry. The
+/// prebuilt fast-path then restores the index from HF in seconds. Idempotent;
+/// the `corpus_id` is slug-validated to keep the write inside the recipes dir.
+#[tauri::command]
+pub async fn meshapp_stage_corpus_recipe(
+    webview: WebviewWindow,
+    corpus_id: String,
+    recipe_toml: String,
+) -> Result<(), String> {
+    if app_id_from_label(webview.label()).is_some() {
+        return Err("staging a corpus recipe is host-only".into());
+    }
+    if corpus_id.is_empty()
+        || !corpus_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(format!("invalid corpus id `{corpus_id}`"));
+    }
+    let dir = dirs::home_dir()
+        .ok_or_else(|| "cannot resolve home directory".to_string())?
+        .join(".sovereign")
+        .join("recipes");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
+    let path = dir.join(format!("{corpus_id}.toml"));
+    std::fs::write(&path, recipe_toml).map_err(|e| format!("write {}: {e}", path.display()))?;
+    Ok(())
+}
+
+/// Read the manifests of apps installed via `sovereign meshapp install`
+/// (under `~/.sovereign/meshapps/<id>/meshapp.json`). Skips the shared `_sdk/`
+/// and the `artifacts/` cache. Pure (takes the dir) so it's unit-testable.
+fn scan_installed_apps(dir: &std::path::Path) -> Vec<serde_json::Value> {
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return out;
+    };
+    for e in entries.flatten() {
+        if !e.path().is_dir() {
+            continue;
+        }
+        let name = e.file_name().to_string_lossy().to_string();
+        if name.starts_with('_') || name == "artifacts" {
+            continue;
+        }
+        if let Ok(bytes) = std::fs::read(e.path().join("meshapp.json")) {
+            if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                out.push(v);
+            }
+        }
+    }
+    out
+}
+
+/// `meshapp_installed_apps()` — the manifests of registry-installed apps, for
+/// the host to merge into its catalog alongside the bundled first-party apps.
+/// (Opening an installed app in a sandboxed window — serving its bundle from
+/// the install dir — is the remaining integration; today installed apps run
+/// via `sovereign meshapp dev <id>`. See docs/MESHAPP_AUTHORING.md.)
+#[tauri::command]
+pub async fn meshapp_installed_apps() -> Result<Vec<serde_json::Value>, String> {
+    let Some(dir) = dirs::home_dir().map(|h| h.join(".sovereign").join("meshapps")) else {
+        return Ok(Vec::new());
+    };
+    Ok(scan_installed_apps(&dir))
+}
+
 // ─── Window creation + sandbox ───────────────────────────────────────
 
 /// The `window.meshApp` shim injected into every mesh-app window before
@@ -654,5 +726,25 @@ fn fmt_int(v: f64) -> String {
         format!("-{out}")
     } else {
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scan_installed_apps_reads_manifests_skips_sdk_and_artifacts() {
+        let tmp = tempfile::tempdir().unwrap();
+        let d = tmp.path();
+        std::fs::create_dir_all(d.join("enron")).unwrap();
+        std::fs::write(d.join("enron").join("meshapp.json"), r#"{"id":"enron","name":"Enron"}"#).unwrap();
+        std::fs::create_dir_all(d.join("_sdk")).unwrap(); // shared SDK — skipped
+        std::fs::create_dir_all(d.join("artifacts")).unwrap(); // publish cache — skipped
+        std::fs::create_dir_all(d.join("nomanifest")).unwrap(); // no meshapp.json — skipped
+
+        let apps = scan_installed_apps(d);
+        assert_eq!(apps.len(), 1);
+        assert_eq!(apps[0]["id"], "enron");
     }
 }

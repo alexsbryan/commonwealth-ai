@@ -31,6 +31,13 @@ pub fn sovereign_indexes() -> PathBuf {
     sovereign_root().join("indexes")
 }
 
+/// Where installed third-party mesh apps live (`~/.sovereign/meshapps/<id>/`),
+/// alongside a shared `_sdk/` and the local `registry.toml` of published apps.
+/// `sovereign meshapp install` unpacks here; `meshapp dev <id>` runs from here.
+pub fn sovereign_meshapps() -> PathBuf {
+    sovereign_root().join("meshapps")
+}
+
 /// Where the embedded Commonwealth mesh persists its `mesh.json` —
 /// shared with `sovereign-desktop` so a mesh created from either
 /// surface is picked up by the other. Intentionally uses

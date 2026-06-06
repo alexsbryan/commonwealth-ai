@@ -1,0 +1,23 @@
+# Curated mesh-app registry — the reviewed list of installable mesh apps.
+#
+# This file is the TRUST ANCHOR. Being listed here (reviewed via a PR) is what
+# makes an app "curated"; `sovereign meshapp install <id>` resolves entries here
+# and verifies the artifact's sha256 before unpacking. Until the no-IPC bridge
+# milestone ships, an installed bundle runs in a webview with IPC access — so
+# curation (this list) IS the security boundary. Cryptographic signing
+# (ed25519) is the next step; today the gate is sha256 integrity + review.
+#
+# Add an entry by publishing your bundle and opening a PR with the printed line:
+#
+#   sovereign meshapp publish <id>        # packs the tar.zst, prints the entry
+#
+# [[apps]]
+# id = "my-explorer"
+# name = "My Explorer"
+# version = "0.1.0"
+# corpus = "my-corpus"                                  # its data dependency
+# sha256 = "<sha256 of the published tar.zst>"          # integrity
+# url = "https://huggingface.co/.../my-explorer-0.1.0.tar.zst"
+# trust = "curated"
+
+apps = []

@@ -1009,8 +1009,23 @@ manifest (+ an atlas reader only when the backend differs) — no host code edit
 **Local dev loop:** `sovereign meshapp dev <id>` (sovereign-cli-llm) serves a
 bundle + its `_sdk/` and injects a `window.meshApp` that proxies the explorer
 ops over HTTP to the same `sovereign-meshapp` functions, reading a local corpus
-index — so a bundle is iterable against real data without the desktop.
-**Isolation caveat:** Tauri v2 does not gate app
+index — so a bundle is iterable against real data without the desktop;
+`sovereign meshapp new <id> --corpus <c>` scaffolds one. **Corpus as a managed
+dependency:** a manifest's `corpus_data` (size + the recipe the bundle ships,
+carrying a `[prebuilt]` HF block) makes the corpus first-class — `MeshAppsSection`
+shows its presence and, when missing, a one-click **"Get data (N GB) & Open"** that
+stages the recipe (`meshapp_stage_corpus_recipe` → `~/.sovereign/recipes/`) and runs
+the existing prebuilt install with a progress bar. **Curated registry:** `sovereign
+meshapp publish/install/list` (sovereign-cli-llm `meshapp_registry.rs`) distribute an
+app as a self-contained `tar.zst` (bundle + a copy of `_sdk/`); install verifies the
+artifact's sha256 (refuses tampering) and unpacks under `~/.sovereign/meshapps/<id>/`.
+TRUST = integrity (sha256) + curation (membership in the reviewed
+`sovereign-recipes/meshapp-registry.toml`); `meshapp dev` runs installed apps. The host
+enumerates them via `meshapp_installed_apps()`; in-window opening of an installed app
+(serving it from the install dir via a `meshapp://` scheme) is the remaining
+integration. End-to-end runbooks: `docs/MESHAPP_CONSUMER.md` (replicate a demo) and
+`docs/MESHAPP_AUTHORING.md` (recipe → corpus → app → publish). **Isolation caveat:**
+Tauri v2 does not gate app
 commands per-window (tauri#9227) — a webview with IPC can invoke any
 registered command — so `capabilities/meshapp.json` only narrows the
 core/plugin surface; true isolation for UNTRUSTED third-party apps needs a

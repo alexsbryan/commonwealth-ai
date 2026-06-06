@@ -24,6 +24,7 @@ mod knowledge_gym_cmd;
 mod mcp_cmd;
 mod mesh_cmd;
 mod meshapp_cmd;
+mod meshapp_registry;
 mod meta_atlas_cmd;
 mod newsworthy_cmd;
 mod pipeline_cmd;
