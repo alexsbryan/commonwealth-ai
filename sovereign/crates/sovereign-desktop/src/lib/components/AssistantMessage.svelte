@@ -9,7 +9,8 @@
   } from "@sovereign/chat-ui";
   import { renderMarkdown } from "../utils/markdown";
   import { insightStore } from "../stores/insights.svelte";
-  import { clipInsight } from "../api";
+  import { clipInsight, exportAnswer } from "../api";
+  import { save } from "@tauri-apps/plugin-dialog";
   import { readingSession } from "../stores/readingSession.svelte";
   import type {
     InsightSource,
@@ -286,6 +287,30 @@
       }, 1500);
     } catch (err) {
       console.error("Failed to copy message:", err);
+    }
+  }
+
+  // Provenance-preserving export — the answer + its source ledger out to a
+  // file, so the citations survive the handoff into the user's real work.
+  let exportLabel = $state("Export");
+  async function handleExport() {
+    try {
+      const path = await save({
+        defaultPath: "sovereign-answer.md",
+        filters: [
+          { name: "Markdown", extensions: ["md"] },
+          { name: "PDF", extensions: ["pdf"] },
+          { name: "Word document", extensions: ["docx"] },
+        ],
+      });
+      if (!path) return; // user cancelled the save dialog
+      await exportAnswer(conversationId, messageId, path);
+      exportLabel = "Exported";
+      setTimeout(() => {
+        exportLabel = "Export";
+      }, 1500);
+    } catch (err) {
+      console.error("Failed to export answer:", err);
     }
   }
 
@@ -570,6 +595,14 @@
         title="Copy this answer to the clipboard"
       >
         {copyLabel}
+      </button>
+      <button
+        type="button"
+        class="msg-action-btn"
+        onclick={handleExport}
+        title="Export this answer (Markdown, PDF, or Word) with its source ledger"
+      >
+        {exportLabel}
       </button>
     </div>
   {/if}

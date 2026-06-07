@@ -9,6 +9,7 @@
     "shell:default",
     "dialog:default",
     "dialog:allow-open",
+    "dialog:allow-save",
     "deep-link:default",
     "updater:default",
     {

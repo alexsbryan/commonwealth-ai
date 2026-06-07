@@ -51,6 +51,10 @@ dirs = "6"
 # install. Matches corpus-engine + sovereign-tools workspace pin —
 # deflate-only mirrors the shipping zip variant Anthropic produces.
 zip = { version = "2", default-features = false, features = ["deflate"] }
+# Provenance-preserving PDF export (`commands::export_answer`). Already in
+# the lockfile transitively (pdf-extract) — promoted to a direct dep so the
+# narrow answer+ledger PDF renderer can use it; no new crate, no system lib.
+lopdf = "0.34"
 # Used by `recipe_commands::corpus_import_recipe` to record a
 # tamper-evident sha256 alongside each imported recipe in the
 # user's local registry.
