@@ -717,3 +717,642 @@ pub async fn toggle_skill_impl(
 
     state::rebuild_runtime(state).await
 }
+
+/// Render an assistant answer + its provenance as a self-contained
+/// Markdown document — the "provenance survives the handoff" guarantee.
+/// Built entirely from the persisted message (content + metadata), so no
+/// re-fetch and no schema change: the metadata already carries
+/// `provenance` (model + per-corpus source summary) and `retrieved_chunks`
+/// (the actual grounding passages). Pure + unit-tested so the **source
+/// ledger** can't silently regress to dead text.
+fn render_answer_markdown(content: &str, metadata: Option<&serde_json::Value>) -> String {
+    let mut md = String::from("# Sovereign answer\n\n");
+
+    // Provenance meta line: who answered + which corpora grounded it.
+    let mut meta_bits: Vec<String> = Vec::new();
+    if let Some(backend) = metadata
+        .and_then(|m| m.pointer("/provenance/inference_backend"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+    {
+        meta_bits.push(format!("answered by {backend}"));
+    }
+    if let Some(sources) = metadata
+        .and_then(|m| m.pointer("/provenance/sources"))
+        .and_then(|v| v.as_array())
+    {
+        let names: Vec<String> = sources
+            .iter()
+            .filter(|s| s.get("count").and_then(|v| v.as_u64()).unwrap_or(0) > 0)
+            .filter_map(|s| {
+                s.get("display_name")
+                    .and_then(|v| v.as_str())
+                    .filter(|x| !x.is_empty())
+                    .or_else(|| s.get("origin").and_then(|v| v.as_str()))
+                    .map(str::to_string)
+            })
+            .collect();
+        if !names.is_empty() {
+            meta_bits.push(format!("searched {}", names.join(", ")));
+        }
+    }
+    if !meta_bits.is_empty() {
+        md.push_str(&format!("*{}*\n\n", meta_bits.join(" · ")));
+    }
+
+    md.push_str(content.trim());
+    md.push_str("\n\n");
+
+    // The source ledger — every grounding passage, traceable to its corpus.
+    let chunks = metadata
+        .and_then(|m| m.get("retrieved_chunks"))
+        .and_then(|v| v.as_array())
+        .filter(|c| !c.is_empty());
+    if let Some(chunks) = chunks {
+        md.push_str(
+            "---\n\n## Sources\n\nThis answer was grounded in the following passages \
+             from your indexed corpora:\n\n",
+        );
+        for (i, c) in chunks.iter().enumerate() {
+            let title = c
+                .get("title")
+                .and_then(|v| v.as_str())
+                .filter(|x| !x.is_empty())
+                .unwrap_or("(untitled passage)");
+            let corpus = c.get("corpus_id").and_then(|v| v.as_str()).unwrap_or("");
+            md.push_str(&format!("{}. **{}** — `{}`\n", i + 1, title, corpus));
+            if let Some(snippet) = c
+                .get("snippet")
+                .and_then(|v| v.as_str())
+                .filter(|x| !x.is_empty())
+            {
+                for line in snippet.lines() {
+                    md.push_str(&format!("   > {line}\n"));
+                }
+            }
+            if let Some(url) = c
+                .get("url")
+                .and_then(|v| v.as_str())
+                .filter(|x| !x.is_empty())
+            {
+                md.push_str(&format!("   <{url}>\n"));
+            }
+            md.push('\n');
+        }
+    } else {
+        md.push_str(
+            "---\n\n*No corpus passages were cited for this answer — it came from the \
+             model's own knowledge or a non-retrieval path.*\n\n",
+        );
+    }
+
+    md.push_str("---\n*Exported from Sovereign — provenance preserved.*\n");
+    md
+}
+
+/// Structured view of an answer + its provenance — the shared intermediate
+/// the docx and PDF renderers walk, so neither re-parses the metadata. (The
+/// Markdown renderer above predates this and extracts inline; left as-is to
+/// avoid churning a tested path.)
+struct SourceEntry {
+    title: String,
+    corpus_id: String,
+    snippet: Option<String>,
+    url: Option<String>,
+}
+
+struct AnswerDoc {
+    answered_by: Option<String>,
+    corpora: Vec<String>,
+    body: String,
+    sources: Vec<SourceEntry>,
+}
+
+impl AnswerDoc {
+    fn from_message(content: &str, metadata: Option<&serde_json::Value>) -> Self {
+        let answered_by = metadata
+            .and_then(|m| m.pointer("/provenance/inference_backend"))
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+        let corpora = metadata
+            .and_then(|m| m.pointer("/provenance/sources"))
+            .and_then(|v| v.as_array())
+            .map(|srcs| {
+                srcs.iter()
+                    .filter(|s| s.get("count").and_then(|v| v.as_u64()).unwrap_or(0) > 0)
+                    .filter_map(|s| {
+                        s.get("display_name")
+                            .and_then(|v| v.as_str())
+                            .filter(|x| !x.is_empty())
+                            .or_else(|| s.get("origin").and_then(|v| v.as_str()))
+                            .map(str::to_string)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let sources = metadata
+            .and_then(|m| m.get("retrieved_chunks"))
+            .and_then(|v| v.as_array())
+            .map(|chunks| {
+                chunks
+                    .iter()
+                    .map(|c| SourceEntry {
+                        title: c
+                            .get("title")
+                            .and_then(|v| v.as_str())
+                            .filter(|x| !x.is_empty())
+                            .unwrap_or("(untitled passage)")
+                            .to_string(),
+                        corpus_id: c
+                            .get("corpus_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        snippet: c
+                            .get("snippet")
+                            .and_then(|v| v.as_str())
+                            .filter(|x| !x.is_empty())
+                            .map(str::to_string),
+                        url: c
+                            .get("url")
+                            .and_then(|v| v.as_str())
+                            .filter(|x| !x.is_empty())
+                            .map(str::to_string),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        Self {
+            answered_by,
+            corpora,
+            body: content.trim().to_string(),
+            sources,
+        }
+    }
+
+    fn meta_line(&self) -> Option<String> {
+        let mut bits = Vec::new();
+        if let Some(b) = &self.answered_by {
+            bits.push(format!("answered by {b}"));
+        }
+        if !self.corpora.is_empty() {
+            bits.push(format!("searched {}", self.corpora.join(", ")));
+        }
+        (!bits.is_empty()).then(|| bits.join(" \u{00B7} "))
+    }
+}
+
+/// A flat, format-agnostic block sequence both renderers walk.
+enum Block {
+    Title(String),
+    Heading(String),
+    Meta(String),
+    Para(String),
+    SourceTitle(String),
+    Quote(String),
+    Url(String),
+    Footer(String),
+}
+
+fn doc_blocks(doc: &AnswerDoc) -> Vec<Block> {
+    let mut blocks = vec![Block::Title("Sovereign answer".to_string())];
+    if let Some(meta) = doc.meta_line() {
+        blocks.push(Block::Meta(meta));
+    }
+    for para in doc.body.split("\n\n") {
+        let cleaned = strip_markdown_light(para);
+        if !cleaned.is_empty() {
+            blocks.push(Block::Para(cleaned));
+        }
+    }
+    if doc.sources.is_empty() {
+        blocks.push(Block::Para(
+            "No corpus passages were cited for this answer — it came from the model's own \
+             knowledge or a non-retrieval path."
+                .to_string(),
+        ));
+    } else {
+        blocks.push(Block::Heading("Sources".to_string()));
+        for (i, s) in doc.sources.iter().enumerate() {
+            blocks.push(Block::SourceTitle(format!(
+                "{}. {} \u{2014} {}",
+                i + 1,
+                s.title,
+                s.corpus_id
+            )));
+            if let Some(snippet) = &s.snippet {
+                blocks.push(Block::Quote(strip_markdown_light(snippet)));
+            }
+            if let Some(url) = &s.url {
+                blocks.push(Block::Url(url.clone()));
+            }
+        }
+    }
+    blocks.push(Block::Footer(
+        "Exported from Sovereign — provenance preserved.".to_string(),
+    ));
+    blocks
+}
+
+/// Light Markdown de-noising so prose reads cleanly in PDF/Word (which don't
+/// interpret Markdown): drops `**`, leading `#`/`>`, and backticks. Not a
+/// parser — just enough to avoid stray markup in the exported document.
+fn strip_markdown_light(s: &str) -> String {
+    let mut lines = Vec::new();
+    for line in s.lines() {
+        let l = line.trim_start();
+        let l = l.trim_start_matches(|c| c == '#' || c == '>').trim_start();
+        let cleaned = l.replace("**", "").replace("__", "").replace('`', "");
+        lines.push(cleaned.trim_end().to_string());
+    }
+    lines.join("\n").trim().to_string()
+}
+
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+/// Greedy word-wrap to a max char count — PDF has no layout engine, so we
+/// wrap ourselves with a conservative per-line character budget.
+fn wrap_text(text: &str, max_chars: usize) -> Vec<String> {
+    let max = max_chars.max(8);
+    let mut out = Vec::new();
+    for src_line in text.lines() {
+        if src_line.trim().is_empty() {
+            continue;
+        }
+        let mut cur = String::new();
+        for word in src_line.split_whitespace() {
+            if cur.is_empty() {
+                cur.push_str(word);
+            } else if cur.chars().count() + 1 + word.chars().count() <= max {
+                cur.push(' ');
+                cur.push_str(word);
+            } else {
+                out.push(std::mem::take(&mut cur));
+                cur.push_str(word);
+            }
+            while cur.chars().count() > max {
+                let head: String = cur.chars().take(max).collect();
+                cur = cur.chars().skip(max).collect();
+                out.push(head);
+            }
+        }
+        if !cur.is_empty() {
+            out.push(cur);
+        }
+    }
+    if out.is_empty() {
+        out.push(String::new());
+    }
+    out
+}
+
+/// Fold the few non-ASCII glyphs we emit (·, dashes, curly quotes) to ASCII
+/// so the PDF's built-in Helvetica renders them; drop other non-ASCII rather
+/// than emit tofu.
+fn pdf_text(s: &str) -> String {
+    s.replace('\u{2026}', "...")
+        .chars()
+        .map(|c| match c {
+            '\u{00B7}' | '\u{2022}' | '\u{2014}' | '\u{2013}' => '-',
+            '\u{201C}' | '\u{201D}' => '"',
+            '\u{2018}' | '\u{2019}' => '\'',
+            c if c.is_ascii() => c,
+            _ => ' ',
+        })
+        .collect()
+}
+
+/// Render the answer + source ledger as a Word (.docx) — hand-rolled minimal
+/// OOXML zipped with the `zip` crate already in the tree (no new dep).
+fn render_answer_docx(doc: &AnswerDoc) -> Result<Vec<u8>, String> {
+    use std::io::Write as _;
+
+    let mut xml_body = String::new();
+    let para = |out: &mut String, text: &str, bold: bool, italic: bool, half_pt: u32| {
+        let mut rpr = String::new();
+        if bold {
+            rpr.push_str("<w:b/>");
+        }
+        if italic {
+            rpr.push_str("<w:i/>");
+        }
+        if half_pt > 0 {
+            rpr.push_str(&format!("<w:sz w:val=\"{half_pt}\"/>"));
+        }
+        let rpr = if rpr.is_empty() {
+            String::new()
+        } else {
+            format!("<w:rPr>{rpr}</w:rPr>")
+        };
+        out.push_str(&format!(
+            "<w:p><w:r>{rpr}<w:t xml:space=\"preserve\">{}</w:t></w:r></w:p>",
+            xml_escape(text)
+        ));
+    };
+
+    for block in doc_blocks(doc) {
+        match block {
+            Block::Title(t) => para(&mut xml_body, &t, true, false, 36),
+            Block::Heading(t) => para(&mut xml_body, &t, true, false, 28),
+            Block::Meta(t) => para(&mut xml_body, &t, false, true, 18),
+            Block::Para(t) => {
+                for line in t.split('\n') {
+                    para(&mut xml_body, line, false, false, 22);
+                }
+            }
+            Block::SourceTitle(t) => para(&mut xml_body, &t, true, false, 22),
+            Block::Quote(t) => {
+                for line in t.split('\n') {
+                    para(&mut xml_body, line, false, true, 20);
+                }
+            }
+            Block::Url(t) => para(&mut xml_body, &t, false, false, 18),
+            Block::Footer(t) => para(&mut xml_body, &t, false, true, 16),
+        }
+    }
+
+    let document_xml = format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\
+         <w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">\
+         <w:body>{xml_body}</w:body></w:document>"
+    );
+    let content_types = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\
+        <Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">\
+        <Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>\
+        <Default Extension=\"xml\" ContentType=\"application/xml\"/>\
+        <Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/>\
+        </Types>";
+    let rels = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\
+        <Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\
+        <Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/>\
+        </Relationships>";
+
+    let mut buf = Vec::new();
+    {
+        let mut zw = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let opts = zip::write::SimpleFileOptions::default();
+        zw.start_file("[Content_Types].xml", opts)
+            .map_err(|e| e.to_string())?;
+        zw.write_all(content_types.as_bytes())
+            .map_err(|e| e.to_string())?;
+        zw.start_file("_rels/.rels", opts).map_err(|e| e.to_string())?;
+        zw.write_all(rels.as_bytes()).map_err(|e| e.to_string())?;
+        zw.start_file("word/document.xml", opts)
+            .map_err(|e| e.to_string())?;
+        zw.write_all(document_xml.as_bytes())
+            .map_err(|e| e.to_string())?;
+        zw.finish().map_err(|e| e.to_string())?;
+    }
+    Ok(buf)
+}
+
+/// Render the answer + source ledger as a PDF via `lopdf` (already in the
+/// tree). Built-in Helvetica (no embedded font), greedy word-wrap, simple
+/// pagination — a narrow exporter, not a typesetting engine.
+fn render_answer_pdf(doc: &AnswerDoc) -> Result<Vec<u8>, String> {
+    use lopdf::content::{Content, Operation};
+    use lopdf::{dictionary, Document, Object, Stream};
+
+    const PAGE_W: f64 = 595.0;
+    const PAGE_H: f64 = 842.0;
+    const MARGIN: f64 = 56.0;
+    const TOP: f64 = PAGE_H - MARGIN;
+
+    struct Line {
+        text: String,
+        bold: bool,
+        size: f64,
+        gap_before: f64,
+    }
+    let push = |lines: &mut Vec<Line>, text: &str, bold: bool, size: f64, gap: f64, indent: &str| {
+        let max_chars = ((PAGE_W - 2.0 * MARGIN) / (size * 0.5)) as usize;
+        for (i, wl) in wrap_text(text, max_chars).into_iter().enumerate() {
+            lines.push(Line {
+                text: pdf_text(&format!("{}{}", if i == 0 { "" } else { indent }, wl)),
+                bold,
+                size,
+                gap_before: if i == 0 { gap } else { 0.0 },
+            });
+        }
+    };
+
+    let mut lines: Vec<Line> = Vec::new();
+    for block in doc_blocks(doc) {
+        match block {
+            Block::Title(t) => push(&mut lines, &t, true, 18.0, 0.0, ""),
+            Block::Heading(t) => push(&mut lines, &t, true, 13.0, 14.0, ""),
+            Block::Meta(t) => push(&mut lines, &t, false, 9.0, 3.0, ""),
+            Block::Para(t) => push(&mut lines, &t, false, 11.0, 9.0, ""),
+            Block::SourceTitle(t) => push(&mut lines, &t, true, 11.0, 9.0, ""),
+            Block::Quote(t) => push(&mut lines, &t, false, 10.0, 3.0, "    "),
+            Block::Url(t) => push(&mut lines, &t, false, 9.0, 1.0, "    "),
+            Block::Footer(t) => push(&mut lines, &t, false, 8.0, 16.0, ""),
+        }
+    }
+
+    // Paginate into pages of (baseline_y, line_index).
+    let mut pages: Vec<Vec<(f64, usize)>> = Vec::new();
+    let mut current: Vec<(f64, usize)> = Vec::new();
+    let mut y = TOP;
+    for (idx, ln) in lines.iter().enumerate() {
+        let line_h = ln.size * 1.35;
+        if y - ln.gap_before - line_h < MARGIN && !current.is_empty() {
+            pages.push(std::mem::take(&mut current));
+            y = TOP;
+        }
+        y -= ln.gap_before;
+        current.push((y, idx));
+        y -= line_h;
+    }
+    if !current.is_empty() {
+        pages.push(current);
+    }
+    if pages.is_empty() {
+        pages.push(Vec::new());
+    }
+
+    let mut pdf = Document::with_version("1.5");
+    let pages_id = pdf.new_object_id();
+    let helv = pdf.add_object(dictionary! {
+        "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
+    });
+    let helv_bold = pdf.add_object(dictionary! {
+        "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica-Bold",
+    });
+    let resources_id = pdf.add_object(dictionary! {
+        "Font" => dictionary! { "F1" => helv, "F2" => helv_bold },
+    });
+
+    let mut kids: Vec<Object> = Vec::new();
+    for page in &pages {
+        let mut ops: Vec<Operation> = Vec::new();
+        for (line_y, idx) in page {
+            let ln = &lines[*idx];
+            if ln.text.is_empty() {
+                continue;
+            }
+            ops.push(Operation::new("BT", vec![]));
+            ops.push(Operation::new(
+                "Tf",
+                vec![
+                    (if ln.bold { "F2" } else { "F1" }).into(),
+                    ln.size.into(),
+                ],
+            ));
+            ops.push(Operation::new("Td", vec![MARGIN.into(), (*line_y).into()]));
+            ops.push(Operation::new(
+                "Tj",
+                vec![Object::string_literal(ln.text.clone())],
+            ));
+            ops.push(Operation::new("ET", vec![]));
+        }
+        let content = Content { operations: ops };
+        let content_id = pdf.add_object(Stream::new(
+            dictionary! {},
+            content.encode().map_err(|e| e.to_string())?,
+        ));
+        let page_id = pdf.add_object(dictionary! {
+            "Type" => "Page", "Parent" => pages_id, "Contents" => content_id,
+        });
+        kids.push(page_id.into());
+    }
+
+    let count = kids.len() as i64;
+    pdf.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages",
+            "Kids" => kids,
+            "Count" => count,
+            "Resources" => resources_id,
+            "MediaBox" => vec![0f64.into(), 0f64.into(), PAGE_W.into(), PAGE_H.into()],
+        }),
+    );
+    let catalog_id = pdf.add_object(dictionary! {
+        "Type" => "Catalog", "Pages" => pages_id,
+    });
+    pdf.trailer.set("Root", catalog_id);
+    pdf.compress();
+
+    let mut bytes = Vec::new();
+    pdf.save_to(&mut bytes).map_err(|e| e.to_string())?;
+    Ok(bytes)
+}
+
+/// Export a single assistant answer to a file, carrying its citations +
+/// source ledger. Format follows the `dest_path` extension chosen in the
+/// frontend save dialog — `.md` (Markdown), `.pdf`, or `.docx` — all built
+/// from the same persisted message metadata, with zero new dependencies.
+#[tauri::command]
+pub async fn export_answer(
+    state: State<'_, Arc<AppState>>,
+    conversation_id: String,
+    message_id: String,
+    dest_path: String,
+) -> Result<(), String> {
+    let guard = require_runtime!(state);
+    let runtime = guard.as_ref().unwrap();
+    let convo = runtime
+        .store
+        .get_conversation(&conversation_id)
+        .await
+        .map_err(|e| e.to_string())?;
+    let msg = convo
+        .messages
+        .iter()
+        .find(|m| m.id == message_id)
+        .ok_or_else(|| format!("message {message_id} not found"))?;
+    let metadata = msg.metadata.as_ref();
+    // Format follows the extension the user picked in the save dialog.
+    let ext = std::path::Path::new(&dest_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    let bytes: Vec<u8> = match ext.as_str() {
+        "pdf" => render_answer_pdf(&AnswerDoc::from_message(&msg.content, metadata))?,
+        "docx" => render_answer_docx(&AnswerDoc::from_message(&msg.content, metadata))?,
+        // `.md` and anything else fall back to Markdown.
+        _ => render_answer_markdown(&msg.content, metadata).into_bytes(),
+    };
+    std::fs::write(&dest_path, bytes).map_err(|e| format!("write {dest_path}: {e}"))?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod export_tests {
+    use super::{render_answer_docx, render_answer_markdown, render_answer_pdf, AnswerDoc};
+
+    #[test]
+    fn markdown_includes_source_ledger() {
+        let meta = serde_json::json!({
+            "provenance": {
+                "inference_backend": "Qwen3-8B-Q4_K_M",
+                "sources": [{ "origin": "sep", "count": 3 }]
+            },
+            "retrieved_chunks": [
+                { "title": "Free Will", "corpus_id": "sep", "snippet": "Compatibilism holds that..." }
+            ]
+        });
+        let md = render_answer_markdown("Free will is compatible with determinism.", Some(&meta));
+        assert!(md.contains("# Sovereign answer"));
+        assert!(md.contains("Free will is compatible with determinism."));
+        assert!(md.contains("answered by Qwen3-8B-Q4_K_M"));
+        assert!(md.contains("searched sep"));
+        // The ledger: title, corpus handle, and the grounding quote.
+        assert!(md.contains("## Sources"));
+        assert!(md.contains("**Free Will**"));
+        assert!(md.contains("`sep`"));
+        assert!(md.contains("> Compatibilism holds that..."));
+    }
+
+    #[test]
+    fn markdown_without_sources_says_so() {
+        let md = render_answer_markdown("Hello.", None);
+        assert!(md.contains("Hello."));
+        assert!(md.contains("No corpus passages were cited"));
+        // Never silently implies sources that aren't there.
+        assert!(!md.contains("## Sources"));
+    }
+
+    #[test]
+    fn answerdoc_extracts_provenance() {
+        let meta = serde_json::json!({
+            "provenance": {
+                "inference_backend": "Darwin-36B",
+                "sources": [{ "origin": "sep", "count": 2 }, { "origin": "empty", "count": 0 }]
+            },
+            "retrieved_chunks": [{ "title": "T", "corpus_id": "sep", "snippet": "q" }]
+        });
+        let d = AnswerDoc::from_message("Body", Some(&meta));
+        assert_eq!(d.answered_by.as_deref(), Some("Darwin-36B"));
+        assert_eq!(d.corpora, vec!["sep".to_string()]); // count:0 dropped
+        assert_eq!(d.sources.len(), 1);
+        assert_eq!(d.sources[0].corpus_id, "sep");
+    }
+
+    #[test]
+    fn docx_is_a_valid_zip_package() {
+        let meta = serde_json::json!({
+            "retrieved_chunks": [{ "title": "Free Will", "corpus_id": "sep", "snippet": "grounding quote" }]
+        });
+        let doc = AnswerDoc::from_message("The answer body.", Some(&meta));
+        let bytes = render_answer_docx(&doc).expect("docx renders");
+        // Real .docx is an OOXML zip — starts with the PK zip-local-header.
+        assert_eq!(&bytes[..2], b"PK");
+        assert!(bytes.len() > 300);
+    }
+
+    #[test]
+    fn pdf_has_pdf_header() {
+        let doc = AnswerDoc::from_message("A short answer.", None);
+        let bytes = render_answer_pdf(&doc).expect("pdf renders");
+        assert_eq!(&bytes[..5], b"%PDF-");
+        assert!(bytes.len() > 300);
+    }
+}

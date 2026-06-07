@@ -203,6 +203,21 @@ export async function searchMessages(query: string): Promise<SearchResult[]> {
   return invoke("search_messages", { query });
 }
 
+/** Export a single assistant answer to a file (Markdown), carrying its
+ *  citations + source ledger. `destPath` is chosen via a native save
+ *  dialog on the caller side. */
+export async function exportAnswer(
+  conversationId: string,
+  messageId: string,
+  destPath: string,
+): Promise<void> {
+  return invoke("export_answer", {
+    conversationId,
+    messageId,
+    destPath,
+  });
+}
+
 export async function submitApproval(
   key: string,
   approved: boolean,

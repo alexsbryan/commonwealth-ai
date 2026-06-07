@@ -6859,6 +6859,7 @@ version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c5c8ecfc6c72051981c0459f75ccc585e7ff67c70829560cda8e647882a9abff"
 dependencies = [
+ "chrono",
  "encoding_rs",
  "flate2",
  "indexmap 2.14.0",
@@ -6867,6 +6868,7 @@ dependencies = [
  "md-5 0.10.6",
  "nom 7.1.3",
  "rangemap",
+ "rayon",
  "time",
  "weezl",
 ]
@@ -10932,6 +10934,7 @@ dependencies = [
  "dirs 6.0.0",
  "futures",
  "hostname",
+ "lopdf",
  "rand 0.8.6",
  "reqwest 0.12.28",
  "serde",
