@@ -1,0 +1,66 @@
+# Examples for the binary current-info classifier
+# (`sovereign-core/src/current_info_classifier.rs`). Two classes:
+#
+#   [current]   — genuinely time-sensitive; the correct answer changes
+#                 day-to-day and lives outside any installed corpus, so
+#                 it should route to the external-search ACTION path.
+#   [evergreen] — history, definitions, explanations, and long-form
+#                 synthesis; answerable from the knowledge corpora. MUST
+#                 NOT route to external search.
+#
+# Keep these shape-diverse and DISJOINT from any bench question — they
+# define centroids, not a coaching set. The evergreen list deliberately
+# includes the shapes that broke the old keyword matcher: a historical
+# range ending "…to today / to the present", and topics whose NAME
+# contains a temporal keyword ("history of the news industry", "the
+# stock market", a fixed past year).
+
+[current]
+examples = [
+  "What's the latest news about the election?",
+  "Who won the game last night?",
+  "What is the current price of Bitcoin?",
+  "What's the weather in Beirut right now?",
+  "Give me today's headlines",
+  "What happened in the markets this week?",
+  "Is there any breaking news on the ceasefire?",
+  "What's the score in the match right now?",
+  "What are the most recent developments in the conflict?",
+  "Look up the current exchange rate for the euro",
+  "Search the web for the latest iPhone release date",
+  "What's trending today?",
+  "Has the bill passed yet?",
+  "What is the stock price of Apple today?",
+  "Find out who just got elected",
+  "What's the latest version of this software?",
+  "Any updates on the flight status?",
+  "What did the central bank decide this month?",
+  "Who is currently leading the polls?",
+  "What's the most recent earthquake report?",
+]
+
+[evergreen]
+examples = [
+  "Write an exhaustive essay on the complete history of Lebanon from antiquity to today",
+  "Explain the history of the Roman Empire from its founding to its fall",
+  "Cover the Phoenician era of Lebanon in detail",
+  "Trace the development of democracy from ancient Greece to the present day",
+  "Write a detailed history of the news industry",
+  "Explain how the stock market works",
+  "What were the causes of the First World War?",
+  "Summarize the philosophy of Immanuel Kant",
+  "Explain photosynthesis",
+  "What is recursion in computer science?",
+  "Give me a comprehensive overview of Ottoman rule in the Levant",
+  "Describe the major events of the 2024 Olympics",
+  "Write a long, in-depth essay on the French Mandate period",
+  "What is the significance of the Treaty of Versailles?",
+  "Explain the difference between mitosis and meiosis",
+  "Walk me through the history of Beirut from antiquity to the modern era",
+  "Describe the cultural achievements of the Abbasid Caliphate",
+  "What is the theory of general relativity?",
+  "Explain the origins and spread of the printing press",
+  "Give a thorough account of the Lebanese Civil War and its aftermath",
+  "Summarize the plot and themes of the Epic of Gilgamesh",
+  "How did the Industrial Revolution change European society?",
+]

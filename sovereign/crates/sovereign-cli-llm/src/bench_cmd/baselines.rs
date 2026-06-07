@@ -27,27 +27,65 @@ use serde::Serialize;
 
 use super::discover::DiscoveredBench;
 
+/// `<bench_root>/<group>/baselines/<id>/` — the storage convention,
+/// expressed over a raw `(group, id)` pair. This is the primitive both the
+/// `DiscoveredBench`-keyed `bench all` path and the lane-baseline gate
+/// (`bench gate`, which has no `DiscoveredBench`) build on, so the on-disk
+/// layout is identical no matter which surface wrote it.
+pub fn baseline_dir(bench_root: &Path, group: &str, id: &str) -> PathBuf {
+    bench_root.join(group).join("baselines").join(id)
+}
+
+/// Read `<dir>/latest.json` (following the symlink), deserialise into `T`.
+/// `Ok(None)` when the file doesn't exist — the first-run case.
+pub fn read_latest_at<T: DeserializeOwned>(dir: &Path) -> Result<Option<T>, String> {
+    let path = dir.join("latest.json");
+    // `exists()` follows symlinks, so a dangling symlink and a missing
+    // file both read as None (first run).
+    if !path.exists() {
+        return Ok(None);
+    }
+    let bytes = fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let parsed: T =
+        serde_json::from_str(&bytes).map_err(|e| format!("parse {}: {e}", path.display()))?;
+    Ok(Some(parsed))
+}
+
+/// Persist a fresh dated snapshot into `dir` + atomically retarget the
+/// `latest.json` symlink. Creates `dir` if missing. Same single-writer
+/// remove-then-symlink as the `DiscoveredBench` writer below.
+pub fn write_dated_and_update_latest_at<T: Serialize>(
+    dir: &Path,
+    report: &T,
+) -> io::Result<PathBuf> {
+    fs::create_dir_all(dir)?;
+    let today = Utc::now().format("%Y-%m-%d").to_string();
+    let dated = dir.join(format!("{today}.json"));
+    let bytes = serde_json::to_vec_pretty(report)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    fs::write(&dated, &bytes)?;
+
+    let latest = dir.join("latest.json");
+    let _ = fs::remove_file(&latest);
+    let dated_filename = dated
+        .file_name()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("latest.json"));
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(&dated_filename, &latest)?;
+    }
+    #[cfg(not(unix))]
+    {
+        fs::copy(&dated, &latest)?;
+    }
+    Ok(dated)
+}
+
 /// `<bench_root>/<group>/baselines/<bench_id>/`. Created on demand by
 /// `write_dated_and_update_latest`.
 pub fn baseline_dir_for(bench_root: &Path, bench: &DiscoveredBench) -> PathBuf {
-    bench_root
-        .join(&bench.group)
-        .join("baselines")
-        .join(&bench.id)
-}
-
-/// Path to the canonical `latest.json` symlink inside the baseline
-/// dir. May not exist yet.
-pub fn latest_symlink_path(bench_root: &Path, bench: &DiscoveredBench) -> PathBuf {
-    baseline_dir_for(bench_root, bench).join("latest.json")
-}
-
-/// Path for a fresh dated snapshot — `<dir>/<YYYY-MM-DD>.json`. If a
-/// snapshot for today already exists, callers may decide to append
-/// `-<NN>` suffix; v1 just overwrites.
-pub fn dated_snapshot_path(bench_root: &Path, bench: &DiscoveredBench) -> PathBuf {
-    let today = Utc::now().format("%Y-%m-%d").to_string();
-    baseline_dir_for(bench_root, bench).join(format!("{today}.json"))
+    baseline_dir(bench_root, &bench.group, &bench.id)
 }
 
 /// Read the bench's `latest.json` (following symlink if present),
@@ -57,17 +95,7 @@ pub fn read_latest<T: DeserializeOwned>(
     bench_root: &Path,
     bench: &DiscoveredBench,
 ) -> Result<Option<T>, String> {
-    let path = latest_symlink_path(bench_root, bench);
-    // `path.exists()` follows symlinks, so this catches both the
-    // dangling-symlink case (returns false) and the no-baseline
-    // case (returns false). Either way → None.
-    if !path.exists() {
-        return Ok(None);
-    }
-    let bytes = fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    let parsed: T =
-        serde_json::from_str(&bytes).map_err(|e| format!("parse {}: {e}", path.display()))?;
-    Ok(Some(parsed))
+    read_latest_at(&baseline_dir_for(bench_root, bench))
 }
 
 /// Persist a fresh dated snapshot + atomically retarget the
@@ -82,32 +110,7 @@ pub fn write_dated_and_update_latest<T: Serialize>(
     bench: &DiscoveredBench,
     report: &T,
 ) -> io::Result<PathBuf> {
-    let dir = baseline_dir_for(bench_root, bench);
-    fs::create_dir_all(&dir)?;
-    let dated = dated_snapshot_path(bench_root, bench);
-    let bytes = serde_json::to_vec_pretty(report)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    fs::write(&dated, &bytes)?;
-
-    let latest = dir.join("latest.json");
-    // Best-effort remove of any prior symlink/file at the path; if
-    // nothing's there, `remove_file` errors — ignore.
-    let _ = fs::remove_file(&latest);
-    let dated_filename = dated
-        .file_name()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("latest.json"));
-    #[cfg(unix)]
-    {
-        std::os::unix::fs::symlink(&dated_filename, &latest)?;
-    }
-    #[cfg(not(unix))]
-    {
-        // Fallback for non-unix: copy the file. Loses the "latest
-        // points to dated" semantic but keeps the file present.
-        fs::copy(&dated, &latest)?;
-    }
-    Ok(dated)
+    write_dated_and_update_latest_at(&baseline_dir_for(bench_root, bench), report)
 }
 
 #[cfg(test)]
@@ -164,7 +167,7 @@ mod tests {
         assert!(dated_path.exists());
 
         // latest.json symlink should resolve to the dated snapshot.
-        let latest = latest_symlink_path(tmp.path(), &bench);
+        let latest = baseline_dir_for(tmp.path(), &bench).join("latest.json");
         assert!(latest.exists());
         let target = fs::read_link(&latest).unwrap();
         assert_eq!(target, PathBuf::from(dated_path.file_name().unwrap()));

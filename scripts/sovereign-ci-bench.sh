@@ -14,14 +14,20 @@
 #   SOFT  (reported, non-breaking): the synthesis answer-equiv judge lane.
 #         LLM-judge variance shouldn't cause flaky red builds, so it's tracked
 #         with a band, not gated.
-#   TRACKED (run + reported, not yet gating): chaos-monkey (grounded
-#         calibration) and mechanism-fidelity (reasoning-fidelity witness) and
-#         the multi-turn degradation thread. These have *absolute* verdicts
-#         (chaos is designed to break the current system; mechanism returns
-#         NO-GO for any non-faithful model), so their absolute pass/fail must
-#         NOT break CI. Once a baseline of their metrics is captured on a
-#         healthy daemon, promote them to HARD *baseline-diff* gates (fail only
-#         on regression vs that baseline) — see PROMOTE markers below.
+#   TRACKED+GATED: chaos-monkey (grounded calibration), mechanism-fidelity
+#         (reasoning-fidelity witness), and the multi-turn degradation thread.
+#         These carry *absolute* verdicts that are true findings for the current
+#         system, NOT regression signals (chaos is designed to break the present
+#         agent → NO-GO; mechanism returns NO-GO for any non-faithful model), so
+#         their own pass/fail must never break CI. Each runs as a TRACKED lane
+#         (advisory — its absolute verdict is printed but does not gate), then a
+#         paired HARD `*-gate` lane re-scores the SAME artifact and fails ONLY on
+#         regression vs a committed baseline (`sovereign bench gate <lane>`,
+#         baselines under sovereign/bench/<group>/baselines/<id>/). First-run
+#         (no baseline) passes. Capture/refresh baselines with --update-baseline
+#         on a healthy daemon. This is the promotion the old PROMOTE markers
+#         called for: absolute verdict stays advisory, regression-vs-baseline
+#         gates.
 #
 # Overall exit: 0 iff every HARD lane passed AND the run stayed within budget.
 #
@@ -46,10 +52,11 @@ BENCH_ROOT="sovereign/bench"
 MF_MANIFEST="$BENCH_ROOT/mechanism_fidelity/manifest.toml"
 CHAOS_BANK="$BENCH_ROOT/chaos_monkey/secret_agent.toml"
 CHAOS_MANIFEST="$BENCH_ROOT/chaos_monkey/manifest.toml"
-# Corpus id for the chaos lane. `corpus watch` derives the id from the PATH
-# hash, not --name, so override this with the actual installed id (or empty to
-# fall back to the bank's [meta].corpus). See chaos_monkey/README.md.
-CHAOS_CORPUS="${CHAOS_CORPUS:-watched-25378eeeed13}"
+# Corpus id for the chaos lane. The stable recipe-install
+# (`scripts/setup-chaos-corpus.sh` → `sovereign corpus install chaos-secret-agent`)
+# gives a machine-fixed id; override only if you watched the text instead (a
+# path-hash `watched-<hash>` id). Empty falls back to the bank's [meta].corpus.
+CHAOS_CORPUS="${CHAOS_CORPUS:-chaos-secret-agent}"
 MF_MODELS="${MF_MODELS:-primary}"
 
 # Core corpora the suite gates on (must be installed/queryable). Filters target
@@ -180,34 +187,50 @@ else
   echo "── SKIP  [SOFT] synth lanes — --no-synth"
 fi
 
-# ── Lane 5: grounded calibration — chaos-monkey (TRACKED) ──
-# PROMOTE to HARD once a baseline of {competence, honesty} is captured: the
-# chaos bench currently exits 1 by design (the system hasn't grown into it).
+# ── Lane 5: grounded calibration — chaos-monkey (TRACKED run + HARD gate) ──
+# The bench RUN is advisory (TRACKED): chaos is designed to break the present
+# agent, so its absolute NO-GO must never gate the build. The paired chaos-gate
+# lane (HARD) re-scores the SAME artifact and fails only on regression vs the
+# committed baseline (sovereign/bench/chaos_monkey/baselines/secret_agent/).
+# First-run (no baseline) and a clean diff both pass; a missing artifact fails
+# HARD (the bench couldn't certify the path). $UPDATE_BASELINE captures instead.
 if [[ -f "$CHAOS_BANK" ]]; then
   CHAOS_CORPUS_ARG=()
   [[ -n "$CHAOS_CORPUS" ]] && CHAOS_CORPUS_ARG=(--corpus "$CHAOS_CORPUS")
   run_lane "chaos-monkey" TRACKED \
     "$BIN" bench chaos-monkey run --bank "$CHAOS_BANK" --manifest "$CHAOS_MANIFEST" \
       "${CHAOS_CORPUS_ARG[@]}" --out "$REPORT_DIR/chaos.jsonl"
+  run_lane "chaos-gate" HARD \
+    "$BIN" bench gate chaos-monkey --report "$REPORT_DIR/chaos.jsonl" \
+      --bench-root "$BENCH_ROOT" $UPDATE_BASELINE
 fi
 
-# ── Lane 6: reasoning-fidelity witness — mechanism-fidelity (TRACKED) ──
-# The witness is "control d_agent == 0.000" (scoring join intact), NOT the
-# GO/NO-GO verdict (NO-GO is a true finding for non-faithful models). PROMOTE
-# to HARD by gating on the control witness once a baseline exists.
+# ── Lane 6: reasoning-fidelity witness — mechanism-fidelity (TRACKED run + HARD gate) ──
+# The witness is "control Δ̄ ≈ 0" (the forced-choice scoring join is intact),
+# NOT the GO/NO-GO verdict (NO-GO is a true finding for non-faithful models).
+# mechanism-gate (HARD) gates on the control-witness drift vs baseline; P1
+# collapse is tracked but tolerant. Baseline at
+# sovereign/bench/mechanism_fidelity/baselines/dev/.
 run_lane "mechanism-fidelity" TRACKED \
   "$BIN" bench mechanism-fidelity run --models "$MF_MODELS" --pool dev \
     --n-cases "$N_CASES_MF" --manifest "$MF_MANIFEST" \
     --out "$REPORT_DIR/mechanism.jsonl"
+run_lane "mechanism-gate" HARD \
+  "$BIN" bench gate mechanism-fidelity --report "$REPORT_DIR/mechanism.jsonl" \
+    --bench-root "$BENCH_ROOT" $UPDATE_BASELINE
 
-# ── Lane 4: multi-turn degradation — wikipedia_learn threads (TRACKED) ──
-# eval --threads reports a degradation curve; gate it once a baseline of
-# first_failure_turn / slope is captured.
+# ── Lane 4: multi-turn degradation — wikipedia_learn threads (TRACKED run + HARD gate) ──
+# eval --threads reports a degradation curve; multiturn-gate (HARD) gates the
+# worst-thread first-failure turn + mean fact-recall slope (+ judge coverage)
+# vs baseline at sovereign/bench/wikipedia_learn/baselines/threads/.
 THREAD_BANK=$(ls "$BENCH_ROOT"/wikipedia_learn/*.toml 2>/dev/null | head -1)
 if [[ -n "${THREAD_BANK:-}" ]]; then
   run_lane "multiturn-degradation" TRACKED \
     "$BIN" eval run --threads --bank "$THREAD_BANK" \
       --output "$REPORT_DIR/threads.json"
+  run_lane "multiturn-gate" HARD \
+    "$BIN" bench gate multiturn --report "$REPORT_DIR/threads.json" \
+      --bench-root "$BENCH_ROOT" $UPDATE_BASELINE
 fi
 
 # ── Verdict ─────────────────────────────────────────────────────────────────

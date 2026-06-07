@@ -278,6 +278,16 @@ pub struct LlmRouter {
     /// scope to restrict to user-owned corpora when the classifier
     /// fires `Some("personal")`.
     scope_classifier: Option<Arc<crate::scope_classifier::PersonalScopeClassifier>>,
+    /// Optional binary classifier for the current-info (time-sensitive
+    /// → external search) axis. When installed it REPLACES the
+    /// `needs_current_info` keyword heuristic that drives the
+    /// `force_action` pre-check — a semantic centroid decision instead
+    /// of substring matching, so "…history of Lebanon from antiquity to
+    /// today" no longer trips on the bare word "today". Falls back to
+    /// the keyword heuristic when absent (tests / minimal configs).
+    /// Installed via `with_current_info_classifier`.
+    current_info_classifier:
+        Option<Arc<crate::current_info_classifier::CurrentInfoClassifier>>,
     /// Cache of L2-normalised embeddings of the registered tools'
     /// described purposes, keyed by the (order-independent) tool-id set.
     /// Powers the tool-relevance gate (see `query_best_tool_sim`).
@@ -358,6 +368,7 @@ impl LlmRouter {
             skills,
             embed_router: None,
             scope_classifier: None,
+            current_info_classifier: None,
             tool_embed_cache: std::sync::RwLock::new(None),
         }
     }
@@ -431,6 +442,17 @@ impl LlmRouter {
         classifier: Arc<crate::scope_classifier::PersonalScopeClassifier>,
     ) -> Self {
         self.scope_classifier = Some(classifier);
+        self
+    }
+
+    /// Install a binary current-info classifier. When present it drives
+    /// the `force_action` pre-check instead of the `needs_current_info`
+    /// keyword heuristic — a semantic decision over time-sensitivity.
+    pub fn with_current_info_classifier(
+        mut self,
+        classifier: Arc<crate::current_info_classifier::CurrentInfoClassifier>,
+    ) -> Self {
+        self.current_info_classifier = Some(classifier);
         self
     }
 
@@ -1863,9 +1885,36 @@ impl Router for LlmRouter {
         let force_conation = Self::looks_like_conation(message);
 
         // Pre-check 1: temporal/current-info → force ACTION (search).
-        // Small models are unreliable at detecting these.
+        // Small models are unreliable at detecting these. When a binary
+        // current-info classifier is installed, make this call
+        // SEMANTICALLY (centroid cosine over time-sensitivity) instead
+        // of substring-matching a keyword list. The keyword path forced
+        // "…history of Lebanon from antiquity to today" to ACTION on the
+        // bare word "today" → synthesis then treated its 19 retrieved
+        // chunks as inadequate and refused. The embed call is paid only
+        // when a search tool is present AND this isn't already a conation
+        // imperative — i.e. exactly when `force_action` could fire — so
+        // the common path pays nothing. Falls back to the keyword
+        // heuristic on classify error or when no classifier is wired.
         let has_search = available_tools.iter().any(|t| t.name.contains("search"));
-        let force_action = !force_conation && has_search && Self::needs_current_info(message);
+        let force_action = if !force_conation && has_search {
+            match self.current_info_classifier.as_ref() {
+                Some(cls) => match cls.classify(message, &*self.inference).await {
+                    Ok(v) => v,
+                    Err(e) => {
+                        tracing::warn!(
+                            target: "router.current_info",
+                            error = %e,
+                            "current-info classify failed; falling back to keyword heuristic"
+                        );
+                        Self::needs_current_info(message)
+                    }
+                },
+                None => Self::needs_current_info(message),
+            }
+        } else {
+            false
+        };
 
         // Pre-check 1a: personal-recall content question → force
         // LOOKUP. First-person + content-discourse verb without a

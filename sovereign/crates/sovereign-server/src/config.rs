@@ -74,6 +74,15 @@ pub struct InferenceSection {
     pub embed_model: Option<PathBuf>,
     #[serde(default = "default_context_size")]
     pub context_size: u32,
+    /// Response-length budget: max tokens generated per reply. The
+    /// server-side equivalent of the desktop's "Response length"
+    /// setting (`InferenceConfig.max_tokens`) — the knob the mobile
+    /// cutoff chip / Continue affordance points at. Honoured by every
+    /// synthesis path. Defaults to the core `InferenceConfig` default
+    /// (2048) so existing configs are unchanged; raise it on a host
+    /// whose clients ask for long-form answers.
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: usize,
     /// Multi-backend configuration. When present, overrides `model`/`primary_model`.
     #[serde(default)]
     pub backends: Vec<BackendConfig>,
@@ -173,6 +182,12 @@ fn default_auth_mode() -> String {
     "none".to_string()
 }
 fn default_context_size() -> u32 {
+    2048
+}
+fn default_max_tokens() -> usize {
+    // Matches `sovereign_core::types::InferenceConfig::default().max_tokens`
+    // so a config without `[inference] max_tokens` behaves exactly as
+    // before this field existed.
     2048
 }
 fn default_store_path() -> PathBuf {

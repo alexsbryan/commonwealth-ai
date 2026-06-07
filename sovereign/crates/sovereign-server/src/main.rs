@@ -225,11 +225,44 @@ async fn main() {
     let skills = Arc::new(skills);
 
     // Build components.
-    let router: Box<dyn sovereign_core::traits::Router> = Box::new(LlmRouter::new(
+    //
+    // Install the binary current-info classifier (time-sensitive →
+    // external search) so the `force_action` pre-check decides
+    // semantically instead of substring-matching a keyword list. Without
+    // it, "…history of Lebanon from antiquity to today" tripped on the
+    // bare word "today" → ACTION/external-tool route → refused-to-write
+    // loop. Falls through to the keyword heuristic on load failure, so a
+    // missing example file is a soft degrade, not a startup error.
+    let mut llm_router = LlmRouter::new(
         Arc::clone(&inference),
         Arc::clone(&store),
         Arc::clone(&skills),
-    ));
+    );
+    if let Some(path) = resolve_current_info_examples_path() {
+        match sovereign_core::current_info_classifier::CurrentInfoClassifier::load(
+            &path,
+            Arc::clone(&inference),
+        )
+        .await
+        {
+            Ok(cls) => {
+                tracing::info!(
+                    current = cls.current_count(),
+                    evergreen = cls.evergreen_count(),
+                    path = %path.display(),
+                    "router current-info classifier loaded"
+                );
+                llm_router = llm_router.with_current_info_classifier(Arc::new(cls));
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "current-info classifier load failed; force_action falls back to keyword heuristic"
+                );
+            }
+        }
+    }
+    let router: Box<dyn sovereign_core::traits::Router> = Box::new(llm_router);
 
     let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
 
@@ -514,7 +547,14 @@ async fn main() {
         store,
         skills,
         approval.clone() as Arc<dyn sovereign_core::traits::ApprovalChannel>,
-        sovereign_core::types::InferenceConfig::default(),
+        // Honour the configured response-length budget ([inference]
+        // max_tokens) instead of hardcoding the 2048 default — the
+        // server-side equivalent of the desktop "Response length"
+        // setting. All other knobs keep their core defaults.
+        sovereign_core::types::InferenceConfig {
+            max_tokens: config.inference.max_tokens,
+            ..sovereign_core::types::InferenceConfig::default()
+        },
     )
     .with_corpus_engine(Arc::clone(&corpus_engine))
     .with_routing_events(std::sync::Arc::new(narration_sink));
@@ -739,6 +779,31 @@ fn resolve_embed_model(inf: &config::InferenceSection) -> Option<PathBuf> {
     }
     let default = inf.model.parent()?.join("qwen-embedding-0.6b.gguf");
     default.exists().then_some(default)
+}
+
+/// Resolve the path to `router/current_info_examples.toml`. Mirrors
+/// `chat_cmd::bootstrap::resolve_scope_examples_path`: honour
+/// `$SOVEREIGN_CURRENT_INFO_EXAMPLES` (absolute or cwd-relative) first,
+/// else the default `sovereign/router/current_info_examples.toml`
+/// relative to the cwd. Returns `None` when neither exists so the
+/// caller degrades to the keyword heuristic rather than erroring.
+fn resolve_current_info_examples_path() -> Option<PathBuf> {
+    if let Ok(env) = std::env::var("SOVEREIGN_CURRENT_INFO_EXAMPLES") {
+        let p = PathBuf::from(env);
+        if p.exists() {
+            return Some(p);
+        }
+        tracing::warn!(
+            path = %p.display(),
+            "SOVEREIGN_CURRENT_INFO_EXAMPLES set but file missing; trying default"
+        );
+    }
+    let default = PathBuf::from("sovereign/router/current_info_examples.toml");
+    if default.exists() {
+        Some(default)
+    } else {
+        None
+    }
 }
 
 /// Probe `<indexes_dir>/<corpus_id>/wikipedia_graph.db` for each

@@ -1,0 +1,47 @@
+# Chaos-Monkey reference corpus — machine-STABLE install.
+#
+# Replaces the ephemeral `corpus watch` of /tmp (which derives a per-machine
+# `watched-<pathhash>` id) with a recipe whose `[corpus].id` is fixed, so the
+# chaos-monkey bench + the CI gate can target a deterministic `chaos-secret-agent`
+# corpus on any box. See sovereign/bench/chaos_monkey/README.md.
+#
+# Conrad's *The Secret Agent* (Project Gutenberg #974): bounded, public-domain,
+# and less pretraining-saturated than the very famous novels — which keeps
+# "absent in persistence" distinct from "known from pretraining".
+#
+# Retrieval-only by design (no atlas enrichment): the bench seals retrieval to
+# this corpus via `enabled_corpora` and scores gold-keyword grounding over the
+# returned chunks. Enrichment would add cost without changing what is retrievable.
+
+[corpus]
+id = "chaos-secret-agent"
+name = "The Secret Agent (Conrad)"
+description = "Joseph Conrad's The Secret Agent (Project Gutenberg #974). Sealed reference corpus for the chaos-monkey grounded-calibration bench."
+license = "Public Domain"
+mesh_sharing = false
+size_compressed_gb = 0.001
+size_indexed_gb = 0.005
+
+# `local_file` reads the source text from a stable $HOME path that
+# scripts/setup-chaos-corpus.sh fetches to (Gutenberg #974). The path is
+# absolute because the recipe schema does not expand `~`; setup-chaos-corpus.sh
+# writes a $HOME-correct copy of this recipe to ~/.sovereign/recipes/ so the
+# running daemon resolves it live (registry resolution step 1) without a rebuild.
+[acquire]
+type = "local_file"
+path = "/Users/alexsbryan/.sovereign/bench-corpora/chaos-secret-agent/secret-agent.txt"
+
+[extract]
+type = "plaintext"
+
+# Paragraph chunking with overlap — same shape as the `sep` recipe. Keeps prose
+# paragraphs intact and slices long chapter blocks at clean boundaries for the
+# embed model.
+[chunk]
+type = "paragraph"
+max_chars = 2048
+overlap_chars = 256
+
+[index]
+fts = true
+vector = true
