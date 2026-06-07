@@ -246,7 +246,11 @@ blanket-abstainer can game it). The orchestrator
 (`bench_cmd/chaos_monkey.rs`) drives the live `handle_message_stream` path
 sealed to one corpus via `enabled_corpora`, classifying answer-vs-abstain with a
 forced-choice judge and checking everything else deterministically against the
-bank's witnesses. See `sovereign/bench/chaos_monkey/README.md`.
+bank's witnesses. Its sealed corpus installs under a **machine-stable**
+corpus_id via a committed recipe (`sovereign-recipes/chaos-secret-agent/`,
+installed by `scripts/setup-chaos-corpus.sh`) rather than a path-hashed
+`corpus watch`, so the gate is reproducible across boxes. See
+`sovereign/bench/chaos_monkey/README.md`.
 
 Finally, **`scripts/sovereign-ci-bench.sh`** is the single ≤2h core-regression
 gate a developer runs for confidence that chat + inference hasn't regressed. It
@@ -255,10 +259,16 @@ than reinventing them, with a clear gate policy: deterministic baseline-diffed
 lanes (retrieval recall, enrichment atom-F1, intent routing) are **hard**
 (build-breaking via `bench all`'s exit code); the synthesis answer-equiv judge
 lane is **soft** (judge variance shouldn't flake the build); chaos-monkey,
-mechanism-fidelity, and the multi-turn degradation thread are **tracked**
-(run + reported, promoted to hard baseline-diff gates once a baseline is
-captured). Overall exit 0 iff every hard lane stays within baseline and the run
-fits the budget.
+mechanism-fidelity, and the multi-turn degradation thread run as **tracked**
+(advisory) lanes whose *absolute* verdict — a true finding for the current
+system, not a regression (chaos is built to break the present agent; mechanism
+returns NO-GO for any non-faithful model) — never gates, each paired with a
+**hard `*-gate` lane** (`sovereign bench gate <lane>`) that re-scores the same
+artifact and fails *only on regression vs a committed baseline*
+(`sovereign/bench/<group>/baselines/<id>/`; first-run passes). The gate logic
+is one shared, self-describing metric/direction/tolerance primitive
+(`bench_cmd/lane_baseline.rs` + `gate.rs`). Overall exit 0 iff every hard lane
+stays within baseline and the run fits the budget.
 
 ---
 

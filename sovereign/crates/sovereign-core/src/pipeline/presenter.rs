@@ -78,12 +78,54 @@ pub const PRESENTER_MAX_TOKENS_CAP: u32 = 1024;
 ///    helps…", "Does that resonate?", "Hope this is what you were
 ///    looking for".
 ///
+/// Remove `<tool_code>…</tool_code>` spans anywhere in `s`. A closed
+/// span is removed inclusive of both tags; an unterminated open tag
+/// (`<tool_code>` with no matching close — the model started a tool
+/// call and stopped) drops everything from the open tag to the end.
+/// Matches the lowercase tag the distilled models emit; all indices are
+/// into `s` directly (no `to_lowercase()` remap, which could shift byte
+/// offsets on non-ASCII text) and all other text is left intact.
+fn strip_tool_code_blocks(s: &str) -> String {
+    const OPEN: &str = "<tool_code";
+    const CLOSE: &str = "</tool_code>";
+    let mut out = String::with_capacity(s.len());
+    let mut cursor = 0usize;
+    while let Some(rel) = s[cursor..].find(OPEN) {
+        let open_at = cursor + rel;
+        out.push_str(&s[cursor..open_at]);
+        // Find the end of the closing tag after the open tag.
+        match s[open_at..].find(CLOSE) {
+            Some(rel_close) => {
+                cursor = open_at + rel_close + CLOSE.len();
+            }
+            None => {
+                // Unterminated — drop the rest.
+                cursor = s.len();
+                break;
+            }
+        }
+    }
+    out.push_str(&s[cursor..]);
+    out
+}
+
 /// Idempotent: running over already-clean text returns the same
 /// text. Benign on edge cases (empty / whitespace / just a label
 /// → returns empty string after trim).
 pub fn strip_presenter_artifacts(raw: &str) -> String {
     // Stage 1: think tags (delegated to existing helper).
     let mut text = strip_thinking_response(raw);
+
+    // Stage 1b: phantom tool-call envelopes. Some distilled chat models
+    // emit a `<tool_code>…</tool_code>` block ("Let me search for more
+    // material…") even when no executable tool is wired on this host —
+    // the server never parses or runs it, so it must not reach the user
+    // as a raw tag, and an emitted-then-abandoned `<tool_code>` (no
+    // closing tag) must not dump the open tag + trailing noise either.
+    // Remove the whole span; if unterminated, drop from the open tag to
+    // end. This is presentation-only — it does not suppress a real tool
+    // call, which travels as structured `tool_choice`/`tools`, not prose.
+    text = strip_tool_code_blocks(&text);
 
     // Stage 2: leading `---` separator lines (Markdown HR / draft
     // separator). Repeat to catch `---\n---\n`.
@@ -483,6 +525,24 @@ mod tests {
     fn strip_presenter_artifacts_removes_think_block() {
         let raw = "<think>planning out my reply</think>The actual reply.";
         assert_eq!(strip_presenter_artifacts(raw), "The actual reply.");
+    }
+
+    #[test]
+    fn strip_presenter_artifacts_removes_closed_tool_code_block() {
+        let raw = "Let me search for more material.\n<tool_code>\nsearch(\"lebanon\")\n</tool_code>\nHere it is.";
+        let out = strip_presenter_artifacts(raw);
+        assert!(!out.contains("tool_code"), "tool_code leaked: {out:?}");
+        assert!(out.contains("Let me search for more material."));
+        assert!(out.contains("Here it is."));
+    }
+
+    #[test]
+    fn strip_presenter_artifacts_removes_unterminated_tool_code() {
+        // The witnessed Lebanon failure: model opens the tag and stops.
+        let raw = "I need to search for comprehensive information.\n\n<tool_code>\n";
+        let out = strip_presenter_artifacts(raw);
+        assert!(!out.contains("tool_code"), "dangling tag leaked: {out:?}");
+        assert!(out.contains("I need to search for comprehensive information."));
     }
 
     #[test]

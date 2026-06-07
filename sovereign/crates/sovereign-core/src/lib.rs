@@ -23,6 +23,7 @@ pub mod pipeline;
 pub mod planner;
 pub mod query_session;
 pub mod registry;
+pub mod current_info_classifier;
 pub mod router;
 pub mod router_embed;
 pub mod runtime;

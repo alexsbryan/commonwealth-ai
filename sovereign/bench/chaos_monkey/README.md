@@ -59,8 +59,10 @@ expected vs. actual action and the per-row pass.
 The reference bank targets Conrad's *The Secret Agent* (Project Gutenberg
 #974) — bounded, public-domain, and less pretraining-saturated than the very
 famous novels, which keeps "absent in persistence" distinct from "known from
-pretraining." One-command setup (fetches to a **stable** path, not `/tmp`, and
-waits for ingest):
+pretraining." One-command setup installs it under the **machine-stable**
+corpus_id `chaos-secret-agent` (recipe install, not a `watch` — fetches to a
+stable path, mirrors the recipe to the daemon's live override dir, installs,
+and waits for ingest):
 
 ```bash
 scripts/setup-chaos-corpus.sh
@@ -70,13 +72,40 @@ scripts/setup-chaos-corpus.sh
 — otherwise the daemon's 30 s health-ping starves the embed pipeline and ingest
 never completes (the script warns if it's misconfigured).
 
-**Corpus id caveat:** `corpus watch` derives the id from the *path hash*, not
-`--name`, so the installed id is something like `watched-<hash>` and is
-per-machine. Pass it explicitly: `--corpus <id>` (chaos-monkey) or
-`CHAOS_CORPUS=<id>` (the CI bench). A machine-stable fixed `corpus_id`
-(`chaos-secret-agent`) needs a recipe-install instead of a watch — a tracked
-follow-up. The bench is corpus-parameterized, so a new bank can target any
-sealed corpus whose ground truth you can verify.
+**Why a recipe, not `corpus watch`:** `watch` derives the id from the *path
+hash* (a per-machine `watched-<hash>`), which made the CI gate
+non-reproducible. The committed recipe
+(`sovereign-recipes/chaos-secret-agent/recipe.toml`) pins `[corpus].id`, so
+every box gets the same `chaos-secret-agent`. The bank's `[meta].corpus` and
+the manifest's `[meta].default_corpus` both default to it, so `--corpus` is
+optional. The bench is still corpus-parameterized — a new bank can target any
+sealed corpus whose ground truth you can verify via `--corpus <id>`.
+
+## In CI — baseline-relative gate
+
+Run standalone, chaos exits non-zero **by design** (the current agent has no
+humility floor → NO-GO). That absolute verdict is a true finding, not a
+regression signal, so CI must not gate on it directly. Instead the CI suite
+(`scripts/sovereign-ci-bench.sh`) runs the bench as an advisory **TRACKED**
+lane, then a paired **HARD `chaos-gate`** lane re-scores the same artifact and
+fails **only on regression vs a committed baseline**:
+
+```bash
+# capture/refresh the baseline (once, on a healthy daemon):
+sovereign bench gate chaos-monkey --report <chaos.jsonl> --update-baseline
+# gate (every CI run): exit 0 unless a metric regressed past tolerance
+sovereign bench gate chaos-monkey --report <chaos.jsonl>
+```
+
+The baseline lives at `sovereign/bench/chaos_monkey/baselines/secret_agent/`
+and gates `{competence ↑, honesty ↑, hallucination_rate ↓}`. Tolerances follow
+`tol ≈ items-of-noise / population`: **0.15** on competence (n≈7, ~1 item) and
+**0.18** on honesty / hallucination (n≈11, ~2 items). The agent is *not*
+run-to-run deterministic even at temperature 0 (MoE routing + Metal float) —
+two clean runs of this bank differed by ~2 honesty items — so the gate fires
+only on a genuine ≥3-item collapse, not noise. First-run (no baseline) passes.
+The same `bench gate` surface gates `mechanism-fidelity` (on the control-Δ̄≈0
+witness) and `multiturn`.
 
 ## Where the code lives
 
@@ -84,3 +113,8 @@ sealed corpus whose ground truth you can verify.
   `sovereign-eval/src/chaos_monkey/` — rebuilds and unit-tests in seconds.
 - Orchestrator (drives the live chat path, classifies answer-vs-abstain):
   `sovereign-cli-llm/src/bench_cmd/chaos_monkey.rs`.
+- Baseline-relative CI gate (re-scores the artifact, diffs vs baseline):
+  `sovereign-cli-llm/src/bench_cmd/gate.rs` + `lane_baseline.rs` (the shared
+  self-describing metric/direction/tolerance primitive, reused by all three
+  absolute-verdict lanes).
+- The stable corpus recipe: `sovereign-recipes/chaos-secret-agent/recipe.toml`.

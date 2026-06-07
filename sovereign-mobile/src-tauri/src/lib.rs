@@ -6,7 +6,7 @@
 //! `generate_context!()`. A FRONTEND-ONLY change won't reach the device unless
 //! this crate recompiles — on iOS, `tauri ios build` relinks but doesn't always
 //! re-embed a changed dist. Bump this marker (or touch any .rs) to force it.
-//! frontend-embed-rev: 3
+//! frontend-embed-rev: 4
 
 mod cache;
 mod commands;
