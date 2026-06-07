@@ -659,6 +659,12 @@ pub struct FolderTieredProvider {
     /// constructed from a daemon that knows its index root; left
     /// `None` in unit tests that don't need durable state.
     index_dir_resolver: Option<Arc<dyn IndexDirResolver>>,
+    /// Document-type cue handed to the RAPTOR summarizer. Defaults to
+    /// `Unknown` (generic "section-level" summaries); a corpus-specific
+    /// retrofit sets this via [`FolderTieredProvider::with_doc_type`] —
+    /// e.g. `Argument` for SEP philosophy essays so summaries come out
+    /// claim-level. Threaded into `build_folder_artifacts`.
+    doc_type: DocumentTypeTag,
 }
 
 /// Indirection so the provider can locate the per-corpus index dir
@@ -691,6 +697,7 @@ impl FolderTieredProvider {
             store,
             inference,
             index_dir_resolver: None,
+            doc_type: DocumentTypeTag::Unknown,
         }
     }
 
@@ -699,6 +706,16 @@ impl FolderTieredProvider {
     /// should always set this; tests can skip it.
     pub fn with_index_dir_resolver(mut self, resolver: Arc<dyn IndexDirResolver>) -> Self {
         self.index_dir_resolver = Some(resolver);
+        self
+    }
+
+    /// Override the document-type cue handed to the RAPTOR summarizer
+    /// (default [`DocumentTypeTag::Unknown`]). Lets a corpus-specific
+    /// retrofit ask for the right summary shape — `Argument` for
+    /// philosophy yields claim-level summaries rather than generic
+    /// section-level ones.
+    pub fn with_doc_type(mut self, doc_type: DocumentTypeTag) -> Self {
+        self.doc_type = doc_type;
         self
     }
 
@@ -1147,6 +1164,7 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
                         &chunks,
                         &embeddings,
                         self.inference.clone(),
+                        self.doc_type.clone(),
                         updated_at,
                         checkpoint_ref,
                         progress_ref,
@@ -1334,6 +1352,7 @@ async fn build_folder_artifacts(
     chunks: &[EnrichmentChunkRow],
     embeddings: &[Vec<f32>],
     inference: Arc<dyn InferenceProvider>,
+    doc_type: DocumentTypeTag,
     updated_at: i64,
     checkpoint: Option<&crate::raptor_checkpoint::RaptorCheckpointHandle>,
     progress: Option<&Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink>>,
@@ -1350,7 +1369,7 @@ async fn build_folder_artifacts(
         &inference,
         &raptor_chunks,
         embeddings,
-        DocumentTypeTag::Unknown,
+        doc_type,
         checkpoint,
         progress,
     )

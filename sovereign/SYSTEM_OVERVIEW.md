@@ -427,6 +427,12 @@ means one thing.
   via the `TieredEnrichmentProvider` trait (`enrichment/tiered.rs`) to
   avoid a cyclic dep. GLiNER (real ONNX NER) augments the conversation
   path. Used by attached docs, conversations, Obsidian / watched folders.
+  `sovereign enrich raptor <corpus>` (sovereign-cli-llm) retrofits this
+  tier-3 tree onto an already-installed corpus additively — writes
+  `conv_raptor_nodes` keyed by `source_doc_id`, never touches the
+  corpus's atom-graph atlas, reuses the existing leaf embeddings, and
+  carries `--strip-furniture` + doc-level resume (the SEP
+  whole-document-summarization retrofit, 2026-06-06).
   Deep-dive: [`docs/TIERED_RETRIEVAL.md`](./docs/TIERED_RETRIEVAL.md).
 
 See [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md)
