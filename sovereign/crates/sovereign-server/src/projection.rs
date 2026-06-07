@@ -48,6 +48,21 @@ pub struct Provenance {
     /// Total turn latency (ms). Maps from `total_latency_ms`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_ms: Option<u64>,
+    /// OpenAI-style finish reason ("stop", "length", "error", …). The
+    /// mobile cutoff affordance keys on `"length"` to show the
+    /// "response was cut off" chip + Continue button. Dropped from the
+    /// "desktop-only" exclusion above precisely because the thin client
+    /// has no other way to know the answer was truncated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<String>,
+    /// `max_tokens` budget the turn ran under — lets the cutoff chip
+    /// say "hit the N-token limit". Maps from `max_tokens_budget`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tokens_budget: Option<u64>,
+    /// Completion tokens generated (provider-reported or estimated).
+    /// Maps from `completion_tokens`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completion_tokens: Option<u64>,
     /// Per-corpus retrieval origins (origin + count [+ peer]). Lets the
     /// client render "From <corpus> (N)" without re-deriving it from
     /// the citation list.
@@ -130,11 +145,21 @@ fn project_provenance(meta: &Value) -> Option<Provenance> {
         .map(|arr| arr.iter().filter_map(project_source).collect())
         .unwrap_or_default();
 
+    let finish_reason = prov
+        .get("finish_reason")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let max_tokens_budget = prov.get("max_tokens_budget").and_then(Value::as_u64);
+    let completion_tokens = prov.get("completion_tokens").and_then(Value::as_u64);
+
     Some(Provenance {
         inference_backend,
         routing_tier,
         ttft_ms: None,
         total_ms,
+        finish_reason,
+        max_tokens_budget,
+        completion_tokens,
         sources,
     })
 }

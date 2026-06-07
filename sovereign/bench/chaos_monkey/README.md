@@ -59,14 +59,23 @@ expected vs. actual action and the per-row pass.
 The reference bank targets Conrad's *The Secret Agent* (Project Gutenberg
 #974) — bounded, public-domain, and less pretraining-saturated than the very
 famous novels, which keeps "absent in persistence" distinct from "known from
-pretraining." Ingest it as a sealed corpus:
+pretraining." One-command setup (fetches to a **stable** path, not `/tmp`, and
+waits for ingest):
 
 ```bash
-curl -s https://www.gutenberg.org/cache/epub/974/pg974.txt -o /tmp/chaos-corpus/secret-agent.txt
-sovereign corpus watch /tmp/chaos-corpus --name chaos-secret-agent --sync-initial
+scripts/setup-chaos-corpus.sh
 ```
 
-The bench is corpus-parameterized (`--corpus <id>`); point a new bank at any
+**Prerequisite:** `yield_to_foreground_secs < 30` in `~/.sovereign/config.toml`
+— otherwise the daemon's 30 s health-ping starves the embed pipeline and ingest
+never completes (the script warns if it's misconfigured).
+
+**Corpus id caveat:** `corpus watch` derives the id from the *path hash*, not
+`--name`, so the installed id is something like `watched-<hash>` and is
+per-machine. Pass it explicitly: `--corpus <id>` (chaos-monkey) or
+`CHAOS_CORPUS=<id>` (the CI bench). A machine-stable fixed `corpus_id`
+(`chaos-secret-agent`) needs a recipe-install instead of a watch — a tracked
+follow-up. The bench is corpus-parameterized, so a new bank can target any
 sealed corpus whose ground truth you can verify.
 
 ## Where the code lives

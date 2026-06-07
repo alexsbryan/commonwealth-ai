@@ -408,7 +408,20 @@ export const chatMachine = setup({
                 if (!id) return {};
                 return {
                   messages: updateMessageById(context.messages, id, (m) => {
-                    m.content = `${m.content}\n\nError: ${event.error}`;
+                    if (m.content.trim().length > 0) {
+                      // Partial answer streamed before the stream broke
+                      // (e.g. a mid-generation decode crash). Keep it and
+                      // flag the interruption so the bubble shows a
+                      // graceful "response was interrupted" chip + Continue
+                      // — not a raw error string appended to the prose.
+                      m.metadata = {
+                        ...(m.metadata ?? {}),
+                        cutoff: { kind: "error", message: event.error },
+                      };
+                    } else {
+                      // Nothing was generated — surface the failure inline.
+                      m.content = `Error: ${event.error}`;
+                    }
                   }),
                   streamingMessageId: null,
                 };

@@ -218,6 +218,9 @@ impl CorpusIndex {
             content_fts_built: false,
             title_fts_built: false,
             chunks_deduped: false,
+            // Fresh index: first inserted chunk gets id 1. Bumped by the
+            // batch size on every insert; never reused (see the field doc).
+            next_chunk_id: Some(1),
             chunks_expected: None,
             resume_from: None,
             enrichment_enabled: false,

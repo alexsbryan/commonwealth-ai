@@ -63,6 +63,11 @@
     const text = input.trim();
     if (!text) return;
     input = "";
+    await sendText(text);
+  }
+
+  // Shared send path for the composer + the cutoff "Continue" affordance.
+  async function sendText(text: string) {
     narration = []; // fresh turn — clear any prior progress trace
     stick = true; // re-engage follow for the user's turn + the answer
     const userMsg: MessageEntry = {
@@ -81,7 +86,21 @@
     }
   }
 
+  // Resume a length-truncated answer (finish_reason="length"). The model
+  // still has the prior assistant text in conversation history, so a short
+  // imperative is enough to pick up where it left off — and bug 2's
+  // graceful streaming fallback means this no longer errors out.
+  async function continueFromCutoff() {
+    await sendText(
+      "Continue from where you left off in the previous response. " +
+        "Pick up mid-sentence if needed — don't restart from the top.",
+    );
+  }
+
   const messages = $derived($snapshot.context.messages as MessageEntry[]);
+  const streamingMessageId = $derived(
+    $snapshot.context.streamingMessageId as string | null,
+  );
 
   // Keep the latest content in view as it streams — but *gently*. A hard
   // `scrollTop = scrollHeight` per token (the old behaviour) reads as a jarring
@@ -154,7 +173,12 @@
   >
     {#each messages as m (m.id)}
       {#if m.role === "assistant"}
-        <AssistantMessage content={m.content} metadata={m.metadata} />
+        <AssistantMessage
+          content={m.content}
+          metadata={m.metadata}
+          isStreaming={m.id === streamingMessageId}
+          onContinue={continueFromCutoff}
+        />
       {:else}
         <div class="user">{m.content}</div>
       {/if}
