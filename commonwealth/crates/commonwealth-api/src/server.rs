@@ -10,6 +10,7 @@ use crate::routes_apps;
 use crate::routes_inference;
 use crate::routes_internal;
 use crate::routes_knowledge;
+use crate::routes_ollama;
 use crate::routes_oicp;
 use crate::routes_responses;
 use crate::routes_status;
@@ -48,6 +49,23 @@ pub fn client_router(state: AppState) -> Router {
         .route("/status", get(routes_status::status))
         // OICP capability manifest.
         .route("/oicp/v1/capabilities", get(routes_oicp::capabilities))
+        // Ollama-native /api/* compatibility shim. Pure translation over the
+        // OpenAI handlers above — no new inference/routing logic. Chat +
+        // generate carry the same peer-admission gate as /v1/chat/completions
+        // (a no-op for local Ollama clients, which don't send X-Node-Id).
+        // Same unauthenticated posture as the rest of :9741 — see
+        // `routes_ollama` module docs for the trust/CORS rationale.
+        .route("/api/version", get(routes_ollama::version))
+        .route("/api/tags", get(routes_ollama::tags))
+        .route("/api/ps", get(routes_ollama::ps))
+        .route("/api/show", post(routes_ollama::show))
+        .route("/api/chat", post(routes_ollama::chat).layer(admission()))
+        .route(
+            "/api/generate",
+            post(routes_ollama::generate).layer(admission()),
+        )
+        .route("/api/embed", post(routes_ollama::embed))
+        .route("/api/embeddings", post(routes_ollama::embeddings))
         // App management endpoints.
         .route("/v1/apps", get(routes_apps::list_apps))
         .route("/v1/apps/{app_id}/install", post(routes_apps::install_app))

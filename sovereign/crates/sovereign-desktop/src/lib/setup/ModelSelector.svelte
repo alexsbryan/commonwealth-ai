@@ -5,6 +5,7 @@
   import {
     scanForModels,
     downloadModel,
+    deleteModel,
     detectHardware,
     primaryCatalog,
     slotRecommendation,
@@ -25,9 +26,18 @@
     showRawInput?: boolean;
     /** When true, shows embedding-specific model recommendations */
     embedMode?: boolean;
+    /** When true, surfaces per-model delete affordances + a disk-usage
+     *  total. Off during first-run setup; on in Settings → Models. */
+    allowManage?: boolean;
   }
 
-  let { selectedPath, onSelect, showRawInput = false, embedMode = false }: Props = $props();
+  let {
+    selectedPath,
+    onSelect,
+    showRawInput = false,
+    embedMode = false,
+    allowManage = false,
+  }: Props = $props();
 
   let discovered: DiscoveredModel[] = $state([]);
   let scanning = $state(true);
@@ -40,6 +50,44 @@
   let manualPath = $state("");
   let unlisten: UnlistenFn | null = null;
   let hardware: HardwareInfo | null = $state(null);
+
+  // Model management (delete) — only surfaced when `allowManage` is set
+  // (Settings, not first-run setup). A two-click confirm guards the
+  // destructive action; the Rust command independently refuses to delete
+  // an in-use, non-gguf, or out-of-root file, so this is a UX guard over
+  // an already-safe backend.
+  let pendingDeletePath: string | null = $state(null);
+  let pendingDeleteTimer: ReturnType<typeof setTimeout> | undefined;
+  let deleteError: string | null = $state(null);
+
+  // Total bytes of every discovered model — a small glassbox readout so
+  // the user can see how much disk their weights occupy before reclaiming.
+  let totalDiscoveredBytes = $derived(
+    discovered.reduce((sum, m) => sum + (m.size_bytes ?? 0), 0),
+  );
+
+  async function handleDeleteModel(path: string, event: Event) {
+    event.stopPropagation();
+    deleteError = null;
+    if (pendingDeletePath !== path) {
+      // First click — arm, with a 3s auto-disarm window.
+      pendingDeletePath = path;
+      if (pendingDeleteTimer) clearTimeout(pendingDeleteTimer);
+      pendingDeleteTimer = setTimeout(() => {
+        pendingDeletePath = null;
+      }, 3000);
+      return;
+    }
+    // Second click — confirm.
+    if (pendingDeleteTimer) clearTimeout(pendingDeleteTimer);
+    pendingDeletePath = null;
+    try {
+      await deleteModel(path);
+      await rescan();
+    } catch (e) {
+      deleteError = typeof e === "string" ? e : "Could not delete that model.";
+    }
+  }
 
   // Daemon-supplied catalog. Single source of truth lives in
   // `sovereign-inference::setup_planner` + `models.toml`; the desktop
@@ -303,33 +351,60 @@
       <span class="spinner-small"></span> Scanning for models...
     </div>
   {:else if discovered.length > 0}
-    <div class="section-header">Models on this machine</div>
+    <div class="section-header">
+      Models on this machine
+      {#if discovered.length > 0}
+        <span class="header-sub"
+          >{discovered.length} file{discovered.length === 1 ? "" : "s"} · {formatSize(
+            totalDiscoveredBytes,
+          )}</span
+        >
+      {/if}
+    </div>
     <div class="model-grid">
       {#each discovered as model (model.path)}
         {@const isSelected = selectedPath === model.path}
-        <button
-          class="model-card"
-          class:selected={isSelected}
-          onclick={() => onSelect(model.path)}
-          aria-pressed={isSelected}
-        >
-          <span class="card-rail" aria-hidden="true"></span>
-          <span class="card-main">
-            <span class="model-name">{model.file_name}</span>
-            <span class="model-meta">
-              <span class="model-size">{formatSize(model.size_bytes)}</span>
-              <span class="model-location">{model.location_label}</span>
+        <div class="model-card-wrap">
+          <button
+            class="model-card"
+            class:selected={isSelected}
+            onclick={() => onSelect(model.path)}
+            aria-pressed={isSelected}
+          >
+            <span class="card-rail" aria-hidden="true"></span>
+            <span class="card-main">
+              <span class="model-name">{model.file_name}</span>
+              <span class="model-meta">
+                <span class="model-size">{formatSize(model.size_bytes)}</span>
+                <span class="model-location">{model.location_label}</span>
+              </span>
             </span>
-          </span>
-          {#if isSelected}
-            <span class="using-pill" aria-hidden="true">
-              <span class="using-check">✓</span>
-              <span class="using-text">Using this</span>
-            </span>
+            {#if isSelected}
+              <span class="using-pill" aria-hidden="true">
+                <span class="using-check">✓</span>
+                <span class="using-text">Using this</span>
+              </span>
+            {/if}
+          </button>
+          {#if allowManage && !isSelected}
+            <button
+              class="model-del-btn"
+              class:armed={pendingDeletePath === model.path}
+              onclick={(e) => handleDeleteModel(model.path, e)}
+              title={pendingDeletePath === model.path
+                ? "Click again to permanently delete this file"
+                : "Delete this model file from disk"}
+              aria-label="Delete model file"
+            >
+              {pendingDeletePath === model.path ? "Delete?" : "✕"}
+            </button>
           {/if}
-        </button>
+        </div>
       {/each}
     </div>
+    {#if deleteError}
+      <p class="delete-error" role="alert">{deleteError}</p>
+    {/if}
   {/if}
 
   <!-- Section B: Download a Model -->
@@ -488,6 +563,72 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+
+  /* Disk-usage readout in the section header — quiet, right-aligned. */
+  .header-sub {
+    margin-left: auto;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: normal;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+  }
+
+  /* Wrap holds the selectable card + the (sibling, not nested) delete
+     button so we never put a <button> inside a <button>. */
+  .model-card-wrap {
+    position: relative;
+    width: 100%;
+  }
+
+  .model-del-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 2;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-mid);
+    border-radius: 100px;
+    background: var(--bg-surface);
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    line-height: 1;
+    opacity: 0;
+    transition:
+      opacity 0.15s,
+      color 0.15s,
+      border-color 0.15s,
+      background 0.15s;
+  }
+  .model-card-wrap:hover .model-del-btn {
+    opacity: 1;
+  }
+  .model-del-btn:hover {
+    color: var(--error);
+    border-color: var(--error);
+  }
+  /* Armed (first click) — stays visible regardless of hover and reads
+     red, so the confirm step is unmistakable. */
+  .model-del-btn.armed {
+    opacity: 1;
+    color: var(--error);
+    border-color: var(--error);
+    background: rgba(212, 72, 72, 0.12);
+    font-weight: 600;
+  }
+
+  .delete-error {
+    margin: 8px 0 0;
+    font-size: 0.76rem;
+    color: var(--error);
+    line-height: 1.4;
   }
 
   .model-card {

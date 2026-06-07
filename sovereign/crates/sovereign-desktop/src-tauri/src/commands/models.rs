@@ -292,6 +292,61 @@ mod scan_tests {
     }
 }
 
+#[cfg(test)]
+mod delete_tests {
+    use super::delete_model_blocking;
+    use tempfile::tempdir;
+
+    fn touch(path: &std::path::Path) {
+        std::fs::write(path, b"GGUF\x00\x00\x00\x00").unwrap();
+    }
+
+    #[test]
+    fn deletes_gguf_under_root() {
+        let root = tempdir().unwrap();
+        let file = root.path().join("model.gguf");
+        touch(&file);
+        let roots = vec![root.path().to_path_buf()];
+        assert!(delete_model_blocking(&file, &[], &roots).is_ok());
+        assert!(!file.exists(), "the model file should be gone");
+    }
+
+    #[test]
+    fn rejects_non_gguf() {
+        let root = tempdir().unwrap();
+        let file = root.path().join("notes.txt");
+        touch(&file);
+        let roots = vec![root.path().to_path_buf()];
+        let err = delete_model_blocking(&file, &[], &roots).unwrap_err();
+        assert!(err.contains(".gguf"));
+        assert!(file.exists(), "a non-gguf must never be deleted");
+    }
+
+    #[test]
+    fn rejects_file_outside_roots() {
+        let root = tempdir().unwrap();
+        let elsewhere = tempdir().unwrap();
+        let file = elsewhere.path().join("model.gguf");
+        touch(&file);
+        let roots = vec![root.path().to_path_buf()];
+        let err = delete_model_blocking(&file, &[], &roots).unwrap_err();
+        assert!(err.contains("outside"));
+        assert!(file.exists(), "a file outside the known roots must never be deleted");
+    }
+
+    #[test]
+    fn rejects_assigned_model() {
+        let root = tempdir().unwrap();
+        let file = root.path().join("primary.gguf");
+        touch(&file);
+        let roots = vec![root.path().to_path_buf()];
+        let assigned = vec![file.clone()];
+        let err = delete_model_blocking(&file, &assigned, &roots).unwrap_err();
+        assert!(err.contains("assigned"));
+        assert!(file.exists(), "a slot-assigned model must never be deleted");
+    }
+}
+
 /// Returns `Some(bytes)` for an existing file path, `None` if the path
 /// is empty or the file does not exist. Errors are reserved for genuine
 /// IO failures (permissions etc.) so the UI can distinguish "user
@@ -349,6 +404,97 @@ pub async fn scan_for_models() -> Result<Vec<DiscoveredModel>, String> {
     })
     .await
     .map_err(|e| format!("Scan failed: {e}"))?
+}
+
+/// The directories the model scanner walks — and therefore the ONLY
+/// places `delete_model` will remove a file from. Kept in lock-step with
+/// `scan_for_models` above so anything the user can see, they can delete,
+/// and nothing outside these roots can ever be targeted.
+fn model_scan_roots() -> Vec<PathBuf> {
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    vec![
+        home.join(".sovereign").join("models"),
+        std::env::current_dir().unwrap_or_default().join("models"),
+        home.join(".cache").join("huggingface").join("hub"),
+        home.join("Downloads"),
+    ]
+}
+
+/// Delete a GGUF model file from disk to reclaim space. Destructive, so
+/// it is guarded three ways: (1) the path must be a real `.gguf` file;
+/// (2) it must resolve (canonicalised, symlinks followed) to somewhere
+/// under a known model-scan root — this command can never be coaxed into
+/// deleting an arbitrary file; (3) it must NOT be the file currently
+/// assigned to any chat slot, since deleting an in-use model would break
+/// the next runtime build. The UI additionally requires a two-click
+/// confirm. Returns a human-readable error (surfaced to the user) on any
+/// guard failure.
+#[tauri::command]
+pub async fn delete_model(
+    state: State<'_, Arc<AppState>>,
+    path: String,
+) -> Result<(), String> {
+    let target = PathBuf::from(path.trim());
+    // Snapshot the assigned slot paths for the in-use guard (cheap clone).
+    let assigned: Vec<PathBuf> = {
+        let cfg = state.config.read().await;
+        [
+            Some(cfg.model_path.clone()),
+            cfg.primary_model_path.clone(),
+            cfg.embed_model_path.clone(),
+            cfg.code_model_path.clone(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    };
+    let roots = model_scan_roots();
+    tokio::task::spawn_blocking(move || delete_model_blocking(&target, &assigned, &roots))
+        .await
+        .map_err(|e| format!("delete_model join error: {e}"))?
+}
+
+fn delete_model_blocking(
+    target: &Path,
+    assigned: &[PathBuf],
+    roots: &[PathBuf],
+) -> Result<(), String> {
+    // (1) .gguf only.
+    let is_gguf = target
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("gguf"));
+    if !is_gguf {
+        return Err("Refusing to delete: not a .gguf model file.".into());
+    }
+    let canonical =
+        std::fs::canonicalize(target).map_err(|e| format!("Cannot resolve that path: {e}"))?;
+    if !canonical.is_file() {
+        return Err("Refusing to delete: not a regular file.".into());
+    }
+    // (2) Must live under a known model-scan root.
+    let under_root = roots
+        .iter()
+        .filter_map(|r| std::fs::canonicalize(r).ok())
+        .any(|r| canonical.starts_with(&r));
+    if !under_root {
+        return Err("Refusing to delete: that file is outside the known model folders.".into());
+    }
+    // (3) Must not be assigned to a slot.
+    for a in assigned {
+        if std::fs::canonicalize(a)
+            .map(|ac| ac == canonical)
+            .unwrap_or(false)
+        {
+            return Err(
+                "This model is assigned to a slot. Clear it in Settings → Models first, \
+                 then delete."
+                    .into(),
+            );
+        }
+    }
+    std::fs::remove_file(&canonical).map_err(|e| format!("Delete failed: {e}"))?;
+    Ok(())
 }
 
 #[tauri::command]

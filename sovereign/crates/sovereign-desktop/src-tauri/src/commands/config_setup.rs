@@ -126,6 +126,14 @@ fn config_needs_rebuild(old: &DesktopConfig, new: &DesktopConfig) -> bool {
         || old.knowledge_view_enabled != new.knowledge_view_enabled
         || old.auto_escalate_to_web != new.auto_escalate_to_web
         || old.data_dir != new.data_dir
+        // `custom_instructions` is captured into the Runtime's
+        // `InferenceConfig` at construction (state.rs) and the Runtime is
+        // held as an immutable `Arc<Runtime>` — there is NO live-update
+        // path, so a persona edit only takes effect after a rebuild.
+        // (The sampling fields above are captured the same way; persona
+        // is the one a user actively edits and expects applied on the
+        // next turn, so we pay the rebuild for it.)
+        || old.custom_instructions != new.custom_instructions
 }
 
 /// Mirror the three model paths + data_dir from `DesktopConfig` into

@@ -140,6 +140,11 @@ export interface DesktopConfig {
    *  draft for thin evidence and may surface an InformationRequest
    *  card. Default on. */
   auto_collaborate: boolean;
+  /** User-authored "custom instructions" / persona. Global standing
+   *  guidance appended as the outermost layer of every system prompt —
+   *  append-only, never replacing the situated context. Null/empty is a
+   *  no-op. Visible verbatim in the Inner Work ProvenancePanel. */
+  custom_instructions?: string | null;
   /** Idle seconds before the lazy chat slot (primary + code) is
    *  unloaded to reclaim memory. Mirrors
    *  `DaemonSection::primary_idle_secs`; default 300. */

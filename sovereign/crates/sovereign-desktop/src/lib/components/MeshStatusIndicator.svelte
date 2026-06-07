@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { meshGetState, meshIsRunning } from "../api";
+  import { meshGetState, meshIsRunning, getRuntimeStatus } from "../api";
+  import type { RuntimeStatus } from "../api";
   import type { MeshStateResponse } from "../types";
 
   const POLL_INTERVAL_MS = 10_000;
@@ -10,6 +11,7 @@
   // (`null`), and every subsequent assignment treats `mesh` as `never`.
   // Passing the type as the generic parameter keeps the union intact.
   let mesh = $state<MeshStateResponse | null>(null);
+  let runtime = $state<RuntimeStatus | null>(null);
 
   onMount(() => {
     void refresh();
@@ -19,9 +21,22 @@
 
   async function refresh() {
     try {
-      mesh = (await meshIsRunning()) ? await meshGetState() : null;
+      if (await meshIsRunning()) {
+        mesh = await meshGetState();
+        // Capacity is best-effort glassbox — never let a /status
+        // hiccup blank out the "connected" label.
+        try {
+          runtime = await getRuntimeStatus();
+        } catch {
+          runtime = null;
+        }
+      } else {
+        mesh = null;
+        runtime = null;
+      }
     } catch {
       mesh = null;
+      runtime = null;
     }
   }
 
@@ -32,12 +47,30 @@
         : `${mesh.status.members_online} connected`
       : null
   );
+
+  // Pooled mesh capacity, surfaced honestly: free VRAM/storage summed
+  // across online members (sourced from `/status`). Appended to the
+  // "N connected" label as a glanceable "· 48 GB", with the full
+  // breakdown on hover — glassbox over the sidebar dot so the user can
+  // see the compute behind the count.
+  let capacityLabel = $derived(
+    runtime && runtime.pooled_vram_gb > 0
+      ? ` · ${Math.round(runtime.pooled_vram_gb)} GB`
+      : ""
+  );
+  let capacityTooltip = $derived(
+    runtime
+      ? `${runtime.members_online} of ${runtime.members_total} peers online` +
+          ` · ${Math.round(runtime.pooled_vram_gb)} GB VRAM` +
+          ` · ${Math.round(runtime.pooled_storage_gb)} GB storage pooled`
+      : ""
+  );
 </script>
 
 {#if label}
-  <div class="mesh-status" aria-live="polite">
+  <div class="mesh-status" aria-live="polite" title={capacityTooltip}>
     <span class="dot" aria-hidden="true"></span>
-    <span class="count">{label}</span>
+    <span class="count">{label}{capacityLabel}</span>
   </div>
 {/if}
 

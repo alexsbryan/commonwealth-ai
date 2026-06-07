@@ -442,6 +442,14 @@ export async function scanForModels(): Promise<DiscoveredModel[]> {
   return invoke("scan_for_models");
 }
 
+/** Delete a GGUF model file from disk to reclaim space. Guarded on the
+ *  Rust side: `.gguf` only, must live under a known model folder, and
+ *  must not be assigned to a slot. Throws a human-readable error string
+ *  on any guard failure. */
+export async function deleteModel(path: string): Promise<void> {
+  return invoke("delete_model", { path });
+}
+
 /** Returns the on-disk size of a GGUF file in bytes. Resolves to `null`
  *  when the path is empty or the file is missing — useful for the
  *  Settings → Models budget meter, which queries every slot whether or
@@ -482,6 +490,20 @@ export async function slotRecommendation(
  *  blocked by Tauri's sandbox and fails with Safari's "Load failed". */
 export async function listDaemonModels(): Promise<string[]> {
   return invoke("list_daemon_models");
+}
+
+export interface RuntimeStatus {
+  members_online: number;
+  members_total: number;
+  pooled_vram_gb: number;
+  pooled_storage_gb: number;
+}
+
+/** Pooled mesh capacity from the daemon's `/status` summary — the
+ *  accurate-today numbers (free VRAM/storage across online members).
+ *  Surfaced as the sidebar mesh-indicator tooltip. */
+export async function getRuntimeStatus(): Promise<RuntimeStatus> {
+  return invoke("get_runtime_status");
 }
 
 export async function downloadModel(

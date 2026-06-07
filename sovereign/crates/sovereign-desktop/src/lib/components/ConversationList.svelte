@@ -6,8 +6,9 @@
     createConversation,
     deleteConversation,
     renameConversation,
+    searchMessages,
   } from "../api";
-  import type { ConversationEntry } from "../types";
+  import type { ConversationEntry, SearchResult } from "../types";
   import MeshStatusIndicator from "./MeshStatusIndicator.svelte";
   import BrandMark from "./BrandMark.svelte";
 
@@ -33,6 +34,105 @@
 
   let unlisten: (() => void) | undefined;
 
+  // ── Full-text search over message bodies (FTS5, backed by the
+  // existing `search_messages` command). Surfaces the conversation a
+  // hit belongs to so the user can jump straight there. ──
+  let searchQuery = $state("");
+  let searchResults = $state<SearchResult[]>([]);
+  let searching = $state(false);
+  let searchDebounce: ReturnType<typeof setTimeout> | undefined;
+
+  // conversation_id → display title, for labelling search hits without
+  // a second round-trip (the sidebar list is already loaded).
+  let titleById = $derived(
+    new Map(conversations.map((c) => [c.id, c.title || "New conversation"])),
+  );
+  let inSearch = $derived(searchQuery.trim().length >= 2);
+
+  function onSearchInput() {
+    if (searchDebounce) clearTimeout(searchDebounce);
+    if (searchQuery.trim().length < 2) {
+      searchResults = [];
+      searching = false;
+      return;
+    }
+    searching = true;
+    searchDebounce = setTimeout(runSearch, 200);
+  }
+
+  async function runSearch() {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      searchResults = [];
+      searching = false;
+      return;
+    }
+    try {
+      searchResults = await searchMessages(q);
+    } catch (e) {
+      console.error("Failed to search messages:", e);
+      searchResults = [];
+    } finally {
+      searching = false;
+    }
+  }
+
+  function clearSearch() {
+    searchQuery = "";
+    searchResults = [];
+    searching = false;
+    if (searchDebounce) clearTimeout(searchDebounce);
+  }
+
+  function openResult(conversationId: string) {
+    clearSearch();
+    onSelect(conversationId);
+  }
+
+  /** Match-centred snippet so the user sees *why* a result matched,
+   *  not just the start of the message. Falls back to a head-truncation
+   *  when the term isn't found verbatim (FTS stemming can match a
+   *  variant). Collapses whitespace for a tidy one-line preview. */
+  function snippet(text: string, q: string): string {
+    const collapsed = text.replace(/\s+/g, " ").trim();
+    const idx = collapsed.toLowerCase().indexOf(q.trim().toLowerCase());
+    if (idx < 0) {
+      return collapsed.length > 140 ? `${collapsed.slice(0, 140)}…` : collapsed;
+    }
+    const start = Math.max(0, idx - 40);
+    const end = Math.min(collapsed.length, idx + q.trim().length + 100);
+    return (
+      (start > 0 ? "…" : "") +
+      collapsed.slice(start, end) +
+      (end < collapsed.length ? "…" : "")
+    );
+  }
+
+  // ── Two-click delete confirm for the hover ✕ (easy to mis-click).
+  // First click arms (3s window), second confirms. The deliberate
+  // right-click → Delete menu path stays single-action. ──
+  let pendingDeleteId: string | null = $state(null);
+  let pendingDeleteTimeout: ReturnType<typeof setTimeout> | undefined;
+
+  function armDelete(id: string, event: Event) {
+    event.stopPropagation();
+    if (pendingDeleteId === id) {
+      disarmDelete();
+      void deleteById(id);
+      return;
+    }
+    pendingDeleteId = id;
+    if (pendingDeleteTimeout) clearTimeout(pendingDeleteTimeout);
+    pendingDeleteTimeout = setTimeout(() => {
+      pendingDeleteId = null;
+    }, 3000);
+  }
+
+  function disarmDelete() {
+    pendingDeleteId = null;
+    if (pendingDeleteTimeout) clearTimeout(pendingDeleteTimeout);
+  }
+
   onMount(async () => {
     await loadConversations();
     // Keep the list in sync with backend changes (new messages, rename,
@@ -43,7 +143,11 @@
     });
   });
 
-  onDestroy(() => unlisten?.());
+  onDestroy(() => {
+    unlisten?.();
+    if (searchDebounce) clearTimeout(searchDebounce);
+    if (pendingDeleteTimeout) clearTimeout(pendingDeleteTimeout);
+  });
 
   export async function loadConversations() {
     try {
@@ -119,11 +223,6 @@
     }
   }
 
-  async function handleDelete(id: string, event: Event) {
-    event.stopPropagation();
-    await deleteById(id);
-  }
-
   async function deleteById(id: string) {
     try {
       await deleteConversation(id);
@@ -191,10 +290,61 @@
       </svg>
       New conversation
     </button>
+    <div class="search-box">
+      <svg class="search-icon" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+        <circle cx="5" cy="5" r="3.5" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M7.7 7.7L10.5 10.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+      <input
+        class="search-input"
+        type="text"
+        placeholder="Search messages…"
+        bind:value={searchQuery}
+        oninput={onSearchInput}
+        spellcheck="false"
+      />
+      {#if searchQuery}
+        <button
+          class="search-clear"
+          onclick={clearSearch}
+          title="Clear search"
+          aria-label="Clear search"
+        >
+          <svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+            <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+        </button>
+      {/if}
+    </div>
   </div>
 
   <div class="list-items">
-    {#each conversations as convo (convo.id)}
+    {#if inSearch}
+      {#if searching}
+        <p class="empty">Searching…</p>
+      {:else if searchResults.length === 0}
+        <p class="empty">No matches</p>
+      {:else}
+        {#each searchResults as result, i (result.conversation_id + ":" + i)}
+          <div
+            class="search-result"
+            role="button"
+            tabindex="0"
+            onclick={() => openResult(result.conversation_id)}
+            onkeydown={(e) =>
+              e.key === "Enter" && openResult(result.conversation_id)}
+          >
+            <span class="result-title">
+              {titleById.get(result.conversation_id) ?? "Conversation"}
+            </span>
+            <span class="result-snippet"
+              >{snippet(result.content, searchQuery)}</span
+            >
+          </div>
+        {/each}
+      {/if}
+    {:else}
+      {#each conversations as convo (convo.id)}
       <div
         class="convo-item"
         class:selected={selectedConversationId === convo.id}
@@ -233,18 +383,28 @@
         </div>
         <button
           class="delete-btn"
-          onclick={(e) => handleDelete(convo.id, e)}
-          title="Delete"
+          class:armed={pendingDeleteId === convo.id}
+          onclick={(e) => armDelete(convo.id, e)}
+          title={pendingDeleteId === convo.id
+            ? "Click again to confirm delete"
+            : "Delete"}
         >
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-            <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-          </svg>
+          {#if pendingDeleteId === convo.id}
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+              <path d="M2.5 6.5l2.5 2.5 4.5-5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          {:else}
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+              <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+          {/if}
         </button>
       </div>
     {/each}
 
-    {#if conversations.length === 0}
-      <p class="empty">No conversations yet</p>
+      {#if conversations.length === 0}
+        <p class="empty">No conversations yet</p>
+      {/if}
     {/if}
   </div>
 
@@ -329,6 +489,90 @@
     background: var(--accent-dim);
     border-color: var(--accent);
     color: var(--accent);
+  }
+
+  /* ── Search ── */
+  .search-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 0 10px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius);
+  }
+  .search-box:focus-within {
+    border-color: var(--accent);
+  }
+  .search-icon {
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .search-input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-family: inherit;
+    padding: 7px 0;
+  }
+  .search-input::placeholder {
+    color: var(--text-muted);
+  }
+  .search-clear {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-muted);
+    padding: 2px;
+    border-radius: 3px;
+    transition:
+      color 0.15s,
+      background 0.15s;
+  }
+  .search-clear:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  /* ── Search results ── */
+  .search-result {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px 14px;
+    border-left: 2px solid transparent;
+    cursor: pointer;
+    transition:
+      background 0.15s,
+      border-color 0.15s;
+  }
+  .search-result:hover {
+    background: var(--bg-surface);
+    border-left-color: var(--border-bright);
+  }
+  .result-title {
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .result-snippet {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   /* ── Conversation list ── */
@@ -424,6 +668,15 @@
   .delete-btn:hover {
     color: var(--error);
     background: rgba(212, 72, 72, 0.1);
+  }
+
+  /* Armed (first click) — stays visible regardless of hover so the
+     confirm affordance doesn't vanish when the cursor drifts, and
+     reads red to signal the next click is destructive. */
+  .delete-btn.armed {
+    opacity: 1;
+    color: var(--error);
+    background: rgba(212, 72, 72, 0.12);
   }
 
   .empty {
