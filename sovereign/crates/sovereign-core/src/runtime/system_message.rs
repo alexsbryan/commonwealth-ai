@@ -258,6 +258,23 @@ impl Runtime {
             parts.push(crate::dossier::render_tool_dossier(dossier, now_unix));
         }
 
+        // User-authored standing instructions (global persona). The
+        // OUTERMOST layer — appended after everything, including the tool
+        // dossier — so it sits closest to the user's in-flight message and
+        // carries the most weight on *how* to respond. It is layered ON
+        // TOP of the situated prompt, never replacing it: the base
+        // epistemic contract and all situated context above still hold.
+        // `render_custom_instructions` returns `None` for an absent/empty
+        // persona, so the assembled prompt is byte-identical to the
+        // no-persona case (no stray section, no trailing separator).
+        // Fully visible to the user in the desktop's ProvenancePanel,
+        // which renders this final assembled string.
+        if let Some(block) =
+            render_custom_instructions(self.inference_config.custom_instructions.as_deref())
+        {
+            parts.push(block);
+        }
+
         parts.join("\n\n")
     }
     /// Run the R3 temporal-tension pre-pass before prompt assembly.
@@ -724,5 +741,52 @@ impl Runtime {
             None,
         )
         .await
+    }
+}
+
+/// Render the user's global "custom instructions" / persona as the
+/// outermost system-prompt layer. Returns `None` for an absent or
+/// whitespace-only persona so the assembled prompt is byte-identical to
+/// the no-persona case (no stray section, no trailing separator).
+/// Append-only by construction: the caller pushes this AFTER every
+/// situated/tool section, so it augments the base contract, never
+/// displaces it.
+pub(crate) fn render_custom_instructions(ci: Option<&str>) -> Option<String> {
+    let ci = ci?.trim();
+    if ci.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "The user has provided these standing instructions for how you \
+         should respond. Honour them unless they conflict with a safety \
+         or grounding rule above:\n{ci}"
+    ))
+}
+
+#[cfg(test)]
+mod custom_instructions_tests {
+    use super::render_custom_instructions;
+
+    #[test]
+    fn none_persona_renders_nothing() {
+        assert_eq!(render_custom_instructions(None), None);
+    }
+
+    #[test]
+    fn empty_or_whitespace_persona_renders_nothing() {
+        // The byte-identical guarantee: empty / whitespace yields no
+        // section, so the assembled prompt matches the no-persona case.
+        assert_eq!(render_custom_instructions(Some("")), None);
+        assert_eq!(render_custom_instructions(Some("   \n\t ")), None);
+    }
+
+    #[test]
+    fn nonempty_persona_is_rendered_and_trimmed() {
+        let out = render_custom_instructions(Some("  Be concise.  "))
+            .expect("non-empty persona must render");
+        assert!(out.contains("Be concise."));
+        // Trimmed — no leading/trailing whitespace from the raw field.
+        assert!(!out.contains("  Be concise.  "));
+        assert!(out.contains("standing instructions"));
     }
 }

@@ -142,6 +142,15 @@ pub struct DesktopConfig {
     #[serde(default = "default_auto_collaborate")]
     pub auto_collaborate: bool,
 
+    /// User-authored "custom instructions" / persona — global standing
+    /// guidance appended as the outermost layer of every system prompt
+    /// (see `sovereign_core::types::InferenceConfig::custom_instructions`).
+    /// Append-only: it never replaces the situated prompt. Empty / `None`
+    /// is a no-op (byte-identical prompt). Editable from Settings →
+    /// Models; visible verbatim in the Inner Work ProvenancePanel.
+    #[serde(default)]
+    pub custom_instructions: Option<String>,
+
     /// Idle seconds before the lazy-loaded primary chat slot is
     /// unloaded to reclaim VRAM. Mirrors
     /// `sovereign_core::setup_config::DaemonSection::primary_idle_secs`
@@ -366,6 +375,7 @@ impl Default for DesktopConfig {
             think_budget: default_think_budget(),
             top_k: None,
             auto_collaborate: default_auto_collaborate(),
+            custom_instructions: None,
             primary_idle_secs: default_primary_idle_secs(),
             embed_family: ModelFamily::Unknown,
             node_name: String::new(),
@@ -1955,6 +1965,11 @@ pub async fn bootstrap_with_progress(
             think_budget: cfg.think_budget as usize,
             top_k: cfg.top_k,
             auto_collaborate: cfg.auto_collaborate,
+            custom_instructions: cfg
+                .custom_instructions
+                .as_ref()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
         }
     };
 

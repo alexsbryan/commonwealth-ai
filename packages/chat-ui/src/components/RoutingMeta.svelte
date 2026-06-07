@@ -19,6 +19,11 @@
       }[];
       total_latency_ms: number;
       tokens_used: number;
+      /// Completion tokens generated this turn (excludes the prompt).
+      /// Present on streamed paths; pairs with `total_latency_ms`
+      /// (which is synthesis-scoped, not whole-turn) to derive an
+      /// honest generation tok/s. Absent → no rate is shown.
+      completion_tokens?: number;
       inference_backend: string;
       oicp_match?: string;
       coarse_intent?: string;
@@ -109,6 +114,39 @@
     if (tokensPct >= 75) return "ctx-tight";
     return "";
   });
+
+  // Glassbox "answered-by" — the model that actually produced this
+  // turn. `inference_backend` is the gguf stem for a local slot, or
+  // "<model> @ peer <name>" when the mesh fan-out served it. We surface
+  // it as an always-visible chip (not only in the expanded detail) so
+  // the user can always tell which model answered without a click. This
+  // is the *visibility* half of model agency — routing stays automatic;
+  // we just stop hiding the result.
+  let modelLabel = $derived(provenance?.inference_backend?.trim() ?? "");
+  let modelIsPeer = $derived(modelLabel.includes("@ peer"));
+
+  // Honest generation throughput. `total_latency_ms` is scoped to the
+  // synthesis call (the embedded `complete()`/stream span), NOT the
+  // whole turn — retrieval and routing complete before the timer starts
+  // (in the runtime, `started` is set inside the synthesis spawn). So
+  // `completion_tokens / synthesis_seconds` is a defensible tok/s — the
+  // same number `ollama --verbose` reports as eval rate. We use
+  // completion tokens only (never `tokens_used`, which can include the
+  // prompt) and suppress the rate on sub-50ms spans where a few-token
+  // turn would yield a meaningless number.
+  let tokPerSec = $derived.by(() => {
+    const toks = provenance?.completion_tokens;
+    if (!toks || toks <= 0) return null;
+    const secs = (provenance?.total_latency_ms ?? 0) / 1000;
+    if (secs < 0.05) return null;
+    const rate = toks / secs;
+    return isFinite(rate) && rate > 0 ? rate : null;
+  });
+  let tokPerSecLabel = $derived(
+    tokPerSec == null
+      ? ""
+      : `${tokPerSec >= 100 ? Math.round(tokPerSec) : tokPerSec.toFixed(1)} tok/s`,
+  );
 </script>
 
 {#if provenance}
@@ -119,6 +157,15 @@
     onclick={() => (expanded = !expanded)}
     onkeydown={(e) => e.key === "Enter" && (expanded = !expanded)}
   >
+    {#if modelLabel}
+      <span
+        class="meta-chip meta-model"
+        class:meta-peer={modelIsPeer}
+        title={modelIsPeer
+          ? `Answered by ${modelLabel}`
+          : `Answered locally by ${modelLabel}`}>{modelLabel}</span
+      >
+    {/if}
     {#if corporaSearched.length > 0}
       <span class="meta-chip meta-source"
         >Searched {corporaSearched.join(", ")}</span
@@ -133,6 +180,12 @@
       {:else}
         <span class="meta-chip">{provenance.tokens_used} tok</span>
       {/if}
+    {/if}
+    {#if tokPerSecLabel}
+      <span
+        class="meta-chip"
+        title="Generation throughput — completion tokens ÷ synthesis time">{tokPerSecLabel}</span
+      >
     {/if}
   </div>
   {#if expanded}
@@ -173,7 +226,7 @@
         <strong>Timing:</strong>
         {elapsedLabel}{provenance.tokens_used > 0
           ? ` \u00B7 ${provenance.tokens_used} tok`
-          : ""}
+          : ""}{tokPerSecLabel ? ` \u00B7 ${tokPerSecLabel}` : ""}
       </div>
       {#if provenance.context_window}
         <div>
@@ -244,6 +297,36 @@
     color: var(--accent);
     border-color: color-mix(in srgb, var(--accent) 25%, transparent);
     background: var(--accent-glow);
+  }
+
+  /* Always-visible "answered-by" model chip. Long gguf stems are
+     ellipsized so they don't dominate the row; the full string
+     (incl. "@ peer <name>" for mesh-served turns) stays available
+     in the `title` tooltip, so nothing is hidden — just compacted. */
+  .meta-model {
+    color: var(--lavender-light, var(--accent));
+    border-color: color-mix(
+      in srgb,
+      var(--lavender-light, var(--accent)) 30%,
+      transparent
+    );
+    background: color-mix(
+      in srgb,
+      var(--lavender-light, var(--accent)) 8%,
+      transparent
+    );
+    max-width: 24ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Mesh-served turns lean on the accent so "this ran on a peer"
+     reads at a glance, distinct from the local lavender. */
+  .meta-model.meta-peer {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
   }
 
   /* Context-budget glassbox — chip tints warmer as the turn

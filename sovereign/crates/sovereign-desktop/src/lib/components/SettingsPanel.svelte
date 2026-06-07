@@ -147,6 +147,7 @@
   let editingCreativity = $state(false);
   let editingContextWindow = $state(false);
   let editingResponseLength = $state(false);
+  let editingPersona = $state(false);
   let editingStorageBudget = $state(false);
   let editingPaths = $state(false);
   let editingIdleSecs = $state(false);
@@ -654,7 +655,7 @@
                 <div class="slot-item-body">
                   <p class="slot-item-desc">Handles the short turns — quick replies, drafts, follow-ups. Stays loaded so there's no wait when you hit send.</p>
                   <div class="slot-item-controls">
-                    <ModelSelector selectedPath={slotSelectedPath} onSelect={handleSlotSelect} showRawInput={true} embedMode={false} />
+                    <ModelSelector selectedPath={slotSelectedPath} onSelect={handleSlotSelect} showRawInput={true} embedMode={false} allowManage={true} />
                     {#if config.model_path}
                       <button class="act-btn act-btn--ghost act-btn--danger" onclick={() => { config!.model_path = ""; markDirty('model-fast'); activeSlot = null; }}>
                         Clear
@@ -687,7 +688,7 @@
                 <div class="slot-item-body">
                   <p class="slot-item-desc">Your heaviest model. Comes out for research, long writing, and careful analysis, then steps back five minutes after the last question to free memory.</p>
                   <div class="slot-item-controls">
-                    <ModelSelector selectedPath={slotSelectedPath} onSelect={handleSlotSelect} showRawInput={true} embedMode={false} />
+                    <ModelSelector selectedPath={slotSelectedPath} onSelect={handleSlotSelect} showRawInput={true} embedMode={false} allowManage={true} />
                     {#if config.primary_model_path}
                       <button class="act-btn act-btn--ghost act-btn--danger" onclick={() => { config!.primary_model_path = null; markDirty('model-reasoning'); activeSlot = null; }}>
                         Clear
@@ -720,7 +721,7 @@
                 <div class="slot-item-body">
                   <p class="slot-item-desc">Indexes every document you add so the assistant can find passages by meaning, not just keywords. Runs in the background while ingest is going.</p>
                   <div class="slot-item-controls">
-                    <ModelSelector selectedPath={slotSelectedPath} onSelect={handleSlotSelect} showRawInput={true} embedMode={true} />
+                    <ModelSelector selectedPath={slotSelectedPath} onSelect={handleSlotSelect} showRawInput={true} embedMode={true} allowManage={true} />
                     {#if config.embed_model_path}
                       <button class="act-btn act-btn--ghost act-btn--danger" onclick={() => { config!.embed_model_path = null; markDirty('model-embed'); activeSlot = null; }}>
                         Clear
@@ -772,7 +773,7 @@
                 <div class="slot-item-body">
                   <p class="slot-item-desc">A second model trained on code (Qwen-Coder, DeepSeek-Coder, etc.). When set, programming questions go here instead of the Main responder. The two share a memory slot — whichever you need loads on demand.</p>
                   <div class="slot-item-controls">
-                    <ModelSelector selectedPath={slotSelectedPath} onSelect={handleSlotSelect} showRawInput={true} embedMode={false} />
+                    <ModelSelector selectedPath={slotSelectedPath} onSelect={handleSlotSelect} showRawInput={true} embedMode={false} allowManage={true} />
                     {#if config.code_model_path}
                       <button class="act-btn act-btn--ghost act-btn--danger" onclick={() => { config!.code_model_path = null; markDirty('model-code'); activeSlot = null; }}>
                         Clear
@@ -982,6 +983,42 @@
                 </div>
                 <p class="preset-tech">Rule of thumb: ~4 chars per token. 2048 ≈ a tight summary; 4096 ≈ a typical long reply; 16384 ≈ a multi-section deep dive. Bigger budgets use more RAM during generation.</p>
                 <button class="edit-done" onclick={() => editingResponseLength = false}>Done</button>
+              </div>
+            {/if}
+          </div>
+
+          <!-- Custom instructions / persona — global standing guidance
+               appended as the OUTERMOST layer of every system prompt
+               (sovereign_core InferenceConfig.custom_instructions).
+               Append-only: it never replaces Sovereign's situated
+               context. Visible verbatim in the Inner Work
+               ProvenancePanel so the user can always see what was sent. -->
+          <div class="cfg-entry" class:cfg-entry--open={editingPersona}>
+            <button class="cfg-entry-display" onclick={() => editingPersona = !editingPersona} aria-expanded={editingPersona}>
+              <span class="cfg-entry-name">Custom instructions</span>
+              <span class="cfg-entry-current">
+                <span class="cfg-entry-val">{config.custom_instructions?.trim() ? 'Set' : 'Off'}</span>
+                <span class="cfg-entry-tech">persona</span>
+              </span>
+            </button>
+            {#if editingPersona}
+              <div class="cfg-entry-edit">
+                <p class="cfg-entry-question">Standing guidance for how the assistant should respond — tone, format, things to always or never do. It's layered on top of Sovereign's own instructions (never replacing them) and applies to every conversation. Leave empty for default behaviour.</p>
+                <textarea
+                  class="cfg-textarea"
+                  rows="5"
+                  maxlength="4000"
+                  placeholder="e.g. Be concise and prefer bullet points. Always show your reasoning for any numeric claim. Never start a reply with &quot;Certainly&quot;."
+                  value={config.custom_instructions ?? ''}
+                  oninput={(e) => {
+                    if (!config) return;
+                    const v = e.currentTarget.value;
+                    config.custom_instructions = v.length ? v : null;
+                    markDirty('custom_instructions');
+                  }}
+                ></textarea>
+                <p class="cfg-entry-question">Visible verbatim in Inner Work → provenance (Cmd+?), so you can always see exactly what the model was told.</p>
+                <button class="edit-done" onclick={() => editingPersona = false}>Done</button>
               </div>
             {/if}
           </div>
@@ -2561,6 +2598,31 @@
 
   .cfg-number-input:focus {
     border-color: var(--accent);
+  }
+
+  .cfg-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius);
+    outline: none;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+    font-family: inherit;
+    resize: vertical;
+    min-height: 96px;
+    transition: border-color 0.15s;
+  }
+
+  .cfg-textarea:focus {
+    border-color: var(--accent);
+  }
+
+  .cfg-textarea::placeholder {
+    color: var(--text-muted);
   }
 
   .cfg-text-input {

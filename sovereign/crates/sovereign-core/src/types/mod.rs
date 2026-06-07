@@ -53,6 +53,14 @@ pub struct InferenceConfig {
     /// disable it for cost or testing.
     #[serde(default = "default_auto_collaborate")]
     pub auto_collaborate: bool,
+    /// User-authored standing instructions ("custom instructions" /
+    /// persona). Appended as the final, outermost layer of the system
+    /// prompt — layered ON TOP of the situated context, never replacing
+    /// any of it. Global (applies to every conversation). `None`/empty
+    /// yields a byte-identical prompt to the no-persona case. See
+    /// `Runtime::build_system_message`.
+    #[serde(default)]
+    pub custom_instructions: Option<String>,
 }
 
 pub(crate) fn default_auto_collaborate() -> bool {
@@ -67,6 +75,7 @@ impl Default for InferenceConfig {
             think_budget: 512,
             top_k: None,
             auto_collaborate: default_auto_collaborate(),
+            custom_instructions: None,
         }
     }
 }

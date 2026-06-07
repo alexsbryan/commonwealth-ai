@@ -239,6 +239,58 @@ pub async fn list_daemon_models() -> Result<Vec<String>, String> {
     Ok(ids)
 }
 
+/// Pooled mesh capacity for the sidebar's runtime readout. Reads the
+/// daemon's `/status` summary — the one surface that aggregates free
+/// VRAM / storage across online members. We deliberately surface only
+/// the numbers that are *accurate today*: `/v1/models` carries no
+/// per-model residency in embedded mode, and `/status`
+/// `inference.loaded_models` is mesh-plan-derived (empty on a solo
+/// embedded desktop), so a true local "what's resident + bytes" table
+/// (the `ollama ps` analog) is a tracked follow-up requiring a small
+/// `InferenceProvider` introspection method — not surfaced here rather
+/// than shown as a fabricated zero.
+#[derive(Serialize, Default)]
+pub struct RuntimeStatus {
+    pub members_online: u32,
+    pub members_total: u32,
+    pub pooled_vram_gb: f32,
+    pub pooled_storage_gb: f32,
+}
+
+#[tauri::command]
+pub async fn get_runtime_status() -> Result<RuntimeStatus, String> {
+    let url = "http://127.0.0.1:9741/status";
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .map_err(|e| format!("build http client: {e}"))?;
+    let resp = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("GET /status: {e}"))?;
+    let status = resp.status();
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("parse /status body: {e}"))?;
+    if !status.is_success() {
+        return Err(format!("/status returned {status}"));
+    }
+    let mesh = body.get("mesh");
+    let num = |k: &str| -> f64 {
+        mesh.and_then(|m| m.get(k))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0)
+    };
+    Ok(RuntimeStatus {
+        members_online: num("members_online") as u32,
+        members_total: num("members_total") as u32,
+        pooled_vram_gb: num("pooled_vram_gb") as f32,
+        pooled_storage_gb: num("pooled_storage_gb") as f32,
+    })
+}
+
 /// Return the recommended slot for `kind` (`"fast"` or `"embed"`) on
 /// `profile` (or detected). Wraps `setup_planner::resolve_slot`. The
 /// thoughtful (primary) slot has its own catalog endpoint above; the

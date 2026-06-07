@@ -42,6 +42,8 @@ serde_json = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }
 bytes = { workspace = true }
+# RFC3339 `created_at` timestamps for the Ollama-native `/api/*` shim.
+chrono = { workspace = true }
 hex = "0.4"
 # `libc::kill` for the `pipeline_pause` handler — needs to SIGTERM
 # local `sovereign pipeline run` PIDs found via `/proc/`. Same usage

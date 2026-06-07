@@ -28,6 +28,7 @@ pub mod routes_apps;
 pub mod routes_inference;
 pub mod routes_internal;
 pub mod routes_knowledge;
+pub mod routes_ollama;
 pub mod routes_oicp;
 pub mod routes_responses;
 pub mod routes_status;

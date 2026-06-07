@@ -270,6 +270,25 @@
     }
   }
 
+  // Message-level copy — the whole answer, not just a code block.
+  // Copies `proseText` (the prose with `<think>` reasoning stripped),
+  // mirroring the per-block clipboard pattern above. Markdown source is
+  // what's copied (readable + structure-preserving), consistent with
+  // how the code-block button copies raw text.
+  let copyLabel = $state("Copy");
+  async function handleMessageCopy() {
+    if (!proseText) return;
+    try {
+      await navigator.clipboard.writeText(proseText);
+      copyLabel = "Copied";
+      setTimeout(() => {
+        copyLabel = "Copy";
+      }, 1500);
+    } catch (err) {
+      console.error("Failed to copy message:", err);
+    }
+  }
+
   function handleProseClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
 
@@ -540,6 +559,19 @@
       offers={nextStepOffers}
       onselect={(offer) => onNextStep?.(offer)}
     />
+  {/if}
+
+  {#if proseText && !isStreaming}
+    <div class="message-actions">
+      <button
+        type="button"
+        class="msg-action-btn"
+        onclick={handleMessageCopy}
+        title="Copy this answer to the clipboard"
+      >
+        {copyLabel}
+      </button>
+    </div>
   {/if}
 </div>
 
@@ -849,6 +881,33 @@
   .cutoff-hint {
     color: var(--text-muted);
     font-size: 0.76rem;
+  }
+
+  /* Message-level action row (Copy). Quiet by default — a muted,
+     monospace affordance that brightens on hover so it never competes
+     with the answer, matching the restraint of the RoutingMeta chips. */
+  .message-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .msg-action-btn {
+    padding: 2px 10px;
+    border: 0.5px solid var(--border-mid);
+    border-radius: 100px;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition:
+      color 0.15s,
+      border-color 0.15s;
+  }
+  .msg-action-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--border-bright);
   }
 
   .unresolved-toast em {
