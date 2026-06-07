@@ -46,6 +46,7 @@ pub mod phase_cmd;
 pub mod promote;
 pub mod providers;
 pub mod query;
+pub mod raptor;
 pub mod reset;
 pub mod schema_review;
 pub mod seed_cmd;
@@ -75,6 +76,7 @@ const HELP: Help = Help {
                 ("delta", "Incrementally enrich a chapter subset and merge the resulting atoms+edges into the EXISTING atlas (additive; no full rebuild)."),
                 ("delta-manifest", "Mint sec_NNNNN chapter ids for freshly-appended chunks (by --source-prefix) and append them to chapters.json."),
                 ("ingest", "Run an AtlasIngestion strategy end-to-end (today: structure_first deterministic Wikipedia parser)."),
+                ("raptor", "Retrofit an installed corpus with a per-document RAPTOR tier-3 summary tree (additive to any existing atom-graph atlas) — powers whole-document summarization."),
                 ("triage-candidates", "Rank atlas entities by inbound link degree to pick Tier-1.5 / Tier-2 enrichment candidates."),
                 ("atlas-eval", "Score the structural atlas against a question bank by tokenized title-overlap retrieval."),
                 ("eval", "Score the resolved atlas against a golden-set TOML; reports per-phase precision/recall/F1."),
@@ -205,6 +207,7 @@ pub async fn run_enrich(args: &[String]) -> i32 {
 
         // ── Investigation pipeline (typed-relationship graph + pattern detectors) ──
         "investigation" => investigation::cmd_investigation(rest).await,
+        "raptor" => raptor::cmd_raptor(rest).await,
 
         // ── Utilities ─────────────────────────────────────────
         "status" => status::cmd_status(rest).await,
