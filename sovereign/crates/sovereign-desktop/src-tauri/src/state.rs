@@ -95,6 +95,14 @@ pub struct DesktopConfig {
     /// later without restarting through the wizard.
     #[serde(default)]
     pub enable_recipe_authoring: bool,
+    /// Opt-in for **Mobile access** — serving the phone-facing
+    /// `sovereign-server` API so the Sovereign mobile app can pair with this
+    /// node over the tailnet. When `true`, the desktop supervises a
+    /// `sovereign-server` child (via [`crate::supervisor::Supervisor`]) that
+    /// delegates all inference to the local daemon — it loads no models of
+    /// its own. Off by default; flipped from Settings → Mobile access.
+    #[serde(default)]
+    pub mobile_access_enabled: bool,
     /// When `true`, the `knowledge_lookup` tool auto-escalates to
     /// web search when the local envelope returns thin or empty
     /// results. The escalation is internal to the tool — the
@@ -364,6 +372,7 @@ impl Default for DesktopConfig {
             knowledge_view_enabled: default_knowledge_view_enabled(),
             storage_budget_bytes: None,
             enable_recipe_authoring: false,
+            mobile_access_enabled: false,
             auto_escalate_to_web: false,
             first_mesh_consent: None,
             meshapp_installs: Vec::new(),
@@ -594,6 +603,12 @@ pub struct AppState {
     /// lifecycle separately). Tauri commands subscribe to its state
     /// channel and call `request_reconnect()` on it.
     pub supervisor: RwLock<Option<Arc<Supervisor>>>,
+    /// Supervise-task handle for the opt-in **Mobile access**
+    /// `sovereign-server` child (the phone-facing host). `Some` while the host
+    /// runs; aborting the handle drops the run future and the in-flight child's
+    /// `kill_on_drop(true)` SIGKILLs `sovereign-server` — that's the toggle-off
+    /// path. `None` when Mobile access is off. See [`crate::mobile_host_setup`].
+    pub mobile_host_supervisor: RwLock<Option<tauri::async_runtime::JoinHandle<()>>>,
 }
 
 impl AppState {
@@ -669,6 +684,7 @@ impl AppState {
             notes: RwLock::new(None),
             features: RwLock::new(None),
             supervisor: RwLock::new(supervisor),
+            mobile_host_supervisor: RwLock::new(None),
         }
     }
 }

@@ -26,6 +26,11 @@ export const listHostConnections = (): Promise<HostConnection[]> =>
 export const setDefaultHost = (id: string): Promise<void> =>
   invoke("set_default_host", { id });
 
+/** Remove a host connection (token + rows). Removing the active host
+ *  returns the app to the pairing screen — this is the "change host" path. */
+export const removeHostConnection = (id: string): Promise<void> =>
+  invoke("remove_host_connection", { id });
+
 export const getConnectivity = (): Promise<string> => invoke("get_connectivity");
 
 // ─── Conversations ─────────────────────────────────────────────

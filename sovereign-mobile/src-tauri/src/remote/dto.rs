@@ -67,6 +67,17 @@ pub struct ProvenanceDto {
     pub ttft_ms: Option<i64>,
     #[serde(default)]
     pub total_ms: Option<i64>,
+    /// OpenAI finish reason ("stop"/"length"/…). `"length"` drives the
+    /// cutoff chip + Continue affordance. `#[serde(default)]` so older
+    /// hosts that don't send it deserialize as `None`.
+    #[serde(default)]
+    pub finish_reason: Option<String>,
+    /// `max_tokens` budget the turn ran under (cutoff chip detail).
+    #[serde(default)]
+    pub max_tokens_budget: Option<i64>,
+    /// Completion tokens generated (cutoff chip detail).
+    #[serde(default)]
+    pub completion_tokens: Option<i64>,
     #[serde(default)]
     pub sources: Vec<SourceDto>,
 }

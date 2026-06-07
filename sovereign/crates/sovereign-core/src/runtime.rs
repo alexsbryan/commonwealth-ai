@@ -1657,22 +1657,64 @@ impl Runtime {
                 .await;
         }
 
-        if message.starts_with("[Document attached: ")
-            || matches!(
-                intent,
-                Intent::ComplexTask
-                    | Intent::MetalingualQuery
-                    | Intent::ConationQuery
-                    | Intent::CommissiveQuery
-            )
-        {
+        // Document-attached turns are owned by the document-operation path and
+        // never reach the streaming surface for synthesis — keep the explicit
+        // bail.
+        if message.starts_with("[Document attached: ") {
+            tracing::info!("runtime: document-attached stream — falling back");
+            return Err(Error::NotImplemented(
+                "Streaming not supported for document-attached turns".into(),
+            ));
+        }
+
+        // These four intents don't token-stream, but they must NOT dead-end
+        // with "Not implemented" (the streaming endpoint is the ONLY one both
+        // apps use, so a follow-up like "can you continue?" — classified
+        // Metalingual/Conation — would error). Run the handler with the context
+        // we already built (no re-classification), persist its assistant
+        // message so the WS Complete frame can project the metadata, and emit
+        // the full answer as a single chunk through the same StreamHandle.
+        if matches!(
+            intent,
+            Intent::ComplexTask
+                | Intent::MetalingualQuery
+                | Intent::ConationQuery
+                | Intent::CommissiveQuery
+        ) {
             tracing::info!(
                 intent = ?intent,
-                "runtime: stream not supported for this intent — falling back"
+                "runtime: non-streaming intent — single-chunk graceful fallback"
             );
-            return Err(Error::NotImplemented(
-                "Streaming not supported for this intent".into(),
-            ));
+            let response = match intent {
+                Intent::MetalingualQuery => {
+                    self.handle_metalingual_query(message, conversation_id, &context)
+                        .await?
+                }
+                Intent::ConationQuery => {
+                    self.handle_conation_query(message, conversation_id, &context)
+                        .await?
+                }
+                Intent::CommissiveQuery => {
+                    self.handle_commissive_query(message, conversation_id, &context)
+                        .await?
+                }
+                Intent::ComplexTask => {
+                    self.handle_complex_task(message, conversation_id, &context, &tool_descriptors)
+                        .await?
+                }
+                _ => unreachable!("matched above"),
+            };
+            // Persist the assistant message (the non-streaming handlers return a
+            // Response for the caller to save — mirror handle_turn) so
+            // `tr.message_metadata` in ws.rs finds it for the terminal frame.
+            self.store.save_message(&response.message).await?;
+            let message_id = response.message.id.clone();
+            let content = response.message.content.clone();
+            let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(1);
+            let _ = tx.send(Ok(content)).await;
+            drop(tx);
+            let stream = Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
+            return Ok(StreamHandle { message_id, stream });
         }
 
         // 3b. Splice KnowledgeView landscape digests now that routing

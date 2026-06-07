@@ -12,6 +12,7 @@ pub mod insight;
 pub mod intent_policy;
 pub mod memory;
 pub mod memory_compaction;
+pub mod mobile_host;
 pub mod model_family;
 pub mod models_manifest;
 pub mod observer;

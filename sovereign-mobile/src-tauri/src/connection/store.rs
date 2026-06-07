@@ -87,3 +87,36 @@ pub fn set_status(conn: &Connection, id: &str, status: &str) -> Result<()> {
     )?;
     Ok(())
 }
+
+/// Whether a host_connection row still exists. The connectivity monitor
+/// polls this so it self-terminates once its host has been removed (see
+/// `remove_host_connection`), rather than probing a gone address forever.
+pub fn exists(conn: &Connection, id: &str) -> Result<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM host_connection WHERE id = ?1)",
+        params![id],
+        |r| r.get(0),
+    )?)
+}
+
+/// Delete a host connection. If it was the default and other hosts
+/// remain, the oldest survivor is promoted so the app always has a
+/// well-defined active host (or none, returning the UI to pairing).
+/// The caller is responsible for the keychain token + `credential` row.
+pub fn delete(conn: &Connection, id: &str) -> Result<()> {
+    let was_default: bool = conn
+        .query_row(
+            "SELECT is_default FROM host_connection WHERE id = ?1",
+            params![id],
+            |r| r.get::<_, i64>(0),
+        )
+        .map(|v| v != 0)
+        .unwrap_or(false);
+    conn.execute("DELETE FROM host_connection WHERE id = ?1", params![id])?;
+    if was_default {
+        if let Some(next) = list(conn)?.into_iter().next() {
+            set_default(conn, &next.id)?;
+        }
+    }
+    Ok(())
+}

@@ -500,6 +500,101 @@ pub(crate) struct GenerationOutcome {
     pub finish_reason: FinishReason,
 }
 
+// ── Forced-choice logprob elicitation (the reasoning-fidelity K-killer) ──
+//
+// The reasoning-fidelity harness needs a calibrated P(choice) over a
+// small candidate set. Repeated sampling (K=32–200 draws) is how it gets
+// one today because no logprobs are surfaced. These two helpers replace
+// that with ONE forward pass: the harness carries a sentinel inside
+// `structured_output` — `{"type":"string","enum":[...],
+// "x_forced_choice":true}` — and `generate_sync`, right after the prompt
+// decode (logits at the final position are live), reads the next-token
+// distribution over the candidate labels and returns it as JSON in
+// `text`, skipping the generation loop entirely. `structured_output` is
+// only ever *compiled* in `build_sampler` (which the branch bypasses), so
+// the sentinel rides the existing HTTP plumbing untouched.
+
+/// Detect the forced-choice sentinel and return its candidate labels.
+/// `None` for ordinary requests (so every existing path is unaffected).
+pub(crate) fn forced_choice_candidates(request: &CompletionRequest) -> Option<Vec<String>> {
+    let so = request.structured_output.as_ref()?;
+    if so.get("x_forced_choice").and_then(|v| v.as_bool()) != Some(true) {
+        return None;
+    }
+    let cands: Vec<String> = so
+        .get("enum")?
+        .as_array()?
+        .iter()
+        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+        .collect();
+    if cands.is_empty() {
+        None
+    } else {
+        Some(cands)
+    }
+}
+
+/// Read the model's next-token distribution over `candidates` in one
+/// forward pass (prompt already decoded). For each candidate we sum the
+/// mass over its single-token encodings — bare and space-prefixed, to
+/// absorb BPE's leading-space split — then softmax over the union and
+/// re-sum per candidate. Returns `(label, probability)` summing to ~1.0.
+pub(crate) fn forced_choice_probs(
+    model: &LlamaModel,
+    ctx: &crate::llama::cpp::context::LlamaContext<'_>,
+    candidates: &[String],
+) -> Result<Vec<(String, f32)>> {
+    // candidate-leading token id -> candidate index.
+    let mut tok_to_cand: std::collections::HashMap<i32, usize> = std::collections::HashMap::new();
+    for (ci, c) in candidates.iter().enumerate() {
+        for variant in [c.clone(), format!(" {c}")] {
+            if let Ok(toks) = model.str_to_token(&variant, AddBos::Never) {
+                if toks.len() == 1 {
+                    tok_to_cand.entry(toks[0].0).or_insert(ci);
+                }
+            }
+        }
+    }
+    if tok_to_cand.is_empty() {
+        return Err(Error::Inference(
+            "forced_choice: no candidate encodes to a single token".into(),
+        ));
+    }
+    // One O(vocab) pass to gather the candidate tokens' raw logits at the
+    // final (next-token) position.
+    let data = ctx.token_data_array();
+    let mut gathered: Vec<(usize, f32)> = Vec::with_capacity(tok_to_cand.len());
+    for entry in data.data.iter() {
+        if let Some(&ci) = tok_to_cand.get(&entry.id().0) {
+            gathered.push((ci, entry.logit()));
+        }
+    }
+    if gathered.is_empty() {
+        return Err(Error::Inference(
+            "forced_choice: candidate tokens absent from the vocab logits".into(),
+        ));
+    }
+    // Numerically-stable softmax over just the candidate tokens.
+    let m = gathered
+        .iter()
+        .map(|(_, l)| *l)
+        .fold(f32::NEG_INFINITY, f32::max);
+    let mut denom = 0.0f32;
+    let exps: Vec<(usize, f32)> = gathered
+        .iter()
+        .map(|(ci, l)| {
+            let e = (l - m).exp();
+            denom += e;
+            (*ci, e)
+        })
+        .collect();
+    let mut out = vec![0.0f32; candidates.len()];
+    for (ci, e) in exps {
+        out[ci] += e / denom;
+    }
+    Ok(candidates.iter().cloned().zip(out).collect())
+}
+
 /// Synthesise `FinishReason` from observed token counts. Real source
 /// of truth is the decode loop's exit branch (EOS vs `n_generated >=
 /// max_tokens`); this helper is the fallback for variants that haven't
@@ -2027,6 +2122,7 @@ impl ModelSlot {
         if !mtp_disabled
             && slot_ctx.is_speculative()
             && request.tools.as_ref().is_none_or(|t| t.is_empty())
+            && forced_choice_candidates(request).is_none()
         {
             // Try MTP. On prefill-decode failure, quarantine MTP for
             // this slot's lifetime and fall through to single-token
@@ -2305,6 +2401,23 @@ impl ModelSlot {
         // cached_tokens because they're not part of the *prompt* the
         // next request will share. Only the prompt is comparable.
         *cached_tokens = tokens.clone();
+
+        // Forced-choice logprob elicitation (reasoning-fidelity K-killer):
+        // the prompt is decoded, so the next-token logits are live. Read
+        // the distribution over the candidate labels in ONE pass and
+        // return it as JSON in `text` — no generation loop, no sampler.
+        if let Some(cands) = forced_choice_candidates(request) {
+            let probs = forced_choice_probs(model, ctx, &cands)?;
+            let map: std::collections::BTreeMap<String, f32> = probs.into_iter().collect();
+            let text = serde_json::to_string(&map)
+                .map_err(|e| Error::Inference(format!("forced_choice serialize: {e}")))?;
+            return Ok(GenerationOutcome {
+                text,
+                prompt_tokens: tokens.len(),
+                completion_tokens: 0,
+                finish_reason: FinishReason::Stop,
+            });
+        }
 
         let mut sampler = build_sampler(model, request, quirks);
         let mut output = String::new();
@@ -4245,6 +4358,30 @@ mod rpc_prune_tests {
         assert!(!rpc_distribution_safe_decision(30_000 * mb, 512 * mb, false));
         // Large + asserted-warm: safe (host skips the bulk send via cache hits).
         assert!(rpc_distribution_safe_decision(30_000 * mb, 512 * mb, true));
+    }
+
+    #[test]
+    fn forced_choice_sentinel_detection() {
+        // The sentinel is detected and the candidate labels read off `enum`.
+        let mut req = CompletionRequest::default();
+        req.structured_output = Some(serde_json::json!({
+            "type": "string", "enum": ["A", "B", "C"], "x_forced_choice": true
+        }));
+        assert_eq!(
+            forced_choice_candidates(&req),
+            Some(vec!["A".to_string(), "B".to_string(), "C".to_string()])
+        );
+
+        // An ordinary structured-output schema (no marker) is NOT a forced
+        // choice — every existing path stays unaffected.
+        let mut plain = CompletionRequest::default();
+        plain.structured_output = Some(serde_json::json!({
+            "type": "object", "properties": {"x": {"type": "string"}}
+        }));
+        assert_eq!(forced_choice_candidates(&plain), None);
+
+        // No structured_output at all → None.
+        assert_eq!(forced_choice_candidates(&CompletionRequest::default()), None);
     }
 
     #[test]

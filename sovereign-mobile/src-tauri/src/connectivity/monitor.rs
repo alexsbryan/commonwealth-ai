@@ -87,6 +87,13 @@ impl ConnectivityMonitor {
         tauri::async_runtime::spawn(async move {
             let mut last: Option<ConnState> = None;
             loop {
+                // Self-terminate once this host has been removed (host
+                // management), so a deleted host's address isn't probed forever.
+                if let Ok(conn) = db.lock() {
+                    if !store::exists(&conn, &host_connection_id).unwrap_or(true) {
+                        break;
+                    }
+                }
                 let (state, retry) = classify(&client).await;
                 if last != Some(state) {
                     last = Some(state);
