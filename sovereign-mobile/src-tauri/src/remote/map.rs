@@ -25,6 +25,11 @@ pub fn metadata_blob(provenance: Option<&ProvenanceDto>, citations: &[CitationDt
             "inference_backend": p.inference_backend,
             "total_latency_ms": p.total_ms,
             "ttft_ms": p.ttft_ms,
+            // Cutoff legibility: AssistantMessage shows the "response was
+            // cut off" chip + Continue button when finish_reason == "length".
+            "finish_reason": p.finish_reason,
+            "max_tokens_budget": p.max_tokens_budget,
+            "completion_tokens": p.completion_tokens,
             "sources": p.sources.iter().map(|s| json!({
                 "origin": s.origin,
                 "count": s.count,

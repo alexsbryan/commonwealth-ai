@@ -350,6 +350,24 @@ struct IndexMeta {
     #[serde(default)]
     chunks_deduped: bool,
 
+    /// High-water mark for chunk-id allocation: the id the NEXT inserted
+    /// chunk will receive. Bumped by the batch size on every insert and
+    /// NEVER decreases, so ids are globally unique and monotonic even
+    /// across deletes, dedupes, and incremental (delta) appends.
+    ///
+    /// This is the AUTHORITATIVE id source. The previous scheme derived
+    /// ids from `chunk_count()` (the row count), which silently diverges
+    /// from the max id after any delete/dedupe/delta — the next insert
+    /// then REUSED ids that already existed, making `neighbors(id)`
+    /// ambiguous and citations resolve to the wrong chunk (the
+    /// duplicate-id corruption: 31k colliding rows in the wikipedia
+    /// index, "2026 Lebanon war" reading back as "Gold").
+    ///
+    /// `None` for legacy indexes written before this field existed →
+    /// seeded lazily from `max(id) + 1` on the first insert.
+    #[serde(default)]
+    next_chunk_id: Option<u64>,
+
     // ── Health-check fields ──────────────────────────────────
     /// Expected total chunks, written at ingest start.
     #[serde(default)]
@@ -1139,6 +1157,42 @@ mod tests {
         idx.insert_batch(&sample_chunks()).await.unwrap();
 
         assert_eq!(idx.chunk_count().await.unwrap(), 4);
+    }
+
+    /// Regression for the duplicate-id citation corruption: chunk ids
+    /// must be allocated from a monotonic high-water mark, NEVER the row
+    /// count. After deleting rows (so the row count falls below the max
+    /// id), a fresh insert must hand out ids strictly greater than every
+    /// id ever used — not ids 3,4 again. The old `chunk_count()`-based
+    /// scheme reused ids here, so `neighbors(id)` became ambiguous and a
+    /// citation for one article read back as a different one.
+    #[tokio::test]
+    async fn insert_ids_never_reused_after_delete() {
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+
+        idx.insert_batch(&sample_chunks()).await.unwrap(); // ids 1,2,3,4
+        assert_eq!(idx.max_chunk_id().await.unwrap(), 4);
+
+        // Drop two rows → row count = 2, but max id is still 4.
+        idx.delete_chunks_by_ids(&[1, 2]).await.unwrap();
+        assert_eq!(idx.chunk_count().await.unwrap(), 2);
+        assert_eq!(idx.max_chunk_id().await.unwrap(), 4);
+
+        // Insert two more. Count-based allocation would assign 3,4 —
+        // colliding with the surviving rows. The high-water scheme must
+        // assign 5,6 instead.
+        idx.insert_batch(&sample_chunks()[..2]).await.unwrap();
+        assert_eq!(
+            idx.chunk_count().await.unwrap(),
+            4,
+            "two survivors + two fresh rows"
+        );
+        assert_eq!(
+            idx.max_chunk_id().await.unwrap(),
+            6,
+            "fresh ids must advance past the prior max (4), not reuse 3,4"
+        );
     }
 
     /// Build a small multi-doc fixture and assert that
