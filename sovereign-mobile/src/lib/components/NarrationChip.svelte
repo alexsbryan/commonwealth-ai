@@ -35,7 +35,7 @@
 </script>
 
 <div class="narration" aria-live="polite">
-  {#each visible as e, i (e.elapsed_ms + ":" + phaseKey(e.phase) + ":" + i)}
+  {#each visible as e, i (entries.length - visible.length + i)}
     {@const last = i === visible.length - 1}
     <div class="chip" class:latest={last}>
       <span class="ico" aria-hidden="true">{icon(phaseKey(e.phase))}</span>
@@ -72,11 +72,26 @@
     /* Older entries recede; the latest is the live one. */
     opacity: 0.5;
     transition: opacity 0.25s, color 0.25s, border-color 0.25s;
+    /* Each new phase rises gently into view as the host makes progress —
+       runs once on creation. Stable keys mean only NEW chips animate. */
+    animation: chipRise 0.3s ease-out;
   }
   .chip.latest {
     opacity: 1;
     color: var(--text-secondary);
     border-color: color-mix(in srgb, var(--lavender) 40%, transparent);
+    /* A slow lavender sheen sweeps across the live chip — a gentle, continuous
+       "still working" pulse. It's a background layer (under the text), so the
+       label stays crisp; the base tint from `.chip` shows through. */
+    background-image: linear-gradient(
+      100deg,
+      transparent 28%,
+      color-mix(in srgb, var(--lavender) 18%, transparent) 50%,
+      transparent 72%
+    );
+    background-size: 220% 100%;
+    background-repeat: no-repeat;
+    animation: sheen 2.4s ease-in-out infinite;
   }
   .ico {
     font-style: normal;
@@ -103,7 +118,19 @@
     0%, 100% { opacity: 0.5; }
     50%      { opacity: 1; }
   }
+  /* New phase rises in (settles to its declared opacity — no fill). */
+  @keyframes chipRise {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: none; }
+  }
+  /* Lavender sheen sweeping left→right with a brief rest between sweeps. */
+  @keyframes sheen {
+    0%        { background-position: 165% 0; }
+    55%, 100% { background-position: -65% 0; }
+  }
   @media (prefers-reduced-motion: reduce) {
+    .chip { animation: none; }
+    .chip.latest { animation: none; background-image: none; }
     .chip.latest .ico { animation: none; }
   }
 </style>

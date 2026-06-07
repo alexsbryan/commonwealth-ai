@@ -42,16 +42,29 @@
         conversationId,
         messages: convo.messages as unknown as MessageEntry[],
       });
+      // On open, land at the latest message instantly — no animated catch-up
+      // scrolling the whole history. (Streaming uses the gentle follow.)
+      requestAnimationFrame(() => {
+        const el = scrollEl;
+        if (el) {
+          el.scrollTop = el.scrollHeight;
+          stick = true;
+        }
+      });
     }
   });
 
-  onDestroy(() => offs.forEach((off) => off()));
+  onDestroy(() => {
+    offs.forEach((off) => off());
+    if (rafId) cancelAnimationFrame(rafId);
+  });
 
   async function submit() {
     const text = input.trim();
     if (!text) return;
     input = "";
     narration = []; // fresh turn — clear any prior progress trace
+    stick = true; // re-engage follow for the user's turn + the answer
     const userMsg: MessageEntry = {
       id: `local-${Date.now()}`,
       role: "user",
@@ -70,18 +83,58 @@
 
   const messages = $derived($snapshot.context.messages as MessageEntry[]);
 
-  // Keep the view pinned to the latest content. Re-runs whenever a
-  // message streams a token or a narration chip arrives, so the live
-  // progress (and the answer forming under it) stays in view instead of
-  // landing below the fold.
+  // Keep the latest content in view as it streams — but *gently*. A hard
+  // `scrollTop = scrollHeight` per token (the old behaviour) reads as a jarring
+  // jitter against fast token output, and it yanks the reader back even when
+  // they've scrolled up to re-read. Instead: ease toward the bottom over a few
+  // frames (a catch-up, not a snap), and only while the reader is already near
+  // the bottom. Scrolling up releases the follow; scrolling back re-engages it.
   let scrollEl = $state<HTMLDivElement | null>(null);
+  let stick = true;
+  let rafId = 0;
+  let lastTop = 0;
+
+  function followBottom() {
+    const el = scrollEl;
+    if (!el || !stick) {
+      rafId = 0;
+      return;
+    }
+    const target = el.scrollHeight - el.clientHeight;
+    const delta = target - el.scrollTop;
+    if (delta > 1) {
+      // ~18% of the remaining gap per frame (floored) — a smooth approach.
+      el.scrollTop += Math.max(delta * 0.18, 0.5);
+      rafId = requestAnimationFrame(followBottom);
+    } else {
+      el.scrollTop = target;
+      rafId = 0;
+    }
+  }
+
+  function nudgeFollow() {
+    if (stick && rafId === 0) rafId = requestAnimationFrame(followBottom);
+  }
+
+  function onScroll() {
+    const el = scrollEl;
+    if (!el) return;
+    const top = el.scrollTop;
+    const dist = el.scrollHeight - top - el.clientHeight;
+    // Direction-based so the programmatic follow (which only scrolls DOWN)
+    // never disengages itself: a real upward scroll releases the follow;
+    // returning to the bottom re-engages it.
+    if (top < lastTop - 2) stick = false;
+    else if (dist < 40) stick = true;
+    lastTop = top;
+  }
+
   $effect(() => {
-    // Touch the reactive deps so this runs on every update.
+    // Re-run on each streamed token / new message / narration update.
     void messages.length;
     void (messages.at(-1)?.content?.length ?? 0);
     void narration.length;
-    const el = scrollEl;
-    if (el) requestAnimationFrame(() => (el.scrollTop = el.scrollHeight));
+    nudgeFollow();
   });
 </script>
 
@@ -97,6 +150,7 @@
     aria-live="polite"
     aria-label="Conversation"
     bind:this={scrollEl}
+    onscroll={onScroll}
   >
     {#each messages as m (m.id)}
       {#if m.role === "assistant"}

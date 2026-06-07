@@ -232,6 +232,33 @@ stamped with the manifest fingerprint so stale bands invalidate it) — the
 `ResultRow` JSONL read by the Python verdict sidecar. See
 `sovereign/bench/mechanism_fidelity/README.md`.
 
+The **Chaos-Monkey** bench (`sovereign bench chaos-monkey`) is the
+calibration counterpart: where every other bench measures competence *when the
+corpus can answer*, this one measures the situated-agent property of answering
+capably + cited **when the facts are in persistence** and abstaining honestly
+**when they aren't** — without being fooled by distractors. Pure logic
+(`sovereign-eval/src/chaos_monkey/`: a question schema whose *fairness contract*
+is enforced at load — answerable items must ship a witness, absent items must
+not — plus a **two-red-line scorer** that never blends competence-when-present
+and honesty-when-absent into one number, so neither a hallucinator nor a
+blanket-abstainer can game it). The orchestrator
+(`bench_cmd/chaos_monkey.rs`) drives the live `handle_message_stream` path
+sealed to one corpus via `enabled_corpora`, classifying answer-vs-abstain with a
+forced-choice judge and checking everything else deterministically against the
+bank's witnesses. See `sovereign/bench/chaos_monkey/README.md`.
+
+Finally, **`scripts/sovereign-ci-bench.sh`** is the single ≤2h core-regression
+gate a developer runs for confidence that chat + inference hasn't regressed. It
+*composes* the existing benches (each a visible, re-runnable command) rather
+than reinventing them, with a clear gate policy: deterministic baseline-diffed
+lanes (retrieval recall, enrichment atom-F1, intent routing) are **hard**
+(build-breaking via `bench all`'s exit code); the synthesis answer-equiv judge
+lane is **soft** (judge variance shouldn't flake the build); chaos-monkey,
+mechanism-fidelity, and the multi-turn degradation thread are **tracked**
+(run + reported, promoted to hard baseline-diff gates once a baseline is
+captured). Overall exit 0 iff every hard lane stays within baseline and the run
+fits the budget.
+
 ---
 
 ## 3. corpus-engine — the shared knowledge layer

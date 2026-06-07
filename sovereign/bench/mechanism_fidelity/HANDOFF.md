@@ -4,6 +4,8 @@
 
 > **START HERE if you're picking this up:** read §1 (what this is), §3 (current state), then §6.4 (what's left). The single most useful artifact is the **scoring-join witness** in §5 — the negative control's `d_agent` must be **exactly 0.000**; re-run a small dev battery and confirm it before changing anything.
 
+> **For "where does this go / why" (research + end-user-value roadmap):** see **`FUTURE_RESEARCH.md`** — the measurement→product arc, the consistency≠correctness constraint that governs how cards may be used, and the prioritized backlog (runtime grounding verifier, class-aware caveats/routing, real-holdout calibration, remaining classes, infra unblockers).
+
 > **⚠️ DAEMON / MODEL CAVEAT (this session):** the daemon's `config.toml` now pins `primary`=`FINAL-Bench_Darwin-36B-Opus-Q6_K`, `fast`=`...APEX-I-Compact` (a qwen-MoE that hits `Decode -3` on some paths). The handoff's original `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL`/`Qwopus3.5-4B` are gone (stale mesh-registry entries, not locally loadable). Worse, this daemon's BYOM OICP adapter routes forced-choice by *latency class*, not model name — so `--models primary,fast` collapse onto **one slot** (identical output). Run **single-model** here (`--models primary`) until the daemon is reconfigured with distinct, name-routed slots. The exact `−0.331/−0.014` anchor is therefore unreproducible; the model-independent witness (control `d_agent == 0.000`) is what to check instead.
 
 ---
