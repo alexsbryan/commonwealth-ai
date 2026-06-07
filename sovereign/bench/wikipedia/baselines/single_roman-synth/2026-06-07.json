@@ -1,0 +1,319 @@
+{
+  "bank_name": "single-causal-roman",
+  "corpus": "wikipedia",
+  "limit": 0,
+  "started_at_unix": 1780802695,
+  "results": [
+    {
+      "question_id": "causal_roman_empire_fall",
+      "category": "causal_reasoning",
+      "question": "What caused the fall of the Western Roman Empire?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Abstract",
+          "score": 0.0,
+          "snippet": "Western Roman Empire\n\nIn modern historiography, the Western Roman Empire was the western provinces of the Roman Empire, collectively, during any period in which they were administered separately from..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emilia-Romagna",
+          "url": "https://en.wikipedia.org/wiki/Emilia-Romagna",
+          "score": 0.0,
+          "snippet": "ost of the east (540â751)]].\n\nBefore the Romans took control of present-day Emilia-Romagna, it had been part of the Etruscan world and subsequently that of the Gauls. During the first thousand..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emilia-Romagna",
+          "url": "https://en.wikipedia.org/wiki/Emilia-Romagna",
+          "score": 0.0,
+          "snippet": "Emilia-Romagna is an administrative region of northern Italy, comprising the historical regions of Emilia and Romagna. Its capital is Bologna. It has an area of 22,446 km⁲ (8,666 sq mi), and a..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emilia-Romagna",
+          "url": "https://en.wikipedia.org/wiki/Emilia-Romagna",
+          "score": 0.0,
+          "snippet": "Emilia-Romagna\n\nThe region is home to the third largest community of foreign residents in the country, after Lombardy and Lazio. It borders with San Marino, a micro-state."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emilia-Romagna",
+          "url": "https://en.wikipedia.org/wiki/Emilia-Romagna#Abstract",
+          "score": 0.0,
+          "snippet": "Emilia-Romagna (UK: / ɪ ˌ m iː l i ə r oʊ ˈ m ɑː n j ə /, US: / eɪ ˌ m iː l j ə /, both also / ɛ ˌ m iː l j ə -/; Italian:; Emilian: Emégglia-Rumâgna or Emîlia-Rumâgna; Romagnol:..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Empire",
+          "url": "https://en.wikipedia.org/wiki/Empire",
+          "score": 0.0,
+          "snippet": "Empire\n\nAn empire is a political unit made up of several territories, military outposts, and peoples, \"usually created by conquest, and divided between a dominant center and subordinate peripheries\"...."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Empire",
+          "url": "https://en.wikipedia.org/wiki/Empire",
+          "score": 0.0,
+          "snippet": "Empire\n\nAn important distinction has been between land empires made up solely of contiguous territories, such as the Austrian Empire or the Russian Empire; and those created by sea-power, which..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Empire",
+          "url": "https://en.wikipedia.org/wiki/Empire#Abstract",
+          "score": 0.0,
+          "snippet": "Empire\n\nAn empire is a political unit made up of several territories, military outposts, and peoples, \"usually created by conquest, and divided between a dominant center and subordinate peripheries\"...."
+        },
+        {
+          "corpus_id": "conversations-anthropic",
+          "title": "Roman Empire's Legacy in America",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Roman Empire's Legacy in America\n\n meaningful connection between political participation and personal consequence."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire",
+          "score": 0.0,
+          "snippet": "Fall of the Western Roman Empire\n\nThe fall of the Western Roman Empire, also called the fall of the Roman Empire or the fall of Rome, was the loss of central political control in the Western Roman..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Abstract",
+          "score": 0.0,
+          "snippet": "Fall of the Western Roman Empire\n\nWestern Roman Empire in Italy, Romulus Augustulus, and the Senate sent the imperial insignia to the Eastern Roman Emperor Zeno.\n\nWhile its legitimacy lasted for..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Fall_of_the_Empire",
+          "score": 0.0,
+          "snippet": "Western Roman Empire\n\nAs 480 marks the end of the juridical division of the empire into two imperial courts, some historians refer to the death of Nepos and abolition of the Western Empire by Zeno as..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Fall_of_the_Empire",
+          "score": 0.0,
+          "snippet": "Western Roman Empire\n\nSome historians thus refer to the reorganizations of Italy and abolition of the old and separate Western Roman administrative units, such as the Praetorian prefecture of Italy,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Empire",
+          "url": "https://en.wikipedia.org/wiki/Empire#Roman_Empire",
+          "score": 0.0,
+          "snippet": "Empire\n\nThe fall of the western half of the Roman Empire is seen as one of the most pivotal points in all of human history. This event traditionally marks the transition from classical civilization..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western world",
+          "url": "https://en.wikipedia.org/wiki/Western_world#Ancient_Roman_world_(6th_century_BC_–_AD_395–476)",
+          "score": 0.0,
+          "snippet": "Western world\n\neventual decline and ultimately fall of the Roman Empire.\n\nThe Roman Empire is where the idea of \"the West\" began to emerge."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western world",
+          "url": "https://en.wikipedia.org/wiki/Western_world#Ancient_Roman_world_(6th_century_BC_–_AD_395–476)",
+          "score": 0.0,
+          "snippet": "Western world\n\ndespite its great legacy, a number of factors led to the eventual decline and ultimately fall of the Roman Empire.\n\nThe Roman Empire is where the idea of \"the West\" began to emerge."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Another_paradigm_of_the_period",
+          "score": 0.0,
+          "snippet": "Fall of the Western Roman Empire\n\nFrom at least the time of Henri Pirenne (1862–1935), scholars have described a continuity of Roman culture and political legitimacy long after 476. Pirenne..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Abstract",
+          "score": 0.0,
+          "snippet": "Fall of the Western Roman Empire\n\nThe reasons for the collapse are major subjects of the historiography of the ancient world and they inform much modern discourse on state failure."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Underlying_causes",
+          "score": 0.0,
+          "snippet": "Fall of the Western Roman Empire\n\nWhen Gibbon published his landmark work, it quickly became the standard. Peter Brown has written that \"Gibbon's work formed the peak of a century of scholarship..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Abstract",
+          "score": 0.0,
+          "snippet": "Western Roman Empire\n\nThe Great Schism of 1054 between the churches of Rome and Constantinople further diminished any authority the emperor in Constantinople could hope to exert in the West."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Imperial_reconquest",
+          "score": 0.0,
+          "snippet": "Western Roman Empire\n\ncombined with the disastrous effects of the Plague of Justinian, made it difficult to retain over the following centuries."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Henri Pirenne",
+          "url": "https://en.wikipedia.org/wiki/Henri_Pirenne#On_the_formation_of_European_towns",
+          "score": 0.0,
+          "snippet": "Henri Pirenne\n\nTraditionally, historians had dated the Middle Ages from the fall of the Western Roman Empire in the 5th century, a theory Edward Gibbon famously put forward in the 18th century, and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Migration Period",
+          "url": "https://en.wikipedia.org/wiki/Migration_Period#Viewpoints",
+          "score": 0.0,
+          "snippet": "Migration Period\n\nas the replacement of a \"tired, effete and decadent Mediterranean civilization\" with a \"more virile, martial, Nordic one\".\n\nThe scholar Guy Halsall has seen the barbarian movement..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western culture",
+          "url": "https://en.wikipedia.org/wiki/Western_culture#The_West_of_the_Mediterranean_Region_during_the_Antiquity",
+          "score": 0.0,
+          "snippet": "Western culture\n\nThus, much of the learning of classical antiquity was slowly reintroduced to European civilization in the centuries following the collapse of the Western Roman Empire."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Migration Period",
+          "url": "https://en.wikipedia.org/wiki/Migration_Period#Abstract",
+          "score": 0.0,
+          "snippet": "Migration Period\n\npower broke down in the Western Roman Empire, the military became more important but was dominated by men of barbarian origin.\n\nThere are contradictory opinions as to whether the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ancient-political",
+          "url": "https://plato.stanford.edu/entries/ancient-political/",
+          "score": 0.0,
+          "snippet": "ancient-political\n\nAncient political philosophy is understood here to mean ancient Greek and Roman thought from the classical period of Greek thought in the fifth century BCE to the end of the Roman..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Fall of the Western Roman Empire",
+          "Migration Period"
+        ],
+        "missing": [
+          "Roman Empire"
+        ],
+        "total_expected": 3,
+        "ratio": 0.6666667
+      },
+      "fact_score": {
+        "matched": [
+          "barbarian",
+          "invasions",
+          "476",
+          "economic",
+          "military",
+          "political",
+          "Migration Period"
+        ],
+        "missing": [
+          "Christianity"
+        ],
+        "total_expected": 8,
+        "ratio": 0.875
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "conversations-anthropic",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The fall of the Western Roman Empire was not caused by a single event but was \"a process in which the Empire failed to enforce its rule, and its vast territory was divided between several successor polities\" [Source: Fall of the Western Roman Empire]. Modern historians posit that multiple factors contributed to this collapse.\n\nAccording to the retrieved sources, these causes include:\n*   **Military Factors:** The effectiveness and numbers of the army were cited as key elements [Source: Fall of the Western Roman Empire]. As central power broke down, the military became dominated by men of barbarian origin [Source: Migration Period], leading to contradictory opinions on whether increased migrations or internal breakdown created additional destabilizing factors [Source: Migration Period].\n*   **Economic and Social Health:** The strength of the economy, along with \"the health and numbers of the Roman population,\" are listed among the primary reasons for the loss of imperial control [Source: Fall of the Western Roman Empire].\n\n**Historiographical Debate**\nThe interpretation of these causes has shifted significantly over time. Edward Gibbon famously attributed a decline from a previous classic ideal in his 18th-century work [Source: Henri Pirenne]. However, later scholars like Henri Pirenne challenged this view. Pirenne argued that Germanic barbarians did not cause the end of the empire but rather pointed to economic continuity after invasions; he suggested that classical civilization only truly ended due to Muslim conquests disrupting Mediterranean trade in the 8th century [Source: Fall of the Western Roman Empire][Source: Henri Pirenne].\n\nModern scholarship often views the \"barbarian movement\" as a result of the fall of the Roman Empire, not its primary cause. Scholars such as Guy Halsall argue that these tribes were agriculturalists drawn into an empire already falling apart for other internal causes [Source: Migration Period].\n\n**Conclusion and Timeline**\nThe traditional date for the fall is AD 476, when Odoacer deposed Romulus Augustulus, the last emperor of Italy [Source: Fall of the Western Roman Empire]. However, some historians mark the end at 480 with the death of Nepos or even in the sixth century during reorganizations by Justinian [Source: Western Roman Empire]. While political unity was lost, Pirenne noted a continuity of cultural legitimacy long after this point [Source: Fall of the Western Roman Empire].",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 54071,
+        "total_latency_ms": 35124,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "conversations-anthropic",
+          "sep"
+        ],
+        "retrieved_chunk_count": 26,
+        "chunks_fact_score": {
+          "matched": [
+            "barbarian",
+            "476",
+            "military",
+            "political",
+            "Migration Period"
+          ],
+          "missing": [
+            "invasions",
+            "economic",
+            "Christianity"
+          ],
+          "total_expected": 8,
+          "ratio": 0.625
+        },
+        "judge_fact_score": {
+          "matched": [
+            "barbarian",
+            "invasions",
+            "476",
+            "economic",
+            "military",
+            "political",
+            "Migration Period"
+          ],
+          "missing": [
+            "Christianity"
+          ],
+          "total_expected": 8,
+          "ratio": 0.875
+        },
+        "judge_evidence": [
+          {
+            "fact": "barbarian",
+            "present": true,
+            "evidence": "\"the military became dominated by men of barbarian origin\""
+          },
+          {
+            "fact": "invasions",
+            "present": true,
+            "evidence": "\"classical civilization only truly ended due to Muslim conquests disrupting Mediterranean trade in the 8th century\""
+          },
+          {
+            "fact": "476",
+            "present": true,
+            "evidence": "\"The traditional date for the fall is AD 476, when Odoacer deposed Romulus Augustulus\""
+          },
+          {
+            "fact": "economic",
+            "present": true,
+            "evidence": "\"The strength of the economy, along with 'the health and numbers of the Roman population,' are listed among the primary reasons for the loss of imperial control\""
+          },
+          {
+            "fact": "Christianity",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "military",
+            "present": true,
+            "evidence": "**Military Factors:** The effectiveness and numbers of the army were cited as key elements"
+          },
+          {
+            "fact": "political",
+            "present": true,
+            "evidence": "\"the Empire failed to enforce its rule, and its vast territory was divided between several successor polities\""
+          },
+          {
+            "fact": "Migration Period",
+            "present": true,
+            "evidence": "\"the military became dominated by men of barbarian origin [Source: Migration Period]\""
+          }
+        ]
+      }
+    }
+  ]
+}

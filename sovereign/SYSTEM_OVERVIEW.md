@@ -198,6 +198,68 @@ per-corpus question banks) live under `sovereign/bench/`, not here — the gym
 *commands* (`sovereign search-gym`, `knowledge-gym`) still exist; only their
 fixtures moved.
 
+The **Reasoning-Fidelity Validation Harness** (`sovereign bench
+mechanism-fidelity`) is a different shape of bench: a *metamorphic* audit of
+whether a frozen model reasons from a causal **mechanism** or from a memorized
+label. It is organized as a **registry of reasoning classes** behind one
+generic orchestrator. Pure logic lives in `sovereign-eval/src/mechanism_fidelity/`:
+the `ReasoningClass` trait (`class.rs`) + `registry.rs` resolve `--class <id>`,
+and each class emits a flat list of finished `RenderedProbe`s (a base case + its
+perturbations × full / stripped-control render, each carrying the structural
+prior's probability). Three classes ship today — `wealth_tax_relocation`
+(synthetic logistic prior; DIR-P1 anti-gestalt collapse / DIR-P2 saturation /
+INV-I1 identity invariance), `attribution_support` (corpus-grounded: mines
+`Claim` atoms + their evidence from a corpus's `atlas/atoms.json`, exact 0/1
+oracle, blindfold negative control via withheld passage), and
+`aggregation_threshold` (synthetic counting-under-a-threshold). The
+class-agnostic `score.rs` scorer + three-pool discipline are shared.
+
+The inference-coupled orchestrator (`bench_cmd/mechanism_fidelity.rs`) elicits a
+forced-choice **logprob** distribution in ONE forward pass per probe (the
+candidate set rides inside `structured_output` as a sentinel the daemon's
+embedded path reads off the masked next-token logits — `model_slot.rs`), maps it
+to a scalar via `class.target_prob`, and scores each perturbation's `d_agent`
+against the structural `d_struct`. Elicitation is **sequential** so byte-identical
+control prompts stay deterministic — the negative control's "provably blind"
+guarantee (its `d_agent` must be exactly 0). Train/Dev run **anytime-valid
+early-stopping** (empirical-Bernstein confidence intervals read at a pre-
+registered checkpoint schedule, `stopping.rs`): a model is resolved and its
+remaining cases skipped the instant the overall verdict is decided (any required
+band fails → NO-GO; all pass → GO). Each run distils a per-`(model, class)`
+**fidelity card** (`card.rs` → `~/.sovereign/model-fidelity-cards/<model>.json`,
+stamped with the manifest fingerprint so stale bands invalidate it) — the
+"characterize once, read free per query" artifact. It reuses
+`entity_resolution_bench::PeekBudget` for the sacred test pool and emits
+`ResultRow` JSONL read by the Python verdict sidecar. See
+`sovereign/bench/mechanism_fidelity/README.md`.
+
+The **Chaos-Monkey** bench (`sovereign bench chaos-monkey`) is the
+calibration counterpart: where every other bench measures competence *when the
+corpus can answer*, this one measures the situated-agent property of answering
+capably + cited **when the facts are in persistence** and abstaining honestly
+**when they aren't** — without being fooled by distractors. Pure logic
+(`sovereign-eval/src/chaos_monkey/`: a question schema whose *fairness contract*
+is enforced at load — answerable items must ship a witness, absent items must
+not — plus a **two-red-line scorer** that never blends competence-when-present
+and honesty-when-absent into one number, so neither a hallucinator nor a
+blanket-abstainer can game it). The orchestrator
+(`bench_cmd/chaos_monkey.rs`) drives the live `handle_message_stream` path
+sealed to one corpus via `enabled_corpora`, classifying answer-vs-abstain with a
+forced-choice judge and checking everything else deterministically against the
+bank's witnesses. See `sovereign/bench/chaos_monkey/README.md`.
+
+Finally, **`scripts/sovereign-ci-bench.sh`** is the single ≤2h core-regression
+gate a developer runs for confidence that chat + inference hasn't regressed. It
+*composes* the existing benches (each a visible, re-runnable command) rather
+than reinventing them, with a clear gate policy: deterministic baseline-diffed
+lanes (retrieval recall, enrichment atom-F1, intent routing) are **hard**
+(build-breaking via `bench all`'s exit code); the synthesis answer-equiv judge
+lane is **soft** (judge variance shouldn't flake the build); chaos-monkey,
+mechanism-fidelity, and the multi-turn degradation thread are **tracked**
+(run + reported, promoted to hard baseline-diff gates once a baseline is
+captured). Overall exit 0 iff every hard lane stays within baseline and the run
+fits the budget.
+
 ---
 
 ## 3. corpus-engine — the shared knowledge layer

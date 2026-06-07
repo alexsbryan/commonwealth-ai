@@ -687,6 +687,11 @@ async fn main() {
 
     let app = authed
         .merge(routes_mcp::mcp_router())
+        // Unauthenticated liveness probe (added at the `app` level so it sits
+        // OUTSIDE the `/v1/*` auth layer). A supervisor — the desktop's
+        // Mobile-access toggle, the CLI, or systemd — can poll `GET /health`
+        // for a 200 to know the host is up, without holding a tenant token.
+        .route("/health", get(|| async { "ok" }))
         .layer(Extension(Arc::clone(&runtime)))
         .layer(Extension(approval))
         .layer(Extension(tdd_state))

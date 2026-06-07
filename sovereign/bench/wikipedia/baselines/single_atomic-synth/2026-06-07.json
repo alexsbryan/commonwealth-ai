@@ -1,0 +1,326 @@
+{
+  "bank_name": "single-atomic-bombings",
+  "corpus": "wikipedia",
+  "limit": 0,
+  "started_at_unix": 1780802522,
+  "results": [
+    {
+      "question_id": "contested_atomic_bombings_morality",
+      "category": "contested",
+      "question": "What are the major arguments for and against the morality of the atomic bombings of Hiroshima and Nagasaki?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki#Transportation",
+          "score": 0.0,
+          "snippet": "Nagasaki\n\nThe nearest airport is Nagasaki Airport in the nearby city of Ōmura. The Kyushu Railway Company (JR Kyushu) provides rail transportation on the Nishi Kyushu Shinkansen and Nagasaki Main..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hiroshima Prefecture",
+          "url": "https://en.wikipedia.org/wiki/Hiroshima_Prefecture",
+          "score": 0.0,
+          "snippet": "roshima Hawks] (Hiroshima City)\n\nSanfrecce Hiroshima (Hiroshima city)\nSanfrecce Hiroshima Regina (Hiroshima city)\n\nHiroshima Toyo Carp (Hiroshima city)\n\nJT Thunders (Hiroshima city)\n\nHiroshima..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki",
+          "score": 0.0,
+          "snippet": "Nagasaki, officially known as Nagasaki City, is the capital and the largest city of the Nagasaki Prefecture on the island of Kyushu in Japan. Founded by the Portuguese, the port of Nagasaki became..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki#Abstract",
+          "score": 0.0,
+          "snippet": "Nagasaki (Japanese: 長崎, Hepburn: Nagasaki) (IPA:; lit. \"Long Cape\"), officially known as Nagasaki City (長崎市, Nagasaki-shi), is the capital and the largest city of the Nagasaki Prefecture on..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Nagasaki#Nagasaki_as_a_Jesuit_port_of_call",
+          "score": 0.0,
+          "snippet": "Nagasaki\n\nThe first contact with Portuguese explorers occurred in 1543. An early visitor was Fernão Mendes Pinto, who came from Sagres on a Portuguese ship which landed nearby in Tanegashima.\n\nSoon..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hiroshima Prefecture",
+          "url": "https://en.wikipedia.org/wiki/Hiroshima_Prefecture",
+          "score": 0.0,
+          "snippet": "Hiroshima Prefecture is a prefecture of Japan located in the Chūgoku region of Honshu. Hiroshima Prefecture has a population of 2,811,410 and has a geographic area of 8,479 km². Hiroshima..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hiroshima Prefecture",
+          "url": "https://en.wikipedia.org/wiki/Hiroshima_Prefecture#Abstract",
+          "score": 0.0,
+          "snippet": "Hiroshima Prefecture (広島県, Hiroshima-ken) is a prefecture of Japan located in the Chūgoku region of Honshu. Hiroshima Prefecture has a population of 2,811,410 (1 June 2019) and has a..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hiroshima Prefecture",
+          "url": "https://en.wikipedia.org/wiki/Hiroshima_Prefecture#History",
+          "score": 0.0,
+          "snippet": "Hiroshima Prefecture\n\nThe area around Hiroshima was formerly divided into Bingo Province and Aki Province. This location has been a center of trade and culture since the beginning of Japan's recorded..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
+          "score": 0.0,
+          "snippet": "Air raids on Japan\n\nDuring the Pacific War, Allied forces conducted air raids on Japan from 1942 to 1945, causing extensive destruction to the country's cities and killing between 241,000 and 900,000..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
+          "score": 0.0,
+          "snippet": "Air raids on Japan\n\nFrom June 1944 until January 1945, B-29s stationed in India staged through bases in China to make a series of nine raids on targets in western Japan, but this effort proved..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan",
+          "score": 0.0,
+          "snippet": "Air raids on Japan\n\nDuring early August 1945, the cities of Hiroshima and Nagasaki were struck and mostly destroyed by atomic bombs. Japan's military and civil defenses were unable to stop the Allied..."
+        },
+        {
+          "corpus_id": "watched-25378eeeed13",
+          "title": "secret agent",
+          "url": null,
+          "score": 0.0,
+          "snippet": "secret agent\n\nprotest.  He listened in a stillness of dread\n\nwhich resembled the immobility of profound attention.\n\n“A series of outrages,” Mr Vladimir continued calmly, “executed here in\n\nthis..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki",
+          "score": 0.0,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki\n\nAccording to supporters, the atomic bombings were necessary to bring an end to the war with minimal casualties and ultimately prevented a greater loss of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "score": 0.0,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki\n\nto destroy the enemy's war industries, kill or disable civilian employees of these industries, and undermine civilian morale."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Abstract",
+          "score": 0.0,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki\n\ncompounded by illness and malnutrition. Though Hiroshima had a sizable military garrison, most of the dead were civilians.\n\nScholars have extensively..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Legal_considerations",
+          "score": 0.0,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki\n\nall major belligerents during World War II was not prohibited by positive or specific customary international humanitarian law.\n\nIn 1963 the bombings were..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "score": 0.0,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki\n\ndestroy the enemy's war industries, kill or disable civilian employees of these industries, and undermine civilian morale."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Debate_over_bombings",
+          "score": 0.0,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki\n\nidea became the accepted position in Japan and that it may have played some part in the decision-making of the US government."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Reportage",
+          "score": 0.0,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki\n\nLess than a week after his New York Times story was published, Lawrence also backtracked and dismissed the reports on radiation sickness as Japanese efforts..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki",
+          "score": 0.0,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki\n\nBy July 1945, the Allies' Manhattan Project had produced two types of atomic bombs: \"Little Boy\", an enriched uranium gun-type fission weapon, and \"Fat..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "score": 0.0,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki\n\nfire-bombed over a hundred Japanese towns and cities."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan#Morality",
+          "score": 0.0,
+          "snippet": "Air raids on Japan\n\nThe atomic bomb attacks have been the subject of long-running controversy. While conventional attacks inflicted more damage and casualties on Japan than the atomic bombs,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nuclear weapon",
+          "url": "https://en.wikipedia.org/wiki/Nuclear_weapon#Testing_and_deployment",
+          "score": 0.0,
+          "snippet": "Nuclear weapons have only twice been used in warfare, both times by the United States against Japan at the end of World War II. On August 6, 1945, the United States Army Air Forces (USAAF) detonated..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Thomas Blake Glover",
+          "url": "https://en.wikipedia.org/wiki/Thomas_Blake_Glover#Family",
+          "score": 0.0,
+          "snippet": "Thomas Blake Glover\n\nthe atomic bombings of Hiroshima and Nagasaki and a few weeks before the arrival of American occupation forces in Nagasaki."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "morality-definition",
+          "url": "https://plato.stanford.edu/entries/morality-definition/",
+          "score": 0.0,
+          "snippet": "morality-definition\n\nand Haidt claims that"
+        },
+        {
+          "corpus_id": "institutional-notes",
+          "title": null,
+          "url": null,
+          "score": 0.0,
+          "snippet": "`sovereign-inference/examples/bench_embed.rs` is the authoritative probe for embed performance questions. Use it BEFORE proposing fixes.\n\nWhy it exists: three speculative fixes in a row (bigger..."
+        },
+        {
+          "corpus_id": "enron-sample-multi-wide",
+          "title": "To All Warren Electric Group friends...From the Thompson-Draper-Schmidt-McAlvany Family:",
+          "url": null,
+          "score": 0.0,
+          "snippet": "To All Warren Electric Group friends...From the Thompson-Draper-Schmidt-McAlvany Family:\n\nwhether we are from small towns, metropolitan\ncities, the country, or living abroad are bonded together -..."
+        },
+        {
+          "corpus_id": "system-overview",
+          "title": "10.2 Commonwealth deferrals",
+          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "score": 0.0,
+          "snippet": "10.2 Commonwealth deferrals\n\nItemLocationWhy deferredMulti-embed-model dispatch`commonwealth-api/src/routes_inference.rs:418``/v1/embeddings` ignores the `model` field; gated on a second production..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of nuclear weapons",
+          "url": "https://en.wikipedia.org/wiki/History_of_nuclear_weapons#The_first_thermonuclear_weapons",
+          "score": 0.0,
+          "snippet": "History of nuclear weapons\n\nthey argued, could only be used against large civilian populations, and could thus only be used as a weapon of genocide.\n\nMany scientists, such as Bethe, urged that the..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Atomic bombings of Hiroshima and Nagasaki"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "civilian casualties"
+        ],
+        "missing": [
+          "ended the war sooner",
+          "saved lives by avoiding invasion",
+          "alternatives existed",
+          "demonstration",
+          "Soviet entry"
+        ],
+        "total_expected": 6,
+        "ratio": 0.16666667
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "watched-25378eeeed13",
+        "sep",
+        "institutional-notes",
+        "enron-sample-multi-wide",
+        "system-overview"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The morality of the atomic bombings of Hiroshima and Nagasaki remains one of the most contested questions in modern history. The debate centres on whether these acts were a necessary military decision or an unjustifiable war crime, with arguments spanning utilitarian ethics, international law, and historical counterfactuals.\n\n### Arguments For the Morality of the Bombings\n\n**1. Saving Lives Through a Swift End to War (Utilitarianism)**\nThe primary argument for the bombings is that they ended World War II quickly, thereby preventing even greater loss of life than would have resulted from a prolonged conflict or a planned invasion of Japan (Operation Downfall). Supporters argue that while the immediate death toll was horrific, it was \"minimal casualties\" compared to what might have occurred otherwise [Source: Atomic bombings of Hiroshima and Nagasaki]. This view holds that the decision-makers were faced with an impossible choice between two catastrophic outcomes, choosing the one that saved more lives in total—both Allied soldiers and Japanese civilians who would have died in a ground invasion.\n\n**2. Military Necessity and Target Legitimacy**\nProponents contend that both cities were legitimate military targets. Hiroshima housed a major garrison and served as a command center for Japanese forces [Source: Atomic bombings of Hiroshima and Nagaska], while Nagasaki contained significant industrial facilities and was home to a \"major Imperial Japanese Navy base\" during previous conflicts [Source: Nagasaki]. The argument follows that since conventional firebombing campaigns had already targeted civilian populations across Japan (killing between 241,000 and 900,000 people according to some estimates) with the stated aim of destroying war industries and undermining morale [Source: Air raids on Japan; Source: Atomic bombings of Hiroshima and\n\nNagasaki], the atomic bombs were simply a more efficient means to achieve the same strategic objectives.\n\n**3. Deterrence Against Soviet Expansion**\nSome historians argue that demonstrating American nuclear capability was also intended to signal strength to the Soviet Union, potentially limiting post-war communist expansion in Asia. While not always framed as a moral justification for killing civilians, this geopolitical calculation is often cited by supporters who view the action through the lens of realpolitik rather than pure humanitarianism.\n\n### Arguments Against the Morality of the Bombings\n\n**1. Unnecessary for Victory (The \"Japan Was Already Defeated\" Thesis)**\nCritics argue that Japan was on the verge of surrender and that the bombs were unnecessary to end the war. They point out that:\n*   The Japanese navy had been effectively destroyed [Source: Air raids on Japan].\n*   A naval blockade was strangling Japan's ability to import resources.\n*   Conventional firebombing had already devastated major cities, including Tokyo [Source: Atomic bombings of Hiroshima and",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 66806,
+        "total_latency_ms": 39889,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "enron-sample-multi-wide",
+          "institutional-notes",
+          "sep",
+          "system-overview",
+          "watched-25378eeeed13"
+        ],
+        "retrieved_chunk_count": 29,
+        "chunks_fact_score": {
+          "matched": [
+            "civilian casualties"
+          ],
+          "missing": [
+            "ended the war sooner",
+            "saved lives by avoiding invasion",
+            "alternatives existed",
+            "demonstration",
+            "Soviet entry"
+          ],
+          "total_expected": 6,
+          "ratio": 0.16666667
+        },
+        "judge_fact_score": {
+          "matched": [
+            "ended the war sooner",
+            "saved lives by avoiding invasion",
+            "civilian casualties",
+            "alternatives existed",
+            "demonstration",
+            "Soviet entry"
+          ],
+          "missing": [],
+          "total_expected": 6,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "ended the war sooner",
+            "present": true,
+            "evidence": "\"The primary argument for the bombings is that they ended World War II quickly, thereby preventing even greater loss of life than would have resulted from a prolonged conflict or a planned invasion of Japan\""
+          },
+          {
+            "fact": "saved lives by avoiding invasion",
+            "present": true,
+            "evidence": "\"ending World War II quickly, thereby preventing even greater loss of life than would have resulted from a prolonged conflict or a planned invasion\""
+          },
+          {
+            "fact": "civilian casualties",
+            "present": true,
+            "evidence": "\"Japanese civilians who would have died in a ground invasion\""
+          },
+          {
+            "fact": "alternatives existed",
+            "present": true,
+            "evidence": "\"the decision-makers were faced with an impossible choice between two catastrophic outcomes\""
+          },
+          {
+            "fact": "demonstration",
+            "present": true,
+            "evidence": "\"demonstrating American nuclear capability was also intended to signal strength\""
+          },
+          {
+            "fact": "Soviet entry",
+            "present": true,
+            "evidence": "\"demonstrating American nuclear capability was also intended to signal strength to the Soviet Union, potentially limiting post-war communist expansion in Asia\""
+          }
+        ]
+      }
+    }
+  ]
+}

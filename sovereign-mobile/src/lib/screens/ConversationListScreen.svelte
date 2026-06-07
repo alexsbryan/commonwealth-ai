@@ -1,11 +1,23 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { createConversation, listConversations } from "../api";
-  import type { ConversationSummary } from "../types";
+  import { createConversation, listConversations, removeHostConnection } from "../api";
+  import type { ConversationSummary, HostConnection } from "../types";
 
-  let { onopen }: { onopen: (id: string) => void } = $props();
+  // `host` is the active connection (for the manage-host chip); `ondisconnect`
+  // lets App.svelte re-derive `paired` after a removal so it can route back to
+  // the pairing screen.
+  let {
+    onopen,
+    host,
+    ondisconnect,
+  }: {
+    onopen: (id: string) => void;
+    host: HostConnection | null;
+    ondisconnect: () => void;
+  } = $props();
 
   let convos = $state<ConversationSummary[]>([]);
+  let menuOpen = $state(false);
 
   async function refresh() {
     try {
@@ -20,24 +32,101 @@
     onopen(id);
   }
 
+  // Remove the active host, then hand control back to App.svelte. Removing the
+  // only host drops `paired`, so the pairing screen returns — this is also the
+  // "change host" path (remove, then pair again with a new address/token).
+  async function disconnect() {
+    if (host) {
+      try {
+        await removeHostConnection(host.id);
+      } catch {
+        /* best-effort: even on error, fall through to re-pairing */
+      }
+    }
+    menuOpen = false;
+    ondisconnect();
+  }
+
+  // Host-side title generation sometimes leaks the (thinking) model's
+  // reasoning instead of a title — "The user wants me to output only the
+  // title…", "Assistant Response: Expl". Until that's fixed host-side, clean
+  // the obvious artifacts and fall back to a dated label so the list stays
+  // legible (and distinct) rather than showing a paragraph or a fragment.
+  function fmtDate(unixSecs: number): string {
+    try {
+      return new Date(unixSecs * 1000).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    } catch {
+      return "Conversation";
+    }
+  }
+
+  function displayTitle(c: ConversationSummary): string {
+    const raw = (c.title ?? "").trim();
+    if (!raw) return fmtDate(c.created_at);
+    // "Assistant Response: …" is a labeling artifact, not a title.
+    if (/^assistant\s+response\b/i.test(raw)) return fmtDate(c.created_at);
+    // A thinking model narrating instead of titling.
+    if (
+      /^(the user\b|let me\b|i (need|should|want|'?ll|will)\b|okay[,!]|sure[,!]|based on\b|here(?:'s| is)\b)/i.test(
+        raw,
+      )
+    )
+      return fmtDate(c.created_at);
+    // Strip a "Title:"-style prefix + surrounding quotes the model adds.
+    let s = raw.replace(/^(?:the\s+)?(?:conversation\s+)?title\s*[:\-—]\s*/i, "").trim();
+    s = s.replace(/^["'“‘]+|["'”’]+$/g, "").trim();
+    // A title shouldn't be a paragraph or empty after cleaning.
+    if (!s || s.length > 60 || s.includes("\n")) return fmtDate(c.created_at);
+    return s;
+  }
+
   onMount(refresh);
 </script>
 
 <div class="list">
   <header>
-    <h1>Conversations</h1>
+    <div class="head-left">
+      <h1>Conversations</h1>
+      {#if host}
+        <button
+          class="host-chip"
+          onclick={() => (menuOpen = !menuOpen)}
+          aria-label={`Host: ${host.display_name}. Tap to manage.`}
+          aria-expanded={menuOpen}
+        >
+          <span class="dot" aria-hidden="true">◈</span>
+          {host.display_name}
+        </button>
+      {/if}
+    </div>
     <button class="new-btn" onclick={startNew} aria-label="New conversation">
       <span class="plus" aria-hidden="true">+</span> New
     </button>
   </header>
+  {#if menuOpen && host}
+    <div class="host-menu" role="dialog" aria-label="Host connection">
+      <div class="host-addr">{host.tailnet_address}</div>
+      <div class="host-actions">
+        <button class="disconnect" onclick={disconnect}>
+          Disconnect / change host
+        </button>
+        <button class="cancel" onclick={() => (menuOpen = false)}>Cancel</button>
+      </div>
+    </div>
+  {/if}
   <div class="rows" role="group" aria-label="Conversations">
     {#each convos as c (c.id)}
       <button
         class="row"
         onclick={() => onopen(c.id)}
-        aria-label={`Open conversation: ${c.title ?? "Untitled"}`}
+        aria-label={`Open conversation: ${displayTitle(c)}`}
       >
-        <span class="title">{c.title ?? "Untitled"}</span>
+        <span class="title">{displayTitle(c)}</span>
       </button>
     {:else}
       <p class="empty">No conversations yet — start one.</p>
@@ -49,7 +138,12 @@
   .list {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    /* Fill the flex space left by the connectivity banner — NOT height:100%,
+       which overflows #app and makes the whole page scroll (taking the
+       "sticky" header with it). flex:1 + min-height:0 keeps the list bounded
+       to the viewport so only `.rows` scrolls and the header truly sticks. */
+    flex: 1;
+    min-height: 0;
     /* Cap the column on tablets/landscape; full-width with gutters on a
        phone. Centered so it never stretches edge-to-edge. */
     width: 100%;
@@ -91,6 +185,68 @@
   }
   .new-btn:active { background: color-mix(in srgb, var(--accent) 22%, transparent); }
   .plus { font-size: 1.05em; line-height: 1; }
+
+  .head-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+    min-width: 0;
+  }
+  /* The connected-host chip — the entry point to change/remove the host. */
+  .host-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+    max-width: 100%;
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--lavender-light);
+    background: var(--lavender-dim);
+    border: 1px solid color-mix(in srgb, var(--lavender) 24%, transparent);
+    border-radius: 999px;
+    padding: 0.16rem 0.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .host-chip .dot { font-size: 0.7em; opacity: 0.7; }
+  .host-chip:active { background: color-mix(in srgb, var(--lavender) 22%, transparent); }
+
+  .host-menu {
+    margin: 0.1rem var(--pad-r) 0.4rem var(--pad-l);
+    padding: 0.7rem 0.8rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-bright);
+    border-radius: var(--radius-lg);
+  }
+  .host-addr {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    margin-bottom: 0.55rem;
+    word-break: break-all;
+  }
+  .host-actions { display: flex; gap: 0.5rem; }
+  .host-actions button {
+    flex: 1;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border-radius: var(--radius);
+    padding: 0.5rem 0.6rem;
+  }
+  .disconnect {
+    color: var(--danger, #e5837a);
+    background: color-mix(in srgb, var(--danger, #e5837a) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--danger, #e5837a) 34%, transparent);
+  }
+  .disconnect:active { background: color-mix(in srgb, var(--danger, #e5837a) 22%, transparent); }
+  .cancel {
+    color: var(--text-secondary, var(--text-muted));
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+  }
 
   .rows {
     flex: 1;

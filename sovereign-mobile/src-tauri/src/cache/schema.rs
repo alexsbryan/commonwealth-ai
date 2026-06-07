@@ -66,7 +66,12 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             inference_backend TEXT NOT NULL,
             routing_tier      TEXT,
             ttft_ms           INTEGER,
-            total_ms          INTEGER
+            total_ms          INTEGER,
+            -- Cutoff legibility: "length" finish reason + budget/tokens so a
+            -- reopened (hydrated) conversation still shows the cutoff chip.
+            finish_reason     TEXT,
+            max_tokens_budget INTEGER,
+            completion_tokens INTEGER
         );
 
         CREATE TABLE IF NOT EXISTS citation (
@@ -110,5 +115,20 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_conv_host    ON conversation(host_connection_id);
         "#,
     )?;
+
+    // Idempotent column adds for DBs created before the cutoff-legibility
+    // fields existed. SQLite has no `ADD COLUMN IF NOT EXISTS`, so we run
+    // each ALTER and swallow the "duplicate column name" error.
+    for stmt in [
+        "ALTER TABLE response_provenance ADD COLUMN finish_reason TEXT",
+        "ALTER TABLE response_provenance ADD COLUMN max_tokens_budget INTEGER",
+        "ALTER TABLE response_provenance ADD COLUMN completion_tokens INTEGER",
+    ] {
+        match conn.execute(stmt, []) {
+            Ok(_) => {}
+            Err(rusqlite::Error::SqliteFailure(_, Some(msg))) if msg.contains("duplicate column") => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
     Ok(())
 }

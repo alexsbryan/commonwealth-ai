@@ -10,6 +10,7 @@
 //! Operator-driven — no daemon source changes.
 
 pub mod audit_trail;
+pub mod chaos_monkey;
 pub mod cognitive;
 pub mod diff;
 pub mod disposition_bench;
@@ -21,6 +22,7 @@ pub mod finalize;
 pub mod judge;
 pub mod manifest;
 pub mod mechanical;
+pub mod mechanism_fidelity;
 pub mod regression;
 pub mod scope;
 pub mod tool_grader;

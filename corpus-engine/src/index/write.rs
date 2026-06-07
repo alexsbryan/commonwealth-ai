@@ -17,16 +17,82 @@ use super::{
 };
 
 impl CorpusIndex {
+    /// Maximum `id` currently stored (0 when empty). A one-time full scan
+    /// of the `id` column — used only to SEED the allocation high-water
+    /// for legacy indexes that pre-date `IndexMeta::next_chunk_id`. Not
+    /// on any query hot path.
+    pub async fn max_chunk_id(&self) -> Result<u64> {
+        use lancedb::query::Select;
+        let batches: Vec<RecordBatch> = self
+            .table()
+            .query()
+            .select(Select::Columns(vec!["id".into()]))
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("max_chunk_id query: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("max_chunk_id collect: {e}")))?;
+        let mut max_id = 0u64;
+        for batch in &batches {
+            if let Some(ids) = batch
+                .column_by_name("id")
+                .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
+            {
+                for i in 0..ids.len() {
+                    max_id = max_id.max(ids.value(i).max(0) as u64);
+                }
+            }
+        }
+        Ok(max_id)
+    }
+
+    /// Reserve `n` contiguous chunk ids and return the first. Allocates
+    /// from the persisted `next_chunk_id` high-water mark (seeded lazily
+    /// from `max(id) + 1` for legacy indexes), so allocated ids are
+    /// unique and strictly monotonic — never reused after a delete,
+    /// dedupe, or delta append. This is the fix for the duplicate-id
+    /// citation corruption; see `IndexMeta::next_chunk_id`.
+    ///
+    /// The high-water is persisted to `_corpus_meta.json`. If the meta is
+    /// absent (rare — every created index writes it), we fall back to a
+    /// fresh `max(id)` scan each call: still correct (committed rows are
+    /// visible to the scan), just without the O(1) cache.
+    async fn allocate_chunk_ids(&self, n: u64) -> Result<u64> {
+        let index_dir = std::path::Path::new(self.connection().uri());
+        let mut meta = read_meta(index_dir).ok();
+        let first = match meta.as_ref().and_then(|m| m.next_chunk_id) {
+            Some(hw) if hw > 0 => hw,
+            // Legacy / missing high-water: seed from the actual max id so
+            // we never collide with rows already on disk.
+            _ => self.max_chunk_id().await?.saturating_add(1),
+        };
+        if let Some(m) = meta.as_mut() {
+            m.next_chunk_id = Some(first + n);
+            // Best-effort persist: even if this fails, correctness holds
+            // because the next `max(id)` seed will see these rows.
+            if let Err(e) = write_meta(index_dir, m) {
+                tracing::warn!(error = %e, "allocate_chunk_ids: failed to persist next_chunk_id high-water");
+            }
+        }
+        Ok(first)
+    }
+
     /// Insert a batch of chunks (with pre-computed embeddings).
     pub async fn insert_batch(&self, chunks: &[(InsertChunk, Vec<f32>)]) -> Result<()> {
         if chunks.is_empty() {
             return Ok(());
         }
 
-        let base_id = self.chunk_count().await?;
+        // Allocate ids from the persisted high-water mark, NOT the row
+        // count. `chunk_count()` diverges from the max id after any
+        // delete/dedupe/delta, so count-based ids silently REUSE existing
+        // ids → ambiguous `neighbors(id)` → wrong-chunk citations. See
+        // `IndexMeta::next_chunk_id`.
+        let first_id = self.allocate_chunk_ids(chunks.len() as u64).await?;
 
         let ids: Vec<i64> = (0..chunks.len())
-            .map(|i| (base_id + i as u64 + 1) as i64)
+            .map(|i| (first_id + i as u64) as i64)
             .collect();
         let contents: Vec<&str> = chunks.iter().map(|(c, _)| c.content.as_str()).collect();
         let titles: Vec<Option<&str>> = chunks.iter().map(|(c, _)| c.title.as_deref()).collect();

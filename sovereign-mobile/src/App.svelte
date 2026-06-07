@@ -39,6 +39,15 @@
   });
 
   const paired = $derived(hosts.length > 0);
+  const activeHost = $derived(hosts.find((h) => h.is_default) ?? hosts[0] ?? null);
+
+  // After the user removes/changes the host (from the conversation list), drop
+  // any open conversation and re-read hosts: an emptied list flips `paired`
+  // false, routing back to the pairing screen.
+  async function handleDisconnect() {
+    activeConversationId = null;
+    await refreshHosts();
+  }
 </script>
 
 {#if !loaded}
@@ -55,7 +64,11 @@
       onback={() => (activeConversationId = null)}
     />
   {:else}
-    <ConversationListScreen onopen={(id) => (activeConversationId = id)} />
+    <ConversationListScreen
+      host={activeHost}
+      onopen={(id) => (activeConversationId = id)}
+      ondisconnect={handleDisconnect}
+    />
   {/if}
 {/if}
 

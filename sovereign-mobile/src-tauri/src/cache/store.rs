@@ -73,14 +73,28 @@ pub fn upsert_message_full(
         )?;
         if let Some(p) = provenance {
             tx.execute(
-                "INSERT INTO response_provenance (message_id, inference_backend, routing_tier, ttft_ms, total_ms)
-                 VALUES (?1, ?2, ?3, ?4, ?5)
+                "INSERT INTO response_provenance
+                     (message_id, inference_backend, routing_tier, ttft_ms, total_ms,
+                      finish_reason, max_tokens_budget, completion_tokens)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                  ON CONFLICT(message_id) DO UPDATE SET
                      inference_backend = excluded.inference_backend,
                      routing_tier      = excluded.routing_tier,
                      ttft_ms           = excluded.ttft_ms,
-                     total_ms          = excluded.total_ms",
-                params![m.id, p.inference_backend, p.routing_tier, p.ttft_ms, p.total_ms],
+                     total_ms          = excluded.total_ms,
+                     finish_reason     = excluded.finish_reason,
+                     max_tokens_budget = excluded.max_tokens_budget,
+                     completion_tokens = excluded.completion_tokens",
+                params![
+                    m.id,
+                    p.inference_backend,
+                    p.routing_tier,
+                    p.ttft_ms,
+                    p.total_ms,
+                    p.finish_reason,
+                    p.max_tokens_budget,
+                    p.completion_tokens
+                ],
             )?;
         }
         // Citations are immutable per message — replace wholesale.
@@ -226,7 +240,8 @@ pub fn read_conversation(conn: &Connection, id: &str) -> Result<Option<Conversat
     for m in &mut messages {
         m.provenance = conn
             .query_row(
-                "SELECT inference_backend, routing_tier, ttft_ms, total_ms
+                "SELECT inference_backend, routing_tier, ttft_ms, total_ms,
+                        finish_reason, max_tokens_budget, completion_tokens
                  FROM response_provenance WHERE message_id = ?1",
                 params![m.id],
                 |r| {
@@ -235,6 +250,9 @@ pub fn read_conversation(conn: &Connection, id: &str) -> Result<Option<Conversat
                         routing_tier: r.get(1)?,
                         ttft_ms: r.get(2)?,
                         total_ms: r.get(3)?,
+                        finish_reason: r.get(4)?,
+                        max_tokens_budget: r.get(5)?,
+                        completion_tokens: r.get(6)?,
                         sources: Vec::new(),
                     })
                 },

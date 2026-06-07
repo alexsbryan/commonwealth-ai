@@ -26,6 +26,7 @@ mod mesh_cmd;
 mod meshapp_cmd;
 mod meshapp_registry;
 mod meta_atlas_cmd;
+mod mobile_cmd;
 mod newsworthy_cmd;
 mod pipeline_cmd;
 mod reading_diag_cmd;
@@ -98,6 +99,7 @@ async fn async_main() {
         "mcp" => mcp_cmd::run_mcp(rest).await,
         "alignment" => alignment_cmd::run_alignment(rest).await,
         "mesh" => mesh_cmd::run_mesh(rest).await,
+        "mobile" => mobile_cmd::run_mobile(rest).await,
         "corpus" => mesh_cmd::run_corpus(rest).await,
         "" => {
             eprintln!("sovereign-cli-llm: usage: sovereign-cli-llm <subcommand> [args...]");

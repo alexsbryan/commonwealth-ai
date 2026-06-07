@@ -1,0 +1,256 @@
+{
+  "bank_name": "single-causal-roman",
+  "corpus": "wikipedia",
+  "limit": 30,
+  "started_at_unix": 1780798876,
+  "results": [
+    {
+      "question_id": "causal_roman_empire_fall",
+      "category": "causal_reasoning",
+      "question": "What caused the fall of the Western Roman Empire?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire",
+          "score": 0.032539684,
+          "snippet": "Fall of the Western Roman Empire  The fall of the Western Roman Empire, also called the fall of the Roman Empire or the fall of Rome, was the loss of central political control in the Western Roman Empire, a process in which the Empire failed to enforce its rule, and its vast territory was divided between several successor polities. The Roman Empire lost the strengths that had allowed it to exercise effective control over its Western provinces; modern historians posit factors including the effectiveness and numbers of the army, the health and numbers of the Roman population, the strength of the…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Empire",
+          "url": "https://en.wikipedia.org/wiki/Empire#Roman_Empire",
+          "score": 0.032522473,
+          "snippet": "Empire  The fall of the western half of the Roman Empire is seen as one of the most pivotal points in all of human history. This event traditionally marks the transition from classical civilization to the birth of Europe. The Roman Empire started to decline at the end of the reign of the last of the Five Good Emperors, Marcus Aurelius in 161–180 A.D. There is still a debate over the cause of the fall of one of the largest empires in history. Piganiol argues that the Roman Empire under its authority can be described as \"a period of terror\", holding its imperial system accountable for its failur…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Migration Period",
+          "url": "https://en.wikipedia.org/wiki/Migration_Period#Abstract",
+          "score": 0.031257633,
+          "snippet": "Migration Period  power broke down in the Western Roman Empire, the military became more important but was dominated by men of barbarian origin.  There are contradictory opinions as to whether the fall of the Western Roman Empire was a result of an increase in migrations, or if both the breakdown of central power and the increased importance of non-Romans created additional internal factors. Migrations, and the use of non-Romans in the military, were known in the periods before and after, and the Eastern Roman Empire adapted and continued to exist until the fall of Constantinople to the Ottoma…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western world",
+          "url": "https://en.wikipedia.org/wiki/Western_world#Ancient_Roman_world_(6th_century_BC_–_AD_395–476)",
+          "score": 0.028790388,
+          "snippet": "Western world  eventual decline and ultimately fall of the Roman Empire.  The Roman Empire is where the idea of \"the West\" began to emerge."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Fall_of_the_Empire",
+          "score": 0.02857726,
+          "snippet": "Western Roman Empire  Some historians thus refer to the reorganizations of Italy and abolition of the old and separate Western Roman administrative units, such as the Praetorian prefecture of Italy, during the sixth century as the \"true\" fall of the Western Roman Empire."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Abstract",
+          "score": 0.02848485,
+          "snippet": "Fall of the Western Roman Empire  Western Roman Empire in Italy, Romulus Augustulus, and the Senate sent the imperial insignia to the Eastern Roman Emperor Zeno.  While its legitimacy lasted for centuries longer and its cultural influence remains today, the Western Empire never had the strength to rise again. The Eastern Roman, or Byzantine, Empire, survived and remained for centuries an effective power of the Eastern Mediterranean, although it lessened in strength. Additionally, while the loss of political unity and military control is universally acknowledged, the fall of Rome is not the onl…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western world",
+          "url": "https://en.wikipedia.org/wiki/Western_world#Ancient_Roman_world_(6th_century_BC_–_AD_395–476)",
+          "score": 0.026491228,
+          "snippet": "Western world  despite its great legacy, a number of factors led to the eventual decline and ultimately fall of the Roman Empire.  The Roman Empire is where the idea of \"the West\" began to emerge."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#433–454:_Ascendancy_of_Aetius,_loss_of_Carthage",
+          "score": 0.016666668,
+          "snippet": "Fall of the Western Roman Empire  For by what other causes were they made Bagaudae save by our unjust acts, the wicked decisions of the magistrates, the proscription and extortion of those who have turned the public exactions to the increase of their private fortunes and made the tax indictions their opportunity for plunder?\""
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Christian art",
+          "url": "https://en.wikipedia.org/wiki/Christian_art#Middle_Ages",
+          "score": 0.016393442,
+          "snippet": "Christian art  Much of the art surviving from Europe after the fall of the Western Roman Empire is Christian art, although this is in large part because the continuity of church ownership has preserved church art better than secular works. While the Western Roman Empire 's political structure essentially collapsed after the fall of Rome, its religious hierarchy, what is today the modern-day Roman Catholic Church commissioned and funded production of religious art imagery."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Abstract",
+          "score": 0.016129032,
+          "snippet": "Fall of the Western Roman Empire  The reasons for the collapse are major subjects of the historiography of the ancient world and they inform much modern discourse on state failure."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Underlying_causes",
+          "score": 0.015625,
+          "snippet": "Fall of the Western Roman Empire  When Gibbon published his landmark work, it quickly became the standard. Peter Brown has written that \"Gibbon's work formed the peak of a century of scholarship which had been conducted in the belief that the study of the declining Roman Empire was also the study of the origins of modern Europe\". Gibbon was the first to attempt an explanation of causes of a Fall of empire. Like other Enlightenment thinkers and British citizens of the age steeped in institutional anti-Catholicism, Gibbon held in contempt the Middle Ages as a priest-ridden, superstitious Dark Ag…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Another_paradigm_of_the_period",
+          "score": 0.015625,
+          "snippet": "Fall of the Western Roman Empire  From at least the time of Henri Pirenne (1862–1935), scholars have described a continuity of Roman culture and political legitimacy long after 476. Pirenne postponed the demise of classical civilization to the 8th century. He challenged the notion that Germanic barbarians had caused the Western Roman Empire to end, and he refused to equate the end of the Western Roman Empire with the end of the office of emperor in Italy. He pointed out the essential continuity of the economy of the Roman Mediterranean even after the barbarian invasions, and suggested that onl…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Migration Period",
+          "url": "https://en.wikipedia.org/wiki/Migration_Period",
+          "score": 0.015384615,
+          "snippet": "Migration Period  The beginning of the period is widely regarded as the invasion of Europe by the Huns from Asia in about 375 and the ending with the conquest of Italy by the Lombards in 568, but a more loosely set period is from as early as 300 to as late as 800. For example, in the 4th century a very large group of Goths was settled as foederati within the Roman Balkans, and the Franks were settled south of the Rhine in Roman Gaul. In 406 a particularly large and unexpected crossing of the Rhine was made by a group of Vandals, Alans and Suebi. As central power broke down in the Western Roman…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Roman_Empire#Abstract",
+          "score": 0.015151516,
+          "snippet": "Roman Empire  The Migration Period, involving large invasions by Germanic peoples and by the Huns of Attila, led to the decline of the Western Roman Empire. With the fall of Ravenna to the Germanic Herulians and the deposition of Romulus Augustus in 476 by Odoacer, the Western Empire finally collapsed. The Eastern Roman Empire survived for another millennium with Constantinople as its sole capital, until the city's fall in 1453."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Imperial_reconquest",
+          "score": 0.014925373,
+          "snippet": "Western Roman Empire  combined with the disastrous effects of the Plague of Justinian, made it difficult to retain over the following centuries."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Henri Pirenne",
+          "url": "https://en.wikipedia.org/wiki/Henri_Pirenne#On_the_formation_of_European_towns",
+          "score": 0.014925373,
+          "snippet": "Henri Pirenne  Traditionally, historians had dated the Middle Ages from the fall of the Western Roman Empire in the 5th century, a theory Edward Gibbon famously put forward in the 18th century, and which is inexorably linked to the supposition of a Roman \"decline\" from a previous classic ideal. Pirenne postponed the demise of classical civilization to the 8th century. He challenged the notion that Germanic barbarians had caused the Western Roman Empire to end and he challenged the notion that the end of the Western Roman Empire should be equated with the end of the office of emperor in Europe,…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Migration Period",
+          "url": "https://en.wikipedia.org/wiki/Migration_Period#Viewpoints",
+          "score": 0.014705882,
+          "snippet": "Migration Period  as the replacement of a \"tired, effete and decadent Mediterranean civilization\" with a \"more virile, martial, Nordic one\".  The scholar Guy Halsall has seen the barbarian movement as the result of the fall of the Roman Empire, not its cause. Archaeological discoveries have confirmed that Germanic and Slavic tribes were settled agriculturalists who were probably merely \"drawn into the politics of an empire already falling apart for quite a few other causes\". Goffart argues that the process of settlement was connected to hospitalitas, the Roman practice of quartering soldiers a…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western culture",
+          "url": "https://en.wikipedia.org/wiki/Western_culture#The_West_of_the_Mediterranean_Region_during_the_Antiquity",
+          "score": 0.014492754,
+          "snippet": "Western culture  Thus, much of the learning of classical antiquity was slowly reintroduced to European civilization in the centuries following the collapse of the Western Roman Empire."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Underlying_causes",
+          "score": 0.014285714,
+          "snippet": "Fall of the Western Roman Empire  the role of Christianity, but he gave great weight to other causes of internal decline and to attacks from outside the Empire.  The story of its ruin is simple and obvious; and, instead of inquiring why the Roman empire was destroyed, we should rather be surprised that it had subsisted so long. The victorious legions, who, in distant wars, acquired the vices of strangers and mercenaries, first oppressed the freedom of the republic, and afterwards violated the majesty of the purple. The emperors, anxious for their personal safety and the public peace, were redu…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Agriculture in the Middle Ages",
+          "url": "https://en.wikipedia.org/wiki/Agriculture_in_the_Middle_Ages#The_Early_Middle_Ages",
+          "score": 0.014285714,
+          "snippet": "Agriculture in the Middle Ages  The popular view is that the fall of the Western Roman Empire caused a \" dark age \" in western Europe in which \"knowledge and civility\", the \"arts of elegance,\" and \"many of the useful arts\" were neglected or lost. Conversely, however, the lot of the farmers who made at least 80 percent of the total population, may have improved in the aftermath of the Roman Empire. The fall of Rome saw the \"shrinking of tax burdens, weakening of the aristocracy, and consequently greater freedom for peasants.\" The countryside of the Roman Empire was dotted with \"villas\" or estat…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Vikings",
+          "url": "https://en.wikipedia.org/wiki/Vikings#Motives",
+          "score": 0.013888889,
+          "snippet": "Vikings  and the period of strife was due to successive Norwegian kings embracing Christianity after encountering it overseas.  Another explanation is that the Vikings exploited a moment of weakness in the surrounding regions. Contrary to Simek's assertion, Viking raids occurred sporadically long before the reign of Charlemagne; but exploded in frequency and size after his death, when his empire fragmented into multiple much weaker entities. England suffered from internal divisions and was a relatively easy prey given the proximity of many towns to the sea or to navigable rivers. Lack of organ…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Human history",
+          "url": "https://en.wikipedia.org/wiki/Human_history#Declines,_falls,_and_resurgence",
+          "score": 0.013888889,
+          "snippet": "Human history  The development of the stirrup and the use of horse archers made the nomads a constant threat to sedentary civilizations.  In the 4th century CE, the Roman Empire split into western and eastern regions, with usually separate emperors. The Western Roman Empire fell in 476 CE to German influence under Odoacer. The Eastern Roman Empire, known as the Byzantine Empire, was more long-lasting. In China, dynasties rose and fell, but, in sharp contrast to the Mediterranean-European world, political unity was always eventually restored. After the fall of the Eastern Han dynasty and the de…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Abstract",
+          "score": 0.01369863,
+          "snippet": "Western Roman Empire  The Great Schism of 1054 between the churches of Rome and Constantinople further diminished any authority the emperor in Constantinople could hope to exert in the West."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Roman_Empire#Abstract",
+          "score": 0.01369863,
+          "snippet": "Roman Empire  The Roman Empire ruled the Mediterranean and much of Europe, Western Asia and North Africa. The Romans conquered most of this during the Republic, and it was ruled by emperors following Octavian 's assumption of effective sole rule in 27 BC. The western empire collapsed in 476 AD, but the eastern empire lasted until the fall of Constantinople in 1453."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Sixteen Kingdoms",
+          "url": "https://en.wikipedia.org/wiki/Sixteen_Kingdoms",
+          "score": 0.013513514,
+          "snippet": "Sixteen Kingdoms  For seven years from 376 to 383, the Former Qin briefly unified northern China, but this ended when the Eastern Jin inflicted a crippling defeat on it at the Battle of Fei River, after which the Former Qin splintered and northern China experienced even greater political fragmentation. The fall of the Western Jin dynasty amidst the rise of non-Han regimes in northern China during the Sixteen Kingdoms period resembles the fall of the Western Roman Empire amidst invasions by the Huns and Germanic tribes in Europe, which also occurred in the 4th to 5th centuries."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ancient Rome",
+          "url": "https://en.wikipedia.org/wiki/Ancient_Rome#Abstract",
+          "score": 0.013513514,
+          "snippet": "Ancient Rome  In modern historiography, ancient Rome is the Roman civilisation from the founding of the Italian city of Rome in the 8th century BC to the collapse of the Western Roman Empire in the 5th century AD. It encompasses the Roman Kingdom (753–509 BC), the Roman Republic (509–27 BC), and the Roman Empire (27 BC–476 AD) until the fall of the western empire."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Fall_of_the_Empire",
+          "score": 0.013157895,
+          "snippet": "Western Roman Empire  As 480 marks the end of the juridical division of the empire into two imperial courts, some historians refer to the death of Nepos and abolition of the Western Empire by Zeno as the end of the Western Roman Empire."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Alaric_besieges_Rome",
+          "score": 0.012987013,
+          "snippet": "Fall of the Western Roman Empire  Indeed, Attalus's claim was a marker of threat to Honorius, and Alaric dethroned him after a few months."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Political_aftermath",
+          "score": 0.012987013,
+          "snippet": "Western Roman Empire  After the fall of the Western Roman Empire, the Germanic kingdoms, often referred to as \"barbarian kingdoms\", founded during its collapse continued to grow and prosper. Their beginnings, together with the end of the Western Roman Empire, mark the transition from Late Antiquity to the Middle Ages. The practices of the barbarian kingdoms gradually replaced the old Roman institutions, specifically in the praetorian prefectures of Gaul and Italy, during the sixth and seventh centuries. In many places, the Roman institutions collapsed along with the economic stability. In some…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Crisis of the Third Century",
+          "url": "https://en.wikipedia.org/wiki/Crisis_of_the_Third_Century#Breakdown_of_the_internal_trade_network",
+          "score": 0.012820513,
+          "snippet": "Crisis of the Third Century  This would have a considerable impact on the later development of the empire with a richer, more stable eastern empire surviving the end of Roman rule in the west."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Fall of the Western Roman Empire",
+          "Roman Empire",
+          "Migration Period"
+        ],
+        "missing": [],
+        "total_expected": 3,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "barbarian",
+          "invasions",
+          "476",
+          "economic",
+          "Christianity",
+          "military",
+          "political",
+          "Migration Period"
+        ],
+        "missing": [],
+        "total_expected": 8,
+        "ratio": 1.0
+      },
+      "embed_ms": 39,
+      "search_ms": 4323,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    }
+  ]
+}
