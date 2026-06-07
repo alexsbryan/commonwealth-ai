@@ -47,6 +47,44 @@
     ondisconnect();
   }
 
+  // Host-side title generation sometimes leaks the (thinking) model's
+  // reasoning instead of a title — "The user wants me to output only the
+  // title…", "Assistant Response: Expl". Until that's fixed host-side, clean
+  // the obvious artifacts and fall back to a dated label so the list stays
+  // legible (and distinct) rather than showing a paragraph or a fragment.
+  function fmtDate(unixSecs: number): string {
+    try {
+      return new Date(unixSecs * 1000).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    } catch {
+      return "Conversation";
+    }
+  }
+
+  function displayTitle(c: ConversationSummary): string {
+    const raw = (c.title ?? "").trim();
+    if (!raw) return fmtDate(c.created_at);
+    // "Assistant Response: …" is a labeling artifact, not a title.
+    if (/^assistant\s+response\b/i.test(raw)) return fmtDate(c.created_at);
+    // A thinking model narrating instead of titling.
+    if (
+      /^(the user\b|let me\b|i (need|should|want|'?ll|will)\b|okay[,!]|sure[,!]|based on\b|here(?:'s| is)\b)/i.test(
+        raw,
+      )
+    )
+      return fmtDate(c.created_at);
+    // Strip a "Title:"-style prefix + surrounding quotes the model adds.
+    let s = raw.replace(/^(?:the\s+)?(?:conversation\s+)?title\s*[:\-—]\s*/i, "").trim();
+    s = s.replace(/^["'“‘]+|["'”’]+$/g, "").trim();
+    // A title shouldn't be a paragraph or empty after cleaning.
+    if (!s || s.length > 60 || s.includes("\n")) return fmtDate(c.created_at);
+    return s;
+  }
+
   onMount(refresh);
 </script>
 
@@ -86,9 +124,9 @@
       <button
         class="row"
         onclick={() => onopen(c.id)}
-        aria-label={`Open conversation: ${c.title ?? "Untitled"}`}
+        aria-label={`Open conversation: ${displayTitle(c)}`}
       >
-        <span class="title">{c.title ?? "Untitled"}</span>
+        <span class="title">{displayTitle(c)}</span>
       </button>
     {:else}
       <p class="empty">No conversations yet — start one.</p>
@@ -100,7 +138,12 @@
   .list {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    /* Fill the flex space left by the connectivity banner — NOT height:100%,
+       which overflows #app and makes the whole page scroll (taking the
+       "sticky" header with it). flex:1 + min-height:0 keeps the list bounded
+       to the viewport so only `.rows` scrolls and the header truly sticks. */
+    flex: 1;
+    min-height: 0;
     /* Cap the column on tablets/landscape; full-width with gutters on a
        phone. Centered so it never stretches edge-to-edge. */
     width: 100%;

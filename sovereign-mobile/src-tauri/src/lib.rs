@@ -1,6 +1,12 @@
 //! Sovereign mobile — thin Tauri client. The Rust core owns transport,
 //! security (token in keychain), the SQLite cache, and connectivity;
 //! the Svelte frontend renders chat via the shared `@sovereign/chat-ui`.
+//!
+//! NB: Tauri embeds the frontend (dist/) into this crate at compile time via
+//! `generate_context!()`. A FRONTEND-ONLY change won't reach the device unless
+//! this crate recompiles — on iOS, `tauri ios build` relinks but doesn't always
+//! re-embed a changed dist. Bump this marker (or touch any .rs) to force it.
+//! frontend-embed-rev: 2
 
 mod cache;
 mod commands;
