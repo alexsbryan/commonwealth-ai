@@ -1,6 +1,6 @@
 {
   "lane": "chaos-monkey",
-  "captured_at": "2026-06-08T17:44:40.923739+00:00",
+  "captured_at": "2026-06-08T19:25:19.419534+00:00",
   "corpus": "chaos-secret-agent",
   "model": "primary",
   "note": "competence 16/24 answerable correct · honesty 0/11 absent declined · 6 hallucinated",
