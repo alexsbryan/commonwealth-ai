@@ -101,6 +101,10 @@ pub use filters::{
     build_filter_pipeline, compute_signature as compute_filter_signature, ComposeMode,
     DocumentFilter, FilterConfig, FilterPipeline, PageviewRankFilter, TitleListFilter,
 };
+pub use index::raptor::{
+    build_raptor_index, read_raptor_meta, search_raptor_summaries, RaptorHit, RaptorIndexMeta,
+    RaptorSummaryRow,
+};
 pub use index::{
     read_provenance, set_provenance, CorpusIndex, CorpusProvenance, DedupeReport,
     EnrichmentChunkRow, FilterOverride, InsertChunk, NeighborWindow, ScopeMeta, StoredChunk,

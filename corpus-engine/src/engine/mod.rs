@@ -2157,6 +2157,30 @@ impl CorpusEngine {
         self.open_index(&path).await
     }
 
+    /// ANN search over a corpus's derived RAPTOR summary-node table
+    /// (`raptor_summaries.lance`, built by
+    /// `sovereign_tools::raptor_index::build_corpus_raptor_index`). Replaces
+    /// the brute-force cosine scan in `apply_raptor_grounding`. Returns up to
+    /// `fetch_m` hits (`score = 1 - cosine_distance`); `Ok(vec![])` when the
+    /// corpus has no index built yet, so the caller falls back to the scan.
+    /// `min_level`/dedupe are applied caller-side over the over-fetched set.
+    pub async fn search_raptor_summaries(
+        &self,
+        corpus_id: &str,
+        query_emb: &[f32],
+        fetch_m: usize,
+    ) -> Result<Vec<crate::index::raptor::RaptorHit>> {
+        let corpus_dir = self.index_dir.join(corpus_id);
+        crate::index::raptor::search_raptor_summaries(&corpus_dir, query_emb, fetch_m).await
+    }
+
+    /// The freshness sidecar for a corpus's RAPTOR summary index, if built.
+    /// The query-time freshness probe compares its `source_version` against
+    /// the live `max(created_at)` of `conv_raptor_nodes`.
+    pub fn raptor_index_meta(&self, corpus_id: &str) -> Option<crate::index::raptor::RaptorIndexMeta> {
+        crate::index::raptor::read_raptor_meta(&self.index_dir.join(corpus_id))
+    }
+
     /// Return the IDs of all installed corpora that have field model
     /// enrichment data. Used by epistemic tools to know which corpora
     /// to consult.

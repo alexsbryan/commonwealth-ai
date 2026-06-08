@@ -432,7 +432,14 @@ means one thing.
   `conv_raptor_nodes` keyed by `source_doc_id`, never touches the
   corpus's atom-graph atlas, reuses the existing leaf embeddings, and
   carries `--strip-furniture` + doc-level resume (the SEP
-  whole-document-summarization retrofit, 2026-06-06).
+  whole-document-summarization retrofit, 2026-06-06). Query-time
+  grounding (`apply_raptor_grounding`) reads those summary nodes via a
+  derived per-corpus `raptor_summaries.lance` ANN index — built at the
+  end of `enrich raptor` (or standalone via `enrich raptor-index
+  <corpus>`) by `sovereign-tools/src/raptor_index.rs` over the pure
+  `corpus-engine::index::raptor` primitives, with a `max(created_at)`
+  freshness gate and the brute-force `conv_raptor_nodes` cosine scan as
+  fallback (spec `docs/specs/RAPTOR_ANN_INDEX.md`).
   Deep-dive: [`docs/TIERED_RETRIEVAL.md`](./docs/TIERED_RETRIEVAL.md).
 
 See [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md)
