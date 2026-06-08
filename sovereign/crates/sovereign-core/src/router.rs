@@ -75,11 +75,6 @@ const SELF_ASSESSMENT_PROMPT: &str = include_str!("../assets/self_assessment_pro
 /// the personal-recall heuristic in the wider stack) never see the
 /// case where they'd otherwise hijack the thread.
 ///
-/// Personal-recall framings ("Have I mentioned X before?") are
-/// handled by the upstream `looks_like_personal_recall` pre-check
-/// (where present) — it fires earlier and short-circuits before this
-/// function is reached.
-///
 /// Surfaced by sovereign/bench/wikipedia_learn 2026-05-17 marathon
 /// (v9→v10).
 fn inherits_prior_knowledge_intent(context: &ConversationContext) -> Option<Intent> {
@@ -909,168 +904,6 @@ Reply with JSON only:
         has_recent_year || has_temporal || has_search_request
     }
 
-    /// Heuristic check: is this message a metalingual query — asking
-    /// about how a *specific source* uses a term, rather than asking
-    /// about the term's general meaning in the world?
-    ///
-    /// Jakobson's metalingual function: foregrounding the *code* (the
-    /// words themselves), not the world the words point at. The
-    /// distinguishing Gricean signal is the **source-anchor locator**
-    /// — without one, the question is referential (KnowledgeQuery);
-    /// with one, it's asking how *that source* uses the word.
-    ///
-    /// Locator families covered:
-    /// - **System-internal**: "in this codebase / repo / project /
-    ///   sovereign" → resolves to code corpora.
-    /// - **Conversation-internal**: "earlier", "we mentioned", "you
-    ///   said" → resolves to conversation history.
-    /// - **Source-anchored**: "according to X", "per X", "X defines",
-    ///   "in [author / framework]" → resolves to a named corpus.
-    /// - **Ambient**: "here", "this" + definitional → resolves from
-    ///   conversation context.
-    fn looks_like_personal_recall(_message: &str) -> bool {
-        // Retired (2026-05-21): vocabulary-list pre-check replaced
-        // by the embed router's cluster centroid + Pass 1 prompt
-        // category description. See exemplars.toml for the
-        // semantic coverage. Tombstoned (not deleted) so
-        // downstream `force_*` guards compile unchanged; follow-up
-        // PR can delete the guards and the stub together.
-        false
-    }
-
-    fn looks_like_metalingual(_message: &str) -> bool {
-        // Retired (2026-05-21): vocabulary-list pre-check replaced
-        // by the embed router's cluster centroid + Pass 1 prompt
-        // category description. See exemplars.toml for the
-        // semantic coverage. Tombstoned (not deleted) so
-        // downstream `force_*` guards compile unchanged; follow-up
-        // PR can delete the guards and the stub together.
-        false
-    }
-
-    /// Retired (2026-05-21): the substring-based conation
-    /// pre-check used a maintained-by-hand `IMPERATIVE_MARKERS`
-    /// list that duplicated work the embed router already does
-    /// via cluster centroids. Each missed phrasing required a
-    /// new Rust source edit + rebuild + restart — exactly the
-    /// failure mode the embed router was introduced to retire.
-    ///
-    /// The conation cluster in `sovereign/router/exemplars.toml`
-    /// now carries representative entries for the shapes the
-    /// substring list used to catch (stop / cancel / shorter /
-    /// elaborate / walk-through / slower / faster / etc.). New
-    /// conation phrasings ship as DATA (one row in exemplars.toml)
-    /// rather than CODE.
-    ///
-    /// This stub stays as a tombstone so the downstream `!force_conation`
-    /// guards compile unchanged. A follow-up PR can delete the
-    /// guards and the stub together.
-    fn looks_like_conation(_message: &str) -> bool {
-        false
-    }
-
-    /// Heuristic check: is this message a commissive move — user
-    /// committing to a future action or asking the assistant to
-    /// remember something? "I'll fix this tomorrow", "I'm going to
-    /// refactor X", "remind me to check Friday".
-    ///
-    /// Distinct from a question with first-person framing ("I want
-    /// to know X" — that's still a question). Requires a future-
-    /// commitment marker AND no question mark AND no memory-reference
-    /// opener — see `looks_like_memory_reference` for the latter.
-    fn looks_like_commissive(_message: &str) -> bool {
-        // Retired (2026-05-21): vocabulary-list pre-check replaced
-        // by the embed router's cluster centroid + Pass 1 prompt
-        // category description. See exemplars.toml for the
-        // semantic coverage. Tombstoned (not deleted) so
-        // downstream `force_*` guards compile unchanged; follow-up
-        // PR can delete the guards and the stub together.
-        false
-    }
-
-    /// Heuristic check: factual-lookup shape — the message opens
-    /// with a single-clause "what is/was X" / "who is/was X" /
-    /// "when did/was X" / "where is/was X". Iter6 pre-check added
-    /// to bypass the LLM Pass 1 (median ~3s on the 4B fast slot)
-    /// for unambiguous lookups.
-    ///
-    /// High-precision floor:
-    /// - Lookup-verb opener (first ~6 words contain the trigger).
-    /// - No analytical markers ("and what", "compared to",
-    ///   "compatible", "and how", etc.) — those go through
-    ///   `needs_deep_reasoning` first; this fires only when the
-    ///   message is a clean single-clause lookup.
-    /// - Skipped on long messages (>15 words) — the longer the
-    ///   message, the more likely it embeds a multi-clause shape
-    ///   the LLM should resolve.
-    fn looks_like_factual_lookup(_message: &str) -> bool {
-        // Retired (2026-05-21): "what is X" / "who was X" opener
-        // detection had a substring-exclusion list (" differ " /
-        // " consequences " / etc.) that drifted from real phrasings
-        // — e.g. "difference between X and Y" misclassified because
-        // the exclusion list had " differ " but not " difference ".
-        // Same architectural debt as the other retired vocabulary
-        // heuristics. Embed router's knowledge_query cluster +
-        // Pass 1 LOOKUP category cover the same shapes without the
-        // substring-mismatch failure mode.
-        false
-    }
-
-    /// Heuristic check: does this message lead with (or contain) a
-    /// memory-reference framing? "Remember when …", "Last time we
-    /// talked about …", "You mentioned X", "I told you about Y".
-    ///
-    /// These are recall moves — the user is pointing at past shared
-    /// state, not committing to anything. The relational/witness
-    /// contract is the right surface; a Save-commitment classifier
-    /// that catches the trailing "I want to come back to that" misses
-    /// the lead. High-precision floor: substring match on phrases
-    /// that don't appear inside other words.
-    fn looks_like_memory_reference(_message: &str) -> bool {
-        // Retired (2026-05-21): vocabulary-list pre-check replaced
-        // by the embed router's cluster centroid + Pass 1 prompt
-        // category description. See exemplars.toml for the
-        // semantic coverage. Tombstoned (not deleted) so
-        // downstream `force_*` guards compile unchanged; follow-up
-        // PR can delete the guards and the stub together.
-        false
-    }
-
-    /// Heuristic check: is this message an expressive move — user
-    /// stating how they're feeling about the current work, often with
-    /// implicit help-request? "I'm stuck on this bug", "ugh, broken
-    /// again", "I have no idea where to start".
-    ///
-    /// High-precision floor only — Pass 1 (situated) handles the
-    /// borderline cases. We require an emotive marker AND no question
-    /// mark AND short message length, because longer messages tend to
-    /// embed a real question that the LLM should classify.
-    fn looks_like_expressive(_message: &str) -> bool {
-        // Retired (2026-05-21): vocabulary-list pre-check replaced
-        // by the embed router's cluster centroid + Pass 1 prompt
-        // category description. See exemplars.toml for the
-        // semantic coverage. Tombstoned (not deleted) so
-        // downstream `force_*` guards compile unchanged; follow-up
-        // PR can delete the guards and the stub together.
-        false
-    }
-
-    /// Heuristic check: is this message a two-entity comparison shape
-    /// ("difference between X and Y", "X vs Y", "how do X and Y differ",
-    /// "compare X and Y")? High-precision — requires both a comparison
-    /// verb/preposition AND a conjunction/separator AND no in-prompt-content
-    /// markers ("this", "these", "the passage", etc.) so it doesn't
-    /// poach `looks_like_content_processing`'s territory.
-    fn looks_like_comparison(_message: &str) -> bool {
-        // Retired (2026-05-21): vocabulary-list pre-check replaced
-        // by the embed router's cluster centroid + Pass 1 prompt
-        // category description. See exemplars.toml for the
-        // semantic coverage. Tombstoned (not deleted) so
-        // downstream `force_*` guards compile unchanged; follow-up
-        // PR can delete the guards and the stub together.
-        false
-    }
-
     /// Heuristic check: is this message asking the model to *process* content
     /// it already has (summarize, explain, compare, paraphrase, etc.) rather
     /// than reach outside to fetch or mutate something?
@@ -1589,62 +1422,6 @@ impl Router for LlmRouter {
             .await
             .unwrap_or_default();
 
-        // Pre-check -3: personal-recall content question. Fires BEFORE
-        // the embed router because the embed router's nearest-exemplar
-        // matching reliably picks ExpressiveQuery or MetalingualQuery
-        // for "Have I ever discussed X" / "Questions I keep coming back
-        // to" shapes — both intents skip retrieval entirely, defeating
-        // the whole point of the conversation-history corpus. The
-        // heuristic is high-precision: first-person marker
-        // (`have i `, `did i `, `my `, `our `, `i've `, ...) +
-        // content-discourse verb (`mentioned` / `talked` / `discussed`
-        // / `said` / `told`) with no word-definition or system-locator
-        // override. We compute the scope hint here too (when the
-        // classifier is installed) so retrieval sees the personal
-        // bias without paying a second embed call later.
-        //
-        // Must fire BEFORE `inherits_prior_knowledge_intent` —
-        // the inherit pre-check assumes personal-recall already
-        // short-circuited (see fn doc-comment).
-        if Self::looks_like_personal_recall(message) {
-            let latency_ms = start.elapsed().as_millis() as i64;
-            let hash = message_hash(message);
-            let _ = self
-                .store
-                .log_routing(&hash, "KnowledgeQuery", latency_ms)
-                .await;
-            let _ = self
-                .store
-                .log_routing_meta(&hash, "PERSONAL_RECALL", None)
-                .await;
-            // Compute scope hint via the classifier (needs a fresh
-            // embedding — the embed router didn't run, so no shared
-            // vector to reuse). Skipped if no classifier installed.
-            let scope = match self.scope_classifier.as_ref() {
-                Some(cls) => cls.classify(message, &*self.inference).await.ok().flatten(),
-                None => None,
-            };
-            eprintln!(
-                "[router] \"{}\" → KnowledgeQuery (personal-recall heuristic; scope={:?})",
-                &message[..message.len().min(50)],
-                scope,
-            );
-            return Ok(RouterClassification {
-                primary: IntentCandidate {
-                    intent: Intent::KnowledgeQuery,
-                    confidence: 1.0,
-                },
-                alternatives: Vec::new(),
-                rationale: Some(
-                    "first-person + content-discourse verb → personal-corpus lookup".to_string(),
-                ),
-                coarse_intent: Some("PERSONAL_RECALL".to_string()),
-                self_assessment: None,
-                timing: None,
-                scope,
-            });
-        }
-
         // Pre-check -2: inherit prior knowledge-family intent when
         // the conversation already has an established knowledge
         // thread. Structural detector — keys off
@@ -1877,13 +1654,6 @@ impl Router for LlmRouter {
         // routing slice (median 6s) can be diagnosed.
         let precheck_start = Instant::now();
 
-        // Pre-check 0: conation shape → force CONATION. Short imperative
-        // directed at the assistant about the prior turn ("stop", "try
-        // again", "shorter please"). Highest-precision pre-check; fires
-        // first so it pre-empts e.g. "stop" being read as ACTION (cancel
-        // an in-flight search would itself be conation routed correctly).
-        let force_conation = Self::looks_like_conation(message);
-
         // Pre-check 1: temporal/current-info → force ACTION (search).
         // Small models are unreliable at detecting these. When a binary
         // current-info classifier is installed, make this call
@@ -1892,12 +1662,11 @@ impl Router for LlmRouter {
         // "…history of Lebanon from antiquity to today" to ACTION on the
         // bare word "today" → synthesis then treated its 19 retrieved
         // chunks as inadequate and refused. The embed call is paid only
-        // when a search tool is present AND this isn't already a conation
-        // imperative — i.e. exactly when `force_action` could fire — so
-        // the common path pays nothing. Falls back to the keyword
-        // heuristic on classify error or when no classifier is wired.
+        // when a search tool is present — i.e. exactly when `force_action`
+        // could fire — so the common path pays nothing. Falls back to the
+        // keyword heuristic on classify error or when no classifier is wired.
         let has_search = available_tools.iter().any(|t| t.name.contains("search"));
-        let force_action = if !force_conation && has_search {
+        let force_action = if has_search {
             match self.current_info_classifier.as_ref() {
                 Some(cls) => match cls.classify(message, &*self.inference).await {
                     Ok(v) => v,
@@ -1916,127 +1685,19 @@ impl Router for LlmRouter {
             false
         };
 
-        // Pre-check 1a: personal-recall content question → force
-        // LOOKUP. First-person + content-discourse verb without a
-        // word-definition or system-locator marker means the user is
-        // asking what was SAID in the chats, not how the chats USE a
-        // word. Runs BEFORE force_metalingual so the LLM Pass 1's
-        // overzealous METALINGUAL emission on "What books have I
-        // mentioned" is pre-empted. See `looks_like_personal_recall`
-        // for the heuristic. Pairs with the centroid scope classifier
-        // (`scope_classifier.rs`) which marks these queries personal
-        // for retrieval-time corpus restriction.
-        let force_personal_recall =
-            !force_conation && !force_action && Self::looks_like_personal_recall(message);
-
-        // Pre-check 1b: metalingual shape → force METALINGUAL. Question
-        // about the system's own vocabulary ("what does X mean in this
-        // codebase"). Runs BEFORE comparison so "what's the difference
-        // between plan and task in this codebase" routes metalingual,
-        // not comparison-against-Wikipedia.
-        let force_metalingual = !force_conation
-            && !force_action
-            && !force_personal_recall
-            && Self::looks_like_metalingual(message);
-
-        // Pre-check 1c: commissive shape → force COMMISSION. First-
-        // person future commitment ("I'll fix it tomorrow", "remind me
-        // to check Friday"). Distinct from comparison/metalingual; can
-        // fire after either without conflict.
-        let force_commissive = !force_conation
-            && !force_action
-            && !force_personal_recall
-            && !force_metalingual
-            && Self::looks_like_commissive(message);
-
-        // Pre-check 2: comparison shape → force COMPARISON. Two-entity
-        // contrast ("difference between X and Y", "X vs Y", "compare X
-        // and Y") — bounded shape that's served by the fast slot with a
-        // constrained prompt rather than the open-ended REASONING path.
-        // Runs BEFORE content-processing so `compare X and Y` (world
-        // entities) doesn't get poached by the `compare ` content verb.
-        let force_comparison = !force_conation
-            && !force_action
-            && !force_personal_recall
-            && !force_metalingual
-            && !force_commissive
-            && Self::looks_like_comparison(message);
-
-        // Pre-check 2b: expressive shape → force EXPRESSIVE. Short
-        // first-person feeling-statement, often with implicit help-
-        // request ("I'm stuck on this bug", "ugh, broken again").
-        // The heuristic catches surface-clear cases; situated Pass 1
-        // (and the tail-case refiner) handle the borderline ones.
-        let force_expressive_short = !force_conation
-            && !force_action
-            && !force_personal_recall
-            && !force_metalingual
-            && !force_commissive
-            && !force_comparison
-            && Self::looks_like_expressive(message);
-
-        // Pre-check 2c: memory-reference framing → force EXPRESSIVE.
-        // "Remember when …", "You mentioned X", "Last time we talked
-        // about Y" — the user is pointing at past shared state. The
-        // relational/witness contract is the right surface; the LLM
-        // Pass 1 otherwise misclassifies these as COMMISSION when a
-        // trailing "I want to come back to that" appears (hard-mode
-        // H02). EXPRESSIVE routes to `handle_expressive_query`, which
-        // runs the witness path on Relational skills.
-        let force_expressive_memref = !force_conation
-            && !force_action
-            && !force_personal_recall
-            && !force_metalingual
-            && !force_commissive
-            && !force_comparison
-            && !force_expressive_short
-            && Self::looks_like_memory_reference(message);
-
-        let force_expressive = force_expressive_short || force_expressive_memref;
-
         // Pre-check 3: content-processing signal → force REASONING. Catches
         // "summarize this", "explain this passage", "compare these sections"
         // etc. which the Fast model sometimes misreads as ACTION because of
         // the imperative verb. Content processing never needs external reach.
-        let force_content_reasoning = !force_conation
-            && !force_action
-            && !force_personal_recall
-            && !force_metalingual
-            && !force_commissive
-            && !force_comparison
-            && !force_expressive
-            && Self::looks_like_content_processing(message);
+        let force_content_reasoning =
+            !force_action && Self::looks_like_content_processing(message);
 
         // Pre-check 4: deep reasoning signal → force REASONING before the LLM sees it.
         // This catches philosophical, analytical, and compatibility questions that
         // small fast models frequently mis-classify as SimpleQuery.
-        let force_deep = !force_conation
-            && !force_action
-            && !force_personal_recall
-            && !force_metalingual
-            && !force_commissive
-            && !force_comparison
-            && !force_expressive
+        let force_deep = !force_action
             && !force_content_reasoning
             && Self::needs_deep_reasoning(message);
-
-        // Pre-check 5: factual-lookup shape → force LOOKUP. Single-
-        // clause "what is/was X", "who is/was X", "when did X",
-        // "where is/was X" patterns. Iter6: each catch saves a ~3s
-        // LLM Pass 1 call. High-precision floor — requires the
-        // lookup verb at the message start (no "and" / "but" /
-        // multi-clause), no analytical markers (those would have
-        // caught earlier in `force_deep`).
-        let force_lookup = !force_conation
-            && !force_action
-            && !force_personal_recall
-            && !force_metalingual
-            && !force_commissive
-            && !force_comparison
-            && !force_expressive
-            && !force_content_reasoning
-            && !force_deep
-            && Self::looks_like_factual_lookup(message);
 
         // Iter6: pre-check chain done. Cap timer here — anything
         // after this is either zero-cost branch selection or the
@@ -2047,54 +1708,11 @@ impl Router for LlmRouter {
         let mut used_llm = false;
 
         // Pass 1: Coarse classification (skipped for pre-checked cases).
-        let coarse = if force_conation {
-            CoarseClassification {
-                intent: "CONATION".to_string(),
-                confidence: 1.0,
-                rationale: Some("short imperative on prior turn → conation".to_string()),
-            }
-        } else if force_action {
+        let coarse = if force_action {
             CoarseClassification {
                 intent: "ACTION".to_string(),
                 confidence: 1.0,
                 rationale: Some("current/time-sensitive signal → external tool".to_string()),
-            }
-        } else if force_personal_recall {
-            CoarseClassification {
-                intent: "LOOKUP".to_string(),
-                confidence: 1.0,
-                rationale: Some(
-                    "first-person + content-discourse verb → personal-corpus lookup".to_string(),
-                ),
-            }
-        } else if force_metalingual {
-            CoarseClassification {
-                intent: "METALINGUAL".to_string(),
-                confidence: 1.0,
-                rationale: Some("in-system definitional signal → codebase lookup".to_string()),
-            }
-        } else if force_commissive {
-            CoarseClassification {
-                intent: "COMMISSION".to_string(),
-                confidence: 1.0,
-                rationale: Some("first-person future commitment → persist".to_string()),
-            }
-        } else if force_comparison {
-            CoarseClassification {
-                intent: "COMPARISON".to_string(),
-                confidence: 1.0,
-                rationale: Some("two-entity contrast signal → bounded comparison".to_string()),
-            }
-        } else if force_expressive {
-            let rationale = if force_expressive_memref {
-                "memory-reference framing → relational witness path"
-            } else {
-                "emotive marker, short first-person → expressive"
-            };
-            CoarseClassification {
-                intent: "EXPRESSIVE".to_string(),
-                confidence: 1.0,
-                rationale: Some(rationale.to_string()),
             }
         } else if force_content_reasoning {
             CoarseClassification {
@@ -2107,14 +1725,6 @@ impl Router for LlmRouter {
                 intent: "REASONING".to_string(),
                 confidence: 1.0,
                 rationale: Some("analytical/compatibility signal → deep reasoning".to_string()),
-            }
-        } else if force_lookup {
-            CoarseClassification {
-                intent: "LOOKUP".to_string(),
-                confidence: 1.0,
-                rationale: Some(
-                    "factual-lookup shape (what/who/when/where) → knowledge query".to_string(),
-                ),
             }
         } else {
             let pass1_prompt =
