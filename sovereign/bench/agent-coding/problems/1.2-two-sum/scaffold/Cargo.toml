@@ -6,6 +6,3 @@ edition = "2021"
 [lib]
 name = "two_sum"
 path = "src/lib.rs"
-
-[lints]
-workspace = true
