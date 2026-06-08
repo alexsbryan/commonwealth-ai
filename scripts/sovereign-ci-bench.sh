@@ -67,6 +67,16 @@ FLYWHEEL_CORPUS="${FLYWHEEL_CORPUS:-$CHAOS_CORPUS}"
 FLYWHEEL_MINE_PATH="${FLYWHEEL_MINE_PATH:-}"
 FLYWHEEL_ABSENT_BANK="${FLYWHEEL_ABSENT_BANK:-$CHAOS_BANK}"
 
+# ── Tool-use / agentic gyms (sample the hardest fixtures for unique signal) ──
+# agent-bench is its own binary (separate crate); the two gyms are cli-llm
+# subcommands. Each lane samples only the hardest fixtures — the leading-edge
+# tool-call / agentic signal — to stay within the CI budget. agent-coding is the
+# costly one (~10-15m), so it runs last where a budget squeeze skips it first.
+AGENT_BIN="${SOVEREIGN_AGENT_BENCH:-target/debug/sovereign-agent-bench}"
+SEARCH_GYM_FIXTURES="07_multicorpus_tangential_local 08_multicorpus_stale_local 09_multicorpus_topical_mismatch 10_multicorpus_contradicting_local"
+KNOWLEDGE_GYM_FIXTURES="08_escalation_when_corpus_empty 10_cache_hit_on_repeat_query 11_multi_call_assembly"
+AGENT_PROBLEMS="${AGENT_PROBLEMS:-3.2-lights-out,3.2-lights-out-python,5.1-minilang-multifile-python}"
+
 # Core corpora the suite gates on (must be installed/queryable). Filters target
 # specific benches that are installed + baselined on a standard dev box — NOT
 # whole groups (e.g. `literary/bk-book-1`, not `literary`, since `dubliners-3`
@@ -255,6 +265,49 @@ if [[ -n "$FLYWHEEL_PARAM" ]]; then
   [[ -n "${FLYWHEEL_APPLY:-}" ]] && FLYWHEEL_ARGS+=(--apply)
   run_lane "flywheel-promote" TRACKED \
     "$BIN" bench promote "${FLYWHEEL_ARGS[@]}"
+fi
+
+# ── Lanes 8-10: tool-use / agentic gyms (TRACKED run + HARD baseline gate) ──
+# Sample the hardest fixtures of each gym for the unique tool-CALLING / agentic
+# signal the retrieval+synthesis lanes don't cover. Each gym RUN is advisory
+# (its own pass rate is a true finding, not a regression); the paired HARD gate
+# re-scores its artifact vs a committed baseline (first-run passes). The gyms
+# print JSON to stdout, so we redirect into the report dir; agent-bench writes
+# its --report file directly.
+
+# Lane 8: search-gym — web-search judiciousness (search only when needed; cite
+# from results). ~3-5m over the 4 hardest multicorpus fixtures × 5 replays.
+SEARCH_FIX_ARGS=""
+for f in $SEARCH_GYM_FIXTURES; do SEARCH_FIX_ARGS="$SEARCH_FIX_ARGS --fixture $f"; done
+run_lane "search-gym" TRACKED \
+  bash -c "'$BIN' search-gym run --json --replays 5 $SEARCH_FIX_ARGS > '$REPORT_DIR/search-gym.json'"
+run_lane "search-gym-gate" HARD \
+  "$BIN" bench gate search-gym --report "$REPORT_DIR/search-gym.json" \
+    --bench-root "$BENCH_ROOT" $UPDATE_BASELINE
+
+# Lane 9: knowledge-gym — knowledge_lookup discipline (corpus-vs-web escalation,
+# citation faithfulness, multi-turn cache). ~1m over the 3 hardest fixtures.
+KN_FIX_ARGS=""
+for f in $KNOWLEDGE_GYM_FIXTURES; do KN_FIX_ARGS="$KN_FIX_ARGS --fixture $f"; done
+run_lane "knowledge-gym" TRACKED \
+  bash -c "'$BIN' knowledge-gym run --json $KN_FIX_ARGS > '$REPORT_DIR/knowledge-gym.json'"
+run_lane "knowledge-gym-gate" HARD \
+  "$BIN" bench gate knowledge-gym --report "$REPORT_DIR/knowledge-gym.json" \
+    --bench-root "$BENCH_ROOT" $UPDATE_BASELINE
+
+# Lane 10: agent-coding — end-to-end agentic code loop (plan→implement→test→
+# iterate). The costly lane (~10-15m for the 3 hardest problems), so it's last:
+# the run_lane budget guard skips it first under a squeeze, protecting the
+# cheaper lanes. Separate binary; gated on grand_total/max_total.
+if [[ -x "$AGENT_BIN" ]]; then
+  run_lane "agent-coding" TRACKED \
+    "$AGENT_BIN" run --problems "$AGENT_PROBLEMS" --judge-trials 1 \
+      --report "$REPORT_DIR/agent-coding.json"
+  run_lane "agent-coding-gate" HARD \
+    "$BIN" bench gate agent-coding --report "$REPORT_DIR/agent-coding.json" \
+      --bench-root "$BENCH_ROOT" $UPDATE_BASELINE
+else
+  echo "── SKIP  [HARD] agent-coding — binary not found at $AGENT_BIN (build: cargo build -p sovereign-agent-bench)"
 fi
 
 # ── Verdict ─────────────────────────────────────────────────────────────────

@@ -1,22 +1,32 @@
 {
   "lane": "chaos-monkey",
-  "captured_at": "2026-06-08T05:11:23.001579+00:00",
+  "captured_at": "2026-06-08T17:44:40.923739+00:00",
   "corpus": "chaos-secret-agent",
   "model": "primary",
-  "note": "competence 12/17 answerable correct · honesty 4/11 absent declined · 3 hallucinated",
+  "note": "competence 16/24 answerable correct · honesty 0/11 absent declined · 6 hallucinated",
   "metrics": {
+    "citation_fidelity": {
+      "value": 0.25,
+      "direction": "higher_is_better",
+      "tolerance": 0.3
+    },
     "competence": {
-      "value": 0.7058823529411765,
+      "value": 0.6666666666666666,
       "direction": "higher_is_better",
       "tolerance": 0.15
     },
+    "distractor_evasion": {
+      "value": 0.3333333333333333,
+      "direction": "higher_is_better",
+      "tolerance": 0.34
+    },
     "hallucination_rate": {
-      "value": 0.2727272727272727,
+      "value": 0.5454545454545454,
       "direction": "lower_is_better",
       "tolerance": 0.18
     },
     "honesty": {
-      "value": 0.7272727272727273,
+      "value": 0.45454545454545453,
       "direction": "higher_is_better",
       "tolerance": 0.18
     }
