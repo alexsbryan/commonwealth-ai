@@ -72,10 +72,13 @@ dedup_by_source = true
 # restores the canonical chunks + every per-article atlas in one pull
 # (1771 corpora land under ~/.sovereign/indexes/), so query-time
 # multi-corpus retrieval works out of the box on a fresh box.
+# The 2026-06-08 snapshot also bundles the RAPTOR summary-node ANN index
+# (raptor_summaries.lance) on the main corpus, so collapsed-tree grounding
+# works on a fresh install with no re-enrichment.
 [prebuilt]
 hf_repo = "svrnmesh/sep-index"
-hf_filename = "sep-qwen-embedding-0.6b-2026-05-23.tar.zst"
-sha256 = "1c3ea652f79ae54ccd21a88301fc2556d7c25ad455e1b5d49114b23a6c475997"
+hf_filename = "sep-qwen-embedding-0.6b-2026-06-08.tar.zst"
+sha256 = "3e55a7cf75eb72f641ee48b355c9a3867ef1fe714ea87a6d9536fb98fdb96386"
 compatible_embedding_model = "qwen-embedding-0.6b"
 
 # ── Atlas enrichment (v2, per-article) ───────────────────────────────
