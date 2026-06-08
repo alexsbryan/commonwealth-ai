@@ -206,6 +206,12 @@ pub struct RetrievedChunk {
     /// Truncated to ~600 chars to keep run files readable; the full
     /// chunk lives in the index if the developer wants to drill in.
     pub snippet: String,
+    /// Provenance tag from the chunk's `metadata.source` — "raptor",
+    /// "atlas", "atom-enum", or absent for organically-retrieved
+    /// chunks. Makes structural-layer injection visible in the run file
+    /// so a bench can confirm (not infer) which layer surfaced a hit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1608,6 +1614,7 @@ async fn run_question(
             url: c.url.clone(),
             score: c.score,
             snippet: truncate(&c.content.replace('\n', " "), 600),
+            source: None,
         })
         .collect();
     let atlas_navigation_packed = atlas_navigation
@@ -1618,6 +1625,7 @@ async fn run_question(
             url: c.url.clone(),
             score: c.score,
             snippet: truncate(&c.content.replace('\n', " "), 600),
+            source: None,
         })
         .collect();
 
@@ -1941,6 +1949,10 @@ async fn run_question_synth(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string(),
+            source: c
+                .get("source")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
         })
         .collect();
 

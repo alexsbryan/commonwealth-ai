@@ -528,7 +528,8 @@ pub(crate) use self::intent_helpers::{
 pub(crate) use self::question_analysis::{
     cap_chunks_per_article, comparison_axis, extract_commitment_phrase,
     extract_comparison_entities, extract_question_entities, parse_metalingual_locator,
-    reserve_atom_enum_chunks, reserve_raptor_chunks, reserve_chunks_per_entity, MetalingualLocator,
+    project_retrieved_chunks, reserve_atom_enum_chunks, reserve_raptor_chunks,
+    reserve_chunks_per_entity, MetalingualLocator,
 };
 pub(crate) use self::retrieval_helpers::{
     atlas_grounding_enabled, build_per_corpus_k_overrides, build_retrieval_query,

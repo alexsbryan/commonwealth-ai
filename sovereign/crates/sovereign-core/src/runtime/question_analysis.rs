@@ -546,17 +546,25 @@ pub(crate) fn cap_chunks_per_article(
     let mut section_counts: HashMap<(String, String, String), usize> = HashMap::new();
     let mut out = Vec::with_capacity(chunks.len());
     for c in chunks {
-        // Atom-directed chunks bypass the anti-flood cap. The cap exists
-        // to stop one *organically*-retrieved article from dominating
-        // the merge; the atom-enum set is an intentional one-chunk-per-
-        // entity selection the atlas directed (already bounded upstream
-        // by SOVEREIGN_ATOM_ENUM_TOPK). Capping it by (corpus, title)
-        // would silently drop entities whose first_appearance evidence
-        // happens to live in a shared document — exactly the entities
-        // enumeration needs. Tagged in `enumerate_typed_atom_chunks`.
+        // Atom-directed and RAPTOR chunks bypass the anti-flood cap. The
+        // cap exists to stop one *organically*-retrieved article from
+        // dominating the merge; these two sets are intentional, upstream-
+        // bounded selections directed by the structural layers, not organic
+        // retrieval:
+        //   - atom-enum: one-chunk-per-entity, atlas-directed, bounded by
+        //     SOVEREIGN_ATOM_ENUM_TOPK.
+        //   - raptor: top-M whole-document summaries, collapsed-tree-
+        //     directed, bounded by SOVEREIGN_RAPTOR_TOP_M.
+        // Capping either by (corpus_id, title) would silently drop exactly
+        // the directed evidence — a RAPTOR summary carries title=<slug> and
+        // corpus_id=<corpus>, so it collides with the article's own leaf
+        // chunks (and the no-fragment section sub-cap) and, scoring lower
+        // than a query-term-dense leaf, loses its slot to its own leaves.
+        // That is the precise summary we injected it to surface. Tagged in
+        // `enumerate_typed_atom_chunks` / `apply_raptor_grounding`.
         if c.metadata
             .get("source")
-            .map(|s| s == "atom-enum")
+            .map(|s| s == "atom-enum" || s == "raptor")
             .unwrap_or(false)
         {
             out.push(c);
@@ -717,4 +725,37 @@ pub(crate) fn reserve_raptor_chunks(chunks: Vec<ScoredChunk>) -> Vec<ScoredChunk
     }
     reserved.extend(rest);
     reserved
+}
+
+/// Project merged chunks into the `retrieved_chunks` JSON carried on the
+/// assistant message metadata — the single shape BOTH the KnowledgeQuery
+/// (`prepare_knowledge_query_plan`) and DeepQuery (`prepare_knowledge_context`)
+/// paths emit, and that the desktop citation expander + the eval's
+/// `RetrievedChunk` both read. Previously two divergent `json!` blocks: the KQ
+/// copy carried `score` but not `metadata`, the DQ copy the reverse, and the
+/// `source` provenance field (added for RAPTOR observability) had to be patched
+/// into each by hand — a duplication that silently hid raptor chunks from the
+/// eval until both copies were found. Unified to the superset so the next
+/// chunk-level field is a one-place edit. `metadata` powers the desktop
+/// "↗ surfaced via entity bridge" subtitle (frontend gates on
+/// `metadata.ppr_mass_norm > 0.5`).
+pub(crate) fn project_retrieved_chunks(chunks: &[ScoredChunk]) -> Vec<serde_json::Value> {
+    chunks
+        .iter()
+        .map(|c| {
+            let snippet = super::text_utils::truncate_with_ellipsis(&c.content, 200);
+            serde_json::json!({
+                "title": c.title.as_deref().unwrap_or(""),
+                "corpus_id": c.corpus_id,
+                "url": c.url,
+                "snippet": snippet,
+                "score": c.score,
+                "source": c.metadata.get("source"),
+                "provenance_tier": if c.url.is_some() { "web" } else { "corpus" },
+                "chunk_id": c.chunk_id,
+                "source_doc_id": c.source_doc_id,
+                "metadata": c.metadata,
+            })
+        })
+        .collect()
 }

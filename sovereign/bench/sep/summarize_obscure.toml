@@ -1,0 +1,177 @@
+[bank]
+name = "sep-summarize-obscure-v1"
+corpus = "sep"
+description = """
+Obscure-works companion to summarize.toml — removes the famous-topic confound.
+
+summarize.toml used famous topics (idealism, Mill, Descartes) the 35B knows
+parametrically, so it covered the themes whether or not retrieval supplied them;
+the answer-coverage gain from RAPTOR was muted (+3-4) even though RAPTOR doubled
+the themes present in the retrieved CONTEXT (facts-in-chunks 26%→46%).
+
+This bank picks SPECIALIST entries (proof theory, Frege's theorem, Principia,
+recursive functions, common knowledge, Ibn Rushd) where a general 35B's
+parametric knowledge is thin — so retrieval is load-bearing and RAPTOR's
+context-coverage advantage should translate into ANSWER-coverage gains. The
+raptor=OFF facts-judge column self-reveals obscurity: if it's near-ceiling
+(~94% like the famous bank), the model knew it anyway; if it's lower, retrieval
+mattered and the RAPTOR delta is the real signal.
+
+Themes are canonical-from-knowledge (not corpus-derived → no circular bias
+toward the raptor arm). A/B on SOVEREIGN_RAPTOR_GROUNDING, same as the others.
+All 6 works have rich RAPTOR trees (16–34 nodes).
+
+v1 (2026-06-08).
+"""
+
+[bank.latency_budget]
+default_p95_ms = 60000
+max_per_question_ms = 120000
+
+[[questions]]
+id = "summary_proof_theory"
+category = "comprehensive_summary"
+subject = "logic"
+question = """
+Provide a comprehensive overview of proof theory. Cover its central methods and
+results, its historical motivation, the principal figures, and its main
+subfields. Aim for breadth across the whole topic rather than depth on any
+single point.
+"""
+expected_facts = [
+    "Gentzen",
+    "natural deduction",
+    "sequent calculus",
+    "cut elimination",
+    "Hilbert's program",
+    "consistency proofs",
+    "ordinal analysis",
+    "consistency of arithmetic",
+    "structural proof theory",
+    "Gödel incompleteness",
+]
+expected_sources = ["proof-theory"]
+notes = "Specialist logic; tests Gentzen/cut-elimination/Hilbert-program breadth."
+
+[[questions]]
+id = "summary_frege_theorem"
+category = "comprehensive_summary"
+subject = "philosophy_of_mathematics"
+question = """
+Provide a comprehensive overview of Frege's theorem and its philosophical
+significance. Cover the key logical result, the principles it relies on, the
+problems it faces, and the program built around it. Aim for breadth across the
+whole topic.
+"""
+expected_facts = [
+    "Hume's principle",
+    "Peano axioms",
+    "Basic Law V",
+    "Russell's paradox",
+    "neo-logicism",
+    "second-order logic",
+    "the Caesar problem",
+    "Grundgesetze",
+    "abstraction principles",
+    "logicism",
+]
+expected_sources = ["frege-theorem"]
+notes = "Neo-logicist program; tests Hume's-principle/Basic-Law-V/Caesar breadth."
+
+[[questions]]
+id = "summary_recursive_functions"
+category = "comprehensive_summary"
+subject = "logic"
+question = """
+Provide a comprehensive overview of the theory of recursive functions. Cover the
+main classes of functions, the central thesis connecting them to computability,
+the key constructions, and the principal figures. Aim for breadth across the
+whole topic.
+"""
+expected_facts = [
+    "primitive recursive functions",
+    "minimization operator",
+    "Church-Turing thesis",
+    "partial recursive functions",
+    "Ackermann function",
+    "computability",
+    "Kleene normal form",
+    "general recursion",
+    "the halting problem",
+    "total versus partial functions",
+]
+expected_sources = ["recursive-functions"]
+notes = "Computability theory; tests primitive/μ-recursion/Church-Turing breadth."
+
+[[questions]]
+id = "summary_common_knowledge"
+category = "comprehensive_summary"
+subject = "logic_decision"
+question = """
+Provide a comprehensive overview of common knowledge as a topic in logic and
+the theory of rationality. Cover its definition, the formal treatments, the key
+results, and its applications. Aim for breadth across the whole topic.
+"""
+expected_facts = [
+    "mutual knowledge",
+    "fixed-point definition",
+    "Aumann",
+    "coordination problems",
+    "Lewis convention",
+    "iterated knowledge hierarchy",
+    "agreement theorem",
+    "coordinated attack problem",
+    "epistemic logic",
+    "common belief",
+]
+expected_sources = ["common-knowledge"]
+notes = "Epistemic game theory; tests fixed-point/Aumann/coordination breadth."
+
+[[questions]]
+id = "summary_principia_mathematica"
+category = "comprehensive_summary"
+subject = "philosophy_of_mathematics"
+question = """
+Provide a comprehensive overview of the logical system of Principia Mathematica.
+Cover its goals, its central logical machinery, the difficulties it confronted,
+and its significance. Aim for breadth across the whole topic.
+"""
+expected_facts = [
+    "Russell and Whitehead",
+    "ramified type theory",
+    "logicism",
+    "axiom of reducibility",
+    "the no-class theory",
+    "vicious circle principle",
+    "theory of descriptions",
+    "deriving arithmetic",
+    "Russell's paradox",
+    "axiom of infinity",
+]
+expected_sources = ["principia-mathematica"]
+notes = "Tests ramified-types/reducibility/no-class breadth."
+
+[[questions]]
+id = "summary_ibn_rushd"
+category = "comprehensive_summary"
+subject = "history_medieval"
+question = """
+Provide a comprehensive overview of the philosophy of Ibn Rushd (Averroes).
+Cover his major works and commitments, his treatment of philosophy and religion,
+his most influential doctrines, and his later influence. Aim for breadth across
+the whole topic.
+"""
+expected_facts = [
+    "commentaries on Aristotle",
+    "unity of the intellect",
+    "philosophy and religion",
+    "Tahafut al-Tahafut",
+    "eternity of the world",
+    "Latin Averroism",
+    "demonstrative knowledge",
+    "against al-Ghazali",
+    "the Decisive Treatise",
+    "natural philosophy",
+]
+expected_sources = ["ibn-rushd"]
+notes = "Medieval Islamic philosophy; tests Aristotle-commentary/unity-of-intellect breadth."
