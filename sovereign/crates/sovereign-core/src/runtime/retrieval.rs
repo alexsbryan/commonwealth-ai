@@ -2608,34 +2608,91 @@ impl Runtime {
             }
         };
 
-        // Fetch by title. The score on returned chunks is uniform 1.0
-        // (cohesion pull, not query-similarity) — don't confuse these
-        // with RRF-scored search results.
+        // Anchor the dominant-source expansion on the ACTUALLY-RELEVANT
+        // chunks from the initial retrieval, widened with their textual
+        // neighbours for narrative cohesion — instead of
+        // `fetch_chunks_by_title`'s "first N chunks of the title". The title
+        // fetch is sound for article-shaped sources (a Wikipedia article's
+        // lead is usually what a reader wants), but for a single large
+        // document chunked under ONE title — a whole book — it returns the
+        // document's OPENING for any query: the Greenwich-bomb question gets
+        // the shop scenes, the india-rubber-ball question never sees the
+        // Professor. Centring on the real hits keeps the cohesion intent but
+        // makes the fetch query-aware. Appended neighbours carry the uniform
+        // cohesion score (1.0), not query similarity.
         let t_fetch = std::time::Instant::now();
-        let fetched = match idx
-            .fetch_chunks_by_title(top_title, EXPANSION_MAX_FROM_TOP_SOURCE)
-            .await
-        {
-            Ok(f) => f,
-            Err(e) => {
-                tracing::warn!(
-                    top_corpus_id,
-                    top_title,
-                    error = %e,
-                    "KnowledgeQuery: source expansion skipped — fetch_chunks_by_title failed"
-                );
-                return (initial, 0, 0, 0);
+        let mut by_id: std::collections::BTreeMap<u64, corpus_engine::ScoredChunk> =
+            std::collections::BTreeMap::new();
+        // `initial` is score-ordered; visit the dominant-source hits
+        // best-first so the budget favours the most relevant regions.
+        for hit in initial.iter().filter(|c| {
+            (c.corpus_id.clone(), c.title.clone().unwrap_or_default()) == shape.top_source_key
+        }) {
+            if by_id.len() >= EXPANSION_MAX_FROM_TOP_SOURCE {
+                break;
             }
-        };
+            let Some(hit_id) = hit.chunk_id else { continue };
+            by_id.entry(hit_id).or_insert_with(|| hit.clone());
+            match idx.neighbors(hit_id, EXPANSION_NEIGHBOR_RADIUS).await {
+                Ok(Some(win)) => {
+                    for row in win.prev.into_iter().chain(win.next) {
+                        if by_id.len() >= EXPANSION_MAX_FROM_TOP_SOURCE {
+                            break;
+                        }
+                        by_id.entry(row.id).or_insert_with(|| {
+                            // Same document as the hit → inherit its
+                            // corpus/title/source ids and any other fields;
+                            // overwrite only content, id, and the score.
+                            let mut n = hit.clone();
+                            n.content = row.content;
+                            n.chunk_id = Some(row.id);
+                            n.score = 1.0;
+                            n
+                        });
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    tracing::warn!(
+                        top_corpus_id, hit_id, error = %e,
+                        "KnowledgeQuery: neighbour fetch failed — skipping this hit's window"
+                    );
+                }
+            }
+        }
+        // Fallback: no chunk_id'd dominant hit in the pool (legacy index, or
+        // an all-section-id pool) — keep the old title fetch so expansion
+        // never silently empties.
+        if by_id.is_empty() {
+            match idx
+                .fetch_chunks_by_title(top_title, EXPANSION_MAX_FROM_TOP_SOURCE)
+                .await
+            {
+                Ok(fetched) => {
+                    for c in fetched {
+                        if let Some(id) = c.chunk_id {
+                            by_id.entry(id).or_insert(c);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        top_corpus_id,
+                        top_title,
+                        error = %e,
+                        "KnowledgeQuery: source expansion skipped — fetch_chunks_by_title failed"
+                    );
+                    return (initial, 0, 0, 0);
+                }
+            }
+        }
         let fetch_ms = t_fetch.elapsed().as_millis() as u64;
 
-        // Dedupe: track contents we've already seen. The initial
-        // retrieval's dominant-source chunks will collide with some of
-        // the fetched ones — keep the fetched copy (which is in natural
-        // document order) and drop the duplicates.
+        // BTreeMap iterates ascending id → natural document order. Dedupe by
+        // content (re-ingestion can yield duplicate content under fresh ids).
         let mut seen_contents: HashSet<String> = HashSet::new();
         let mut expanded_dominant: Vec<corpus_engine::ScoredChunk> = Vec::new();
-        for c in fetched {
+        for (_id, c) in by_id {
             if seen_contents.insert(c.content.clone()) {
                 expanded_dominant.push(c);
             }

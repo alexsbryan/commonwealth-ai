@@ -539,6 +539,14 @@ mod refusal_opener_tests {
 /// without forcing us to truncate narratively.
 pub(crate) const EXPANSION_MAX_FROM_TOP_SOURCE: usize = 12;
 
+/// Radius (chunks each side) of the cohesion window pulled around each
+/// dominant-source HIT during expansion. The window is anchored on the
+/// query-relevant chunks from the initial retrieval, not the document's
+/// opening — so a single large document (a whole book under one title) no
+/// longer returns its first chunks for every query. 3 each side ≈ a 7-chunk
+/// passage per hit; the `EXPANSION_MAX_FROM_TOP_SOURCE` cap still bounds the total.
+pub(crate) const EXPANSION_NEIGHBOR_RADIUS: usize = 3;
+
 /// Non-dominant chunks to keep alongside expanded dominant-source chunks,
 /// so the model has grounding breadth (e.g. a contradicting viewpoint, a
 /// corroborating passage from a different corpus). 2 is enough to signal
