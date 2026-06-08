@@ -72,6 +72,31 @@ pub async fn atlas_list_atoms(
         .map_err(|e| format!("atlas_list_atoms: {e}"))
 }
 
+/// Build the curated landscape **Map** subgraph for one corpus — nodes
+/// (atoms, sized by salience/degree) + edges (relationships; `Tension` edges
+/// carry their disagreement `crux`), capped so a large corpus reads as a map
+/// rather than a hairball (the epistemic spine — tension endpoints, every
+/// argument + question — is always kept). Drives `AtlasGraph.svelte`.
+#[tauri::command]
+pub async fn atlas_subgraph(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    max_nodes: Option<usize>,
+) -> Result<sovereign_tools::atlas_view::AtlasSubgraph, String> {
+    let engine = match state.corpus_engine.read().await.as_ref() {
+        Some(e) => Arc::clone(e),
+        None => return Err("Corpus engine not initialized".into()),
+    };
+    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
+    reader
+        .subgraph(
+            &corpus_id,
+            max_nodes.unwrap_or(sovereign_tools::atlas_view::DEFAULT_MAX_NODES),
+        )
+        .await
+        .map_err(|e| format!("atlas_subgraph: {e}"))
+}
+
 /// Full inspector record for one atom — full type-specific shape +
 /// one-hop related atoms + cross-corpus bridges + evidence
 /// excerpts. Drives the desktop's `AtomDetail.svelte`.

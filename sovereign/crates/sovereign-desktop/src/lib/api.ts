@@ -35,6 +35,7 @@ import type {
   AtlasCorpusSummary,
   AtomFilter,
   AtomListPage,
+  AtlasSubgraph,
   PageCursor,
   AtomDetail,
   ChunkEntityProgressRow,
@@ -1664,6 +1665,16 @@ export async function atlasListAtoms(
     filter,
     page,
   });
+}
+
+/** Curated landscape "Map" subgraph for a corpus — atoms as nodes (sized by
+ *  salience/degree), relationships as edges (Tension edges carry their crux).
+ *  Capped server-side so large corpora render as a map, not a hairball. */
+export async function atlasSubgraph(
+  corpusId: string,
+  maxNodes?: number,
+): Promise<AtlasSubgraph> {
+  return invoke("atlas_subgraph", { corpusId, maxNodes });
 }
 
 /** Full inspector record for one atom — type-specific atom body,
