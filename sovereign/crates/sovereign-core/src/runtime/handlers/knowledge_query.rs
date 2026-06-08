@@ -561,13 +561,19 @@ impl Runtime {
         //       whole-document / section SUMMARY, not just leaf chunks.
         //       Post-floor like atom-enum (summaries carry no query-token
         //       overlap). See `apply_raptor_grounding`.
-        self.apply_raptor_grounding(
-            &embedding,
-            &mut chunks,
-            "KnowledgeQuery",
-            context.conversation.enabled_corpora.as_deref(),
-        )
-        .await;
+        // Early injection (SOVEREIGN_RAPTOR_LATE=0): summaries enter before the
+        // merge so they participate in graph-expansion + rerank — but on QA they
+        // also perturb leaf ranking, costing source coverage. The DEFAULT (late
+        // on) uses the post-rerank block below instead, which is QA-neutral.
+        if !raptor_late_inject_enabled() {
+            self.apply_raptor_grounding(
+                &embedding,
+                &mut chunks,
+                "KnowledgeQuery",
+                context.conversation.enabled_corpora.as_deref(),
+            )
+            .await;
+        }
 
         // 2d. Atlas grounding — graph-walk navigation when the
         //     provider exposes the graph layer; bag-of-atoms top-K
@@ -1082,6 +1088,22 @@ impl Runtime {
         let folder_meta = self.folder_metadata_snapshot().await;
         self.rerank_conv_chunks_via_ppr(message, &mut chunks, &display_categories)
             .await;
+        // Late RAPTOR injection (SOVEREIGN_RAPTOR_LATE): inject summaries AFTER
+        // the full leaf pipeline (reweight → … → ppr-rerank) so they cannot
+        // perturb leaf retrieval/ranking — QA-neutral by construction.
+        // Appended at the END (not reserved to front) so the prompt char budget
+        // serves leaf chunks first; the summaries fill remaining budget, which
+        // DeepQuery's larger budget admits (where summary intent lives). Reuses
+        // the same `embedding` as the early path so the A/B isolates TIMING.
+        if raptor_late_inject_enabled() {
+            self.apply_raptor_grounding(
+                &embedding,
+                &mut chunks,
+                "KnowledgeQuery",
+                context.conversation.enabled_corpora.as_deref(),
+            )
+            .await;
+        }
         let conv_briefing = self
             .build_conv_briefing_block(&chunks, &display_categories)
             .await;

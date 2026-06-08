@@ -759,3 +759,20 @@ pub(crate) fn project_retrieved_chunks(chunks: &[ScoredChunk]) -> Vec<serde_json
         })
         .collect()
 }
+
+/// `SOVEREIGN_RAPTOR_LATE` (default ON — set `=0` to disable) — inject RAPTOR
+/// summaries AFTER the leaf merge/rerank pipeline instead of before it, so they
+/// cannot perturb leaf retrieval or ranking. This is the default mode because
+/// on the SEP bench it makes raptor QA-NEUTRAL (sources 76→86, at/above the
+/// no-raptor 85 baseline — the residual harm additive truncation couldn't
+/// reach, since sparse-pool questions are displaced UPSTREAM of the truncate)
+/// while keeping the summarization gain (+5 judge over no-raptor) and running
+/// slightly FASTER than early injection (raptor no longer drags ~8 chunks
+/// through reweight/sort/graph-expand). Early injection (LATE=0) lets summaries
+/// participate in graph-expansion but costs source-coverage QA. Independent of
+/// SOVEREIGN_RAPTOR_GROUNDING, which still gates raptor on/off overall.
+pub(crate) fn raptor_late_inject_enabled() -> bool {
+    std::env::var("SOVEREIGN_RAPTOR_LATE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(true)
+}
