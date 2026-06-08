@@ -2045,6 +2045,10 @@ impl Runtime {
                 meta_atlas_hits,
             } = plan;
             let documents_found = chunks.len();
+            // Answerable-context gate for the refusal-retry (KQ path), mirroring
+            // the DeepQuery spawn: only retry a refusal when evidence WAS
+            // retrieved — a genuine "no sources" stays an honest abstention.
+            let had_retrieved_chunks = documents_found > 0;
             let top_source_label = shape.top_source_label.clone();
             let coarse_intent_for_prov = coarse_intent.clone();
             let self_assessment_for_prov = self_assessment.clone();
@@ -2110,7 +2114,7 @@ impl Runtime {
             tokio::spawn(async move {
                 let started = std::time::Instant::now();
 
-                let (mut s, model_id) =
+                let (mut s, mut model_id) =
                     match inference.complete_stream_with_id_and_finish(&request).await {
                         Ok(pair) => pair,
                         Err(e) => {
@@ -2122,49 +2126,149 @@ impl Runtime {
                 let mut full_text = String::new();
                 let mut observed_finish: Option<crate::types::FinishReason> = None;
                 let mut observed_completion_tokens: Option<u32> = None;
-                while let Some(frame) = s.next().await {
-                    use crate::types::StreamFrame;
-                    match frame {
-                        StreamFrame::Token(chunk) => {
-                            full_text.push_str(&chunk);
-                            if tx.send(Ok(chunk)).await.is_err() {
+
+                // Refusal-retry (mirror of the DeepQuery spawn): hold the head;
+                // if it opens with the model's own refusal signal AND evidence
+                // was retrieved, discard and re-synthesize once with the
+                // guardrail-stripping system + answer prefill. One retry max.
+                let mut head = String::new();
+                let mut head_flushed = false;
+                let mut retried = false;
+
+                'synth: loop {
+                    while let Some(frame) = s.next().await {
+                        use crate::types::StreamFrame;
+                        match frame {
+                            StreamFrame::Token(chunk) => {
+                                if head_flushed {
+                                    full_text.push_str(&chunk);
+                                    if tx.send(Ok(chunk)).await.is_err() {
+                                        return;
+                                    }
+                                } else {
+                                    head.push_str(&chunk);
+                                    full_text.push_str(&chunk);
+                                    if head.chars().count() >= REFUSAL_HEAD_CHARS {
+                                        if !retried
+                                            && had_retrieved_chunks
+                                            && looks_like_refusal_opener(&head)
+                                        {
+                                            retried = true;
+                                            tracing::info!(
+                                                target: "synth.refusal_retry",
+                                                head = %head.chars().take(80).collect::<String>(),
+                                                "kq-stream: refusal opener detected with evidence present — retrying with answer prefill"
+                                            );
+                                            full_text.clear();
+                                            full_text.push_str(REFUSAL_RETRY_PREFIX);
+                                            if tx
+                                                .send(Ok(REFUSAL_RETRY_PREFIX.to_string()))
+                                                .await
+                                                .is_err()
+                                            {
+                                                return;
+                                            }
+                                            head_flushed = true;
+                                            let mut retry_req = request.clone();
+                                            retry_req.assistant_prefix =
+                                                Some(REFUSAL_RETRY_PREFIX.to_string());
+                                            retry_req.system_message =
+                                                Some(REFUSAL_RETRY_SYSTEM.to_string());
+                                            match inference
+                                                .complete_stream_with_id_and_finish(&retry_req)
+                                                .await
+                                            {
+                                                Ok((s2, mid2)) => {
+                                                    s = s2;
+                                                    model_id = mid2;
+                                                    observed_finish = None;
+                                                    observed_completion_tokens = None;
+                                                    continue 'synth;
+                                                }
+                                                Err(e) => {
+                                                    let _ = tx.send(Err(e)).await;
+                                                    return;
+                                                }
+                                            }
+                                        } else if tx
+                                            .send(Ok(std::mem::take(&mut head)))
+                                            .await
+                                            .is_err()
+                                        {
+                                            return;
+                                        } else {
+                                            head_flushed = true;
+                                        }
+                                    }
+                                }
+                            }
+                            StreamFrame::Finish { reason, usage } => {
+                                observed_completion_tokens =
+                                    usage.as_ref().map(|u| u.completion_tokens);
+                                // FinishReason::Error means the slot bailed
+                                // mid-stream (context overflow, decode failure,
+                                // tokenizer rejection). Surface it so the
+                                // post-stream path doesn't save a 0-char message
+                                // + fire a misleading InformationRequest.
+                                if let crate::types::FinishReason::Error(ref msg) = reason {
+                                    tracing::warn!(
+                                        finish_reason = "error",
+                                        error = %msg,
+                                        chars_streamed = full_text.len(),
+                                        "kq-stream: slot terminated with Finish::Error — propagating as error frame"
+                                    );
+                                    let _ = tx
+                                        .send(Err(crate::error::Error::Inference(msg.clone())))
+                                        .await;
+                                    return;
+                                }
+                                observed_finish = Some(reason);
+                            }
+                            StreamFrame::Error(msg) => {
+                                let _ = tx.send(Err(crate::error::Error::Inference(msg))).await;
                                 return;
                             }
-                        }
-                        StreamFrame::Finish { reason, usage } => {
-                            observed_completion_tokens =
-                                usage.as_ref().map(|u| u.completion_tokens);
-                            // FinishReason::Error means the slot's
-                            // generate_stream_sync_with_finish returned
-                            // an Err (context overflow, decode failure,
-                            // tokenizer rejection). Without surfacing it
-                            // here the post-stream path saves a 0-char
-                            // assistant message and the gap-check fires
-                            // a misleading InformationRequest. Forward
-                            // as an error frame so the desktop renders
-                            // a real failure state instead of "empty
-                            // answer + please paste a source." Repro
-                            // 2026-05-25: primary slot n_ctx=8192 vs
-                            // synth prompt 8522 tokens.
-                            if let crate::types::FinishReason::Error(ref msg) = reason {
-                                tracing::warn!(
-                                    finish_reason = "error",
-                                    error = %msg,
-                                    chars_streamed = full_text.len(),
-                                    "kq-stream: slot terminated with Finish::Error — propagating as error frame"
-                                );
-                                let _ = tx
-                                    .send(Err(crate::error::Error::Inference(msg.clone())))
-                                    .await;
-                                return;
-                            }
-                            observed_finish = Some(reason);
-                        }
-                        StreamFrame::Error(msg) => {
-                            let _ = tx.send(Err(crate::error::Error::Inference(msg))).await;
-                            return;
                         }
                     }
+
+                    // Stream ended while still buffering the head (a short
+                    // answer below the threshold): decide on what we have.
+                    if !head_flushed {
+                        if !retried && had_retrieved_chunks && looks_like_refusal_opener(&head) {
+                            retried = true;
+                            tracing::info!(
+                                target: "synth.refusal_retry",
+                                head = %head.chars().take(80).collect::<String>(),
+                                "kq-stream: short refusal detected with evidence present — retrying with answer prefill"
+                            );
+                            full_text.clear();
+                            full_text.push_str(REFUSAL_RETRY_PREFIX);
+                            if tx.send(Ok(REFUSAL_RETRY_PREFIX.to_string())).await.is_err() {
+                                return;
+                            }
+                            head_flushed = true;
+                            let mut retry_req = request.clone();
+                            retry_req.assistant_prefix = Some(REFUSAL_RETRY_PREFIX.to_string());
+                            retry_req.system_message = Some(REFUSAL_RETRY_SYSTEM.to_string());
+                            match inference.complete_stream_with_id_and_finish(&retry_req).await {
+                                Ok((s2, mid2)) => {
+                                    s = s2;
+                                    model_id = mid2;
+                                    observed_finish = None;
+                                    observed_completion_tokens = None;
+                                    continue 'synth;
+                                }
+                                Err(e) => {
+                                    let _ = tx.send(Err(e)).await;
+                                    return;
+                                }
+                            }
+                        } else {
+                            let _ = tx.send(Ok(std::mem::take(&mut head))).await;
+                            head_flushed = true;
+                        }
+                    }
+                    break 'synth;
                 }
 
                 // Post-synthesis guardrail: demote any quoted span that
