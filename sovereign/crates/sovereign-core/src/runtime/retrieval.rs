@@ -1776,7 +1776,13 @@ impl Runtime {
         }
     }
 
-    /// RAPTOR collapsed-tree grounding (env-gated `SOVEREIGN_RAPTOR_GROUNDING`).
+    /// RAPTOR collapsed-tree grounding (`SOVEREIGN_RAPTOR_GROUNDING`, default ON
+    /// — set `=0` to disable). Late-injected by default (`raptor_late_inject_
+    /// enabled`) so it's QA-neutral on the SEP bench; on by default for the
+    /// whole-work summarization capability it adds. NB: the cosine pass below is
+    /// a brute-force scan over all of a corpus's summary nodes (no ANN index) —
+    /// fine at SEP scale (~11k), but index the summary embeddings before
+    /// enabling on wiki-scale corpora.
     /// Cosines the query embedding against the queried corpora's RAPTOR
     /// summary-node embeddings (`conv_raptor_nodes`), takes the global
     /// top-M, and injects each as a virtual `ScoredChunk` — so a query can
@@ -1795,7 +1801,7 @@ impl Runtime {
     ) {
         let enabled = std::env::var("SOVEREIGN_RAPTOR_GROUNDING")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
+            .unwrap_or(true);
         if !enabled {
             return;
         }
@@ -3023,13 +3029,15 @@ impl Runtime {
 
             // RAPTOR collapsed-tree grounding (env-gated) — same as the KQ
             // path's 2c'' step; DeepQuery / ComparisonQuery take this route.
-            self.apply_raptor_grounding(
-                &corpus_embedding,
-                &mut all_chunks,
-                "DeepQuery",
-                context.conversation.enabled_corpora.as_deref(),
-            )
-            .await;
+            if !raptor_late_inject_enabled() {
+                self.apply_raptor_grounding(
+                    &corpus_embedding,
+                    &mut all_chunks,
+                    "DeepQuery",
+                    context.conversation.enabled_corpora.as_deref(),
+                )
+                .await;
+            }
 
             // Also search StateStore for corpus-type documents (used by test
             // harness and for corpora ingested directly into the store).
@@ -3431,6 +3439,25 @@ impl Runtime {
             // `sovereign/docs/specs/CONV_TIERED_PORT.md`.
             self.rerank_conv_chunks_via_ppr(message, &mut all_chunks, &display_categories)
                 .await;
+            // Late RAPTOR injection (SOVEREIGN_RAPTOR_LATE) — see the KQ path.
+            // Appended post-rerank so leaf ranking is untouched. corpus_embedding
+            // is block-local to the corpus-search arm and out of scope here, so
+            // re-derive the SAME query embedding (build_retrieval_query →
+            // embed_query) — isolates injection TIMING, not the embedding.
+            if raptor_late_inject_enabled() {
+                let late_emb = self
+                    .inference
+                    .embed_query(&build_retrieval_query(message, context))
+                    .await
+                    .unwrap_or_default();
+                self.apply_raptor_grounding(
+                    &late_emb,
+                    &mut all_chunks,
+                    "DeepQuery",
+                    context.conversation.enabled_corpora.as_deref(),
+                )
+                .await;
+            }
             let conv_briefing = self
                 .build_conv_briefing_block(&all_chunks, &display_categories)
                 .await;
