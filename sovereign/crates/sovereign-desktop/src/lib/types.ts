@@ -2043,6 +2043,38 @@ export type CurationStatus = "generated";
 /** Compact per-atom record returned by `atlas_list_atoms`. The full
  *  type-specific shape (premises[], evidence chunk previews, …)
  *  lives in `atlas_get_atom_detail` (Step 4). */
+/** One node in the Atlas Map (an atom). `atom_type` is the backend
+ *  `AtomType` serde string (e.g. "Entity", "Question",
+ *  "ArgumentReconstruction"); `salience` present for Entity/Configuration. */
+export interface AtlasNode {
+  id: string;
+  label: string;
+  atom_type: string;
+  salience?: number;
+  degree: number;
+}
+/** One edge. `edge_type` is the `EdgeType` serde string; `crux` is the
+ *  disagreement a "Tension" edge turns on. */
+export interface AtlasEdge {
+  source: string;
+  target: string;
+  edge_type: string;
+  crux?: string;
+}
+export interface SubgraphCensus {
+  atom_total: number;
+  shown: number;
+  tensions: number;
+  questions: number;
+  arguments: number;
+}
+/** Curated landscape subgraph for the Atlas Map view. */
+export interface AtlasSubgraph {
+  nodes: AtlasNode[];
+  edges: AtlasEdge[];
+  census: SubgraphCensus;
+}
+
 export interface AtomSummary {
   atom_id: string;
   stable_key: string;

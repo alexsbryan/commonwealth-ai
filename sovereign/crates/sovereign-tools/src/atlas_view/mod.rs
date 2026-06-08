@@ -31,6 +31,7 @@ pub mod atom_detail;
 pub mod conv;
 pub mod reader;
 pub mod stable_key;
+pub mod subgraph;
 
 pub use atom_browse::{AtomBrowseError, AtomFilter, AtomListPage, AtomSummary, PageCursor};
 pub use atom_detail::{
@@ -42,3 +43,4 @@ pub use conv::{
 };
 pub use reader::{AtlasCorpusSummary, AtlasViewError, CurationStatus, FileAtlasReader};
 pub use stable_key::{compute_stable_key, StableAtomKey};
+pub use subgraph::{AtlasEdge, AtlasNode, AtlasSubgraph, SubgraphCensus, DEFAULT_MAX_NODES};

@@ -11,12 +11,14 @@
   // the interaction shape is already in place.
 
   import { onMount, untrack, tick } from "svelte";
-  import { atlasListAtoms } from "../../api";
+  import { atlasListAtoms, atlasSubgraph } from "../../api";
+  import AtlasGraph from "./AtlasGraph.svelte";
   import type {
     AtomFilter,
     AtomListPage,
     AtomSummary,
     AtomType,
+    AtlasSubgraph,
   } from "../../types";
 
   interface Props {
@@ -73,6 +75,32 @@
   let totalMatching = $state(0);
   let nextOffset: number | undefined = $state(undefined);
   let loading = $state(true);
+
+  // ─── Map view (epistemic landscape) ───────────────────────
+  let viewMode = $state<"list" | "map">("list");
+  let sg = $state<AtlasSubgraph | null>(null);
+  let sgLoading = $state(false);
+  let sgError = $state<string | null>(null);
+
+  // Fetch the curated subgraph when the user enters Map mode (or switches
+  // corpus while in it). The backend caches atoms.json, so re-entering is
+  // cheap; reads only corpusId + viewMode so list keystrokes don't refetch.
+  $effect(() => {
+    const cid = corpusId;
+    if (viewMode !== "map") return;
+    sgLoading = true;
+    sgError = null;
+    atlasSubgraph(cid)
+      .then((g) => {
+        sg = g;
+      })
+      .catch((e) => {
+        sgError = e instanceof Error ? e.message : String(e);
+      })
+      .finally(() => {
+        sgLoading = false;
+      });
+  });
   let loadingMore = $state(false);
   let error: string | null = $state(null);
 
@@ -255,8 +283,23 @@
     {#if totalAtomsHint !== undefined}
       <span class="total-hint">{totalAtomsHint.toLocaleString()} atoms</span>
     {/if}
+    <div class="view-toggle" role="group" aria-label="View mode">
+      <button
+        class="vt-btn"
+        class:active={viewMode === "list"}
+        type="button"
+        onclick={() => (viewMode = "list")}>List</button
+      >
+      <button
+        class="vt-btn"
+        class:active={viewMode === "map"}
+        type="button"
+        onclick={() => (viewMode = "map")}>Map</button
+      >
+    </div>
   </header>
 
+  {#if viewMode === "list"}
   <nav class="type-tabs" aria-label="Filter by atom type">
     <button
       class="tab"
@@ -377,9 +420,56 @@
       {/if}
     {/if}
   </div>
+  {:else}
+    {#if sgError}
+      <div class="status error" role="alert">Failed to build the map: {sgError}</div>
+    {:else if sgLoading || !sg}
+      <div class="status">Building the landscape…</div>
+    {:else}
+      <div class="map-census">
+        {sg.census.atom_total.toLocaleString()} atoms · {sg.census.tensions} tensions
+        · {sg.census.questions} questions · {sg.census.arguments} arguments{#if sg.census.shown < sg.census.atom_total}
+          · showing top {sg.census.shown}{/if}
+      </div>
+      <AtlasGraph
+        nodes={sg.nodes}
+        edges={sg.edges}
+        onNodeClick={(id) => onSelectAtom?.(id)}
+      />
+    {/if}
+  {/if}
 </div>
 
 <style>
+  .view-toggle {
+    display: inline-flex;
+    gap: 2px;
+    margin-left: 8px;
+    border: 1px solid var(--border-mid);
+    border-radius: 100px;
+    padding: 2px;
+  }
+  .vt-btn {
+    padding: 2px 12px;
+    border-radius: 100px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    cursor: pointer;
+    border: none;
+  }
+  .vt-btn.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+  }
+  .map-census {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    padding: 8px 14px;
+    letter-spacing: 0.02em;
+    line-height: 1.5;
+  }
   .atlas-corpus-view {
     max-width: 920px;
     width: 100%;
