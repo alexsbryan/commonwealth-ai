@@ -1,10 +1,10 @@
 {
   "lane": "search-gym",
-  "captured_at": "2026-06-08T17:02:10.665320+00:00",
-  "note": "0/20 replays passed",
+  "captured_at": "2026-06-08T19:02:07.397128+00:00",
+  "note": "24/30 replays passed",
   "metrics": {
     "pass_rate": {
-      "value": 0.0,
+      "value": 0.800000011920929,
       "direction": "higher_is_better",
       "tolerance": 0.15
     }
