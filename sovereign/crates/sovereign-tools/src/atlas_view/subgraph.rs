@@ -259,7 +259,7 @@ impl FileAtlasReader {
         // tissue; the added degree also pulls a question's neighbours into the
         // kept set under the node cap.
 
-        // Per-atom (type, salience) for ranking co-occurrence neighbours.
+        // Per-atom (type, salience), used to populate the light SpineAtoms.
         let meta: HashMap<AtomId, (AtomType, Option<f32>)> = nodes_in
             .iter()
             .map(|n| (n.id.clone(), (n.atom_type, n.salience)))
@@ -287,124 +287,194 @@ impl FileAtlasReader {
             }
         }
 
-        let mut chunk_atoms: HashMap<String, Vec<AtomId>> = HashMap::new();
-        let mut atom_chunks: HashMap<AtomId, Vec<String>> = HashMap::new();
-        for env in envelopes.iter() {
-            let mut cids = Vec::new();
-            if let Ok(v) = serde_json::to_value(env) {
-                collect_chunk_ids(&v, &mut cids);
-            }
-            cids.sort();
-            cids.dedup();
-            for c in &cids {
-                chunk_atoms
-                    .entry(c.clone())
-                    .or_default()
-                    .push(env.id().clone());
-            }
-            atom_chunks.insert(env.id().clone(), cids);
-        }
-
-        // Rank co-occurrence neighbours: Claims/Positions first (the actual
-        // answers), then argument structure, then events/states, then
-        // background entities — and within a tier, by descending salience.
-        fn type_rank(t: AtomType) -> u8 {
-            match t {
-                AtomType::Claim | AtomType::Position => 0,
-                AtomType::ArgumentReconstruction | AtomType::Opposition => 1,
-                AtomType::Event | AtomType::State | AtomType::Relation => 2,
-                _ => 3,
-            }
-        }
-        const COOCCUR_K: usize = 4;
-        let cooccur = |aid: &AtomId| -> Vec<AtomId> {
-            let mut seen: HashSet<AtomId> = HashSet::new();
-            let mut cands: Vec<AtomId> = Vec::new();
-            if let Some(cs) = atom_chunks.get(aid) {
-                for c in cs {
-                    if let Some(list) = chunk_atoms.get(c) {
-                        for other in list {
-                            if other != aid && seen.insert(other.clone()) {
-                                cands.push(other.clone());
+        // Extract the envelope-coupled bits into light `SpineAtom`s, then
+        // hand off to the pure, unit-tested `synthesize_spine_edges`.
+        let spine_atoms: Vec<SpineAtom> = envelopes
+            .iter()
+            .map(|env| {
+                let id = env.id().clone();
+                let (atom_type, salience) =
+                    meta.get(&id).copied().unwrap_or((AtomType::Entity, None));
+                let mut chunks = Vec::new();
+                if let Ok(v) = serde_json::to_value(env) {
+                    collect_chunk_ids(&v, &mut chunks);
+                }
+                chunks.sort();
+                chunks.dedup();
+                let (role, authoritative) = match env {
+                    AtomEnvelope::Question(q) => {
+                        let mut auth: Vec<AtomId> = q.addressed_by.clone();
+                        match &q.resolution_status {
+                            ResolutionStatus::Resolved { claim_id } => {
+                                auth.push(claim_id.clone())
                             }
+                            ResolutionStatus::Contested { claim_ids } => {
+                                auth.extend(claim_ids.iter().cloned())
+                            }
+                            _ => {}
                         }
+                        (SpineRole::Question, auth)
                     }
+                    AtomEnvelope::ArgumentReconstruction(a) => {
+                        (SpineRole::Argument, a.proponent.iter().cloned().collect())
+                    }
+                    _ => (SpineRole::Other, Vec::new()),
+                };
+                SpineAtom {
+                    id,
+                    atom_type,
+                    salience,
+                    chunks,
+                    authoritative,
+                    role,
                 }
-            }
-            cands.sort_by(|a, b| {
-                let (ta, sa) = meta.get(a).copied().unwrap_or((AtomType::Entity, None));
-                let (tb, sb) = meta.get(b).copied().unwrap_or((AtomType::Entity, None));
-                type_rank(ta).cmp(&type_rank(tb)).then(
-                    sb.unwrap_or(0.0)
-                        .partial_cmp(&sa.unwrap_or(0.0))
-                        .unwrap_or(std::cmp::Ordering::Equal),
-                )
-            });
-            cands.truncate(COOCCUR_K);
-            cands
-        };
+            })
+            .collect();
 
-        for env in envelopes.iter() {
-            match env {
-                AtomEnvelope::Question(q) => {
-                    // Authoritative answering claims, if the extractor linked any.
-                    let mut targets: HashSet<AtomId> = q.addressed_by.iter().cloned().collect();
-                    match &q.resolution_status {
-                        ResolutionStatus::Resolved { claim_id } => {
-                            targets.insert(claim_id.clone());
-                        }
-                        ResolutionStatus::Contested { claim_ids } => {
-                            targets.extend(claim_ids.iter().cloned());
-                        }
-                        _ => {}
-                    }
-                    if targets.is_empty() {
-                        // Fallback: co-occurrence — link to salient atoms
-                        // sharing this question's passage.
-                        for t in cooccur(&q.id) {
-                            edges_in.push(EdgeIn {
-                                source: q.id.clone(),
-                                target: t,
-                                edge_type: EdgeType::Involves,
-                                crux: None,
-                            });
-                        }
-                    } else {
-                        for t in targets {
-                            edges_in.push(EdgeIn {
-                                source: q.id.clone(),
-                                target: t,
-                                edge_type: EdgeType::Grounds,
-                                crux: None,
-                            });
-                        }
-                    }
-                }
-                AtomEnvelope::ArgumentReconstruction(a) => {
-                    if let Some(proponent) = &a.proponent {
-                        edges_in.push(EdgeIn {
-                            source: a.id.clone(),
-                            target: proponent.clone(),
-                            edge_type: EdgeType::Involves,
-                            crux: None,
-                        });
-                    } else {
-                        for t in cooccur(&a.id) {
-                            edges_in.push(EdgeIn {
-                                source: a.id.clone(),
-                                target: t,
-                                edge_type: EdgeType::Involves,
-                                crux: None,
-                            });
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
+        edges_in.extend(synthesize_spine_edges(&spine_atoms));
 
         Ok(build_subgraph(&nodes_in, &edges_in, max_nodes))
     }
+}
+
+/// How a [`SpineAtom`] participates in spine-edge synthesis — set by the
+/// envelope→`SpineAtom` extraction in [`FileAtlasReader::subgraph`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpineRole {
+    /// A Question — links to its answering Claims, or (fallback) co-occurrence.
+    Question,
+    /// An ArgumentReconstruction — links to its proponent, or co-occurrence.
+    Argument,
+    /// Any other atom: a candidate co-occurrence *target*, never a source.
+    Other,
+}
+
+/// Light per-atom input for spine-edge synthesis — decoupled from the full
+/// atom structs (mirrors [`NodeIn`]) so [`synthesize_spine_edges`] is pure and
+/// unit-testable. The messy envelope→`SpineAtom` extraction (typed field
+/// access + chunk-id walk) lives in [`FileAtlasReader::subgraph`].
+#[derive(Debug, Clone)]
+pub struct SpineAtom {
+    pub id: AtomId,
+    pub atom_type: AtomType,
+    pub salience: Option<f32>,
+    /// Evidence chunk ids this atom cites (the co-occurrence fallback signal).
+    pub chunks: Vec<String>,
+    /// Authoritative outbound links, when the extractor populated them:
+    /// Question → answering Claims (`addressed_by` ∪ `resolution_status`),
+    /// Argument → `proponent`. Empty → fall back to co-occurrence.
+    pub authoritative: Vec<AtomId>,
+    pub role: SpineRole,
+}
+
+/// Max co-occurrence neighbours linked per floating Question/Argument — keeps
+/// the synthesized spine sparse (a backbone, not a hairball).
+const COOCCUR_K: usize = 4;
+
+/// Co-occurrence neighbour ranking: Claims/Positions first (the actual
+/// answers being debated), then argument structure, then events/states, then
+/// background entities. Within a tier we order by descending salience.
+fn type_rank(t: AtomType) -> u8 {
+    match t {
+        AtomType::Claim | AtomType::Position => 0,
+        AtomType::ArgumentReconstruction | AtomType::Opposition => 1,
+        AtomType::Event | AtomType::State | AtomType::Relation => 2,
+        _ => 3,
+    }
+}
+
+/// Synthesize "spine" edges so Questions and Arguments aren't isolated nodes.
+///
+/// Materialized `edges.json` rows only ever target Claims / Entities / Events
+/// / Positions — never a Question or ArgumentReconstruction; those atoms carry
+/// their relationships in their own fields. For each Question/Argument we emit,
+/// authoritative-first:
+///
+///   1. Authoritative links when present — Question → answering Claims,
+///      Argument → `proponent` (deduped, deterministic order).
+///   2. Co-occurrence FALLBACK when (1) is empty — which, today, is nearly
+///      always: across the installed corpora the extractor populates the
+///      authoritative links on a literal handful of atoms, so this fallback
+///      is the de-facto mechanism. Link to the top-[`COOCCUR_K`] most-salient
+///      atoms sharing an evidence `chunk_id`, preferring answer-bearing types
+///      via [`type_rank`]. Corpus-agnostic: every atom cites chunks, so this
+///      connects floating Questions/Arguments on any atlas, not just SEP.
+///
+/// Edges reuse quiet, non-Tension variants (`Grounds` for a question's
+/// authoritative answers, `Involves` otherwise) so they read as connective
+/// tissue, not fault lines. `Other` atoms are co-occurrence *targets* only,
+/// never sources.
+pub fn synthesize_spine_edges(atoms: &[SpineAtom]) -> Vec<EdgeIn> {
+    // (type, salience) lookup + chunk → atoms inverted index.
+    let meta: HashMap<AtomId, (AtomType, Option<f32>)> = atoms
+        .iter()
+        .map(|a| (a.id.clone(), (a.atom_type, a.salience)))
+        .collect();
+    let mut chunk_atoms: HashMap<&str, Vec<&AtomId>> = HashMap::new();
+    for a in atoms {
+        for c in &a.chunks {
+            chunk_atoms.entry(c.as_str()).or_default().push(&a.id);
+        }
+    }
+
+    // Top-K salient co-occurrence neighbours sharing any of `a`'s chunks.
+    let cooccur = |a: &SpineAtom| -> Vec<AtomId> {
+        let mut seen: HashSet<&AtomId> = HashSet::new();
+        let mut cands: Vec<&AtomId> = Vec::new();
+        for c in &a.chunks {
+            if let Some(list) = chunk_atoms.get(c.as_str()) {
+                for other in list {
+                    if **other != a.id && seen.insert(*other) {
+                        cands.push(*other);
+                    }
+                }
+            }
+        }
+        cands.sort_by(|x, y| {
+            let (tx, sx) = meta.get(*x).copied().unwrap_or((AtomType::Entity, None));
+            let (ty, sy) = meta.get(*y).copied().unwrap_or((AtomType::Entity, None));
+            type_rank(tx).cmp(&type_rank(ty)).then(
+                sy.unwrap_or(0.0)
+                    .partial_cmp(&sx.unwrap_or(0.0))
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
+        });
+        cands.truncate(COOCCUR_K);
+        cands.into_iter().cloned().collect()
+    };
+
+    let mut out: Vec<EdgeIn> = Vec::new();
+    for a in atoms {
+        let auth_edge = match a.role {
+            SpineRole::Question => EdgeType::Grounds,
+            SpineRole::Argument => EdgeType::Involves,
+            SpineRole::Other => continue,
+        };
+        if a.authoritative.is_empty() {
+            for t in cooccur(a) {
+                out.push(EdgeIn {
+                    source: a.id.clone(),
+                    target: t,
+                    edge_type: EdgeType::Involves,
+                    crux: None,
+                });
+            }
+        } else {
+            // addressed_by ∪ resolution_status can name the same claim twice.
+            let mut seen: HashSet<&AtomId> = HashSet::new();
+            for t in &a.authoritative {
+                if seen.insert(t) {
+                    out.push(EdgeIn {
+                        source: a.id.clone(),
+                        target: t.clone(),
+                        edge_type: auth_edge.clone(),
+                        crux: None,
+                    });
+                }
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -426,6 +496,115 @@ mod tests {
             edge_type: EdgeType::Tension,
             crux: Some(crux.to_string()),
         }
+    }
+
+    // ── spine-edge synthesis ─────────────────────────────────────────
+    // Ids are all `entity(i)` (just unique keys); `atom_type`/`role` carry
+    // the meaning the shaping reads.
+    fn spine(
+        i: usize,
+        t: AtomType,
+        sal: f32,
+        chunks: &[&str],
+        auth: &[usize],
+        role: SpineRole,
+    ) -> SpineAtom {
+        SpineAtom {
+            id: AtomId::entity(i),
+            atom_type: t,
+            salience: Some(sal),
+            chunks: chunks.iter().map(|s| s.to_string()).collect(),
+            authoritative: auth.iter().map(|&j| AtomId::entity(j)).collect(),
+            role,
+        }
+    }
+
+    #[test]
+    fn spine_question_falls_back_to_cooccurrence_ranked_and_capped() {
+        // An `Open` question (no authoritative links) + 5 claims and 1 entity
+        // sharing its chunk. Claims must outrank the (higher-salience) entity
+        // on type, and only COOCCUR_K survive the cap.
+        let atoms = vec![
+            spine(0, AtomType::Question, 0.5, &["c1"], &[], SpineRole::Question),
+            spine(1, AtomType::Claim, 0.9, &["c1"], &[], SpineRole::Other),
+            spine(2, AtomType::Claim, 0.8, &["c1"], &[], SpineRole::Other),
+            spine(3, AtomType::Claim, 0.7, &["c1"], &[], SpineRole::Other),
+            spine(4, AtomType::Claim, 0.6, &["c1"], &[], SpineRole::Other),
+            spine(5, AtomType::Claim, 0.5, &["c1"], &[], SpineRole::Other),
+            spine(6, AtomType::Entity, 1.0, &["c1"], &[], SpineRole::Other),
+        ];
+        let edges = synthesize_spine_edges(&atoms);
+        assert_eq!(edges.len(), COOCCUR_K, "capped at COOCCUR_K");
+        assert!(edges.iter().all(|e| e.source == AtomId::entity(0)));
+        assert!(edges.iter().all(|e| matches!(e.edge_type, EdgeType::Involves)));
+        let targets: HashSet<AtomId> = edges.iter().map(|e| e.target.clone()).collect();
+        // Top-4 claims by salience win; the salience-1.0 entity loses on type.
+        assert!(targets.contains(&AtomId::entity(1)));
+        assert!(targets.contains(&AtomId::entity(4)));
+        assert!(!targets.contains(&AtomId::entity(5)), "5th claim dropped by cap");
+        assert!(!targets.contains(&AtomId::entity(6)), "entity excluded by type rank");
+    }
+
+    #[test]
+    fn spine_question_authoritative_links_win_over_cooccurrence() {
+        // A resolved question links to its answering claim (not even chunk-
+        // shared) via Grounds, and emits NO co-occurrence edges.
+        let atoms = vec![
+            spine(0, AtomType::Question, 0.5, &["c1"], &[9], SpineRole::Question),
+            spine(1, AtomType::Claim, 0.9, &["c1"], &[], SpineRole::Other), // shares chunk; ignored
+            spine(9, AtomType::Claim, 0.1, &["c2"], &[], SpineRole::Other), // the authoritative answer
+        ];
+        let edges = synthesize_spine_edges(&atoms);
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].source, AtomId::entity(0));
+        assert_eq!(edges[0].target, AtomId::entity(9));
+        assert!(matches!(edges[0].edge_type, EdgeType::Grounds));
+    }
+
+    #[test]
+    fn spine_argument_uses_proponent_then_cooccurrence() {
+        // Named proponent → single Involves edge to it.
+        let with_prop = vec![
+            spine(0, AtomType::ArgumentReconstruction, 0.5, &["c1"], &[7], SpineRole::Argument),
+            spine(7, AtomType::Entity, 0.9, &["c2"], &[], SpineRole::Other),
+        ];
+        let e = synthesize_spine_edges(&with_prop);
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0].target, AtomId::entity(7));
+        assert!(matches!(e[0].edge_type, EdgeType::Involves));
+
+        // Anonymous argument → co-occurrence fallback (also Involves).
+        let anon = vec![
+            spine(0, AtomType::ArgumentReconstruction, 0.5, &["c1"], &[], SpineRole::Argument),
+            spine(1, AtomType::Claim, 0.9, &["c1"], &[], SpineRole::Other),
+        ];
+        let e2 = synthesize_spine_edges(&anon);
+        assert_eq!(e2.len(), 1);
+        assert_eq!(e2[0].target, AtomId::entity(1));
+        assert!(matches!(e2[0].edge_type, EdgeType::Involves));
+    }
+
+    #[test]
+    fn spine_other_atoms_never_source_and_isolated_yields_nothing() {
+        // A question with no chunks and no authoritative links is genuinely
+        // isolated; a plain Claim is never a synthesis source.
+        let atoms = vec![
+            spine(0, AtomType::Question, 0.5, &[], &[], SpineRole::Question),
+            spine(1, AtomType::Claim, 0.9, &["c1"], &[], SpineRole::Other),
+        ];
+        assert!(synthesize_spine_edges(&atoms).is_empty());
+    }
+
+    #[test]
+    fn spine_authoritative_targets_are_deduped() {
+        // addressed_by ∪ resolution_status can name the same claim repeatedly.
+        let atoms = vec![
+            spine(0, AtomType::Question, 0.5, &[], &[9, 9, 9], SpineRole::Question),
+            spine(9, AtomType::Claim, 0.1, &[], &[], SpineRole::Other),
+        ];
+        let edges = synthesize_spine_edges(&atoms);
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].target, AtomId::entity(9));
     }
 
     #[test]
