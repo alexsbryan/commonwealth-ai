@@ -1775,6 +1775,117 @@ impl Runtime {
             }
         }
     }
+
+    /// RAPTOR collapsed-tree grounding (env-gated `SOVEREIGN_RAPTOR_GROUNDING`).
+    /// Cosines the query embedding against the queried corpora's RAPTOR
+    /// summary-node embeddings (`conv_raptor_nodes`), takes the global
+    /// top-M, and injects each as a virtual `ScoredChunk` — so a query can
+    /// match a whole-document / section SUMMARY even when no leaf chunk
+    /// surfaced. The summary's `title` is the source-doc slug (so it counts
+    /// toward source coverage) and `source_doc_id` back-points to the
+    /// origin. Mirrors `apply_atlas_grounding`'s bag-of-atoms shape. Tunable:
+    /// `SOVEREIGN_RAPTOR_TOP_M` (default 8), `SOVEREIGN_RAPTOR_MIN_LEVEL`
+    /// (default 0 = all nodes incl. leaves; 1 = section/doc summaries only).
+    pub(crate) async fn apply_raptor_grounding(
+        &self,
+        embedding: &[f32],
+        chunks: &mut Vec<corpus_engine::ScoredChunk>,
+        label: &str,
+        enabled_corpora: Option<&[String]>,
+    ) {
+        let enabled = std::env::var("SOVEREIGN_RAPTOR_GROUNDING")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        if !enabled {
+            return;
+        }
+        let Some(reader) = self.conv_tiered_reader.as_ref() else {
+            return;
+        };
+        if embedding.is_empty() {
+            return;
+        }
+        let top_m: usize = std::env::var("SOVEREIGN_RAPTOR_TOP_M")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(8);
+        if top_m == 0 {
+            return;
+        }
+        let min_level: i64 = std::env::var("SOVEREIGN_RAPTOR_MIN_LEVEL")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        // Which corpora to ground: the conversation allow-list when set
+        // (the bench's --isolate path), else the distinct corpora that
+        // already produced hits this turn.
+        let corpus_ids: Vec<String> = match enabled_corpora {
+            Some(allowed) if !allowed.is_empty() => allowed.to_vec(),
+            _ => {
+                let mut s: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+                for c in chunks.iter() {
+                    s.insert(c.corpus_id.clone());
+                }
+                s.into_iter().collect()
+            }
+        };
+        if corpus_ids.is_empty() {
+            return;
+        }
+        let mut scored: Vec<(f32, crate::conv_tiered::ConvRaptorNodeRow)> = Vec::new();
+        for corpus_id in &corpus_ids {
+            let nodes = match reader.list_corpus_raptor_nodes(corpus_id, min_level).await {
+                Ok(n) => n,
+                Err(e) => {
+                    tracing::warn!(label, corpus = %corpus_id, error = %e,
+                        "raptor-grounding: list_corpus_raptor_nodes failed");
+                    continue;
+                }
+            };
+            for node in nodes {
+                if node.summary_embedding.len() != embedding.len() {
+                    continue;
+                }
+                let s = crate::atlas_context::cosine(embedding, &node.summary_embedding);
+                scored.push((s, node));
+            }
+        }
+        if scored.is_empty() {
+            return;
+        }
+        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(top_m);
+        let added = scored.len();
+        for (score, node) in scored {
+            // Title = the source-doc slug so source-coverage scoring matches
+            // (e.g. `https://plato.stanford.edu/entries/holes/` → `holes`).
+            let title = {
+                let trimmed = node.conv_uuid.trim_end_matches('/');
+                trimmed
+                    .rsplit('/')
+                    .next()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(trimmed)
+                    .to_string()
+            };
+            let mut metadata = std::collections::HashMap::new();
+            metadata.insert("source".to_string(), "raptor".to_string());
+            metadata.insert("raptor_level".to_string(), node.level.to_string());
+            chunks.push(corpus_engine::ScoredChunk {
+                content: node.summary,
+                title: Some(title),
+                url: Some(node.conv_uuid.clone()),
+                corpus_id: node.corpus_id,
+                score,
+                metadata,
+                chunk_id: None,
+                source_doc_id: Some(node.conv_uuid),
+                vector_distance: Some(1.0 - score),
+            });
+        }
+        tracing::info!(label, added, top_m, min_level,
+            "raptor-grounding: collapsed-tree summaries injected");
+    }
     /// Search every installed knowledge/catalog corpus with optional
     /// per-corpus K overrides (hot-corpora affinity pre-merge bias).
     /// When the conversation has already drawn many chunks from a
@@ -2890,6 +3001,16 @@ impl Runtime {
             )
             .await;
 
+            // RAPTOR collapsed-tree grounding (env-gated) — same as the KQ
+            // path's 2c'' step; DeepQuery / ComparisonQuery take this route.
+            self.apply_raptor_grounding(
+                &corpus_embedding,
+                &mut all_chunks,
+                "DeepQuery",
+                context.conversation.enabled_corpora.as_deref(),
+            )
+            .await;
+
             // Also search StateStore for corpus-type documents (used by test
             // harness and for corpora ingested directly into the store).
             let embedding = self.inference.embed(message).await.unwrap_or_default();
@@ -3108,6 +3229,7 @@ impl Runtime {
         // wholesale; pin them so the atlas-directed set survives into
         // synthesis. See `reserve_atom_enum_chunks`.
         all_chunks = reserve_atom_enum_chunks(all_chunks);
+        all_chunks = reserve_raptor_chunks(all_chunks);
         all_chunks.truncate(KQ_MERGED_LIMIT);
 
         // Multi-source cohesion expansion. DeepQuery is the path

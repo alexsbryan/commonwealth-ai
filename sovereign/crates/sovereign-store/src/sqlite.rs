@@ -2505,6 +2505,14 @@ impl ConvTieredReader for SqliteStateStore {
         SqliteStateStore::list_conv_raptor_nodes(self, corpus_id, conv_uuid).await
     }
 
+    async fn list_corpus_raptor_nodes(
+        &self,
+        corpus_id: &str,
+        min_level: i64,
+    ) -> sovereign_core::error::Result<Vec<ConvRaptorNodeRow>> {
+        SqliteStateStore::list_corpus_raptor_nodes(self, corpus_id, min_level).await
+    }
+
     async fn list_chunk_entities_for_conv(
         &self,
         corpus_id: &str,
@@ -2862,6 +2870,57 @@ impl SqliteStateStore {
             .map_err(map_db)?;
         let rows = stmt
             .query_map(rusqlite::params![corpus_id, conv_uuid], |r| {
+                Ok(ConvRaptorNodeRow {
+                    node_id: r.get(0)?,
+                    corpus_id: r.get(1)?,
+                    conv_uuid: r.get(2)?,
+                    level: r.get(3)?,
+                    summary: r.get(4)?,
+                    summary_embedding: decode_f32_vec(r.get::<_, Vec<u8>>(5)?.as_slice()),
+                    centroid_embedding: decode_f32_vec(r.get::<_, Vec<u8>>(6)?.as_slice()),
+                    children_node_ids_json: r.get(7)?,
+                    direct_member_chunk_ids_json: r.get(8)?,
+                    evidence_chunk_ids_json: r.get(9)?,
+                    quote_spans_json: r.get(10)?,
+                    primary_entities_json: r.get(11)?,
+                    cluster_coherence: r.get(12)?,
+                    created_at: r.get(13)?,
+                })
+            })
+            .map_err(map_db)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.map_err(map_db)?);
+        }
+        Ok(out)
+    }
+
+    /// Every RAPTOR node for a corpus at or above `min_level`
+    /// (`min_level = 0` = all nodes incl. leaves; `1` = section/doc
+    /// summaries only). The corpus-wide collapsed-tree pool for
+    /// query-time cosine grounding (`Runtime::apply_raptor_grounding`).
+    /// Mirrors `list_conv_raptor_nodes` but drops the `conv_uuid`
+    /// predicate.
+    pub async fn list_corpus_raptor_nodes(
+        &self,
+        corpus_id: &str,
+        min_level: i64,
+    ) -> Result<Vec<ConvRaptorNodeRow>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT node_id, corpus_id, conv_uuid, level, summary,
+                        summary_embedding, centroid_embedding,
+                        children_node_ids, direct_member_chunk_ids,
+                        evidence_chunk_ids, quote_spans, primary_entities,
+                        cluster_coherence, created_at
+                 FROM conv_raptor_nodes
+                 WHERE corpus_id = ?1 AND level >= ?2
+                 ORDER BY level DESC, conv_uuid ASC, node_id ASC",
+            )
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map(rusqlite::params![corpus_id, min_level], |r| {
                 Ok(ConvRaptorNodeRow {
                     node_id: r.get(0)?,
                     corpus_id: r.get(1)?,

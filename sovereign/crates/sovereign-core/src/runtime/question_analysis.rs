@@ -690,3 +690,31 @@ pub(crate) fn reserve_atom_enum_chunks(chunks: Vec<ScoredChunk>) -> Vec<ScoredCh
     reserved.extend(rest);
     reserved
 }
+
+/// Reserve RAPTOR collapsed-tree summary chunks (metadata `source=raptor`)
+/// ahead of the `KQ_MERGED_LIMIT` truncate — same rationale as
+/// `reserve_atom_enum_chunks`: the grounding step deliberately selected the
+/// top-M summaries by cosine; the cross-corpus sort must not silently demote
+/// them below base chunks. No-op when nothing is tagged `source=raptor`.
+pub(crate) fn reserve_raptor_chunks(chunks: Vec<ScoredChunk>) -> Vec<ScoredChunk> {
+    let is_raptor = |c: &ScoredChunk| {
+        c.metadata
+            .get("source")
+            .map(|s| s == "raptor")
+            .unwrap_or(false)
+    };
+    if !chunks.iter().any(is_raptor) {
+        return chunks;
+    }
+    let mut reserved: Vec<ScoredChunk> = Vec::new();
+    let mut rest: Vec<ScoredChunk> = Vec::new();
+    for c in chunks {
+        if is_raptor(&c) {
+            reserved.push(c);
+        } else {
+            rest.push(c);
+        }
+    }
+    reserved.extend(rest);
+    reserved
+}
