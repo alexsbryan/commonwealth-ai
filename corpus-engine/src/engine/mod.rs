@@ -181,6 +181,17 @@ pub struct CorpusEngine {
     /// re-indexed corpus is re-opened without threading invalidation
     /// through every mutation path.
     index_cache: std::sync::Mutex<HashMap<PathBuf, (std::time::SystemTime, CorpusIndex)>>,
+    /// Cache of computed `IndexInfo`, keyed by index path + the same
+    /// `chunks.lance/_versions` mtime freshness signal as `index_cache`
+    /// (falling back to `_corpus_meta.json` mtime so every valid index
+    /// caches). `installed_indexes()` runs every gossip tick (~10s) and
+    /// walks EVERY installed corpus; without this, a node hosting ~1,800
+    /// indexes (e.g. the per-article SEP atlases) re-`open`s + `info()`s
+    /// all of them every tick — a btrfs metadata storm that thrashes even
+    /// a 128 GB box. Unlike `index_cache` this holds only the small
+    /// `IndexInfo` (no LanceDB handle), so caching all ~1,800 is cheap on
+    /// memory. Self-invalidates per-index on any committed write.
+    index_info_cache: std::sync::Mutex<HashMap<PathBuf, (std::time::SystemTime, IndexInfo)>>,
     /// Optional host-level allow-list of corpus ids to surface from
     /// `installed_indexes`. `None` (the default) lists every installed
     /// corpus. When `Some`, only listed ids are enumerated — and since
@@ -340,6 +351,7 @@ impl CorpusEngine {
             // `"qwen-embedding-0.6b"` on every fresh install).
             expected_embedding_model: String::new(),
             index_cache: std::sync::Mutex::new(HashMap::new()),
+            index_info_cache: std::sync::Mutex::new(HashMap::new()),
             corpus_allow_list: None,
             self_node_id: DEFAULT_LOCAL_NODE_SUFFIX.to_string(),
             cancel_registry: CancellationRegistry::new(),
@@ -1336,16 +1348,45 @@ impl CorpusEngine {
                     continue;
                 }
             }
-            // Check for _corpus_meta.json to identify valid indexes.
+            // IndexInfo cache check FIRST — before the validity gates — so a
+            // hit is stat-only. Freshness key: the `chunks.lance/_versions`
+            // mtime (bumped by every committed write — same signal
+            // `open_index` uses), falling back to the `_corpus_meta.json`
+            // mtime so even legacy-layout indexes cache. Cheap stats only,
+            // no file reads. A hit returns the IndexInfo WITHOUT the
+            // `CorpusIndex::open` AND without the `_corpus_meta.json` read
+            // that `is_ingestion_complete` does below — so a gossip tick
+            // (build_local_capabilities, ~10s) over ~1,800 unchanged indexes
+            // is stat-only instead of a LanceDB open + JSON parse per index.
+            // The mtime self-invalidates on any write — including an
+            // ingestion-in-progress meta rewrite — so the validity gates
+            // re-run whenever the index actually changes.
+            let version_mtime = std::fs::metadata(path.join("chunks.lance").join("_versions"))
+                .and_then(|m| m.modified())
+                .or_else(|_| {
+                    std::fs::metadata(path.join("_corpus_meta.json")).and_then(|m| m.modified())
+                })
+                .ok();
+            if let Some(mtime) = version_mtime {
+                if let Ok(cache) = self.index_info_cache.lock() {
+                    if let Some((cached_mtime, info)) = cache.get(&path) {
+                        if *cached_mtime == mtime {
+                            indexes.push(info.clone());
+                            continue;
+                        }
+                    }
+                }
+            }
+            // Cache miss (new / changed / unusual layout): run the full
+            // validity gates, then open + info() and populate the cache.
+            // _corpus_meta.json identifies a valid index dir.
             if !path.join("_corpus_meta.json").exists() {
                 continue;
             }
-            // Skip indexes where ingestion was interrupted (process
-            // killed mid-embed). Logged at trace because
-            // `installed_indexes` is called from several startup
-            // paths (HealthMonitor, vector-readiness verifier,
-            // engine list endpoint) and at debug it produces 5–6
-            // duplicate lines per partial corpus per launch.
+            // Skip indexes where ingestion was interrupted (process killed
+            // mid-embed). Trace-level: `installed_indexes` is called from
+            // several startup paths and at debug produces 5–6 duplicate
+            // lines per partial corpus per launch.
             if !CorpusIndex::is_ingestion_complete(&path) {
                 tracing::trace!(
                     corpus = name,
@@ -1355,7 +1396,14 @@ impl CorpusEngine {
             }
             match CorpusIndex::open(&path).await {
                 Ok(idx) => match idx.info().await {
-                    Ok(info) => indexes.push(info),
+                    Ok(info) => {
+                        if let Some(mtime) = version_mtime {
+                            if let Ok(mut cache) = self.index_info_cache.lock() {
+                                cache.insert(path.clone(), (mtime, info.clone()));
+                            }
+                        }
+                        indexes.push(info);
+                    }
                     Err(e) => {
                         eprintln!("Skipping {}: {e}", path.display());
                     }
