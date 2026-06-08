@@ -29,6 +29,7 @@ pub mod knowledge_view;
 pub mod local_corpus;
 pub mod raptor_atlas;
 pub mod raptor_checkpoint;
+pub mod raptor_index;
 pub mod wikipedia_fetch;
 // `manifest` module retired 2026-05-22 — commonwealth-api now
 // injects tool descriptors at construction time rather than pulling

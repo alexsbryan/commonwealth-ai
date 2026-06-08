@@ -999,3 +999,51 @@ async fn save_chunk_entities_preserves_prior_rows_non_destructive() {
     assert!(ids.contains(&10));
     assert!(ids.contains(&11));
 }
+
+/// `corpus_raptor_version` is the cheap build-version the RAPTOR summary-index
+/// freshness gate reads: the newest `created_at` across a corpus's nodes, 0
+/// when none, and scoped to the corpus (no cross-corpus bleed).
+#[tokio::test]
+async fn corpus_raptor_version_returns_scoped_max_created_at() {
+    let store = SqliteStateStore::open_in_memory().unwrap();
+
+    // Empty corpus → 0 (freshness gate treats this as "nothing to be stale").
+    assert_eq!(store.corpus_raptor_version("sep").await.unwrap(), 0);
+
+    let mk = |corpus: &str, node_id: &str, conv: &str, created: i64| {
+        sovereign_core::conv_tiered::ConvRaptorNodeRow {
+            node_id: node_id.to_string(),
+            corpus_id: corpus.to_string(),
+            conv_uuid: conv.to_string(),
+            level: 1,
+            summary: "s".to_string(),
+            summary_embedding: vec![0.1, 0.2, 0.3],
+            centroid_embedding: vec![0.1, 0.2, 0.3],
+            children_node_ids_json: "[]".to_string(),
+            direct_member_chunk_ids_json: None,
+            evidence_chunk_ids_json: "[]".to_string(),
+            quote_spans_json: "[]".to_string(),
+            primary_entities_json: "[]".to_string(),
+            cluster_coherence: 1.0,
+            created_at: created,
+        }
+    };
+
+    store
+        .save_conv_raptor_nodes("sep", "doc-a", &[mk("sep", "a1", "doc-a", 100)])
+        .await
+        .unwrap();
+    store
+        .save_conv_raptor_nodes("sep", "doc-b", &[mk("sep", "b1", "doc-b", 250)])
+        .await
+        .unwrap();
+    // A different corpus with a higher timestamp must NOT bleed into 'sep'.
+    store
+        .save_conv_raptor_nodes("other", "doc-c", &[mk("other", "c1", "doc-c", 999)])
+        .await
+        .unwrap();
+
+    assert_eq!(store.corpus_raptor_version("sep").await.unwrap(), 250);
+    assert_eq!(store.corpus_raptor_version("other").await.unwrap(), 999);
+    assert_eq!(store.corpus_raptor_version("missing").await.unwrap(), 0);
+}

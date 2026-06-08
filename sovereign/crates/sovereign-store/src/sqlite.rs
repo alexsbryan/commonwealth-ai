@@ -2513,6 +2513,10 @@ impl ConvTieredReader for SqliteStateStore {
         SqliteStateStore::list_corpus_raptor_nodes(self, corpus_id, min_level).await
     }
 
+    async fn corpus_raptor_version(&self, corpus_id: &str) -> sovereign_core::error::Result<i64> {
+        SqliteStateStore::corpus_raptor_version(self, corpus_id).await
+    }
+
     async fn list_chunk_entities_for_conv(
         &self,
         corpus_id: &str,
@@ -2944,6 +2948,23 @@ impl SqliteStateStore {
             out.push(row.map_err(map_db)?);
         }
         Ok(out)
+    }
+
+    /// Newest `created_at` across a corpus's RAPTOR nodes, or 0 when none.
+    /// A cheap `MAX` aggregate over the `idx_conv_raptor_nodes_conv_level`
+    /// `corpus_id` prefix — the build-version source for the
+    /// `raptor_summaries.lance` freshness gate, avoiding the full-table BLOB
+    /// decode the brute-force grounding scan performs.
+    pub async fn corpus_raptor_version(&self, corpus_id: &str) -> Result<i64> {
+        let conn = self.conn.lock().await;
+        let v: i64 = conn
+            .query_row(
+                "SELECT COALESCE(MAX(created_at), 0) FROM conv_raptor_nodes WHERE corpus_id = ?1",
+                rusqlite::params![corpus_id],
+                |r| r.get(0),
+            )
+            .map_err(map_db)?;
+        Ok(v)
     }
 
     /// Wipe every RAPTOR node for a single source_doc inside a

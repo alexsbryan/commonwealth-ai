@@ -3,6 +3,7 @@
 
 mod create;
 mod enrichment;
+pub mod raptor;
 mod read;
 mod search;
 mod write;

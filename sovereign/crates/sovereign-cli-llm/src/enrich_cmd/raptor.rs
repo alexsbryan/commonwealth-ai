@@ -411,6 +411,22 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     }
     println!("\nThe atom-graph atlas (atlas/atoms.json) is untouched — RAPTOR nodes are additive.");
 
+    // Post-build: (re)build the RAPTOR summary-node ANN index so query-time
+    // grounding takes the fast LanceDB path (`raptor_summaries.lance`) instead
+    // of the brute-force scan. Once per RUN (not per document) — the index is a
+    // whole-corpus derivative of `conv_raptor_nodes`. Mirrors the
+    // `build_structural_atlas` post-install hook. Skipped on a total failure
+    // (nothing to index); `enrich raptor-index` rebuilds it standalone.
+    if built > 0 || resumed > 0 {
+        let outcome = sovereign_tools::raptor_index::build_corpus_raptor_index(
+            &verify_store,
+            &index_path,
+            &parsed.corpus_id,
+        )
+        .await;
+        println!("RAPTOR summary-node ANN index: {outcome}");
+    }
+
     // Total failure (nothing built) is a non-zero exit; partial
     // failures are tolerated like the folder runner — one bad document
     // shouldn't sink a multi-day pass.

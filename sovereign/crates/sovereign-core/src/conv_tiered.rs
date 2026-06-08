@@ -230,6 +230,22 @@ pub trait ConvTieredReader: Send + Sync {
         min_level: i64,
     ) -> crate::error::Result<Vec<ConvRaptorNodeRow>>;
 
+    /// Newest `created_at` across a corpus's RAPTOR nodes (0 when none) — a
+    /// cheap build-version for the `raptor_summaries.lance` freshness gate
+    /// (`Runtime::raptor_index_fresh`). The default derives it from
+    /// `list_corpus_raptor_nodes`; `SqliteStateStore` overrides it with a
+    /// `MAX(created_at)` aggregate so the per-query probe never pays the
+    /// full-table decode the grounding scan does.
+    async fn corpus_raptor_version(&self, corpus_id: &str) -> crate::error::Result<i64> {
+        Ok(self
+            .list_corpus_raptor_nodes(corpus_id, 0)
+            .await?
+            .iter()
+            .map(|n| n.created_at)
+            .max()
+            .unwrap_or(0))
+    }
+
     /// All `chunk_entities` rows for one conversation. Returned in
     /// `(chunk_id ASC, char_start ASC)` order so consumers building
     /// the entity graph see entities in their natural document
