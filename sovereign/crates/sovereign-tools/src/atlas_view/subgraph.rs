@@ -14,11 +14,11 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use corpus_engine::enrichment::atlas::atoms::{AtomId, AtomType};
+use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomType, ResolutionStatus};
 use corpus_engine::enrichment::atlas::edges::{Edge, EdgeType};
 use corpus_engine::enrichment::atlas::read_atlas_edges;
 
-use super::atom_browse::{AtomBrowseError, AtomFilter, PageCursor};
+use super::atom_browse::{cached_atoms, AtomBrowseError, AtomFilter, PageCursor};
 use super::reader::FileAtlasReader;
 
 /// Light node input — just the fields the shaping needs, decoupled from the
@@ -201,10 +201,14 @@ impl FileAtlasReader {
         let atlas_dir = self
             .atlas_dir(corpus_id)
             .ok_or_else(|| AtomBrowseError::UnknownCorpus(corpus_id.to_string()))?;
-        let edges_file = tokio::task::spawn_blocking(move || read_atlas_edges(&atlas_dir))
-            .await
-            .map_err(|e| AtomBrowseError::Task(e.to_string()))?
-            .map_err(AtomBrowseError::ReadAtoms)?;
+        let (edges_file, envelopes) = tokio::task::spawn_blocking(move || -> std::io::Result<_> {
+            let edges = read_atlas_edges(&atlas_dir)?;
+            let atoms = cached_atoms(&atlas_dir)?;
+            Ok((edges, atoms))
+        })
+        .await
+        .map_err(|e| AtomBrowseError::Task(e.to_string()))?
+        .map_err(AtomBrowseError::ReadAtoms)?;
 
         let nodes_in: Vec<NodeIn> = page
             .items
@@ -216,7 +220,7 @@ impl FileAtlasReader {
                 salience: s.salience,
             })
             .collect();
-        let edges_in: Vec<EdgeIn> = edges_file
+        let mut edges_in: Vec<EdgeIn> = edges_file
             .edges
             .iter()
             .map(|e: &Edge| EdgeIn {
@@ -230,6 +234,174 @@ impl FileAtlasReader {
                 },
             })
             .collect();
+
+        // ── Synthesize "spine" edges so Questions and Arguments aren't
+        // isolated floating nodes ──────────────────────────────────────
+        //
+        // Materialized `edges.json` rows only ever target Claims / Entities /
+        // Events / Positions (Grounds, Tension, Causes, …) — never a Question
+        // or ArgumentReconstruction. Those atoms carry their relationships in
+        // their own FIELDS, so without synthesis they render as disconnected
+        // dots. We wire two tiers, authoritative-first:
+        //
+        //   1. Authoritative links, when the extractor populated them:
+        //      Question → answering Claims (`addressed_by` ∪ the claim ids in
+        //      `resolution_status`), Argument → `proponent`.
+        //   2. Co-occurrence FALLBACK when (1) is empty — the common case on
+        //      current SEP corpora, where every Question is `Open`. Two atoms
+        //      citing the same evidence `chunk_id` discuss the same passage,
+        //      so we link a floating Question/Argument to the most salient
+        //      atoms sharing its chunks, preferring Claims/Positions (the
+        //      answers being debated) over background Entities, capped at
+        //      `COOCCUR_K` to keep the map a spine, not a hairball.
+        //
+        // Edges reuse quiet, non-Tension variants so they read as connective
+        // tissue; the added degree also pulls a question's neighbours into the
+        // kept set under the node cap.
+
+        // Per-atom (type, salience) for ranking co-occurrence neighbours.
+        let meta: HashMap<AtomId, (AtomType, Option<f32>)> = nodes_in
+            .iter()
+            .map(|n| (n.id.clone(), (n.atom_type, n.salience)))
+            .collect();
+
+        // Generic chunk-id walk — future-proof vs. matching every variant's
+        // chunk-bearing fields (first_appearance / evidence / raised_at / …).
+        fn collect_chunk_ids(v: &serde_json::Value, out: &mut Vec<String>) {
+            match v {
+                serde_json::Value::Object(m) => {
+                    for (k, vv) in m {
+                        if k == "chunk_id" {
+                            if let serde_json::Value::String(s) = vv {
+                                out.push(s.clone());
+                            }
+                        } else {
+                            collect_chunk_ids(vv, out);
+                        }
+                    }
+                }
+                serde_json::Value::Array(a) => {
+                    a.iter().for_each(|x| collect_chunk_ids(x, out))
+                }
+                _ => {}
+            }
+        }
+
+        let mut chunk_atoms: HashMap<String, Vec<AtomId>> = HashMap::new();
+        let mut atom_chunks: HashMap<AtomId, Vec<String>> = HashMap::new();
+        for env in envelopes.iter() {
+            let mut cids = Vec::new();
+            if let Ok(v) = serde_json::to_value(env) {
+                collect_chunk_ids(&v, &mut cids);
+            }
+            cids.sort();
+            cids.dedup();
+            for c in &cids {
+                chunk_atoms
+                    .entry(c.clone())
+                    .or_default()
+                    .push(env.id().clone());
+            }
+            atom_chunks.insert(env.id().clone(), cids);
+        }
+
+        // Rank co-occurrence neighbours: Claims/Positions first (the actual
+        // answers), then argument structure, then events/states, then
+        // background entities — and within a tier, by descending salience.
+        fn type_rank(t: AtomType) -> u8 {
+            match t {
+                AtomType::Claim | AtomType::Position => 0,
+                AtomType::ArgumentReconstruction | AtomType::Opposition => 1,
+                AtomType::Event | AtomType::State | AtomType::Relation => 2,
+                _ => 3,
+            }
+        }
+        const COOCCUR_K: usize = 4;
+        let cooccur = |aid: &AtomId| -> Vec<AtomId> {
+            let mut seen: HashSet<AtomId> = HashSet::new();
+            let mut cands: Vec<AtomId> = Vec::new();
+            if let Some(cs) = atom_chunks.get(aid) {
+                for c in cs {
+                    if let Some(list) = chunk_atoms.get(c) {
+                        for other in list {
+                            if other != aid && seen.insert(other.clone()) {
+                                cands.push(other.clone());
+                            }
+                        }
+                    }
+                }
+            }
+            cands.sort_by(|a, b| {
+                let (ta, sa) = meta.get(a).copied().unwrap_or((AtomType::Entity, None));
+                let (tb, sb) = meta.get(b).copied().unwrap_or((AtomType::Entity, None));
+                type_rank(ta).cmp(&type_rank(tb)).then(
+                    sb.unwrap_or(0.0)
+                        .partial_cmp(&sa.unwrap_or(0.0))
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                )
+            });
+            cands.truncate(COOCCUR_K);
+            cands
+        };
+
+        for env in envelopes.iter() {
+            match env {
+                AtomEnvelope::Question(q) => {
+                    // Authoritative answering claims, if the extractor linked any.
+                    let mut targets: HashSet<AtomId> = q.addressed_by.iter().cloned().collect();
+                    match &q.resolution_status {
+                        ResolutionStatus::Resolved { claim_id } => {
+                            targets.insert(claim_id.clone());
+                        }
+                        ResolutionStatus::Contested { claim_ids } => {
+                            targets.extend(claim_ids.iter().cloned());
+                        }
+                        _ => {}
+                    }
+                    if targets.is_empty() {
+                        // Fallback: co-occurrence — link to salient atoms
+                        // sharing this question's passage.
+                        for t in cooccur(&q.id) {
+                            edges_in.push(EdgeIn {
+                                source: q.id.clone(),
+                                target: t,
+                                edge_type: EdgeType::Involves,
+                                crux: None,
+                            });
+                        }
+                    } else {
+                        for t in targets {
+                            edges_in.push(EdgeIn {
+                                source: q.id.clone(),
+                                target: t,
+                                edge_type: EdgeType::Grounds,
+                                crux: None,
+                            });
+                        }
+                    }
+                }
+                AtomEnvelope::ArgumentReconstruction(a) => {
+                    if let Some(proponent) = &a.proponent {
+                        edges_in.push(EdgeIn {
+                            source: a.id.clone(),
+                            target: proponent.clone(),
+                            edge_type: EdgeType::Involves,
+                            crux: None,
+                        });
+                    } else {
+                        for t in cooccur(&a.id) {
+                            edges_in.push(EdgeIn {
+                                source: a.id.clone(),
+                                target: t,
+                                edge_type: EdgeType::Involves,
+                                crux: None,
+                            });
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
 
         Ok(build_subgraph(&nodes_in, &edges_in, max_nodes))
     }

@@ -273,6 +273,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     let mut failed = 0usize;
     let mut skipped = 0usize;
     let mut resumed = 0usize;
+    let mut empty = 0usize;
     let mut nodes_total = 0usize;
 
     for (idx, (doc_id, _)) in docs.into_iter().enumerate() {
@@ -347,19 +348,36 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
                     .await
                     .map(|n| n.len())
                     .unwrap_or(0);
-                nodes_total += node_count;
-                built += 1;
                 let furniture_note = if dropped > 0 {
                     format!(" (-{dropped} furniture)")
                 } else {
                     String::new()
                 };
-                println!(
-                    "  [{}/{total_docs}] {doc_id}  {kept} chunks{furniture_note} · {} · {node_count} nodes · {:.1}s",
-                    idx + 1,
-                    bucket.label(),
-                    t.elapsed().as_secs_f64(),
-                );
+                if node_count == 0 {
+                    // A non-skipped document that persists ZERO nodes is an
+                    // anomaly — almost always the summarizer failing every
+                    // cluster (e.g. the daemon's inference slot crashing
+                    // mid-run, as on 2026-06-07 when the 92 largest SEP docs
+                    // silently produced nothing). Flag it loudly and count it
+                    // as a failure so a crash can never masquerade as "built";
+                    // resume retries it (it has no nodes) on the next run.
+                    empty += 1;
+                    eprintln!(
+                        "  [{}/{total_docs}] {doc_id}  {kept} chunks{furniture_note} · {} · 0 NODES — summarizer FAILED (will retry on resume) · {:.1}s",
+                        idx + 1,
+                        bucket.label(),
+                        t.elapsed().as_secs_f64(),
+                    );
+                } else {
+                    nodes_total += node_count;
+                    built += 1;
+                    println!(
+                        "  [{}/{total_docs}] {doc_id}  {kept} chunks{furniture_note} · {} · {node_count} nodes · {:.1}s",
+                        idx + 1,
+                        bucket.label(),
+                        t.elapsed().as_secs_f64(),
+                    );
+                }
             }
             Err(e) => {
                 failed += 1;
@@ -380,6 +398,9 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     if failed > 0 {
         println!("  documents failed: {failed}");
     }
+    if empty > 0 {
+        println!("  documents with 0 nodes (summarizer FAILED — re-run to retry): {empty}");
+    }
     println!(
         "  nodes persisted:  {nodes_total}  (conv_raptor_nodes, corpus_id='{}')",
         parsed.corpus_id
@@ -393,7 +414,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     // Total failure (nothing built) is a non-zero exit; partial
     // failures are tolerated like the folder runner — one bad document
     // shouldn't sink a multi-day pass.
-    if built == 0 && failed > 0 {
+    if empty > 0 || (built == 0 && failed > 0) {
         return 1;
     }
     0
