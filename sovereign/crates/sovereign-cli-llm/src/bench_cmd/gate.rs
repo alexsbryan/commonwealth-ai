@@ -40,9 +40,12 @@ const HELP: Help = Help {
             "sovereign bench gate <lane> --report <artifact> [--bench-root <dir>] [--id <baseline-id>] [--update-baseline] [--regression-threshold <f>]",
         ),
         HelpSection::Subcommands(&[
-            ("chaos-monkey", "Gate the chaos JSONL on {competence, honesty, hallucination_rate}."),
+            ("chaos-monkey", "Gate the chaos JSONL on {competence, honesty, hallucination_rate} (+ distractor-evasion / citation-fidelity when the bank has v2 questions)."),
             ("mechanism-fidelity", "Gate the mechanism JSONL on the control Δ̄≈0 witness (+ P1 collapse, informational)."),
             ("multiturn", "Gate the threads JSON on {min first-failure turn, mean fact-recall slope, mean judge coverage}."),
+            ("search-gym", "Gate the search-gym JSON on overall pass_rate (web-search judiciousness)."),
+            ("knowledge-gym", "Gate the knowledge-gym JSON on overall pass_rate (knowledge_lookup discipline)."),
+            ("agent-coding", "Gate the agent-bench JSON on grand_total/max_total score fraction (agentic code loop)."),
         ]),
         HelpSection::Notes(
             "The lane's own absolute verdict (e.g. chaos NO-GO) stays advisory; this gate fails ONLY on regression vs the committed baseline at <bench-root>/<group>/baselines/<id>/latest.json. First-run (no baseline) passes — capture one with --update-baseline.",
@@ -119,6 +122,15 @@ pub fn cmd_gate(args: &[String]) -> i32 {
         }
         "multiturn" | "threads" | "multi-turn" => {
             multiturn_summary(&report).map(|b| ("wikipedia_learn", "threads", b))
+        }
+        "search-gym" | "search" => {
+            search_gym_summary(&report).map(|b| ("search-gym", "ci", b))
+        }
+        "knowledge-gym" | "knowledge" => {
+            knowledge_gym_summary(&report).map(|b| ("knowledge-gym", "ci", b))
+        }
+        "agent-coding" | "agent-bench" | "agent" => {
+            agent_coding_summary(&report).map(|b| ("agent-coding", "ci", b))
         }
         other => {
             eprintln!("error: unknown lane `{other}` (expected chaos-monkey | mechanism-fidelity | multiturn)");
@@ -262,9 +274,37 @@ pub(crate) fn chaos_lane_baseline(
         rep.counts.absent,
         rep.counts.absent_hallucinated,
     ));
-    b.with("competence", LaneMetric::higher_is_better(rep.competence, 0.15))
+    let mut b = b
+        .with("competence", LaneMetric::higher_is_better(rep.competence, 0.15))
         .with("honesty", LaneMetric::higher_is_better(rep.honesty, 0.18))
-        .with("hallucination_rate", LaneMetric::lower_is_better(rep.hallucination_rate, 0.18))
+        .with("hallucination_rate", LaneMetric::lower_is_better(rep.hallucination_rate, 0.18));
+    // chaos v2 — only present once the bank ships distractor / provenance_trap
+    // questions (otherwise the scorer returns NaN for an empty population). The
+    // `.is_finite()` guard keeps this additive: zero effect on the flywheel's
+    // promote loop or the v1 baseline until such questions exist, then both the
+    // CI gate and promote pick them up automatically (one shared metric set).
+    if rep.citation_fidelity.is_finite() {
+        // Retrieval-grounding (did the genuinely-supporting passage reach
+        // retrieval). Retrieval is near-deterministic at temp 0, so this is the
+        // more stable of the two; 0.30 absorbs ~1 flip over the ~4 provenance
+        // questions.
+        b = b.with(
+            "citation_fidelity",
+            LaneMetric::higher_is_better(rep.citation_fidelity, 0.30),
+        );
+    }
+    if rep.distractor_evasion.is_finite() {
+        // Answer-echo proxy (did the answer parrot the wrong passage). This is a
+        // coarse substring proxy — the real check is the FUTURE_RESEARCH
+        // grounding verifier — so it's gated loosely (0.34 ≈ one flip over the
+        // ~3 distractor questions); it fires only on a clear multi-item
+        // collapse, not generation noise.
+        b = b.with(
+            "distractor_evasion",
+            LaneMetric::higher_is_better(rep.distractor_evasion, 0.34),
+        );
+    }
+    b
 }
 
 /// mechanism-fidelity: the gating metric is the **control Δ̄≈0 witness** — the
@@ -362,4 +402,90 @@ fn multiturn_summary(report: &Path) -> Result<LaneBaseline, String> {
         b = b.with("mean_judge_coverage", LaneMetric::higher_is_better(mean(&coverages), 0.10));
     }
     Ok(b)
+}
+
+// ── Tool-use / agentic gym adapters ─────────────────────────────────────────
+//
+// The gyms (search-gym, knowledge-gym, agent-bench) are owned by other code and
+// emit their own JSON. Rather than couple to their structs, we read the report
+// as a serde Value and pull just the headline scalar by key — robust to gym
+// schema churn. Rates are normalised to 0..1 (some gyms emit a 0..100 percent).
+
+fn read_json_value(report: &Path) -> Result<serde_json::Value, String> {
+    let text = std::fs::read_to_string(report).map_err(|e| format!("read {}: {e}", report.display()))?;
+    // The gyms print their JSON to stdout, possibly after a human-readable
+    // preamble and/or with a trailing summary line. Skip to the first `{`/`[`
+    // and read exactly one JSON value (StreamDeserializer ignores trailing
+    // bytes), so a `… > out.json` capture that isn't pristine JSON still parses.
+    let start = text.find(['{', '[']).ok_or_else(|| format!("{}: no JSON found", report.display()))?;
+    let mut stream = serde_json::Deserializer::from_str(&text[start..]).into_iter::<serde_json::Value>();
+    match stream.next() {
+        Some(Ok(v)) => Ok(v),
+        Some(Err(e)) => Err(format!("parse {}: {e}", report.display())),
+        None => Err(format!("{}: no JSON value", report.display())),
+    }
+}
+
+fn get_f64(v: &serde_json::Value, key: &str) -> Option<f64> {
+    v.get(key).and_then(serde_json::Value::as_f64)
+}
+
+/// Normalise a pass-rate that may be expressed as a fraction (0..1) or a
+/// percentage (0..100) into 0..1. A value above 1.5 is treated as a percent.
+fn norm_rate(x: f64) -> f64 {
+    if x > 1.5 {
+        x / 100.0
+    } else {
+        x
+    }
+}
+
+/// search-gym: web-search judiciousness (search only when needed; cite from
+/// results, not training). Headline = overall pass rate across the sampled
+/// fixtures × replays. Tolerance 0.15: the CI samples ~4 hardest fixtures × 5
+/// replays (~20 runs, ~0.05/flip) and the live chat path is not deterministic,
+/// so absorb ~3 flips; a real regression drops the rate further.
+fn search_gym_summary(report: &Path) -> Result<LaneBaseline, String> {
+    let v = read_json_value(report)?;
+    let rate = get_f64(&v, "total_rate")
+        .map(norm_rate)
+        .ok_or_else(|| format!("{}: no `total_rate` in search-gym report", report.display()))?;
+    let mut b = LaneBaseline::new("search-gym", now_rfc3339());
+    if let (Some(p), Some(r)) = (get_f64(&v, "total_pass"), get_f64(&v, "total_run")) {
+        b.note = Some(format!("{p:.0}/{r:.0} replays passed"));
+    }
+    Ok(b.with("pass_rate", LaneMetric::higher_is_better(rate, 0.15)))
+}
+
+/// knowledge-gym: knowledge_lookup tool discipline — corpus-vs-web escalation,
+/// citation faithfulness, multi-turn cache. Headline = overall pass rate.
+/// Tolerance 0.20: the CI samples ~3 hardest fixtures × 3 replays (~9 runs,
+/// ~0.11/flip), so a small-n flip stays under the gate; a regression needs ≥2.
+fn knowledge_gym_summary(report: &Path) -> Result<LaneBaseline, String> {
+    let v = read_json_value(report)?;
+    let rate = get_f64(&v, "pass_rate")
+        .map(norm_rate)
+        .ok_or_else(|| format!("{}: no `pass_rate` in knowledge-gym report", report.display()))?;
+    let mut b = LaneBaseline::new("knowledge-gym", now_rfc3339());
+    if let (Some(p), Some(r)) = (get_f64(&v, "total_passes"), get_f64(&v, "total_replays")) {
+        b.note = Some(format!("{p:.0}/{r:.0} replays passed"));
+    }
+    Ok(b.with("pass_rate", LaneMetric::higher_is_better(rate, 0.20)))
+}
+
+/// agent-coding: end-to-end agentic code loop (plan→implement→test→iterate).
+/// Headline = grand_total / max_total as a 0..1 score fraction over the sampled
+/// hardest problems. Tolerance 0.12 ≈ 3 of the 27 max points across 3 problems
+/// — agentic + judge variance is high, so the gate fires only on a real drop
+/// (e.g. a problem that used to complete now hitting a token/loop exit).
+fn agent_coding_summary(report: &Path) -> Result<LaneBaseline, String> {
+    let v = read_json_value(report)?;
+    let grand = get_f64(&v, "grand_total")
+        .ok_or_else(|| format!("{}: no `grand_total` in agent-bench report", report.display()))?;
+    let max = get_f64(&v, "max_total").filter(|m| *m > 0.0).unwrap_or(1.0);
+    let frac = grand / max;
+    let mut b = LaneBaseline::new("agent-coding", now_rfc3339());
+    b.model = v.get("model").and_then(|m| m.as_str()).map(str::to_string);
+    b.note = Some(format!("grand_total {grand:.0}/{max:.0}"));
+    Ok(b.with("score_fraction", LaneMetric::higher_is_better(frac, 0.12)))
 }
