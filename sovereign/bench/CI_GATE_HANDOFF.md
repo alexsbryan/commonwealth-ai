@@ -29,14 +29,23 @@ Drive the `sovereign bench gate` CI suite to a **full baseline on the corrected 
 
 ## Baseline status (committed) — what's VALID vs STALE
 
-| Lane | Committed baseline | Status |
+**ALL 6 re-captured on the corrected stack 2026-06-08 (this session).** Values:
+
+| Lane | Baseline (corrected stack) | Notes |
 |---|---|---|
-| chaos-monkey | `secret_agent/2026-06-08` (5 metrics) | ~valid (IQ4 + fixed retrieval; chaos has no tools so the grammar fix doesn't change it). **honesty 0.45** (IQ4 answers OOD), competence 0.67, citation_fidelity 0.25, distractor_evasion 0.33 |
-| search-gym | `ci/2026-06-08` = **0.80** | VALID (re-captured `1aff3e26`, grammar-fixed) |
-| mechanism-fidelity | `dev/2026-06-07` | **STALE** — captured on the old 36B-Q6 model. Re-run. |
-| multiturn | `wikipedia_learn/threads/2026-06-08` | **STALE** — old model + broken retrieval. Re-run (retrieval fix should help). |
-| knowledge-gym | — | **NOT captured** |
-| agent-coding | — | **NOT captured** |
+| chaos-monkey | `secret_agent/2026-06-08` — competence 0.67, **honesty 0.45**, hallu 0.55, citation_fidelity 0.25, distractor_evasion 0.33 | VALID. **Honesty diagnosis CORRECTED:** the prior handoff said "IQ4 answers OOD" — WRONG. OOD is 5/5 honest (answers WITH a "general knowledge, not your sources" caveat — the desired HYBRID). The 6 hallucinations are all `absent_adjacent` (Heat's first name, embassy country, …) answered instead of abstained — AND those answers leak un-tagged chain-of-thought (`"The user is asking…"`) that `strip_think` misses and the abstain-classifier mis-reads. Disambiguate H1 (real fabrication) vs H2 (missed abstention) with a live full-answer probe. Competence/citation gaps are a SEPARATE retrieval-grounding issue (provenance 1/4, distractor 0/3 on the single 316-chunk doc). |
+| search-gym | `ci/2026-06-08` = **0.80** (24/30) | VALID — reproduced exactly on the grammar-fixed stack. |
+| mechanism-fidelity | `dev/2026-06-08` — control_p1_delta 0.000, p1_collapse −0.331 | VALID. **Re-ran fresh** — the prior run RESUMED a stale Jun-7 old-model cache (`mechanism.jsonl.partial.jsonl`); purge it before re-running or you re-capture stale data. Fresh IQ4 is MORE faithful (collapse −0.005→−0.331). |
+| knowledge-gym | `ci/2026-06-08` = **0.818** (27/33) | VALID (first capture). 9/11 fixtures perfect; the 2 zeros are `05_noresults_honesty` (model is honest but skips the lookup tool — strict fixture) and `06_fabricated_id_blocked` (cited a fabricated ev-id + leaked visible confusion — corroborates the reasoning-leak). |
+| agent-coding | `ci/2026-06-08` = **0.333** (9/27) | VALID — but REQUIRES the env cocktail (see below). Without it: floored ~0.11 (model 503s on `commonwealth/coder` / early-exits). 3.2-lights-out-python = 9/9 perfect; Rust + 5.1 = 0 (write_thrash / no_progress — termination gap). |
+| multiturn | `wikipedia_learn/threads/2026-06-08` | Re-baselined this session on the corrected (clean, force-off) daemon. |
+
+### Agent-coding cocktail (was the suspicious 3/27) — REQUIRED to reproduce
+
+`sovereign bench gate agent-coding` is only meaningful when agent-coding runs under the right daemon config. Two things the corrected stack dropped:
+1. **`--model`** — agent-bench defaults to `commonwealth/coder`, which the corrected stack doesn't advertise (no `code=` slot) → 503 → floored 0/27. Pass `--model commonwealth/primary` (the coder model is NOT needed — confirmed). Fixed in `scripts/sovereign-ci-bench.sh` (`AGENT_MODEL`).
+2. **`SOVEREIGN_FORCE_TOOL_CALLS=1`** (+ `SOVEREIGN_DISABLE_AUTO_RESUME=1`) on the DAEMON. Without it the model emits ~100 tokens of chat, no tool call, and pi's zero-tool-call exit fires (inference_adapter.rs:722). WITH it: real solving (147→2971+ tokens, python 9/9). This flag is daemon-GLOBAL and forces a tool call on every tools-bearing request → regresses search-gym judiciousness, so **agent-coding needs its own daemon pass** (can't share with the gym/chaos lanes).
+   - `FORCE_TOOL_CALLS` alone re-engages but causes write_thrash/no_progress kills (forces a tool every turn → no text turn to test/terminate). The historically-"perfect-on-first-two" behavior came from the **alternation grammar** (text|tool_envelope escape, lets the model write→test→done), which is now broken (loop-trap). Repairing it (Step 2 #2) is the real fix and unblocks a single shared daemon.
 
 ## Next-session plan
 
@@ -68,12 +77,15 @@ target/debug/sovereign-cli-llm bench gate multiturn --report target/ci-bench/thr
 ```
 Then `git add sovereign/bench/*/baselines && git commit`. (Tip: `scripts/sovereign-ci-bench.sh --update-baseline --no-synth` does the whole sweep + validates the script end-to-end — but it overwrites the deterministic-lane baselines too; prefer the per-lane commands if you want surgical baselines.)
 
-**Step 2 — quality iteration (≥ a few rounds).** Highest-value known gaps the baselines expose:
-1. **IQ4 honesty 0.45** — the canonical model answers OOD ("capital of Australia", "margarita") instead of abstaining. Either a humility-gate/prompt fix, or revisit the quant. This is the chaos honesty red-line.
-2. **Alternation grammar is broken** (the actual tool-loop root cause) — its `text|tool_envelope` + injected `done` escape is unreachable (`inference_adapter.rs:423-472`, `llguidance_constraint.rs:415 build_tool_alternation_grammar`). It was meant to close agent-bench `loop_trap`/`parse_failed_envelope`; fix it so it can be re-enabled safely, then re-validate against search-gym + knowledge-gym. Until then it stays OFF.
-3. **search-gym 02_stock_price + 07_multicorpus_tangential** fail even grammar-off (genuine tool-judgment edge cases).
-4. **chaos v2 citation_fidelity 0.25 / distractor_evasion 0.33** — grounding precision; the neighbour-window catches the region but not always the exact supporting chunk (try `EXPANSION_NEIGHBOR_RADIUS` tuning or the FUTURE_RESEARCH grounding verifier).
-5. Whatever **knowledge-gym + agent-coding** reveal once baselined.
+**Step 2 — quality iteration (≥ a few rounds).** Highest-value gaps the corrected-stack baselines expose, in leverage order:
+
+1. **Fix the alternation grammar — HIGHEST LEVERAGE (one fix, three payoffs). ROOT CAUSE FOUND 2026-06-08 — the fix is SURGICAL, not "a day or more."** The bug is NOT the grammar; it's that the working grammar is UNWIRED. `inference_adapter.rs:436-469` (the `alternation_grammar_enabled()` branch) does NOT call `build_tool_alternation_grammar` (the Lark `start: think_block? body / body: tool_envelope | plain_text` grammar with a genuine plain-text escape, `llguidance_constraint.rs:415`). Instead the "canonical 2026-05-21 path" routes a **pure JSON schema** of `inject_done_tool(envelope)` (`inference_adapter.rs:459-469`) — which grammar-locks the model to emit JSON on EVERY turn. The only escape became a `done` tool call, never plain text → any tool-caller needing a prose turn (search-gym synthesis, a chat answer) is locked out of text → trap ([[invariant_alternation_grammar_breaks_tool_calling]]). Proof the Lark grammar works: `recipe_author.rs:725` has a LOCAL COPY of it that IS wired and ships (closed the recipe-author TOML-malformation class). **The fix: route `inference_adapter.rs:436` through `sovereign_inference::build_tool_alternation_grammar(&schema_json)` (set `req.lark_grammar` to the Lark text, not the `inject_done_tool` JSON schema)** — a few lines, the function already exists + is unit-tested. Watch the tradeoff the comment at `:445-450` flags (the older Lark+%json accepted partial JSON `{...]}`); iteration-3 wraps `%json {schema}` inside literal `<tool_call>…</tool_call>` markers, which SHOULD enforce strict closure — re-validate. Payoffs: (a) agent-coding terminates cleanly (write→test→plain-text/done) instead of write-thrashing → well above 9/27 (the historical "perfect on first two"); (b) enable GLOBALLY without the trap → one daemon serves agent-coding AND gym lanes (no separate `FORCE_TOOL_CALLS` pass); (c) likely helps the un-tagged-reasoning leak. Requires daemon rebuild (`-p sovereign-mesh`) + restart + re-validate search-gym (must NOT regress) and agent-coding (must terminate).
+
+2. **Reasoning-leak / honesty (chaos honesty 0.45 + knowledge-gym `06_fabricated_id`).** CORRECTED diagnosis: not OOD-answering (OOD is 5/5 honest). The failure is `absent_adjacent` answered-instead-of-abstained, AND the answers leak un-tagged chain-of-thought (`"The user is asking…"`) that `strip_think` (only strips `<think>…</think>`) misses → the abstain-classifier mis-reads it AND it's a UX bug. **First action: a live full-answer probe of one adjacent question** to disambiguate H1 (genuine fabrication → prompt/grounding fix) vs H2 (correct abstention mis-classified → fix the leak). The leak is systemic (also in knowledge-gym `06`). Do NOT just append `"The user is asking"` to `presenter.rs PREAMBLE_PREFIXES` (whack-a-mole, [[feedback_embed_router_over_keyword_classification]]); the principled fix is why the synthesis Drafter (runner.rs:584, `enable_thinking=false`, `Speed::Slow`) emits un-tagged meta-narration at all, and whether `KNOWLEDGE_SYNTHESIS_SYSTEM`'s loud "ANSWER, don't deflect" bias is overriding the "not in your sources" abstention exception for adjacent facts.
+
+3. **chaos citation_fidelity 0.25 / distractor_evasion 0.33 / competence provenance 1/4, distractor 0/3** — retrieval-grounding precision on the single 316-chunk doc; the neighbour-window catches the region but not always the exact supporting chunk (try `EXPANSION_NEIGHBOR_RADIUS` tuning or the FUTURE_RESEARCH grounding verifier).
+
+4. **search-gym 02_stock_price + 07_multicorpus_tangential** fail even grammar-off (genuine tool-judgment edge cases).
 
 ## Gotchas
 - `~/.sovereign/config.toml` is local (not in repo); the two config fixes (models, `alternation_grammar=false`) live there. Repo defaults are already correct (`setup_config.rs:498`).

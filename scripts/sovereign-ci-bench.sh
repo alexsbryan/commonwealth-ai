@@ -76,6 +76,11 @@ AGENT_BIN="${SOVEREIGN_AGENT_BENCH:-target/debug/sovereign-agent-bench}"
 SEARCH_GYM_FIXTURES="07_multicorpus_tangential_local 08_multicorpus_stale_local 09_multicorpus_topical_mismatch 10_multicorpus_contradicting_local"
 KNOWLEDGE_GYM_FIXTURES="08_escalation_when_corpus_empty 10_cache_hit_on_repeat_query 11_multi_call_assembly"
 AGENT_PROBLEMS="${AGENT_PROBLEMS:-3.2-lights-out,3.2-lights-out-python,5.1-minilang-multifile-python}"
+# agent-bench's built-in default --model is `commonwealth/coder`, which no node
+# in the corrected stack advertises (→ every judge/agent call 503s → a floored
+# 0/27 that hides regressions). Pin it to the primary slot the daemon actually
+# serves; override with AGENT_MODEL for a dedicated coder model.
+AGENT_MODEL="${AGENT_MODEL:-commonwealth/primary}"
 
 # Core corpora the suite gates on (must be installed/queryable). Filters target
 # specific benches that are installed + baselined on a standard dev box — NOT
@@ -299,10 +304,26 @@ run_lane "knowledge-gym-gate" HARD \
 # iterate). The costly lane (~10-15m for the 3 hardest problems), so it's last:
 # the run_lane budget guard skips it first under a squeeze, protecting the
 # cheaper lanes. Separate binary; gated on grand_total/max_total.
+#
+# DAEMON CONFIG REQUIREMENT (2026-06-08): this lane needs the daemon started
+# with SOVEREIGN_FORCE_TOOL_CALLS=1 — otherwise the model emits ~100 tokens of
+# plain text and pi's zero-tool-call exit fires immediately (a floored ~3/27
+# that hides regressions; see inference_adapter.rs:722). That flag is
+# DAEMON-GLOBAL and forces a tool call on EVERY tools-bearing request, which
+# regresses search-gym's "don't search when unnecessary" judiciousness — so
+# agent-coding cannot share a daemon with the gym/chaos lanes. Run it in its
+# OWN daemon pass:
+#   sovereign daemon stop && SOVEREIGN_FORCE_TOOL_CALLS=1 \
+#     SOVEREIGN_DISABLE_AUTO_RESUME=1 sovereign daemon start
+# The clean (force-off) daemon is correct for every OTHER lane. The proper fix
+# that lets one daemon serve both is repairing the alternation grammar's
+# text|tool_envelope escape (CI_GATE_HANDOFF Step 2 #2) so tool-or-text per
+# turn works without the loop-trap — then FORCE_TOOL_CALLS is unnecessary and
+# the agent terminates cleanly instead of write-thrashing.
 if [[ -x "$AGENT_BIN" ]]; then
   run_lane "agent-coding" TRACKED \
     "$AGENT_BIN" run --problems "$AGENT_PROBLEMS" --judge-trials 1 \
-      --report "$REPORT_DIR/agent-coding.json"
+      --model "$AGENT_MODEL" --report "$REPORT_DIR/agent-coding.json"
   run_lane "agent-coding-gate" HARD \
     "$BIN" bench gate agent-coding --report "$REPORT_DIR/agent-coding.json" \
       --bench-root "$BENCH_ROOT" $UPDATE_BASELINE

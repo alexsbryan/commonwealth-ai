@@ -1,16 +1,16 @@
 {
   "lane": "multiturn",
-  "captured_at": "2026-06-08T08:19:02.420382+00:00",
+  "captured_at": "2026-06-08T21:40:52.528264+00:00",
   "corpus": "wikipedia",
   "note": "16 threads · bank=wikipedia-learn-v0 · judge coverage on 16/16 threads",
   "metrics": {
     "mean_fact_recall_slope": {
-      "value": -0.08446615860461593,
+      "value": -0.10659991055913083,
       "direction": "higher_is_better",
       "tolerance": 0.05
     },
     "mean_judge_coverage": {
-      "value": 0.8191478885710239,
+      "value": 0.7635886184871197,
       "direction": "higher_is_better",
       "tolerance": 0.1
     },
