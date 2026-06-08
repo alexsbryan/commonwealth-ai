@@ -555,6 +555,20 @@ impl Runtime {
             chunks.extend(atom_chunks);
         }
 
+        // 2c''. RAPTOR collapsed-tree grounding (env-gated
+        //       SOVEREIGN_RAPTOR_GROUNDING). Injects the queried corpus's
+        //       top-M summary nodes as virtual chunks so a query can match a
+        //       whole-document / section SUMMARY, not just leaf chunks.
+        //       Post-floor like atom-enum (summaries carry no query-token
+        //       overlap). See `apply_raptor_grounding`.
+        self.apply_raptor_grounding(
+            &embedding,
+            &mut chunks,
+            "KnowledgeQuery",
+            context.conversation.enabled_corpora.as_deref(),
+        )
+        .await;
+
         // 2d. Atlas grounding — graph-walk navigation when the
         //     provider exposes the graph layer; bag-of-atoms top-K
         //     fallback otherwise. See `apply_atlas_grounding` for
@@ -652,6 +666,7 @@ impl Runtime {
         // Pin it like the title-expand selection — the atlas chose
         // these chunks; the merge sort must not silently demote them.
         chunks = reserve_atom_enum_chunks(chunks);
+        chunks = reserve_raptor_chunks(chunks);
         audit_pipeline_stage(&chunks, "after_cap_and_reserve", message);
         chunks.truncate(KQ_MERGED_LIMIT);
         audit_pipeline_stage(&chunks, "after_truncate", message);

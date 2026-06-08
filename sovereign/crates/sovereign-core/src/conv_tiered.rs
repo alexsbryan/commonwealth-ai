@@ -221,6 +221,15 @@ pub trait ConvTieredReader: Send + Sync {
         conv_uuid: &str,
     ) -> crate::error::Result<Vec<ConvRaptorNodeRow>>;
 
+    /// Every RAPTOR node for a corpus at or above `min_level` (0 = all,
+    /// incl. leaves). The corpus-wide collapsed-tree pool for query-time
+    /// cosine grounding — see `Runtime::apply_raptor_grounding`.
+    async fn list_corpus_raptor_nodes(
+        &self,
+        corpus_id: &str,
+        min_level: i64,
+    ) -> crate::error::Result<Vec<ConvRaptorNodeRow>>;
+
     /// All `chunk_entities` rows for one conversation. Returned in
     /// `(chunk_id ASC, char_start ASC)` order so consumers building
     /// the entity graph see entities in their natural document

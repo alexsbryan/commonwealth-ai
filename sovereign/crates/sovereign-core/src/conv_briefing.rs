@@ -767,6 +767,13 @@ mod tests {
         ) -> crate::error::Result<Vec<ConvRaptorNodeRow>> {
             Ok(Vec::new())
         }
+        async fn list_corpus_raptor_nodes(
+            &self,
+            _corpus_id: &str,
+            _min_level: i64,
+        ) -> crate::error::Result<Vec<ConvRaptorNodeRow>> {
+            Ok(Vec::new())
+        }
         async fn list_chunk_entities_for_conv(
             &self,
             _corpus_id: &str,
