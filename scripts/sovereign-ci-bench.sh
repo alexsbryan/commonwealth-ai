@@ -58,6 +58,14 @@ CHAOS_MANIFEST="$BENCH_ROOT/chaos_monkey/manifest.toml"
 # path-hash `watched-<hash>` id). Empty falls back to the bank's [meta].corpus.
 CHAOS_CORPUS="${CHAOS_CORPUS:-chaos-secret-agent}"
 MF_MODELS="${MF_MODELS:-primary}"
+# Fidelity-Flywheel promote lane (Lane 7) — OPT-IN. A normal CI run never turns
+# the loop; set FLYWHEEL_PARAM (e.g. "rerank.enabled=true") + FLYWHEEL_CORPUS to
+# enable it, FLYWHEEL_MINE_PATH for Present probes, FLYWHEEL_ABSENT_BANK for the
+# abstain path, and FLYWHEEL_APPLY=1 to auto-apply a passing RerankConfig win.
+FLYWHEEL_PARAM="${FLYWHEEL_PARAM:-}"
+FLYWHEEL_CORPUS="${FLYWHEEL_CORPUS:-$CHAOS_CORPUS}"
+FLYWHEEL_MINE_PATH="${FLYWHEEL_MINE_PATH:-}"
+FLYWHEEL_ABSENT_BANK="${FLYWHEEL_ABSENT_BANK:-$CHAOS_BANK}"
 
 # Core corpora the suite gates on (must be installed/queryable). Filters target
 # specific benches that are installed + baselined on a standard dev box — NOT
@@ -231,6 +239,22 @@ if [[ -n "${THREAD_BANK:-}" ]]; then
   run_lane "multiturn-gate" HARD \
     "$BIN" bench gate multiturn --report "$REPORT_DIR/threads.json" \
       --bench-root "$BENCH_ROOT" $UPDATE_BASELINE
+fi
+
+# ── Lane 7: fidelity flywheel — propose + gate a scaffolding param (TRACKED) ──
+# OPT-IN (skipped unless FLYWHEEL_PARAM is set). Runs the foundational closed
+# loop on the chaos corpus: paired baseline/candidate arms on the Dev split,
+# diffed by the SAME baseline-relative gate the chaos lane uses. Advisory by
+# default (proposes); FLYWHEEL_APPLY=1 auto-applies a passing RerankConfig win.
+# The existing chaos-gate HARD lane stays the build-breaker; this lane never
+# fails the build on its own (TRACKED).
+if [[ -n "$FLYWHEEL_PARAM" ]]; then
+  FLYWHEEL_ARGS=(--param "$FLYWHEEL_PARAM" --corpus "$FLYWHEEL_CORPUS" --bench-root "$BENCH_ROOT")
+  [[ -n "$FLYWHEEL_MINE_PATH" ]] && FLYWHEEL_ARGS+=(--mine-path "$FLYWHEEL_MINE_PATH")
+  [[ -n "$FLYWHEEL_ABSENT_BANK" ]] && FLYWHEEL_ARGS+=(--absent-bank "$FLYWHEEL_ABSENT_BANK")
+  [[ -n "${FLYWHEEL_APPLY:-}" ]] && FLYWHEEL_ARGS+=(--apply)
+  run_lane "flywheel-promote" TRACKED \
+    "$BIN" bench promote "${FLYWHEEL_ARGS[@]}"
 fi
 
 # ── Verdict ─────────────────────────────────────────────────────────────────

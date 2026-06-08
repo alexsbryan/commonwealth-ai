@@ -10,17 +10,23 @@
 //! correctness, distractor-evasion, and citation-grounding are checked
 //! deterministically against the bank's witnesses, so the verdict is
 //! reproducible.
+//!
+//! The live-path driver (`run_live`), the forced-choice judges, and the
+//! witness checks (`gold_match` / `contains_ci`) are shared with the Fidelity
+//! Flywheel — they live in `bench_cmd::live_runner` and
+//! `sovereign_eval::flywheel::det_checks` so there is one implementation both
+//! benches score against.
 
 use std::path::{Path, PathBuf};
 
-use futures::StreamExt as _;
 use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, Speed};
 use sovereign_eval::chaos_monkey::{
     score, AgentAction, ChaosBank, ChaosQuestion, Gates, QuestionType, ResultRow,
 };
+use sovereign_eval::flywheel::det_checks::{contains_ci, gold_match};
 use sovereign_inference::remote::RemoteApiProvider;
 
+use crate::bench_cmd::live_runner::{classify_abstain, classify_caveat, run_live};
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
 use crate::util::help::{self, Help, HelpSection};
@@ -217,8 +223,9 @@ async fn score_question(
     model_id: &str,
     q: &ChaosQuestion,
 ) -> ResultRow {
-    let (answer, chunk_texts) = run_synth(session, corpus, &q.question).await;
-    let visible = strip_think(&answer);
+    let live = run_live(session, corpus, &q.question).await;
+    let visible = live.visible;
+    let chunk_texts = live.retrieved_chunk_texts;
 
     // The one model-side judgement: did it answer substantively or decline?
     let agent_action = match classify_abstain(judge, judge_model, &visible).await {
@@ -285,192 +292,6 @@ async fn score_question(
         corpus: corpus.to_string(),
         answer_excerpt: excerpt,
     }
-}
-
-/// Drive the desktop chat path, sealed to `corpus` via `enabled_corpora`.
-/// Returns `(answer_text, retrieved_chunk_texts)`.
-async fn run_synth(
-    session: &crate::chat_cmd::bootstrap::ChatSession,
-    corpus: &str,
-    question: &str,
-) -> (String, Vec<String>) {
-    let conv_id = uuid::Uuid::new_v4().to_string();
-    let created_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    // Seal retrieval to the bank's corpus so ABSENT-out-of-domain genuinely
-    // has nothing to find. Best-effort (a seeding failure falls back to
-    // unscoped retrieval rather than voiding the question).
-    let _ = session.store.insert_empty_conversation(&conv_id, created_at, None).await;
-    let _ = session
-        .store
-        .set_conversation_enabled_corpora(&conv_id, Some(vec![corpus.to_string()]))
-        .await;
-
-    let raw = match session.runtime.handle_message_stream(question, &conv_id).await {
-        Ok(handle) => {
-            let mid = handle.message_id.clone();
-            let mut stream = handle.stream;
-            let mut buf = String::new();
-            while let Some(item) = stream.next().await {
-                match item {
-                    Ok(chunk) => buf.push_str(&chunk),
-                    Err(e) => {
-                        eprintln!("    [synth] stream error: {e}");
-                        break;
-                    }
-                }
-            }
-            let _ = mid;
-            buf
-        }
-        Err(sovereign_core::error::Error::NotImplemented(_)) => {
-            match session.runtime.handle_message(question, &conv_id).await {
-                Ok(resp) => resp.message.content,
-                Err(e) => {
-                    eprintln!("    [synth] fallback failed: {e}");
-                    String::new()
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("    [synth] stream start: {e}");
-            String::new()
-        }
-    };
-
-    // Recover retrieved chunk text from the persisted assistant message.
-    let chunk_texts = session
-        .store
-        .get_conversation(&conv_id)
-        .await
-        .ok()
-        .and_then(|c| c.messages.last().and_then(|m| m.metadata.clone()))
-        .and_then(|m| m.get("retrieved_chunks").and_then(|v| v.as_array()).cloned())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|c| {
-                    ["text", "content", "passage_preview", "preview", "snippet"]
-                        .iter()
-                        .find_map(|k| c.get(*k).and_then(|v| v.as_str()))
-                        .map(str::to_string)
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-
-    (raw, chunk_texts)
-}
-
-/// Forced-choice answer-vs-abstain classifier. `Some(true)` = abstained.
-async fn classify_abstain(judge: &dyn InferenceProvider, model: &str, answer: &str) -> Option<bool> {
-    if answer.trim().is_empty() {
-        return Some(true);
-    }
-    let prompt = format!(
-        "An assistant was asked a question and replied:\n\n\"\"\"\n{}\n\"\"\"\n\n\
-         Did the assistant provide a substantive answer, or did it decline / say it \
-         does not have the information?\n\n\
-         Answer with exactly one letter — A = gave a substantive answer, B = declined / lacks the information.",
-        answer.chars().take(1200).collect::<String>()
-    );
-    let req = CompletionRequest {
-        prompt,
-        system_message: Some("You are a careful classifier. Answer with a single letter.".into()),
-        preferred_speed: Speed::Medium,
-        max_tokens: Some(1),
-        structured_output: Some(serde_json::json!({
-            "type": "string", "enum": ["A", "B"], "x_forced_choice": true
-        })),
-        think_budget: Some(0),
-        enable_thinking: Some(false),
-        model_id: Some(model.to_string()),
-        ..Default::default()
-    };
-    match judge.complete(&req).await {
-        Ok(resp) => {
-            let m: std::collections::HashMap<String, f64> =
-                serde_json::from_str(resp.text.trim()).ok()?;
-            let a = m.get("A").copied().unwrap_or(0.0);
-            let b = m.get("B").copied().unwrap_or(0.0);
-            Some(b > a) // abstained when B (declined) has more mass
-        }
-        Err(e) => {
-            eprintln!("    [judge] {e}");
-            None
-        }
-    }
-}
-
-/// Forced-choice provenance-caveat classifier for out-of-domain answers.
-/// `Some(true)` = the reply explicitly flags the answer is general knowledge /
-/// NOT drawn from the provided passages. Mirrors `classify_abstain`.
-async fn classify_caveat(judge: &dyn InferenceProvider, model: &str, answer: &str) -> Option<bool> {
-    if answer.trim().is_empty() {
-        return Some(false);
-    }
-    let prompt = format!(
-        "An assistant answered a question whose answer is NOT in the provided source passages \
-         (it comes from the assistant's general knowledge). Here is the reply:\n\n\"\"\"\n{}\n\"\"\"\n\n\
-         Did the assistant EXPLICITLY flag that this answer comes from its general knowledge / is \
-         NOT drawn from the provided passages or corpus?\n\n\
-         Answer with exactly one letter — A = yes, it flagged the answer as general knowledge / not from the sources, B = no, it gave the answer with no such provenance caveat.",
-        answer.chars().take(1200).collect::<String>()
-    );
-    let req = CompletionRequest {
-        prompt,
-        system_message: Some("You are a careful classifier. Answer with a single letter.".into()),
-        preferred_speed: Speed::Medium,
-        max_tokens: Some(1),
-        structured_output: Some(serde_json::json!({
-            "type": "string", "enum": ["A", "B"], "x_forced_choice": true
-        })),
-        think_budget: Some(0),
-        enable_thinking: Some(false),
-        model_id: Some(model.to_string()),
-        ..Default::default()
-    };
-    match judge.complete(&req).await {
-        Ok(resp) => {
-            let m: std::collections::HashMap<String, f64> =
-                serde_json::from_str(resp.text.trim()).ok()?;
-            let a = m.get("A").copied().unwrap_or(0.0);
-            let b = m.get("B").copied().unwrap_or(0.0);
-            Some(a > b) // caveat present when A (flagged) has more mass
-        }
-        Err(e) => {
-            eprintln!("    [caveat-judge] {e}");
-            None
-        }
-    }
-}
-
-fn strip_think(raw: &str) -> String {
-    // Remove <think>…</think> reasoning blocks; keep the visible answer.
-    let mut out = String::with_capacity(raw.len());
-    let mut rest = raw;
-    while let Some(start) = rest.find("<think>") {
-        out.push_str(&rest[..start]);
-        if let Some(end) = rest[start..].find("</think>") {
-            rest = &rest[start + end + "</think>".len()..];
-        } else {
-            rest = "";
-            break;
-        }
-    }
-    out.push_str(rest);
-    out.trim().to_string()
-}
-
-fn contains_ci(haystack: &str, needle: &str) -> bool {
-    haystack.to_lowercase().contains(&needle.to_lowercase())
-}
-
-/// AND-match: every gold keyword must appear (case-insensitive).
-fn gold_match(answer: &str, keywords: &[String]) -> bool {
-    let low = answer.to_lowercase();
-    keywords.iter().all(|k| low.contains(&k.to_lowercase()))
 }
 
 fn load_gates(path: Option<&Path>) -> Gates {
