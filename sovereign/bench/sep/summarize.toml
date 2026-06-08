@@ -1,0 +1,233 @@
+[bank]
+name = "sep-summarize-v1"
+corpus = "sep"
+description = """
+Whole-work SUMMARIZATION bank — the axis RAPTOR is actually built for.
+
+The sibling `questions.toml` measures source-coverage breadth (which specific
+SEP entries got retrieved) — a metric that structurally penalizes doc-level
+summaries, because a summary trades article-breadth for whole-work synthesis.
+This bank measures the opposite and correct axis for RAPTOR: given a "summarize
+the whole topic" prompt, does the answer COVER the major themes of the work, or
+just the corner the leaf chunks happened to retrieve?
+
+Mechanism under test: a chunk-collage summary covers only the ~K leaf chunks it
+pulled (one section of a long entry); RAPTOR's collapsed-tree root/intermediate
+summaries are designed to represent the WHOLE entry. So theme-coverage is the
+discriminating measure.
+
+Method (zero new harness code): the questions are "comprehensive overview"
+prompts; `expected_facts` are the work's major canonical themes. Under
+`--synth`, the strict + LLM-judge fact scorers then measure *theme coverage* of
+the generated summary — facts-judge (paraphrase-tolerant) is the headline
+number. Run A/B on `SOVEREIGN_RAPTOR_GROUNDING` (0 vs 1), same as the SEP bench.
+
+Theme authoring note: themes are canonical for each topic, not corpus-derived.
+That's fine — the A/B is RELATIVE (same themes both arms), so any theme that is
+slightly off-corpus depresses both arms equally and cancels out of the delta.
+Works chosen for the richest RAPTOR trees (longest, most-multi-section entries,
+16–23 nodes) — exactly where chunk-RAG whole-work summarization is hardest.
+
+v1 (2026-06-08): 8 works, ~10 themes each. Faithfulness/hallucination scoring
+is a v2 gap (the strict+judge scorers measure coverage, not grounding).
+"""
+
+[bank.latency_budget]
+default_p95_ms = 60000
+max_per_question_ms = 120000
+
+[[questions]]
+id = "summary_idealism"
+category = "comprehensive_summary"
+subject = "metaphysics"
+question = """
+Provide a comprehensive overview of idealism as a philosophical position.
+Cover its central claims, the major varieties and the figures associated with
+them, the principal arguments for it, and the main lines of criticism. Aim for
+breadth across the whole topic rather than depth on any single point.
+"""
+expected_facts = [
+    "mind-dependence of reality",
+    "Berkeley",
+    "esse est percipi",
+    "Kant transcendental idealism",
+    "Hegel absolute idealism",
+    "German idealism",
+    "Fichte",
+    "subjective versus objective idealism",
+    "rejection of mind-independent matter",
+    "realism as the opposing view",
+]
+expected_sources = ["idealism"]
+notes = "Broad metaphysics entry; tests breadth across Berkeley/Kant/Hegel varieties."
+
+[[questions]]
+id = "summary_cosmological_argument"
+category = "comprehensive_summary"
+subject = "philosophy_of_religion"
+question = """
+Give a comprehensive overview of the cosmological argument for the existence of
+God. Cover the major forms the argument takes, its key premises, the principal
+figures, and the most important objections. Aim for breadth across the whole
+topic.
+"""
+expected_facts = [
+    "argument from contingency",
+    "first cause",
+    "Kalam cosmological argument",
+    "principle of sufficient reason",
+    "Leibniz",
+    "infinite regress",
+    "necessary being",
+    "Aquinas",
+    "Hume objection",
+    "Kant objection",
+]
+expected_sources = ["cosmological-argument"]
+notes = "Classic natural-theology entry with well-delineated argument forms."
+
+[[questions]]
+id = "summary_problem_of_evil"
+category = "comprehensive_summary"
+subject = "philosophy_of_religion"
+question = """
+Provide a comprehensive overview of the problem of evil in philosophy of
+religion. Cover the main formulations of the problem, the principal responses
+and defenses, and the key figures. Aim for breadth across the whole topic.
+"""
+expected_facts = [
+    "logical problem of evil",
+    "evidential problem of evil",
+    "theodicy",
+    "free will defense",
+    "soul-making theodicy",
+    "natural versus moral evil",
+    "skeptical theism",
+    "omnipotence omniscience omnibenevolence",
+    "Plantinga",
+    "gratuitous suffering",
+]
+expected_sources = ["evil"]
+notes = "Tests coverage of logical/evidential split + the major theodicies."
+
+[[questions]]
+id = "summary_descartes_epistemology"
+category = "comprehensive_summary"
+subject = "epistemology"
+question = """
+Provide a comprehensive overview of Descartes's epistemology. Cover his method,
+his foundational certainties, the role of God, and the principal difficulties
+that have been raised. Aim for breadth across the whole topic.
+"""
+expected_facts = [
+    "method of doubt",
+    "cogito ergo sum",
+    "foundationalism",
+    "clear and distinct ideas",
+    "evil demon",
+    "Cartesian circle",
+    "God as guarantor of truth",
+    "dream argument",
+    "rationalism",
+    "indubitable foundation",
+]
+expected_sources = ["descartes-epistemology"]
+notes = "Tests method-of-doubt → cogito → God → circle arc."
+
+[[questions]]
+id = "summary_mill_moral_political"
+category = "comprehensive_summary"
+subject = "ethics"
+question = """
+Provide a comprehensive overview of John Stuart Mill's moral and political
+philosophy. Cover his utilitarianism, his political principles, and his major
+works and positions. Aim for breadth across the whole topic.
+"""
+expected_facts = [
+    "utilitarianism",
+    "greatest happiness principle",
+    "harm principle",
+    "individual liberty",
+    "higher and lower pleasures",
+    "freedom of expression",
+    "representative government",
+    "qualitative hedonism",
+    "the subjection of women",
+    "tyranny of the majority",
+]
+expected_sources = ["mill-moral-political"]
+notes = "Spans ethics (utilitarianism) and political philosophy (liberty)."
+
+[[questions]]
+id = "summary_conservatism"
+category = "comprehensive_summary"
+subject = "political_philosophy"
+question = """
+Provide a comprehensive overview of conservatism as a political philosophy.
+Cover its central commitments, its principal theorists, and the way it differs
+from rival traditions. Aim for breadth across the whole topic.
+"""
+expected_facts = [
+    "Edmund Burke",
+    "tradition and inherited wisdom",
+    "skepticism of abstract reason",
+    "organic society",
+    "gradual incremental change",
+    "Oakeshott",
+    "anti-rationalism",
+    "critique of revolution",
+    "prejudice as accumulated wisdom",
+    "contrast with liberalism",
+]
+expected_sources = ["conservatism"]
+notes = "Tests Burke + the anti-rationalist tradition + varieties."
+
+[[questions]]
+id = "summary_game_theory"
+category = "comprehensive_summary"
+subject = "logic_decision"
+question = """
+Provide a comprehensive overview of game theory as it bears on philosophy.
+Cover the core solution concepts, the canonical games, the main distinctions in
+how games are modeled, and the principal applications. Aim for breadth across
+the whole topic.
+"""
+expected_facts = [
+    "Nash equilibrium",
+    "prisoner's dilemma",
+    "dominant strategies",
+    "cooperative versus non-cooperative games",
+    "extensive and normal form",
+    "mixed strategies",
+    "backward induction",
+    "common knowledge of rationality",
+    "zero-sum games",
+    "applications to social science",
+]
+expected_sources = ["game-theory"]
+notes = "Formal entry; tests coverage of solution concepts + modeling distinctions."
+
+[[questions]]
+id = "summary_infinity"
+category = "comprehensive_summary"
+subject = "philosophy_of_mathematics"
+question = """
+Provide a comprehensive overview of the philosophy of the infinite. Cover the
+central distinctions, the major historical and mathematical developments, the
+key paradoxes, and the principal figures. Aim for breadth across the whole
+topic.
+"""
+expected_facts = [
+    "actual versus potential infinity",
+    "Cantor",
+    "transfinite numbers",
+    "Zeno's paradoxes",
+    "the continuum",
+    "Aristotle on potential infinity",
+    "set-theoretic infinity",
+    "infinitesimals",
+    "one-to-one correspondence",
+    "cardinality",
+]
+expected_sources = ["infinity"]
+notes = "Philosophy-of-math entry; tests actual/potential + Cantorian breadth."

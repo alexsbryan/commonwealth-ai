@@ -1854,6 +1854,26 @@ impl Runtime {
             return;
         }
         scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        // Optional dedupe-by-article (SOVEREIGN_RAPTOR_DEDUPE=1, default off).
+        // A long entry has summaries at every tree level — level-0 leaf
+        // clusters through the level-N root — all keyed to the same slug, and
+        // all score high on a query about that entry. On a source-coverage QA
+        // query that lets one article flood the top-M (observed: goedel ×6,
+        // kant-hume-causality ×7 in one 8-slot injection), so deduping to M
+        // *distinct* works improves QA diversity. BUT for whole-work SUMMARY
+        // intent those multi-level nodes are COMPLEMENTARY (each summarizes a
+        // different section), so deduping costs summary depth — hence opt-in,
+        // not default. Additive truncation (the merge sites) already removes
+        // the displacement harm without this tradeoff; intent-conditional
+        // dedupe is the proper long-term home once a summary-intent signal
+        // exists. Kept as a flag so the two levers stay independently testable.
+        let dedupe_by_article = std::env::var("SOVEREIGN_RAPTOR_DEDUPE")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        if dedupe_by_article {
+            let mut seen = std::collections::HashSet::new();
+            scored.retain(|(_, node)| seen.insert(node.conv_uuid.clone()));
+        }
         scored.truncate(top_m);
         let added = scored.len();
         for (score, node) in scored {
@@ -3230,7 +3250,14 @@ impl Runtime {
         // synthesis. See `reserve_atom_enum_chunks`.
         all_chunks = reserve_atom_enum_chunks(all_chunks);
         all_chunks = reserve_raptor_chunks(all_chunks);
-        all_chunks.truncate(KQ_MERGED_LIMIT);
+        // Additive RAPTOR — see the KnowledgeQuery merge site for the full
+        // rationale: grant reserved collapsed-tree summaries slots on top of
+        // the leaf budget so they supplement rather than displace leaf chunks.
+        let raptor_n = all_chunks
+            .iter()
+            .filter(|c| c.metadata.get("source").map(|s| s == "raptor").unwrap_or(false))
+            .count();
+        all_chunks.truncate(KQ_MERGED_LIMIT + raptor_n);
 
         // Multi-source cohesion expansion. DeepQuery is the path
         // multi-article synthesis questions take, so this is exactly
@@ -3499,28 +3526,7 @@ impl Runtime {
         // chunk_id and source_doc_id are emitted (when present) so the
         // desktop reading surface can deref a citation back to the
         // source chunk for in-app reading + atom-graph overlay.
-        let retrieved_chunks: Vec<serde_json::Value> = all_chunks
-            .iter()
-            .map(|c| {
-                let snippet = truncate_with_ellipsis(&c.content, 200);
-                // Conv-tiered PPR provenance (A3-lite) — emit the
-                // metadata map so the desktop SourceAttribution
-                // component can render an "↗ surfaced via entity
-                // bridge" subtitle on chunks the entity graph
-                // boosted. Frontend gates on
-                // `metadata.ppr_mass_norm > 0.5`.
-                serde_json::json!({
-                    "title": c.title.as_deref().unwrap_or(""),
-                    "corpus_id": c.corpus_id,
-                    "url": c.url,
-                    "snippet": snippet,
-                    "provenance_tier": if c.url.is_some() { "web" } else { "corpus" },
-                    "chunk_id": c.chunk_id,
-                    "source_doc_id": c.source_doc_id,
-                    "metadata": c.metadata,
-                })
-            })
-            .collect();
+        let retrieved_chunks = project_retrieved_chunks(&all_chunks);
 
         KnowledgeContext {
             chunks: all_chunks,

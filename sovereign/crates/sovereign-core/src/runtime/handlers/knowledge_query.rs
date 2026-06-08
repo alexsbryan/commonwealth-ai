@@ -668,7 +668,19 @@ impl Runtime {
         chunks = reserve_atom_enum_chunks(chunks);
         chunks = reserve_raptor_chunks(chunks);
         audit_pipeline_stage(&chunks, "after_cap_and_reserve", message);
-        chunks.truncate(KQ_MERGED_LIMIT);
+        // Additive RAPTOR: the collapsed-tree summaries are reserved to the
+        // front, so a plain truncate(LIMIT) lets them DISPLACE leaf chunks —
+        // tolerable for whole-work summary intent, but it costs specific-
+        // article source coverage on QA (measured −14pts on the SEP bench:
+        // tangential summaries crowding out canonical leaf chunks). Grant the
+        // summaries slots ON TOP of the full leaf budget so they supplement
+        // rather than crowd out. raptor_n ≤ SOVEREIGN_RAPTOR_TOP_M (fewer when
+        // SOVEREIGN_RAPTOR_DEDUPE collapses an entry's multi-level nodes).
+        let raptor_n = chunks
+            .iter()
+            .filter(|c| c.metadata.get("source").map(|s| s == "raptor").unwrap_or(false))
+            .count();
+        chunks.truncate(KQ_MERGED_LIMIT + raptor_n);
         audit_pipeline_stage(&chunks, "after_truncate", message);
 
         // Naturalistic audit — post-merge composition. Answers "after
@@ -1197,22 +1209,7 @@ impl Runtime {
         // 4f. Build retrieved_chunks summaries for the UI citation
         // expander. Same shape `prepare_knowledge_context` produces so
         // the frontend renders both paths identically.
-        let retrieved_chunks: Vec<serde_json::Value> = chunks
-            .iter()
-            .map(|c| {
-                let snippet = truncate_with_ellipsis(&c.content, 200);
-                serde_json::json!({
-                    "title": c.title.as_deref().unwrap_or(""),
-                    "corpus_id": c.corpus_id,
-                    "url": c.url,
-                    "snippet": snippet,
-                    "score": c.score,
-                    "provenance_tier": if c.url.is_some() { "web" } else { "corpus" },
-                    "chunk_id": c.chunk_id,
-                    "source_doc_id": c.source_doc_id,
-                })
-            })
-            .collect();
+        let retrieved_chunks = project_retrieved_chunks(&chunks);
 
         let mut source_map: HashMap<String, usize> = HashMap::new();
         for c in &chunks {
