@@ -30,12 +30,16 @@ mod book_report;
 mod chaos_monkey;
 mod discover;
 mod enron;
+mod flywheel;
 mod gate;
 mod lane_baseline;
+mod live_runner;
 mod mechanism_fidelity;
 mod obsidian;
+mod promote;
 mod render;
 mod scaffold;
+mod scaffolding_param;
 mod uap;
 
 use crate::util::help::{self, Help, HelpSection};
@@ -65,6 +69,14 @@ const HELP: Help = Help {
             (
                 "mechanism-fidelity",
                 "Metamorphic audit of whether an agent's wealth-tax relocation decisions track the causal mechanism (P1 collapse / P2 saturation / I1 invariance) vs the label, with a feature-stripped negative control.",
+            ),
+            (
+                "flywheel",
+                "Fidelity-Flywheel read side: generate probes from a corpus (I1), run them through the live chat path, verify groundedness/abstention against the witness, capture failures as regression cases.",
+            ),
+            (
+                "promote",
+                "Fidelity-Flywheel write side: propose a retrieval scaffolding change, gate it on a held-out pool via paired baseline/candidate arms, apply it on a pass (atoms-decoupled, in-process).",
             ),
             (
                 "book-report",
@@ -113,6 +125,8 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "book-report" => book_report::cmd_book_report(&args[1..]).await,
         "chaos-monkey" => chaos_monkey::cmd_chaos_monkey(&args[1..]).await,
         "enron" => enron::cmd_enron(&args[1..]).await,
+        "flywheel" => flywheel::cmd_flywheel(&args[1..]).await,
+        "promote" => promote::cmd_promote(&args[1..]).await,
         "mechanism-fidelity" => mechanism_fidelity::cmd_mechanism_fidelity(&args[1..]).await,
         "obsidian" => obsidian::cmd_obsidian(&args[1..]).await,
         "scaffold" => scaffold::cmd_scaffold(&args[1..]).await,

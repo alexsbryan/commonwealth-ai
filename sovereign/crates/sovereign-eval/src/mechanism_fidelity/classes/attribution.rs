@@ -36,19 +36,12 @@ use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
 
+use crate::flywheel::mining::mine_claims;
 use crate::mechanism_fidelity::class::{prob_of, ReasoningClass, RenderedProbe};
 use crate::mechanism_fidelity::perturb::PerturbKind;
 
 #[derive(Debug, Default)]
 pub struct AttributionSupport;
-
-/// One mined claim with a genuine supporting excerpt.
-#[derive(Debug, Clone)]
-struct MinedClaim {
-    id: String,
-    content: String,
-    excerpt: String,
-}
 
 impl AttributionSupport {
     /// Negate the supporting excerpt so it contradicts the claim. A
@@ -85,77 +78,6 @@ impl AttributionSupport {
         };
         format!("{body}\n\nAnswer with exactly one letter — A = supported, B = unsupported.")
     }
-
-    /// True when the claim text already contains the excerpt (or vice
-    /// versa) — such a claim would let the blindfolded control self-verify,
-    /// so it is excluded from the battery.
-    fn cheatable(content: &str, excerpt: &str) -> bool {
-        let c = content.to_lowercase();
-        let e = excerpt.to_lowercase();
-        // Substring either way, or a long shared run (the excerpt's first
-        // ~40 chars appearing in the claim).
-        if c.contains(&e) || e.contains(&c) {
-            return true;
-        }
-        let head: String = e.chars().take(40).collect();
-        head.len() >= 24 && c.contains(&head)
-    }
-}
-
-/// Load mined `Claim` atoms with genuine evidence from a corpus's
-/// `atlas/atoms.json`. Robust to mixed atom types (parses `data` lazily as
-/// JSON) and returns an empty vec on any I/O / shape problem so the
-/// orchestrator reports "no probes" rather than panicking.
-fn load_claims(corpus: &Path) -> Vec<MinedClaim> {
-    let path = corpus.join("atlas").join("atoms.json");
-    let Ok(text) = std::fs::read_to_string(&path) else {
-        return Vec::new();
-    };
-    let Ok(root) = serde_json::from_str::<serde_json::Value>(&text) else {
-        return Vec::new();
-    };
-    let Some(atoms) = root.get("atoms").and_then(|v| v.as_array()) else {
-        return Vec::new();
-    };
-
-    let mut out = Vec::new();
-    for a in atoms {
-        if a.get("atom_type").and_then(|v| v.as_str()) != Some("Claim") {
-            continue;
-        }
-        let Some(d) = a.get("data") else { continue };
-        let has_evidence = d
-            .get("evidence")
-            .and_then(|v| v.as_array())
-            .map(|e| !e.is_empty())
-            .unwrap_or(false);
-        if !has_evidence {
-            continue;
-        }
-        let id = d.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let content = d
-            .get("content")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .trim()
-            .to_string();
-        let excerpt = d
-            .get("quotable_excerpt")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .trim()
-            .to_string();
-        // A usable probe needs an id, a substantive claim, and a
-        // substantive excerpt that the claim doesn't already contain.
-        if id.is_empty() || content.len() < 12 || excerpt.len() < 12 {
-            continue;
-        }
-        if AttributionSupport::cheatable(&content, &excerpt) {
-            continue;
-        }
-        out.push(MinedClaim { id, content, excerpt });
-    }
-    out
 }
 
 impl ReasoningClass for AttributionSupport {
@@ -182,7 +104,9 @@ impl ReasoningClass for AttributionSupport {
         let Some(corpus) = corpus else {
             return Vec::new();
         };
-        let mut claims = load_claims(corpus);
+        // Strict: attribution needs a substantial standalone excerpt for its
+        // negate/reframe transforms, so it does NOT fall back to passage_preview.
+        let mut claims = mine_claims(corpus, false);
         if claims.is_empty() {
             return Vec::new();
         }
@@ -253,11 +177,14 @@ mod tests {
     use super::*;
     use std::io::Write;
 
-    /// Write a tiny atoms.json fixture and return its corpus root. Content
-    /// is identical across runs, so concurrent tests writing the same path
-    /// is harmless.
+    /// Write a tiny atoms.json fixture and return its corpus root. Each call
+    /// gets a UNIQUE dir: `File::create` truncates, so sharing one path races a
+    /// concurrent reader to an empty parse (an empty claim set → `probes[0]`
+    /// panics). Unique dirs remove the shared mutable state entirely.
     fn fixture_corpus() -> std::path::PathBuf {
-        let root = std::env::temp_dir().join("mf_attribution_unit_fixture");
+        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!("mf_attribution_unit_fixture_{n}"));
         let atlas = root.join("atlas");
         std::fs::create_dir_all(&atlas).unwrap();
         let atoms = serde_json::json!({
@@ -293,7 +220,7 @@ mod tests {
     #[test]
     fn mines_claims_and_excludes_cheatable_and_nonclaims() {
         let corpus = fixture_corpus();
-        let claims = load_claims(&corpus);
+        let claims = mine_claims(&corpus, false);
         let ids: Vec<&str> = claims.iter().map(|c| c.id.as_str()).collect();
         // The two genuine claims survive; the cheatable one (excerpt ==
         // content) and the non-Claim atom are excluded.

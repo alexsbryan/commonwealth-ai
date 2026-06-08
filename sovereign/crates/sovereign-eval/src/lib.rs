@@ -19,6 +19,7 @@ pub mod disposition_taxonomy;
 pub mod entity_resolution_bench;
 pub mod entity_resolution_score;
 pub mod finalize;
+pub mod flywheel;
 pub mod judge;
 pub mod manifest;
 pub mod mechanical;
