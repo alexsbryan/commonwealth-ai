@@ -72,7 +72,7 @@ vector = true                      # dense vector index
 # ── Optional: prebuilt cold-start snapshot (PrebuiltConfig) ──────────────────
 # Lets users skip a full ingest by downloading a prebuilt index.
 # [prebuilt]
-# hf_repo = "your-org/my-corpus-index"
+# hf_repo = "alexsbryan/my-corpus-index"
 # hf_filename = "my-corpus-qwen-embedding-0.6b.tar.zst"
 # sha256 = "…"
 # compatible_embedding_model = "qwen-embedding-0.6b"

@@ -50,7 +50,7 @@ from typing import Iterator, List, Set
 
 
 WIKI_API = "https://en.wikipedia.org/w/api.php"
-DEFAULT_UA = "sovereign-recipes/0.1 (https://github.com/your-org/sovereign-recipes; contact via PR)"
+DEFAULT_UA = "sovereign-recipes/0.1 (https://github.com/alexsbryan/sovereign-recipes; contact via PR)"
 
 
 def http_get_json(params: dict, ua: str, max_retries: int = 5) -> dict:

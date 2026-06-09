@@ -20,7 +20,7 @@ design evolved.
 ---
 
 **Status:** Draft v2, 2026-05-24. Pre-implementation review after ARCH_PRINCIPLES.md pass.
-**Owners:** your-org + claude
+**Owners:** alexsbryan + claude
 **Supersedes:** none
 **Superseded-by:** `TDD_MACHINE_DESIGN.md`
 **Related:** `sovereign/crates/sovereign-agent-bench/src/runners/search.rs`, `sovereign/ARCH_PRINCIPLES.md`
