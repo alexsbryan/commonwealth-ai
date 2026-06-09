@@ -1,5 +1,18 @@
 // ─── Command Response Types ──────────────────────────────────
 
+/// Structured error returned by migrated Tauri command handlers (§2D-3).
+/// Mirrors the Rust `DesktopError` wire shape exactly (see
+/// `src-tauri/src/error.rs`, pinned by a serialization test there);
+/// `invokeChecked` normalises every rejection to this so callers branch
+/// on `code` instead of parsing error strings.
+export type ErrorCode = "not_ready" | "invalid_request" | "upstream" | "internal";
+
+export interface DesktopError {
+  code: ErrorCode;
+  message: string;
+  suggested_action: string;
+}
+
 export interface MessageResponse {
   message_id: string;
   role: string;

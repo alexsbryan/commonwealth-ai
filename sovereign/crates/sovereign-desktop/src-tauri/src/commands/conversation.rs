@@ -412,6 +412,13 @@ pub async fn submit_information_search(
         "brave" => &["brave", "duckduckgo"][..],
         _ => &["duckduckgo"][..],
     };
+    // Glassbox (§9): record the backend decision + query *length* (never
+    // the query text, §9.3) so a stuck search is diagnosable from logs.
+    tracing::info!(
+        provider = %config_snapshot.search_backend.provider,
+        query_len = query.len(),
+        "submit_information_search: dispatching web search"
+    );
     let out = orchestrator
         .search(
             &client,
@@ -428,6 +435,11 @@ pub async fn submit_information_search(
         .await;
 
     if out.results.is_empty() {
+        tracing::warn!(
+            backend_id = %out.backend_id,
+            query_len = query.len(),
+            "submit_information_search: backend returned 0 results"
+        );
         // Treat as a soft failure surfaced to the UI. The pending
         // request stays open so the user can paste / skip / retry
         // with a tighter query without rebuilding the card.
@@ -437,6 +449,13 @@ pub async fn submit_information_search(
             out.backend_id,
         ));
     }
+
+    tracing::info!(
+        backend_id = %out.backend_id,
+        results = out.results.len(),
+        query_len = query.len(),
+        "submit_information_search: synthesizing from results"
+    );
 
     // Format as a paste-shaped block so the runtime's re-synthesis
     // path treats this identically to user-pasted content. Each

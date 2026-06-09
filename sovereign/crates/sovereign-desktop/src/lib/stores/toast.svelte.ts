@@ -20,6 +20,7 @@
 
 import type { StarterQuestion } from "../types";
 import { cleanExcerptTitle } from "../onboarding/excerpt_helpers";
+import { normalizeError } from "../errors";
 
 /// Shape of one active toast. Kept minimal — if more variants land
 /// we'll switch to a tagged union.
@@ -38,6 +39,19 @@ export interface Toast {
 }
 
 const DEFAULT_TTL_MS = 8000;
+
+/// Surface a (possibly structured) command failure as a toast (§2D-3).
+/// Any rejection from `invokeChecked` is already a `DesktopError`;
+/// legacy/string errors are normalised first. The `suggested_action`
+/// becomes the toast body so the user sees a next step, not just a
+/// failure line.
+export function toastError(e: unknown): void {
+  const err = normalizeError(e);
+  toastStore.notify({
+    title: err.message,
+    body: err.suggested_action || undefined,
+  });
+}
 
 let _current: Toast | null = $state(null);
 let _timer: ReturnType<typeof setTimeout> | null = null;

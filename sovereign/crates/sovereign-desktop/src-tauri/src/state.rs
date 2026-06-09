@@ -10,7 +10,7 @@ use corpus_engine_notes::NoteStore;
 use sovereign_core::health_monitor::HealthMonitor;
 use sovereign_core::insight::InsightService;
 use sovereign_core::model_family::{
-    EmbedModelInfo, ModelFamily, NormalizationStrategy, PoolingStrategy,
+    EmbedModelInfo, NormalizationStrategy, PoolingStrategy,
 };
 use sovereign_core::planner::LlmPlanner;
 use sovereign_core::router::LlmRouter;
@@ -18,7 +18,6 @@ use sovereign_core::runtime::Runtime;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::InferenceConfig;
 use sovereign_core::{SkillRegistry, ToolRegistry};
-use sovereign_inference::embedded::EmbeddedLlamaCpp;
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::local_corpus::LocalCorpusManager;
 use sovereign_tools::shell::ShellTool;
@@ -131,6 +130,22 @@ impl AppState {
             self.bootstrap_mode,
             crate::bootstrap::BootstrapMode::Attach { .. }
         )
+    }
+
+    /// Typed accessor for the chat `Runtime` (§2D-3 DesktopError). Returns
+    /// `DesktopError::not_ready` while bootstrap is still loading it, so a
+    /// handler can `state.runtime().await?` instead of the stringly
+    /// `require_runtime!` macro. Additive — the `runtime` field and the
+    /// macro both keep working during the incremental migration. Cloning
+    /// the `Arc` also avoids holding the `RwLock` read guard across the
+    /// handler's later `.await` points.
+    pub async fn runtime(&self) -> Result<Arc<Runtime>, crate::error::DesktopError> {
+        self.runtime
+            .read()
+            .await
+            .as_ref()
+            .map(Arc::clone)
+            .ok_or_else(|| crate::error::DesktopError::not_ready("The assistant is still loading."))
     }
 
     /// Construct `AppState` branching on the bootstrap mode probed at
@@ -270,159 +285,9 @@ pub async fn bootstrap_with_progress(
     //
     // Both share the same underlying weights — there's no double-
     // load. The wrapper is a thin router over an Arc clone.
-    let raw_inference: Arc<dyn InferenceProvider> = {
-        let existing = state.inference.read().await;
-        if let Some(ref inf) = *existing {
-            Arc::clone(inf)
-        } else {
-            drop(existing);
-            tracing::info!("Loading fast model: {}", config.model_path.display());
-            if let Some(ref ep) = config.embed_model_path {
-                tracing::info!("Loading embed model: {}", ep.display());
-            } else {
-                tracing::warn!(
-                    "No embedding model configured. Corpus install and RAG features \
-                     will be unavailable until you set Settings → Embedding model."
-                );
-            }
-
-            // Canonical chat-slot ctx lives in `~/.sovereign/config.toml`'s
-            // `[models].context_size` now (single source of truth, see the
-            // migration block in `DesktopConfig::load`). Read it here so
-            // the desktop-embedded `EmbeddedLlamaCpp` lines up with the
-            // value the daemon also uses. Fallback chain:
-            //   1. `SetupConfig::effective_context_size()` (daemon
-            //      canonical — explicit value, or daemon's 16384 default).
-            //   2. If `SetupConfig::load` errors at all (file missing /
-            //      malformed and not yet migrated), use the daemon-side
-            //      default directly so we still pass a non-zero ctx to
-            //      llama.
-            // 16384 matches `sovereign-core::setup_config::default_context_size`
-            // — the daemon's safe default for a 30B+ primary on a
-            // 64 GB Mac. We can't reach the private helper from here,
-            // so the literal duplicates the constant. If it drifts on
-            // the daemon side, the daemon's `effective_context_size`
-            // wins for users who actually have a SetupConfig file
-            // (the common case); this fallback only fires on a
-            // genuinely-missing daemon config.
-            let effective_ctx = sovereign_core::setup_config::SetupConfig::load()
-                .map(|c| c.models.effective_context_size())
-                .unwrap_or(16384);
-
-            // Crash-isolated smoke test: spawn ourselves with
-            // `--smoketest` and run a 1-token decode against the
-            // chat slot's GGUF before loading it in-process. If the
-            // child SIGSEGVs (e.g., Gemma 4 on Apple Metal in
-            // llama-cpp-2 0.1.145, where ggml's Metal kernel-pipeline
-            // lookup returns nil and gets dereferenced), set
-            // `SOVEREIGN_FORCE_CPU_CHAT=1` for THIS process and
-            // continue — the in-process load below will then
-            // configure the chat slot with `n_gpu_layers=0`.
-            //
-            // Skipped silently when `SOVEREIGN_FORCE_CPU_CHAT=1` is
-            // already set (the user has already chosen CPU) or when
-            // we can't determine GPU layers from hardware (no GPU
-            // configured anyway).
-            let env_force_cpu = std::env::var("SOVEREIGN_FORCE_CPU_CHAT")
-                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                .unwrap_or(false);
-            if !env_force_cpu {
-                let smoke_gpu_layers =
-                    sovereign_inference::hardware::HardwareProfile::detect().recommended_gpu_layers;
-                if smoke_gpu_layers > 0 {
-                    emit(BootstrapPhase::SmokeTesting);
-                    let smoke_ctx = effective_ctx.min(2048);
-                    tracing::info!(
-                        model = %config.model_path.display(),
-                        gpu_layers = smoke_gpu_layers,
-                        n_ctx = smoke_ctx,
-                        "smoketest: probing GPU compatibility before in-process load"
-                    );
-                    let outcome = crate::smoketest::run_in_subprocess(
-                        &config.model_path,
-                        smoke_gpu_layers,
-                        smoke_ctx,
-                        std::time::Duration::from_secs(60),
-                    );
-                    match &outcome {
-                        crate::smoketest::SmokeResult::Ok => {
-                            tracing::info!("smoketest: GPU path ok — proceeding");
-                        }
-                        other if other.suggests_cpu_fallback() => {
-                            tracing::error!(
-                                outcome = %other,
-                                "smoketest: GPU path crashed — falling back to CPU. \
-                                 Set SOVEREIGN_FORCE_CPU_CHAT=0 to disable this guard."
-                            );
-                            // SAFETY: bootstrap runs once, single
-                            // task, no concurrent env mutation.
-                            // SOVEREIGN_FORCE_CPU_CHAT is read by
-                            // sovereign-inference's chat-slot loader
-                            // immediately below.
-                            std::env::set_var("SOVEREIGN_FORCE_CPU_CHAT", "1");
-                        }
-                        other => {
-                            tracing::warn!(
-                                outcome = %other,
-                                "smoketest: inconclusive — proceeding with GPU load. \
-                                 The model may still load and run normally; this just \
-                                 means we couldn't pre-confirm it."
-                            );
-                        }
-                    }
-                }
-            }
-
-            emit(BootstrapPhase::LoadingModel);
-            let loaded = Arc::new(
-                EmbeddedLlamaCpp::load_full_with_families(
-                    &config.model_path,
-                    config.primary_model_path.as_deref(),
-                    config.embed_model_path.as_deref(),
-                    config.code_model_path.as_deref(),
-                    effective_ctx,
-                    None,
-                    ModelFamily::Unknown,        // fast slot
-                    ModelFamily::Unknown,        // primary slot (lazy-loaded)
-                    config.embed_family.clone(), // embed slot — drives pooling/instructions
-                    config.code_family.clone(),  // code slot (lazy, hot-swaps with primary)
-                )
-                .map_err(|e| format!("Failed to load model: {e}"))?,
-            );
-
-            if config.primary_model_path.is_some() {
-                // Configurable via `DesktopConfig.primary_idle_secs`
-                // (default 300s). Mirrors the daemon-side knob in
-                // `sovereign_core::setup_config::DaemonSection`.
-                // Raise toward `u64::MAX` to effectively pin the
-                // primary; lower if you want eager VRAM reclaim.
-                loaded.start_idle_monitor(config.primary_idle_secs);
-            }
-
-            let raw: Arc<dyn InferenceProvider> = loaded;
-            *state.inference.write().await = Some(Arc::clone(&raw));
-            raw
-        }
-    };
-
-    // Wrap raw with mesh routing only in Local mode. The wrapper asks
-    // the embedded daemon on every Slow-slot request whether any peer
-    // with more RAM is online; if yes AND privacy isn't LocalOnly, it
-    // forwards over HTTP to `<peer>:9741/v1/chat/completions`. On any
-    // remote error, auto-falls back to `raw_inference`.
-    //
-    // In Attach mode (`state.mesh == None`) the CLI daemon already
-    // owns peer-routing decisions — wrapping `raw_inference` with a
-    // MeshInferenceProvider against a None daemon would be a no-op at
-    // best and misleading at worst, so we just hand the raw provider
-    // through.
-    let inference: Arc<dyn InferenceProvider> = match state.mesh.as_ref() {
-        Some(mesh) => Arc::new(sovereign_mesh::peer_inference::MeshInferenceProvider::new(
-            Arc::clone(&raw_inference),
-            Arc::clone(mesh),
-        )),
-        None => Arc::clone(&raw_inference),
-    };
+    let (raw_inference, inference) =
+        builders::inference::load_inference(&state.inference, state.mesh.as_ref(), &config, &emit)
+            .await?;
 
     // Open database.
     let store: Arc<dyn StateStore> = builders::store::open_store(
@@ -815,89 +680,21 @@ pub async fn bootstrap_with_progress(
     }
 
     // KnowledgeView wire-up (desktop mirror of the server/CLI path).
-    // Gated on three things, in order of precedence:
-    //
-    // 1. **Attach mode** — when a CLI daemon at `:9741` is the source
-    //    of truth, IT owns the `KnowledgeViewManager` (see
-    //    `sovereign-cli/src/daemon_cmd.rs:697`). Constructing one here
-    //    too means: a duplicate observer fires on every conversation
-    //    write, two debouncers race to ingest the same view, and two
-    //    enrichment loops compete for the chat slot. Skip entirely.
-    //    Note: this means landscape digests are NOT spliced into
-    //    prompts on the desktop side in attach mode — the daemon has
-    //    the digest data but no HTTP endpoint exposes it yet. TODO:
-    //    add `/v1/knowledge/landscape_digest` on the daemon and a
-    //    thin client-side `LandscapeDigestProvider` impl that fetches
-    //    over HTTP, then wire that into the runtime here.
-    //
-    // 2. **Settings → Knowledge → Enable KnowledgeView** — when the
-    //    user has explicitly disabled the feature, Sovereign behaves
-    //    exactly as it did before KnowledgeView existed.
-    //
-    // 3. Otherwise (Local / CliSetup mode, feature on) build the
-    //    manager. The Runtime gets a landscape-digest provider; the
-    //    observer wires the manager into SQLite writes.
-    //
-    // The toggle is read once at startup — changes to the Settings
-    // toggle or to bootstrap mode require a desktop restart because
-    // the Runtime is built once with or without the provider.
-    let knowledge_view_manager = if state.is_attach_mode() {
-        tracing::info!(
-            "knowledge_view: attach mode — CLI daemon owns enrichment, \
-             skipping desktop-side construction. Landscape digests in \
-             chat splice are deferred until the daemon exposes an HTTP \
-             endpoint."
-        );
-        None
-    } else if config.knowledge_view_enabled {
-        let knowledge_view_db_path = config.data_dir.join("sovereign.db");
-        // Resolve local_only skill ids from the registry loaded above.
-        // Mirror of the server/CLI paths.
-        let local_only_skill_ids = skills.local_only_skill_ids();
-        tracing::info!(
-            local_only_skills = ?local_only_skill_ids,
-            "knowledge_view: enabled; skills excluded from conversational corpus"
-        );
-        // Project-local ATOS paths — same `.sovereign/` layout as the
-        // CLI / server bootstraps. Optional; the splice path's
-        // strategic block falls through gracefully when either path
-        // is missing.
-        let project_sov_dir = std::env::current_dir()
-            .unwrap_or_else(|_| std::path::PathBuf::from("."))
-            .join(".sovereign");
-        let features_db_path = project_sov_dir.join("features.db");
-        let project_toml_path = project_sov_dir.join("project.toml");
-        let mut mgr = sovereign_tools::knowledge_view::KnowledgeViewManager::new(
-            Arc::clone(&corpus_engine),
-            inference_fn.clone(),
-            knowledge_view_db_path,
-            local_only_skill_ids,
-        )
-        .await;
-        if features_db_path.exists() {
-            mgr = mgr.with_features_db_path(features_db_path);
-        }
-        if project_toml_path.exists() {
-            mgr = mgr.with_project_toml_path(project_toml_path);
-        }
-        let mgr = Arc::new(mgr);
-        if let Some(concrete) = state.sqlite_store.read().await.as_ref() {
-            concrete
-                .set_observer(mgr.clone() as sovereign_core::observer::SharedStateStoreObserver);
-        } else {
-            tracing::warn!(
-                "KnowledgeView: desktop store was not SQLite-backed; \
-                 observer not installed (memory-mode fallback?)"
-            );
-        }
-        Some(mgr)
-    } else {
-        tracing::info!(
-            "knowledge_view: disabled via Settings — landscape digests \
-             skipped, no ingest will run"
-        );
-        None
-    };
+    // Gating precedence (attach mode → Settings toggle → build) and the
+    // full rationale (the attach-mode duplicate-observer hazard, the
+    // deferred-digest TODO) are documented on `build_knowledge_view`.
+    // The manager is consumed below as the Runtime's landscape-digest
+    // provider; here we only construct it — installing the SQLite write
+    // observer is the builder's only side effect.
+    let knowledge_view_manager = builders::knowledge_view::build_knowledge_view(
+        state.is_attach_mode(),
+        &config,
+        &skills,
+        &corpus_engine,
+        &inference_fn,
+        &state.sqlite_store,
+    )
+    .await;
     // No auto-backfill on launch.
     //
     // KnowledgeView ingest used to fire on a 30 s timer here, on the
@@ -1027,7 +824,7 @@ pub async fn bootstrap_with_progress(
                 // exact-name lookup now reads from SCIP rather than
                 // the Lance chunk projection.
                 let initial_graph = corpus_engine_scip::ScipGraph::open_in_memory("merged")
-                    .expect("in-memory ScipGraph for MCP call-graph tools");
+                    .map_err(|e| format!("in-memory ScipGraph for MCP call-graph tools: {e}"))?;
                 if let Ok(rd) = std::fs::read_dir(&indexes_dir) {
                     for de in rd.flatten() {
                         if !de.path().is_dir() {
@@ -1122,7 +919,7 @@ pub async fn bootstrap_with_progress(
 
         // 4. /v1/projects — project freshness pipeline.
         let merged_for_indexer = corpus_engine_scip::ScipGraph::open_in_memory("merged")
-            .expect("in-memory ScipGraph for project pipeline");
+            .map_err(|e| format!("in-memory ScipGraph for project pipeline: {e}"))?;
         let merged_handle: sovereign_mesh::reindexer::ScipGraphHandle =
             Arc::new(arc_swap::ArcSwap::from_pointee(merged_for_indexer));
         let mut reindexer =
@@ -1265,7 +1062,7 @@ pub async fn bootstrap_with_progress(
     let indexes_dir_for_scip = home.join(".sovereign").join("indexes");
     let symbols_graph = {
         let merged = corpus_engine_scip::ScipGraph::open_in_memory("merged")
-            .expect("in-memory ScipGraph for symbols lookup");
+            .map_err(|e| format!("in-memory ScipGraph for symbols lookup: {e}"))?;
         if let Ok(rd) = std::fs::read_dir(&indexes_dir_for_scip) {
             for de in rd.flatten() {
                 if !de.path().is_dir() {

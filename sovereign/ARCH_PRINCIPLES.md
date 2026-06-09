@@ -184,7 +184,7 @@ full set with per-file deferral rationale):
 
 - `sovereign-inference/src/embedded.rs` (~9636 lines) — embedded daemon glue.
 - `sovereign-cli-dev/src/project_cmd.rs` (~7040 lines) — the project subcommand surface. Moved out of `sovereign-cli` in the 2026-05-22 binary split; still wants an in-file §3.2 split.
-- `sovereign-desktop/src-tauri/src/state.rs` (~2347 lines) — desktop `AppState` + the ~1460-line `bootstrap_with_progress`. (The former `commands.rs` monolith was already split into `commands/*.rs`.)
+- `sovereign-desktop/src-tauri/src/state.rs` (~1430 lines, down from 2347) — desktop `AppState` + `bootstrap_with_progress`. **Decomposition in progress:** config / built-in skills and four bootstrap sub-phases (`health`, `store`, `inference`, `knowledge_view`) are extracted to `state/` + `state/builders/` with mock-backed tests; `embedded_daemon` remains, `tools` stays inline (mutated across the whole bootstrap). (The former `commands.rs` monolith was already split into `commands/*.rs`.)
 - `commonwealth-api/src/frontdoor.rs` (~5758 lines) — harness-protocol → model-native normalizer.
 - `corpus-engine-notes/src/notes.rs` (~5634 lines) — NoteStore (carved-out crate; still wants an in-file split).
 - `corpus-engine/src/enrichment/atlas/resolution.rs` (~5189 lines) — atlas URI resolution + scoring.

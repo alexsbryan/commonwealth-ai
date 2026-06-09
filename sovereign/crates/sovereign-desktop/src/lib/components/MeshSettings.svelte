@@ -1,6 +1,14 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import {
+    withRelay,
+    relayLabel,
+    formatBytes,
+    formatTokens,
+    formatGb,
+    statusDot,
+  } from "./meshFormat";
+  import {
     getConfig,
     meshClearPeerPreference,
     meshCreate,
@@ -21,7 +29,6 @@
     CreateMeshResponse,
     DesktopConfig,
     MeshStateResponse,
-    MeshMember,
     NodeContributionsDto,
     PeerPreferenceDto,
     RelayCandidate,
@@ -138,46 +145,6 @@
     relayLoading = false;
   }
 
-  /** Append `?relay=<value>` (or `&relay=…` if other params already
-   *  exist) to the bare invite link. Idempotent: any existing relay
-   *  query param gets replaced, so toggling between candidates
-   *  doesn't accumulate junk.
-   *
-   *  Must NOT use `URL.searchParams.set()` — that percent-encodes
-   *  reserved chars (`:` → `%3A`, `'` → `%27`) which makes the link
-   *  ugly in a chat client AND produces `relay=100.64.0.2%3A9742`
-   *  that older daemon builds (pre-percent-decode fix) fail to parse.
-   *  Mirror `build_join_link` in Rust instead — its query format is
-   *  the canonical one the parser's round-trip test locks in. */
-  function withRelay(baseLink: string, relay: string | null): string {
-    // Strip any existing `relay=` param so toggling is idempotent.
-    const qIdx = baseLink.indexOf("?");
-    let base = baseLink;
-    let query: string[] = [];
-    if (qIdx >= 0) {
-      base = baseLink.slice(0, qIdx);
-      query = baseLink
-        .slice(qIdx + 1)
-        .split("&")
-        .filter((p) => p.length > 0 && !p.startsWith("relay="));
-    }
-    if (relay) query.push(`relay=${relay}`);
-    return query.length > 0 ? `${base}?${query.join("&")}` : base;
-  }
-
-  function relayLabel(c: RelayCandidate): string {
-    switch (c.kind) {
-      case "tailscale":
-        return "Tailscale (works across networks)";
-      case "lan":
-        return "Local network only";
-      case "ipv6":
-        return "IPv6 (sometimes routable)";
-      default:
-        return c.kind;
-    }
-  }
-
   // ── Mesh Health: dimensional contributions + peer preferences ──
   //
   // The legacy single-score `contribution_level` per member is gone.
@@ -269,33 +236,6 @@
       prefError = { ...prefError, [nodeId]: `${e}` };
     }
     prefSaving = { ...prefSaving, [nodeId]: false };
-  }
-
-  // ── Formatting helpers (no totals, no ranking — just legibility)
-
-  function formatBytes(n: number): string {
-    if (!Number.isFinite(n) || n <= 0) return "0 B";
-    const units = ["B", "KB", "MB", "GB", "TB"];
-    let v = n;
-    let i = 0;
-    while (v >= 1024 && i < units.length - 1) {
-      v /= 1024;
-      i += 1;
-    }
-    return `${v < 10 ? v.toFixed(1) : v.toFixed(0)} ${units[i]}`;
-  }
-
-  function formatTokens(n: number): string {
-    if (!Number.isFinite(n) || n <= 0) return "0";
-    if (n < 1_000) return n.toString();
-    if (n < 1_000_000) return `${(n / 1_000).toFixed(1)}k`;
-    return `${(n / 1_000_000).toFixed(2)}M`;
-  }
-
-  function formatGb(gb: number): string {
-    if (!Number.isFinite(gb) || gb <= 0) return "0 GB";
-    if (gb < 1) return `${(gb * 1024).toFixed(0)} MB`;
-    return `${gb < 10 ? gb.toFixed(1) : gb.toFixed(0)} GB`;
   }
 
   let pollHandle: ReturnType<typeof setInterval> | null = null;
@@ -459,20 +399,6 @@
       rotateError = `Failed to rotate invite: ${e}`;
     }
     rotating = false;
-  }
-
-  // ── Helpers ────────────────────────────────────────────
-  function statusDot(member: MeshMember): string {
-    switch (member.status) {
-      case "online":
-        return "online";
-      case "busy":
-        return "busy";
-      case "away":
-        return "away";
-      default:
-        return "offline";
-    }
   }
 
 </script>
@@ -681,7 +607,7 @@
                       onchange={() => (selectedRelay = cand.url_fragment)}
                     />
                     <span class="relay-label">
-                      {relayLabel(cand)}
+                      {relayLabel(cand.kind)}
                       {#if cand.recommended}<em class="badge">Recommended</em>{/if}
                     </span>
                     <code class="relay-frag">{cand.url_fragment}</code>
@@ -741,7 +667,7 @@
             {@const pref = preferences.get(member.node_id)}
             <li class="member-row" data-node-id={member.node_id}>
               <header class="member-header-row">
-                <span class="dot {statusDot(member)}"></span>
+                <span class="dot {statusDot(member.status)}"></span>
                 <span class="member-name">
                   {member.name}
                   {#if member.is_self}<em>(you)</em>{/if}

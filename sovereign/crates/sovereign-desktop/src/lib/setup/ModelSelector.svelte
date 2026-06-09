@@ -10,6 +10,7 @@
     primaryCatalog,
     slotRecommendation,
   } from "../api";
+  import { modelTier, formatSize } from "./modelDisplay";
   import type {
     DiscoveredModel,
     DownloadProgress,
@@ -159,12 +160,6 @@
         : "Embedder — turns your library into something searchable by meaning.",
       min_ram_gb: min,
     };
-  }
-
-  function modelTier(model: RecommendedModel): "basic" | "standard" | "premium" {
-    if (model.min_ram_gb <= 10) return "basic";
-    if (model.min_ram_gb <= 20) return "standard";
-    return "premium";
   }
 
   let visibleModels = $derived.by<RecommendedModel[]>(() => {
@@ -325,16 +320,6 @@
     }
   }
 
-  function formatSize(bytes: number): string {
-    if (bytes >= 1_000_000_000) {
-      return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
-    }
-    if (bytes >= 1_000_000) {
-      return `${(bytes / 1_000_000).toFixed(0)} MB`;
-    }
-    return `${(bytes / 1_000).toFixed(0)} KB`;
-  }
-
   function formatDownloadProgress(): string {
     const dl = formatSize(downloadedBytes);
     if (downloadTotalBytes) {
@@ -432,7 +417,7 @@
         <div class="model-name">
           {model.name}
           {#if !embedMode}
-            {@const tier = modelTier(model)}
+            {@const tier = modelTier(model.min_ram_gb)}
             {#if tier === "basic"}
               <span class="tier-badge tier-basic">Basic</span>
             {:else if tier === "standard"}

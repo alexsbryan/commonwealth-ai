@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { normalizeError } from "./errors";
 import type {
   MessageResponse,
   ConversationEntry,
@@ -46,6 +47,23 @@ import type {
   EntityAggregateRow,
   GlinerModelStatus,
 } from "./types";
+
+/// Tauri `invoke` that normalises every rejection to a `DesktopError`
+/// (§2D-3). Migrated commands reject with the structured wire shape;
+/// unmigrated commands (bare `String`) and JS errors are coerced to
+/// `internal`. Callers can therefore `catch (e) { toastError(e) }`
+/// uniformly and branch on `e.code`. Migrate a command's callers to this
+/// as the command's Rust side flips to `Result<_, DesktopError>`.
+export async function invokeChecked<T>(
+  cmd: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  try {
+    return await invoke<T>(cmd, args);
+  } catch (e) {
+    throw normalizeError(e);
+  }
+}
 
 export async function sendMessage(
   message: string,
@@ -451,7 +469,7 @@ export async function searchWeb(
   query: string,
   conversationId: string,
 ): Promise<MessageResponse> {
-  return invoke("search_web", { query, conversationId });
+  return invokeChecked("search_web", { query, conversationId });
 }
 
 export async function scanForModels(): Promise<DiscoveredModel[]> {
