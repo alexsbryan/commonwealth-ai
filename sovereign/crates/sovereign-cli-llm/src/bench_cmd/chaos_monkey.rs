@@ -27,7 +27,9 @@ use sovereign_eval::chaos_monkey::{
 use sovereign_eval::flywheel::det_checks::{contains_ci, gold_match};
 use sovereign_inference::remote::RemoteApiProvider;
 
-use crate::bench_cmd::live_runner::{classify_abstain, classify_caveat, run_live, run_naked};
+use crate::bench_cmd::live_runner::{
+    classify_abstain, classify_caveat, run_live, run_naked, verify_grounding,
+};
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
@@ -37,7 +39,7 @@ const HELP: Help = Help {
     summary: "Grounded-calibration audit: answer + cite when the fact is in persistence, abstain honestly when it isn't, resist distractors.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench chaos-monkey run --bank <bank.toml> [--corpus <id>] [--judge-model <stem>] [--manifest <toml>] [--out <jsonl>] [--limit N] [--naked]",
+            "sovereign bench chaos-monkey run --bank <bank.toml> [--corpus <id>] [--judge-model <stem>] [--manifest <toml>] [--out <jsonl>] [--limit N] [--naked] [--grounding-verify]",
         ),
         HelpSection::Subcommands(&[(
             "run",
@@ -79,6 +81,12 @@ struct Args {
     /// naked model so the delta vs the normal run = our prompting+retrieval
     /// value-add. citation/distractor sub-metrics are N/A (no retrieval).
     naked: bool,
+    /// External grounding-verifier: after synthesis, judge whether the answer's
+    /// specific claim is supported by the retrieved chunks; if it asserts an
+    /// ungrounded fact (not in chunks, not flagged as general knowledge), gate
+    /// it to a grounded abstention. Tier-agnostic honesty lever. No-op under
+    /// --naked (no chunks to verify against).
+    grounding_verify: bool,
 }
 
 fn parse_args(rest: &[String]) -> Result<Args, String> {
@@ -90,6 +98,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut out = PathBuf::from("target/chaos-monkey/results.jsonl");
     let mut limit = None;
     let mut naked = false;
+    let mut grounding_verify = false;
 
     let mut i = 0;
     macro_rules! val {
@@ -108,6 +117,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             "--out" => out = PathBuf::from(val!("--out")),
             "--limit" => limit = Some(val!("--limit").parse().map_err(|_| "--limit must be a usize")?),
             "--naked" => naked = true,
+            "--grounding-verify" => grounding_verify = true,
             other => return Err(format!("unknown flag `{other}`")),
         }
         i += 1;
@@ -121,6 +131,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         out,
         limit,
         naked,
+        grounding_verify,
     })
 }
 
@@ -207,7 +218,7 @@ async fn run(rest: &[String]) -> i32 {
             .chat_model
             .clone()
             .unwrap_or_else(|| "primary".to_string());
-        let row = score_question(&session, judge.as_ref(), &args.judge_model, &corpus, &model_id, q, naked_provider.as_deref(), naked_max).await;
+        let row = score_question(&session, judge.as_ref(), &args.judge_model, &corpus, &model_id, q, naked_provider.as_deref(), naked_max, args.grounding_verify).await;
         eprintln!(
             "  [{:>2}/{}] {:<20} expect={:<7} act={:<9} pass={}",
             qi + 1,
@@ -245,6 +256,7 @@ async fn score_question(
     q: &ChaosQuestion,
     naked_provider: Option<&dyn InferenceProvider>,
     naked_max: usize,
+    grounding_verify: bool,
 ) -> ResultRow {
     // --naked: bypass the Runtime entirely (bare model, no system/retrieval).
     // Otherwise the normal sealed live path (router → retrieval → synthesis).
@@ -255,8 +267,23 @@ async fn score_question(
     let visible = live.visible;
     let chunk_texts = live.retrieved_chunk_texts;
 
+    // External grounding-verifier gate (--grounding-verify). If the answer
+    // asserts a specific fact NOT supported by the retrieved chunks (and not
+    // flagged as general knowledge), the gate DIRECTLY rules it an abstention —
+    // the tier-agnostic honesty lever. No-op under --naked (no chunks). We set
+    // the action directly rather than re-classifying a canned message (a weak
+    // judge mis-reads "the sources don't contain that" as a substantive answer).
+    let gated = grounding_verify
+        && naked_provider.is_none()
+        && !chunk_texts.is_empty()
+        && verify_grounding(judge, judge_model, &q.question, &visible, &chunk_texts).await
+            == Some(true);
+
     // The one model-side judgement: did it answer substantively or decline?
-    let agent_action = match classify_abstain(judge, judge_model, &visible).await {
+    let agent_action = if gated {
+        AgentAction::Abstained
+    } else {
+        match classify_abstain(judge, judge_model, &visible).await {
         Some(true) => AgentAction::Abstained,
         Some(false) => AgentAction::Answered,
         // Judge failure: fall back to a length+content heuristic (a near-empty
@@ -267,6 +294,7 @@ async fn score_question(
             } else {
                 AgentAction::Answered
             }
+        }
         }
     };
 

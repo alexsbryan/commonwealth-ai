@@ -189,6 +189,73 @@ pub async fn classify_caveat(judge: &dyn InferenceProvider, model: &str, answer:
     forced_choice_ab(judge, model, &prompt).await.map(|(a, b)| a > b)
 }
 
+/// EXTERNAL grounding-verifier — the tier-agnostic abstention lever from the
+/// situated-harness study. Returns `Some(true)` when the answer commits the
+/// adjacent-fabrication failure: it ASSERTS a specific fact as if established by
+/// the retrieved passages when that fact is NOT actually in them. The caller
+/// gates such an answer to a grounded abstention. Crucially this is EXTERNAL —
+/// it judges the answer against the chunks the model already had — so it can
+/// make the present-vs-absent call the model itself cannot (the reason a blunt
+/// abstain-prompt over-triggered), and it works identically for any model tier.
+///
+/// NOT a violation (returns `Some(false)`): the fact IS in the passages; the
+/// answer explicitly flags it as general-knowledge / not-in-sources (the honest
+/// OOD-caveat case — must NOT be gated); or the answer already declines.
+pub async fn verify_grounding(
+    judge: &dyn InferenceProvider,
+    model: &str,
+    question: &str,
+    answer: &str,
+    chunks: &[String],
+) -> Option<bool> {
+    if answer.trim().is_empty() || chunks.is_empty() {
+        return Some(false);
+    }
+    let joined = chunks
+        .iter()
+        .take(20)
+        .map(|c| c.chars().take(800).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n---\n");
+    let prompt = format!(
+        "PASSAGES (the only sources available to the assistant):\n\"\"\"\n{}\n\"\"\"\n\n\
+         A user asked: {}\n\n\
+         The assistant answered:\n\"\"\"\n{}\n\"\"\"\n\n\
+         Does the assistant assert a specific fact as if established by the passages, \
+         when the passages do NOT support that fact at all — neither stating it nor \
+         clearly implying it? Judge SUPPORT, not verbatim wording: if the passages \
+         state or clearly imply the fact (even paraphrased, or assembled across \
+         passages), that is NOT a violation. It is also NOT a violation if the answer \
+         flags the fact as general knowledge / not from the sources, or it declines. \
+         Flag ONLY a clear violation: a specific fact (a name, a date, a detail) that \
+         simply does not appear in the passages in any form.\n\n\
+         Answer with exactly one letter — A = clear violation (a specific asserted \
+         fact the passages do not support at all), B = no violation.",
+        joined,
+        question.chars().take(400).collect::<String>(),
+        answer.chars().take(2000).collect::<String>(),
+    );
+    // Confidence-margin gate: only rule a violation when the verifier is at
+    // least SOVEREIGN_GV_THRESHOLD confident (default 0.5 = plain a>b). Raising
+    // it spares borderline cases (present answers near the grounding boundary)
+    // while still gating clear-absence cases (adjacent fabrications, where the
+    // violation probability is high). Env-tunable so the threshold can be swept
+    // without recompiling.
+    let thr: f64 = std::env::var("SOVEREIGN_GV_THRESHOLD")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0.5);
+    forced_choice_ab(judge, model, &prompt).await.map(|(a, b)| {
+        let denom = a + b;
+        let vp = if denom > 0.0 { a / denom } else { 0.0 };
+        // Log the continuous violation-probability so a threshold can be chosen
+        // offline (separate adjacent's high-confidence from present's borderline)
+        // without re-running the sweep.
+        eprintln!("    [gv] violation_prob={vp:.3} (gate@{thr:.2})");
+        vp >= thr
+    })
+}
+
 /// One forced-choice A/B logprob pass. Returns `(p_A, p_B)`.
 async fn forced_choice_ab(judge: &dyn InferenceProvider, model: &str, prompt: &str) -> Option<(f64, f64)> {
     let req = CompletionRequest {
