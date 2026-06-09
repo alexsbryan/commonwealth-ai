@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Stdio-based MCP transport.
 //!
 //! Spawns an MCP server as a child process and communicates via

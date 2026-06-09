@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!--
   InformationRequestCard — the post-answer "would source X sharpen
   this?" prompt (kind: refinement) and the planned task-blocking step

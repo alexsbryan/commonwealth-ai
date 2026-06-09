@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `reading_http` chunk-fetch test.
 //!
 //! The reading surface (`reading_http::reading_router`) powers the

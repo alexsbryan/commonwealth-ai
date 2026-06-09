@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign serve` — foreground or background MCP server.
 //!
 //! Renamed from `sovereign project serve` per the CLI refactor plan.

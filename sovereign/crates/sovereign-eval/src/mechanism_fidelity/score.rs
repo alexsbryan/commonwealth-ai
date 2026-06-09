@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The scorer + the Rust→Python result contract.
 //!
 //! Scoring is always on the **decision probability**, never the

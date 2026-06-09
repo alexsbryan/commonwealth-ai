@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end test for the Phase 5 + 5b spec-presence gate.
 //!
 //! Wires `mcp_router` over an ephemeral localhost port with:

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Deterministic, glassbox scoring of retrieval results.
 //!
 //! Two scorers, both pure (no LLM, no embeddings). They're crude on

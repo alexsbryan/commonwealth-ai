@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Git archaeology — temporal grounding for atlas atoms.
 //!
 //! Given a code corpus that's been indexed and atom-extracted, this

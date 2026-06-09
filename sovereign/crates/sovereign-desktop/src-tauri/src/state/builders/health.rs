@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! HealthMonitor construction — extracted verbatim from
 //! `bootstrap_with_progress` (§3.3). Terminal, self-contained phase:
 //! consumes already-built handles, registers checkers, and spawns the

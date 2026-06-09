@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Deterministic numeric-provenance audit — Layer 3 of the "no
 //! confabulated numbers" guarantee (SF-LVT demo).
 //!

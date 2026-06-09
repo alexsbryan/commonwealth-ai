@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atlas edge types — the typed relationships between atoms.
 //!
 //! Spec §3 enumerates seven intra-corpus edge types. Step 3a emits

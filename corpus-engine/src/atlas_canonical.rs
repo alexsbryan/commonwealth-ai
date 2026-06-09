@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Canonical-name normalisation primitives shared by the meta-atlas
 //! substrate.
 //!

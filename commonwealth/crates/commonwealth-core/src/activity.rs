@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Local Activity ledger — the glassbox record of what *this*
 //! daemon did, in Sovereign's own vocabulary (tokens, embeddings,
 //! chunks, queries, fetches).

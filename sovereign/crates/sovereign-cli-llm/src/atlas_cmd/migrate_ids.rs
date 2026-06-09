@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign atlas migrate-ids` — Move 6 Phase 0 migration command.
 //!
 //! Walks installed atlases and rewrites atoms.json + edges.json +

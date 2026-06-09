@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-document entity graph + Personalized PageRank as an additional
 //! retrieval ranking signal.
 //!

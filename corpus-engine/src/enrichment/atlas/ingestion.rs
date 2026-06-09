@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `AtlasIngestion` trait and the `AtlasData` bundle it returns.
 //!
 //! Every ingestion strategy — extraction-first LLM pipelines today,

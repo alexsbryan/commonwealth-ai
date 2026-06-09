@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-peer health tracking with automatic quarantine + recovery.
 //!
 //! When a peer fails repeatedly, we don't want the scheduler to keep

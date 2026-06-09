@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Serde mirror of the Phase-1 `sovereign-server` JSON. Kept in one
 //! place so the wire contract has a single definition on the client.
 //! The data DTOs are also `Serialize` so commands can return them

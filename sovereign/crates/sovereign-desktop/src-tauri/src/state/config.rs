@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Desktop configuration — `DesktopConfig`, its defaults, and load/save.
 //! Extracted from `state.rs` in the §3.3 decomposition. Pure data + IO
 //! (no runtime/inference types), so it unit-tests without a model.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Mesh app manifest — the static description of a mesh application.
 
 use serde::{Deserialize, Serialize};

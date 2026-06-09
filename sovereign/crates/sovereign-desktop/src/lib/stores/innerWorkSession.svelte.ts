@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Inner Work session store.
 //
 // Phase 2 holds three pieces of cross-component state:

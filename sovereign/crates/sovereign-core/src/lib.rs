@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod atlas_context;
 pub mod context;
 pub mod conv_briefing;

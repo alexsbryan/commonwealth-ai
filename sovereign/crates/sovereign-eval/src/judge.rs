@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! LLM-judge scorer.
 //!
 //! Calls a local model via `POST <daemon>/v1/chat/completions` with the

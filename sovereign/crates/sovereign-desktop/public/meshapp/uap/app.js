@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Project Blue Book evidence explorer — composed from the MeshApp SDK.
 //
 // Reads the host's deterministic investigation graph through the permission-

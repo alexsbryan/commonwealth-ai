@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   import { open } from "@tauri-apps/plugin-dialog";
   import { recipeValidate, recipeTest } from "../api";

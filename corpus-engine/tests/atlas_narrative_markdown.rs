@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Integration coverage for the markdown extractor that backs the
 //! narrative-stream branch of the two-stream atlas pipeline.
 //!

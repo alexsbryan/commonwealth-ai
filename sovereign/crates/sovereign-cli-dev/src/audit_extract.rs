@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign audit` LLM-backed extraction pass (Phase 7.3 gap E).
 //!
 //! When the user runs `sovereign audit`, this module:

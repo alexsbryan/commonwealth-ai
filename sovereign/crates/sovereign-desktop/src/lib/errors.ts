@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Frontend half of the structured-error contract (§2D-3). Pure — no
 // Tauri import — so the guard + normaliser are unit-testable without
 // mocking `invoke`. `invokeChecked` (in api.ts) and `toastError` (in

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! DuckDuckGo real-network probe — runs always (no key required).
 //! Surfaces whether the zero-config fallback the desktop ships with
 //! actually returns results in practice.

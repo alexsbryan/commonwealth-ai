@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tool-Mastery Framework — Layer 2: tool dossier (ambient context).
 //!
 //! A per-turn block of ambient context that puts the model on the

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 

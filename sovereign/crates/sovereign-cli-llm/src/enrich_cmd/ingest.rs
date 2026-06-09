@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich ingest <corpus> [--strategy <id>] [--source-corpus <id>] [--limit-articles <N>]`
 //!
 //! Drives an `AtlasIngestion` strategy end-to-end: open the source
@@ -17,7 +18,7 @@ use corpus_engine::enrichment::atlas::{AtlasData, AtlasIngestionConfig, AtlasIng
 use corpus_engine::{CorpusEngine, EmbedFn, IngestProgress, ProgressCallback};
 
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich ingest",

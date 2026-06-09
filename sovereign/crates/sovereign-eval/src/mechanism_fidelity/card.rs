@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Model **fidelity cards** — the "characterize once, read free" artifact.
 //!
 //! A full battery is expensive; a query that wants to know "does this model

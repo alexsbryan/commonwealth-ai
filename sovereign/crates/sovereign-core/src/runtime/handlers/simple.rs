@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! SimpleQuery / DeepQuery dispatch — the witness path's primary
 //! entry. Builds the (relational or factual) system message, splices
 //! recalled memories, and emits a single non-streaming synthesis call.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end smoke for `POST /v1/embeddings`.
 //!
 //! Today's coverage of `routes_inference::embeddings` lives entirely

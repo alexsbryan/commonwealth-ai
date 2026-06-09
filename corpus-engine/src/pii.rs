@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! PII scrubber primitive — replaces structured PII (emails, phones,
 //! URLs, money, IPs, ISO dates) via regex, and replaces names/orgs
 //! that the caller has explicitly registered with stable role tokens

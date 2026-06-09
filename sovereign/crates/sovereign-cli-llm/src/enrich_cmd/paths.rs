@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Filesystem conventions for the `sovereign enrich` admin harness.
 //!
 //! Layout under `~/.sovereign/enrichment/<corpus-id>/`:
@@ -16,7 +17,7 @@
 
 use std::path::PathBuf;
 
-use crate::util::dirs::{sovereign_indexes, sovereign_root};
+use sovereign_cli_shared::dirs::{sovereign_indexes, sovereign_root};
 
 /// Root of the enrichment state tree for one corpus.
 pub fn enrichment_root(corpus_id: &str) -> PathBuf {

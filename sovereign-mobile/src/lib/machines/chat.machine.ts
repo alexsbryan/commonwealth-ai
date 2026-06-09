@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // chatMachine — owns the message list and the streaming lifecycle for
 // ChatView. Replaces the ad-hoc `$state` + Tauri-listener choreography
 // that spawned the provenance bug.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign rough-edges <code-corpus> [--source-path <path>] [--output <md>]`
 //!
 //! Scans a code corpus' source tree for `TODO/FIXME/HACK/XXX`

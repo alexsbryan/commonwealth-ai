@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Integration tests for the `/internal/join` handshake route.
 //!
 //! Exercises the route via tower's `oneshot` pattern rather than a

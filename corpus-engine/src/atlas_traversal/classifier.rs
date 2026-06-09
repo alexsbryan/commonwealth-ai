@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Query classifier — natural-language query → `QueryPlan`.
 //!
 //! The classifier is a two-pass scanner:

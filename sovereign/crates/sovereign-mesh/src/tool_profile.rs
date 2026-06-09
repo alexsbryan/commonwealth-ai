@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tool-profile registry: a named subset of tool names that filters
 //! incoming `request.tools[]` before the chat-completion request
 //! reaches the model.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Rust executors for the canonical primitives. One async fn per
 //! `PrimitiveKind`. Each takes `&ExecCtx` (the bound workdir) +
 //! parsed args and returns `Result<ToolResult, ToolError>`.

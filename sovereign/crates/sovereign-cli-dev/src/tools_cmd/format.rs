@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Formatters for `sovereign tools` stdout.
 //!
 //! The CLI is agent-primary: output is plain text, shaped for an LLM

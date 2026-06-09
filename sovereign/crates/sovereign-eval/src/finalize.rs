@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Mark a run as ended.
 //!
 //! The opencode plugin records `tool.execute.before/after` events into

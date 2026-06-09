@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Case schema + seeded synthetic generator for the mechanism-fidelity
 //! harness (reference mechanism: relocation under a wealth tax).
 //!

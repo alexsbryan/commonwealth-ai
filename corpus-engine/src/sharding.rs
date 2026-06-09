@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shard operations: the three-operation contract between corpus-engine
 //! and Commonwealth.
 //!

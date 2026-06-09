@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Aggregate report for one cognitive-bank run.
 //!
 //! The shape mirrors `crate::workflow::WorkflowReport` and friends —

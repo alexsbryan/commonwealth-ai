@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import type { Scenario } from "../fixtures/scenario-player";
 
 // With-thinking: a reasoning-heavy turn where the model emits

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The OCR engine seam.
 //!
 //! `recognize_page` (tesseract subprocess) was the original single OCR

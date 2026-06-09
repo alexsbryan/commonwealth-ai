@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Split-file task — translates a structural goal ("every source
 //! file ≤ N lines") into a runtime test + a Trial.
 //!

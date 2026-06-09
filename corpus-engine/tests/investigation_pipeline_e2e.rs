@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end test for the investigation enrichment pipeline.
 //!
 //! Drives the full Extract → Coalesce → DetectPatterns flow with

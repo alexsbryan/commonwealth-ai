@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Shared visual frame for every dashboard card: title + optional
   // counter pill + slot for body. Keeps each leaf card pure and

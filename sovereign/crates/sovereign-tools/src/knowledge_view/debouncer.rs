@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Debounced Tier-3 enrichment runner.
 //!
 //! Writes to the state store fire `ViewEvent`s into an unbounded

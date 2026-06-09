@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Auto-split from the former monolithic `commands.rs` (PR5). Tauri
 //! command handlers grouped by concern; re-exported through
 //! `commands/mod.rs` so `commands::<name>` paths in `main.rs`'s

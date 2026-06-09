@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The shared probe schema — the "generate" output every Fidelity-Flywheel
 //! signal source (I1 corpus, I2 adversarial, I3 cross-model, I4 delta, I5
 //! human) emits and the verifier consumes.

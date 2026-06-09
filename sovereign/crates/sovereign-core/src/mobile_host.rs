@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared core for **opt-in mobile access** — serving the phone-facing
 //! `sovereign-server` API (stateful `/v1/conversations` + `/v1/corpora` + WS
 //! streaming) without loading a second copy of the models.

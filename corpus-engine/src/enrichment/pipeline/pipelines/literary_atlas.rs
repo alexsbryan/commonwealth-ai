@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Literary atlas pipeline — Step 1 of the v2.1 atlas schema rollout.
 //!
 //! Extends the `literary` pipeline's Phase 1 to emit a full

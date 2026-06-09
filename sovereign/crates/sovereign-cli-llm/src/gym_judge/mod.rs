@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Fast-inference Judge — evaluates semantic assertions against
 //! model output for the search-gym predicate scorer.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Parent-side helpers for crash-isolated model smoke testing.
 //!
 //! The actual `LlamaBackend::init` + load + decode happens in

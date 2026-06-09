@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Gap identification — the bridge between "best-effort answer from
 //! local corpus" and "structured information request to the user".
 //!

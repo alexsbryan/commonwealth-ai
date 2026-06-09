@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pinned transport — the per-pod handle that lets the mesh's
 //! inference scheduler route requests to an ephemeral worker pod the
 //! same way it routes to a persistent mesh peer.

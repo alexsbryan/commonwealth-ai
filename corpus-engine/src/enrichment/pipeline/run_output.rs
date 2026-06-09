@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-run output files with monotonic ordinals.
 //!
 //! Every phase run writes a timestamped output file to

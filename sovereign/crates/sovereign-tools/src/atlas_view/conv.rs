@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Conv-corpus DTOs for the desktop Atlas surface.
 //!
 //! Spec: `sovereign/docs/specs/CONV_TIERED_PORT.md` §"Retrieval

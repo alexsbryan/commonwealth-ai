@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Pure starter-question pool logic, extracted from ChatView.svelte
 // (§3.3 component decomposition). These three functions are the
 // logic-heavy, drift-prone parts of the suggestion-chip feature —

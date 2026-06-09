@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Append-only audit log for the reconciliation primitive (Phase 4).
 //!
 //! Lives at `<corpus_index>/atlas/reconciliation_oplog.jsonl`. Every

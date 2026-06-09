@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-model byte-rendering of a `LlamaModel`'s vocab + the
 //! non-Latin token bitmap derived from it.
 //!

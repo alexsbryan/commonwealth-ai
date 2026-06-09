@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!--
   InkStamp — the pulsing ◈ mark. The brand heartbeat during any
   long-running phase. Subtle (2.8s cycle), never strobing.

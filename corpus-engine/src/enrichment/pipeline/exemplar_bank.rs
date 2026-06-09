@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Exemplar bank — data-driven prompt shaping for the v2 pipeline.
 //!
 //! Each phase gets a JSON file at

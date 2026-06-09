@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `ArtifactSurface` — the post-path middleware that notices what
 //! the model did this turn and stages a breadcrumb for the next
 //! turn's preamble.

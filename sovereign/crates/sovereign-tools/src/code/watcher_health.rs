@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared watcher-liveness assessment for `lint_status`, `test_status`,
 //! and `build`.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `Worker::run_once(corpus_id)` — one full sweep iteration.
 //!
 //! Sequence:

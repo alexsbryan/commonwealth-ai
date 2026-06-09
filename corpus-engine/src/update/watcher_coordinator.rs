@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Plugin architecture for background file-watching computations.
 //!
 //! [`WatcherCoordinator`] owns the single OS-level filesystem watcher (via the

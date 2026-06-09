@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The streaming contract bridge. Opens the host WebSocket for one
 //! turn, forwards each `Token` frame as a `message-chunk` Tauri event,
 //! writes the completed message + provenance + citations to the cache

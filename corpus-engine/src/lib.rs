@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! corpus-engine — shared corpus ingestion and index management.
 //!
 //! This crate handles:

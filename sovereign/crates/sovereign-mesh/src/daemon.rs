@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Embedded Commonwealth daemon lifecycle management.
 //!
 //! The daemon runs in-process within Sovereign — no separate binary needed.

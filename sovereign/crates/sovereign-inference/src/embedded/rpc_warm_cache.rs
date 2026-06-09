@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Offline pre-warming of the RPC worker's tensor cache from a local GGUF.
 //!
 //! The mesh RPC worker caches received weight tensors (>10MB) to disk by

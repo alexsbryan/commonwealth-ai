@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Engineering-documentation atlas — Phase 1 emits ONLY claims that
 //! mention code artifacts. No entities, no events, no relations,
 //! no questions. Designed for drift-detection inputs (ARCH docs,

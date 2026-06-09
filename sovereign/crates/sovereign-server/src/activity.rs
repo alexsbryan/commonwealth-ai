@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Activity level tracking for the inference availability signal.
 //!
 //! `ActivityReporter` watches for file changes from the watcher coordinator

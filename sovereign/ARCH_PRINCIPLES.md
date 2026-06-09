@@ -189,7 +189,7 @@ full set with per-file deferral rationale):
 - `corpus-engine-notes/src/notes.rs` (~5634 lines) — NoteStore (carved-out crate; still wants an in-file split).
 - `corpus-engine/src/enrichment/atlas/resolution.rs` (~5189 lines) — atlas URI resolution + scoring.
 - `sovereign-cli-dev/src/atos_cmd/run.rs` (~4659 lines) — ATOS lifecycle dispatcher.
-- `sovereign-cli-daemon/src/daemon_cmd.rs` (~3746 lines) — the daemon Runtime construction. Moved binaries, still wants an in-file split.
+- `sovereign-cli-daemon/src/daemon_cmd/` (was ~3746 lines; `mod.rs` ~2378 + `lifecycle`/`workspace`/`provider`/`worker`/`tool_registry` submodules) — daemon Runtime construction. **Partially split (2026-06-09):** separable lifecycle / workspace / provider / worker / tool-registry concerns extracted; the `run_daemon` bootstrap's two self-contained early phases (VRAM `preflight` + `inference` provider load) were extracted to `daemon_cmd/build/`. The remaining ~22 phases (~1990 lines) are interleaved (shared locals + ordering constraints) and stay inline — the accepted end state, mirroring the desktop `state.rs` `tools`/`embedded_daemon` call.
 
 All are listed in `SYSTEM_OVERVIEW.md` §10 Architecture Roadmap with
 their deferral rationale. Big files without a roadmap entry are

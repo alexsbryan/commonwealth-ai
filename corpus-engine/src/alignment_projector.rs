@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Alignment projector — materializes an `alignment` corpus's chunks
 //! back to the filesystem under `<home>/.claude/`.
 //!

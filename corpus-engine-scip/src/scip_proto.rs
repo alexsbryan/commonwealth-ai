@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Minimal SCIP protobuf types.
 //!
 //! These types mirror the subset of the SCIP protocol we need for call

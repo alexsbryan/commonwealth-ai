@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `run_team_pipeline` — the five-stage orchestrator that drives a
 //! turn through Router → Retriever → Curator → Drafter → Presenter
 //! when the team-pipeline kill-switch is on

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Configuration types for a locally-sourced corpus.
 //!
 //! One `LocalCorpusConfig` describes everything about one corpus

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tension candidate selection + Landing 4 placeholder.
 //!
 //! Landing 3 scope: produce a **candidate list** of atom pairs that

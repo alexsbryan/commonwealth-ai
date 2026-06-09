@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { test, expect, type Page } from "@playwright/test";
 
 // Agent-drivable verification of the first-party SF land-value-tax mesh

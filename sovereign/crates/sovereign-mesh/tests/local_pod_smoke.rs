@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Local-podman smoke test for the ephemeral worker daemon.
 //!
 //! Builds the `sovereign-worker-local:test` image (built ahead of

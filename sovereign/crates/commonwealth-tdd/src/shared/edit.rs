@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Edit-action schema + emission parser.
 //!
 //! The model emits one fenced JSON action header + one fenced source

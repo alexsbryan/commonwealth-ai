@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atlas facet-typed clustering — Phase 2 of the v2.1 pipeline.
 //!
 //! Wraps `vector_clustering::cluster_vectors` for each atlas facet.

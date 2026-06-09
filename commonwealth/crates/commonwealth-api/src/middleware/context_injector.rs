@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `ContextInjector` — prepends ATOS context to the system prompt so
 //! the model "happens to" know the current notes digest + the
 //! feature spec without the agent having to remember to load them.

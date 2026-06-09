@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign memory` — glassbox for the long-term memory store.
 //!
 //! The rolling-summary compaction worker (`crate::memory_compaction`)

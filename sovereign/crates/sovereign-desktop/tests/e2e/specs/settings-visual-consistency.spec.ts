@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { test, expect, bootToChat, type Page } from "../fixtures/test-base";
 
 // Settings panel substrate audit. Every section inside Settings must

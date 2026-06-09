@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! PP-OCR recognition character dictionary.
 //!
 //! PaddleOCR dict files list one character per line (UTF-8). The CTC

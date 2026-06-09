@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /// Errors produced by Commonwealth library crates.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

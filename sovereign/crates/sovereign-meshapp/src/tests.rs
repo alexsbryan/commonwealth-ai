@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 use super::*;
 
 /// A minimal but real-shaped atlas: two entities, one Relation and one Event

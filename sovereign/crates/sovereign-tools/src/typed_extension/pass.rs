@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pass A (per-leaf) and Pass B (per-vault-theme) execution.
 //!
 //! Each pass:

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Port-config plumbing test.
 //!
 //! Pins that the `SetupConfig.daemon.{client_port, internal_port}`

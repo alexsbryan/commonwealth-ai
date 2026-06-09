@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Snapshot fixture suite for the working-set brief assembler.
 //!
 //! Each test:

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich seed` — Stage 1a driver.
 //!
 //! Runs the pipeline's seed-extraction strategy against the first
@@ -19,7 +20,7 @@ use super::config::EnrichConfig;
 use super::corpus_io::rebuild_corpus_state;
 use super::inference_client::DaemonInferenceClient;
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich seed",

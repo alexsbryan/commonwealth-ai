@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! KnowledgeQuery dispatch + its retrieval-miss diversion path.
 //!
 //! `prepare_knowledge_query_plan` is the load-bearing setup that

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich eval-median <corpus> <golden> --runs N` —
 //! variance-aware version of `enrich eval`.
 //!
@@ -43,7 +44,7 @@ use serde::Serialize;
 use super::config::EnrichConfig;
 use super::eval::{score_corpus, EvalReport, PhaseFilter, PhaseScore};
 use super::{build, paths};
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich eval-median",

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Peer-address preference ordering.
 //!
 //! When a `MemberRecord` carries multiple addresses for a peer (a

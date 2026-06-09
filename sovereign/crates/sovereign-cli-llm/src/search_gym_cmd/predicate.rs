@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pass-predicate vocabulary for `sovereign search-gym`.
 //!
 //! Each fixture's `pass.toml` parses into a `Predicate`. The struct is

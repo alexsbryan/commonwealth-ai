@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! [`BackgroundWatcher`] that keeps the project documentation index up to date.
 //!
 //! Watches for changes to `*.md` files and re-indexes them via

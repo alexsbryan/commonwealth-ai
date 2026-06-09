@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!--
   StarterChips — compact chip row surfacing atlas-mined starter
   questions. Clicking a chip fires `onPick(question)` so the caller

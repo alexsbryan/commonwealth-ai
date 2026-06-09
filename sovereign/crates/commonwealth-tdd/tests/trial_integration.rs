@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end exercise of the unified `run_trial` against real
 //! workdirs + real pytest + scripted backend. Same behavioral
 //! surface as the pre-collapse green_loop / red_loop / refactor_loop

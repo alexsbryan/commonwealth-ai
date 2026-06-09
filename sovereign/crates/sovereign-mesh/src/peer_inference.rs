@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `MeshInferenceProvider` — the Joiner-side wrapper that routes
 //! synthesis to the best-scoring mesh peer for a given OICP request,
 //! with automatic fallback to local on any remote error.

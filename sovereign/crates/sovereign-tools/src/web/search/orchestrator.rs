@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Search orchestrator — picks a backend per call, respects privacy
 //! and budget, emits tracing, handles fallback.
 //!

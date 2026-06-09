@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Stdin prompt helpers.
 //!
 //! Every subcommand that talks to the user shares a few interaction

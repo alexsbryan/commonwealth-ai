@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Semantic code search over installed code corpora.
 //!
 //! Trust contract: results are **approximate**. Every response is

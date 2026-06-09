@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end pipeline test — discovery → load → mock-agent run →
 //! stub-judge → score → report → baseline persistence. No cargo
 //! subprocess (the synthesized problem uses `JudgeOnly` for all

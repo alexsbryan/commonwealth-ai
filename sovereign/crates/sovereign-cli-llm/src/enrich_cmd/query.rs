@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich query <corpus> "<text>" [--show-traversal]` —
 //! one-off atlas traversal. Loads the atlas from the phase cache,
 //! embeds the query via the daemon, prints LOCATE / TRAVERSE /
@@ -8,7 +9,7 @@ use corpus_engine::enrichment::pipeline::{traverse_atlas, Atlas};
 use super::config::EnrichConfig;
 use super::inference_client::{probe_daemon, DaemonInferenceClient};
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich query",

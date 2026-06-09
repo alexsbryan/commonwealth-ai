@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Presentation helpers for `IngestStats.excerpt_chunks`.
 //
 // The Rust side picks 3 excerpts using length + diversity +

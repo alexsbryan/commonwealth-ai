@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! MCP tools for the work atlas.
 //!
 //! Phase 1 exposes three tools:

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Canonical-index sync: pack/unpack helpers for cross-peer transfer.
 //!
 //! Phase 6 of the resilience track. The mesh's `auto_recover` path

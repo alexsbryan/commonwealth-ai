@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign atlas enable-incremental` — flip the per-corpus
 //! `atlas_incremental_enabled` flag in `_corpus_meta.json`.
 //!

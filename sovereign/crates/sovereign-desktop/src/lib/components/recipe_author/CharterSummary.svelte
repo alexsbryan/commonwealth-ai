@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Charter card. The charter is the partner's domain framing — what
   // the corpus is, who it's for, what's already settled. Read-only

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign bench mechanism-fidelity run …` — the elicitation +
 //! scoring orchestrator for the Reasoning-Fidelity Validation Harness.
 //!
@@ -49,7 +50,7 @@ use sovereign_eval::mechanism_fidelity::{
 };
 use sovereign_inference::remote::RemoteApiProvider;
 
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign bench mechanism-fidelity",

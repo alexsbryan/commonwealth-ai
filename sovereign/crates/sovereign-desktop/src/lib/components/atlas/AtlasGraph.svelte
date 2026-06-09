@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Force-directed "epistemic landscape" map for a corpus's atom atlas.
   // Ported from the mesh-app SDK's proven, dependency-free graph engine

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Filesystem-backed [`AssetStore`] impl (AD-1).
 
 use std::path::{Path, PathBuf};

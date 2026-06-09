@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Shared chat-render types consumed by the chat-ui components + FSM.
 // Self-contained: this module imports nothing from any app, so the
 // package carries no back-dependency on desktop or mobile. Each app's

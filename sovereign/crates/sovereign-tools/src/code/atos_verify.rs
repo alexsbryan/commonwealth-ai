@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `atos_verify` — step verification with hollow/untouched gates.
 //!
 //! Runs a shell verify command in the workdir and checks that the

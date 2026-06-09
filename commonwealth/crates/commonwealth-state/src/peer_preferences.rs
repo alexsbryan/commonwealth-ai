@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-peer affinity preferences (Ostrom-style sanctions).
 //!
 //! A node operator can privately tell their daemon "serve peer X

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `promote_note` — rewrite a note from session/feature scope up to
 //! feature/global scope.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign project` subcommand — one-shot workspace setup for code intelligence.
 //!
 //! Run `sovereign project init` from any repo root and the entire code
@@ -37,11 +38,11 @@ pub async fn run_project(args: &[String]) -> i32 {
     // Specific sub-subcommand help (e.g. `project init --help`) is
     // handled inside each cmd_* function via `util::help::wants_help`.
     if args.is_empty() {
-        crate::util::help::print(&HELP);
+        sovereign_cli_shared::help::print(&HELP);
         return 1;
     }
     if matches!(args[0].as_str(), "--help" | "-h" | "help") {
-        crate::util::help::print(&HELP);
+        sovereign_cli_shared::help::print(&HELP);
         return 0;
     }
 
@@ -51,7 +52,7 @@ pub async fn run_project(args: &[String]) -> i32 {
     // and forward to the same handler the new top-level arm uses,
     // so behaviour is identical modulo the banner. Suppress with
     // SOVEREIGN_QUIET_DEPRECATIONS=1.
-    use crate::util::deprecation::announce;
+    use sovereign_cli_shared::deprecation::announce;
     match args[0].as_str() {
         "init" => {
             announce("sovereign project init", "sovereign init");
@@ -98,18 +99,18 @@ pub async fn run_project(args: &[String]) -> i32 {
         "watch" => cmd_watch(&args[1..]).await,
         other => {
             eprintln!("Unknown project subcommand: {other}");
-            crate::util::help::print(&HELP);
+            sovereign_cli_shared::help::print(&HELP);
             1
         }
     }
 }
 
-const HELP: crate::util::help::Help = crate::util::help::Help {
+const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign project",
     summary: "Per-project code intelligence: indexes, call graphs, and the MCP tool server.",
     sections: &[
-        crate::util::help::HelpSection::Usage("sovereign project <subcommand> [flags]"),
-        crate::util::help::HelpSection::Subcommands(&[
+        sovereign_cli_shared::help::HelpSection::Usage("sovereign project <subcommand> [flags]"),
+        sovereign_cli_shared::help::HelpSection::Subcommands(&[
             ("init",           "Set up code intelligence for the current workspace (also registers with the daemon)"),
             ("design",         "Agent-collaborative DESIGN.md session (opencode-first). --solo to skip the agent"),
             ("plan",           "Compose IMPLEMENTATION_PLAN.md from DESIGN.md + OPEN_QUESTIONS.md; indexes plan items in .sovereign/plan.db"),
@@ -127,23 +128,23 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
             ("watch",          "Inspect or control watchers: `watch status | restart | logs`"),
             ("install-hooks",  "Deprecated — the daemon now owns freshness; prints migration hint"),
         ]),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Notes(
             "Run `sovereign project <subcommand> --help` for subcommand-specific flags.",
         ),
     ],
 };
 
-const HELP_INIT: crate::util::help::Help = crate::util::help::Help {
+const HELP_INIT: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign project init",
     summary: "Set up code intelligence for the workspace in the current directory.",
     sections: &[
-        crate::util::help::HelpSection::Usage(
+        sovereign_cli_shared::help::HelpSection::Usage(
             "sovereign project init [--name <id>] [--port <port>]\n    \
              [--data-dir <dir>] [--workspace-root <path>]\n    \
              [--watcher-ignore <component>]...\n    \
              [--no-scip] [--no-hooks] [--no-claude-config]",
         ),
-        crate::util::help::HelpSection::Flags(&[
+        sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--name <id>",          "Corpus ID (default: directory name)"),
             ("--port <port>",        "MCP server port (default: 9741)"),
             ("--data-dir <dir>",     "Index directory (default: ~/.sovereign/indexes)"),
@@ -153,7 +154,7 @@ const HELP_INIT: crate::util::help::Help = crate::util::help::Help {
             ("--no-hooks",           "Skip git hook installation"),
             ("--no-claude-config",   "Skip writing .claude/settings.json (overrides harness prompt)"),
         ]),
-        crate::util::help::HelpSection::Examples(&[
+        sovereign_cli_shared::help::HelpSection::Examples(&[
             ("sovereign project init",                                   "Index the current workspace"),
             ("sovereign project init --workspace-root ..",               "Index a monorepo from a sibling dir"),
             ("sovereign project init --watcher-ignore .sovereign --watcher-ignore generated", "Add custom ignores at the FS watcher seam"),
@@ -162,27 +163,27 @@ const HELP_INIT: crate::util::help::Help = crate::util::help::Help {
     ],
 };
 
-const HELP_DESIGN: crate::util::help::Help = crate::util::help::Help {
+const HELP_DESIGN: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign project design",
     summary: "Agent-collaborative DESIGN.md session. opencode is the blessed path; --solo and --stopgap are fallbacks.",
     sections: &[
-        crate::util::help::HelpSection::Usage(
+        sovereign_cli_shared::help::HelpSection::Usage(
             "sovereign project design [--import <path>] [--via <agent>]\n    \
              [--solo] [--stopgap] [--port <port>]",
         ),
-        crate::util::help::HelpSection::Flags(&[
+        sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--import <path>",  "Copy <path> into <repo>/DESIGN.md (diff-confirms if one already exists)"),
             ("--via <agent>",    "Choose the agent: opencode (default) | claude-code | cursor"),
             ("--solo",           "Skip the agent; walk structural gaps with CLI prompts, write OPEN_QUESTIONS.md"),
             ("--stopgap",        "Provisional embedded CLI chat (banner-labelled; install opencode for the real experience)"),
             ("--port <port>",    "Commonwealth daemon port (default: 9741)"),
         ]),
-        crate::util::help::HelpSection::Examples(&[
+        sovereign_cli_shared::help::HelpSection::Examples(&[
             ("sovereign project design",                         "Launch opencode with the session brief primed"),
             ("sovereign project design --import ./design.md",    "Import an existing doc, then start the session"),
             ("sovereign project design --solo",                  "No agent — CLI prompts driven by the structural parser"),
         ]),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Notes(
             "Requires the Commonwealth daemon (start it with `commonwealth daemon start`).\n\
              The session writes DESIGN.md and OPEN_QUESTIONS.md at repo root; artifacts live in\n\
              .sovereign/.atos/design/<session-id>/.",
@@ -190,20 +191,20 @@ const HELP_DESIGN: crate::util::help::Help = crate::util::help::Help {
     ],
 };
 
-const HELP_PLAN: crate::util::help::Help = crate::util::help::Help {
+const HELP_PLAN: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign project plan",
     summary: "Compose IMPLEMENTATION_PLAN.md from DESIGN.md + OPEN_QUESTIONS.md; upsert rows into .sovereign/plan.db.",
     sections: &[
-        crate::util::help::HelpSection::Usage(
+        sovereign_cli_shared::help::HelpSection::Usage(
             "sovereign project plan [--allow-open] [--no-enrich] [--enrich-model <id>] [--daemon-url <url>]",
         ),
-        crate::util::help::HelpSection::Flags(&[
+        sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--allow-open",        "Proceed even if OPEN_QUESTIONS.md has unanswered entries (they surface as open risks on the matching phase)"),
             ("--no-enrich",         "Skip the inference-driven phase enrichment pass; produce the deterministic skeleton only"),
             ("--enrich-model <id>", "Override the chat model used for enrichment (default: FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L)"),
             ("--daemon-url <url>",  "Override the daemon URL for enrichment (default: http://localhost:9741)"),
         ]),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Notes(
             "Phase 0 = Skeleton (language-specific build+test stop).\n\
              Phases 1..N come from H2 sections in DESIGN.md, in order (skipping Anchors / Open questions).\n\
              Each phase 1..N is enriched by one chat call: the model rewrites the body and proposes an executable stop_hint. \
@@ -215,15 +216,15 @@ const HELP_PLAN: crate::util::help::Help = crate::util::help::Help {
     ],
 };
 
-const HELP_CHARTER: crate::util::help::Help = crate::util::help::Help {
+const HELP_CHARTER: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign project charter",
     summary: "Create or edit the team's free-form CHARTER.md (governance, culture, onboarding). Distinct from DESIGN.md.",
     sections: &[
-        crate::util::help::HelpSection::Usage("sovereign project charter [--print]"),
-        crate::util::help::HelpSection::Flags(&[
+        sovereign_cli_shared::help::HelpSection::Usage("sovereign project charter [--print]"),
+        sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--print", "Print the current CHARTER.md to stdout and exit without opening $EDITOR"),
         ]),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Notes(
             "CHARTER.md is the low-ceremony team governance doc — who we are, how we decide, \
              onboarding pointers. It is NOT auto-generated from DESIGN.md: DESIGN.md says what \
              we're building; CHARTER.md says how we work together on it.\n\n\
@@ -262,15 +263,15 @@ const CHARTER_SKELETON: &str = r#"# Charter
 <!-- Appended to by `sovereign project amend`. -->
 "#;
 
-const HELP_SERVE: crate::util::help::Help = crate::util::help::Help {
+const HELP_SERVE: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign project serve",
     summary: "Start a lightweight MCP server for locally-indexed projects (no model required).",
     sections: &[
-        crate::util::help::HelpSection::Usage(
+        sovereign_cli_shared::help::HelpSection::Usage(
             "sovereign project serve [--port <port>] [--data-dir <dir>]\n    \
              [--sovereign-dir <dir>]",
         ),
-        crate::util::help::HelpSection::Flags(&[
+        sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--port <port>", "Listen port (default: 9741)"),
             (
                 "--data-dir <dir>",
@@ -284,22 +285,22 @@ const HELP_SERVE: crate::util::help::Help = crate::util::help::Help {
     ],
 };
 
-const HELP_STATUS: crate::util::help::Help = crate::util::help::Help {
+const HELP_STATUS: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign project status",
     summary: "Show the status of code intelligence for the current project.",
-    sections: &[crate::util::help::HelpSection::Usage(
+    sections: &[sovereign_cli_shared::help::HelpSection::Usage(
         "sovereign project status",
     )],
 };
 
-const HELP_REFRESH: crate::util::help::Help = crate::util::help::Help {
+const HELP_REFRESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign project refresh",
     summary: "Re-export the SCIP call graph + rebuild the LanceDB index when embeddings are stale.",
     sections: &[
-        crate::util::help::HelpSection::Usage(
+        sovereign_cli_shared::help::HelpSection::Usage(
             "sovereign project refresh [--quiet] [--rebuild-index]",
         ),
-        crate::util::help::HelpSection::Flags(&[
+        sovereign_cli_shared::help::HelpSection::Flags(&[
             (
                 "--quiet",
                 "Suppress progress output (use from hook scripts)",
@@ -310,7 +311,7 @@ const HELP_REFRESH: crate::util::help::Help = crate::util::help::Help {
                  even when the on-disk embed model matches the current daemon.",
             ),
         ]),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Notes(
             "Runs automatically on commit via the installed hook (SCIP only; the hook does \
              NOT force a LanceDB rebuild). The LanceDB index auto-rebuilds whenever this \
              command detects an embed-model mismatch between `_corpus_meta.json` and \
@@ -320,12 +321,12 @@ const HELP_REFRESH: crate::util::help::Help = crate::util::help::Help {
     ],
 };
 
-const HELP_INSTALL_HOOKS: crate::util::help::Help = crate::util::help::Help {
+const HELP_INSTALL_HOOKS: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign project install-hooks",
     summary: "Upgrade (or install) the post-commit hook in the current repo.",
     sections: &[
-        crate::util::help::HelpSection::Usage("sovereign project install-hooks"),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Usage("sovereign project install-hooks"),
+        sovereign_cli_shared::help::HelpSection::Notes(
             "Use this when you've upgraded sovereign-cli and want the hook to pick up the new\n\
              binary without re-running `sovereign project init`.",
         ),
@@ -424,8 +425,8 @@ async fn fetch_commonwealth_models(commonwealth_url: &str) -> Vec<String> {
 // ─── Init ────────────────────────────────────────────────────
 
 pub(crate) async fn cmd_init(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
-        crate::util::help::print(&HELP_INIT);
+    if sovereign_cli_shared::help::wants_help(args) {
+        sovereign_cli_shared::help::print(&HELP_INIT);
         return 0;
     }
     let mut name: Option<String> = None;
@@ -1292,8 +1293,8 @@ vector = false
 // Most of the work lives in `crate::design_session`; `cmd_design`
 // parses args, resolves the repo root + project id, and hands off.
 pub(crate) async fn cmd_design(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
-        crate::util::help::print(&HELP_DESIGN);
+    if sovereign_cli_shared::help::wants_help(args) {
+        sovereign_cli_shared::help::print(&HELP_DESIGN);
         return 0;
     }
     let mut import_path: Option<PathBuf> = None;
@@ -1375,8 +1376,8 @@ pub(crate) async fn cmd_design(args: &[String]) -> i32 {
 // Composition lives in `crate::plan_composer` (pure); this handler
 // does the IO, ordering, and indexing.
 pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
-        crate::util::help::print(&HELP_PLAN);
+    if sovereign_cli_shared::help::wants_help(args) {
+        sovereign_cli_shared::help::print(&HELP_PLAN);
         return 0;
     }
 
@@ -1756,8 +1757,8 @@ async fn cmd_amend_design(args: &[String]) -> i32 {
 // separate migration that affects amend + drift detection and
 // hasn't landed yet.)
 pub(crate) async fn cmd_charter(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
-        crate::util::help::print(&HELP_CHARTER);
+    if sovereign_cli_shared::help::wants_help(args) {
+        sovereign_cli_shared::help::print(&HELP_CHARTER);
         return 0;
     }
 
@@ -1874,8 +1875,8 @@ pub(crate) async fn cmd_charter(args: &[String]) -> i32 {
 // ─── Status ──────────────────────────────────────────────────
 
 pub(crate) async fn cmd_status(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
-        crate::util::help::print(&HELP_STATUS);
+    if sovereign_cli_shared::help::wants_help(args) {
+        sovereign_cli_shared::help::print(&HELP_STATUS);
         return 0;
     }
     let mut data_dir: Option<PathBuf> = None;
@@ -2059,8 +2060,8 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
 // ─── Refresh ─────────────────────────────────────────────────
 
 pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
-        crate::util::help::print(&HELP_REFRESH);
+    if sovereign_cli_shared::help::wants_help(args) {
+        sovereign_cli_shared::help::print(&HELP_REFRESH);
         return 0;
     }
     let mut quiet = false;
@@ -2566,8 +2567,8 @@ fn reset_scip_db(db_path: &Path) -> std::io::Result<()> {
 // ─── Serve ───────────────────────────────────────────────────
 
 pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
-        crate::util::help::print(&HELP_SERVE);
+    if sovereign_cli_shared::help::wants_help(args) {
+        sovereign_cli_shared::help::print(&HELP_SERVE);
         return 0;
     }
 
@@ -3339,7 +3340,7 @@ async fn scip_graph_reloader(handle: sovereign_tools::ScipGraphHandle, data_dir:
 // favour of the explicit `sovereign design` / `sovereign charter`
 // / `sovereign plan` triad.
 async fn cmd_found(_args: &[String]) -> i32 {
-    crate::util::deprecation::announce_retired(
+    sovereign_cli_shared::deprecation::announce_retired(
         "sovereign project found",
         "Founding is implicit now: `sovereign init` + a committed          spec is sufficient. Use `sovereign charter` if you want          to define team conventions, or `sovereign plan` to write          PHASES.md from a design doc.",
     );
@@ -3978,7 +3979,7 @@ fn compose_publish_recipe_nudge() -> Option<String> {
     // Resolve the local recipes dir + the indexes dir. Bail
     // silently when HOME isn't set — the nudge is best-effort.
     let local_recipes_dir = RecipeRegistry::default_local_recipes_dir()?;
-    let indexes_dir = crate::util::dirs::sovereign_indexes();
+    let indexes_dir = sovereign_cli_shared::dirs::sovereign_indexes();
     if !indexes_dir.is_dir() {
         return None;
     }
@@ -3988,7 +3989,7 @@ fn compose_publish_recipe_nudge() -> Option<String> {
     registry = registry.with_local_registry(&local_recipes_dir.join("registry.toml"));
 
     // Read the publish + dismissal markers.
-    let sovereign_root = crate::util::dirs::sovereign_root();
+    let sovereign_root = sovereign_cli_shared::dirs::sovereign_root();
     let published: std::collections::BTreeMap<String, serde_json::Value> =
         std::fs::read_to_string(sovereign_root.join("published_recipes.json"))
             .ok()
@@ -4805,7 +4806,7 @@ fn resolve_git(
     // fresh repos are almost always setting up a dev environment,
     // and git is what every downstream ATOS command assumes. If the
     // user truly wants no git, they pass --no-git.
-    if !crate::util::prompts::stdin_is_tty() {
+    if !sovereign_cli_shared::prompts::stdin_is_tty() {
         println!();
         println!(
             "    No git repo; initializing (non-interactive default — pass --no-git to opt out)."
@@ -4832,7 +4833,7 @@ fn resolve_git(
     eprintln!("    \u{00b7} amendment history that survives machine changes");
     eprintln!();
 
-    let accept = crate::util::prompts::confirm("  Run `git init` here now?", true);
+    let accept = sovereign_cli_shared::prompts::confirm("  Run `git init` here now?", true);
     if accept {
         run_git_init(repo_root);
         if repo_root.join(".git").exists() {
@@ -5826,8 +5827,8 @@ fn update_gitignore(root: &Path) -> std::io::Result<()> {
 /// running the full `project init` pipeline. Safe to re-run; detects and
 /// rewrites prior-version hook blocks in place.
 async fn cmd_install_hooks(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
-        crate::util::help::print(&HELP_INSTALL_HOOKS);
+    if sovereign_cli_shared::help::wants_help(args) {
+        sovereign_cli_shared::help::print(&HELP_INSTALL_HOOKS);
         return 0;
     }
     // Deprecated. The daemon's Reindexer now keeps the graph fresh
@@ -5874,7 +5875,7 @@ async fn cmd_install_hooks(args: &[String]) -> i32 {
 const DAEMON_BASE: &str = "http://127.0.0.1:9741";
 
 pub(crate) async fn cmd_register(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
+    if sovereign_cli_shared::help::wants_help(args) {
         print_simple_help(
             "sovereign project register",
             "Register the current directory with the daemon's freshness pipeline.",
@@ -5937,7 +5938,7 @@ pub(crate) async fn cmd_register(args: &[String]) -> i32 {
 }
 
 pub(crate) async fn cmd_unregister(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
+    if sovereign_cli_shared::help::wants_help(args) {
         print_simple_help(
             "sovereign project unregister",
             "Stop the daemon from watching a project.",
@@ -5972,7 +5973,7 @@ pub(crate) async fn cmd_unregister(args: &[String]) -> i32 {
 }
 
 pub(crate) async fn cmd_list(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
+    if sovereign_cli_shared::help::wants_help(args) {
         print_simple_help(
             "sovereign project list",
             "List every project the daemon is watching.",
@@ -6017,7 +6018,7 @@ pub(crate) async fn cmd_list(args: &[String]) -> i32 {
 }
 
 pub(crate) async fn cmd_watch(args: &[String]) -> i32 {
-    if args.is_empty() || crate::util::help::wants_help(args) {
+    if args.is_empty() || sovereign_cli_shared::help::wants_help(args) {
         print_simple_help(
             "sovereign project watch",
             "Inspect or control per-project watchers.",

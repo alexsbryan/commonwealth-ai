@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Runtime prompt-asset loading with compile-time fallback.
 //!
 //! Pipelines used to bake their prompt MD files at compile time via

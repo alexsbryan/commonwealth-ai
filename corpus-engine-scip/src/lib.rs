@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! # corpus-engine-scip
 //!
 //! SCIP call graph (`scip_graph`) + language-agnostic exporter

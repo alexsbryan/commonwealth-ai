@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Append-only ledger-event store backed by [`MeshStore`].
 //!
 //! Why piggy-back on `MeshStore` instead of a sibling SQLite table:

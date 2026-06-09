@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Runtime-side meta-atlas index — wraps a loaded [`MetaAtlasFile`]
 //! for fast canonical-name lookups at retrieval time.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Dimensional contribution ledger — replaces the abandoned
 //! `LedgerEntry` schema with append-only events that gossip
 //! through the mesh and aggregate into per-node `NodeContributions`

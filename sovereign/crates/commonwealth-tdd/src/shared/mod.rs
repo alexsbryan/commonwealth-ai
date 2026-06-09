@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared building blocks for every phase of the solver loop.
 //!
 //! Lifted from `sovereign-agent-bench/src/runners/shared.rs` +

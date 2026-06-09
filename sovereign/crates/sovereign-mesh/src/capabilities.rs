@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Build this node's `NodeCapabilities` from live system state.
 //!
 //! Why this module exists: `MemberRecord.capabilities` is the field

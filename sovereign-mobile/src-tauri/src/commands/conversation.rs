@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Conversation CRUD — cache-first, then reconcile against the host.
 //!
 //! Reads return the local cache immediately so the app is usable

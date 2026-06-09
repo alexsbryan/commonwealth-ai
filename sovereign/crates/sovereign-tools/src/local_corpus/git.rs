@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Thin shell-out wrappers around the system `git` binary.
 //!
 //! We do NOT depend on `git2` / `libgit2`: it's heavy, has its own

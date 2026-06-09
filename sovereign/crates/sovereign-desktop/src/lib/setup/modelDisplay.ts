@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Pure display helpers for ModelSelector (§3.3 component decomposition):
 // the hardware-tier classifier and the byte formatter. No runes, no IO —
 // unit-tested; the component imports them.

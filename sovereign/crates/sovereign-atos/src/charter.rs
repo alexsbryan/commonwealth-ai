@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Charter parser — turns a markdown spec into a structured set of
 //! milestones.
 //!

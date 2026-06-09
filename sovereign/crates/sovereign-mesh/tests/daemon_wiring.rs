@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Daemon-wiring integration test.
 //!
 //! Verifies the load-bearing service-injection order from

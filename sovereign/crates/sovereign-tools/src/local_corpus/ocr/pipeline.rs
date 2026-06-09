@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-file orchestration for the OCR path.
 //!
 //! `extract_pdf_via_ocr(path, ctx, on_progress)` is the single entry

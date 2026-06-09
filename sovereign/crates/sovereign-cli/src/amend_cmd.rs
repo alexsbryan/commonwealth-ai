@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign amend [architecture|charter]` — adversarial doc edit.
 //!
 //! Renamed from `sovereign project amend` per the CLI refactor plan.

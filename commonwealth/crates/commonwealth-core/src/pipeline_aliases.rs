@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pipeline aliases — the M4 entry point for "the model alias is the
 //! entire orchestrator."
 //!

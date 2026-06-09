@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Read-only status reporter — pulls from the worklist DB and prints
 //! a human-friendly summary. Works whether or not a driver is alive.
 //!

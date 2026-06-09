@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Response-provenance / UI / insight types — split from monolithic types.rs
 //! (ARCH §3.2); re-exported by types/mod.rs (paths unchanged).
 #[allow(unused_imports)]

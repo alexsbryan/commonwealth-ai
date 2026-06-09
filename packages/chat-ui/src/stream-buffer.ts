@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Buffers streaming tokens to word boundaries before flushing.
  * Prevents mid-word rendering in the UI.

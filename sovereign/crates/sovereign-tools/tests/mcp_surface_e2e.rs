@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end coverage for the Phase 2 MCP-surface contract.
 //!
 //! Phase 2 of the CLI refactor:

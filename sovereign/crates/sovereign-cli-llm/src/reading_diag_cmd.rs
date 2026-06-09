@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign reading-diag` — headless validator for the glass-box
 //! reading-surface chain.
 //!
@@ -42,7 +43,7 @@ use serde_json::json;
 
 use crate::chat_cmd::bootstrap::{build_session, ChatSession};
 use crate::chat_cmd::config::parse_globals;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign reading-diag",

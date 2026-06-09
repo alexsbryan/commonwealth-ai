@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! ComplexTask dispatch — planner-driven multi-step execution.
 //! Builds a Task, hands it to the Planner, then drives the Executor
 //! through each step until completion or yield.

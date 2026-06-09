@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Registered reasoning classes. Adding a class = a new module here
 //! implementing [`crate::mechanism_fidelity::class::ReasoningClass`] +
 //! an entry in [`crate::mechanism_fidelity::registry`].

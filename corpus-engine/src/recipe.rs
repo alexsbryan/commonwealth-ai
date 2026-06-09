@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Recipe schema — declarative TOML for `acquire → extract → chunk
 //! → embed → index` pipelines, plus optional `[parameters]`,
 //! `[catalog]`, `[enrichment]` blocks.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Wrapper extractor that delegates per-file text extraction to a
 //! [`CustomExtractorFn`](crate::engine::CustomExtractorFn) registered
 //! on the engine at startup.

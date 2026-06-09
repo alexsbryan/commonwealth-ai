@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tiny shared parsers for cross-handler request headers.
 //!
 //! Right now this exists for the `X-Node-Id` header that

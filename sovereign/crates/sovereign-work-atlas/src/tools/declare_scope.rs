@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `declare_scope` — write a Claim and broadcast it.
 //!
 //! Idempotent on the underlying session, not on the claim itself

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! ConationQuery dispatch — adjustments to the prior assistant turn.
 //! The handler rebinds against the prior turn's intent and re-issues
 //! synthesis with the user's tweak folded in.

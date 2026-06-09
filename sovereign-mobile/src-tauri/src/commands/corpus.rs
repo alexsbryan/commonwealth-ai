@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Corpus commands — list installed CORPUS_REFs and resolve a citation
 //! to its snippet (the `(corpus_id, chunk_id)` handle, §4).
 

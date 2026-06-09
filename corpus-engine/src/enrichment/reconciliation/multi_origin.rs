@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The multi-origin merge primitive.
 //!
 //! Given a `Vec<Entity>` whose atoms carry [`Provenance`] (AD-4),

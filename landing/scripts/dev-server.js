@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Minimal local dev server — serves static files at root, proxies /api/* to
 // the same Edge handler that runs on Vercel. No bundler, no watch loop.
 //

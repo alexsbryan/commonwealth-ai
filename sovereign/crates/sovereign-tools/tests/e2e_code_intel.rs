@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 #![cfg(feature = "treesitter")]
 //! Code Intelligence — E2E tests.
 //!

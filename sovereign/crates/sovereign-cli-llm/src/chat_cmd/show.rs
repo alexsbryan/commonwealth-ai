@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign chat show <conversation_id>` — dump a conversation's turns
 //! with their persisted provenance + retrieved-chunks metadata.
 
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
 use crate::chat_cmd::render;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign chat show",

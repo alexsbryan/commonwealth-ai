@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Content-addressed asset store (AD-1).
 //!
 //! The substrate primitive every binary-bearing vertical inherits: a

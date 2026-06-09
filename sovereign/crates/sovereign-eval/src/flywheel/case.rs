@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The regression-case store (G3): every detected failure becomes a durable,
 //! replayable case. Append-only JSONL so capture is a cheap append — never a
 //! whole-bank rewrite — and the fairness contract is re-checked at capture AND

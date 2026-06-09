@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 use super::{floor_char_boundary, Chunker, TextChunk};
 
 /// Fixed-size chunker with overlap.

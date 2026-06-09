@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Snapshot of where the corpus stands: recipe id, on-disk path,
   // last test status. Pure read; the actual recipe TOML lives in the

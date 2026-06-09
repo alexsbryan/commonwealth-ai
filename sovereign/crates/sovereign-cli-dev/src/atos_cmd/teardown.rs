@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign atos teardown <feature>` — interactive note classification
 //! pass that ends with a frozen epistemic-report.md and the feature
 //! marked `completed`.

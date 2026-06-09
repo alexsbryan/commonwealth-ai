@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Recipe test harness for `corpus-engine`.
 //!
 //! Provides [`run_test`] which downloads a small sample of a recipe's data,

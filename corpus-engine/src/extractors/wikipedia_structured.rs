@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Extractor for the `wikimedia/structured-wikipedia` HuggingFace dataset.
 //!
 //! This dataset stores each article as a single parquet row with deeply-nested

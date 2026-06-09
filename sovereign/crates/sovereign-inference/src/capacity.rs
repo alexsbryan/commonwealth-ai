@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! VRAM working-set planner — refuse-to-load if the configured slot
 //! mix wouldn't fit on the detected GPU with safety margin.
 //!

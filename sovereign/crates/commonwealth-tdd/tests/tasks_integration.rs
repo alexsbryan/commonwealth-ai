@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Convenience-wrapper integration tests. Pin the
 //! prompt-and-test-generator contract for `tasks::split_file` and
 //! `tasks::write_failing_test`.

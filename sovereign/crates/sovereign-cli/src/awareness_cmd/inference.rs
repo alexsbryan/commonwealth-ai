@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! InferenceFn resolution for awareness subcommands.
 //!
 //! Three modes — **default is "talk to the daemon"**, the same code

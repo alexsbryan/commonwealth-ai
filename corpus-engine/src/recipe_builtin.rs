@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Built-in recipe catalog — extracted out of `crate::recipe`.
 //!
 //! `RecipeId` is the type-safe identifier for every bundled recipe.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! SQLite-backed store for lint runner results.
 //!
 //! Mirrors [`crate::test_results`] but adds `line`/`col` columns for

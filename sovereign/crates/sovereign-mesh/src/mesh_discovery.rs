@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pure address-enumeration helpers used by `EmbeddedDaemon` lifecycle
 //! and the desktop relay-picker UI.
 //!

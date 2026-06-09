@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Process-global handles for the watched-folder reconciliation
 //! subsystem.
 //!

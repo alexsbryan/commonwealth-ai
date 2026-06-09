@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich raptor-index <corpus>` — (re)build the derived RAPTOR
 //! summary-node ANN index (`raptor_summaries.lance`) from a corpus's
 //! `conv_raptor_nodes`.
@@ -14,7 +15,7 @@ use std::path::PathBuf;
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::raptor_index::{build_corpus_raptor_index, RaptorIndexOutcome};
 
-use crate::util::help;
+use sovereign_cli_shared::help;
 
 pub async fn cmd_raptor_index(args: &[String]) -> i32 {
     if help::wants_help(args) {

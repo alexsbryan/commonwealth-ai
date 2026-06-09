@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Inference-binding shim.
 //!
 //! `crate::llama::cpp` re-exports the underlying llama.cpp Rust binding.

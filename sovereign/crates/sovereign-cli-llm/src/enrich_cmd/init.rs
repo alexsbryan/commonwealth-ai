@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich init <corpus> --source <path>` — first-run setup.
 //!
 //! Responsibilities:
@@ -27,9 +28,9 @@ use super::config::{EnrichConfig, TocMarkers, CONFIG_SCHEMA_VERSION};
 use super::inference_client::{probe_daemon, resolve_default_models};
 use super::paths;
 use super::templates;
-use crate::util::help::{self, Help, HelpSection};
-use crate::util::prompts::{confirm, stdin_is_tty};
-use crate::util::urls::DEFAULT_CLIENT_PORT;
+use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_shared::prompts::{confirm, stdin_is_tty};
+use sovereign_cli_shared::urls::DEFAULT_CLIENT_PORT;
 
 const HELP: Help = Help {
     command: "sovereign enrich init",

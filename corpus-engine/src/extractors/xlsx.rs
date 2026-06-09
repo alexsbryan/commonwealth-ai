@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! XLSX sub-extractor for the described-asset dispatcher (AD-3).
 //!
 //! Reads spreadsheets with `calamine` and emits two things:

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Server-level busy guard — bounds concurrent inference turns and
 //! makes host saturation *legible* as `503 + Retry-After` (REST) or a
 //! busy stream-error frame (WebSocket). This is the "busy host is

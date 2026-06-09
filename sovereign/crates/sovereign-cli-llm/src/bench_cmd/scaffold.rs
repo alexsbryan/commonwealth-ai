@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign bench scaffold <corpus-id>` — draft a golden TOML
 //! from an existing resolved atlas.
 //!
@@ -21,7 +22,7 @@ use corpus_engine::enrichment::atlas::axis_catalog::{all_axes, AtomKind, TypedAx
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 
 use crate::enrich_cmd::paths::index_root;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign bench scaffold",

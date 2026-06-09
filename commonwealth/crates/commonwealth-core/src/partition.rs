@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Deterministic partitioning primitives shared across replicated-state
 //! daemons (inference scheduler, freshness watchers, etc.).
 //!

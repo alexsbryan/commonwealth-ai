@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Trait-based dispatch for web search backends.
 //!
 //! Phase 0 of the production-search integration

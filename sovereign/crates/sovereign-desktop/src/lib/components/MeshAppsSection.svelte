@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Host-UI affordance to install + open the first-party mesh apps,
   // replacing the devtools-console invoke. Records the granted permission

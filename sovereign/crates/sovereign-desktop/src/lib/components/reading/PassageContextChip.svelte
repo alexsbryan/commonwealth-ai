@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!--
   PassageContextChip — small pill above the chat input that shows
   the currently-focused passage (if any). When the user sends a

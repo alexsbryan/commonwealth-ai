@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Sovereign mobile — thin Tauri client. The Rust core owns transport,
 //! security (token in keychain), the SQLite cache, and connectivity;
 //! the Svelte frontend renders chat via the shared `@sovereign/chat-ui`.

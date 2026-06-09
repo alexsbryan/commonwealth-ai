@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Member-list gossip — the thing that keeps two peers' views of
 //! the mesh converged after the initial join.
 //!

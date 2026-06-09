@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Walks a watched folder and produces a snapshot keyed on doc_id.
 //!
 //! Reuses `PreScanner::run_blocking` for directory traversal +

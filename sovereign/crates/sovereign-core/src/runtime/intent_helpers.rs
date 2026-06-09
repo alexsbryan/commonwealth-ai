@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pure helpers around `Intent` — defaults, labels, wire-form encode/decode,
 //! and clarification UI strings. No state, no I/O; safe to call from
 //! anywhere in the runtime dispatch path.

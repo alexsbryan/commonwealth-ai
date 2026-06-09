@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `Workdir` — structural safety gate for the solver loop.
 //!
 //! Per ARCH_PRINCIPLES §7.1 ("structural invariants"), a solver

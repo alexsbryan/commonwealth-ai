@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! ConversationalDomain — enrichment for conversations indexed as a
 //! `KnowledgeView` over the `conversations` + `messages` tables.
 //!

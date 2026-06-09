@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `/v1/knowledge/landscape_digest` HTTP-surface test.
 //!
 //! Pins the daemon-owned endpoint that attached desktops POST to in

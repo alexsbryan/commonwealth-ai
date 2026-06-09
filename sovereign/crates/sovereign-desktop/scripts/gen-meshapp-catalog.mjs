@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Aggregate every bundle's meshapp.json into public/meshapp/catalog.json — the
 // build-time index the host UI loads to discover available apps (instead of a
 // hard-coded list). Registry-ready: each meshapp.json is the self-describing

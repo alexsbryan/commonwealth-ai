@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! HuggingFace multi-shard dataset acquirer.
 //!
 //! Supports two kinds of HuggingFace dataset layouts:

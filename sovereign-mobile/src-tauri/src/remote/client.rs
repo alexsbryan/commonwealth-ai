@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! HTTP client for the host's `sovereign-server`. Injects the tenant
 //! token, only ever dials the configured tailnet address (no fallback
 //! route — fail-closed off-tailnet is enforced upstream by the monitor),

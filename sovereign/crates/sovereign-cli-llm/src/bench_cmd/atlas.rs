@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atlas-pipeline throughput + correctness bench.
 //!
 //! Hits the running daemon's `/v1/chat/completions` with a fixed set
@@ -38,7 +39,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::enrich_cmd::config::EnrichConfig;
 use crate::enrich_cmd::corpus_io::rebuild_corpus_state;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign bench atlas",

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Voice / register prompt scaffolding for the Primary slot.
 //!
 //! Two epistemic contracts (factual vs. relational) and three Tier-A

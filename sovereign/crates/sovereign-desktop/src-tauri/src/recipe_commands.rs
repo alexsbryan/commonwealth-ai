@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tauri commands powering the desktop's "Add Knowledge Source"
 //! panel.
 //!

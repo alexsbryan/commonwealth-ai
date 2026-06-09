@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 use corpus_engine::{CorpusEngine, ScoredChunk};
 
 use serde::{Deserialize, Serialize};

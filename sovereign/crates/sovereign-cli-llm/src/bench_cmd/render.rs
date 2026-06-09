@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Two-pane scoreboard + cross-corpus matrices for `bench all`.
 //!
 //! Layout:

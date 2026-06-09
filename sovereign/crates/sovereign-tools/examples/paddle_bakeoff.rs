@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tesseract-vs-PaddleOCR bake-off harness.
 //!
 //! Rasterizes a PDF via the existing `PdfiumRasterizer`, runs BOTH the

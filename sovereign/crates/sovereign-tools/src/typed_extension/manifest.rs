@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `atoms.meta.json` sidecar — gates re-extraction.
 //!
 //! The manifest pins what produced the current `atoms.json` so the

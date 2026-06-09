@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end exercise of the bdd_cycle composition with a
 //! scripted backend + real pytest. Pins the contract that
 //! synthesis Reached → green runs → tests stay green or improve.

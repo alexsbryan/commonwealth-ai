@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign recipe-agent` — recipe-author project lifecycle CLI.
 //!
 //! Thin command surface for M1:

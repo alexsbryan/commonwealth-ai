@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich show <corpus> <target>` — formatted view of a cached
 //! phase output. Landing 2 implements `phase1` (with optional
 //! `--chapter <id>` filter); other targets land incrementally.
@@ -9,7 +10,7 @@ use corpus_engine::enrichment::pipeline::{
 
 use super::config::EnrichConfig;
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich show",

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Reading-surface HTTP — `/internal/corpus/{corpus}/chunks/...`
 //! and `/internal/corpus/{corpus}/atoms/...`.
 //!

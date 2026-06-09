@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `session_reflection` — structured post-task feedback from the agent.
 //!
 //! Agents call this at the end of a significant task (refactor, bug fix,

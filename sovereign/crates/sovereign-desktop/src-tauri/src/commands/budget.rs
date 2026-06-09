@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Auto-split from the former monolithic `commands.rs` (PR5). Tauri
 //! command handlers grouped by concern; re-exported through
 //! `commands/mod.rs` so `commands::<name>` paths in `main.rs`'s
@@ -14,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State};
 use tokio::io::AsyncWriteExt;
 
+use crate::error::DesktopError;
 use crate::state::{self, AppState, DesktopConfig};
 
 // ─── Ingest budget + mesh quiesce ──────────────────────────────
@@ -43,7 +45,7 @@ pub struct MeshQuiesceState {
 }
 
 #[tauri::command]
-pub async fn get_ingest_budget() -> Result<IngestBudgetState, String> {
+pub async fn get_ingest_budget() -> Result<IngestBudgetState, DesktopError> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -57,17 +59,17 @@ pub async fn get_ingest_budget() -> Result<IngestBudgetState, String> {
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        return Err(format!(
+        return Err(DesktopError::upstream(format!(
             "daemon /internal/ingest/budget returned {status}: {body}"
-        ));
+        )));
     }
     resp.json::<IngestBudgetState>()
         .await
-        .map_err(|e| format!("decode /internal/ingest/budget: {e}"))
+        .map_err(|e| DesktopError::upstream(format!("decode /internal/ingest/budget: {e}")))
 }
 
 #[tauri::command]
-pub async fn set_ingest_budget(throttle_factor: f32) -> Result<IngestBudgetState, String> {
+pub async fn set_ingest_budget(throttle_factor: f32) -> Result<IngestBudgetState, DesktopError> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -82,17 +84,17 @@ pub async fn set_ingest_budget(throttle_factor: f32) -> Result<IngestBudgetState
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        return Err(format!(
+        return Err(DesktopError::upstream(format!(
             "daemon /internal/ingest/budget returned {status}: {body}"
-        ));
+        )));
     }
     resp.json::<IngestBudgetState>()
         .await
-        .map_err(|e| format!("decode /internal/ingest/budget: {e}"))
+        .map_err(|e| DesktopError::upstream(format!("decode /internal/ingest/budget: {e}")))
 }
 
 #[tauri::command]
-pub async fn get_mesh_quiesced() -> Result<MeshQuiesceState, String> {
+pub async fn get_mesh_quiesced() -> Result<MeshQuiesceState, DesktopError> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -106,17 +108,17 @@ pub async fn get_mesh_quiesced() -> Result<MeshQuiesceState, String> {
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        return Err(format!(
+        return Err(DesktopError::upstream(format!(
             "daemon /internal/mesh/quiesce returned {status}: {body}"
-        ));
+        )));
     }
     resp.json::<MeshQuiesceState>()
         .await
-        .map_err(|e| format!("decode /internal/mesh/quiesce: {e}"))
+        .map_err(|e| DesktopError::upstream(format!("decode /internal/mesh/quiesce: {e}")))
 }
 
 #[tauri::command]
-pub async fn set_mesh_quiesced(quiesced: bool) -> Result<MeshQuiesceState, String> {
+pub async fn set_mesh_quiesced(quiesced: bool) -> Result<MeshQuiesceState, DesktopError> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -131,13 +133,13 @@ pub async fn set_mesh_quiesced(quiesced: bool) -> Result<MeshQuiesceState, Strin
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        return Err(format!(
+        return Err(DesktopError::upstream(format!(
             "daemon /internal/mesh/quiesce returned {status}: {body}"
-        ));
+        )));
     }
     resp.json::<MeshQuiesceState>()
         .await
-        .map_err(|e| format!("decode /internal/mesh/quiesce: {e}"))
+        .map_err(|e| DesktopError::upstream(format!("decode /internal/mesh/quiesce: {e}")))
 }
 
 // ── Storage budget ───────────────────────────────────────────

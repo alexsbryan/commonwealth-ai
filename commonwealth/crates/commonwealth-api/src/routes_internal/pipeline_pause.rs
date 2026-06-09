@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `POST /internal/pipeline/pause` — mesh-aware pause of running
 //! `sovereign pipeline run` drivers.
 //!

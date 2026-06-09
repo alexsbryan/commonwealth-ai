@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Daemon-side SCIP rebuild pipeline.
 //!
 //! Each registered project gets one [`ProjectHandle`], running a

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Web-search dispatch — both the legacy enum surface (`SearchBackend`,
 //! `search()` — the eight existing call sites use these) and the new
 //! trait-based abstraction (`backend_trait::WebSearchBackend`,

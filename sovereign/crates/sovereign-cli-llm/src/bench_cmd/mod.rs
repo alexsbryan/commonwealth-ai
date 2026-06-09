@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign bench …` — throughput + correctness benchmarks for
 //! enrichment-pipeline LLM tasks. Used to pick a primary model
 //! before committing to a long batch (the SEP 1800-article ingest
@@ -42,7 +43,7 @@ mod scaffold;
 mod scaffolding_param;
 mod uap;
 
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign bench",

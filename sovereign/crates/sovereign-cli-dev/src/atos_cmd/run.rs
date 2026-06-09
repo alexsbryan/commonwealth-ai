@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign atos run` — the ralph-wiggum-style loop driver.
 //!
 //! Reads `DESIGN.md` + `CHARTER.md` + `IMPLEMENTATION_PLAN.md` from the

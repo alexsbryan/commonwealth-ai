@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `CheckpointTool` — name a recoverable point in a recipe-author project.
 //!
 //! Spec §4.2 says the partner can back up to "any prior decision and

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tauri command surface for watched-folder corpora.
 //!
 //! Mirrors the daemon's `/internal/corpus/watch/*` HTTP routes (see

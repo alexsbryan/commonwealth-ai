@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `provision_feature` — create an ATOS feature charter.
 //!
 //! This tool is primarily invoked by the `sovereign atos provision` CLI over

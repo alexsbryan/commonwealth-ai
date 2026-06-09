@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `AgentRunnerRegistry` — open-set dispatch for concrete runners.
 //!
 //! Mirrors `corpus-engine::enrichment::domain_registry::DomainRegistry`

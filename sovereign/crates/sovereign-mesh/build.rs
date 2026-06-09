@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Stamp the build's git short-SHA and dirty-tree flag into a compile-
 //! time env var so the worker daemon can log them at startup.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign recipe` subcommand handlers.
 //!
 //! Provides two commands that don't require a loaded inference model:
@@ -22,11 +23,11 @@ use corpus_engine::{CorpusEngine, EmbedFn, RecipeRegistry, TestOptions};
 /// Run a `recipe` subcommand. Returns the exit code.
 pub async fn run_recipe(args: &[String]) -> i32 {
     if args.is_empty() {
-        crate::util::help::print(&HELP);
+        sovereign_cli_shared::help::print(&HELP);
         return 1;
     }
     if matches!(args[0].as_str(), "--help" | "-h" | "help") {
-        crate::util::help::print(&HELP);
+        sovereign_cli_shared::help::print(&HELP);
         return 0;
     }
 
@@ -37,18 +38,18 @@ pub async fn run_recipe(args: &[String]) -> i32 {
         "publish" => cmd_publish(&args[1..]).await,
         other => {
             eprintln!("Unknown recipe subcommand: {other}");
-            crate::util::help::print(&HELP);
+            sovereign_cli_shared::help::print(&HELP);
             1
         }
     }
 }
 
-const HELP: crate::util::help::Help = crate::util::help::Help {
+const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign recipe",
     summary: "Run corpus ingestion recipes: test, validate, list.",
     sections: &[
-        crate::util::help::HelpSection::Usage("sovereign recipe <subcommand> [args]"),
-        crate::util::help::HelpSection::Subcommands(&[
+        sovereign_cli_shared::help::HelpSection::Usage("sovereign recipe <subcommand> [args]"),
+        sovereign_cli_shared::help::HelpSection::Subcommands(&[
             ("list", "List all corpora available in the registry"),
             (
                 "test <path>",
@@ -60,7 +61,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
             ),
             ("publish <path>", "Add a recipe to the local user registry"),
         ]),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Notes(
             "`list` takes --offline (skip live registry refresh).\n\
              `test` takes --sample-size N, --output <path>, --offline, --verbose, \
              --params k=v[,...], --params-file <json>.\n\
@@ -760,4 +761,4 @@ mod test_param_tests {
     }
 }
 
-// print_usage replaced by crate::util::help::print(&HELP); see HELP const above.
+// print_usage replaced by sovereign_cli_shared::help::print(&HELP); see HELP const above.

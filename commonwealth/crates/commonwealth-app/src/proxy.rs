@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! HTTP reverse proxy for /app/{app_id}/* routes.
 //!
 //! Forwards requests to the app's local port. The `app_port` must be looked

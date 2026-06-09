@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `SessionBriefing` — prepends a "Welcome back" frame at the start
 //! of a fresh or stale session.
 //!

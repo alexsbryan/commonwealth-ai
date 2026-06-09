@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Minimal `LlamaSampler::grammar` reproducer.
 //!
 //! Loads a GGUF, attaches a 14-byte grammar (`root ::= "yes"`) plus

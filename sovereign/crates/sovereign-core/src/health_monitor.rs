@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Background health-monitor loop.
 //!
 //! `HealthMonitor` is constructed in `bootstrap()` (sovereign-desktop) and

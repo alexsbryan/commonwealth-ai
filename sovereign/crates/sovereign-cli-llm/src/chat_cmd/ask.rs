@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign chat ask "<question>"` — one-shot streaming turn.
 //!
 //! Same shape as the desktop's `sendMessageStream` flow:
@@ -21,7 +22,7 @@ use serde_json::json;
 use crate::chat_cmd::bootstrap::{build_session, ChatSession};
 use crate::chat_cmd::config::parse_globals;
 use crate::chat_cmd::render;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign chat ask",

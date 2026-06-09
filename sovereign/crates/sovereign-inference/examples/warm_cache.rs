@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pre-warm the RPC worker's tensor cache from a local GGUF — fully offline
 //! (no network, no GPU). Hand a node the GGUF on a thumbdrive, run this, and the
 //! worker serves with zero weight transfer when the cluster comes online.

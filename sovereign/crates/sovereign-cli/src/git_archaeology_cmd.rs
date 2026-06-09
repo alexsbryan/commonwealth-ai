@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign git-archaeology <code-corpus> [--source-path <path>] [--output <md>]`
 //!
 //! Walks the code corpus' git history once and produces a temporal

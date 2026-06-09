@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // TTFI scenario recorder — captures real backend timing during
 // production use and emits a Scenario file the harness can replay.
 //

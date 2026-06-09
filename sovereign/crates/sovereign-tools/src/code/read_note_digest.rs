@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `read_note_digest` — Fast-slot summarization of scope-filtered notes.
 //!
 //! The digest is how a freshly-compacted agent session rebuilds context

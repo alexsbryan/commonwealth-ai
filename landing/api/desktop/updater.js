@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Tauri updater manifest for the Sovereign desktop app.
 //
 // The desktop's `tauri-plugin-updater` polls this endpoint with the user's

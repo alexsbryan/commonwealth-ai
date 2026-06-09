@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared types for the markdown extractor.
 //!
 //! `MarkdownChunkMetadata` mirrors the shape of [`super::wikipedia_types::WikipediaChunkMetadata`]

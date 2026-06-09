@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! DBNet text detection: page image → text-line boxes.
 //!
 //! Stages: preprocess (resize to a multiple of 32, ImageNet normalize,

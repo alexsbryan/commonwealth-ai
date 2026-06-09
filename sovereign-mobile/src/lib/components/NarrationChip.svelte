@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Live "glassbox" progress for an in-flight turn — the mobile port of
   // the desktop NarrationChip stack. Each entry is a phase the host's

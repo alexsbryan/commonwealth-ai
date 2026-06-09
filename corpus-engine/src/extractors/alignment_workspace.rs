@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Alignment workspace extractor.
 //!
 //! Walks the user's `~/.claude/` tree and yields one `ExtractedDoc` per

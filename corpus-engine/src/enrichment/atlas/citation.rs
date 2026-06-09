@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Primary-source citation handles for atlas atoms.
 //!
 //! Empirical driver: 2026-05-24 typed-extension pass over RAPTOR

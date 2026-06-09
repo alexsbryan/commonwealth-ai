@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `.sovereign/project.toml` — ATOS lifecycle + observation surface.
 //!
 //! Distinct from the older `.sovereign/project.json` (which holds

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Confidence grade returned by `work_in_flight`.
 //!
 //! Phase 1 emits only [`ConfidenceGrade::Declared`]. The other three

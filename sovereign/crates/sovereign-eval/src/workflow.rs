@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Workflow analytics derived from the manifest's tool-call stream.
 //!
 //! What we get from `atos_tool_events`:

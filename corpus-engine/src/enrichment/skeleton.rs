@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Field skeleton types — the primary artifact of enrichment.
 //!
 //! `FieldSkeleton` is the complete field model, serialized to

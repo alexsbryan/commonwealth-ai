@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Unit tests for chatMachine. Same no-DOM pattern as skills.machine.test.ts.
 //
 // These tests cover the exact race conditions that produced bugs in

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign awareness timeline <entity-name>` — interaction history.
 //!
 //! Calls `assemble_timelines_from_atlas` per relational atlas dir,

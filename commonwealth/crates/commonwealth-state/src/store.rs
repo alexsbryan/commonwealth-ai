@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! MeshStore — the distributed key-value store for mesh apps.
 //!
 //! Each entry is scoped to an `app_id` + `key`. Conflict resolution is LWW

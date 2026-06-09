@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Concrete `Pipeline` implementations.
 //!
 //! Each submodule contributes one pipeline + its prompt assets.

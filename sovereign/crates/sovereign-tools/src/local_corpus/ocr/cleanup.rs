@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! OCR cleanup pass via the daemon's `/v1/chat/completions` endpoint.
 //!
 //! Tesseract emits raw text with column-flow artefacts, hyphenation

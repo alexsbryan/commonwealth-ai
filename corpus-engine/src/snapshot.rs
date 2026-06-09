@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Prebuilt-index snapshot format.
 //!
 //! A snapshot is a `.tar.zst` archive that captures one node's

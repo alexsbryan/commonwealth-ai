@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Project checkpoints. The only mutating control on the dashboard:
   // a "Restore" button per row. Restore calls back into the store

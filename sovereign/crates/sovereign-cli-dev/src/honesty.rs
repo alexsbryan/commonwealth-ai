@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Honest-uncertainty protocol — the discipline the system follows
 //! when it lacks information it needs.
 //!

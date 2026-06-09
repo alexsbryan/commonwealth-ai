@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! PaddleOCR engine — in-process OCR via ONNX Runtime (`ort`).
 //!
 //! An alternative to the tesseract subprocess that drives the SAME

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign install-service` — register the daemon with launchd /
 //! systemd as a user-level service.
 //!
@@ -17,13 +18,13 @@
 use crate::service_install;
 
 pub async fn run(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
-        crate::util::help::print(&HELP);
+    if sovereign_cli_shared::help::wants_help(args) {
+        sovereign_cli_shared::help::print(&HELP);
         return 0;
     }
     if let Some(unknown) = args.iter().find(|a| a.starts_with('-')) {
         eprintln!("error: unknown flag '{unknown}' for `sovereign install-service`");
-        crate::util::help::print(&HELP);
+        sovereign_cli_shared::help::print(&HELP);
         return 2;
     }
 
@@ -59,12 +60,12 @@ pub async fn run(args: &[String]) -> i32 {
     }
 }
 
-const HELP: crate::util::help::Help = crate::util::help::Help {
+const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign install-service",
     summary: "Register the sovereign daemon with launchd (macOS) or systemd (Linux).",
     sections: &[
-        crate::util::help::HelpSection::Usage("sovereign install-service"),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Usage("sovereign install-service"),
+        sovereign_cli_shared::help::HelpSection::Notes(
             "Writes a launchd plist (macOS) or systemd user unit (Linux) that runs \
              `sovereign daemon run` on login + restarts on crash. The daemon's setup \
              wizard must have been completed first (config at ~/.sovereign/config.toml). \

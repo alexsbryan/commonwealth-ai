@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! On-disk persistence for a running mesh.
 //!
 //! Without this, `EmbeddedDaemon` is purely in-memory: you create a

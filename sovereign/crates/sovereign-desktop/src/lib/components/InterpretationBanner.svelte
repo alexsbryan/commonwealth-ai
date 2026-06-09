@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!--
   InterpretationBanner — rendered above the streaming assistant
   message on moderate-confidence Propose turns. Shows the router's

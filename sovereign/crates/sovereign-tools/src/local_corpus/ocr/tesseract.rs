@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tesseract sidecar wrapper.
 //!
 //! `recognize_page(image, ctx)` writes the page image to a temp PNG,

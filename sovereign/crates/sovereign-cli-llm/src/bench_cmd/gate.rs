@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign bench gate <lane> --report <artifact>` — the baseline-relative
 //! CI gate for the *absolute-verdict* lanes.
 //!
@@ -30,7 +31,7 @@ use serde::de::DeserializeOwned;
 
 use super::baselines::{baseline_dir, read_latest_at, write_dated_and_update_latest_at};
 use super::lane_baseline::{diff, render_and_exit_code, LaneBaseline, LaneMetric};
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign bench gate",

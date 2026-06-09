@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `build` — single-call view of the workspace's compile/lint state.
 //!
 //! Demo shape (from the renamed-tool surface):

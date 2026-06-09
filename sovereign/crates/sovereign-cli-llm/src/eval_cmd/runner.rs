@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-question runner.
 //!
 //! Two modes share a result shape so a retrieval baseline and a synth

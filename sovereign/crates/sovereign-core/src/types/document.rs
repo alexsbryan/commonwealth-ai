@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Document / asset / RAPTOR-atlas types — split from the former monolithic
 //! `types.rs` (ARCH_PRINCIPLES §3.2). Re-exported by `types/mod.rs`, so every
 //! `sovereign_core::types::*` import path is unchanged (behaviour-preserving).

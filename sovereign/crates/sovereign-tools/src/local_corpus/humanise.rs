@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Humanise a filename into a display-friendly string.
 //!
 //! Spec §5.3 rules (applied in order):

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Delta corpus updater — applies incremental updates to an installed index.
 //!
 //! ## Delete-last invariant (for `phase_updates`)

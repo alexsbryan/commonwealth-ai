@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! SQLite schema — client-owned tables + cached projections of host
 //! state, mirroring the `MOBILE.md` ERD.
 //!

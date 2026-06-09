@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // InformationRequestCard smoke tests. The card is pure props-in — no
 // store, no machine — so these are straightforward template tests.
 // Goal: verify each section renders its payload field and that

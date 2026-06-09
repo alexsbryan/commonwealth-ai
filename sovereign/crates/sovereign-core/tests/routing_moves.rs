@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! PR2a integration tests — verify `handle_message` + `handle_message_stream`
 //! honour the `MoveKind` branch picked by `decide_policy` at the
 //! observable surface (routing-event sink calls, saved message

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! PersonalDomain — enrichment for personal memories surfaced as a
 //! `KnowledgeView` over the `memories` table.
 //!

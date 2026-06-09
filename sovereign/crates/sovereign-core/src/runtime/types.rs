@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Data types shared between runtime dispatch paths.
 //!
 //! These are the shapes that `Runtime`'s handlers and pre-flight helpers

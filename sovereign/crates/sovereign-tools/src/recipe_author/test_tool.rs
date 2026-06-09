@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `RecipeTestTool` — drive a sample acquire / extract / chunk
 //! against a recipe, with structured per-section miss reporting.
 //!

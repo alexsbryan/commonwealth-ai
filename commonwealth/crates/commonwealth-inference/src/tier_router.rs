@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-request tier routing.
 //!
 //! Evaluates routing rules against an incoming request to decide whether

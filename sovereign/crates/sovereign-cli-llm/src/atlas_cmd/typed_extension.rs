@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign atlas typed-extension <corpus>` — operator surface for
 //! the tiered typed-extension pass over RAPTOR cluster summaries.
 //!

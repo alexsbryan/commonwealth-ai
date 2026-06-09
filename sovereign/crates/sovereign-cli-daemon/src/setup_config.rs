@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The `SetupConfig` schema and load/save helpers now live in
 //! `sovereign-core` so the desktop app can depend on them without
 //! pulling in this CLI-only crate. This file is a thin re-export so

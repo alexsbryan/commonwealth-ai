@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! A/B driver comparison: `diff`, `run-ab`, `probe-driver`.
 //!
 //! - **`atos diff <id>`** reads the per-run `atos_tool_events` for a

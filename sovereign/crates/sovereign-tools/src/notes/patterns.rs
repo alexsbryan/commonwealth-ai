@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tool-call pattern matcher (Phase 7.1).
 //!
 //! Observes sequences and gaps in the agent's MCP tool calls and

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! HTTP transport for the unified TDD solver.
 //!
 //! Single endpoint — `POST /v1/solve` — accepts a wire-shaped

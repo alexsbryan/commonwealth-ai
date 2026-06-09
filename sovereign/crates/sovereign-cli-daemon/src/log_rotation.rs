@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Size-based daemon log rotation.
 //!
 //! `daemon.log` and `daemon.err` are written by launchd-spawned stdio

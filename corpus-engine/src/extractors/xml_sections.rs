@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Section-aware XML extractor.
 //!
 //! Walks a directory of `.xml` files, streams each through `quick-xml`,

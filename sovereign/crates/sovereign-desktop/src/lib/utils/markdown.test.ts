@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Citation-shape rendering tests. `renderMarkdown` is the single
 // point that turns model output into clickable chips; both shapes
 // must round-trip predictably so AssistantMessage's click handler

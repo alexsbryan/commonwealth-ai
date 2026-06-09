@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `SqliteAcquirer` — materializes a SQL query over a SQLite database
 //! into a newline-delimited JSON file that the existing `Jsonl`
 //! extractor can consume.

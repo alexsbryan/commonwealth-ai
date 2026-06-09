@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich atlas-eval <atlas-corpus> --bank <path>` —
 //! score the structural atlas against a question bank by tokenized
 //! title-overlap retrieval.
@@ -29,7 +30,7 @@ use corpus_engine::filters::normalize_title;
 
 use super::paths;
 use crate::eval_cmd::bank::load_bank;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich atlas-eval",

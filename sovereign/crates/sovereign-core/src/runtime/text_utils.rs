@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Stateless text utilities used by the runtime dispatch and prompt-
 //! assembly paths.
 //!

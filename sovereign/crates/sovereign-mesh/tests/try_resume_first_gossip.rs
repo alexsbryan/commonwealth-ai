@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `try_resume` → reconstruct mesh → first gossip round → HTTP path live.
 //!
 //! `node_id_persistence::node_id_survives_daemon_restart_against_same_data_dir`

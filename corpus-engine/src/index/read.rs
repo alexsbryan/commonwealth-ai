@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Read helpers for the desktop reading surface.
 //!
 //! The glass-box reading UI clicks a citation and expects to see the

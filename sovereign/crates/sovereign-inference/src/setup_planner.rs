@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared catalog + downloader for first-run model setup.
 //!
 //! Lifted out of `sovereign-cli/src/setup_cmd.rs` so both the CLI

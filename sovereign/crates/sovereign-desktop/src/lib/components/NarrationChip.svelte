@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!--
   NarrationChip — renders the running `routingStore.narrationLog`
   as a vertical stack of model-voice chips. Each entry marks a

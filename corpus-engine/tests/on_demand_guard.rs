@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tests for the on-demand recipe guard in `CorpusEngine::ingest`.
 //!
 //! On-demand recipes (e.g. `gutenberg-work`) carry a placeholder

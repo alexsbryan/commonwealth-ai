@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Exec dispatch into the `sovereign-cli-llm` sibling binary.
 //!
 //! When the user runs an LLM-touching verb (bench / chat / eval /

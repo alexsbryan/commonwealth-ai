@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Integration test for the corpus install / cancel / reinstall lifecycle.
 //!
 //! Covers the unified-ingest flow end-to-end at the HTTP boundary:

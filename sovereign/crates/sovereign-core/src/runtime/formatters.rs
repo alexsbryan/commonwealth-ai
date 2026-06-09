@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Synthesis-prompt chunk formatter and `ResponseProvenance` builders.
 //!
 //! `format_scored_chunks` / `format_scored_chunks_with_kinds` render the

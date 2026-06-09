@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign corpus extract-entities <corpus_id>` — run GliNER NER
 //! across a corpus's chunks, persist results into `chunk_entities`.
 //!

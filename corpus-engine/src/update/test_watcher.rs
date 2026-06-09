@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Test-suite runner as a [`BackgroundWatcher`] plugin.
 //!
 //! [`TestWatcher`] runs a configured shell command on file changes, parses its

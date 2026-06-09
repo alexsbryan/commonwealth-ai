@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // MeshApp SDK — a CSP-safe force-directed node-link graph.
 //
 // Pure vanilla JS + SVG (no d3, no imports) so it runs under the strict mesh-

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! ExpressiveQuery dispatch — witness handler. Non-streaming
 //! (`handle_expressive_query`) and streaming (`handle_expressive_query_stream`)
 //! variants. Builds the compact relational system message, splices

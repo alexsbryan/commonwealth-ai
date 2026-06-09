@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Cross-view resonance detection.
 //!
 //! A theme that appears in one view is often connected to a theme

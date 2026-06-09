@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Generalized document operation tool.
 //!
 //! Runs any user-described operation across an uploaded document via

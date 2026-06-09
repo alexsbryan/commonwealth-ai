@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign search-gym …` — correctness harness for the
 //! web-search-during-inference flow.
 //!
@@ -30,7 +31,7 @@ mod score;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign search-gym",

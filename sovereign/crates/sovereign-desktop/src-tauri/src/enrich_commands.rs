@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tauri command surface for atlas enrichment.
 //!
 //! Mirrors the layout of `local_corpus_commands.rs`:

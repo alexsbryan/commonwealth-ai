@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Recipe TOML — the per-corpus surface of the pipeline tool.
 //!
 //! A recipe declares **what** the worklist contains and **how** each

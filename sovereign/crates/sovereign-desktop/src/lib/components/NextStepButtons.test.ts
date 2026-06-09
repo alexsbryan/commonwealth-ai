@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // NextStepButtons smoke tests. The component is pure props-in: no
 // store, no FSM, no Tauri calls — it receives an `offers` array and
 // an `onselect` callback. These tests verify rendering + callback

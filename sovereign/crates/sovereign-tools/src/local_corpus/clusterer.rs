@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Obsidian-only clustering pipeline.
 //!
 //! Wraps `corpus_engine::enrichment::cluster_embeddings` (pure vector

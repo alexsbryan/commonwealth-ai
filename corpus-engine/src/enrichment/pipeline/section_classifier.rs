@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Phase 0 — section-type classifier.
 //!
 //! Reads one section's title + opening body + frontmatter signals and

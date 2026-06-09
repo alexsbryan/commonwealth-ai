@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Daemon-level coordinator for watched-folder workers.
 //!
 //! Runs one tokio task that:

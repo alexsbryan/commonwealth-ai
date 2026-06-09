@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `wikipedia_fetch` agent-callable tool.
 //!
 //! Phase W4 — when retrieval surfaces a catalog hit on the

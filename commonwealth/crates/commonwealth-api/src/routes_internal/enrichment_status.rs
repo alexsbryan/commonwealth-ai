@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `GET /internal/enrichment/status?corpus_id=<id>` — generic
 //! per-corpus enrichment progress surface.
 //!

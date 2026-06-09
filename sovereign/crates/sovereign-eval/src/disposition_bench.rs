@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Gold-label loader + split discipline for the UAP disposition bench —
 //! the classification analog of `entity_resolution_bench`. Reuses the
 //! proven `Split` + `PeekBudget` primitives verbatim (re-exported, not

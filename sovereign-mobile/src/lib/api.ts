@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Mobile invoke() bridge. Command names mirror the desktop `api.ts`
 // contract; the Rust core implements them over the tailnet. Arg keys
 // are camelCase — Tauri maps them to the snake_case Rust params.

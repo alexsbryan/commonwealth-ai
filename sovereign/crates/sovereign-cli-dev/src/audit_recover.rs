@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign audit --recover` (Phase 7.3).
 //!
 //! When a session SIGKILL's mid-flight, the in-process pattern

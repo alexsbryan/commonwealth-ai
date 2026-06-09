@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `RoleDossier` — the ambient context packet that threads between
 //! role calls. Borrows the shape of `sovereign-core::ToolDossier`
 //! per the plan: each role call sees a small, structured summary

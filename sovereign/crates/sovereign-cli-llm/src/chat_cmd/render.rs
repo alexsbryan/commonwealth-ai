@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Terminal rendering helpers — translate the desktop's
 //! `RoutingMeta.svelte` / `parse-message.ts` conventions into
 //! plain-text for the CLI.

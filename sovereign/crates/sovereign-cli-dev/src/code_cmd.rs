@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign code` subcommand — Code Intelligence v1 Phase 1.
 //!
 //! Ships two commands in v1:
@@ -31,11 +32,11 @@ use sovereign_inference::remote::RemoteApiProvider;
 /// Run a `code` subcommand. Returns the exit code.
 pub async fn run_code(args: &[String]) -> i32 {
     if args.is_empty() {
-        crate::util::help::print(&HELP);
+        sovereign_cli_shared::help::print(&HELP);
         return 1;
     }
     if matches!(args[0].as_str(), "--help" | "-h" | "help") {
-        crate::util::help::print(&HELP);
+        sovereign_cli_shared::help::print(&HELP);
         return 0;
     }
 
@@ -49,7 +50,7 @@ pub async fn run_code(args: &[String]) -> i32 {
         "reflect" => cmd_reflect(&args[1..]).await,
         other => {
             eprintln!("Unknown code subcommand: {other}");
-            crate::util::help::print(&HELP);
+            sovereign_cli_shared::help::print(&HELP);
             1
         }
     }
@@ -132,7 +133,7 @@ async fn cmd_reflect(args: &[String]) -> i32 {
         args.first().map(String::as_str),
         Some("--help" | "-h" | "help")
     ) {
-        crate::util::help::print(&REFLECT_HELP);
+        sovereign_cli_shared::help::print(&REFLECT_HELP);
         return 0;
     }
 
@@ -317,15 +318,15 @@ fn git_recent_commit_files(repo_root: &Path, hours: u64) -> Vec<String> {
     set.into_iter().collect()
 }
 
-const REFLECT_HELP: crate::util::help::Help = crate::util::help::Help {
+const REFLECT_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign code reflect",
     summary: "Write a session-end reflection note describing what changed during the session.",
     sections: &[
-        crate::util::help::HelpSection::Usage(
+        sovereign_cli_shared::help::HelpSection::Usage(
             "sovereign code reflect [--hours N] [--repo-root <path>] [--feature-id <id>] \
              [--content <text>] [--quiet]",
         ),
-        crate::util::help::HelpSection::Flags(&[
+        sovereign_cli_shared::help::HelpSection::Flags(&[
             (
                 "--hours N",
                 "How far back to scan for recent commits. Default 4.",
@@ -344,7 +345,7 @@ const REFLECT_HELP: crate::util::help::Help = crate::util::help::Help {
             ),
             ("--quiet", "Suppress info output (used by hooks)."),
         ]),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Notes(
             "Writes a `reflection` kind note to ~/.sovereign/notes.db via \
              NoteStore::write_reflection_scoped. The next session's brief queries \
              reflection alongside decision/invariant so this surfaces automatically. \
@@ -368,7 +369,7 @@ async fn cmd_brief(args: &[String]) -> i32 {
         args.first().map(String::as_str),
         Some("--help" | "-h" | "help")
     ) {
-        crate::util::help::print(&BRIEF_HELP);
+        sovereign_cli_shared::help::print(&BRIEF_HELP);
         return 0;
     }
 
@@ -638,16 +639,16 @@ fn home_dir() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
 }
 
-const BRIEF_HELP: crate::util::help::Help = crate::util::help::Help {
+const BRIEF_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign code brief",
     summary: "Assemble a working-set brief (markdown) for the current session.",
     sections: &[
-        crate::util::help::HelpSection::Usage(
+        sovereign_cli_shared::help::HelpSection::Usage(
             "sovereign code brief [--strategy {branch|recent|explicit}] [--hours N] \
              [--budget N] [--repo-root <path>] [--atlas-id <id>] [--feature-id <id>] \
              [--output <md>] [--file <path>]...",
         ),
-        crate::util::help::HelpSection::Flags(&[
+        sovereign_cli_shared::help::HelpSection::Flags(&[
             (
                 "--strategy",
                 "branch (default; diff vs default branch), recent (last N hours), or explicit",
@@ -674,7 +675,7 @@ const BRIEF_HELP: crate::util::help::Help = crate::util::help::Help {
                 "(For --strategy explicit) Add a file to the working set. Repeat for multiple.",
             ),
         ]),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Notes(
             "Reads notes from ~/.sovereign/notes.db. Reads atoms + archaeology sidecar from \
              ~/.sovereign/indexes/<id>-self-atlas/atlas/ when --atlas-id is given. Walks git \
              history for the recent-activity section.",
@@ -682,12 +683,12 @@ const BRIEF_HELP: crate::util::help::Help = crate::util::help::Help {
     ],
 };
 
-const HELP: crate::util::help::Help = crate::util::help::Help {
+const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign code",
     summary: "Code intelligence tooling: index a repository, watch for changes, check MCP.",
     sections: &[
-        crate::util::help::HelpSection::Usage("sovereign code <subcommand> [args]"),
-        crate::util::help::HelpSection::Subcommands(&[
+        sovereign_cli_shared::help::HelpSection::Usage("sovereign code <subcommand> [args]"),
+        sovereign_cli_shared::help::HelpSection::Subcommands(&[
             ("index <path>", "Index a local repository with tree-sitter"),
             (
                 "finalize <id>",
@@ -706,7 +707,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
                 "(placeholder) Use the Sovereign chat or MCP for now",
             ),
         ]),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Notes(
             "`index` and `watch` take --corpus-id <id>, --data-dir <dir>, --root <path>.\n\
              `mcp-status` accepts --url <url> to override http://localhost:9741/mcp.",
         ),
@@ -751,7 +752,7 @@ async fn cmd_index(args: &[String]) -> i32 {
 
     let Some(path) = path_arg else {
         eprintln!("error: missing <path>");
-        crate::util::help::print(&HELP);
+        sovereign_cli_shared::help::print(&HELP);
         return 1;
     };
 
@@ -1192,7 +1193,7 @@ fn default_data_dir() -> Option<PathBuf> {
     // Mirrors project_cmd::default_data_dir; both just wrap
     // `util::dirs::sovereign_indexes()` but keep the Option return so
     // existing `.or_else(default_data_dir)` callers stay stable.
-    let p = crate::util::dirs::sovereign_indexes();
+    let p = sovereign_cli_shared::dirs::sovereign_indexes();
     if p == std::path::Path::new(".") {
         None
     } else {

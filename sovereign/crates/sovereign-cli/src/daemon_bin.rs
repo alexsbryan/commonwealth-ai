@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Exec dispatch into the `sovereign-cli-daemon` sibling binary
 //! (long-running host: daemon, setup, install-service, doctor).
 //!

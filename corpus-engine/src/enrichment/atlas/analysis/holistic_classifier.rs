@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Phase 6 *holistic* fault-line classifier.
 //!
 //! Sibling of `tension_classifier`. The per-pair classifier asks

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! v2 enrichment pipeline.
 //!
 //! Sibling to the v1 `Domain` + `FieldModelEngine` stack living in

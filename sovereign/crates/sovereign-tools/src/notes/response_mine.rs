@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Response miner (Phase 7.2).
 //!
 //! Scans assistant transcripts for decision-language sentences

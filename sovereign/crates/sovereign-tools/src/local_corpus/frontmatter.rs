@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Obsidian YAML frontmatter merge + strip primitives.
 //!
 //! Invariants (spec §6.5, enforced by tests in this module):

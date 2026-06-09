@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! HTTP+SSE transport for MCP servers.
 //!
 //! Connects to remote MCP servers (SaaS tools like GitHub, Linear, Notion)

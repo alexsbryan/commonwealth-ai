@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Golden-set comparison primitives shared by `eval` and
 //! `scenario`. Two input shapes:
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign project found` — the four-stage founding conversation.
 //!
 //! M6.3 delivers **Stage 1 (Understanding)**. Later stages land in

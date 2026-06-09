@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! sovereign-mesh — Commonwealth mesh integration layer for Sovereign.
 //!
 //! This crate embeds the Commonwealth daemon as a library, managing its

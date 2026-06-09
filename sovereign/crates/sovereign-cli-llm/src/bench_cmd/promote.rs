@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign bench promote …` — the Fidelity-Flywheel WRITE side: the
 //! promotion controller that actually closes the loop.
 //!
@@ -38,7 +39,7 @@ use super::live_runner::{classify_abstain, classify_caveat, run_live};
 use super::scaffolding_param::{decide, AutoApplyPolicy, PromoteDecision, RerankSettings, ScaffoldingParam};
 use crate::chat_cmd::bootstrap::{build_session, ChatSession};
 use crate::chat_cmd::config::parse_globals;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign bench promote",

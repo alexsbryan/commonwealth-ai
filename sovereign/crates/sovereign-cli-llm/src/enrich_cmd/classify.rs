@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich classify <corpus> [--chapters …|--full] [--force]` —
 //! Phase 0: per-section type classification.
 //!
@@ -30,7 +31,7 @@ use super::config::EnrichConfig;
 use super::corpus_io::rebuild_corpus_state;
 use super::inference_client::{probe_daemon, DaemonInferenceClient};
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich classify",

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Native adapter — passthrough. A native runner driving the
 //! daemon's `/v1/chat/completions` directly exposes ONLY the
 //! canonical primitives to the model. The translation step is

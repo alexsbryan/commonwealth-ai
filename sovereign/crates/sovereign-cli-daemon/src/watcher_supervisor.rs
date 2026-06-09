@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Self-healing supervisor for the lint/test watcher coordinator.
 //!
 //! ## Why this exists

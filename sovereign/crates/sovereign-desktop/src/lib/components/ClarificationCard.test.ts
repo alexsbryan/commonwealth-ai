@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // ClarificationCard tests — oversize free-text guard (PR2e).
 //
 // The component reads from `routingStore` via `$derived`. We drive

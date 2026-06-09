@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Deterministic checks for Tier-B voice eval.
 //!
 //! Cheap, no inference, fully unit-tested. Each check produces a

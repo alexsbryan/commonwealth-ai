@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Panic-boundary supervisor for watcher tasks.
 //!
 //! Every long-running watcher the daemon spawns (reindexer, test

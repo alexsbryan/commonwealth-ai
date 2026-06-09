@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Deterministic gap detection over the resolved atlas.
 //!
 //! A "gap" is a structural missing-piece in the atlas that the

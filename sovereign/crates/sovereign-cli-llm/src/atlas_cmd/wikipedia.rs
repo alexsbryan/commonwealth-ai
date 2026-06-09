@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign atlas wikipedia ...` — Wikipedia-specific structural
 //! enrichment commands. Today Layer 0 only (link graph build).
 
@@ -6,7 +7,7 @@ use std::sync::Arc;
 
 use corpus_engine::{CorpusEngine, EmbedFn, WikipediaGraph};
 
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign atlas wikipedia",

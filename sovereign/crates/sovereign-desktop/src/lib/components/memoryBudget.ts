@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Memory-budget math for the Settings → Models tab, extracted from
 // SettingsPanel.svelte (§3.3 component decomposition). Pure functions
 // (no runes, no IO) so the footgun-avoidance logic is unit-tested;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end test of the ephemeral-worker pod wire protocol.
 //!
 //! Spec: `sovereign/docs/EPHEMERAL_WORKER_PODS.md`. Verifies that:

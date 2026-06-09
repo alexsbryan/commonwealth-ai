@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! System-message builders + the upstream gates (`detect_contradiction`,
 //! `maybe_collaborate`, `apply_post_stream_refinement`) and tool-narrowing
 //! that the dispatch path consults before invoking inference.

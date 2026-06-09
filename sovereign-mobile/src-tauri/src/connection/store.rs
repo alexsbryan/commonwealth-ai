@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! HOST_CONNECTION CRUD — the client-owned record (source of truth on
 //! device). The token is NOT here (see `keychain.rs`); this row holds
 //! only the addressing + status the phone authors.

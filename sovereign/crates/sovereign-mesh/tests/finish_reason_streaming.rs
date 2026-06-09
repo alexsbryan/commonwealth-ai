@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Streaming `finish_reason` end-to-end test.
 //!
 //! The typed `StreamFrame` surface on `InferenceProvider`

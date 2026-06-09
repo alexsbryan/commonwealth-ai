@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `blast_radius` — transitive impact analysis for a symbol.
 //!
 //! Performs a BFS traversal over the SCIP call graph to find all callers

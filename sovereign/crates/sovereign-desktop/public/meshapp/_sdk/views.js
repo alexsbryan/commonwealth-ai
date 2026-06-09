@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // MeshApp SDK — composable views.
 //
 // Each renders into a container with the shared classes from meshapp.css and

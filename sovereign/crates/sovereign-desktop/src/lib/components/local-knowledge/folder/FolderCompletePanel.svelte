@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!--
   FolderCompletePanel — ingest-only completion screen. Used when
   the atlas build was skipped, cancelled, or still in flight when

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich atlas-configuration` — Phase A Step 5 (Phase 8).
 //!
 //! Reads the resolved atlas (atoms.json + edges.json),
@@ -26,7 +27,7 @@ use corpus_engine::enrichment::pipeline::{ChatPrompt, PipelineRegistry};
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich atlas-configuration",

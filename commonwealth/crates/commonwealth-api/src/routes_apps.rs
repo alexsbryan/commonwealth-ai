@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Client-facing routes for mesh app management and proxying.
 //!
 //! GET    /v1/apps                   — list registered apps

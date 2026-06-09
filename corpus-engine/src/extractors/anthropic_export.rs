@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Anthropic claude.ai chat-export extractor.
 //!
 //! Parses the `conversations.json` produced by claude.ai's "Export

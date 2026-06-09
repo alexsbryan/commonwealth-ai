@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Conversation tiered-retrieval provider — the concrete impl of
 //! `corpus_engine::enrichment::tiered::TieredEnrichmentProvider` that
 //! the daemon injects into `CorpusEngine` at startup.

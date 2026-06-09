@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Wire-level proof for the gossip-load-awareness fix
 //! (`sovereign/docs/MESH_LOAD_AWARENESS.md`).
 //!

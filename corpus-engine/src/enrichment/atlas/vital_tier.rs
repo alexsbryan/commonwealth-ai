@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Wikipedia Vital Articles tier classifier.
 //!
 //! Wraps the bundled `vital_articles_l{1..5}.txt` lists in a single

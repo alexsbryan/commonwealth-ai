@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Bench runner for the notes_tiered T1 surface.
 //!
 //! Loads the fixture under `sovereign/bench/notes_tiered/`, opens

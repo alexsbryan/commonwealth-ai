@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Host-connection + connectivity commands. `add_host_connection` is
 //! the pairing entry point: it writes the client-owned HOST_CONNECTION
 //! row, stores the token in the keychain, and starts the connectivity

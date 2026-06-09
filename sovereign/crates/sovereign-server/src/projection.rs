@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Projection of persisted `Message.metadata` into the typed,
 //! client-facing provenance + citation surface.
 //!

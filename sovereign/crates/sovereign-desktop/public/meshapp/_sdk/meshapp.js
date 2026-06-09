@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // MeshApp SDK — barrel. A bundle imports everything it needs from here:
 //
 //   import { connect, scaleBanner, forceGraph, entityDetail } from "../_sdk/meshapp.js";

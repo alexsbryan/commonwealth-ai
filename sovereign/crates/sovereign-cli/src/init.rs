@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign init` — workspace setup for code intelligence.
 //!
 //! The new top-level entry point in the flat CLI namespace, renamed

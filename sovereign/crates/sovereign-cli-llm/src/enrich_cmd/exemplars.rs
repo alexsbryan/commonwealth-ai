@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich exemplars <corpus>` — exemplar-bank status + lint.
 //!
 //! Walks every per-phase bank file under the corpus's exemplars
@@ -10,7 +11,7 @@ use corpus_engine::enrichment::pipeline::{ExemplarBank, PipelinePhase};
 
 use super::config::EnrichConfig;
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich exemplars",

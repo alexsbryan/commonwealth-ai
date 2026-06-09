@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich atlas-gaps` — Phase A Step 4 (Landing 3,
 //! gap detection half).
 //!
@@ -22,7 +23,7 @@ use corpus_engine::enrichment::atlas::{
 
 use super::config::EnrichConfig;
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich atlas-gaps",

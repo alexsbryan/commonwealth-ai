@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Supervises an external sovereign-cli daemon child process for the
 //! desktop app.
 //!

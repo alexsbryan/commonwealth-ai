@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign audit [feature-id] [--archive]` — the deliverable.
 //!
 //! Merges three older commands under one flat name:

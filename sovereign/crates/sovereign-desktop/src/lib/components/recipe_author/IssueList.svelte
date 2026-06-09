@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Outstanding issues for the project — `kind=recipe_issue` notes
   // grouped by category. The agent emits these from `recipe_test`

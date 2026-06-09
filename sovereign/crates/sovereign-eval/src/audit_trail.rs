@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Audit-trail analyzer.
 //!
 //! For run #2 (the extension feature), we want to verify that decisions

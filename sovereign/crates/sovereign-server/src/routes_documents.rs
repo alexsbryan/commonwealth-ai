@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Document asset HTTP routes.
 //!
 //! Exposes the document library and per-document conversation API

@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   /// Glassbox panel for the inner-work surface. Toggled by Cmd+?, this
   /// renders the most recent witness-turn provenance: the assembled

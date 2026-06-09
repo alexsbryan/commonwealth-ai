@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `CapabilityRequestTool` — escalate a capability gap to the maintainer.
 //!
 //! Spec §5.4 distinguishes two flavours of agent-to-maintainer

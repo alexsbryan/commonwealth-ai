@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Landscape digest formatter — pure function from a
 //! `FieldSkeleton` to the markdown block that gets spliced into
 //! the system prompt.

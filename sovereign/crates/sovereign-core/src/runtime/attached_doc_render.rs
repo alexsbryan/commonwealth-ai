@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Helpers used by `Runtime::handle_attached_doc_turn` to render its
 //! ReasonWithTools-style prefill, parse inline tool-call markers out
 //! of model output, and clip query strings for narration chips.

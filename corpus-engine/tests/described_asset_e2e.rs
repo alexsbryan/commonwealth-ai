@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end test for the described-asset substrate (Phase 1).
 //!
 //! Mirrors the plan's "Demoable check": `sovereign corpus ingest

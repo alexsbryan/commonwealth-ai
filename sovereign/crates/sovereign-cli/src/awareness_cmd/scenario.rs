@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign awareness scenario` — drive a scripted end-to-end run.
 //!
 //! Parses a TOML scenario file (see `tests/awareness/scenarios/`),

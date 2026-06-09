@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign-cli-dev` — workbench binary: ATOS workflow + project
 //! lifecycle + local code intelligence + MCP tool runner. Parent
 //! `sovereign` shim execs into this binary for `atos`, `project`,
@@ -34,7 +35,6 @@ mod plan_enricher;
 mod project_cmd;
 mod project_toml;
 mod tools_cmd;
-mod util;
 
 use sovereign_cli_shared::tracing_init::init_tracing;
 

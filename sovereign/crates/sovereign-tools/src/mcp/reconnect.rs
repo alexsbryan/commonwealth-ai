@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Reconnecting transport wrapper.
 //!
 //! Wraps an `HttpSseTransport` with automatic reconnection on disconnect.

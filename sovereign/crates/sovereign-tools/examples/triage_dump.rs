@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Run `build_triage_candidates` against an installed corpus's atlas
 //! and print the resulting top-N with tier annotations.
 //!

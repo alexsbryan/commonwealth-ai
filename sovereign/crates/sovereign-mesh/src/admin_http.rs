@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! HTTP admin surface — `POST /v1/admin/reload`.
 //!
 //! When the desktop writes a new model path into `SetupConfig` and

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared `#[cfg(test)]` fixtures for the bootstrap builders: a no-op
 //! `InferenceProvider` stub and a temp `CorpusEngine`. These let each
 //! builder unit-test with the project's standard mocks — concrete proof

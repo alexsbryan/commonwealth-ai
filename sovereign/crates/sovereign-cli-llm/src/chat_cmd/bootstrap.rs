@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Daemon-backed Runtime bootstrap for `sovereign chat`.
 //!
 //! Mirrors `sovereign-desktop::state::bootstrap` — same StateStore,

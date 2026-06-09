@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign bench enron run …` — Phase 5 measurement command for
 //! the architecture-over-Enron substrate.
 //!
@@ -30,7 +31,7 @@ use serde::{Deserialize, Serialize};
 use sovereign_eval::entity_resolution_bench::{BenchGroundTruth, PeekBudget, Split};
 use sovereign_eval::entity_resolution_score::{score, Clustering, EntityResolutionReport};
 
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign bench enron",

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich raptor <corpus>` — retrofit an already-installed
 //! corpus with a RAPTOR tier-3 summary tree: one tree per source
 //! document, persisted into `conv_raptor_nodes` keyed
@@ -66,7 +67,7 @@ use sovereign_tools::conv_tiered_provider::{
 };
 
 use crate::chat_cmd::bootstrap::SplitInferenceProvider;
-use crate::util::help;
+use sovereign_cli_shared::help;
 
 /// Parsed `enrich raptor` invocation.
 struct RaptorArgs {

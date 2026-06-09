@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atoms-delta primitive — Move 6 Phase 2.
 //!
 //! `apply_atom_delta(atlas_dir, delta)` mutates an atlas's on-disk

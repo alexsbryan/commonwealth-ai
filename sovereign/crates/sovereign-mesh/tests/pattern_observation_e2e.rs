@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end test for Phase 7.1 ToolPatternMatcher wired through
 //! `mcp_router::handle_tool_call`.
 //!

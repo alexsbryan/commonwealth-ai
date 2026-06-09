@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Phase 8 — configuration detection.
 //!
 //! A **Configuration** atom (spec §2.7) captures the interpretive

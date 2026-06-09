@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Local error type for corpus-engine-atos.
 //!
 //! Narrow by design (`Io` + `Database`), mirroring the scip carve-out.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Stream-axis taxonomy — the two orthogonal dimensions every meta-atom
 //! anchor is tagged with.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Filesystem watcher for spec-presence signals.
 //!
 //! Phase 5b of the CLI refactor. Pairs with the spec-presence

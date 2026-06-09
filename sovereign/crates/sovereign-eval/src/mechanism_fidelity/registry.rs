@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The class registry — the single place the orchestrator resolves a
 //! `--class <id>` to a [`ReasoningClass`] implementation.
 

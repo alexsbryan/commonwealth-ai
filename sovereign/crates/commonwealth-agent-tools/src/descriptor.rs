@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! JSON-Schema descriptors for each primitive. This is the shape
 //! the model sees in the OpenAI chat completion `tools` array.
 //!

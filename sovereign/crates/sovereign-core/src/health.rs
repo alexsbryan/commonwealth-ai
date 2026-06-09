@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Health types, the `HealthCheckable` trait, and related utilities.
 //!
 //! All serialisable structs use `i64` Unix-second timestamps and `u64`

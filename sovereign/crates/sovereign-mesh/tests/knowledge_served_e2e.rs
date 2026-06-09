@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `KnowledgeQueryServed` ledger emission test.
 //!
 //! `routes_internal::knowledge_search` is the inter-node fan-out

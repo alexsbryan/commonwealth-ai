@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-cluster RAPTOR checkpoint — durable resume across daemon
 //! restarts.
 //!

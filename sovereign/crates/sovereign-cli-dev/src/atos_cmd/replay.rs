@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign atos replay` — reconstruct a historical commit as an
 //! ATOS Runner task.
 //!

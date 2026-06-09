@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `lint_status` — return the current state of the background lint runner.
 //!
 //! Groups errors by file and separates warnings from failures. Cheap —

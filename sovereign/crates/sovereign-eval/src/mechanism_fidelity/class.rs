@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The `ReasoningClass` abstraction — the seam that turns the
 //! wealth-tax-specific harness into a registry of reasoning-fidelity tests.
 //!

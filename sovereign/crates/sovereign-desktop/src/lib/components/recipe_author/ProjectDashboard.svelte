@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Right-rail dashboard for the selected recipe-author project.
   // Pure layout — composes the leaf cards in stable order over a

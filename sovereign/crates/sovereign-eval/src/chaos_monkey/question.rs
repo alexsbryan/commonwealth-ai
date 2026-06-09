@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The chaos-monkey question bank schema + its **fairness contract**.
 //!
 //! The bench's whole claim to being "hard but *fair*" lives in

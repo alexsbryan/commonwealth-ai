@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich schema-report` and `schema-review` —
 //! Phase C Step 9 diagnostic drivers.
 //!
@@ -25,7 +26,7 @@ use corpus_engine::enrichment::atlas::{
 
 use super::config::EnrichConfig;
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 // ── schema-report ────────────────────────────────────────────
 

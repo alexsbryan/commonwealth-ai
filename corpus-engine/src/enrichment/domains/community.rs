@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! CommunityKnowledgeDomain — stub for community knowledge corpus enrichment (Stack Exchange).
 
 use super::super::domain::*;

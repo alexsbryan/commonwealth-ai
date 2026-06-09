@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign chat ...` — CLI mirror of the desktop chat surface.
 //!
 //! Why this exists
@@ -37,7 +38,7 @@ pub mod render;
 pub mod session;
 pub mod show;
 
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign chat",

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! RFC-5322 / MIME email extractor (Phase 2 of the architecture-over-
 //! Enron push).
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Append-only ledger of asset observations.
 //!
 //! One JSONL line per *unique* sha256 (idempotent on re-observation).

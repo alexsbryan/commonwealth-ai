@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! MCP HTTP server endpoints.
 //!
 //! Exposes Sovereign's Code Intelligence tools to any MCP-compatible

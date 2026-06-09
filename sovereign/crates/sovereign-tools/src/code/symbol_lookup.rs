@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Exact symbol-name lookup backed by the SCIP SQLite call graph.
 //!
 //! Trust contract: this tool is labelled "always correct" in the skill

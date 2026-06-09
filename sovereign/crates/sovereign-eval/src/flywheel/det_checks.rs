@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Deterministic grounding checks — the GR1 "source-grounded verification"
 //! kernel shared by the chaos-monkey live adapter and the flywheel verifier.
 //!

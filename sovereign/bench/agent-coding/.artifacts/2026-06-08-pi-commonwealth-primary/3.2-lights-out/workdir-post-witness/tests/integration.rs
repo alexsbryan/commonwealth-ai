@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Held-out integration tests for 3.2 Light's Out.
 //!
 //! Copied into the agent's workdir by the witness pipeline AFTER the

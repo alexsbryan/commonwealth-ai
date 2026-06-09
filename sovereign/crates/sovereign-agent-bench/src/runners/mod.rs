@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Concrete `AgentRunner` implementations + their registry.
 
 pub mod bare_metal;

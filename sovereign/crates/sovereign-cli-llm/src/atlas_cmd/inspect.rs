@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign atlas list-corpora | list-atoms | show-atom` — read-only
 //! atlas inspection from the CLI. Same code path as the desktop's
 //! atlas inspector (sovereign-tools::atlas_view::FileAtlasReader);
@@ -19,7 +20,7 @@ use std::path::PathBuf;
 use corpus_engine::enrichment::atlas::atoms::AtomType;
 use sovereign_tools::atlas_view::{AtomFilter, FileAtlasReader, PageCursor};
 
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const LIST_CORPORA_HELP: Help = Help {
     command: "sovereign atlas list-corpora",

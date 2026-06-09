@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   import { insightStore } from "../stores/insights.svelte";
   import { exploreInsights } from "../api";

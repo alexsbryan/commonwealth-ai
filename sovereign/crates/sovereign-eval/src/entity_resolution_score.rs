@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Entity-resolution scoring primitives (Phase 3 of the
 //! architecture-over-Enron push).
 //!

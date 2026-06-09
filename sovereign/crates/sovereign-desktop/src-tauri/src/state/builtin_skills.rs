@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Built-in skills shipped with the desktop binary. Extracted from
 //! `state.rs` in the §3.3 decomposition — the `skill.toml` contents are
 //! embedded at compile time so the surviving modes are available on

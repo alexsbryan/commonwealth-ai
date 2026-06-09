@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Durable worklist primitive backed by SQLite.
 //!
 //! A worklist holds the units of work for one or more pipelines. Each

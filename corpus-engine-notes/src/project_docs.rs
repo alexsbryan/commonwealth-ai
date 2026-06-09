@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Project documentation store — indexes `*.md` files for FTS5 retrieval.
 //!
 //! Used by the `project_context` MCP tool to answer questions like "what

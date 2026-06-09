@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Canonical port constants + URL builders used by every subcommand
 //! that needs to reach the sovereign daemon.
 //!

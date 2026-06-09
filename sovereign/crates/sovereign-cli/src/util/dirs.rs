@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Canonical filesystem paths used by every sovereign-cli subcommand.
 //!
 //! The implementation moved to `sovereign-cli-shared` so the

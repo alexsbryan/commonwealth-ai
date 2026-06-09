@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /// Simple glob matching with `*` wildcard.
 ///
 /// `*` matches any sequence of characters (including empty).

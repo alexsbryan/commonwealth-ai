@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Open question detection from cluster labels.
 //!
 //! Identifies clusters whose label indicates unresolved inquiry,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tests for `ConversationStore::set_conversation_skill_if_unset`
 //! and the round-trip of `Memory.source_conversation_id`.
 //!

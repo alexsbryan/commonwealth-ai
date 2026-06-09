@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `archive_feature` — mark an ATOS feature as archived.
 //!
 //! Archived features stay in the database (their notes remain queryable by

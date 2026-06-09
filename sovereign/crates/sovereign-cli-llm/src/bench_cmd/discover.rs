@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Filesystem discovery for `sovereign bench all`.
 //!
 //! Walks `sovereign/bench/<group>/` looking for two surface shapes:

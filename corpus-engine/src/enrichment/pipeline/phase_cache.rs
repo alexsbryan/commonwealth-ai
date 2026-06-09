@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-phase cache with mtime-based staleness.
 //!
 //! The CLI admin harness treats every phase's output as a cached JSON

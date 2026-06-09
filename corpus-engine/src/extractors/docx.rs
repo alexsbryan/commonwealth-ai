@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! DOCX sub-extractor for the described-asset dispatcher (AD-3).
 //!
 //! Reads Office Open XML word documents (`.docx`, `.docm`) without

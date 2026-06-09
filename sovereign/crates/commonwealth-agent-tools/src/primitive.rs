@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Closed enum of canonical primitives. Adding a variant requires
 //! touching every other module that matches on `Primitive` — that
 //! is intentional: the convergence test for "does this primitive

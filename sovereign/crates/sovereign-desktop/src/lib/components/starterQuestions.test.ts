@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Pure-logic tests for the starter-question pool helpers (extracted
 // from ChatView). The reactive wiring is covered by the e2e specs; this
 // pins the interleave/window/cursor math that has no compiler signal.

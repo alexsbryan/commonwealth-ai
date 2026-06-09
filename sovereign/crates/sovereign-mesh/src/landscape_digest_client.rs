@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `MeshLandscapeDigestClient` — desktop-side `LandscapeDigestProvider`
 //! that fetches assembled digest blocks from an attached daemon's
 //! `POST /v1/knowledge/landscape_digest` endpoint.

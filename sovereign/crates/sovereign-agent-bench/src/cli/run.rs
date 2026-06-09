@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign agent-bench run` orchestration. Walks problems → runs
 //! the agent on each → invokes the witness → judges → assembles a
 //! `BenchReport` → optionally persists the baseline.

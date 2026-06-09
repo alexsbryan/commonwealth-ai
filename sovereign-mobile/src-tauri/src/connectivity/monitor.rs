@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Connectivity monitor: classifies the host link and emits
 //! `connectivity-changed` on transitions. The Svelte side mirrors this
 //! read-only (it never decides reachability itself — no split-brain).

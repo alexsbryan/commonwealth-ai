@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `ToolInjector` — merges the ATOS MCP tool descriptors into the
 //! `request.tools` array so the model sees them as available
 //! without opencode having to advertise them explicitly.

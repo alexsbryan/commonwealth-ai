@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end test of the `/internal/join` handshake — the path
 //! `sovereign-mesh::join::perform_join` and `EmbeddedDaemon::join_mesh`
 //! ultimately drive.

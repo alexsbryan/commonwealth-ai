@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tier-B scenario loader.
 //!
 //! Reads `bench/voice/<id>.toml` files into a typed [`Scenario`].

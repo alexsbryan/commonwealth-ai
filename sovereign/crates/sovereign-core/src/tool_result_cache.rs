@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-conversation tool-result cache (Tier 4 of tool-framework
 //! expansion). Shared primitive serving two surfaces:
 //!

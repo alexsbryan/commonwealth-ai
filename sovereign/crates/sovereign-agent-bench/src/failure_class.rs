@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Failure-class derivation — turn a (agent.json, witness.json) pair
 //! into a single closed-enum class so a sweep across many cells can
 //! be reduced to a class histogram.

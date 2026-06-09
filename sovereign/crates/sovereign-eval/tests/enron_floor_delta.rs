@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pre-reconciliation floor vs tuned delta — Phase 5 measurement
 //! discipline on a synthetic clustering.
 //!

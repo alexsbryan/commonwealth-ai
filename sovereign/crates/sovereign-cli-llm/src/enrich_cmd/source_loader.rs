@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Load a corpus source file as plaintext.
 //!
 //! The enrichment pipeline operates on plaintext — a `SectionedChunker`

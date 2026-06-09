@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Ollama-native `/api/*` compatibility shim.
 //!
 //! A thin translation layer that lets Ollama-native clients (Open WebUI's

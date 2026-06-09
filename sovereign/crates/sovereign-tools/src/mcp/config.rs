@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! MCP server configuration schema.
 //!
 //! Parsed from TOML config files. Credentials are NOT stored here —

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Vitest setup: imported once per test file via `setupFiles` in
 // vitest.config.ts. Extends `expect` with jest-dom matchers (toBeInTheDocument,
 // toHaveTextContent, etc.) and stubs the Tauri invoke channel so components

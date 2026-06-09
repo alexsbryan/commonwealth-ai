@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign claim` — CLI surface for the work atlas.
 //!
 //! In-process MeshStore access so the CLI shows the same view the

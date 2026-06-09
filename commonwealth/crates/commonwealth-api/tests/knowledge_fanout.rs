@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end test for `/v1/knowledge/search` fan-out.
 //!
 //! Builds two `AppState`s: *Host* owns a tiny real `CorpusEngine`

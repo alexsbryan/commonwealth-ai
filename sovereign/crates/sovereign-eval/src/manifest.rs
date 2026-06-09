@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Build a per-run manifest from the daemon's persisted state.
 //!
 //! Inputs (read-only):

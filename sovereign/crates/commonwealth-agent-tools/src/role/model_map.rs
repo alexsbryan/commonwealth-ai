@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `RoleModelMap` — per-role daemon model handle.
 //!
 //! Lets the bench (or any role-aware caller) route different roles to

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Default Green-equivalent task — drive currently-failing tests
 //! to passing.
 

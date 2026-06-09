@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   import type { StateData } from "../../../types";
   import AtomLink from "../AtomLink.svelte";

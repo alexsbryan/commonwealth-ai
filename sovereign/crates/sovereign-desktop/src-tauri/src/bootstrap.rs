@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Decide at app start whether the desktop should attach to an
 //! already-running CLI daemon, or bring up its own `EmbeddedDaemon`
 //! in-process.

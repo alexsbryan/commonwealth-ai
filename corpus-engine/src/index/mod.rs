@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! CorpusIndex — wraps a LanceDB table for a per-corpus index
 //! with IVF-PQ vector search and Tantivy full-text search.
 

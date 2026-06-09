@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Client side of peer-to-peer model file distribution.
 //!
 //! Talks to `commonwealth-api::routes_internal::model_files` on a

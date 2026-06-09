@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /// Chunking strategy: split on paragraph boundaries, respecting a max token estimate.
 ///
 /// - Max chunk size: ~175 tokens (estimated as ~4 chars per token)

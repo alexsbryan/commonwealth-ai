@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tier-B *live* runner.
 //!
 //! Drives each scenario through a daemon-backed `Runtime`, collects

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich extract-typed <corpus> [--chapters …|--full] [--force]`
 //!
 //! Workstream B routed-Phase-1 v1: second pass after `enrich extract`.
@@ -61,7 +62,7 @@ use super::config::EnrichConfig;
 use super::corpus_io::rebuild_corpus_state;
 use super::inference_client::{probe_daemon, DaemonInferenceClient};
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich extract-typed",

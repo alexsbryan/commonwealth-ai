@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Workdir sandboxing.
 //!
 //! ARCH §7 (structural invariants):

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Deprecation banner for renamed CLI surfaces.
 //!
 //! The CLI refactor collapses `sovereign project *` / `sovereign atos *`

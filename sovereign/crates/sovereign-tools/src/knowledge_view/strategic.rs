@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Strategic digest — the second of the two new digest blocks
 //! (requirements §4.3).
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Copy a workdir to a sibling scratch dir, skipping heavy build
 //! output directories. Used to make per-candidate snapshots so test
 //! runs don't pollute sibling candidates.

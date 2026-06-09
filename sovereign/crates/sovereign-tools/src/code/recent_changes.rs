@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Symbols modified within the last N hours — exact, by file mtime.
 //!
 //! Trust contract: this is labelled "always correct" in the skill prompt.

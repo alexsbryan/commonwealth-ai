@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Prompt assets. Per ARCH §6 ("data vs program"), prompt text
 //! lives as `assets/*.md` loaded via `include_str!`. Edit the
 //! asset, not Rust string literals.

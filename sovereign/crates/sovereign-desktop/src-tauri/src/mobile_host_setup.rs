@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Desktop wiring for the opt-in **Mobile access** host.
 //!
 //! Reuses the shared [`sovereign_core::mobile_host`] core (config generation +

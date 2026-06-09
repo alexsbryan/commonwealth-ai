@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `KnowledgeViewManager` — lifecycle façade for the three
 //! KnowledgeView corpora (`personal-knowledge`,
 //! `conversation-history`, `institutional-notes`).

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! One-shot startup hook that re-spawns any in-progress corpus
 //! ingest the daemon was running before it stopped.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `MeshError::AlreadyInPopulatedMesh` — the safety gate that
 //! refuses to clobber a real mesh's persisted state when `join_mesh`
 //! is called against an already-joined daemon.

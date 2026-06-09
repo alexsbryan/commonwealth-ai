@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Flag parsing shared by every `sovereign atos` subcommand.
 //!
 //! The CLI sidesteps `clap` here because each subcommand has its own

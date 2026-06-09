@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Situated team-pipeline (Router → Retriever → Curator → Drafter
 //! → Presenter).
 //!

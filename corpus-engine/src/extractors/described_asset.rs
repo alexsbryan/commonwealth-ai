@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Described-asset dispatcher (AD-3).
 //!
 //! The architectural primitive every non-prose-data vertical inherits:

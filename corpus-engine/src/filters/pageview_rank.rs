@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Filter that accepts articles ranked at-or-better-than a threshold by
 //! a pageview-rank table.
 //!

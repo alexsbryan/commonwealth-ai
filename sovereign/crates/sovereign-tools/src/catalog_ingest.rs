@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! On-demand single-work catalog ingest.
 //!
 //! When the user accepts an ingest offer for a catalog hit (e.g. "yes,

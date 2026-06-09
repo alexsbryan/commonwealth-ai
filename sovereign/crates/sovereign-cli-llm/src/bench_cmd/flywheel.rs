@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign bench flywheel run …` — the Fidelity-Flywheel loop's READ side.
 //!
 //! Drives an autonomously-generated probe set (I1 corpus self-supervision)
@@ -30,7 +31,7 @@ use sovereign_inference::remote::RemoteApiProvider;
 use crate::bench_cmd::live_runner::{classify_abstain, classify_caveat, run_live};
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign bench flywheel",

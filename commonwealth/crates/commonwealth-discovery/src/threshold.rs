@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 use commonwealth_core::capabilities::AvailableResources;
 
 /// Thresholds for deciding when to propagate capability updates via gossip.

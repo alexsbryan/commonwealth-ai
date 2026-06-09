@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Fault line detection between opposing position clusters.
 //!
 //! Finds pairs of clusters assigned to different positions whose centroids

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-`DiscourseMode` Phase 1 schemas, prompts, and parsers.
 //!
 //! Workstream B of the routed-Phase-1 plan, MECE-axis revision.

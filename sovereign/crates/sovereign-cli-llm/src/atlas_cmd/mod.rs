@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign atlas ...` — Atlas-style structural enrichment that
 //! lives outside the existing 8-phase LLM-extraction pipeline.
 //!
@@ -30,7 +31,7 @@ pub mod status;
 pub mod typed_extension;
 pub mod wikipedia;
 
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign atlas",

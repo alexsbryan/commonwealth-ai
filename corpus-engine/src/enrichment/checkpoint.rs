@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Enrichment checkpoint — resume state for the field model pipeline.
 //!
 //! Written to `_enrichment_checkpoint.json` in the index directory.

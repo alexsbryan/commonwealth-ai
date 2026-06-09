@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Doc→atoms sidecar — Move 6 Phase 1.
 //!
 //! `atlas/doc_to_atoms.json` records which atoms each source

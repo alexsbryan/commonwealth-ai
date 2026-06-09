@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Core data types for the v2 enrichment pipeline.
 //!
 //! Defines the `PipelinePhase` enum, phase dependencies, and the input/output

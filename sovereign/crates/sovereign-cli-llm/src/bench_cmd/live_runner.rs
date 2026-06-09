@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Reusable live-path runner for grounded-calibration benches (chaos-monkey
 //! and the Fidelity Flywheel).
 //!

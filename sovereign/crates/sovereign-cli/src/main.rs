@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // What's in sovereign-cli now (2026-05-22 split — slices 1-5):
 //   * dev_bin / llm_bin — exec dispatchers into the two sibling
 //     binaries (`sovereign-cli-dev`, `sovereign-cli-llm`).

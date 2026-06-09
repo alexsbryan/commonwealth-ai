@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! NoteStore SQL schema + migrations — extracted out of `crate::notes`.
 //!
 //! Each const here is the static SQL for one schema state. The owner

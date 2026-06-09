@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! BusinessEmailDomain — entity extraction tuned for RFC5322 email
 //! corpora (the Enron substrate, Firm Inbox vertical, sales-intel,
 //! etc).

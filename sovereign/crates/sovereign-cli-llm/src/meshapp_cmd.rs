@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign meshapp dev <id>` — a local dev loop for a mesh-app bundle.
 //!
 //! Serves the bundle's static files + the shared `_sdk/`, and injects a

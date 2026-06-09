@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! MeshStore adapter for inference state.
 //!
 //! Serializes/deserializes `InferencePlan`, `ModelInfo`, and

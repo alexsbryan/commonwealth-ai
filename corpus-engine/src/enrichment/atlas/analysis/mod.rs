@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Post-resolution atlas analysis passes.
 //!
 //! These run after Phases 3a/3b populate atoms and structural edges.

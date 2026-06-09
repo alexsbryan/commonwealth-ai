@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign corpus watch …` subcommand handlers.
 //!
 //! Thin HTTP clients for the daemon's `/internal/corpus/watch/*`
@@ -82,7 +83,7 @@ fn describe_request_error(err: &reqwest::Error, url: &str) -> String {
 // ─── `sovereign corpus watch <PATH> [flags]` ────────────────
 
 pub async fn run_register(args: &[String]) -> i32 {
-    if args.is_empty() || crate::util::help::wants_help(args) {
+    if args.is_empty() || sovereign_cli_shared::help::wants_help(args) {
         print_register_help();
         return if args.is_empty() { 1 } else { 0 };
     }
@@ -283,7 +284,7 @@ fn print_register_help() {
 // ─── list / status / pause / resume / confirm / remove ──────
 
 pub async fn run_list(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
+    if sovereign_cli_shared::help::wants_help(args) {
         eprintln!("sovereign corpus watch-list");
         eprintln!();
         eprintln!("List every registered watched-folder corpus and its current status.");

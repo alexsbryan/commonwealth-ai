@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign reflect` — developer-facing session reflection summary.
 //!
 //! Reads accumulated reflections and tool call logs from the notes database

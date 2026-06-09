@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! App process lifecycle management.
 
 use thiserror::Error;

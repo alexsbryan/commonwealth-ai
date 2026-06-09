@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Recipe Registry — catalog management and on-demand recipe fetching.
 //!
 //! The `RecipeRegistry` is the single source of truth for which corpora are

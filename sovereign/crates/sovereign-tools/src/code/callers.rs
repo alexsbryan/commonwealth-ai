@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `find_callers` — list all call sites of a given symbol.
 //!
 //! Backed by the SCIP symbol graph. No false positives from string

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! GET /internal/atlas/status — per-corpus atlas readiness snapshot.
 //!
 //! Phase D1 — the desktop's "Knowledge readiness" panel polls this

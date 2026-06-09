@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Retrieval pipeline — chunk-fetch, atlas grounding, source
 //! expansion, conversation-tiered briefing, and the `prepare_knowledge_context`
 //! orchestrator that drives Runtime's synthesis paths.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Baseline storage convention for `sovereign bench all`.
 //!
 //! ```text

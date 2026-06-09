@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Boilerplate `DocumentFilter` (Phase 2 of the architecture-over-
 //! Enron push).
 //!

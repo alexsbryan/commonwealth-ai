@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // MeshDiagnosticsPanel smoke tests. The panel is simple — renders a
 // table of peers from a polled Tauri command — so the test just
 // asserts that peers returned by the mocked `meshDiagnostics` show

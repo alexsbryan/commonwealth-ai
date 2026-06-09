@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Deterministic tabular → typed-atom extractor.
 //!
 //! Reads tabular JSON rows — e.g. the bare-array response a Socrata /

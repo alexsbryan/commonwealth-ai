@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Injected via Playwright's addInitScript AFTER tauri-shim.js. Records,
 // in page-time, when the chat surface first paints each tier of
 // "intelligence signal" the user can see between submitting a query

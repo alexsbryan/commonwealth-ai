@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign bench book-report` — attach-document benchmark.
 //!
 //! See `sovereign/bench/book-report/README.md` for the full design.
@@ -30,7 +31,7 @@ use sovereign_tools::document_asset::{DocumentAssetManager, IngestProgress};
 
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::default_globals_for_voice_eval;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 /// Bench configuration baked in at compile time. Changing the questions
 /// requires rebuilding the CLI; that's intentional — the bench is

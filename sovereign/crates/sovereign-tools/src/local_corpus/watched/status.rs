@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Status DTOs for a watched-folder corpus.
 //!
 //! Both the CLI (`sovereign corpus watch-status`) and the internal HTTP

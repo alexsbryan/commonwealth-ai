@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! HTTP surface for the project-freshness pipeline.
 //!
 //! Mounted on the daemon's `:9741` client listener alongside

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Investigation Phase-1 checkpoint — per-chunk, append-only resume.
 //!
 //! Mirrors the atlas pipeline's `_checkpoint.jsonl` (see

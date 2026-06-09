@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign awareness suggest <conversation-id>` — replay a
 //! conversation turn-by-turn and report what the model would suggest
 //! as commitment / follow_up / goal notes.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { invoke } from "@tauri-apps/api/core";
 import { normalizeError } from "./errors";
 import type {
@@ -61,7 +62,16 @@ export async function invokeChecked<T>(
   try {
     return await invoke<T>(cmd, args);
   } catch (e) {
-    throw normalizeError(e);
+    // Normalise to a DesktopError, then throw it as an Error instance so
+    // the many existing `e instanceof Error ? e.message : String(e)` catch
+    // blocks render the message (not "[object Object]"). The structured
+    // `code` + `suggested_action` ride along for callers that branch via
+    // `isDesktopError(e)` / `e.code`.
+    const de = normalizeError(e);
+    throw Object.assign(new Error(de.message), {
+      code: de.code,
+      suggested_action: de.suggested_action,
+    });
   }
 }
 
@@ -680,11 +690,11 @@ export interface IngestBudgetState {
 }
 
 export async function getIngestBudget(): Promise<IngestBudgetState> {
-  return invoke("get_ingest_budget");
+  return invokeChecked("get_ingest_budget");
 }
 
 export async function setIngestBudget(throttleFactor: number): Promise<IngestBudgetState> {
-  return invoke("set_ingest_budget", { throttleFactor });
+  return invokeChecked("set_ingest_budget", { throttleFactor });
 }
 
 /// Mesh-quiesce: when `true`, this node stops participating in
@@ -774,11 +784,11 @@ export async function stageCorpusRecipe(corpusId: string, recipeToml: string): P
 }
 
 export async function getMeshQuiesced(): Promise<MeshQuiesceState> {
-  return invoke("get_mesh_quiesced");
+  return invokeChecked("get_mesh_quiesced");
 }
 
 export async function setMeshQuiesced(quiesced: boolean): Promise<MeshQuiesceState> {
-  return invoke("set_mesh_quiesced", { quiesced });
+  return invokeChecked("set_mesh_quiesced", { quiesced });
 }
 
 /// Storage budget — ceiling on disk usage for corpus storage.

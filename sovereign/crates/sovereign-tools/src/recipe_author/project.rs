@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `RecipeProject` — the recipe-author "project" model.
 //!
 //! A project is the unit of work the partner builds end to end —

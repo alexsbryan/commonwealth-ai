@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign doctor` — diagnose and optionally repair the full stack.
 //!
 //! Checks are organized into three layers:
@@ -1943,12 +1944,12 @@ async fn run_fix(results: &[CheckResult], sovereign_dir: &std::path::Path) {
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-const HELP: crate::util::help::Help = crate::util::help::Help {
+const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign doctor",
     summary: "Diagnose setup and daemon health across the Sovereign / Commonwealth / OmO layers.",
     sections: &[
-        crate::util::help::HelpSection::Usage("sovereign doctor [--fix] [--watch] [--json]"),
-        crate::util::help::HelpSection::Flags(&[
+        sovereign_cli_shared::help::HelpSection::Usage("sovereign doctor [--fix] [--watch] [--json]"),
+        sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--fix", "Attempt automatic repair for failing checks"),
             (
                 "--watch",
@@ -1959,7 +1960,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
                 "Emit structured JSON (one object per check) for scripting",
             ),
         ]),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Notes(
             "Checks three layers: Sovereign (server, indexes, config), Commonwealth (daemon,\n\
              mesh, inference), OmO (skill file, MCP round-trip). Exit 0 = all pass (warnings\n\
              don't count), exit 1 = any failure.",
@@ -1968,8 +1969,8 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
 };
 
 pub async fn run_doctor(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
-        crate::util::help::print(&HELP);
+    if sovereign_cli_shared::help::wants_help(args) {
+        sovereign_cli_shared::help::print(&HELP);
         return 0;
     }
     let fix = args.iter().any(|a| a == "--fix");

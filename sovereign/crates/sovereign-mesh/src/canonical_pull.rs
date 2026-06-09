@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Canonical-index pull client.
 //!
 //! Phase 6 of the resilience track. Pairs with the

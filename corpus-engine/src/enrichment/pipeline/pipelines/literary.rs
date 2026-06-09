@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Literary pipeline — the first `Pipeline` implementation.
 //!
 //! Targets narrative prose (novels, short-story collections) with a

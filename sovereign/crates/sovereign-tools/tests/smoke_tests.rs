@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Smoke tests for corpus ingestion and full search pipeline.
 //!
 //! These tests exercise real code paths:

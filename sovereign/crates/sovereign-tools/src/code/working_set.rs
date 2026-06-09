@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Working-set detection — what files are "in scope" for a session?
 //!
 //! Three deterministic strategies, no LLM, no heuristics that drift:

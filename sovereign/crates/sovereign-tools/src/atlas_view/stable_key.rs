@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Content-derived stable key for atlas atoms.
 //!
 //! ## Why this exists

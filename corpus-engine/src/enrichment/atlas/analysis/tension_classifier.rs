@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Phase 6 LLM Tension classifier — Landing 4 of the v2 atlas
 //! pipeline.
 //!

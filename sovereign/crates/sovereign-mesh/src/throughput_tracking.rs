@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Stream wrappers that observe TTFT + token-generation rate as a
 //! synthesis response flows back to the caller. Folded back into the
 //! per-(local|peer) `NodeObservations` EWMA so [`oicp::throughput_factor`]

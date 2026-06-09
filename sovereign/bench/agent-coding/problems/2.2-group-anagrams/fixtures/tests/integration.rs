@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 use group_anagrams::group_anagrams;
 
 fn s(v: &[&str]) -> Vec<String> {

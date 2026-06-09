@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Build-time extraction of the recipe variant catalog from
 //! `corpus-engine/src/recipe.rs`, so the recipe-author tool's JSON Schema
 //! (which drives the LLGuidance grammar) cannot drift behind the real

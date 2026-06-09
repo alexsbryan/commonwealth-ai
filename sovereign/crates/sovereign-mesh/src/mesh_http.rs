@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! HTTP surface for mesh mutation. Lets an out-of-process client
 //! (most notably the desktop app, when it detects that a CLI-started
 //! daemon already owns `:9741`) drive `create / join / rotate / leave`

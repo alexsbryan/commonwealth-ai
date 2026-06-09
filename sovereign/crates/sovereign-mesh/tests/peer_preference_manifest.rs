@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Peer-preference manifest stamping — HTTP-surface integration.
 //!
 //! `routes_oicp::apply_peer_preference` is L1-pinned at the function

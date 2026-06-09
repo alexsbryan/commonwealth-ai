@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Hybrid search (vector + FTS) logic for CorpusIndex.
 
 use std::collections::HashMap;

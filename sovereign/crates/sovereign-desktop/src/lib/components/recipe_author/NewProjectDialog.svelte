@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // New-project modal: title + charter (markdown). The charter is
   // stored verbatim on the FeatureRow's `charter_md` and rendered

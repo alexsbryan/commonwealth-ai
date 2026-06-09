@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! PhilosophyDomain — full implementation for the Stanford Encyclopedia of Philosophy.
 
 use super::super::domain::{

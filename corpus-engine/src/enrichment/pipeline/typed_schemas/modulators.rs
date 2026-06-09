@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Epistemic + Temporal modulators for the routed-Phase-1 fan-out.
 //!
 //! After the dispatcher fires every active discourse-mode extension

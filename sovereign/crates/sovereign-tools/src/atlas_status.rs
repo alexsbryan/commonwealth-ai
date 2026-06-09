@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Phase D1 — atlas readiness summary.
 //!
 //! Single source of truth for "what's the atlas state of every

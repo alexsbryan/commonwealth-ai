@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Rolling-summary memory compaction (2026-05-23).
 //!
 //! Inner-work surface witness path

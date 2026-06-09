@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tauri-side wiring for the daemon supervisor (see `crate::supervisor`).
 //!
 //! Opt-in via `SOVEREIGN_USE_SUPERVISOR=1`. When set, the desktop's

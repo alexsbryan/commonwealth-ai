@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Binary classifier for the "is this query about the user's own
 //! history?" axis. Orthogonal to intent — a `KnowledgeQuery` and a
 //! `DeepQuery` can both carry `scope = "personal"`, and downstream

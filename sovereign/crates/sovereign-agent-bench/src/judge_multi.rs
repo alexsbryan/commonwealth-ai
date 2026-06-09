@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! N-trial judge aggregator. Mirrors the shape from
 //! `sovereign-cli/src/eval_cmd/runner_threads.rs:597-680` but built
 //! against the 0..=3 anchor index instead of per-fact coverage.

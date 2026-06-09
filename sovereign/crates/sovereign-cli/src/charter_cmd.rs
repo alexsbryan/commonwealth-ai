@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign charter` — write/edit the team CHARTER.md.
 //!
 //! Renamed from `sovereign project charter`. Phase 1 delegates to

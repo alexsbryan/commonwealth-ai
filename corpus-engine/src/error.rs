@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 use std::path::PathBuf;
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Quick driver to probe the unified solver via `tasks::split_file`
 //! against a real local daemon.
 //!

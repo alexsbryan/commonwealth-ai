@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `POST /v1/knowledge/landscape_digest` — daemon-side endpoint that
 //! lets an attached desktop fetch the prompt-spliced landscape
 //! digest blocks the daemon's own `KnowledgeViewManager` would

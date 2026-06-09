@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared implementation for the six structural phase subcommands
 //! (`cluster-questions`, `name-concerns`, `cluster-chunks`,
 //! `extract-positions`, `detect-tensions`, `detect-gaps`).
@@ -45,7 +46,7 @@ impl PhaseOp {
 
 /// Shared body for every structural-phase subcommand.
 pub async fn run_phase(op: PhaseOp, args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
+    if sovereign_cli_shared::help::wants_help(args) {
         print_help(op);
         return 0;
     }
@@ -194,14 +195,14 @@ fn fail(msg: &str) -> i32 {
     1
 }
 
-const PHASE_HELP: crate::util::help::Help = crate::util::help::Help {
+const PHASE_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign enrich <phase>",
     summary: "Run one structural phase against a corpus (2-7).",
     sections: &[
-        crate::util::help::HelpSection::Usage(
+        sovereign_cli_shared::help::HelpSection::Usage(
             "sovereign enrich <cluster-questions|name-concerns|cluster-chunks|\n  extract-positions|detect-tensions|detect-gaps> <corpus-id>",
         ),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Notes(
             "Requires upstream caches. Run `sovereign enrich status <corpus>` to see \
              which phases are fresh, stale, or never-run.",
         ),
@@ -209,5 +210,5 @@ const PHASE_HELP: crate::util::help::Help = crate::util::help::Help {
 };
 
 fn print_help(_op: PhaseOp) {
-    crate::util::help::print(&PHASE_HELP);
+    sovereign_cli_shared::help::print(&PHASE_HELP);
 }

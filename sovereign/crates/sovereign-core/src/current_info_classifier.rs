@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Binary classifier for the "does this query need *current / time-
 //! sensitive* information (→ external search)?" axis. Replaces the
 //! `LlmRouter::needs_current_info` substring heuristic that drives the

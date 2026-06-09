@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! PDF → page images via `pdfium-render`.
 //!
 //! pdfium-render binds to the same PDFium engine Chrome's PDF viewer

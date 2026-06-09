@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // CorpusFilterStrip — user-controlled per-conversation allow-list of
   // installed parent corpora. Each chip is a toggle: clicking flips

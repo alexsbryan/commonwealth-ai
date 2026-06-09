@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-atom inspector data — full atom shape + related edges +
 //! cross-corpus bridges, ready for the desktop's `AtomDetail.svelte`
 //! to render.

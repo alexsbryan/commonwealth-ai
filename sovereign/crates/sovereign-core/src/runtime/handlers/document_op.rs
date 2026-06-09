@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! DocumentOperation dispatch — surface for create/append/list/lookup
 //! against the local DocumentStore. Synthesis-free; the operation
 //! itself is the response.

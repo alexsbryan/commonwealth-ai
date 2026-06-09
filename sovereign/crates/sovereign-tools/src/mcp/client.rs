@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Generic MCP client over any transport.
 
 use super::transport::{McpError, McpTransport};

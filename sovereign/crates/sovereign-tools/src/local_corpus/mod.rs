@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Local corpus management — shared abstraction over "Obsidian Vault"
 //! and "Folder Drop". Both flows are instances of the same operation:
 //! the user points Sovereign at a local directory, Sovereign scans +

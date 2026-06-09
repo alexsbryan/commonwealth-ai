@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // POST /api/subscribe — append an email to a Resend audience.
 //
 // Backend choice: Resend Audiences (https://resend.com/audiences). One HTTP

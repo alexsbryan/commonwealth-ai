@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign voice eval` — Tier-B harness for the glass-box voice
 //! contract.
 //!

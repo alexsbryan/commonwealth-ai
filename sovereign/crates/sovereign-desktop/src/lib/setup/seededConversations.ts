@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Seed conversations created on first launch. The user lands in
 // chat with two real conversations in the sidebar — one about what
 // the system is, one about its privacy posture — each with a

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Knowledge fan-out target + latency probe.
 //!
 //! Both endpoints are inter-node primitives: peers POST a

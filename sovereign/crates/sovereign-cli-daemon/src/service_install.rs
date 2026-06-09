@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Cross-platform service registration for the sovereign daemon.
 //!
 //! On macOS, writes a launchd plist to `~/Library/LaunchAgents/` and

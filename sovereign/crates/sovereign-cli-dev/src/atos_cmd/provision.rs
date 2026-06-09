@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign atos provision <id>` (retired Phase 6) and
 //! `sovereign atos archive <id>`.
 //!
@@ -28,7 +29,7 @@ use super::args::{get_flag, split_args};
 use super::stores::open_orchestrator;
 
 pub(crate) async fn cmd_provision(_args: &[String]) -> i32 {
-    crate::util::deprecation::announce_retired(
+    sovereign_cli_shared::deprecation::announce_retired(
         "sovereign atos provision",
         "Provisioning is implicit now: an existing \
          `.sovereign/features/<id>/spec.md` (committed for write \

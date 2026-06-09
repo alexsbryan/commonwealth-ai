@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! MeshStore adapter for knowledge shard state.
 
 use std::sync::Arc;

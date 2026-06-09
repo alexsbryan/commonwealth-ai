@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Procedural discourse-mode Phase 1 — system prompt, schema, parser.
 //!
 //! Fires when the Phase 0 classifier surfaces `DiscourseMode::Procedural`

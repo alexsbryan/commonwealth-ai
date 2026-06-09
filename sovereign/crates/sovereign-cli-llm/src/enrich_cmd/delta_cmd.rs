@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich delta <corpus-id> --chapters <ids>` — incremental
 //! atoms-delta merge into an EXISTING referential atlas.
 //!
@@ -54,7 +55,7 @@ use super::build::{self, ParsedBuild};
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich delta",

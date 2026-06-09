@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Progress events for the local-corpus flows.
 //!
 //! One enum spans every phase in both flows (folder and vault) so the

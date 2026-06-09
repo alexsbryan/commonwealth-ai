@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign archaeology-eval <atlas-corpus> [--inquiry <toml>...] [--baseline <path>]`
 //!
 //! Witness-checks-and-baseline-diff eval for the

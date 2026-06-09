@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `RecipeValidateTool` — schema + regex compile + URL-template
 //! placeholder cross-reference checks against a recipe TOML.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Domain types for the work atlas.
 //!
 //! Privacy enforcement leans on [`Privacy::app_id`] being a `const fn`

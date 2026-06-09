@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign corpus catalog <subcommand>`
 //!
 //! Catalog-corpus probes and the on-demand single-work simulator.
@@ -159,7 +160,7 @@ async fn cmd_simulate(args: &[String]) -> i32 {
             top.title,
             title_id = top.work_id,
         );
-        let confirmed = crate::util::prompts::confirm(&prompt, false);
+        let confirmed = sovereign_cli_shared::prompts::confirm(&prompt, false);
         if !confirmed {
             println!("Skipping ingest. Run again later when you're ready.");
             return 0;

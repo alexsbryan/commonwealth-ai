@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!--
   RotatingMessage — cycles through a list of short status strings
   with a letterpress fade-through effect. Used on "preparing your

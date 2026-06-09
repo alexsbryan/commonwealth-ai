@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign atlas budget` — show or set the per-corpus Tier-2
 //! triage budget.
 //!
@@ -20,7 +21,7 @@ use sovereign_tools::atlas_postinstall::{
     DEFAULT_EXPANSION_FRACTION, DEFAULT_EXPANSION_HOPS, DEFAULT_TIER2_BUDGET,
 };
 
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign atlas budget",

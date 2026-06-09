@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Data-driven entity-name normalization for the investigation pipeline.
 //!
 //! The engine here is the *mechanism*; the *vocabulary* comes from the recipe

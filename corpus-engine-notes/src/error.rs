@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Local error type for corpus-engine-notes.
 //!
 //! Same shape as the atos carve-out: `Io`, `Database`, `InvalidInput`.

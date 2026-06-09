@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich atlas-tensions-classify` — Phase 6 LLM Tension
 //! classifier (Landing 4 of the v2 atlas pipeline).
 //!
@@ -36,7 +37,7 @@ use corpus_engine::enrichment::pipeline::{atlas::EntityType, PipelineRegistry};
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich atlas-tensions-classify",

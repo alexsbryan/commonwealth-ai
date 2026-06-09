@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-language test-result parsers. The MVS only requires the cargo
 //! parser; the Go / TS (vitest) / Python (pytest) parsers ship as
 //! follow-up PRs add their problems. Each parser returns a

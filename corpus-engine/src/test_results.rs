@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! SQLite-backed store for test runner results.
 //!
 //! Records are written by [`crate::update::test_watcher::TestWatcher`] as

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Streaming chat command. Mirrors desktop's `send_message_stream`:
 //! returns immediately with the (server-assigned) stream handle while a
 //! background task drives the WebSocket and emits `message-chunk` /

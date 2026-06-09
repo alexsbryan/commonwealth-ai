@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `drift` — report which feature specs have drifted from their
 //! approved (committed) version.
 //!

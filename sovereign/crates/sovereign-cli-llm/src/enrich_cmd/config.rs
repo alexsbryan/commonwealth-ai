@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `~/.sovereign/enrichment/<corpus>/config.json` — the pinned-at-init
 //! configuration every other enrich subcommand reads.
 //!
@@ -130,7 +131,7 @@ pub struct TocMarkers {
 fn default_base_url() -> String {
     format!(
         "http://localhost:{}",
-        crate::util::urls::DEFAULT_CLIENT_PORT
+        sovereign_cli_shared::urls::DEFAULT_CLIENT_PORT
     )
 }
 

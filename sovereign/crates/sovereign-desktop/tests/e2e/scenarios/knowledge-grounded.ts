@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import type { Scenario } from "../fixtures/scenario-player";
 
 // Knowledge-grounded: the typical "ask a real question against a corpus"

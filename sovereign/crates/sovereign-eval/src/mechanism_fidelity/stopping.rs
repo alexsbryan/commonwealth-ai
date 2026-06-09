@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Anytime-valid early-stopping for the reasoning-fidelity verdict.
 //!
 //! The instrument's per-class verdict reduces to a handful of **bounded

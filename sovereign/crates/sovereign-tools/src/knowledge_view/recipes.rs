@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Built-in `KnowledgeView` recipes.
 //!
 //! Each builder returns a `Recipe` that drives the corpus-engine

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `suggest_note` — model-emitted relational/strategic note suggestion
 //! gated through `ApprovalChannel`.
 //!

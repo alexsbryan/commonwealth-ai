@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich eval <corpus-id> <golden-set>` — score the
 //! resolved atlas against a hand-authored golden set.
 //!
@@ -50,7 +51,7 @@ use serde::{Deserialize, Serialize};
 
 use super::config::EnrichConfig;
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich eval",

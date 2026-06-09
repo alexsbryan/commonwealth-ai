@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared corpus claim-miner: extract `Claim` atoms with genuine supporting
 //! evidence from a corpus's `atlas/atoms.json`.
 //!

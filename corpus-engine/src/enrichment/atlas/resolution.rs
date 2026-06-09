@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Phase 3a atom resolution — merge entity + event sketches across
 //! sections into canonical atoms with assigned IDs.
 //!

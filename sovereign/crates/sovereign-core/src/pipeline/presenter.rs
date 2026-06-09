@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Presenter stage — voice-shaping pass on the Drafter's draft.
 //!
 //! The Drafter writes substantive prose against the curated

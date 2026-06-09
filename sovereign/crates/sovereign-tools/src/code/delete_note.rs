@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `delete_note` — remove a working note by ID.
 //!
 //! Notes are only removed explicitly — there is no automatic pruning or

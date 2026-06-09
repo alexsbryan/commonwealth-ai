@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Peer-to-peer model and corpus index transfer endpoints.
 //!
 //! `model_transfer` is reserved for future use (returns

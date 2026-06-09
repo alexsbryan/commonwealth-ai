@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pipeline registry — maps pipeline ID strings to factory functions.
 //!
 //! Mirrors `enrichment::domain_registry::DomainRegistry` (ARCH_PRINCIPLES §4).

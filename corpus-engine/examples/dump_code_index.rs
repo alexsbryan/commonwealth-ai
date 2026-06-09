@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! One-shot smoke test: open a code-indexed corpus and print the first
 //! few rows, then run a `symbol_name = 'Runtime'` filter to prove the
 //! typed code columns are populated and queryable.

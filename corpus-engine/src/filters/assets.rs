@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Bundled filter artefacts compiled into the crate via `include_bytes!`.
 //!
 //! Source files live in the sibling `sovereign-recipes` repo (where

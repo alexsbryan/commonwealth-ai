@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Open registry mapping primitive ids → executor invocations. Used
 //! by agent loops (the native runner specifically) to dispatch the
 //! model's tool calls without a giant match.

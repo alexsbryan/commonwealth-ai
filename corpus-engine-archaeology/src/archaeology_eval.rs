@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Archaeology eval — measure, iterate, improve.
 //!
 //! This module evaluates the output of [`crate::git_archaeology`]

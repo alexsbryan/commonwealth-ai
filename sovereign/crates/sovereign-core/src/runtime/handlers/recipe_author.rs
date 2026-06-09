@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Recipe-author streaming agent-loop handler.
 //!
 //! The recipe-author workspace is a long-lived tool-using loop: the

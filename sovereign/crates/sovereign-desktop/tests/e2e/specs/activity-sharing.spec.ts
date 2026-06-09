@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { test, expect, bootToChat, type Page } from "../fixtures/test-base";
 
 // Activity & Sharing surface (rebuilt SharingSection). Pins the

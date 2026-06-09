@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 use rusqlite::Connection;
 
 pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {

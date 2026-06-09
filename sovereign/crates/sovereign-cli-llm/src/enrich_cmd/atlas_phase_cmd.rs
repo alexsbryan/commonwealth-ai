@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Driver for atlas-pipeline Phase 2 (clustering) and Phase 3
 //! (facet-aware naming).
 //!
@@ -18,7 +19,7 @@ use corpus_engine::enrichment::pipeline::{
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 // ── cluster-atlas ───────────────────────────────────────────
 

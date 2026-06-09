@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tier-A "prompt-shape" tests for the glass-box voice contract.
 //!
 //! These tests pin the *plumbing* — the static, deterministic

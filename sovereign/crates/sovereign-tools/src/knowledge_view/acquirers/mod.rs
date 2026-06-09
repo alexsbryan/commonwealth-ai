@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Runtime-registered acquirers for the KnowledgeView pipeline.
 //!
 //! Each acquirer implements the `corpus-engine` `CustomAcquirerFn`

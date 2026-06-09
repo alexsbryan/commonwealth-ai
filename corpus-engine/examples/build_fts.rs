@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! One-shot helper: open an installed corpus and (re)build its FTS
 //! indexes. Useful when an old corpus has `content_fts_built = false`
 //! (e.g. the `wikipedia` Vital-L5 install pre-dated the FTS phase

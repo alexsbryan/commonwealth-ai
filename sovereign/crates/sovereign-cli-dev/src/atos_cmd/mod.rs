@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign atos` — the Agent Task Orchestration System CLI.
 //!
 //! The CLI is deliberately thin. It:
@@ -74,7 +75,7 @@ pub async fn run_atos(args: &[String]) -> i32 {
     // the same underlying handler the new top-level arm calls, so
     // behaviour is identical. SOVEREIGN_QUIET_DEPRECATIONS=1
     // silences the banner.
-    use crate::util::deprecation::announce;
+    use sovereign_cli_shared::deprecation::announce;
     let rest = &args[1..];
     match first.as_str() {
         "provision" => {

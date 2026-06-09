@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // routingMachine — antifragile-routing UI side. Owns the three
 // user-facing events the runtime emits when `decide_policy` steers
 // away from a bare Commit move:

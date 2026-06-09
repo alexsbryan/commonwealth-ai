@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Phase 4.B — splice-path integration for the Relational + Strategic
 //! digest blocks.
 //!
