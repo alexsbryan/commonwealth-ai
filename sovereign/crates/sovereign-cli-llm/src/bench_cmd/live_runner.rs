@@ -102,6 +102,42 @@ pub async fn run_live(session: &ChatSession, corpus: &str, question: &str) -> Li
     LiveAnswer { visible, retrieved_chunk_texts }
 }
 
+/// Drive the BARE model — the "true baseline" control. NONE of Commonwealth's
+/// value-add: no system prompt, no retrieval injection, no router / synthesis /
+/// presenter pipeline. Just `{user: question} → model → answer`, at the same
+/// model + temperature as `run_live`, so the ONLY variables removed are our
+/// prompting and retrieval. The delta (`run_live` − `run_naked`) is exactly the
+/// measured value-add. `retrieved_chunk_texts` is empty by definition (no
+/// retrieval), so grounding sub-metrics (citation_fidelity, distractor) score
+/// against an empty set — that's the point: the naked model has no sources.
+pub async fn run_naked(
+    provider: &dyn InferenceProvider,
+    model: &str,
+    question: &str,
+    max_tokens: usize,
+) -> LiveAnswer {
+    let req = CompletionRequest {
+        prompt: question.to_string(),
+        system_message: None,
+        preferred_speed: Speed::Slow,
+        max_tokens: Some(max_tokens),
+        temperature: Some(0.0),
+        model_id: Some(model.to_string()),
+        ..Default::default()
+    };
+    let raw = match provider.complete(&req).await {
+        Ok(resp) => resp.text,
+        Err(e) => {
+            eprintln!("    [naked] complete failed: {e}");
+            String::new()
+        }
+    };
+    LiveAnswer {
+        visible: strip_think(&raw),
+        retrieved_chunk_texts: Vec::new(),
+    }
+}
+
 /// Remove `<think>…</think>` reasoning blocks; keep the visible answer.
 pub fn strip_think(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
