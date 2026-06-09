@@ -337,18 +337,19 @@ pub async fn record_first_mesh_consent(
 // ─── Crash report (W6) ───────────────────────────────────────
 //
 // Bundles the latest supervisor-written crash log + redacted config
-// into a single markdown file on Desktop, returns a mailto URL the
-// frontend opens via tauri-plugin-shell. NO auto-upload — the user
-// reads the file and attaches it manually. See crash_bundle.rs.
+// into a single markdown file on Desktop, returns the project's
+// GitHub Issues URL the frontend opens via tauri-plugin-shell. NO
+// auto-upload — the user reads the file and attaches it to an issue
+// they open. See crash_bundle.rs.
 
 #[derive(Debug, serde::Serialize)]
 pub struct CrashReportInfo {
     /// Absolute path of the report file on disk. UI shows this so
     /// the user can copy/open it.
     pub report_path: String,
-    /// `mailto:` URL pre-filled with subject + body. Frontend passes
-    /// this to `tauri-plugin-shell.open(url)`.
-    pub mailto_url: String,
+    /// The project's GitHub Issues URL. Frontend passes this to
+    /// `tauri-plugin-shell.open(url)`; the user attaches the report.
+    pub issues_url: String,
 }
 
 #[tauri::command]
@@ -363,6 +364,6 @@ pub async fn prepare_crash_report() -> Result<CrashReportInfo, String> {
     let prepared = crate::crash_bundle::prepare_report(&data_dir, cfg.as_ref(), app_version)?;
     Ok(CrashReportInfo {
         report_path: prepared.report_path.to_string_lossy().into_owned(),
-        mailto_url: prepared.mailto_url,
+        issues_url: prepared.issues_url,
     })
 }

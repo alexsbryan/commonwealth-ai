@@ -2473,28 +2473,28 @@
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.8 OICP (v0.3)",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.8 OICP (v0.3)\n\nSpec: `commonwealth/docs/oicp-v0.3.md`. Types: `oicp-types/src/lib.rs`,\nre-exported as `sovereign_core::oicp` and `commonwealth_core::oicp`.\n\nWire types:\n\n`CapabilityHint` —..."
         },
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "9. Glossary",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "9. Glossary\n\nOICP — Open Inference Capabilities Protocol (v0.3). Wire types in `oicp-types`. A model publishes one `CapabilityClaim` per kind-of-work it does well; schedulers score requests against..."
         },
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
         },
         {
           "corpus_id": "commonwealth-ai-arch-principles",
           "title": "9.1 Every non-obvious decision emits a tracing event",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
           "score": 0.0,
           "snippet": "9.1 Every non-obvious decision emits a tracing event\n\n\"Non-obvious\" means: the operator can't predict the decision from the\ninputs + static analysis alone. Examples: which backend a request was..."
         },
@@ -4354,7 +4354,7 @@
         {
           "corpus_id": "commonwealth-ai-arch-principles",
           "title": "0. Operating ethos",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
           "score": 0.0,
           "snippet": "0. Operating ethos\n\nFour commitments that underlie every specific rule below.\n\nGlassbox, always. The people running this system — the user, the\noperator, the next engineer — must be able to see..."
         },
@@ -4651,14 +4651,14 @@
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "9. Glossary",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "9. Glossary\n\nOICP — Open Inference Capabilities Protocol (v0.3). Wire types in `oicp-types`. A model publishes one `CapabilityClaim` per kind-of-work it does well; schedulers score requests against..."
         },
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
         },
@@ -6182,63 +6182,63 @@
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.16 Architectural correctness tooling",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.16 Architectural correctness tooling\n\nFive tools that audit narrative-vs-code drift and gate the merge path\nagainst the principles in `sovereign/ARCH_PRINCIPLES.md`. All callable\nvia..."
         },
         {
           "corpus_id": "commonwealth-ai-arch-principles",
           "title": "Architecture Principles — Commonwealth AI",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
           "score": 0.0,
           "snippet": "Architecture Principles — Commonwealth AI\n\nA practical field guide to how code is written and kept in this workspace.\nDerived from the drift, rot, and refactor work actually done on..."
         },
         {
           "corpus_id": "commonwealth-ai-arch-principles",
           "title": "17. How to add to this document",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
           "score": 0.0,
           "snippet": "17. How to add to this document\n\nThe addition must come from a real incident in this workspace: a\nbug you fixed, a refactor you did, a drift you caught. Cite the PR,\ncommit, or file.\nIt must be..."
         },
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "3.6 Enrichment (optional)",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "3.6 Enrichment (optional)\n\nTwo coexisting systems. Both opt-in per recipe.\n\nv1 (`enrichment/field_engine.rs`) — five-phase pipeline (skeleton\nextraction → HDBSCAN clustering → alignment →..."
         },
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "6. How the Four Projects Fit Together",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "6. How the Four Projects Fit Together\n\nSovereign standalone — Tauri/CLI/server runs against `EmbeddedLlamaCpp`.\nKnowledge bases via `MeshCorpusManager` (named for the mesh case but works\nwithout..."
         },
         {
           "corpus_id": "commonwealth-ai-arch-principles",
           "title": "5.3 Don't widen single-method traits",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
           "score": 0.0,
           "snippet": "5.3 Don't widen single-method traits\n\nSome traits are already minimal and should stay that way:\n\n`LandscapeDigestProvider` (one async method)\n`StateStoreObserver` (three methods, each a write-path..."
         },
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "9. Glossary",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "9. Glossary\n\nOICP — Open Inference Capabilities Protocol (v0.3). Wire types in `oicp-types`. A model publishes one `CapabilityClaim` per kind-of-work it does well; schedulers score requests against..."
         },
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "5.6.2 Desktop integration",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "5.6.2 Desktop integration\n\n`sovereign-desktop/src-tauri/src/mesh_commands.rs` exposes four\nnew Tauri commands for the Mesh Health UI:\n\n`mesh_get_contributions` → `Vec<NodeContributionsDto>`..."
         },
         {
           "corpus_id": "commonwealth-ai-arch-principles",
           "title": "0. Operating ethos",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
           "score": 0.0,
           "snippet": "0. Operating ethos\n\nFour commitments that underlie every specific rule below.\n\nGlassbox, always. The people running this system — the user, the\noperator, the next engineer — must be able to see..."
         },

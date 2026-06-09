@@ -2,8 +2,8 @@
   "schema_version": 1,
   "generated_at_unix": 1780185018,
   "narrative_hashes": {
-    "/Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md": "49e614855d6725d8d487e500cf7571d366f911b5f26d73c31655b161636e2e8d",
-    "/Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md": "978e6e5f27d37f7a9e00a7441e95af346fbbddbba4ea26fd419040a615ce4d44"
+    "/Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md": "49e614855d6725d8d487e500cf7571d366f911b5f26d73c31655b161636e2e8d",
+    "/Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md": "978e6e5f27d37f7a9e00a7441e95af346fbbddbba4ea26fd419040a615ce4d44"
   },
   "output_path": "./drift_report.md"
 }

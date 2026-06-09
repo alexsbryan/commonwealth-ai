@@ -100,7 +100,7 @@ Anything else is optional and adds a witness check on top:
 
 ```toml
 keywords = ["callers", "callees", "scip", "graph"]
-authors  = ["alexbryan01@gmail.com", "alexsbryan@gmail.com"]
+authors  = ["maintainer@example.com", "maintainer@example.com"]
 min_score = 0.75   # per-atom witness score required to pass
 
 [inquiry.date_range]

@@ -206,7 +206,7 @@ async fn post_knowledge_search(
 
 #[tokio::test]
 async fn fanout_fetches_sep_chunk_from_peer_with_attribution() {
-    // ── Host ("BeefyMac") — owns a real `sep` corpus ──────────
+    // ── Host ("mac-peer") — owns a real `sep` corpus ──────────
     let host_dir = tempfile::tempdir().unwrap();
     let host_engine = make_engine_with_corpus(
         host_dir.path(),
@@ -241,11 +241,11 @@ async fn fanout_fetches_sep_chunk_from_peer_with_attribution() {
     let host_state = make_state(host_id, host_joiner_peer, Some(host_engine));
     let host_addr = spawn_internal_router(host_state).await;
 
-    // ── Joiner ("LittleMac") — no corpora ─────────────────────
+    // ── Joiner ("mac-peer") — no corpora ─────────────────────
     let joiner_id = NodeId::from_u128(200);
     let host_in_joiner_view = member(
         host_id,
-        "BeefyMac",
+        "mac-peer",
         NodeStatus::Online,
         host_addr,
         vec!["sep".into()],
@@ -271,7 +271,7 @@ async fn fanout_fetches_sep_chunk_from_peer_with_attribution() {
     let first = &results[0];
     assert_eq!(first["corpus_id"], "sep", "hit must be from the sep corpus");
     assert_eq!(
-        first["metadata"]["peer_name"], "BeefyMac",
+        first["metadata"]["peer_name"], "mac-peer",
         "peer attribution must survive fan-out: {first:?}"
     );
     assert!(body["corpora_searched"]

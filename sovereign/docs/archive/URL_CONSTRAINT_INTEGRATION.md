@@ -4,7 +4,7 @@
 constraint core). All six steps below executed and code-compiled
 against the workspace. Validation against the live daemon and the
 search-gym fixtures requires a daemon rebuild + restart inside the
-sovereign-vulkan toolbox — see "Validation" at the bottom.
+dev-toolbox toolbox — see "Validation" at the bottom.
 
 **Deltas from the original plan worth knowing:**
 

@@ -12,21 +12,21 @@ Agents — Claude instances, human developers, scripted bots — increasingly sh
 
 The whole point of Phase 2 is that this works without anyone declaring or claiming anything.
 
-**On both BeefyMac and RuggedFox:**
+**On both mac-peer and linux-peer:**
 ```
 sovereign daemon start
 ```
 (Wait for `sovereign daemon: work-atlas observer wired on <repo>` and `work_atlas: real broadcaster wired (peer fan-out active)` in the logs.)
 
-**On BeefyMac:** edit any file in the repo — e.g. touch a comment in `corpus-engine/src/engine/ingest.rs`.
+**On mac-peer:** edit any file in the repo — e.g. touch a comment in `corpus-engine/src/engine/ingest.rs`.
 
-**On RuggedFox**, immediately after:
+**On linux-peer**, immediately after:
 ```
 sovereign tools call work_in_flight \
   --scope=corpus-engine/src/engine/ingest.rs \
   --match_mode=file
 ```
-Expected output: a `claims: []` array and an `observations: [...]` array with one entry, `node_id` = BeefyMac's, `confidence` = `active`. Within 30 s of the last edit it's still `active`; within 30 min it drops to `recent`; after that, the observation is no longer surfaced (the record may persist briefly before GC sweeps it).
+Expected output: a `claims: []` array and an `observations: [...]` array with one entry, `node_id` = mac-peer's, `confidence` = `active`. Within 30 s of the last edit it's still `active`; within 30 min it drops to `recent`; after that, the observation is no longer surfaced (the record may persist briefly before GC sweeps it).
 
 If the observation doesn't show: check that both daemons are in the same mesh (`sovereign mesh status` lists peers), and that both repos resolve a `repo_id` (`git config --get remote.origin.url` returns a non-empty value — Phase 1's MUST gate is upheld here too, the observer is a no-op without it).
 

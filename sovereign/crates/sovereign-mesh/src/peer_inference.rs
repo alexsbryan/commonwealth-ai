@@ -1079,7 +1079,7 @@ impl MeshInferenceProvider {
 
     /// Stamp the response's `model_id` with a peer-attribution
     /// suffix so `ResponseProvenance.inference_backend` reads
-    /// e.g. `Qwen3.5-9B.Q8_0 @ peer BeefyMac`.
+    /// e.g. `Qwen3.5-9B.Q8_0 @ peer mac-peer`.
     fn annotate(mut resp: CompletionResponse, peer_name: &str) -> CompletionResponse {
         resp.model_id = format!("{} @ peer {}", resp.model_id, peer_name);
         resp
@@ -1523,7 +1523,7 @@ enum PeerFailureDisposition {
     Hard { model_id: String },
     /// OICP-selected route — when every base_url fails, fall through
     /// to the next [`RouteDecision`] in the cascade (typically
-    /// `LocalFallback`). This is the BeefyMac → Taiwan-pod recovery
+    /// `LocalFallback`). This is the mac-peer → Taiwan-pod recovery
     /// path the mesh-routing design was built around.
     Soft,
 }

@@ -27,7 +27,7 @@
 mod amend_cmd;
 mod archaeology_eval_cmd;
 mod audit_cmd;
-#[cfg(feature = "dev-tools")]
+#[cfg(feature = "awareness")]
 mod awareness_cmd;
 mod charter_cmd;
 mod daemon_bin;
@@ -179,10 +179,6 @@ const HELP: Help = Help {
                 "chat",
                 "CLI mirror of the desktop chat flow (ask / session / inspect)",
             ),
-            (
-                "project",
-                "Per-project code intelligence (init / serve / status / refresh)",
-            ),
             ("mesh", "Mesh management (create / join / rotate / status)"),
             (
                 "mobile",
@@ -193,12 +189,7 @@ const HELP: Help = Help {
                 "Mesh-replicated workspace migrate / status (~/.claude + notes.db)",
             ),
             ("corpus", "Knowledge corpus install / remove / status"),
-            (
-                "code",
-                "Code intelligence tooling (index / watch / mcp-status)",
-            ),
             ("doctor", "Diagnose setup and daemon health"),
-            ("reflect", "Review session reflections; retire fixed ones"),
             ("recipe", "Run a corpus ingestion recipe"),
             (
                 "pipeline",
@@ -223,10 +214,6 @@ const HELP: Help = Help {
             (
                 "eval",
                 "Run a question bank against a corpus; measure retrieval quality",
-            ),
-            (
-                "tools",
-                "Invoke code-intelligence tools from the CLI (list / describe / call)",
             ),
             ("mcp", "MCP server diagnostics (list tools, proxy)"),
             (
@@ -264,8 +251,57 @@ const HELP: Help = Help {
     ],
 };
 
+/// Verbs that belong to the **developer toolchain** — project lifecycle,
+/// ATOS orchestration, code intelligence, git archaeology, agent benches.
+/// They are gated out of the default (end-user) build: most exec the
+/// `sovereign-cli-dev` sibling that a public build does not ship; the rest
+/// are in-process dev tooling kept off the product surface. A default build
+/// intercepts them (see `async_main`) and points the user at
+/// `--features dev-tools`. Kept disjoint from the public `HELP` subcommands
+/// by the `public_help_advertises_no_dev_verb` test.
+const DEV_VERBS: &[&str] = &[
+    "code", "project", "atos", "tools", "status", "charter", "design", "plan",
+    "amend", "refresh", "milestone", "drift", "audit", "serve", "init", "notes",
+    "reflect", "rough-edges", "git-archaeology", "archaeology-eval", "agent-bench",
+    "claim", "nudge",
+];
+
+/// The developer-toolchain verbs as a help table, appended to `--help`
+/// only under `--features dev-tools`. Help text is data (ARCH_PRINCIPLES §6).
+#[cfg(feature = "dev-tools")]
+const DEV_SUBCOMMANDS: &[(&str, &str)] = &[
+    ("project", "Per-project code intelligence (init / serve / status / refresh)"),
+    ("code", "Code intelligence tooling (index / watch / mcp-status)"),
+    ("tools", "Invoke code-intelligence tools (list / describe / call)"),
+    ("atos", "Agent task orchestration (charter → plan → milestones)"),
+    ("status", "Project / ATOS status report"),
+    ("charter", "Create or amend a project charter"),
+    ("design", "Capture a design session"),
+    ("plan", "Compose + align a project plan"),
+    ("amend", "Amend a charter or plan"),
+    ("milestone", "Advance or close an ATOS milestone"),
+    ("drift", "Architectural-drift detection + spec accept"),
+    ("audit", "Audit rollup / recover / teardown"),
+    ("refresh", "Rebuild the project code index"),
+    ("serve", "Run the code-intelligence MCP server"),
+    ("init", "Scaffold AI-assistant config in a project"),
+    ("notes", "Decision / invariant note store"),
+    ("reflect", "Review session reflections; retire fixed ones"),
+    ("rough-edges", "Surface rough edges from git history"),
+    ("git-archaeology", "Mine commit history for provenance"),
+    ("archaeology-eval", "Evaluate atom provenance vs git history"),
+    ("agent-bench", "Eight-problem agent-coding battery"),
+    ("claim", "Work-atlas scope claims (mesh coordination)"),
+    ("nudge", "Dismiss audit nudges"),
+];
+
 fn print_usage() {
     crate::util::help::print(&HELP);
+    // Developer builds additionally list the gated toolchain verbs so
+    // `--features dev-tools` users see the full surface. The default
+    // (public) build omits them — the product is the assistant + mesh.
+    #[cfg(feature = "dev-tools")]
+    crate::util::help::print_subcommands_titled("Developer toolchain", DEV_SUBCOMMANDS);
 }
 
 /// `sovereign nudge dismiss <id>` — record a nudge id in
@@ -495,6 +531,25 @@ async fn async_main() {
         }
     }
 
+    // Gate the developer toolchain out of the default build. `cfg!` (not
+    // `#[cfg]`) so `DEV_VERBS` stays referenced — and thus warning-free —
+    // in both feature states; the optimizer drops this block when the
+    // feature is on, letting the dev verbs fall through to the dispatch
+    // table below.
+    if !cfg!(feature = "dev-tools") {
+        if let Some(first) = raw_args.first() {
+            if DEV_VERBS.contains(&first.as_str()) {
+                eprintln!(
+                    "{first}: part of the Sovereign developer toolchain (project \
+                     lifecycle, ATOS orchestration, code intelligence). It is not \
+                     in the default build. Rebuild with `cargo build --features \
+                     dev-tools` and build the `sovereign-cli-dev` sibling to enable it."
+                );
+                std::process::exit(2);
+            }
+        }
+    }
+
     if let Some(first) = raw_args.first() {
         match first.as_str() {
             // ── LLM / bench / corpus / mesh cluster → sovereign-cli-llm ──
@@ -614,7 +669,7 @@ async fn async_main() {
                 std::process::exit(code);
             }
             "awareness" => {
-                #[cfg(feature = "dev-tools")]
+                #[cfg(feature = "awareness")]
                 {
                     util::tracing_init::init_tracing(
                         "sovereign_cli=info,sovereign_tools=debug,corpus_engine=debug",
@@ -622,11 +677,12 @@ async fn async_main() {
                     let code = awareness_cmd::run_awareness(&raw_args[1..]).await;
                     std::process::exit(code);
                 }
-                #[cfg(not(feature = "dev-tools"))]
+                #[cfg(not(feature = "awareness"))]
                 {
                     eprintln!(
-                        "awareness: this subcommand is gated behind the `dev-tools` cargo\n\
-                         feature. Rebuild with `cargo build --features dev-tools` to enable."
+                        "awareness: built only under the `awareness` cargo feature\n\
+                         (it pulls the heavy knowledge-view surface). Rebuild with\n\
+                         `cargo build --features awareness` to enable."
                     );
                     std::process::exit(2);
                 }
@@ -691,4 +747,30 @@ async fn async_main() {
     // interactive shell type `sovereign chat`.
     print_usage();
     std::process::exit(1);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The public `--help` must never advertise a verb the default build
+    /// rejects. Pins the gating invariant: every `Subcommands` entry in
+    /// `HELP` is absent from `DEV_VERBS` (ARCH_PRINCIPLES §7.2 — an
+    /// invariant as a test, not a comment).
+    #[test]
+    fn public_help_advertises_no_dev_verb() {
+        let mut saw_subcommands = false;
+        for section in HELP.sections {
+            if let HelpSection::Subcommands(entries) = section {
+                saw_subcommands = true;
+                for (name, _) in *entries {
+                    assert!(
+                        !DEV_VERBS.contains(name),
+                        "public help advertises gated dev-toolchain verb `{name}`"
+                    );
+                }
+            }
+        }
+        assert!(saw_subcommands, "HELP is missing its Subcommands section");
+    }
 }

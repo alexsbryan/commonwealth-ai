@@ -356,7 +356,7 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
 
     // Provider name reflects the configured chat primary — that's
     // the name response attribution uses ("qwen3.5-27b @ peer
-    // BeefyMac"). Ask the provider directly for its Slow slot
+    // mac-peer"). Ask the provider directly for its Slow slot
     // (with Fast and a "sovereign-local" sentinel as fallbacks)
     // rather than guessing across advertised slots. The earlier
     // max-by-size heuristic mis-identified the primary when a

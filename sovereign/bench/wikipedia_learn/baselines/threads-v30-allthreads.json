@@ -2823,7 +2823,7 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.024193548,
               "snippet": "4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder\n\nThree source types in Settings → Local Knowledge, all under\n`sovereign-tools/src/local_corpus/`:\n\nSource typeSurfaceInitial..."
             },
@@ -12811,14 +12811,14 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "4.4 Tools",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.01851852,
               "snippet": "4.4 Tools\n\nLocal tools (`sovereign-tools/src/`):\n\nToolPurpose`SearchTool`Local vector + FTS5, coverage assessment, optional web fallback`WebSearchTool`NL → keywords (Quick), search backend, fetch..."
             },
             {
               "corpus_id": "system-overview",
               "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.020370372,
               "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
             },
@@ -12839,7 +12839,7 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "4.4 Tools",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.01851852,
               "snippet": "4.4 Tools\n\nLocal tools (`sovereign-tools/src/`):\n\nToolPurpose`SearchTool`Local vector + FTS5, coverage assessment, optional web fallback`WebSearchTool`NL → keywords (Quick), search backend, fetch..."
             },
@@ -12860,7 +12860,7 @@
             {
               "corpus_id": "system-overview",
               "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.02003643,
               "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
             },

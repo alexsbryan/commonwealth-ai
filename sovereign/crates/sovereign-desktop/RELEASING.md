@@ -437,7 +437,7 @@ Settings → Environment Variables):
 
 | Env var | Value | Required |
 |---|---|---|
-| `GITHUB_OWNER` | repo owner (e.g. `alexbryan01`) | yes |
+| `GITHUB_OWNER` | repo owner (e.g. `your-org`) | yes |
 | `GITHUB_REPO` | repo name (e.g. `commonwealth-ai`) | yes |
 | `GITHUB_TOKEN` | a `repo`-scoped PAT for higher rate limit | optional but recommended once install base grows past ~60 daily-active updaters |
 

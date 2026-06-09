@@ -785,13 +785,13 @@ mod tests {
     fn auth_header_present() {
         let provider = RemoteApiProvider::new(
             "http://localhost:8000/v1",
-            Some("sk-test-key".to_string()),
+            Some("test-key-not-real".to_string()),
             "model",
             4096,
         );
         assert_eq!(
             provider.auth_header(),
-            Some("Bearer sk-test-key".to_string())
+            Some("Bearer test-key-not-real".to_string())
         );
     }
 

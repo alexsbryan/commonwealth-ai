@@ -2,6 +2,7 @@
 name = "sovereign-tools"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 # Build-time only: parse corpus-engine/src/recipe.rs to generate the
 # recipe-author JSON Schema variant catalog (see build.rs + recipe_author/

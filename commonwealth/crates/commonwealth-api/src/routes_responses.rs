@@ -2421,11 +2421,11 @@ mod tests {
     #[test]
     fn normalize_path_segments_strips_whitespace_around_segments() {
         // Observed 2026-05-12 codex+frontdoor v4 model emit:
-        // /Users/alexsbryan/dev/ atos-experiment-oicp-types /src/lib.rs
-        let input = "/Users/alexsbryan/dev/ atos-experiment-oicp-types /src/lib.rs";
+        // /Users/user/dev/ atos-experiment-oicp-types /src/lib.rs
+        let input = "/Users/user/dev/ atos-experiment-oicp-types /src/lib.rs";
         assert_eq!(
             normalize_path_segments(input),
-            "/Users/alexsbryan/dev/atos-experiment-oicp-types/src/lib.rs"
+            "/Users/user/dev/atos-experiment-oicp-types/src/lib.rs"
         );
     }
 

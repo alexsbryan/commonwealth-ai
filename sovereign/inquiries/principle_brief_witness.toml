@@ -27,7 +27,7 @@ file_globs = [
     "**/sovereign-tools/src/knowledge_view/tokens.rs",
 ]
 authors = [
-    "alexbryan01@gmail.com",
-    "alexsbryan@gmail.com",
+    "maintainer@example.com",
+    "maintainer@example.com",
 ]
 min_score = 0.5

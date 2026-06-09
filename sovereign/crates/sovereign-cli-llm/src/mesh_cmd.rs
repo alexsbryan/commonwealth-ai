@@ -2823,7 +2823,7 @@ async fn cmd_corpus_repair(args: &[String]) -> i32 {
 /// (`sovereign corpus remove <id> --canonical-only --yes`).
 ///
 /// `--from <peer-url>` supplies the peer's mesh API base URL
-/// (e.g. `http://100.104.36.28:9742`). Required for v1 — peer
+/// (e.g. `http://100.64.0.2:9742`). Required for v1 — peer
 /// auto-discovery from gossip lands in the auto_recover follow-
 /// up commit. `--expected-fingerprint <hex>` adds a pre-flight
 /// validation: the puller refuses if the peer's advertised
@@ -2845,7 +2845,7 @@ async fn cmd_corpus_pull(args: &[String]) -> i32 {
         match arg.as_str() {
             "--from" => {
                 let Some(val) = iter.next() else {
-                    eprintln!("--from requires a peer URL (e.g. http://100.104.36.28:9742)");
+                    eprintln!("--from requires a peer URL (e.g. http://100.64.0.2:9742)");
                     return 1;
                 };
                 peer_url = Some(val.clone());
@@ -2895,7 +2895,7 @@ async fn cmd_corpus_pull(args: &[String]) -> i32 {
         eprintln!(
             "Missing --from <peer-url>. Auto-discovery from gossip is a \
              follow-up commit; for now pass the peer's mesh API URL \
-             explicitly (e.g. http://100.104.36.28:9742)."
+             explicitly (e.g. http://100.64.0.2:9742)."
         );
         return 1;
     };

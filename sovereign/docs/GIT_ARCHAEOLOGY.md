@@ -22,7 +22,7 @@ Every atom that anchors to a code chunk gets a per-atom block:
   "last_modified":{ "hash": "…", "date_iso": "2026-05-07", "author_email": "…", "subject": "atos tune" },
   "stability_days": 17,
   "modification_count": 44,
-  "primary_authors": ["alexsbryan@gmail.com", "alexbryan01@gmail.com"],
+  "primary_authors": ["maintainer@example.com", "maintainer@example.com"],
   "staleness": "fresh"
 }
 ```

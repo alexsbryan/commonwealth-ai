@@ -9,7 +9,7 @@ size_indexed_gb = 0
 
 [acquire]
 type = "local_file"
-path = "/Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md"
+path = "/Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md"
 
 [extract]
 type = "markdown"

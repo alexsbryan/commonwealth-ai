@@ -1,6 +1,6 @@
 {
   "corpus_id": "obsidian-vault",
-  "golden_path": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/obsidian/golden.toml",
+  "golden_path": "/Users/user/dev/commonwealth-ai/sovereign/bench/obsidian/golden.toml",
   "positions": {
     "expected": 0,
     "matched": 0,

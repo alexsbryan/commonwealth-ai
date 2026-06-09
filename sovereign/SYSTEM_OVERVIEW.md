@@ -1166,7 +1166,7 @@ model and Founder's served slot can't drift.
 `complete_stream_with_id` returns model attribution alongside the
 stream so peer-served completions show in
 `ResponseProvenance.inference_backend` as
-`"Qwen3.5-9B.Q8_0 @ peer BeefyMac"`. Skills with
+`"Qwen3.5-9B.Q8_0 @ peer mac-peer"`. Skills with
 `privacy = "local_only"` short-circuit to local.
 
 **Desktop attach mode** — both the desktop app and `sovereign
@@ -1421,10 +1421,10 @@ an entry is sequenced work.
 
 | Item | Location | Why deferred |
 |------|----------|--------------|
-| `project_cmd.rs` split | `sovereign-cli-dev/src/project_cmd.rs` (~7000 lines) | Subcommand-per-file is the obvious shape; gated on post-found project lifecycle settling so we know which subcommands are sticky vs exploratory. |
+| `project_cmd.rs` split | `sovereign-cli-dev/src/project_cmd.rs` (~7000 lines) | **De-scoped from the launch-pristine §3 bar (2026-06-08):** `sovereign-cli-dev` is feature-gated out of the default/public build — the dispatcher gates its verbs behind `--features dev-tools` — so this developer-toolchain file is not part of the end-user product. Subcommand-per-file remains the eventual split shape; still gated on post-found project-lifecycle settling. |
 | `embedded.rs` split | `sovereign-inference/src/embedded.rs` (~9636 lines) | Embedded daemon glue — slot management, lifecycle, HTTP handlers, MTP dispatch, sibling pool all cohere today; split when an alternate embedding mode forces the seam. |
-| `commands.rs` (Tauri) split | `sovereign-desktop/src-tauri/src/commands.rs` (~6557 lines) | Tauri command-registration surface; splitting requires re-grouping by feature without breaking the IPC name registry. Highest concurrent-edit rate of the god-objects → first target of the burn-down cadence. |
-| `atos_cmd/run.rs` split | `sovereign-cli-dev/src/atos_cmd/run.rs` (~4700 lines) | ATOS runner loop. Subprocess fan-out, MCP-tool brokerage, milestone advancement, reviewer loop, done-marker accept, run-record persistence all cohere as one state machine today. Split is one-file-per-stage when boundaries stabilise. |
+| `state.rs` decomposition (desktop) | `sovereign-desktop/src-tauri/src/state.rs` (~2347 lines) | Desktop `AppState` god-struct (~13 `RwLock<Option<Arc<_>>>` subsystems) + a ~1460-line `bootstrap_with_progress`. Split *construction* into `state/builders/*`, keep the struct fields flat (~295 call sites borrow `state.<field>` directly). The former 6557-line `commands.rs` was already split into `commands/*.rs` (PR5). |
+| `atos_cmd/run.rs` split | `sovereign-cli-dev/src/atos_cmd/run.rs` (~4700 lines) | **De-scoped from the launch-pristine §3 bar (2026-06-08):** in the feature-gated `sovereign-cli-dev` developer toolchain (see `project_cmd.rs` row), not part of the public build. ATOS runner loop — subprocess fan-out, MCP-tool brokerage, milestone advancement, reviewer loop, run-record persistence cohere as one state machine today. One-file-per-stage split when boundaries stabilise. |
 | `daemon_cmd.rs` split | `sovereign-cli-daemon/src/daemon_cmd.rs` (~3300 lines) | Daemon Runtime construction + serve loop + watcher wiring. Cohesive while watcher subsystems keep settling. |
 | `mesh_cmd.rs` split | `sovereign-cli-llm/src/mesh_cmd.rs` (~3546 lines) | Mesh CLI surface — peer ops, gossip introspection, partition tooling. Cohesive while peer-state semantics keep shifting under self-heal + cloud peering. (A stale duplicate `sovereign-cli-dev/src/mesh_cmd.rs` — never compiled — was deleted 2026-06-01.) |
 | `daemon.rs` split | `sovereign-mesh/src/daemon.rs` (~2600 lines) | `EmbeddedDaemon` is the in-process commonwealth+sovereign entry. Pure helpers (`mesh_discovery.rs`) extracted; load-bearing splits (`app_state_builder.rs` + `background_tasks.rs`) unblocked but stay deferred until `MemberRecord.client_port` lands and a real two-daemon integration test against `start_daemon` itself can be built. |

@@ -498,7 +498,7 @@ impl DesktopConfig {
 
         // Friendly first-launch node name. Without this, anyone who
         // never opened the node-name input ends up identified by their
-        // raw system hostname ("Alexs-MacBook-2") in mesh rosters,
+        // raw system hostname ("example-host") in mesh rosters,
         // which is forgettable and easy to mistake for someone else.
         // Generate once and persist; never overwrite a name the user
         // explicitly set, and never re-roll if they later cleared the

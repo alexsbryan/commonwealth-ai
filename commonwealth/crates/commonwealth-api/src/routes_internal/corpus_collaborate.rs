@@ -146,7 +146,7 @@ pub async fn corpus_collaborate(
     //   1. If the engine has a source-file manifest → HF parquet corpus.
     //   2. If `count_jsonl_articles` succeeds → JSONL corpus, source present.
     //   3. If neither → this node has no source data at all. This happens when
-    //      a peer (e.g. LittleMac) has an in-progress partition-of-self dir but
+    //      a peer (e.g. mac-peer) has an in-progress partition-of-self dir but
     //      the Wikipedia ZIP was not yet downloaded here. In this case the
     //      auto-ingest loop's `spawn_local_ingest` will resume the ingest
     //      (which downloads the ZIP on demand), but this node cannot act as a

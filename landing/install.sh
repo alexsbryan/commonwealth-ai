@@ -18,7 +18,7 @@ printf '  │                                                         │\n'
 printf '  │  drop your email at  https://svrnme.sh                  │\n'
 printf '  │  and we will let you know exactly once.                 │\n'
 printf '  │                                                         │\n'
-printf '  │  source:  https://github.com/alexsbryan/commonwealth-ai │\n'
+printf '  │  source:  https://github.com/your-org/commonwealth-ai │\n'
 printf '  └─────────────────────────────────────────────────────────┘\n'
 printf '\n'
 

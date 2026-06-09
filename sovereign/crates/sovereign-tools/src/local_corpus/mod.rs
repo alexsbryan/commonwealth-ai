@@ -20,7 +20,7 @@
 //! Principle: no silent writes. `PreScanner` runs before every ingest;
 //! Obsidian write-back is explicit, reversible, and namespaced to
 //! `sovereign/*`. See the plan at
-//! `/Users/alexsbryan/.claude/plans/binary-scribbling-babbage.md`.
+//! `/Users/user/.claude/plans/binary-scribbling-babbage.md`.
 
 pub mod clusterer;
 pub mod config;

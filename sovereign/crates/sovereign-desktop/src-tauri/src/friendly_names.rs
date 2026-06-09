@@ -1,12 +1,12 @@
-//! Memorable two-word node-name generator (e.g. "BeefyMac",
+//! Memorable two-word node-name generator (e.g. "mac-peer",
 //! "CrispFalcon"). Used to give first-launch desktop users a default
 //! `node_name` better than the bare system hostname so they have a
 //! recognizable identity in mesh member rosters.
 //!
 //! Why this exists: we used to ship users into mesh with whatever
-//! `hostname::get()` returned ("Alexs-MacBook-2"), which is generic
+//! `hostname::get()` returned ("example-host"), which is generic
 //! and forgettable. A short adjective+mascot pair is friendlier and
-//! sticks in memory ("BeefyMac" was a long-time user's actual
+//! sticks in memory ("mac-peer" was a long-time user's actual
 //! identity, lost in a config reset because no default existed). The
 //! user can always override via the node-name input in MeshSettings.
 
@@ -34,7 +34,7 @@ const MASCOTS: &[&str] = &[
     "Raven", "Owl", "Hare", "Bear", "Fox", "Wolf",
 ];
 
-/// Returns e.g. "BeefyMac".
+/// Returns e.g. "mac-peer".
 ///
 /// Random by default. Pass `seed: Some(n)` for a deterministic
 /// pick (used by tests). With ~70 × ~34 = ~2400 combinations,

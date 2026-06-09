@@ -21,7 +21,7 @@ The spec below is preserved as the design record.
 
 **Goal.** Let `sovereign pipeline run` route inference work to an
 ephemeral worker pod (e.g. a Vast L40S rented via `pod up`) the
-same way it routes to a mesh peer today (e.g. BeefyMac). No new
+same way it routes to a mesh peer today (e.g. mac-peer). No new
 shell-out plumbing in the recipe driver, no result-upload protocol
 on the pod side — the pod is treated as one more `/v1/chat/completions`
 backend, scored and selected by the same load balancer.
@@ -354,7 +354,7 @@ Revisit in Phase 2 if commodity-flow accounting needs it.
 - `pipeline pod up` to provision a pod, then
   `pipeline run sep-core-v1 --concurrency 3 --extra-worker pod://<id>`.
 - Smoke 5 SEP slugs and confirm the load balancer routes some
-  to the pod, some to BeefyMac, some local.
+  to the pod, some to mac-peer, some local.
 - Cost ceiling: track `cost_per_hour × wall-clock` per pod; the
   pinned-worker snapshot file can hold the start time.
 

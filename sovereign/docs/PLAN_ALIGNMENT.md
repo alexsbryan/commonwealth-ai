@@ -273,7 +273,7 @@ Once flipped, `sovereign mesh status` on a peer should list the corpus in the go
 
 ## See also
 
-- [`feedback_plan_alignment_sections.md`](../../.claude/projects/-Users-alexsbryan-dev-commonwealth-ai/memory/feedback_plan_alignment_sections.md)
+- [`feedback_plan_alignment_sections.md`](../../.claude/projects/-Users-user-dev-commonwealth-ai/memory/feedback_plan_alignment_sections.md)
   (lives under `~/.claude/projects/.../memory/`) — the memory rule.
 - [`docs/ARCHAEOLOGY_EVAL.md`](./ARCHAEOLOGY_EVAL.md) — pre-push
   ratchet that catches inquiry regressions at git push time. The

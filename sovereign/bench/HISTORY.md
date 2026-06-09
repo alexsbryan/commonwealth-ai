@@ -107,7 +107,7 @@ These are load-bearing fixes triggered by the bench; the bench is the canary, no
 
 ## sep_atlas
 
-Driver + logs for `philosophy_atlas` enrichment over the Stanford Encyclopedia of Philosophy in parallel across two mesh peers (LittleMac + RuggedFox). Per-article granularity — each `sep-<slug>` is a self-contained sub-corpus.
+Driver + logs for `philosophy_atlas` enrichment over the Stanford Encyclopedia of Philosophy in parallel across two mesh peers (mac-peer + linux-peer). Per-article granularity — each `sep-<slug>` is a self-contained sub-corpus.
 
 Architectural constraint baked in:
 - `mesh_sharing=false` on the SEP recipe (Stanford license) → no distributed-shard ingest of the base index.
@@ -119,7 +119,7 @@ Cross-reference:
 - `project_sep_atlas_gemma_ab.md` — Phase 1 Gemma vs Qwopus A/B → pin SEP campaign to `gemma-4-31B-it-Q5_K_M` (reliability + dedup + configurations).
 - `project_phase4_entity_synthesis.md` — Phase 4 entity synthesis at salience 0.1 reduced silent drops 14 → 0 on `sep-compatibilism`; captured Fara/Vihvelin/Jones/Smith/Black, +14 Involves edges.
 
-Operational tooling captured in the README: `--peer-index 0|1`, `--dry-run`, idempotence via `atoms.json` existence check, fedora (RuggedFox) ready-state runbook (node_id stability through toolbx restart is load-bearing — see `project_toolbx_node_id_volatility.md`).
+Operational tooling captured in the README: `--peer-index 0|1`, `--dry-run`, idempotence via `atoms.json` existence check, fedora (linux-peer) ready-state runbook (node_id stability through toolbx restart is load-bearing — see `project_toolbx_node_id_volatility.md`).
 
 ## voice
 

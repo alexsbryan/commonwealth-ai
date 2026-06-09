@@ -81,7 +81,7 @@ Landed since the original MVP plan:
   ```
 
   Local-test image notes: ABI-aligned with the
-  `sovereign-vulkan` toolbox (Fedora-on-Fedora) so the host-built
+  `dev-toolbox` toolbox (Fedora-on-Fedora) so the host-built
   binary's deps resolve; bypasses production `entrypoint.sh`
   (which expects curl + a clock-skewed host); bind-mounts host
   `/lib64` for the binary's dynamic deps. Production CUDA/ROCm

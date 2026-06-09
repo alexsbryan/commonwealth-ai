@@ -32,7 +32,7 @@
   </header>
 
   <div class="fields">
-    <label><span>Name</span><input bind:value={displayName} placeholder="BeefyMac" /></label>
+    <label><span>Name</span><input bind:value={displayName} placeholder="mac-peer" /></label>
     <label>
       <span>Tailnet address</span>
       <input bind:value={tailnetAddress} placeholder="beefymac.tailXXXX.ts.net:8080"

@@ -1,13 +1,13 @@
 # 003 — Path-typo recovery
 
 **What it tests:** does the model invent typo'd absolute paths
-(`tos-experiment` missing `a`, `alexsbryan.dev` with stray dot)
+(`tos-experiment` missing `a`, `example.dev` with stray dot)
 when its context includes the correct path repeatedly?
 
 **Captured from:** real smoke 2026-05-13 where the model had read
-the spec from the CORRECT path (`/Users/alexsbryan/dev/atos-experiment-oicp-types/...`)
+the spec from the CORRECT path (`/Users/user/dev/atos-experiment-oicp-types/...`)
 multiple times, then suddenly started using
-`/Users/alexsbryan/dev/tos-experiment-oicp-types/...` (missing `a`).
+`/Users/user/dev/tos-experiment-oicp-types/...` (missing `a`).
 The pattern persisted across many turns.
 
 **The diagnosis:** at T=0.7 the model's tokenizer can drift one

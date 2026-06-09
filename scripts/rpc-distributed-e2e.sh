@@ -19,7 +19,7 @@
 set -uo pipefail
 
 # ── Config (override via flags) ──────────────────────────────────────────────
-MAC_HOST="${MAC_HOST:-100.104.36.28}"     # Mac Tailscale IP
+MAC_HOST="${MAC_HOST:-100.64.0.2}"     # Mac Tailscale IP
 CLIENT_PORT="${CLIENT_PORT:-9741}"
 INTERNAL_PORT="${INTERNAL_PORT:-9742}"
 RPC_PORT="${RPC_PORT:-50052}"
@@ -53,7 +53,7 @@ say "Pre-flight"
 
 # Host daemon up?
 if [ "$(code "$SELF/status")" = "200" ]; then ok "host daemon up ($SELF)"; else
-  bad "host daemon not responding at $SELF/status — start it (debug, in the sovereign-vulkan toolbox)"; FAIL=1; fi
+  bad "host daemon not responding at $SELF/status — start it (debug, in the dev-toolbox toolbox)"; FAIL=1; fi
 
 # Host running the NEW build? (old build 404s the route; new build 4xx/5xx it).
 HC="$(code -X POST -H 'content-type: application/json' -d '{}' "http://127.0.0.1:${INTERNAL_PORT}/internal/rpc-warm")"

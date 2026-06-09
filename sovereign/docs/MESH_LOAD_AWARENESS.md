@@ -4,7 +4,7 @@
 
 **Diagnosed, not yet implemented.** 2026-05-15. Surfaced during the SEP
 pod deployment: a freshly-joined Vast.ai pod (idle) was bypassed by
-the founder's load balancer in favor of a LAN peer (BeefyMac) that was
+the founder's load balancer in favor of a LAN peer (mac-peer) that was
 already busy serving local traffic.
 
 This document captures the architectural gap, the math behind the
@@ -20,11 +20,11 @@ only when the founder *itself* dispatches a request to that peer
 founder's outbound traffic to the peer — not the peer's *actual*
 serving load.
 
-Concretely: BeefyMac may be serving 10 requests from its own local
+Concretely: mac-peer may be serving 10 requests from its own local
 user (the operator's Claude desktop, local pipelines, anything hitting
-`localhost:9741` on BeefyMac). The founder sees `in_flight = 0` for
-BeefyMac because none of those 10 originated from the founder. So
-`load_penalty(obs)` returns `1.0` regardless of BeefyMac's actual
+`localhost:9741` on mac-peer). The founder sees `in_flight = 0` for
+mac-peer because none of those 10 originated from the founder. So
+`load_penalty(obs)` returns `1.0` regardless of mac-peer's actual
 load, and the load-balance scoring is structurally blind to peer-local
 traffic.
 
@@ -40,13 +40,13 @@ traffic.
            × throughput_factor
 
 For a brand-new Far peer (Taiwan pod, samples=0, idle) vs a warm Near
-peer with seemingly-zero load (BeefyMac, but actually busy):
+peer with seemingly-zero load (mac-peer, but actually busy):
 
 | peer                                    | cold_start | load_penalty | locality | total mult |
 |-----------------------------------------|------------|--------------|----------|------------|
 | Taiwan pod (cold, idle, Far)            | 0.70       | 1.00         | 1.00     | **0.70**   |
-| BeefyMac (warm, 0 observed, Near)       | 1.00       | 1.00         | 1.05     | **1.05**   |
-| BeefyMac (warm, *actual* 10 in-flight)  | 1.00       | 0.67         | 1.05     | 0.70       |
+| mac-peer (warm, 0 observed, Near)       | 1.00       | 1.00         | 1.05     | **1.05**   |
+| mac-peer (warm, *actual* 10 in-flight)  | 1.00       | 0.67         | 1.05     | 0.70       |
 
 The pod can't earn its way past cold-start because it's never given
 the chance — the cold-start bootstrap fails when a warm peer wins on
@@ -176,7 +176,7 @@ form). Need to verify the manifest fetch path actually delivers
   may never get traffic if all warm peers stay just-busy-enough not to
   trip the load penalty. Add a small ε probability of routing to a
   cold-start peer regardless of score, to give it a chance to warm up.
-- **Symmetric peer-to-peer load views.** Right now BeefyMac's view of
+- **Symmetric peer-to-peer load views.** Right now mac-peer's view of
   Taiwan pod's load is also blind to founder-driven traffic to Taiwan.
   The gossip fix here is *outbound*-symmetric — every peer publishes
   its own load. So peer-to-peer scoring (not just founder-to-peer)
@@ -185,13 +185,13 @@ form). Need to verify the manifest fetch path actually delivers
 ## Observed instance: SEP pod deployment
 
 - 2026-05-15 ~13:30 local
-- Founder: toolbx (Strix Halo, 100.115.12.21)
-- Peers online: BeefyMac (LAN, 192.168.1.14), Taiwan pod
+- Founder: toolbx (Strix Halo, 100.64.0.3)
+- Peers online: mac-peer (LAN, 192.168.1.14), Taiwan pod
   (100.102.113.85, joined ~13:20)
 - 3 consecutive `commonwealth/primary` calls from the founder all
-  routed to BeefyMac. Direct `curl` to the Taiwan pod's
+  routed to mac-peer. Direct `curl` to the Taiwan pod's
   `/v1/chat/completions` confirms the pod is fully functional.
-- Operator (running Claude desktop on BeefyMac) confirms BeefyMac is
+- Operator (running Claude desktop on mac-peer) confirms mac-peer is
   actively serving local-user inference. Founder's
-  `peer_observations[BeefyMac].in_flight` does not reflect that load
+  `peer_observations[mac-peer].in_flight` does not reflect that load
   — peer remains "phantom idle" to the scheduler.

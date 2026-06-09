@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-SCLI=${SCLI:-/Users/alexsbryan/dev/commonwealth-ai/sovereign/target/release/sovereign-cli}
+SCLI=${SCLI:-/Users/user/dev/commonwealth-ai/sovereign/target/release/sovereign-cli}
 SOVEREIGN_HOME=${SOVEREIGN_HOME:-$HOME/.sovereign}
 LOG_DIR=${LOG_DIR:-$(dirname -- "$0")/logs}
 

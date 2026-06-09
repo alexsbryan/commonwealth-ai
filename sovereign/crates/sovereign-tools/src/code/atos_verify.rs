@@ -100,7 +100,7 @@ impl Tool for AtosVerifyTool {
                     "After implementing step-02 (define CapabilityHint enum), verify the step"
                         .into(),
                 call: json!({
-                    "workdir": "/Users/alexsbryan/dev/atos-experiment-oicp-types",
+                    "workdir": "/Users/user/dev/atos-experiment-oicp-types",
                     "verify_cmd": "cargo test --test test_capability_hint -- roundtrip",
                     "files_touched": ["src/lib.rs", "tests/test_capability_hint.rs"],
                     "since_unix_ts": 1715000000

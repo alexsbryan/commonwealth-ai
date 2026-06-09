@@ -15,7 +15,7 @@
 # Required env:
 #   TS_AUTHKEY        Tailscale auth key (reusable, ephemeral).
 #   MESH_SEED_ADDR    host:port of the founder daemon's internal port.
-#                     e.g. 100.104.36.28:9742.  Used unchanged for mesh.
+#                     e.g. 100.64.0.2:9742.  Used unchanged for mesh.
 #                     The host portion is also used as the default
 #                     GGUF source — see MODEL_SERVE_HOST below.
 #

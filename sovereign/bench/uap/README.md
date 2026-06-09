@@ -28,7 +28,7 @@ Files here:
 ## Prerequisites for a live run
 
 1. Rebuild so the daemon + CLI carry the changes, then restart the daemon
-   (inside the `sovereign-vulkan` toolbox, per the daemon-restart note):
+   (inside the `dev-toolbox` toolbox, per the daemon-restart note):
    ```
    cargo build --release --bins
    sovereign daemon restart

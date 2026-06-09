@@ -77,7 +77,7 @@ Listmonk (self-hosted), or your own Postgres/KV.
 The page is hand-written HTML. Edit `index.html`. The CSS is inlined inside
 a single `<style>` block at the top of `<head>` — no preprocessing.
 
-GitHub links currently point at `github.com/alexsbryan/sovereign`. Update
+GitHub links currently point at `github.com/your-org/sovereign`. Update
 them in three places when the canonical URL changes:
 - the `<a>` tags in the hero and footer of `index.html`
 - the `install.sh` banner

@@ -2,8 +2,8 @@ loaded thread bank `wikipedia-learn-v0` — 13 threads, 77 turns, target corpus 
 Daemon: http://localhost:9741
 Chat model:  Qwen3.6-35B-A3B-Claude-4.7-Opus-Reasoning-Distilled-APEX-I-Compact
 Embed model: qwen-embedding-0.6b
-Database:    /Users/alexsbryan/.sovereign/sovereign.db
-Indexes:     /Users/alexsbryan/.sovereign/indexes
+Database:    /Users/user/.sovereign/sovereign.db
+Indexes:     /Users/user/.sovereign/indexes
 Corpora:     arch-principles (58 chunks), atos-experiment-oicp-types (55 chunks), commonwealth (2021 chunks), commonwealth-ai (18924 chunks), commonwealth-ai-arch-principles (58 chunks), commonwealth-ai-system-overview (61 chunks), conversation-history (91 chunks), conversations-personal (267 chunks), corpus-engine (4925 chunks), drift-target (0 chunks), folder-9ef2f912ea2e (850 chunks), institutional-notes (9 chunks), oicp-types (76 chunks), sep (187967 chunks), sovereign (13765 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), watched-959ee8a8f330 (973 chunks), wikipedia (1869218 chunks)
 Tools:       10 registered
 Router embed exemplars: 117 loaded from sovereign/router/exemplars.toml

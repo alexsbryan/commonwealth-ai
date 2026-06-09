@@ -416,7 +416,7 @@ pub async fn download_model(
     ];
 
     let client = reqwest::Client::builder()
-        .user_agent("sovereign-tools/gliner-fetch (alexbryan01@gmail.com)")
+        .user_agent("sovereign-tools/gliner-fetch (maintainer@example.com)")
         .timeout(std::time::Duration::from_secs(900))
         .build()
         .map_err(|e| Error::Storage(format!("reqwest::Client build: {e}")))?;

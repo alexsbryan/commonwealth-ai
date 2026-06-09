@@ -1,7 +1,7 @@
 # `sovereign-agent-bench` — session handoff
 
 Continuation doc for the agent-coding battery. Pairs with
-`/Users/alexsbryan/dev/commonwealth-ai/HANDOFF.md` (the predecessor
+`/Users/user/dev/commonwealth-ai/HANDOFF.md` (the predecessor
 OICP-runner diary) and the plans at
 `~/.claude/plans/i-want-to-pickup-sorted-eagle.md` (original) +
 `~/.claude/plans/autonomous-loop-tick-tingly-clock.md` (PR 1

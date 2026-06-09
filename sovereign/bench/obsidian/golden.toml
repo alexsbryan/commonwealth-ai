@@ -1,5 +1,5 @@
 # Golden set for Alex Bryan's personal vault at
-# /Users/alexsbryan/Documents/Obsidian Vault (root essays, COMMONWEALTH/
+# /Users/user/Documents/Obsidian Vault (root essays, COMMONWEALTH/
 # work tree deliberately excluded — see [meta].excluded_paths).
 #
 # Schema mirrors `bench/literary/{bk-book-1,dubliners-3}.toml` (consumed
@@ -31,7 +31,7 @@
 template = "obsidian-real-vault-2026-05-14"
 corpus_id = "obsidian-vault"
 description = "Golden set for Alex Bryan's personal vault — root essays only. Heterogeneous topic range: institutional economics, urban planning, market design, NFL as designed system, AI investment stack, pharmacy benefit managers, land value tax, philosophy of music."
-vault_path = "/Users/alexsbryan/Documents/Obsidian Vault"
+vault_path = "/Users/user/Documents/Obsidian Vault"
 excluded_paths = [
     "COMMONWEALTH/",
     "_sovereign-index/",

@@ -142,7 +142,7 @@ Save the `tskey-...` string.
 
 ```bash
 tailscale ip -4
-# e.g. 100.104.36.28
+# e.g. 100.64.0.2
 ```
 
 This becomes `MESH_SEED_ADDR` for the pod (with `:9742` appended).
@@ -220,7 +220,7 @@ Environment variables (RunPod "Secrets"):
 | key | example | required |
 |---|---|---|
 | `TS_AUTHKEY`     | `tskey-auth-...`                              | yes |
-| `MESH_SEED_ADDR` | `100.104.36.28:9742`                          | yes |
+| `MESH_SEED_ADDR` | `100.64.0.2:9742`                          | yes |
 | `R2_ENDPOINT`    | `https://<account>.r2.cloudflarestorage.com`  | yes |
 | `R2_ACCESS_KEY`  | r2 access key id                              | yes |
 | `R2_SECRET_KEY`  | r2 secret access key                          | yes |
@@ -472,8 +472,8 @@ Drop the `R2_*` env vars; replace with (or rely on the defaults for):
 | key | example | required |
 |---|---|---|
 | `TS_AUTHKEY`        | `tskey-auth-...`     | yes |
-| `MESH_SEED_ADDR`    | `100.104.36.28:9742` | yes |
-| `MODEL_SERVE_HOST`  | `100.104.36.28`      | no — defaults to host part of `MESH_SEED_ADDR` |
+| `MESH_SEED_ADDR`    | `100.64.0.2:9742` | yes |
+| `MODEL_SERVE_HOST`  | `100.64.0.2`      | no — defaults to host part of `MESH_SEED_ADDR` |
 | `MODEL_SERVE_PORT`  | `9743`               | no — matches `cloud-peer-serve-models.sh` default |
 | `PRIMARY_GGUF`      | …                    | no — same defaults as R2 path |
 

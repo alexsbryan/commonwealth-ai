@@ -2951,7 +2951,7 @@ impl Runtime {
     /// for the formatted shape.
     ///
     /// This is the Phase 2.5 seam from the situated-team plan
-    /// (`/Users/alexsbryan/.claude/plans/there-s-a-fast-slot-delightful-peach.md`).
+    /// (`/Users/user/.claude/plans/there-s-a-fast-slot-delightful-peach.md`).
     /// Implementation today is the minimal wrapper — runs the
     /// existing `prepare_knowledge_context` pipeline and discards
     /// the formatter output. Phase 4 wires this directly into
@@ -2998,7 +2998,7 @@ impl Runtime {
         // came in via the mesh. Only populated for corpora we
         // don't host locally (so a corpus present both sides stays
         // tagged as local — we don't pretend to "serve from
-        // BeefyMac" a corpus we have right here).
+        // mac-peer" a corpus we have right here).
         let mut peer_attribution: HashMap<String, String> = HashMap::new();
         // How many hits came from local (before mesh). Drives the
         // computed `search_method` label. `mesh_hits` is derived

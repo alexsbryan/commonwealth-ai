@@ -199,8 +199,8 @@ async fn canonical_pull_rejects_wrong_expected_fingerprint() {
 /// multiple addresses and the FIRST one is unreachable (e.g. a
 /// LAN IP that doesn't route from the puller's network), the
 /// pull tries the next URL until one succeeds. This is the
-/// regression test for the RuggedFox case where Alex's MacBook
-/// gossiped `[192.168.1.6, 100.104.36.28-tailscale, ipv6]` and
+/// regression test for the linux-peer case where Alex's MacBook
+/// gossiped `[192.168.1.6, 100.64.0.2-tailscale, ipv6]` and
 /// my first cut picked the LAN address that wasn't reachable
 /// from the puller's network.
 #[tokio::test]

@@ -398,7 +398,7 @@ pub async fn mesh_relay_candidates(
 }
 
 /// Generate a fresh memorable two-word node-name suggestion (e.g.
-/// "BeefyMac"). Powers the 🎲 button next to the node-name input —
+/// "mac-peer"). Powers the 🎲 button next to the node-name input —
 /// users click it to roll a new candidate, then press Save to
 /// persist via the existing `save_config` flow.
 ///
