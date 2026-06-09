@@ -1,0 +1,203 @@
+[bank]
+name = "wikipedia-summarize-pilot-v1"
+corpus = "wikipedia"
+description = """
+Whole-article SUMMARIZATION bank for the RAPTOR-on-Wikipedia due-diligence
+pilot (2026-06-08). Mirrors sovereign/bench/sep/summarize.toml: comprehensive
+"give me an overview of the whole topic" prompts whose `expected_facts` are the
+article's major canonical themes, scored as THEME COVERAGE under --synth
+(facts-judge, paraphrase-tolerant, is the headline). Run A/B on
+SOVEREIGN_RAPTOR_GROUNDING (0 vs 1) with --isolate (scope to wikipedia).
+
+Restricted to the 8 pilot articles that built level-1 (cross-section) RAPTOR
+nodes — i.e. the richest trees, exactly where whole-work summarization is
+hardest for chunk-RAG and where RAPTOR is supposed to lift. The A/B is RELATIVE
+(same themes both arms) so any slightly-off-corpus theme depresses both arms
+equally and cancels out of the delta.
+
+NOTE: RAPTOR was built per-article via `enrich raptor wikipedia --group-by-article
+--titles-file` on these 12 pilot articles only; the other ~51k articles have no
+RAPTOR nodes, so this bank must stay scoped to these articles.
+"""
+
+[bank.latency_budget]
+default_p95_ms = 90000
+max_per_question_ms = 180000
+
+[[questions]]
+id = "summary_einstein"
+category = "comprehensive_summary"
+subject = "physics-biography"
+question = """
+Provide a comprehensive overview of Albert Einstein. Cover his major scientific
+contributions, the key ideas and how they changed physics, his role in the
+quantum debates, and the main arc of his personal and political life. Aim for
+breadth across the whole topic rather than depth on any single point.
+"""
+expected_facts = [
+    "special relativity (1905)",
+    "general relativity",
+    "mass-energy equivalence E=mc^2",
+    "photoelectric effect and the quantum/photon",
+    "Brownian motion",
+    "Nobel Prize in Physics",
+    "Bose-Einstein statistics",
+    "EPR paradox and debates with Niels Bohr over quantum mechanics",
+    "fled Nazi Germany and emigrated to the United States",
+    "pacifism, civil-rights advocacy, and the letter to Roosevelt",
+]
+
+[[questions]]
+id = "summary_wwii"
+category = "comprehensive_summary"
+subject = "history"
+question = """
+Provide a comprehensive overview of World War II. Cover its scope and timeline,
+the major belligerents, the principal theaters and turning points, its human
+cost, and its consequences. Aim for breadth across the whole topic.
+"""
+expected_facts = [
+    "fought 1939 to 1945",
+    "Axis powers versus the Allies",
+    "German invasion of Poland started the war in Europe",
+    "the Holocaust and genocide",
+    "Pearl Harbor and the entry of the United States",
+    "the Eastern Front and the Soviet Union",
+    "the Pacific theater against Japan",
+    "D-Day / the Normandy landings",
+    "atomic bombings of Hiroshima and Nagasaki",
+    "deadliest conflict in history, tens of millions of deaths",
+]
+
+[[questions]]
+id = "summary_evolution"
+category = "comprehensive_summary"
+subject = "biology"
+question = """
+Provide a comprehensive overview of evolution as a scientific theory. Cover its
+central claim, the main mechanisms, the principal lines of evidence, and its
+historical development. Aim for breadth across the whole topic.
+"""
+expected_facts = [
+    "common descent / a last universal common ancestor",
+    "natural selection (Darwin and Wallace)",
+    "genetic variation and mutation",
+    "genetic drift",
+    "speciation",
+    "fossil evidence",
+    "comparative anatomy and homologous structures",
+    "molecular / DNA evidence",
+    "the modern evolutionary synthesis",
+    "adaptation",
+]
+
+[[questions]]
+id = "summary_french_revolution"
+category = "comprehensive_summary"
+subject = "history"
+question = """
+Provide a comprehensive overview of the French Revolution. Cover its causes,
+the major events and phases, the key factions and figures, and its outcomes and
+legacy. Aim for breadth across the whole topic.
+"""
+expected_facts = [
+    "occurred 1789 to 1799",
+    "financial crisis and social inequality as causes",
+    "Enlightenment ideas",
+    "the Estates-General and the National Assembly",
+    "the storming of the Bastille",
+    "the Declaration of the Rights of Man and of the Citizen",
+    "abolition of the monarchy and execution of Louis XVI",
+    "the Reign of Terror and Robespierre",
+    "rise of Napoleon Bonaparte",
+    "end of feudalism and lasting political legacy",
+]
+
+[[questions]]
+id = "summary_kant"
+category = "comprehensive_summary"
+subject = "philosophy"
+question = """
+Provide a comprehensive overview of the philosophy of Immanuel Kant. Cover his
+central doctrines in metaphysics and epistemology, his moral philosophy, and his
+broader significance. Aim for breadth across the whole topic.
+"""
+expected_facts = [
+    "transcendental idealism",
+    "the Critique of Pure Reason",
+    "synthetic a priori knowledge",
+    "the distinction between phenomena and noumena",
+    "space and time as a priori forms of intuition",
+    "the categories of the understanding",
+    "the categorical imperative",
+    "deontological / duty-based ethics",
+    "the Critique of Practical Reason",
+    "central figure of the Enlightenment",
+]
+
+[[questions]]
+id = "summary_roman_empire"
+category = "comprehensive_summary"
+subject = "history"
+question = """
+Provide a comprehensive overview of the Roman Empire. Cover its political
+evolution, its military and administration, its economy and culture, the
+religious changes it underwent, and its decline. Aim for breadth across the
+whole topic.
+"""
+expected_facts = [
+    "transition from republic to empire under Augustus",
+    "the Pax Romana",
+    "vast territorial extent around the Mediterranean",
+    "the legions and the military",
+    "Roman law and administration",
+    "economy, trade, and infrastructure such as roads and aqueducts",
+    "the spread of Christianity and Constantine",
+    "division into Western and Eastern empires",
+    "the fall of the Western Roman Empire",
+    "continuation as the Byzantine (Eastern) Empire",
+]
+
+[[questions]]
+id = "summary_dna"
+category = "comprehensive_summary"
+subject = "biology"
+question = """
+Provide a comprehensive overview of DNA. Cover its structure, how it encodes
+information, how that information is copied and expressed, and its role in
+heredity. Aim for breadth across the whole topic.
+"""
+expected_facts = [
+    "double-helix structure (Watson, Crick, and Franklin)",
+    "nucleotides and complementary base pairing (A-T, G-C)",
+    "the sugar-phosphate backbone and antiparallel strands",
+    "genes and the genetic code",
+    "DNA replication",
+    "transcription into RNA",
+    "translation into proteins",
+    "chromosomes",
+    "mutations",
+    "the molecular basis of heredity",
+]
+
+[[questions]]
+id = "summary_ai"
+category = "comprehensive_summary"
+subject = "computer-science"
+question = """
+Provide a comprehensive overview of artificial intelligence. Cover its main
+approaches, its historical development, major subfields and applications, and
+its risks and open debates. Aim for breadth across the whole topic.
+"""
+expected_facts = [
+    "machine learning",
+    "neural networks and deep learning",
+    "early history including Turing and the Dartmouth workshop",
+    "search and problem-solving",
+    "natural language processing",
+    "computer vision",
+    "symbolic / expert systems",
+    "the AI winters",
+    "real-world applications",
+    "ethics, safety risks, and artificial general intelligence",
+]

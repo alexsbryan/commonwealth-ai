@@ -77,6 +77,14 @@ struct RaptorArgs {
     strip_furniture: bool,
     inspect_furniture: bool,
     force: bool,
+    /// Restrict the build to a curated set of articles (one slug/title per
+    /// line). Overrides the default smallest-first selection — used to pilot
+    /// RAPTOR on representative multi-section articles instead of stubs.
+    titles_file: Option<String>,
+    /// Wikipedia keys chunks per-section (`…/Article#Section`); this merges an
+    /// article's sections (strip the `#anchor`) into one document so RAPTOR
+    /// trees span the whole article instead of single sections.
+    group_by_article: bool,
     daemon_base: String,
     chat_model: String,
     embed_model: String,
@@ -145,10 +153,68 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
         return 1;
     }
 
-    let mut docs: Vec<(String, usize)> = groups
-        .iter()
-        .map(|(id, chunk_ids)| (id.clone(), chunk_ids.len()))
-        .collect();
+    // Per-article grouping (--group-by-article): Wikipedia keys chunks by
+    // per-section source_doc_id (`…/Albert_Einstein#General_relativity`), so
+    // grouping by source_doc_id alone yields tiny per-section trees. Merge all
+    // of an article's sections (strip the `#…` anchor) into one document so a
+    // RAPTOR tree spans the whole article. `article_sections` keeps the section
+    // source_doc_ids so the build loop fetches + concatenates them.
+    let mut article_sections: Option<std::collections::HashMap<String, Vec<String>>> = None;
+    let mut docs: Vec<(String, usize)> = if parsed.group_by_article {
+        let mut counts: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        let mut sections: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
+        for (sdi, chunk_ids) in &groups {
+            let article = sdi.split('#').next().unwrap_or(sdi).to_string();
+            *counts.entry(article.clone()).or_default() += chunk_ids.len();
+            sections.entry(article).or_default().push(sdi.clone());
+        }
+        let docs = counts.into_iter().collect();
+        article_sections = Some(sections);
+        docs
+    } else {
+        groups
+            .iter()
+            .map(|(id, chunk_ids)| (id.clone(), chunk_ids.len()))
+            .collect()
+    };
+    // Optional curated subset: --titles-file restricts the build to articles
+    // whose slug (last path segment of source_doc_id) matches a line in the
+    // file. Lets a pilot target representative multi-section articles instead
+    // of the default smallest-first stubs. Spaces in a line are normalized to
+    // '_' so the file may hold either "Albert Einstein" or "Albert_Einstein".
+    if let Some(path) = &parsed.titles_file {
+        let raw = match std::fs::read_to_string(path) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("error: --titles-file {path}: {e}");
+                return 1;
+            }
+        };
+        let wanted: std::collections::HashSet<String> = raw
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .map(|l| l.replace(' ', "_"))
+            .collect();
+        let before = docs.len();
+        docs.retain(|(id, _)| {
+            let slug = id.trim_end_matches('/').rsplit('/').next().unwrap_or(id);
+            wanted.contains(slug)
+        });
+        println!(
+            "  titles-file: {path} → matched {} of {before} source docs ({} requested)",
+            docs.len(),
+            wanted.len()
+        );
+        if docs.is_empty() {
+            eprintln!(
+                "error: --titles-file matched no source docs — check slugs against source_doc_id"
+            );
+            return 1;
+        }
+    }
     // Smallest documents first (tie-break by id for determinism): the
     // cheapest trees land early so the operator sees progress — and any
     // failure surfaces — before the long tail of big essays.
@@ -297,12 +363,35 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
                 continue;
             }
         }
-        let rows = match index.chunks_for_source_doc_with_embeddings(&doc_id).await {
-            Ok(r) => r,
-            Err(e) => {
+        let rows = if let Some(sections) = &article_sections {
+            // --group-by-article: concatenate every section's chunks for this
+            // article (each section is a separate source_doc_id under the
+            // article URL). The whole-article chunk set is what RAPTOR clusters.
+            let mut all = Vec::new();
+            let mut fetch_err: Option<String> = None;
+            for sdi in sections.get(&doc_id).map(|v| v.as_slice()).unwrap_or(&[]) {
+                match index.chunks_for_source_doc_with_embeddings(sdi).await {
+                    Ok(r) => all.extend(r),
+                    Err(e) => {
+                        fetch_err = Some(format!("section {sdi}: {e}"));
+                        break;
+                    }
+                }
+            }
+            if let Some(e) = fetch_err {
                 eprintln!("  [{}/{total_docs}] {doc_id}: chunk fetch failed: {e}", idx + 1);
                 failed += 1;
                 continue;
+            }
+            all
+        } else {
+            match index.chunks_for_source_doc_with_embeddings(&doc_id).await {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("  [{}/{total_docs}] {doc_id}: chunk fetch failed: {e}", idx + 1);
+                    failed += 1;
+                    continue;
+                }
             }
         };
         if rows.is_empty() {
@@ -444,6 +533,8 @@ fn parse_args(args: &[String]) -> Result<RaptorArgs, String> {
     let mut strip_furniture = false;
     let mut inspect_furniture = false;
     let mut force = false;
+    let mut titles_file: Option<String> = None;
+    let mut group_by_article = false;
     let mut daemon_base = "http://localhost:9741".to_string();
     let mut chat_model = "primary".to_string();
     let mut embed_model = "embed".to_string();
@@ -484,6 +575,11 @@ fn parse_args(args: &[String]) -> Result<RaptorArgs, String> {
                 i += 1;
                 embed_model = args.get(i).ok_or("--embed-model needs a value")?.clone();
             }
+            "--titles-file" => {
+                i += 1;
+                titles_file = Some(args.get(i).ok_or("--titles-file needs a path")?.clone());
+            }
+            "--group-by-article" => group_by_article = true,
             other if other.starts_with("--") => {
                 return Err(format!("unknown flag: {other}"));
             }
@@ -506,6 +602,8 @@ fn parse_args(args: &[String]) -> Result<RaptorArgs, String> {
         strip_furniture,
         inspect_furniture,
         force,
+        titles_file,
+        group_by_article,
         daemon_base,
         chat_model,
         embed_model,
