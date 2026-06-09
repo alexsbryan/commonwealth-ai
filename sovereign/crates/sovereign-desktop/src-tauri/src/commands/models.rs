@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State};
 use tokio::io::AsyncWriteExt;
 
+use crate::error::DesktopError;
 use crate::state::{self, AppState, DesktopConfig};
 
 // ─── Web Search ─────────────────────────────────────────────
@@ -23,9 +24,8 @@ pub async fn search_web(
     state: State<'_, Arc<AppState>>,
     query: String,
     conversation_id: String,
-) -> Result<MessageResponse, String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
+) -> Result<MessageResponse, DesktopError> {
+    let runtime = state.runtime().await?;
 
     // Save user message.
     let user_msg = sovereign_core::types::Message {
@@ -48,7 +48,7 @@ pub async fn search_web(
         .tools
         .get("search")
         .or(runtime.tools.get("web_search"))
-        .map_err(|_| "Search tool is not enabled.".to_string())?;
+        .map_err(|_| DesktopError::invalid_request("Search tool is not enabled."))?;
 
     let params = serde_json::json!({ "query": query });
     let ctx = sovereign_core::types::ToolContext {
@@ -63,7 +63,7 @@ pub async fn search_web(
     let output = tool
         .execute(&params, &ctx)
         .await
-        .map_err(|e| format!("Web search failed: {e}"))?;
+        .map_err(|e| DesktopError::upstream(format!("Web search failed: {e}")))?;
 
     let content = match output {
         sovereign_core::types::StepOutput::Text(t) => t,

@@ -4,6 +4,7 @@ mod bootstrap;
 mod commands;
 mod crash_bundle;
 mod enrich_commands;
+mod error;
 mod friendly_names;
 mod import_commands;
 mod insight_commands;

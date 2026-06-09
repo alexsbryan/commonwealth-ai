@@ -4,14 +4,27 @@
 //! semantics — invoked in place from `bootstrap_with_progress`.
 //!
 //! Only phases that are genuinely contiguous and self-contained live
-//! here. The `tools` registry is intentionally NOT a builder: it is
-//! mutated across the whole bootstrap (before AND after the corpus /
-//! health phases, because the later tools depend on `corpus_engine`),
-//! so extracting it would require reordering — unsafe to do blind in a
-//! startup path that has no CI coverage (it needs a loaded GGUF). Those
-//! phases stay inline until they can be smoke-tested via `cargo tauri dev`.
+//! here: `config`, `builtin_skills`, `health`, `store`, `inference`,
+//! and `knowledge_view`. Two parts of bootstrap are intentionally NOT
+//! builders because they are *interleaved*, not contiguous:
+//!
+//! - The `tools` registry is mutated across the whole bootstrap (before
+//!   AND after the corpus / health phases, because the later tools
+//!   depend on `corpus_engine`).
+//! - The embedded-`EmbeddedDaemon` wiring is spread over four scattered
+//!   sites (`set_corpus_engine` / `set_state_store`, then
+//!   `set_inference_provider`, the CliSetup/MCP block, then
+//!   `set_embed_model_info` ~300 lines later) and is order-constrained:
+//!   `set_corpus_engine` *must* run before `try_resume` starts the HTTP
+//!   listener, or the first gossip rounds advertise empty corpora.
+//!
+//! Extracting either would require reordering — unsafe to do blind in a
+//! startup path with no CI coverage (it needs a loaded GGUF). Both stay
+//! inline until they can be smoke-tested via `cargo tauri dev`.
 
 pub mod health;
+pub mod inference;
+pub mod knowledge_view;
 pub mod store;
 
 #[cfg(test)]

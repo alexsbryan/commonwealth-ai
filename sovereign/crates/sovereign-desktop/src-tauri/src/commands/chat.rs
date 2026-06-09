@@ -97,6 +97,11 @@ pub async fn send_message_stream(
         .await
     {
         Ok(handle) => {
+            tracing::info!(
+                message_id = %handle.message_id,
+                %conversation_id,
+                "send_message_stream: streaming path engaged"
+            );
             let message_id = handle.message_id.clone();
             let conversation_id_owned = conversation_id.clone();
             let app = app_handle.clone();
@@ -167,6 +172,10 @@ pub async fn send_message_stream(
             })
         }
         Err(_not_streamable) => {
+            tracing::info!(
+                %conversation_id,
+                "send_message_stream: runtime not streamable, falling back to non-streaming (ComplexTask)"
+            );
             // Fall back to non-streaming for ComplexTask.
             let app = app_handle.clone();
             let conversation_id_owned = conversation_id.clone();

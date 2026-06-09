@@ -4,6 +4,12 @@
   import { listCorpora, installCorpus, removeCorpus, pauseCorpus, buildCorpusIndex, getCorpusHealth, retryEnrichmentFailures, expandCorpus, canExpandCorpus, startLayeredSetup, newsworthyStatus, newsworthyTickNow, type NewsworthyStatus } from "../api";
   import { corpusProgressStore } from "../stores/corpusProgress.svelte";
   import type { CorpusEntry, CorpusHealthDetail } from "../types";
+  import {
+    formatRelativeAgo,
+    catalogTier,
+    formatDate,
+    phaseLabel,
+  } from "./knowledgeStatusFormat";
 
   let corpora: CorpusEntry[] = $state([]);
   // Progress payloads come from the singleton `corpusProgressStore` —
@@ -59,33 +65,6 @@
     }
   }
 
-  function formatRelativeAgo(unixSecs: number): string {
-    const now = Math.floor(Date.now() / 1000);
-    const diff = Math.max(0, now - unixSecs);
-    if (diff < 60) return `${diff}s ago`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
-  }
-
-  // Catalog tier comes from `registry_snapshot.toml::catalog_status`
-  // — the registry is the single source of truth so the UI never
-  // grows a parallel allowlist. Anything missing the field defaults
-  // to "preview" (under Coming soon, install disabled) so newly-
-  // registered recipes don't accidentally surface as featured.
-  function catalogTier(c: CorpusEntry): "featured" | "preview" | "hidden" {
-    switch (c.catalog_status) {
-      case "featured":
-      case "hidden":
-        return c.catalog_status;
-      case "preview":
-      case null:
-      case undefined:
-      default:
-        return "preview";
-    }
-  }
-
   // The backend (`list_corpora` Tauri command) returns the full catalog
   // from `corpus_engine::builtin_corpora()` — there's no longer a fallback
   // path because the catalog ships in Rust source, not a sidecar TOML.
@@ -115,18 +94,18 @@
       (c) =>
         !c.parent_corpus_id &&
         !isPartition(c.id) &&
-        catalogTier(c) !== "hidden",
+        catalogTier(c.catalog_status) !== "hidden",
     ),
   );
   let featuredCorpora = $derived(
-    topLevelCorpora.filter((c) => catalogTier(c) === "featured"),
+    topLevelCorpora.filter((c) => catalogTier(c.catalog_status) === "featured"),
   );
   // Coming-soon rail: every other top-level recipe, sorted by name.
   // Install actions render as disabled so users can see what's on the
   // roadmap without crashing into half-built ingest pipelines.
   let comingSoonCorpora = $derived(
     topLevelCorpora
-      .filter((c) => catalogTier(c) === "preview")
+      .filter((c) => catalogTier(c.catalog_status) === "preview")
       .slice()
       .sort((a, b) => a.name.localeCompare(b.name)),
   );
@@ -142,7 +121,7 @@
       if (
         c.parent_corpus_id &&
         c.id !== "wikipedia-fetched" &&
-        catalogTier(c) !== "hidden"
+        catalogTier(c.catalog_status) !== "hidden"
       ) {
         (map[c.parent_corpus_id] ||= []).push(c);
       }
@@ -328,44 +307,6 @@
     }
   }
 
-  function formatDate(unixSecs: number): string {
-    return new Date(unixSecs * 1000).toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  }
-
-  function phaseLabel(phase: string): string {
-    switch (phase) {
-      case "downloading":
-        return "Downloading…";
-      case "extracting":
-        return "Extracting documents…";
-      case "chunking":
-        return "Chunking…";
-      case "embedding":
-        return "Embedding…";
-      case "indexing":
-        return "Building index…";
-      case "extracting_claims":
-        return "Extracting claims…";
-      case "finding_relationships":
-        return "Finding relationships…";
-      case "extracting_relationships":
-        return "Extracting relationships…";
-      case "building_link_graph":
-        return "Building link graph…";
-      case "computing_profiles":
-        return "Computing article profiles…";
-      case "complete":
-        return "Complete";
-      case "failed":
-        return "Failed";
-      default:
-        return phase;
-    }
-  }
 </script>
 
 <div class="knowledge-status">
