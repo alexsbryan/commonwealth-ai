@@ -111,7 +111,7 @@ echo "==> Done. Co-Authored-By commits remaining: ${REMAINING}"
 echo
 echo "NEXT STEPS:"
 echo "  1. Inspect:        git log --pretty=full | less"
-echo "  2. Re-add remote:  git remote add origin git@github.com:alexsbryan/commonwealth-ai.git"
+echo "  2. Re-add remote:  git remote add origin git@github.com:your-org/commonwealth-ai.git"
 echo "     (filter-repo removes 'origin' on purpose to stop an accidental push.)"
 echo "  3. Force-push:     git push --force-with-lease origin --all --tags"
 echo

@@ -92,5 +92,5 @@
   },
   "surface_form_collapse_rate": 0.33139444097439097,
   "delta_from_pre_reconciliation_f1": 0.18461538461538463,
-  "notes": "Written by `sovereign bench enron run`. Reads /Users/alexsbryan/.sovereign/indexes/enron-sample-multi-wide/atlas/atoms.json; ground truth at /Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/enron/ground_truth_entities.jsonl."
+  "notes": "Written by `sovereign bench enron run`. Reads /Users/user/.sovereign/indexes/enron-sample-multi-wide/atlas/atoms.json; ground truth at /Users/user/dev/commonwealth-ai/sovereign/bench/enron/ground_truth_entities.jsonl."
 }

@@ -2,7 +2,7 @@
 //! score a handful of (query, doc) pairs, print the scores. Run via:
 //!
 //!     cargo run --release -p sovereign-inference --example rerank_smoke \
-//!         -- /home/alexbryan/dev/commonwealth-ai/sovereign/models/jina-reranker-v3-Q6_K.gguf
+//!         -- /home/user/dev/commonwealth-ai/sovereign/models/jina-reranker-v3-Q6_K.gguf
 //!
 //! Expectation: docs clearly relevant to the query score higher than
 //! clearly irrelevant ones. Absolute magnitude is model-specific
@@ -17,7 +17,7 @@ use std::env;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     let path = args.get(1).cloned().unwrap_or_else(|| {
-        "/home/alexbryan/dev/commonwealth-ai/sovereign/models/jina-reranker-v3-Q6_K.gguf"
+        "/home/user/dev/commonwealth-ai/sovereign/models/jina-reranker-v3-Q6_K.gguf"
             .to_string()
     });
     eprintln!("loading reranker: {path}");

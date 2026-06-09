@@ -62,11 +62,12 @@ members = [
 [workspace.package]
 version = "0.1.16"
 edition = "2021"
-# Pre-monorepo: corpus-engine + commonwealth shipped Apache-2.0;
-# sovereign shipped MIT. One license under one repo from now on —
-# Apache-2.0 was the majority and is what corpus-engine (the
-# foundational shared crate) used.
-license = "Apache-2.0"
+# Single license across the monorepo: GNU AGPL-3.0-or-later. Sovereign is
+# source-available for audit; the AGPL network-use clause is the point for a
+# mesh/daemon system. (Pre-monorepo, corpus-engine + commonwealth were
+# Apache-2.0 and sovereign was MIT; consolidated to AGPL-3.0-or-later for the
+# open-source launch — full text in /LICENSE.)
+license = "AGPL-3.0-or-later"
 
 # Workspace lint policy (tech-debt clean-start, 2026-06-03). Members opt in
 # with `[lints]\nworkspace = true`. These clippy lints flag subjective

@@ -269,7 +269,7 @@ Two additional structural scans that don't need an LLM:
   `"/home/..."`, or `"C:\\Users\\..."` in `src/**/*.rs` outside
   `tests/` and `examples/`. Catches portability bugs of the shape
   the audit found in `drift_cmd_orchestrator.rs` (which hardcoded
-  `/Users/alexsbryan/.local/bin/sovereign` and broke on cloud peers).
+  `/Users/user/.local/bin/sovereign` and broke on cloud peers).
 - **Zero-tracing files** (`FindingKind::Smell(ZeroTracing)`,
   Severity::Note) — `.rs` files >300 lines that contain at least one
   `fn`/`impl` declaration but no `tracing::` calls. The glassbox

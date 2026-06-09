@@ -22,7 +22,7 @@ A Sovereign code intelligence server runs at `http://localhost:9741/mcp`. The MC
 | `mesh`, `corpus`, `mcp`, `recipe`, `pipeline`, `bench`, `chat`, `eval`, `enrich`, `atlas`, `claim` | `sovereign-cli-llm` |
 | `init`, `status`, `notes`, `drift`, `design`, `plan`, `serve`, `reflect`, `memory`, … | `sovereign-cli` (in-process) |
 
-So `lint_status`/`test_status`/`build` (under `tools`) live in **`sovereign-cli-dev`**; the watcher daemon + `doctor`'s `watcher_live` probe live in **`sovereign-cli-daemon`**. To build everything correctly the first time, build all the binaries the change spans, e.g. `cargo build --release -p sovereign-cli -p sovereign-cli-dev -p sovereign-cli-daemon -p sovereign-cli-llm` (or `cargo build --release --bins`). The daemon must be restarted (`sovereign daemon stop && sovereign daemon start`, inside the `sovereign-vulkan` toolbox) to load a new `sovereign-cli-daemon` binary; CLI verbs pick up the new sibling on next invocation.
+So `lint_status`/`test_status`/`build` (under `tools`) live in **`sovereign-cli-dev`**; the watcher daemon + `doctor`'s `watcher_live` probe live in **`sovereign-cli-daemon`**. To build everything correctly the first time, build all the binaries the change spans, e.g. `cargo build --release -p sovereign-cli -p sovereign-cli-dev -p sovereign-cli-daemon -p sovereign-cli-llm` (or `cargo build --release --bins`). The daemon must be restarted (`sovereign daemon stop && sovereign daemon start`, inside the `dev-toolbox` toolbox) to load a new `sovereign-cli-daemon` binary; CLI verbs pick up the new sibling on next invocation.
 
 When the MCP server is running (the common case), prefer the MCP path — it's faster and native to Claude Code. The same tools are also exposed as a CLI:
 

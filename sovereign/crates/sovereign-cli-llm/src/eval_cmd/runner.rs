@@ -442,18 +442,23 @@ fn intent_wire_label(intent: &sovereign_core::types::Intent) -> String {
 }
 
 /// Resolve `chunk_id` (format `sec_NNNN`) to the corresponding
-/// section text in the article's source markdown
-/// (`/home/alexbryan/.sovereign/corpora/sep/articles/<slug>.md`).
+/// section text in the article's source markdown, under
+/// `<corpora-dir>/sep/articles/<slug>.md`. The corpora dir is
+/// `$SOVEREIGN_CORPORA_DIR` when set, else `<sovereign-data-dir>/corpora`
+/// (`~/.sovereign/corpora` by default).
 /// Sections are delimited by `## Section NNN` headings; we extract
 /// the body between heading N and heading N+1 (or EOF).
 ///
 /// Returns `None` when the file is missing or the section can't be
 /// located. Best-effort — caller falls back gracefully.
 fn lookup_section_markdown(article_slug: &str, chunk_id: &str) -> Option<String> {
-    let path = format!(
-        "/home/alexbryan/.sovereign/corpora/sep/articles/{}.md",
-        article_slug
-    );
+    let corpora_dir = std::env::var_os("SOVEREIGN_CORPORA_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| sovereign_cli_shared::dirs::sovereign_root().join("corpora"));
+    let path = corpora_dir
+        .join("sep")
+        .join("articles")
+        .join(format!("{article_slug}.md"));
     let body = std::fs::read_to_string(&path).ok()?;
     // chunk_id format `sec_NNNN` → ordinal NNN (strip leading zeros).
     let n: usize = chunk_id.strip_prefix("sec_")?.parse().ok()?;

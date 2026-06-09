@@ -145,7 +145,7 @@
    *
    *  Must NOT use `URL.searchParams.set()` — that percent-encodes
    *  reserved chars (`:` → `%3A`, `'` → `%27`) which makes the link
-   *  ugly in a chat client AND produces `relay=100.104.36.28%3A9742`
+   *  ugly in a chat client AND produces `relay=100.64.0.2%3A9742`
    *  that older daemon builds (pre-percent-decode fix) fail to parse.
    *  Mirror `build_join_link` in Rust instead — its query format is
    *  the canonical one the parser's round-trip test locks in. */
@@ -1021,7 +1021,7 @@
           id="node-name-input"
           type="text"
           class="node-name-input"
-          placeholder="e.g. BeefyMac"
+          placeholder="e.g. mac-peer"
           bind:value={nodeNameInput}
           onkeydown={(e) => e.key === "Enter" && saveNodeName()}
           disabled={nodeNameSaving}

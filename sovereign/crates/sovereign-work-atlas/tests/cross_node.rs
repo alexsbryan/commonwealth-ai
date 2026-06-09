@@ -142,7 +142,7 @@ fn private_claim_never_propagates() {
 
 /// Phase 2: Observations propagate via gossip just like Claims.
 /// Pinned because this is the wire signal that powers the cross-mesh
-/// "BeefyMac is editing this file" experience.
+/// "mac-peer is editing this file" experience.
 #[test]
 fn public_observation_propagates_via_gossip() {
     let node_a = NodeId::from_u128(0xA);

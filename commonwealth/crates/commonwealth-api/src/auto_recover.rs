@@ -97,10 +97,10 @@ pub enum RecoveryOutcome {
     /// coverage (mirroring more partitions locally) will produce the
     /// canonical, and gossip will pick it up here on the next tick.
     ///
-    /// Discovered in the wild: RuggedFox completed a 17-shard ingest
+    /// Discovered in the wild: linux-peer completed a 17-shard ingest
     /// while another peer completed a 31-shard ingest. Each peer
     /// mirrored a stub of the other (meta exists, chunks were never
-    /// actually pulled). RuggedFox's auto_recover merged its real
+    /// actually pulled). linux-peer's auto_recover merged its real
     /// partition with the stub, producing a 17/38-shard canonical
     /// that nevertheless advertised `hosted_corpora={"wikipedia"}`.
     /// Query routing then started returning results that silently
@@ -460,7 +460,7 @@ mod tests {
 
     #[tokio::test]
     async fn refuses_merge_when_local_partitions_dont_cover_all_shards() {
-        // Reproduces the RuggedFox scenario: two partition dirs
+        // Reproduces the linux-peer scenario: two partition dirs
         // exist locally, one is real (claims processed_shards [0,
         // 1, 2]), the other is a stub (no chunks, empty
         // processed_shards). Recipe-stamped total_shards = 5.

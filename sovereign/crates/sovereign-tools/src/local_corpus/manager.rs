@@ -9,7 +9,7 @@
 //! the DB); we only own the "which local corpora does the user have?"
 //! list and the pre-scan/extraction glue in front of the engine.
 //!
-//! See `/Users/alexsbryan/.claude/plans/binary-scribbling-babbage.md`
+//! See `/Users/user/.claude/plans/binary-scribbling-babbage.md`
 //! for the broader architecture.
 
 use std::collections::HashMap;

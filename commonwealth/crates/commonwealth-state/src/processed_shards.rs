@@ -116,7 +116,7 @@ mod tests {
     fn union_merges_per_peer_views_into_single_set() {
         // Pins the actual scenario from the two-peer Wikipedia ingest
         // that motivated this module. Local view sees 26 shards
-        // [10..36] minus 23. RuggedFox-equivalent peer published
+        // [10..36] minus 23. linux-peer-equivalent peer published
         // [0..4, 16, 17, 18, 21, 23, 28, 31, 33, 35, 37]. Union
         // should be 33 distinct shards; missing-from-union = {5,6,7,8,9}.
         let store = MeshStore::in_memory().unwrap();

@@ -94,7 +94,7 @@ pub async fn capabilities(
     if let Some(local) = state.inner.local_inference.as_ref() {
         if let Some(mut manifest) = local.provider_manifest() {
             // Enrich provider name with the mesh name so peer
-            // MeshAwareSelector can tell "this is BeefyMac's
+            // MeshAwareSelector can tell "this is mac-peer's
             // Sovereign" vs a generic provider.
             let mesh = state.inner.mesh.read().await;
             if manifest.provider.is_none() {

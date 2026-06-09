@@ -217,14 +217,14 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "3.10 Recipe authoring platform",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0234375,
               "snippet": "3.10 Recipe authoring platform\n\nThe recipe schema is open: a domain expert (financial journalist, legal aid\nattorney, grad student) writes a TOML and the engine runs it. Five generic\nprimitives turn..."
             },
             {
               "corpus_id": "system-overview",
               "title": "3.10 Recipe authoring platform",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.024193548,
               "snippet": "3.10 Recipe authoring platform\n\nThe recipe schema is open: a domain expert (financial journalist, legal aid\nattorney, grad student) writes a TOML and the engine runs it. Five generic\nprimitives turn..."
             },
@@ -2246,7 +2246,7 @@
             {
               "corpus_id": "system-overview",
               "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
             },
@@ -2591,7 +2591,7 @@
               "title": "config",
               "url": null,
               "score": 0.024590163,
-              "snippet": "config\n\n//! `/Users/alexsbryan/.claude/plans/binary-scribbling-babbage.md`.\n\npub mod clusterer;\npub mod config;\npub mod excerpt;\npub mod extract_stage;\npub mod frontmatter;"
+              "snippet": "config\n\n//! `/Users/user/.claude/plans/binary-scribbling-babbage.md`.\n\npub mod clusterer;\npub mod config;\npub mod excerpt;\npub mod extract_stage;\npub mod frontmatter;"
             },
             {
               "corpus_id": "wikipedia",
@@ -2612,14 +2612,14 @@
               "title": "clusterer",
               "url": null,
               "score": 0.025000002,
-              "snippet": "clusterer\n\n//! `sovereign/*`. See the plan at\n//! `/Users/alexsbryan/.claude/plans/binary-scribbling-babbage.md`.\n\npub mod clusterer;\npub mod config;\npub mod excerpt;\npub mod extract_stage;"
+              "snippet": "clusterer\n\n//! `sovereign/*`. See the plan at\n//! `/Users/user/.claude/plans/binary-scribbling-babbage.md`.\n\npub mod clusterer;\npub mod config;\npub mod excerpt;\npub mod extract_stage;"
             },
             {
               "corpus_id": "commonwealth-ai",
               "title": "clusterer",
               "url": null,
               "score": 0.025000002,
-              "snippet": "clusterer\n\n//! `sovereign/*`. See the plan at\n//! `/Users/alexsbryan/.claude/plans/binary-scribbling-babbage.md`.\n\npub mod clusterer;\npub mod config;\npub mod excerpt;\npub mod extract_stage;"
+              "snippet": "clusterer\n\n//! `sovereign/*`. See the plan at\n//! `/Users/user/.claude/plans/binary-scribbling-babbage.md`.\n\npub mod clusterer;\npub mod config;\npub mod excerpt;\npub mod extract_stage;"
             },
             {
               "corpus_id": "folder-9ef2f912ea2e",
@@ -2951,14 +2951,14 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "3.10 Recipe authoring platform",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.021164022,
               "snippet": "3.10 Recipe authoring platform\n\nThe recipe schema is open: a domain expert (financial journalist, legal aid\nattorney, grad student) writes a TOML and the engine runs it. Five generic\nprimitives turn..."
             },
             {
               "corpus_id": "system-overview",
               "title": "3.10 Recipe authoring platform",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.021505376,
               "snippet": "3.10 Recipe authoring platform\n\nThe recipe schema is open: a domain expert (financial journalist, legal aid\nattorney, grad student) writes a TOML and the engine runs it. Five generic\nprimitives turn..."
             },
@@ -3200,7 +3200,7 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "10.1 Sovereign deferrals",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0234375,
               "snippet": "10.1 Sovereign deferrals\n\nItemLocationWhy deferred`runtime.rs` split`sovereign-core/src/runtime.rs` (~10800 lines)The runtime hub mixes routing, planner integration, witness assembly, and channel..."
             }
@@ -7508,7 +7508,7 @@
             {
               "corpus_id": "arch-principles",
               "title": "11.1 Don't cite from memory — cite from grep",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
               "score": 0.0,
               "snippet": "11.1 Don't cite from memory — cite from grep\n\nBefore claiming \"function X exists\" or \"the trait has method Y\", verify it.\nThe codebase evolves faster than memory, and Explore-agent reports can..."
             },
@@ -8782,14 +8782,14 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "8. Where to Look for What",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "8. Where to Look for What\n\nYou want toReadUnderstand the agent runtime`sovereign/crates/sovereign-core/src/runtime.rs`See how plans are executed`sovereign/crates/sovereign-core/src/executor.rs`Add a..."
             },
             {
               "corpus_id": "system-overview",
               "title": "8. Where to Look for What",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "8. Where to Look for What\n\nYou want toReadUnderstand the agent runtime`sovereign/crates/sovereign-core/src/runtime.rs`See how plans are executed`sovereign/crates/sovereign-core/src/executor.rs`Add a..."
             },
@@ -8803,7 +8803,7 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "4.4 Tools",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "4.4 Tools\n\nLocal tools (`sovereign-tools/src/`):\n\nToolPurpose`SearchTool`Local vector + FTS5, coverage assessment, optional web fallback`WebSearchTool`NL → keywords (Quick), search backend, fetch..."
             },
@@ -8817,14 +8817,14 @@
             {
               "corpus_id": "arch-principles",
               "title": "6. Data vs. program — the SICP separation",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
               "score": 0.0,
               "snippet": "6. Data vs. program — the SICP separation\n\nPrompts, templates, lookup tables, and configuration are data. Rust\nsource is program. Conflating them is a recurring smell."
             },
             {
               "corpus_id": "commonwealth-ai-arch-principles",
               "title": "6. Data vs. program — the SICP separation",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
               "score": 0.0,
               "snippet": "6. Data vs. program — the SICP separation\n\nPrompts, templates, lookup tables, and configuration are data. Rust\nsource is program. Conflating them is a recurring smell."
             },
@@ -9047,7 +9047,7 @@
             {
               "corpus_id": "arch-principles",
               "title": "1.1 SYSTEM_OVERVIEW.md is a contract",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
               "score": 0.0,
               "snippet": "1.1 SYSTEM_OVERVIEW.md is a contract\n\nIt must describe what exists today, not what was planned or what's\naspirational.\nAnything a new contributor could derive from the doc must still be true.\nFile..."
             },
@@ -16503,7 +16503,7 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "10.3 Doc-as-source-of-truth posture",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "10.3 Doc-as-source-of-truth posture\n\nThe two long-form commonwealth docs — `commonwealth/ARCHITECTURE.md`\nand `commonwealth/IMPLEMENTATION_PLAN.md` — are now flagged at the top\nas historical..."
             },

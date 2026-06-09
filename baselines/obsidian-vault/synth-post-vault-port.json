@@ -1414,7 +1414,7 @@
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.9 Frontends",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.9 Frontends\n\nFrontendPurpose`sovereign-cli`Interactive REPL + named subcommands. Grouped by surface: agent lifecycle — `setup`, `chat`, `daemon` (long-running, owns :9741), `serve`, `stop`,..."
         },
@@ -1428,21 +1428,21 @@
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
         },
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.6 Memory",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.6 Memory\n\nWorking memory — compressed every message via `memory::compress_working_memory` (Quick slot, ≤200 tokens) into `{ current_goal, facts, active_documents }`.\nLong-term memory —..."
         },
         {
           "corpus_id": "system-overview",
           "title": "4.6 Memory",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.6 Memory\n\nWorking memory — compressed every message via `memory::compress_working_memory` (Quick slot, ≤200 tokens) into `{ current_goal, facts, active_documents }`.\nLong-term memory —..."
         },
@@ -1463,14 +1463,14 @@
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "3.10 Recipe authoring platform",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "3.10 Recipe authoring platform\n\nThe recipe schema is open: a domain expert (financial journalist, legal aid\nattorney, grad student) writes a TOML and the engine runs it. Five generic\nprimitives turn..."
         },
         {
           "corpus_id": "system-overview",
           "title": "3.10 Recipe authoring platform",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "3.10 Recipe authoring platform\n\nThe recipe schema is open: a domain expert (financial journalist, legal aid\nattorney, grad student) writes a TOML and the engine runs it. Five generic\nprimitives turn..."
         },
@@ -1484,14 +1484,14 @@
         {
           "corpus_id": "system-overview",
           "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
         },
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.16 Architectural correctness tooling",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.16 Architectural correctness tooling\n\nFive tools that audit narrative-vs-code drift and gate the merge path\nagainst the principles in `sovereign/ARCH_PRINCIPLES.md`. All callable\nvia..."
         },
@@ -2656,14 +2656,14 @@
         {
           "corpus_id": "arch-principles",
           "title": "1. Documentation is an invariant, not a diary",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
           "score": 0.0,
           "snippet": "1. Documentation is an invariant, not a diary\n\nThe workspace carries two kinds of prose: the authoritative map\n(`sovereign/SYSTEM_OVERVIEW.md`) and per-feature \"why\" docs..."
         },
         {
           "corpus_id": "commonwealth-ai-arch-principles",
           "title": "1. Documentation is an invariant, not a diary",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
           "score": 0.0,
           "snippet": "1. Documentation is an invariant, not a diary\n\nThe workspace carries two kinds of prose: the authoritative map\n(`sovereign/SYSTEM_OVERVIEW.md`) and per-feature \"why\" docs..."
         },

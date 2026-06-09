@@ -151,7 +151,7 @@ pub async fn build_local_capabilities(
         // bootstrap hasn't installed a publisher yet (storage-only
         // nodes, tests). See `sovereign/docs/MESH_LOAD_AWARENESS.md`
         // for why this field exists and why gossiping it is the only
-        // way the founder learns BeefyMac is busy serving local
+        // way the founder learns mac-peer is busy serving local
         // traffic the founder never dispatched.
         current_in_flight: app_state.and_then(|s| s.current_local_in_flight()),
     }

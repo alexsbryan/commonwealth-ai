@@ -218,7 +218,7 @@ async fn rest_get_conversation_projects_citations() {
     let meta = serde_json::json!({
         "provenance": {
             "intent": "KnowledgeQuery",
-            "inference_backend": "Qwen3.5-9B @ peer BeefyMac",
+            "inference_backend": "Qwen3.5-9B @ peer mac-peer",
             "total_latency_ms": 50
         },
         "retrieved_chunks": [
@@ -258,7 +258,7 @@ async fn rest_get_conversation_projects_citations() {
     assert_eq!(m0["citations"][0]["rank"].as_u64(), Some(0));
     assert_eq!(
         m0["provenance"]["inference_backend"].as_str(),
-        Some("Qwen3.5-9B @ peer BeefyMac")
+        Some("Qwen3.5-9B @ peer mac-peer")
     );
 }
 

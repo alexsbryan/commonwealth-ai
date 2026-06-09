@@ -33,7 +33,7 @@ use serde_json::Value;
 /// reads the raw blob directly; the mobile contract is this subset.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct Provenance {
-    /// Model + serving node, e.g. `"Qwen3.5-9B.Q8_0 @ peer BeefyMac"`.
+    /// Model + serving node, e.g. `"Qwen3.5-9B.Q8_0 @ peer mac-peer"`.
     /// Maps from `ResponseProvenance.inference_backend`.
     pub inference_backend: String,
     /// Coarse routing tier / intent label (e.g. `"KnowledgeQuery"`).
@@ -77,7 +77,7 @@ pub struct ProvenanceSource {
     pub origin: String,
     pub count: u64,
     /// Human-readable peer name when this corpus's hits were served by
-    /// a mesh peer (e.g. `"BeefyMac"`); `None` for locally-hosted.
+    /// a mesh peer (e.g. `"mac-peer"`); `None` for locally-hosted.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from_peer: Option<String>,
 }
@@ -244,11 +244,11 @@ mod tests {
                 "intent": "KnowledgeQuery",
                 "coarse_intent": "LOOKUP",
                 "search_method": "CorpusEngine",
-                "inference_backend": "Qwen3.5-9B.Q8_0 @ peer BeefyMac",
+                "inference_backend": "Qwen3.5-9B.Q8_0 @ peer mac-peer",
                 "total_latency_ms": 1234,
                 "tokens_used": 42,
                 "sources": [
-                    {"origin": "sep", "count": 6, "from_peer": "BeefyMac"},
+                    {"origin": "sep", "count": 6, "from_peer": "mac-peer"},
                     {"origin": "wikipedia", "count": 2}
                 ]
             },
@@ -267,13 +267,13 @@ mod tests {
     fn projects_full_provenance_and_citations() {
         let (prov, cites) = project_message_metadata(&Some(full_metadata()));
         let prov = prov.expect("provenance present");
-        assert_eq!(prov.inference_backend, "Qwen3.5-9B.Q8_0 @ peer BeefyMac");
+        assert_eq!(prov.inference_backend, "Qwen3.5-9B.Q8_0 @ peer mac-peer");
         assert_eq!(prov.routing_tier.as_deref(), Some("LOOKUP")); // coarse preferred
         assert_eq!(prov.total_ms, Some(1234));
         assert_eq!(prov.ttft_ms, None);
         assert_eq!(prov.sources.len(), 2);
         assert_eq!(prov.sources[0].origin, "sep");
-        assert_eq!(prov.sources[0].from_peer.as_deref(), Some("BeefyMac"));
+        assert_eq!(prov.sources[0].from_peer.as_deref(), Some("mac-peer"));
         assert_eq!(prov.sources[1].from_peer, None);
 
         assert_eq!(cites.len(), 2);

@@ -114,6 +114,17 @@ pub fn print(h: &Help) {
     eprintln!();
 }
 
+/// Print a standalone titled subcommand table. The top-level dispatcher
+/// uses this to append a "Developer toolchain" section to its help only
+/// when built with `--features dev-tools`, without duplicating the whole
+/// `Help` const. Mirrors the `SubcommandsTitled` rendering.
+pub fn print_subcommands_titled(title: &str, entries: &[(&str, &str)]) {
+    eprintln!();
+    eprintln!("  {title}:");
+    print_table(entries);
+    eprintln!();
+}
+
 /// Two-column aligned printer for Subcommands / Flags sections. Pads
 /// the left column to the longest entry so descriptions line up.
 fn print_table(entries: &[(&str, &str)]) {

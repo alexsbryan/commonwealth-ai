@@ -97,7 +97,7 @@ inevitable first-compile errors here before `tauri ios build`.
 
 ## 5. Standing up a host to test against
 
-On a host node (your Linux box / desktop) inside the `sovereign-vulkan` toolbox:
+On a host node (your Linux box / desktop) inside the `dev-toolbox` toolbox:
 
 1. Build + run the server (binary is `sovereign-server`):
    ```bash
@@ -191,7 +191,7 @@ camelCase.
       **Inspect the `.ipa`: no GGUF / no inference runtime in the bundle.**
 - [ ] **§4 Corpus used** — answer carries ≥1 citation; tapping it shows the
       snippet (`resolve_citation`). Use the distinctive-fact corpus for rigor.
-- [ ] **§5 Provenance shown** — `inference_backend` (e.g. "… @ peer BeefyMac")
+- [ ] **§5 Provenance shown** — `inference_backend` (e.g. "… @ peer mac-peer")
       visible (RoutingMeta footer).
 - [ ] **§6 Busy legible** — set `max_concurrent_turns=1`, fire two turns →
       second surfaces "host busy", not an error/hang.

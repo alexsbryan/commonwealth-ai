@@ -217,14 +217,14 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "3.10 Recipe authoring platform",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0234375,
               "snippet": "3.10 Recipe authoring platform\n\nThe recipe schema is open: a domain expert (financial journalist, legal aid\nattorney, grad student) writes a TOML and the engine runs it. Five generic\nprimitives turn..."
             },
             {
               "corpus_id": "system-overview",
               "title": "3.10 Recipe authoring platform",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.024193548,
               "snippet": "3.10 Recipe authoring platform\n\nThe recipe schema is open: a domain expert (financial journalist, legal aid\nattorney, grad student) writes a TOML and the engine runs it. Five generic\nprimitives turn..."
             },
@@ -2177,35 +2177,35 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "4.14b Newsworthy — Wikipedia freshness layer",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "4.14b Newsworthy — Wikipedia freshness layer\n\nDaemon-driven near-real-time refresh for the `wikipedia-newsworthy`\ncorpus (and any future corpus declaring `[update] ingest_driver = \"watcher\"` in its..."
             },
             {
               "corpus_id": "system-overview",
               "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
             },
             {
               "corpus_id": "system-overview",
               "title": "6. How the Four Projects Fit Together",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "6. How the Four Projects Fit Together\n\nSovereign standalone — Tauri/CLI/server runs against `EmbeddedLlamaCpp`.\nKnowledge bases via `MeshCorpusManager` (named for the mesh case but works\nwithout..."
             },
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "5.1 Discovery and membership",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "5.1 Discovery and membership\n\nJoin keys — `cwth-XXXX-XXXX-XXXX`. `membership::generate_join_key` stores BLAKE3 hash, discards plaintext. `verify_join_key` is constant-time. First node calls..."
             },
             {
               "corpus_id": "system-overview",
               "title": "5.1 Discovery and membership",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "5.1 Discovery and membership\n\nJoin keys — `cwth-XXXX-XXXX-XXXX`. `membership::generate_join_key` stores BLAKE3 hash, discards plaintext. `verify_join_key` is constant-time. First node calls..."
             },
@@ -2240,14 +2240,14 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "4.12 KnowledgeView — Landscape digest assembly",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "4.12 KnowledgeView — Landscape digest assembly\n\nSplices short structured summaries of the user's own world into the system\nprompt before each turn. Three views:\n\nViewSource (StateStore)Domain..."
             },
             {
               "corpus_id": "commonwealth-ai-arch-principles",
               "title": "3.3 Files we haven't split yet are flagged, not hidden",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
               "score": 0.0,
               "snippet": "3.3 Files we haven't split yet are flagged, not hidden\n\nCurrent outliers (all > 5000 lines):\n\n`sovereign-core/src/runtime.rs` (~10800 lines) — the runtime hub.\n`sovereign-cli/src/project_cmd.rs`..."
             },
@@ -2597,7 +2597,7 @@
               "title": "config",
               "url": null,
               "score": 0.024590163,
-              "snippet": "config\n\n//! `/Users/alexsbryan/.claude/plans/binary-scribbling-babbage.md`.\n\npub mod clusterer;\npub mod config;\npub mod excerpt;\npub mod extract_stage;\npub mod frontmatter;"
+              "snippet": "config\n\n//! `/Users/user/.claude/plans/binary-scribbling-babbage.md`.\n\npub mod clusterer;\npub mod config;\npub mod excerpt;\npub mod extract_stage;\npub mod frontmatter;"
             },
             {
               "corpus_id": "wikipedia",
@@ -2618,14 +2618,14 @@
               "title": "clusterer",
               "url": null,
               "score": 0.025000002,
-              "snippet": "clusterer\n\n//! `sovereign/*`. See the plan at\n//! `/Users/alexsbryan/.claude/plans/binary-scribbling-babbage.md`.\n\npub mod clusterer;\npub mod config;\npub mod excerpt;\npub mod extract_stage;"
+              "snippet": "clusterer\n\n//! `sovereign/*`. See the plan at\n//! `/Users/user/.claude/plans/binary-scribbling-babbage.md`.\n\npub mod clusterer;\npub mod config;\npub mod excerpt;\npub mod extract_stage;"
             },
             {
               "corpus_id": "commonwealth-ai",
               "title": "clusterer",
               "url": null,
               "score": 0.025000002,
-              "snippet": "clusterer\n\n//! `sovereign/*`. See the plan at\n//! `/Users/alexsbryan/.claude/plans/binary-scribbling-babbage.md`.\n\npub mod clusterer;\npub mod config;\npub mod excerpt;\npub mod extract_stage;"
+              "snippet": "clusterer\n\n//! `sovereign/*`. See the plan at\n//! `/Users/user/.claude/plans/binary-scribbling-babbage.md`.\n\npub mod clusterer;\npub mod config;\npub mod excerpt;\npub mod extract_stage;"
             },
             {
               "corpus_id": "folder-9ef2f912ea2e",
@@ -2957,14 +2957,14 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "3.10 Recipe authoring platform",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.021164022,
               "snippet": "3.10 Recipe authoring platform\n\nThe recipe schema is open: a domain expert (financial journalist, legal aid\nattorney, grad student) writes a TOML and the engine runs it. Five generic\nprimitives turn..."
             },
             {
               "corpus_id": "system-overview",
               "title": "3.10 Recipe authoring platform",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.021505376,
               "snippet": "3.10 Recipe authoring platform\n\nThe recipe schema is open: a domain expert (financial journalist, legal aid\nattorney, grad student) writes a TOML and the engine runs it. Five generic\nprimitives turn..."
             },
@@ -7592,35 +7592,35 @@
             {
               "corpus_id": "system-overview",
               "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
             },
             {
               "corpus_id": "system-overview",
               "title": "10.2 Commonwealth deferrals",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "10.2 Commonwealth deferrals\n\nItemLocationWhy deferredMulti-embed-model dispatch`commonwealth-api/src/routes_inference.rs:418``/v1/embeddings` ignores the `model` field; gated on a second production..."
             },
             {
               "corpus_id": "system-overview",
               "title": "5.9 CLI",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "5.9 CLI\n\n\n```\ncommonwealth init --name \"...\"          Create a mesh, get a join key\ncommonwealth join <key>                 Join an existing mesh\ncommonwealth status                     Mesh state,..."
             },
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "5.9 CLI",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "5.9 CLI\n\n\n```\ncommonwealth init --name \"...\"          Create a mesh, get a join key\ncommonwealth join <key>                 Join an existing mesh\ncommonwealth status                     Mesh state,..."
             },
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "4.16 Architectural correctness tooling",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "4.16 Architectural correctness tooling\n\nFive tools that audit narrative-vs-code drift and gate the merge path\nagainst the principles in `sovereign/ARCH_PRINCIPLES.md`. All callable\nvia..."
             },
@@ -8919,7 +8919,7 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "4.4 Tools",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "4.4 Tools\n\nLocal tools (`sovereign-tools/src/`):\n\nToolPurpose`SearchTool`Local vector + FTS5, coverage assessment, optional web fallback`WebSearchTool`NL → keywords (Quick), search backend, fetch..."
             },
@@ -8954,14 +8954,14 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "8. Where to Look for What",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "8. Where to Look for What\n\nYou want toReadUnderstand the agent runtime`sovereign/crates/sovereign-core/src/runtime.rs`See how plans are executed`sovereign/crates/sovereign-core/src/executor.rs`Add a..."
             },
             {
               "corpus_id": "system-overview",
               "title": "8. Where to Look for What",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "8. Where to Look for What\n\nYou want toReadUnderstand the agent runtime`sovereign/crates/sovereign-core/src/runtime.rs`See how plans are executed`sovereign/crates/sovereign-core/src/executor.rs`Add a..."
             },
@@ -9129,14 +9129,14 @@
             {
               "corpus_id": "arch-principles",
               "title": "1.1 SYSTEM_OVERVIEW.md is a contract",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
               "score": 0.0,
               "snippet": "1.1 SYSTEM_OVERVIEW.md is a contract\n\nIt must describe what exists today, not what was planned or what's\naspirational.\nAnything a new contributor could derive from the doc must still be true.\nFile..."
             },
             {
               "corpus_id": "commonwealth-ai-arch-principles",
               "title": "1.1 SYSTEM_OVERVIEW.md is a contract",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
               "score": 0.0,
               "snippet": "1.1 SYSTEM_OVERVIEW.md is a contract\n\nIt must describe what exists today, not what was planned or what's\naspirational.\nAnything a new contributor could derive from the doc must still be true.\nFile..."
             },
@@ -13300,14 +13300,14 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "4.4 Tools",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.01851852,
               "snippet": "4.4 Tools\n\nLocal tools (`sovereign-tools/src/`):\n\nToolPurpose`SearchTool`Local vector + FTS5, coverage assessment, optional web fallback`WebSearchTool`NL → keywords (Quick), search backend, fetch..."
             },
             {
               "corpus_id": "system-overview",
               "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.020370372,
               "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
             },
@@ -13321,7 +13321,7 @@
             {
               "corpus_id": "system-overview",
               "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.020370372,
               "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
             },
@@ -13342,7 +13342,7 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "4.4 Tools",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.01851852,
               "snippet": "4.4 Tools\n\nLocal tools (`sovereign-tools/src/`):\n\nToolPurpose`SearchTool`Local vector + FTS5, coverage assessment, optional web fallback`WebSearchTool`NL → keywords (Quick), search backend, fetch..."
             },
@@ -16694,14 +16694,14 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "4.4 Tools",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.022222225,
               "snippet": "4.4 Tools\n\nLocal tools (`sovereign-tools/src/`):\n\nToolPurpose`SearchTool`Local vector + FTS5, coverage assessment, optional web fallback`WebSearchTool`NL → keywords (Quick), search backend, fetch..."
             },
             {
               "corpus_id": "system-overview",
               "title": "4.4 Tools",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.022222225,
               "snippet": "4.4 Tools\n\nLocal tools (`sovereign-tools/src/`):\n\nToolPurpose`SearchTool`Local vector + FTS5, coverage assessment, optional web fallback`WebSearchTool`NL → keywords (Quick), search backend, fetch..."
             },
@@ -16722,7 +16722,7 @@
             {
               "corpus_id": "system-overview",
               "title": "3.10 Recipe authoring platform",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.021505376,
               "snippet": "3.10 Recipe authoring platform\n\nThe recipe schema is open: a domain expert (financial journalist, legal aid\nattorney, grad student) writes a TOML and the engine runs it. Five generic\nprimitives turn..."
             },
@@ -16757,7 +16757,7 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "4.9 Frontends",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.022222225,
               "snippet": "4.9 Frontends\n\nFrontendPurpose`sovereign-cli`Interactive REPL + named subcommands. Grouped by surface: agent lifecycle — `setup`, `chat`, `daemon` (long-running, owns :9741), `serve`, `stop`,..."
             },
@@ -16778,7 +16778,7 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "4.4 Tools",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.021505376,
               "snippet": "4.4 Tools\n\nLocal tools (`sovereign-tools/src/`):\n\nToolPurpose`SearchTool`Local vector + FTS5, coverage assessment, optional web fallback`WebSearchTool`NL → keywords (Quick), search backend, fetch..."
             },

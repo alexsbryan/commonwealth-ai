@@ -1,7 +1,7 @@
 # TDD Machine — design
 
 **Status:** Draft v2, 2026-05-24. Updated after Red + Refactor probes.
-**Owners:** alexbryan + claude
+**Owners:** your-org + claude
 **Related:** `sovereign/crates/sovereign-agent-bench/src/runners/search.rs`, `sovereign/ARCH_PRINCIPLES.md`
 
 ## Core paradigm

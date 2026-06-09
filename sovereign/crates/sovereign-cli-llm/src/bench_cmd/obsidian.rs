@@ -16,7 +16,7 @@
 //!
 //! Workflow:
 //!
-//!     export SOVEREIGN_OBSIDIAN_VAULT="/Users/alexsbryan/Documents/Obsidian Vault"
+//!     export SOVEREIGN_OBSIDIAN_VAULT="/Users/user/Documents/Obsidian Vault"
 //!
 //!     # one-time, per major content shift in the vault.
 //!     # `obsidian_atlas` was retired when vault corpora moved to the

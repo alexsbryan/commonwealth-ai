@@ -146,7 +146,7 @@ fn force_rm(name: &str) {
 ///    shell wrapper (which is exercised by the production deploy).
 ///
 /// 2. **Bind-mount `libvulkan.so.1`** — the host build of
-///    `sovereign-cli` (built in the `sovereign-vulkan` toolbox)
+///    `sovereign-cli` (built in the `dev-toolbox` toolbox)
 ///    dynamic-links `libvulkan.so.1`. Production CUDA/ROCm images
 ///    build their own binary against their native GPU stack and
 ///    don't have this problem; locally we need the host's
@@ -170,7 +170,7 @@ fn run_args<'a>(container_name: &'a str, host_port: u16, bootstrap_b64: &'a str)
     ];
     // Bind-mount the host's /lib64 read-only as /host-lib64 and
     // prepend it to LD_LIBRARY_PATH. The host binary was built in
-    // the sovereign-vulkan toolbox and links against the host's
+    // the dev-toolbox toolbox and links against the host's
     // OpenSSL 3, libgomp, libvulkan, etc. Trying to bind each one
     // individually devolves into whack-a-mole as the binary's
     // transitive deps shift; mounting the whole directory is the

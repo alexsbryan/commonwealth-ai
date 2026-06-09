@@ -300,7 +300,7 @@ pub async fn run_one_round(
         }
         // Reorder: the address that worked last round goes first. The
         // common case is "Tailscale 100.x stable, LAN 192.168.x stale
-        // because the Mac is on a different subnet from RuggedFox" —
+        // because the Mac is on a different subnet from linux-peer" —
         // without this hint, every round burns `PEER_TIMEOUT` (3s) on
         // the dead LAN address before falling through to Tailscale.
         // The cache is best-effort: a stored address that no longer

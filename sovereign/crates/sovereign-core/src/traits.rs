@@ -181,7 +181,7 @@ pub trait InferenceProvider: Send + Sync {
     /// Streaming variant that also returns the model id actually
     /// chosen to serve this request. Exists because
     /// `complete_stream` itself returns only a `Stream<String>` —
-    /// there's nowhere to attach "I routed this to peer BeefyMac's
+    /// there's nowhere to attach "I routed this to peer mac-peer's
     /// Qwen3.5-9B" to, so streaming provenance has historically
     /// fallen back to the synchronous `model_id_for(Speed)` which
     /// can't see any routing decision made inside the async call.
@@ -190,7 +190,7 @@ pub trait InferenceProvider: Send + Sync {
     /// delegate to `complete_stream` and stamp the model_id with
     /// whatever `model_id_for` reports for the request's speed.
     /// Mesh-aware wrappers override this to return the peer-
-    /// attributed id (e.g. `"Qwen3.5-9B @ peer BeefyMac"`). All
+    /// attributed id (e.g. `"Qwen3.5-9B @ peer mac-peer"`). All
     /// pre-existing providers and test mocks keep working
     /// unmodified.
     async fn complete_stream_with_id(
@@ -906,7 +906,7 @@ pub trait BudgetStore: Send + Sync {
 // Commonwealth daemon at `127.0.0.1:9741/v1/knowledge/search`.
 //
 // The return type carries peer attribution so `prepare_knowledge_context`
-// can annotate provenance ("sep (6) via BeefyMac") without having to
+// can annotate provenance ("sep (6) via mac-peer") without having to
 // know anything about mesh topology itself.
 
 /// A single retrieval hit from the mesh, possibly tagged with the

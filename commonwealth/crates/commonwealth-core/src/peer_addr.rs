@@ -73,9 +73,9 @@ mod tests {
 
     #[test]
     fn ipv4_tailscale_outranks_everything() {
-        assert!(rank(&s("100.115.12.21:9742")) < rank(&s("192.168.1.5:9742")));
-        assert!(rank(&s("100.115.12.21:9742")) < rank(&s("[fd7a:115c:a1e0::1]:9742")));
-        assert!(rank(&s("100.115.12.21:9742")) < rank(&s("[2001:db8::1]:9742")));
+        assert!(rank(&s("100.64.0.3:9742")) < rank(&s("192.168.1.5:9742")));
+        assert!(rank(&s("100.64.0.3:9742")) < rank(&s("[fd7a:115c:a1e0::1]:9742")));
+        assert!(rank(&s("100.64.0.3:9742")) < rank(&s("[2001:db8::1]:9742")));
     }
 
     #[test]
@@ -104,11 +104,11 @@ mod tests {
         // What gossip might hand us for a peer behind tailnet + LAN.
         let mut addrs = vec![
             s("[fd7a:115c:a1e0::a3a:241c]:9741"),
-            s("100.104.36.28:9741"),
+            s("100.64.0.2:9741"),
             s("192.168.1.42:9741"),
         ];
         sort_addresses(&mut addrs);
-        assert_eq!(addrs[0], s("100.104.36.28:9741"), "Tailscale IPv4 first");
+        assert_eq!(addrs[0], s("100.64.0.2:9741"), "Tailscale IPv4 first");
         assert_eq!(addrs[1], s("192.168.1.42:9741"), "LAN IPv4 second");
         assert_eq!(
             addrs[2],

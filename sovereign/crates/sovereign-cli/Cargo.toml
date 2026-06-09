@@ -2,6 +2,7 @@
 name = "sovereign-cli"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 # Slim dispatcher binary. After slices 1–5 (2026-05-22), the only
 # code that lives here is exec-dispatch (`atos_bin`, `llm_bin`),
@@ -24,8 +25,9 @@ sovereign-core = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-atos = { workspace = true }
 sovereign-agent-bench = { workspace = true }
-# `awareness_cmd` (dev-tools only) needs the heavy `knowledge_view`
-# surface from sovereign-tools. Default builds skip this.
+# `awareness_cmd` (the `awareness` feature only) needs the heavy
+# `knowledge_view` surface from sovereign-tools. Default + `dev-tools`
+# builds skip this; only `--features awareness` pulls it in.
 sovereign-tools = { workspace = true, optional = true }
 sovereign-cli-shared = { workspace = true }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
@@ -52,7 +54,7 @@ which = "7"
 sha2 = { workspace = true }
 chrono = { workspace = true }
 regex = { workspace = true }
-# Used by `awareness_cmd` (gated behind the `dev-tools` feature) for
+# Used by `awareness_cmd` (gated behind the `awareness` feature) for
 # direct SQLite reads. Production CLI paths go through StateStore.
 rusqlite = { version = "0.35", features = ["bundled"] }
 # `libc` is used by `serve_cmd` for `kill -TERM` via /bin/kill and by
@@ -64,9 +66,15 @@ libc = "0.2"
 tempfile = { workspace = true }
 
 [features]
-# `dev-tools` gates the `sovereign awareness` development CLI.
-# Pulls in `sovereign-tools` for its `knowledge_view` modules.
-dev-tools = ["dep:sovereign-tools"]
+# `dev-tools` re-enables the developer-toolchain verb surface (project
+# lifecycle, ATOS, code intelligence, archaeology) that the default
+# (end-user) build gates out. Lightweight — pure dispatch/help; the
+# gated verbs exec the `sovereign-cli-dev` sibling at runtime.
+dev-tools = []
+# `awareness` builds the heavy `sovereign awareness` knowledge-view
+# diagnostic CLI, which pulls `sovereign-tools`. Opt-in and independent
+# of `dev-tools` so the common developer build stays light.
+awareness = ["dep:sovereign-tools"]
 
 [lints]
 workspace = true

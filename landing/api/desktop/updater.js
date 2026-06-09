@@ -15,7 +15,7 @@
 // this handler reads.
 //
 // Required env vars (set in the Vercel project settings):
-//   GITHUB_OWNER   -- repo owner, e.g. "alexbryan"
+//   GITHUB_OWNER   -- repo owner, e.g. "your-org"
 //   GITHUB_REPO    -- repo name,  e.g. "commonwealth-ai"
 //
 // Optional:

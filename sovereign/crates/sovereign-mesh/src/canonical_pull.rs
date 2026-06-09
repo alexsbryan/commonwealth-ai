@@ -93,7 +93,7 @@ pub enum PullError {
 
 /// Pull `corpus_id` from one of `peer_urls` and place the canonical
 /// at `<index_dir>/<corpus_id>/`. Each URL is the BASE — e.g.
-/// `http://100.104.36.28:9742`. Tries each URL in turn, falling
+/// `http://100.64.0.2:9742`. Tries each URL in turn, falling
 /// through on connection failure (`reqwest::Error::is_connect()` or
 /// timeout); HTTP-level errors (404, 403) abort early without
 /// trying the next URL since they reflect server policy, not

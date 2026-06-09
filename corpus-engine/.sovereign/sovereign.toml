@@ -6,12 +6,12 @@
 
 # [test_runner]
 # command = "cargo test 2>&1"
-# working_dir = "/Users/alexbryan/dev/commonwealth-ai/corpus-engine"
+# working_dir = "/Users/user/dev/commonwealth-ai/corpus-engine"
 # timeout_secs = 300
 # debounce_ms = 2000
 
 # [lint_runner]
 # command = "cargo check --message-format json 2>&1 | sovereign-cargo-check-adapter"
-# working_dir = "/Users/alexbryan/dev/commonwealth-ai/corpus-engine"
+# working_dir = "/Users/user/dev/commonwealth-ai/corpus-engine"
 # timeout_secs = 120
 # debounce_ms = 1000

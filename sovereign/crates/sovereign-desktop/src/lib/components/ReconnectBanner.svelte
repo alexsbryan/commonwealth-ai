@@ -61,20 +61,21 @@
     if (unlisten) unlisten();
   });
 
-  async function handleSendReport() {
+  async function handleReportProblem() {
     if (sendBusy) return;
     sendBusy = true;
     lastReportError = null;
     try {
       const info = await prepareCrashReport();
       lastReportPath = info.report_path;
-      // Open the mailto URL via the shell plugin. Falls back to the
-      // user manually attaching from the path we surface below.
+      // Open the project's GitHub Issues page via the shell plugin.
+      // The locally-saved report path is surfaced below so the user
+      // can attach it to the issue they open. Nothing auto-uploads.
       try {
-        await invoke("plugin:shell|open", { path: info.mailto_url });
+        await invoke("plugin:shell|open", { path: info.issues_url });
       } catch {
-        // Shell open failed (e.g. no default mail client). The path
-        // is still visible so the user can attach manually.
+        // Shell open failed (e.g. no default browser). The path is
+        // still visible so the user can open an issue and attach it.
       }
     } catch (e) {
       lastReportError = e instanceof Error ? e.message : String(e);
@@ -101,10 +102,10 @@
       {#if isFailed}
         <button
           class="action action-primary"
-          onclick={handleSendReport}
+          onclick={handleReportProblem}
           disabled={sendBusy}
         >
-          {sendBusy ? "Preparing…" : "Send report"}
+          {sendBusy ? "Preparing…" : "Report problem"}
         </button>
         <button class="action" onclick={handleReconnect}>Dismiss</button>
       {/if}
@@ -113,7 +114,8 @@
 
   {#if lastReportPath}
     <div class="report-info">
-      Crash report ready at: <code>{lastReportPath}</code>
+      Crash report saved at: <code>{lastReportPath}</code> — attach it to
+      the GitHub issue that just opened.
     </div>
   {/if}
   {#if lastReportError}

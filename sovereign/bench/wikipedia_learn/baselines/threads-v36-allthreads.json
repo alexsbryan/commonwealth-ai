@@ -328,14 +328,14 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "3.10 Recipe authoring platform",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0234375,
               "snippet": "3.10 Recipe authoring platform\n\nThe recipe schema is open: a domain expert (financial journalist, legal aid\nattorney, grad student) writes a TOML and the engine runs it. Five generic\nprimitives turn..."
             },
             {
               "corpus_id": "system-overview",
               "title": "3.10 Recipe authoring platform",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.024193548,
               "snippet": "3.10 Recipe authoring platform\n\nThe recipe schema is open: a domain expert (financial journalist, legal aid\nattorney, grad student) writes a TOML and the engine runs it. Five generic\nprimitives turn..."
             },
@@ -4446,7 +4446,7 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "4.4 Tools",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "4.4 Tools\n\nLocal tools (`sovereign-tools/src/`):\n\nToolPurpose`SearchTool`Local vector + FTS5, coverage assessment, optional web fallback`WebSearchTool`NL → keywords (Quick), search backend, fetch..."
             },
@@ -4460,14 +4460,14 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "8. Where to Look for What",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "8. Where to Look for What\n\nYou want toReadUnderstand the agent runtime`sovereign/crates/sovereign-core/src/runtime.rs`See how plans are executed`sovereign/crates/sovereign-core/src/executor.rs`Add a..."
             },
             {
               "corpus_id": "system-overview",
               "title": "8. Where to Look for What",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "8. Where to Look for What\n\nYou want toReadUnderstand the agent runtime`sovereign/crates/sovereign-core/src/runtime.rs`See how plans are executed`sovereign/crates/sovereign-core/src/executor.rs`Add a..."
             },
@@ -4481,7 +4481,7 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "10.1b corpus-engine deferrals",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "10.1b corpus-engine deferrals\n\nItemLocationWhy deferred`recipe.rs` split`corpus-engine/src/recipe.rs` (~3500 lines)Recipe TOML schema + loader + recipe-authoring tools + parameter resolution +..."
             },
@@ -8520,7 +8520,7 @@
             {
               "corpus_id": "commonwealth-ai-system-overview",
               "title": "sovereign-recipes/",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "sovereign-recipes/\n\n\n```\nregistry.toml                          # Recipe catalog (schema_version 1)\nwikipedia/recipe.toml                  # English Wikipedia (Layer 1 — Vital Articles L5 by..."
             },
@@ -8548,7 +8548,7 @@
             {
               "corpus_id": "system-overview",
               "title": "sovereign-recipes/",
-              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
               "snippet": "sovereign-recipes/\n\n\n```\nregistry.toml                          # Recipe catalog (schema_version 1)\nwikipedia/recipe.toml                  # English Wikipedia (Layer 1 — Vital Articles L5 by..."
             },

@@ -6,25 +6,25 @@
 //!    under `<data_dir>/crash-logs/` whenever the child exits / fails
 //!    heartbeat / spawn fails. Each file already contains the
 //!    captured stderr ring buffer + exit reason header.
-//! 2. The user clicks "Send report" on the Reconnect banner. The
+//! 2. The user clicks "Report problem" on the Reconnect banner. The
 //!    Tauri command [`prepare_crash_report`] runs.
 //! 3. We read the latest crash log, redact the active `SetupConfig`
 //!    (model basenames only — no absolute paths, no extra fields),
 //!    stitch into a single markdown file at
 //!    `~/Desktop/sovereign-crash-<ts>.md`, and return both the file
-//!    path AND a prefilled `mailto:` URL the frontend can hand to
-//!    `tauri-plugin-shell::open`.
+//!    path AND the project's GitHub Issues URL the frontend can hand
+//!    to `tauri-plugin-shell::open`.
 //! 4. The user reads the file (transparency: every byte we'd ship
-//!    is visible), attaches it manually to the email, and sends.
+//!    is visible), opens a GitHub issue, and attaches it manually.
 //!
-//! v1 deliberately does NOT auto-upload. Friends will pre-flight the
-//! contents themselves; reading the report builds trust that the
-//! desktop isn't shipping anything surprising. The trade-off is one
-//! extra "attach this file" step in the email flow; for the friends-
-//! and-family launch cohort that's a worthwhile cost.
+//! Deliberately does NOT auto-upload: nothing leaves the machine
+//! unless the user chooses to attach the file to an issue they open.
+//! Reading the report first builds trust that the desktop isn't
+//! shipping anything surprising. The trade-off is one extra "attach
+//! this file" step; for an audit-first launch that's a worthwhile cost.
 //!
-//! v2 polish (deferred): opt-in HTTPS upload to a Sovereign crash
-//! endpoint, plus an in-app inbox view of crash status.
+//! v2 polish (deferred): opt-in HTTPS upload to a crash endpoint,
+//! plus an in-app inbox view of crash status.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -148,8 +148,8 @@ fn basename(path: &Path) -> String {
 /// Convenience wrapper: read the latest crash log from
 /// `<data_dir>/crash-logs/`, truncate to `MAX_CRASH_LOG_BYTES` if
 /// needed, build the report, write it to `~/Desktop/sovereign-
-/// crash-<unix-ts>.md`, and return both the on-disk path and a
-/// `mailto:` URL the frontend can open.
+/// crash-<unix-ts>.md`, and return both the on-disk path and the
+/// project's GitHub Issues URL the frontend can open.
 ///
 /// All failure modes are mapped to `Result<_, String>` for direct
 /// surface to the Tauri command.
@@ -187,14 +187,14 @@ pub fn prepare_report(
     std::fs::write(&dest, report).map_err(|e| format!("write {}: {e}", dest.display()))?;
 
     Ok(PreparedReport {
-        mailto_url: mailto_url(ts, &dest),
+        issues_url: issues_url(),
         report_path: dest,
     })
 }
 
 pub struct PreparedReport {
     pub report_path: PathBuf,
-    pub mailto_url: String,
+    pub issues_url: String,
 }
 
 fn read_truncated(path: &Path) -> std::io::Result<String> {
@@ -226,41 +226,16 @@ fn desktop_dir() -> Option<PathBuf> {
     dirs::desktop_dir().or_else(dirs::home_dir)
 }
 
-/// Build the `mailto:` URL. Subject embeds the timestamp; the body
-/// nudges the user to attach the (already-written) file. Email
-/// clients vary widely on body length / encoding tolerance, so we
-/// keep the body short and rely on the attachment instruction.
-/// Percent-encode the characters mailto URLs care about. Reserved
-/// chars are `&`, `=`, `#`, `%`, plus whitespace and any non-ASCII.
-/// Encoding alphanumerics and a small safe set of punctuation would
-/// just bloat the URL without helping any real client.
-fn percent_encode_mailto(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    for b in input.bytes() {
-        let ok = b.is_ascii_alphanumeric()
-            || matches!(b, b'-' | b'_' | b'.' | b'~' | b'/' | b':' | b'@');
-        if ok {
-            out.push(b as char);
-        } else {
-            out.push_str(&format!("%{:02X}", b));
-        }
-    }
-    out
-}
+/// The public repository's GitHub Issues page (new-issue form). The
+/// crash flow hands this to the frontend instead of an email address:
+/// the user opens an issue and attaches the locally-written report.
+///
+/// `your-org` is a publish-time placeholder — set the real owner when
+/// the public repo is created (see the open-source pre-publish checklist).
+const GITHUB_ISSUES_URL: &str = "https://github.com/your-org/commonwealth-ai/issues/new";
 
-fn mailto_url(ts: u64, report_path: &Path) -> String {
-    let subject = percent_encode_mailto(&format!("Sovereign crash report {ts}"));
-    let body_text = format!(
-        "Hi Alex,\n\n\
-         My Sovereign desktop hit a daemon crash. The full report is at:\n\n\
-         {}\n\n\
-         Please attach that file before sending.\n\n\
-         (You can open it first to see exactly what's being shared — it's a \
-         single markdown file with no auto-uploaded data.)\n",
-        report_path.display()
-    );
-    let body = percent_encode_mailto(&body_text);
-    format!("mailto:alexbryan01@gmail.com?subject={subject}&body={body}")
+fn issues_url() -> String {
+    GITHUB_ISSUES_URL.to_string()
 }
 
 #[cfg(test)]
@@ -365,12 +340,12 @@ mod tests {
     }
 
     #[test]
-    fn mailto_url_url_encodes_subject_and_body() {
-        let url = mailto_url(1234, Path::new("/tmp/sovereign-crash-1234.md"));
-        assert!(url.starts_with("mailto:alexbryan01@gmail.com?subject="));
-        // The space in "Sovereign crash report 1234" must be encoded.
-        assert!(url.contains("Sovereign%20crash%20report%201234"));
-        // The body's newlines must be encoded too.
-        assert!(url.contains("%0A"));
+    fn issues_url_points_at_repo_issues() {
+        let url = issues_url();
+        assert!(url.starts_with("https://"));
+        assert!(url.contains("/issues"));
+        // No email address is shipped in the crash flow.
+        assert!(!url.contains("mailto:"));
+        assert!(!url.contains('@'));
     }
 }

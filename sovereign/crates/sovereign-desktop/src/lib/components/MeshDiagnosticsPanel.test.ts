@@ -14,14 +14,14 @@ vi.mock("../api", () => ({
         node_id: "node-abcd1234",
         mesh_id_hex: "abcdef0123456789abcdef0123456789",
         mesh_name: "The Masonics",
-        name: "alexbryan-mbp",
+        name: "laptop",
         address: "192.168.1.10:9742",
       },
       {
         node_id: "node-beef5678",
         mesh_id_hex: "1122334455667788aabbccddeeff0011",
         mesh_name: "The Masonics",
-        name: "alexbryan-studio",
+        name: "studio",
         address: "192.168.1.11:9742",
       },
     ],
@@ -37,8 +37,8 @@ describe("MeshDiagnosticsPanel", () => {
     expect(screen.getByText("192.168.1.11:9742")).toBeInTheDocument();
     // Each peer's node label is distinct; the mesh_name column is
     // shared and appears twice.
-    expect(screen.getByText("alexbryan-mbp")).toBeInTheDocument();
-    expect(screen.getByText("alexbryan-studio")).toBeInTheDocument();
+    expect(screen.getByText("laptop")).toBeInTheDocument();
+    expect(screen.getByText("studio")).toBeInTheDocument();
     expect(screen.getAllByText("The Masonics")).toHaveLength(2);
     // Daemon status chip shows the mocked `daemon_running: true`.
     expect(screen.getByText(/daemon running/i)).toBeInTheDocument();

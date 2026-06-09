@@ -877,7 +877,7 @@ export async function meshRelayCandidates(): Promise<
   return invoke("mesh_relay_candidates");
 }
 
-/** Roll a fresh memorable node-name suggestion (e.g. "BeefyMac").
+/** Roll a fresh memorable node-name suggestion (e.g. "mac-peer").
  *  The 🎲 button next to the node-name input calls this; the user
  *  still has to press Save for the name to persist. */
 export async function suggestNodeName(): Promise<string> {
@@ -1945,8 +1945,8 @@ export async function recordFirstMeshConsent(
 export interface CrashReportInfo {
   /** Absolute path of the markdown report on the user's Desktop. */
   report_path: string;
-  /** Pre-filled `mailto:` URL — open with tauri-plugin-shell. */
-  mailto_url: string;
+  /** The project's GitHub Issues URL — open with tauri-plugin-shell. */
+  issues_url: string;
 }
 
 /** Bundles the latest supervisor crash log + redacted config into a

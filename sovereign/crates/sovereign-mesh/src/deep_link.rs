@@ -221,9 +221,9 @@ fn parse_query_params(query: Option<&str>) -> std::collections::HashMap<String, 
 /// Browsers and most clipboard-capable chat clients round-trip URLs
 /// through `URL`/`encodeURIComponent`, which percent-escapes reserved
 /// characters the builder didn't bother to encode — most importantly
-/// the `:` in `relay=100.104.36.28:9742` (becomes `%3A`) and `'` in
+/// the `:` in `relay=100.64.0.2:9742` (becomes `%3A`) and `'` in
 /// mesh names (becomes `%27`). Without this decode the parser treats
-/// `100.104.36.28%3A9742` as a DNS hostname, the join handshake
+/// `100.64.0.2%3A9742` as a DNS hostname, the join handshake
 /// fails, and the user sees a "no peer at that address" error that
 /// looks like a networking problem but is actually an encoding one.
 ///
@@ -421,10 +421,10 @@ mod tests {
         // Regression for a real user-reported link: the desktop UI
         // built the share link via `URL.searchParams.set("relay", ...)`,
         // which encodes `:` as `%3A`. Without decode the parser
-        // handed `100.104.36.28%3A9742` to the join handshake as a
+        // handed `100.64.0.2%3A9742` to the join handshake as a
         // hostname, which failed with a misleading network error.
         let link = parse_deep_link(
-            "sovereign://join/cwth-4d5f-6211-64d6?name=Alexs-MacBook-Pro-2.local%27s+Mesh&relay=100.104.36.28%3A9742"
+            "sovereign://join/cwth-4d5f-6211-64d6?name=example-host.local%27s+Mesh&relay=100.64.0.2%3A9742"
         ).unwrap();
         let DeepLink::Join {
             join_key,
@@ -432,10 +432,10 @@ mod tests {
             mesh_name,
         } = link;
         assert_eq!(join_key, "cwth-4d5f-6211-64d6");
-        assert_eq!(relay_hint.as_deref(), Some("100.104.36.28:9742"));
+        assert_eq!(relay_hint.as_deref(), Some("100.64.0.2:9742"));
         assert_eq!(
             mesh_name.as_deref(),
-            Some("Alexs-MacBook-Pro-2.local's Mesh")
+            Some("example-host.local's Mesh")
         );
     }
 

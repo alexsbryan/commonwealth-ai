@@ -4,7 +4,7 @@
 //! (per [`is_team_pipeline_enabled`]).
 //!
 //! Phase 4 of the situated-team plan
-//! (`/Users/alexsbryan/.claude/plans/there-s-a-fast-slot-delightful-peach.md`).
+//! (`/Users/user/.claude/plans/there-s-a-fast-slot-delightful-peach.md`).
 //! Stages 1–4 (Router/Retriever/Curator/Drafter) emit
 //! [`crate::types::NarrationPhase`] stage chips for the desktop and
 //! produce a Drafter draft; stage 5 (Presenter) is what user-streams

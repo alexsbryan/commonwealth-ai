@@ -17,7 +17,7 @@
 //! plan a per-section budget) so the Primary slot draws inside a
 //! tight, structured task. A Presenter pass after the draft shapes
 //! the voice. The intent — per the situated-team plan in
-//! `/Users/alexsbryan/.claude/plans/there-s-a-fast-slot-delightful-peach.md` —
+//! `/Users/user/.claude/plans/there-s-a-fast-slot-delightful-peach.md` —
 //! is that bounded expression on a curated package is the task
 //! open-weight Primary models are actually good at, and that
 //! blowouts become rare planner-quality regression signals rather

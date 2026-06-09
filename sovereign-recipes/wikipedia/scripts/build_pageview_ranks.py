@@ -199,7 +199,7 @@ def main() -> int:
         "--user-agent",
         default=os.environ.get(
             "WIKI_USER_AGENT",
-            "sovereign-recipes/0.1 (https://github.com/alexsbryan/sovereign-recipes; contact via PR)",
+            "sovereign-recipes/0.1 (https://github.com/your-org/sovereign-recipes; contact via PR)",
         ),
     )
     parser.add_argument(

@@ -622,7 +622,7 @@
         {
           "corpus_id": "system-overview",
           "title": "4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder\n\nThree source types in Settings → Local Knowledge, all under\n`sovereign-tools/src/local_corpus/`:\n\nSource typeSurfaceInitial..."
         }
@@ -777,56 +777,56 @@
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "9. Glossary",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "9. Glossary\n\nOICP — Open Inference Capabilities Protocol (v0.3). Wire types in `oicp-types`. A model publishes one `CapabilityClaim` per kind-of-work it does well; schedulers score requests against..."
         },
         {
           "corpus_id": "system-overview",
           "title": "9. Glossary",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "9. Glossary\n\nOICP — Open Inference Capabilities Protocol (v0.3). Wire types in `oicp-types`. A model publishes one `CapabilityClaim` per kind-of-work it does well; schedulers score requests against..."
         },
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.16 Architectural correctness tooling",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.16 Architectural correctness tooling\n\nFive tools that audit narrative-vs-code drift and gate the merge path\nagainst the principles in `sovereign/ARCH_PRINCIPLES.md`. All callable\nvia..."
         },
         {
           "corpus_id": "commonwealth-ai-arch-principles",
           "title": "Architecture Principles — Commonwealth AI",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
           "score": 0.0,
           "snippet": "Architecture Principles — Commonwealth AI\n\nA practical field guide to how code is written and kept in this workspace.\nDerived from the drift, rot, and refactor work actually done on..."
         },
         {
           "corpus_id": "arch-principles",
           "title": "Architecture Principles — Commonwealth AI",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
           "score": 0.0,
           "snippet": "Architecture Principles — Commonwealth AI\n\nA practical field guide to how code is written and kept in this workspace.\nDerived from the drift, rot, and refactor work actually done on..."
         },
         {
           "corpus_id": "commonwealth-ai-arch-principles",
           "title": "0. Operating ethos",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
           "score": 0.0,
           "snippet": "0. Operating ethos\n\nFour commitments that underlie every specific rule below.\n\nGlassbox, always. The people running this system — the user, the\noperator, the next engineer — must be able to see..."
         },
         {
           "corpus_id": "arch-principles",
           "title": "0. Operating ethos",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
           "score": 0.0,
           "snippet": "0. Operating ethos\n\nFour commitments that underlie every specific rule below.\n\nGlassbox, always. The people running this system — the user, the\noperator, the next engineer — must be able to see..."
         },
         {
           "corpus_id": "system-overview",
           "title": "3. corpus-engine — The Shared Knowledge Layer",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "3. corpus-engine — The Shared Knowledge Layer\n\nSelf-contained library between \"raw source on the internet\" and \"ranked search\nhits with provenance.\" Both upstream projects use it through the same..."
         },
@@ -840,7 +840,7 @@
         {
           "corpus_id": "system-overview",
           "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
         },
@@ -849,7 +849,7 @@
           "title": null,
           "url": null,
           "score": 0.0,
-          "snippet": "Work-queue follow-ups (from 2026-04-20 session proving pull-queue E2E)\n\n1. WikipediaJsonlShardedZipIterator picks up __MACOSX/._* entries as shards. Observed: on LittleMac, shard 1 extracted as..."
+          "snippet": "Work-queue follow-ups (from 2026-04-20 session proving pull-queue E2E)\n\n1. WikipediaJsonlShardedZipIterator picks up __MACOSX/._* entries as shards. Observed: on mac-peer, shard 1 extracted as..."
         },
         {
           "corpus_id": "institutional-notes",
@@ -1018,28 +1018,28 @@
         {
           "corpus_id": "system-overview",
           "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
         },
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
         },
         {
           "corpus_id": "arch-principles",
           "title": "6.1 What counts as data",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
           "score": 0.0,
           "snippet": "6.1 What counts as data\n\nAgent-facing preambles and instruction blocks\nReport section headings and labels\nQ&A catalogs (e.g., ATOS amend-time adversarial prompts)\nDefault configuration that an..."
         },
         {
           "corpus_id": "commonwealth-ai-arch-principles",
           "title": "6.1 What counts as data",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
           "score": 0.0,
           "snippet": "6.1 What counts as data\n\nAgent-facing preambles and instruction blocks\nReport section headings and labels\nQ&A catalogs (e.g., ATOS amend-time adversarial prompts)\nDefault configuration that an..."
         },
@@ -1203,21 +1203,21 @@
         {
           "corpus_id": "system-overview",
           "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
         },
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.4 Tools",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.4 Tools\n\nLocal tools (`sovereign-tools/src/`):\n\nToolPurpose`SearchTool`Local vector + FTS5, coverage assessment, optional web fallback`WebSearchTool`NL → keywords (Quick), search backend, fetch..."
         },
         {
           "corpus_id": "system-overview",
           "title": "4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder\n\nThree source types in Settings → Local Knowledge, all under\n`sovereign-tools/src/local_corpus/`:\n\nSource typeSurfaceInitial..."
         },
@@ -1231,7 +1231,7 @@
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder\n\nThree source types in Settings → Local Knowledge, all under\n`sovereign-tools/src/local_corpus/`:\n\nSource typeSurfaceInitial..."
         },
@@ -1287,7 +1287,7 @@
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
         }
@@ -1422,21 +1422,21 @@
         {
           "corpus_id": "system-overview",
           "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
         },
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
         },
         {
           "corpus_id": "system-overview",
           "title": "3.10 Recipe authoring platform",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "3.10 Recipe authoring platform\n\nThe recipe schema is open: a domain expert (financial journalist, legal aid\nattorney, grad student) writes a TOML and the engine runs it. Five generic\nprimitives turn..."
         },
@@ -1464,14 +1464,14 @@
         {
           "corpus_id": "system-overview",
           "title": "4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder\n\nThree source types in Settings → Local Knowledge, all under\n`sovereign-tools/src/local_corpus/`:\n\nSource typeSurfaceInitial..."
         },
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder\n\nThree source types in Settings → Local Knowledge, all under\n`sovereign-tools/src/local_corpus/`:\n\nSource typeSurfaceInitial..."
         },
@@ -1615,21 +1615,21 @@
         {
           "corpus_id": "system-overview",
           "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
         },
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.15 Voice contract — Tier-B harness + situated synthesis path",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.15 Voice contract — Tier-B harness + situated synthesis path\n\nDeep-dive: `sovereign/bench/voice/README.md`.\n\nThe relational voice contract has two prompt forms in\n`sovereign-core::runtime`:..."
         },
         {
           "corpus_id": "system-overview",
           "title": "3.10 Recipe authoring platform",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "3.10 Recipe authoring platform\n\nThe recipe schema is open: a domain expert (financial journalist, legal aid\nattorney, grad student) writes a TOML and the engine runs it. Five generic\nprimitives turn..."
         },
@@ -1657,7 +1657,7 @@
         {
           "corpus_id": "system-overview",
           "title": "4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder\n\nThree source types in Settings → Local Knowledge, all under\n`sovereign-tools/src/local_corpus/`:\n\nSource typeSurfaceInitial..."
         },
@@ -1671,7 +1671,7 @@
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder\n\nThree source types in Settings → Local Knowledge, all under\n`sovereign-tools/src/local_corpus/`:\n\nSource typeSurfaceInitial..."
         },
@@ -2265,28 +2265,28 @@
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "9. Glossary",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "9. Glossary\n\nOICP — Open Inference Capabilities Protocol (v0.3). Wire types in `oicp-types`. A model publishes one `CapabilityClaim` per kind-of-work it does well; schedulers score requests against..."
         },
         {
           "corpus_id": "system-overview",
           "title": "9. Glossary",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "9. Glossary\n\nOICP — Open Inference Capabilities Protocol (v0.3). Wire types in `oicp-types`. A model publishes one `CapabilityClaim` per kind-of-work it does well; schedulers score requests against..."
         },
         {
           "corpus_id": "commonwealth-ai-system-overview",
           "title": "4.12 KnowledgeView — Landscape digest assembly",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.12 KnowledgeView — Landscape digest assembly\n\nSplices short structured summaries of the user's own world into the system\nprompt before each turn. Three views:\n\nViewSource (StateStore)Domain..."
         },
         {
           "corpus_id": "system-overview",
           "title": "4.12 KnowledgeView — Landscape digest assembly",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.12 KnowledgeView — Landscape digest assembly\n\nSplices short structured summaries of the user's own world into the system\nprompt before each turn. Three views:\n\nViewSource (StateStore)Domain..."
         },
@@ -2300,7 +2300,7 @@
         {
           "corpus_id": "system-overview",
           "title": "4.8 OICP (v0.3)",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "4.8 OICP (v0.3)\n\nSpec: `commonwealth/docs/oicp-v0.3.md`. Types: `oicp-types/src/lib.rs`,\nre-exported as `sovereign_core::oicp` and `commonwealth_core::oicp`.\n\nWire types:\n\n`CapabilityHint` —..."
         },
@@ -2314,14 +2314,14 @@
         {
           "corpus_id": "commonwealth-ai-arch-principles",
           "title": "1.3 Keep inline comments about the why",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
           "score": 0.0,
           "snippet": "1.3 Keep inline comments about the why\n\nBad comment: `// loop over the views`. That's what the code says. Bad comment\nin review: accepted, because it's cheap.\n\nGood comment: `// Hold the per-view..."
         },
         {
           "corpus_id": "arch-principles",
           "title": "1.3 Keep inline comments about the why",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
           "score": 0.0,
           "snippet": "1.3 Keep inline comments about the why\n\nBad comment: `// loop over the views`. That's what the code says. Bad comment\nin review: accepted, because it's cheap.\n\nGood comment: `// Hold the per-view..."
         }

@@ -491,7 +491,7 @@ pub async fn apply_baseline(state: &AppState, headers: &HeaderMap, req: &mut Res
 /// **Path scrubbing.** The distiller model reliably hallucinates
 /// absolute paths even with explicit no-invent rules in its system
 /// prompt — observed 2026-05-13 with three typos in a single
-/// directive (`tos-experiment-oicp-types`, `alexsbryan.dev`,
+/// directive (`tos-experiment-oicp-types`, `example.dev`,
 /// `oicp_core`). Hope-prompting doesn't work; the model has the
 /// same failure modes as the agent that consumes its output. So
 /// the directive's string fields go through `scrub_paths` before
@@ -3763,10 +3763,10 @@ mod tests {
     #[test]
     fn scrub_paths_strips_typo_paths_too() {
         // The whole point: even mis-typed paths get scrubbed.
-        let s = "Workdir is /Users/alexsbryan.dev/tos-experiment-oicp_types — bad path.";
+        let s = "Workdir is /Users/user.dev/tos-experiment-oicp_types — bad path.";
         let out = scrub_paths(s);
         assert!(out.contains("<path>"));
-        assert!(!out.contains("alexsbryan.dev"));
+        assert!(!out.contains("example.dev"));
     }
 
     #[test]
@@ -4919,12 +4919,12 @@ mod tests {
     fn canonicalize_paths_in_cmd_rewrites_typo() {
         let ctx = make_components(&[
             ("Users", 3),
-            ("alexsbryan", 3),
+            ("your-org", 3),
             ("dev", 3),
             ("atos-experiment-oicp-types", 3),
             ("oicp-v0.3.md", 2),
         ]);
-        let bad = "cat /Users/alexsbryan/dev/tos-experiment-oicp-types/oicp-v0.3.md";
+        let bad = "cat /Users/user/dev/tos-experiment-oicp-types/oicp-v0.3.md";
         let fixed = canonicalize_paths_in_cmd(bad, &ctx).expect("should rewrite");
         assert!(fixed.contains("atos-experiment-oicp-types"));
         assert!(!fixed.contains("/tos-experiment-oicp-types"));

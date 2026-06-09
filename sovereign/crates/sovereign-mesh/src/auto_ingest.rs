@@ -221,7 +221,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                         // addresses unreachable) are TRANSIENT —
                         // we WILL retry next tick. Falling through
                         // to local merge here is what produced the
-                        // 17/38 partial canonical bug RuggedFox
+                        // 17/38 partial canonical bug linux-peer
                         // hit: even when our partition meta lacks
                         // total_shards (so the IncompleteCoverage
                         // gate skips), we KNOW from gossip that a
@@ -488,7 +488,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                     // peers) owns the ingest. Skipping spawn_local_ingest
                     // prevents two loops from writing to the same partition
                     // dir and fighting over the single embed slot — the
-                    // reason LittleMac's pre-fix throughput stayed at CPU
+                    // reason mac-peer's pre-fix throughput stayed at CPU
                     // rate even while it held a queue lease.
                     //
                     // Because the collaborate dispatch above ran first, a

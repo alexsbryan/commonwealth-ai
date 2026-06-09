@@ -29,7 +29,7 @@ size_indexed_gb = 0.005
 # running daemon resolves it live (registry resolution step 1) without a rebuild.
 [acquire]
 type = "local_file"
-path = "/Users/alexsbryan/.sovereign/bench-corpora/chaos-secret-agent/secret-agent.txt"
+path = "/Users/user/.sovereign/bench-corpora/chaos-secret-agent/secret-agent.txt"
 
 [extract]
 type = "plaintext"

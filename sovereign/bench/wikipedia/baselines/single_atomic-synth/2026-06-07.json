@@ -201,7 +201,7 @@
         {
           "corpus_id": "system-overview",
           "title": "10.2 Commonwealth deferrals",
-          "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+          "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
           "snippet": "10.2 Commonwealth deferrals\n\nItemLocationWhy deferredMulti-embed-model dispatch`commonwealth-api/src/routes_inference.rs:418``/v1/embeddings` ignores the `model` field; gated on a second production..."
         },

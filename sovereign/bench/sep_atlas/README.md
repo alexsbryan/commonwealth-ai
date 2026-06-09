@@ -1,6 +1,6 @@
 # SEP atlas — two-peer parallel campaign
 
-Driver + logs for running `philosophy_atlas` enrichment over the Stanford Encyclopedia of Philosophy in parallel across two mesh peers (LittleMac + RuggedFox). Per-article granularity — each `sep-<slug>` is a self-contained sub-corpus, no atom-ID coordination across peers.
+Driver + logs for running `philosophy_atlas` enrichment over the Stanford Encyclopedia of Philosophy in parallel across two mesh peers (mac-peer + linux-peer). Per-article granularity — each `sep-<slug>` is a self-contained sub-corpus, no atom-ID coordination across peers.
 
 ## Why this layout
 
@@ -13,11 +13,11 @@ Driver + logs for running `philosophy_atlas` enrichment over the Stanford Encycl
 Both peers run the same command with their own `--peer-index`. The hash mod 2 of each slug determines which peer processes it; the cover is disjoint.
 
 ```bash
-# On LittleMac
+# On mac-peer
 sovereign enrich sep-ingest --list \
   | bench/sep_atlas/run_batch.sh --peer-index 0 --limit 5
 
-# On RuggedFox (over ssh / tailscale)
+# On linux-peer (over ssh / tailscale)
 sovereign enrich sep-ingest --list \
   | bench/sep_atlas/run_batch.sh --peer-index 1 --limit 5
 ```
@@ -45,11 +45,11 @@ Per-run logs land in `bench/sep_atlas/logs/peer-<i>-<timestamp>.{success,fail,sk
 
 ## Phase gates
 
-Don't fan out to RuggedFox until LittleMac's `sep-compatibilism` validation has produced a complete `atlas/` dir (atoms.json, edges.json, plus per-phase artifacts). See `/Users/alexsbryan/.claude/plans/dapper-imagining-stream.md` for the full plan.
+Don't fan out to linux-peer until mac-peer's `sep-compatibilism` validation has produced a complete `atlas/` dir (atoms.json, edges.json, plus per-phase artifacts). See `/Users/user/.claude/plans/dapper-imagining-stream.md` for the full plan.
 
-## Fedora (RuggedFox) ready-state runbook
+## Fedora (linux-peer) ready-state runbook
 
-Run on fedora before Phase 1 smoke. (Tailscale name: `fedora` at `100.115.12.21`. Sovereign mesh peer name: `RuggedFox`.)
+Run on fedora before Phase 1 smoke. (Tailscale name: `fedora` at `100.64.0.3`. Sovereign mesh peer name: `linux-peer`.)
 
 ```bash
 # 1. Verify node_id stable — must match before/after a toolbx restart.
@@ -76,14 +76,14 @@ ls ~/.sovereign/indexes/sep-$SHORT_SLUG/atlas/atoms.json   # exists ⇒ green
 
 ## Phase 2 smoke (one article each, in parallel)
 
-When LittleMac and RuggedFox are both green on a single article, run two distinct slugs concurrently:
+When mac-peer and linux-peer are both green on a single article, run two distinct slugs concurrently:
 
 ```bash
-# LittleMac
+# mac-peer
 sovereign enrich sep-ingest --list \
   | bench/sep_atlas/run_batch.sh --peer-index 0 --limit 1
 
-# RuggedFox (separately, same time)
+# linux-peer (separately, same time)
 sovereign enrich sep-ingest --list \
   | bench/sep_atlas/run_batch.sh --peer-index 1 --limit 1
 ```

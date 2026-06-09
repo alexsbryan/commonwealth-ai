@@ -2139,7 +2139,7 @@
               "title": "clusterer",
               "url": null,
               "score": 0.0,
-              "snippet": "clusterer\n\n//! `sovereign/*`. See the plan at\n//! `/Users/alexsbryan/.claude/plans/binary-scribbling-babbage.md`.\n\npub mod clusterer;\npub mod config;\npub mod excerpt;\npub mod extract_stage;"
+              "snippet": "clusterer\n\n//! `sovereign/*`. See the plan at\n//! `/Users/user/.claude/plans/binary-scribbling-babbage.md`.\n\npub mod clusterer;\npub mod config;\npub mod excerpt;\npub mod extract_stage;"
             },
             {
               "corpus_id": "wikipedia",

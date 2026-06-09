@@ -1,7 +1,7 @@
 # Obsidian-vault bench eval
 
 Bench harness for scoring Phase-1 atlas atom extraction against
-Alex's real vault at `/Users/alexsbryan/Documents/Obsidian Vault`.
+Alex's real vault at `/Users/user/Documents/Obsidian Vault`.
 
 ## Why this exists
 
@@ -73,12 +73,12 @@ artifacts stay portable. Two ways to point at the vault:
 
 ```bash
 # 1. environment variable (recommended for repeated iteration)
-export SOVEREIGN_OBSIDIAN_VAULT="/Users/alexsbryan/Documents/Obsidian Vault"
+export SOVEREIGN_OBSIDIAN_VAULT="/Users/user/Documents/Obsidian Vault"
 sovereign bench obsidian --report /tmp/obsidian-bench.json
 
 # 2. flag (one-off, override env)
 sovereign bench obsidian \
-    --vault "/Users/alexsbryan/Documents/Obsidian Vault" \
+    --vault "/Users/user/Documents/Obsidian Vault" \
     --report /tmp/obsidian-bench.json
 ```
 

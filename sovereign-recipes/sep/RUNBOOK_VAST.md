@@ -41,7 +41,7 @@ pipeline`.
 Two environments matter — get the distinction right or things break
 in confusing ways:
 
-- **Toolbox** (`sovereign-vulkan` Distrobox/toolbx container). The
+- **Toolbox** (`dev-toolbox` Distrobox/toolbx container). The
   daemon lives here, because llama.cpp's Vulkan backend can't find
   `libamdhip64` from the host systemd unit (see memory:
   [project_wiki_tier2_500_atlas]). The `sovereign` CLI you'll run

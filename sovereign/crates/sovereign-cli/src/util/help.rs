@@ -5,3 +5,8 @@
 //! `crate::util::help::*` import path used across every `*_cmd.rs`.
 
 pub use sovereign_cli_shared::help::{print, wants_help, Help, HelpSection};
+// Only the `--features dev-tools` help addendum (the "Developer toolchain"
+// section in main.rs) uses this; gate the re-export to match so the default
+// build doesn't flag it as an unused import.
+#[cfg(feature = "dev-tools")]
+pub use sovereign_cli_shared::help::print_subcommands_titled;

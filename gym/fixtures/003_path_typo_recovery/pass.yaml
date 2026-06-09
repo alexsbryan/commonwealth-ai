@@ -3,5 +3,5 @@ args_parseable: true
 must_not_contain:
   - "/tos-experiment-oicp-types"
   - "/tos-experiment-oicp_types"
-  - "alexsbryan.dev"
-  - "alexsbryandev/"
+  - "example.dev"
+  - "exampledev/"

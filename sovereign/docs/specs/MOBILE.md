@@ -69,7 +69,7 @@ erDiagram
   RESPONSE_PROVENANCE {
     uuid id PK
     string message_id FK "unique, assistant msgs only"
-    string inference_backend "e.g. Qwen3.5-9B.Q8_0 @ peer BeefyMac"
+    string inference_backend "e.g. Qwen3.5-9B.Q8_0 @ peer mac-peer"
     string routing_tier
     int ttft_ms
     int total_ms
@@ -176,7 +176,7 @@ erDiagram
      from the model's parametric knowledge**; a correct answer that carries a
      citation to that corpus proves retrieval, not recall.
 5. **Provenance is shown.** `RESPONSE_PROVENANCE.inference_backend` is displayed
-   (model + serving node, e.g. "... @ peer BeefyMac"), confirming the work ran on
+   (model + serving node, e.g. "... @ peer mac-peer"), confirming the work ran on
    the host/mesh, not the device.
 6. **Busy host is legible.** A `503 + Retry-After` from the host surfaces as
    "host busy," never an error or a hang.

@@ -44,9 +44,26 @@
 # config + plugin manifest tracked; node_modules is per-host.
 .opencode/node_modules/
 
+# ── Internal handoff/investigation notes (kept locally, not published) ────
+# Ephemeral dev-process notes (HANDOFF*.md, RPC_*_HANDOFF, *_INVESTIGATION).
+# Relocated here for the open-source launch so they stay on the author's box
+# but never ship to the public repo. Already-tracked copies removed in the
+# same commit.
+docs/internal/
+
 # ── macOS noise ───────────────────────────────────────────────────────────
 .DS_Store
 **/.DS_Store
 */.DS_Store
 
 models/
+
+# ── Generated dev/analysis artifacts (never commit) ───────────────────────
+# Drift reports + their archaeology/rough sidecars and the agent-bench report
+# are regenerated on demand by the developer toolchain — large, machine-
+# specific, and not part of the source. Removed from the tree for the
+# open-source launch (2026-06-08).
+/drift_report_*
+/*.archaeology.json
+/*.rough.json
+/agent-bench-report.json

@@ -72,7 +72,7 @@ DEFAULT_DUMP_URL = (
 )
 DEFAULT_UA = (
     "sovereign-recipes/0.1 "
-    "(https://github.com/alexsbryan/sovereign-recipes; contact via PR)"
+    "(https://github.com/your-org/sovereign-recipes; contact via PR)"
 )
 
 
