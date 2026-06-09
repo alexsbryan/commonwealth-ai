@@ -304,7 +304,7 @@ impl Default for NewsworthyConfig {
             // we point at the repo. Without this, our requests were
             // treated as generic browser traffic and rate-limited
             // more aggressively.
-            user_agent: "commonwealth-ai-newsworthy/0.1 (https://github.com/your-org/sovereign; \
+            user_agent: "commonwealth-ai-newsworthy/0.1 (https://github.com/alexsbryan/sovereign; \
                  ops@commonwealth.ai) reqwest/0.12"
                 .to_string(),
         }

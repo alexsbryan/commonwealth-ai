@@ -4919,7 +4919,7 @@ mod tests {
     fn canonicalize_paths_in_cmd_rewrites_typo() {
         let ctx = make_components(&[
             ("Users", 3),
-            ("your-org", 3),
+            ("alexsbryan", 3),
             ("dev", 3),
             ("atos-experiment-oicp-types", 3),
             ("oicp-v0.3.md", 2),

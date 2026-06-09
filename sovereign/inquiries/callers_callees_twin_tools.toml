@@ -26,7 +26,7 @@ file_globs = [
 # one of these. Conservative match — substring, case-insensitive.
 keywords = ["callers", "callees", "scip", "graph"]
 
-# v1 archaeology surfaced both your-org@ and your-org@ as
+# v1 archaeology surfaced both alexsbryan@ and alexsbryan@ as
 # primary authors of the surrounding code; either should appear in
 # `primary_authors` for an atom from these files.
 authors = [

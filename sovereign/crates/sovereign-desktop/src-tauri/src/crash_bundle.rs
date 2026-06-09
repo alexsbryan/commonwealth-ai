@@ -230,9 +230,8 @@ fn desktop_dir() -> Option<PathBuf> {
 /// crash flow hands this to the frontend instead of an email address:
 /// the user opens an issue and attaches the locally-written report.
 ///
-/// `your-org` is a publish-time placeholder — set the real owner when
-/// the public repo is created (see the open-source pre-publish checklist).
-const GITHUB_ISSUES_URL: &str = "https://github.com/your-org/commonwealth-ai/issues/new";
+/// `alexsbryan` is the current code owner; update the URL if the repo moves.
+const GITHUB_ISSUES_URL: &str = "https://github.com/alexsbryan/commonwealth-ai/issues/new";
 
 fn issues_url() -> String {
     GITHUB_ISSUES_URL.to_string()

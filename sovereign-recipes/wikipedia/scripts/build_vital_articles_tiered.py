@@ -59,7 +59,7 @@ from typing import Iterator, List, Set
 
 
 WIKI_API = "https://en.wikipedia.org/w/api.php"
-DEFAULT_UA = "sovereign-recipes/0.1 (https://github.com/your-org/sovereign-recipes; contact via PR)"
+DEFAULT_UA = "sovereign-recipes/0.1 (https://github.com/alexsbryan/sovereign-recipes; contact via PR)"
 
 # Subpage suffixes that aren't part of the curated roster — drop
 # these before fetching wikitext. "Article alerts", "Draft",
