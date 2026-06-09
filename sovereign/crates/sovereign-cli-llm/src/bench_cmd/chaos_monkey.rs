@@ -36,11 +36,11 @@ const HELP: Help = Help {
     summary: "Grounded-calibration audit: answer + cite when the fact is in persistence, abstain honestly when it isn't, resist distractors.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench chaos-monkey run --bank <bank.toml> [--corpus <id>] [--judge-model <stem>] [--manifest <toml>] [--out <jsonl>] [--limit N]",
+            "sovereign bench chaos-monkey run --bank <bank.toml> [--corpus <id>] [--judge-model <stem>] [--manifest <toml>] [--out <jsonl>] [--limit N] [--naked]",
         ),
         HelpSection::Subcommands(&[(
             "run",
-            "Run each bank question through the live chat path (sealed to the corpus), score the two red-lines, write ResultRow JSONL.",
+            "Run each bank question through the live chat path (sealed to the corpus), score the two red-lines, write ResultRow JSONL. --naked = true-baseline control: bypass the Runtime (no system prompt, no retrieval, no router/synthesis) and score the bare model; the delta vs a normal run is our prompting+retrieval value-add (citation/distractor N/A under --naked).",
         )]),
         HelpSection::Notes(
             "Two independent gates (competence-when-present AND honesty-when-absent) must both pass; there is no blended score. Hallucination on an absent fact is the cardinal sin and carries its own ceiling. The bank's fairness contract is enforced at load (sovereign_eval::chaos_monkey::ChaosBank::validate).",
