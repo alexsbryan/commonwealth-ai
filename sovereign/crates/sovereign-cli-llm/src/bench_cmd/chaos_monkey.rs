@@ -26,7 +26,7 @@ use sovereign_eval::chaos_monkey::{
 use sovereign_eval::flywheel::det_checks::{contains_ci, gold_match};
 use sovereign_inference::remote::RemoteApiProvider;
 
-use crate::bench_cmd::live_runner::{classify_abstain, classify_caveat, run_live};
+use crate::bench_cmd::live_runner::{classify_abstain, classify_caveat, run_live, run_naked};
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
 use crate::util::help::{self, Help, HelpSection};
@@ -73,6 +73,11 @@ struct Args {
     manifest: Option<PathBuf>,
     out: PathBuf,
     limit: Option<usize>,
+    /// True-baseline control: bypass the whole Runtime (router, retrieval,
+    /// synthesis prompt) and send the bare question to the model. Measures the
+    /// naked model so the delta vs the normal run = our prompting+retrieval
+    /// value-add. citation/distractor sub-metrics are N/A (no retrieval).
+    naked: bool,
 }
 
 fn parse_args(rest: &[String]) -> Result<Args, String> {
@@ -83,6 +88,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut manifest = None;
     let mut out = PathBuf::from("target/chaos-monkey/results.jsonl");
     let mut limit = None;
+    let mut naked = false;
 
     let mut i = 0;
     macro_rules! val {
@@ -100,6 +106,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             "--manifest" => manifest = Some(PathBuf::from(val!("--manifest"))),
             "--out" => out = PathBuf::from(val!("--out")),
             "--limit" => limit = Some(val!("--limit").parse().map_err(|_| "--limit must be a usize")?),
+            "--naked" => naked = true,
             other => return Err(format!("unknown flag `{other}`")),
         }
         i += 1;
@@ -112,6 +119,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         manifest,
         out,
         limit,
+        naked,
     })
 }
 
@@ -179,6 +187,18 @@ async fn run(rest: &[String]) -> i32 {
         PROVIDER_CTX,
     ));
 
+    // True-baseline control: a bare provider that hits the daemon's /v1
+    // directly with no system prompt and no retrieval (set up only in --naked
+    // mode). score_question routes through `run_naked` when this is Some.
+    let naked_provider: Option<std::sync::Arc<dyn InferenceProvider>> = if args.naked {
+        let chat_stem = globals.chat_model.clone().unwrap_or_else(|| "primary".to_string());
+        eprintln!("[chaos] NAKED BASELINE — bypassing the Runtime (no system prompt, no retrieval, no router/synthesis); bare model={chat_stem}, temp=0. citation/distractor are N/A (no sources).");
+        Some(std::sync::Arc::new(RemoteApiProvider::new(&v1, None, &chat_stem, PROVIDER_CTX)))
+    } else {
+        None
+    };
+    let naked_max: usize = globals.max_tokens.unwrap_or(2048);
+
     let take = args.limit.unwrap_or(bank.questions.len());
     let mut rows = Vec::new();
     for (qi, q) in bank.questions.iter().take(take).enumerate() {
@@ -186,7 +206,7 @@ async fn run(rest: &[String]) -> i32 {
             .chat_model
             .clone()
             .unwrap_or_else(|| "primary".to_string());
-        let row = score_question(&session, judge.as_ref(), &args.judge_model, &corpus, &model_id, q).await;
+        let row = score_question(&session, judge.as_ref(), &args.judge_model, &corpus, &model_id, q, naked_provider.as_deref(), naked_max).await;
         eprintln!(
             "  [{:>2}/{}] {:<20} expect={:<7} act={:<9} pass={}",
             qi + 1,
@@ -222,8 +242,15 @@ async fn score_question(
     corpus: &str,
     model_id: &str,
     q: &ChaosQuestion,
+    naked_provider: Option<&dyn InferenceProvider>,
+    naked_max: usize,
 ) -> ResultRow {
-    let live = run_live(session, corpus, &q.question).await;
+    // --naked: bypass the Runtime entirely (bare model, no system/retrieval).
+    // Otherwise the normal sealed live path (router → retrieval → synthesis).
+    let live = match naked_provider {
+        Some(p) => run_naked(p, model_id, &q.question, naked_max).await,
+        None => run_live(session, corpus, &q.question).await,
+    };
     let visible = live.visible;
     let chunk_texts = live.retrieved_chunk_texts;
 
