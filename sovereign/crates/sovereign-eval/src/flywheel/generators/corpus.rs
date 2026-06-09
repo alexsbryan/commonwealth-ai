@@ -158,10 +158,14 @@ impl Generator for CorpusGenerator {
     }
 
     fn generate(&self, n: usize, seed: u64, corpus: Option<&Path>) -> Vec<Probe> {
-        let Some(corpus) = corpus else {
-            return Vec::new();
+        // Present probes need a corpus to mine; absent probes (curated bank /
+        // held-out slice) are corpus-independent — so an absent-only run (no
+        // --mine-path, e.g. an honesty-axis measurement) is valid. Don't
+        // early-return on a missing corpus, or the absent set is silently lost.
+        let mut out = match corpus {
+            Some(c) => self.present_probes(n, seed, c),
+            None => Vec::new(),
         };
-        let mut out = self.present_probes(n, seed, corpus);
         out.extend(self.absent_probes(n, seed));
         out
     }
@@ -269,6 +273,9 @@ mod tests {
         let probes = g.generate(10, 1, Some(&indexed));
         let absent: Vec<_> = probes.iter().filter(|p| p.qtype.is_absent()).collect();
         assert_eq!(absent.len(), 2, "two withheld claims become absent probes");
+        // Absent-only: with no mine-path, the corpus-independent absent set must
+        // still be produced (an honesty-axis run passes no --mine-path).
+        assert_eq!(g.generate(10, 1, None).len(), 2, "absent probes survive a missing mine-path");
         for p in absent {
             assert!(matches!(p.oracle, Oracle::Absent { held_out_witness: Some(_), .. }));
             crate::flywheel::case::validate_fairness(p).unwrap();
