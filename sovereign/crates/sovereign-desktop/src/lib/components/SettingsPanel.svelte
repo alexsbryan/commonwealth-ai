@@ -17,6 +17,14 @@
     modelFileSize,
   } from "../api";
   import type { StorageBudgetState } from "../api";
+  import {
+    effectiveMemoryBytes,
+    memorySourceLabel,
+    peakMemoryBytes,
+    budgetStateFor,
+    fmtGiB,
+    type SlotSizes,
+  } from "./memoryBudget";
   import type {
     BootstrapSnapshot,
     DesktopConfig,
@@ -192,62 +200,23 @@
   }
 
   // ── Memory budgeting for the Models tab ───────────────────────
-  //
-  // Picking a large model in every slot is a footgun: fast + embed are
-  // always loaded, and either the primary or code slot loads on demand
-  // (they share a lazy slot). Without help, a user can land on a combo
-  // that crashes the daemon at load time or triggers OS-level memory
-  // pressure mid-conversation.
-  //
-  // We sum the always-loaded slots and add max(primary, code) for the
-  // peak, multiply by a runtime-overhead factor (KV cache + activation
-  // workspace + chat-template scratch are ~15% of the file size at
-  // 8192 ctx for typical Q4–Q6 GGUFs), and compare against the
-  // device's effective memory — unified RAM on Apple Silicon, VRAM on
-  // discrete GPUs, system RAM otherwise. The 2 GiB baseline reserves
-  // OS + Sovereign's own working set.
-  const RUNTIME_OVERHEAD = 1.15;
-  const BASELINE_BYTES = 2 * 1024 ** 3;
-  const GIB = 1024 ** 3;
-
+  // The pure math (effective device memory, peak resident bytes, the
+  // budget thresholds, GiB formatting) lives in `./memoryBudget`
+  // (unit-tested — picking a large model in every slot is a footgun, so
+  // the meter is worth pinning). These reactive `$derived`s feed it the
+  // live slot sizes + detected hardware.
   let hardware = $state<HardwareInfo | null>(null);
-  let slotSizes = $state<{ fast: number | null; primary: number | null; embed: number | null; code: number | null }>({
-    fast: null, primary: null, embed: null, code: null,
+  let slotSizes = $state<SlotSizes>({
+    fast: null,
+    primary: null,
+    embed: null,
+    code: null,
   });
 
-  function effectiveMemoryBytes(hw: HardwareInfo): number {
-    const gb = hw.is_unified_memory
-      ? hw.system_ram_gb
-      : hw.gpu_available && hw.gpu_memory_gb != null
-        ? hw.gpu_memory_gb
-        : hw.system_ram_gb;
-    return gb * GIB;
-  }
-
-  function memorySourceLabel(hw: HardwareInfo): string {
-    if (hw.is_unified_memory) return "unified RAM";
-    if (hw.gpu_available && hw.gpu_memory_gb != null) return "GPU VRAM";
-    return "system RAM";
-  }
-
-  let peakBytes = $derived.by(() => {
-    const fast    = slotSizes.fast    ?? 0;
-    const embed   = slotSizes.embed   ?? 0;
-    const primary = slotSizes.primary ?? 0;
-    const code    = slotSizes.code    ?? 0;
-    const lazy    = Math.max(primary, code);
-    return (fast + embed + lazy) * RUNTIME_OVERHEAD + BASELINE_BYTES;
-  });
+  let peakBytes = $derived(peakMemoryBytes(slotSizes));
   let effectiveBytes = $derived(hardware ? effectiveMemoryBytes(hardware) : 0);
   let budgetRatio = $derived(effectiveBytes > 0 ? peakBytes / effectiveBytes : 0);
-  type BudgetState = "ok" | "warn" | "crit";
-  let budgetState = $derived<BudgetState>(
-    budgetRatio >= 0.95 ? "crit" : budgetRatio >= 0.80 ? "warn" : "ok",
-  );
-
-  function fmtGiB(bytes: number): string {
-    return `${(bytes / GIB).toFixed(1)} GiB`;
-  }
+  let budgetState = $derived(budgetStateFor(budgetRatio));
 
   async function refreshSlotSizes(cfg: DesktopConfig | null) {
     if (!cfg) return;
