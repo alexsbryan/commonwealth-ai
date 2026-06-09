@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Two-daemon knowledge fan-out test.
 //!
 //! Exercises the "ask my mesh about X" path end-to-end:

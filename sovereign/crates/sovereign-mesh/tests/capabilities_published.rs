@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Proves that a live `EmbeddedDaemon` with a real `CorpusEngine`
 //! publishes its `hosted_corpora` to its own `MemberRecord` on the
 //! first gossip round. This is the mechanism by which the Founder's

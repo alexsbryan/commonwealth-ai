@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Resolve a cross-node `repo_id` from a local working directory.
 //!
 //! Walks up to the enclosing git repo, reads `origin` remote, strips

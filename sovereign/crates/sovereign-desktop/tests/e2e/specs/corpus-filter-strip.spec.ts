@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { test, expect, bootToChat } from "../fixtures/test-base";
 
 // CorpusFilterStrip — the toggle-chip surface that lets users

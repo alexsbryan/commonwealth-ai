@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Build a [`FilterPipeline`] from recipe-level config.
 //!
 //! Filter artefacts can come from two places:

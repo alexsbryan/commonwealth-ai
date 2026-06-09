@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Safety enforcement for corpus acquisition.
 //!
 //! Hardcoded rules, not configurable by recipes:

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pure-data transition rules. One function maps `(current_role,
 //! triggering_primitive)` to the next role (or `None` =
 //! terminate). Native runner calls this after each tool dispatch

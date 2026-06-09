@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Local error type for corpus-engine-scip.
 //!
 //! Deliberately narrow: only the two variants scip actually constructs

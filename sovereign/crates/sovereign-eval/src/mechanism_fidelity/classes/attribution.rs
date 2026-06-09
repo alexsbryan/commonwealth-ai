@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Attribution-support: a **corpus-grounded** reasoning class. Where
 //! wealth-tax is synthetic (the structural prior IS the oracle), here the
 //! oracle is *exact and known by construction* — we mine real `Claim`

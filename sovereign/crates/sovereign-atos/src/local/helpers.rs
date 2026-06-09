@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pure helpers used by [`super::orchestrator::LocalAtosOrchestrator`].
 //!
 //! Everything here is a deterministic function of its inputs — no

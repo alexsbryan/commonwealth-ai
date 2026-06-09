@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign meshapp {publish,install,list}` — the curated registry client.
 //!
 //! A mesh app is distributed as a self-contained `tar.zst`: the bundle (its

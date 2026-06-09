@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Mesh-level inference plan types.
 //!
 //! A [`MeshPlan`] describes the complete inference topology for the current

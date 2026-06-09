@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pagination drivers for the HTTP API acquirer.
 //!
 //! The four [`PaginationStrategy`] variants share a uniform shape:

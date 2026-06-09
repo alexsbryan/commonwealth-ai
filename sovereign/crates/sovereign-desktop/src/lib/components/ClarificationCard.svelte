@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!--
   ClarificationCard — rendered on low-confidence Ask turns. The
   runtime suppresses synthesis and waits for the user to pick an

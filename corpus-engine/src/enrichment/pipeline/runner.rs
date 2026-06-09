@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-phase runner — glues the `Pipeline` trait, `ExemplarBank`,
 //! `PhaseCache`, `RunOutputWriter`, and injected `EmbedFn` +
 //! `ChatCompletionFn` into an executor the CLI calls per subcommand.

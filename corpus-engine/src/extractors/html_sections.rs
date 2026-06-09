@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Section-aware HTML extractor.
 //!
 //! Reads a directory of HTML files, strips tags via the same helper

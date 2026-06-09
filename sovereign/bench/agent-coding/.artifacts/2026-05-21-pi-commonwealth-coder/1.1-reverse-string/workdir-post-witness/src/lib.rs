@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Reverse a string.
 //
 // Returns the input string with its characters in reverse order.

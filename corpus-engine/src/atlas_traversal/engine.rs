@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atlas traversal — execute a [`QueryPlan`] against the resolved
 //! atlas and collect the atoms + edges that answer it.
 //!

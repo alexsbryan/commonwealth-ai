@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Runed singleton tracking `enrich build` runs. Unlike
 // `corpusProgress.svelte.ts`, which subscribes to a single static
 // Tauri event, each enrichment build publishes on its own

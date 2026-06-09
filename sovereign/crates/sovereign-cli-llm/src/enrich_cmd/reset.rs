@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich reset <corpus>` — clear phase caches/runs so
 //! the developer can re-iterate without hand-deleting files.
 //!
@@ -27,8 +28,8 @@ use corpus_engine::enrichment::pipeline::PipelinePhase;
 
 use super::config::EnrichConfig;
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
-use crate::util::prompts::confirm;
+use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_shared::prompts::confirm;
 
 const HELP: Help = Help {
     command: "sovereign enrich reset",

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! System tray menu + 5s status poller.
 //!
 //! Surfaces W2/W3 contribution state to the user without making them

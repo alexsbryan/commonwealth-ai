@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Auto-config first-launch orchestrator (the *lazy sunbeam* flow).
 //!
 //! Runs the entire setup chain — hardware probe → catalog resolve

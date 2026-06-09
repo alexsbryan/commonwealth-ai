@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `LocalCorpusManager` — single entry point for both the Folder Drop
 //! and Obsidian Vault flows.
 //!

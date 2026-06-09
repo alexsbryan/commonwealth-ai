@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Language-agnostic SCIP exporter dispatch.
 //!
 //! Detects which languages are present in a workspace, checks which SCIP

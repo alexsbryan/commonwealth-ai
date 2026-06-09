@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pure deletion-threshold guard.
 //!
 //! Evaluates a sweep's diff against the corpus's `DeletionGuardConfig`

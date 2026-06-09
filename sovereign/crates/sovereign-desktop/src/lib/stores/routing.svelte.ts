@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Singleton wrapper around `routingMachine`. Mirrors
 // `stores/approval.svelte.ts` to the letter — same lifecycle
 // (lazy-start, long-lived), same $state subscription pattern, same

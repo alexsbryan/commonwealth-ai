@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Phase 0 kill-switch for Spike 2 — speculative decoding.
 //!
 //! Validates three things end-to-end against the production model pair

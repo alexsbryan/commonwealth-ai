@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Regression tests for the ingest pipeline's failure modes.
 //!
 //! These tests guard the bug where the desktop's `EmbeddedLlamaCpp::embed`

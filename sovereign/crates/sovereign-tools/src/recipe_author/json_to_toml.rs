@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Recursive `serde_json::Value` → `toml::Value` converter.
 //!
 //! Used by `RecipeWriteStructuredTool` to take a JSON object the

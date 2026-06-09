@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Wikipedia link graph — a SQLite-backed adjacency store built from
 //! the structural metadata that Wikipedia extractors already populate
 //! (`outgoing_links`, `section_path`, `pov_count`, …) but that the

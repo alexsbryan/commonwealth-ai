@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! HDBSCAN clustering over existing chunk embeddings.
 //!
 //! **No inference calls in this phase.** Pure linear algebra over the

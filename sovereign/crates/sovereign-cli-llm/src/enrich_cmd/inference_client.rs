@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! HTTP client glue for talking to the Commonwealth daemon's
 //! OpenAI-compatible chat + embeddings endpoints.
 //!
@@ -18,7 +19,7 @@ use corpus_engine::error::{Error, Result};
 use corpus_engine::types::EmbedFn;
 
 use super::providers::{parse_model_spec, ProviderKind, ProviderRegistry, ResolvedProvider};
-use crate::util::urls::{v1_models_url, DEFAULT_CLIENT_PORT};
+use sovereign_cli_shared::urls::{v1_models_url, DEFAULT_CLIENT_PORT};
 
 /// Default chat request timeout. Phase 1 extract on a 27B-Q6 model
 /// emitting up to 16k tokens of structured JSON can run 5–15 minutes

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Integration tests for the `/internal/gossip` push-pull handler.
 //!
 //! Verifies that two `AppState` instances on the same mesh (same

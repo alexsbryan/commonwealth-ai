@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `commonwealth-state` — distributed KV store for mesh applications.
 //!
 //! Provides `MeshStore` (SQLite-backed, LWW-merged) and `RetentionGc`.

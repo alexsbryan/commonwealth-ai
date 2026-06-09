@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Visual position on the test-scale progression: 50 → 200 → 1000 →
   // full. The agent climbs the ladder during a session; the partner

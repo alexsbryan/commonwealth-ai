@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `/v1/responses` adapter integration — wire-format translation
 //! over the existing `/v1/chat/completions` pipeline.
 //!

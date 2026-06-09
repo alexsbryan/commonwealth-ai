@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign alignment` — operator-facing migration + status entry
 //! point for the mesh-replicated alignment workspace recipe.
 //!
@@ -32,11 +33,11 @@ const CORPUS_ID: &str = "alignment";
 
 pub async fn run_alignment(args: &[String]) -> i32 {
     if args.is_empty() {
-        crate::util::help::print(&HELP);
+        sovereign_cli_shared::help::print(&HELP);
         return 1;
     }
     if matches!(args[0].as_str(), "--help" | "-h" | "help") {
-        crate::util::help::print(&HELP);
+        sovereign_cli_shared::help::print(&HELP);
         return 0;
     }
     match args[0].as_str() {
@@ -44,18 +45,18 @@ pub async fn run_alignment(args: &[String]) -> i32 {
         "status" => cmd_status(&args[1..]).await,
         other => {
             eprintln!("Unknown alignment subcommand: {other}");
-            crate::util::help::print(&HELP);
+            sovereign_cli_shared::help::print(&HELP);
             1
         }
     }
 }
 
-const HELP: crate::util::help::Help = crate::util::help::Help {
+const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign alignment",
     summary: "Manage the mesh-replicated alignment workspace (~/.claude/ + notes.db).",
     sections: &[
-        crate::util::help::HelpSection::Usage("sovereign alignment <subcommand> [args]"),
-        crate::util::help::HelpSection::Subcommands(&[
+        sovereign_cli_shared::help::HelpSection::Usage("sovereign alignment <subcommand> [args]"),
+        sovereign_cli_shared::help::HelpSection::Subcommands(&[
             (
                 "migrate [--dry-run]",
                 "Back up local state, kick off the alignment corpus ingest, \
@@ -67,7 +68,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
                 "Show local alignment scope (files + notes) and ingest state.",
             ),
         ]),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Notes(
             "Sync mechanics: this command lands the LOCAL state on the alignment \
              corpus. Cross-machine convergence happens via the daemon's existing \
              mesh hooks (auto_recover, index_transfer); the projector materializes \
@@ -147,7 +148,7 @@ async fn cmd_migrate(args: &[String]) -> i32 {
 
     println!("→ submitting corpus install for `{CORPUS_ID}`");
     let install_code =
-        crate::mesh_cmd::run_corpus(&["install".to_string(), CORPUS_ID.to_string()]).await;
+        crate::corpus_cmd::run_corpus(&["install".to_string(), CORPUS_ID.to_string()]).await;
     if install_code != 0 {
         eprintln!(
             "corpus install returned exit code {install_code}; backup at {} \
@@ -360,7 +361,7 @@ fn make_backup(home: &Path, scope: &AlignmentScope) -> Result<PathBuf, String> {
 }
 
 fn mesh_indexes_dir() -> Option<PathBuf> {
-    Some(crate::util::dirs::mesh_data_dir().join("indexes"))
+    Some(sovereign_cli_shared::dirs::mesh_data_dir().join("indexes"))
 }
 
 fn format_unix_secs(secs: i64) -> String {

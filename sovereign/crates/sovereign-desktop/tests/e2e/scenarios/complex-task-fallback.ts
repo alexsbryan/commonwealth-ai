@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import type { Scenario } from "../fixtures/scenario-player";
 
 // Complex-task-fallback: the desktop bridge's send_message_stream has

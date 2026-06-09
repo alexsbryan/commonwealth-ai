@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Generic enrichment progress + persistence shared across every
 //! corpus enrichment pipeline.
 //!

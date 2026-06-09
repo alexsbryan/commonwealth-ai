@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Sample-based statistics for a corpus's extracted JSONL file.
 //!
 //! The Wikipedia resume-path UX needs a completion percent that's

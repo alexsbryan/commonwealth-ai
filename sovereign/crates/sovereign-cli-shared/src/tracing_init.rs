@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tracing subscriber bootstrap. Three match arms in `main.rs` (mesh /
 //! setup / daemon) each built the same subscriber with only the
 //! `default_filter` string differing — same `.with_target(false)`,

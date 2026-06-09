@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Router-level middleware that refuses non-loopback callers.
 //!
 //! The admin surfaces on `:9741` (`/v1/mesh/*`, `/v1/admin/*`,

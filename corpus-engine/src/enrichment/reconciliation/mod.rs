@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Multi-origin entity reconciliation primitive (Phase 4 of the
 //! architecture-over-Enron push).
 //!

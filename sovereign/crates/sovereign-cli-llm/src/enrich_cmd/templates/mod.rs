@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Built-in philosophy templates for `sovereign enrich init
 //! --from-template <name>`.
 //!

@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!--
   ToastHost — renders `toastStore.current` as a fixed-position
   notification at the bottom-center of the app. Mounted once at the

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-atom articulation classifier — Phase 0 of the meta-atlas.
 //!
 //! Rule-based deterministic classifier. Reads atom shape + chunk

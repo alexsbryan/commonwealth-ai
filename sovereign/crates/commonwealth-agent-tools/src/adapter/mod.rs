@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-agent translation layer. An adapter knows how to:
 //!
 //! 1. Build the tool descriptors the agent presents to the model

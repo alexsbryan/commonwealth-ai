@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Conversation entity co-occurrence graph + Personalized PageRank.
 //!
 //! Spec: `sovereign/docs/specs/CONV_TIERED_PORT.md` §"T2 via reused

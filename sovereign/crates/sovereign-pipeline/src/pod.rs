@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pod-lifecycle wrappers for `vastai`.
 //!
 //! The pipeline crate stays a thin shell over the upstream `vastai`

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Pure-reducer tests for the enrichProgress store.
 //
 // The Tauri `listen` side effect isn't exercised here — we test

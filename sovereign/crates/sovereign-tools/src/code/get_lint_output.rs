@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `get_lint_output` — retrieve the full raw output of a lint run.
 //!
 //! `lint_status` truncates error output at 500 characters. Call this when

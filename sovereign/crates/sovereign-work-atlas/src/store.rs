@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Typed facade over [`commonwealth_state::MeshStore`].
 //!
 //! Hides the bytes/app_id/serde dance from callers. Every mutating

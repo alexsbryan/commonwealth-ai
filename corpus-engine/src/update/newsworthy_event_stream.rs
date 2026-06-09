@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Wikimedia EventStreams subscription for push-based article freshness.
 //!
 //! Subscribes to `https://stream.wikimedia.org/v2/stream/recentchange`

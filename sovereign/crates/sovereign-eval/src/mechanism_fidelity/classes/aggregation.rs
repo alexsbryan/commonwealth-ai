@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Aggregation (counting under a threshold): a second **synthetic** class,
 //! proving the registry generalizes past the wealth-tax mechanism to a
 //! different reasoning shape — and that a class can have an *exact* oracle

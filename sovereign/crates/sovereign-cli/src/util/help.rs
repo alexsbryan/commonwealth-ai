@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared help formatter. Implementation moved to
 //! `sovereign-cli-shared::help` so sibling binaries (atos, future
 //! meta) can render the same `--help` blocks without depending on

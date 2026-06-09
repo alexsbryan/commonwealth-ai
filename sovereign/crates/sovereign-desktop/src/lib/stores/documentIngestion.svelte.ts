@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Runed singleton for `document:progress` Tauri events — keyed by
 // `asset_id`. Mirrors the shape of `corpusProgressStore` (see
 // corpusProgress.svelte.ts); see that file's comment for the

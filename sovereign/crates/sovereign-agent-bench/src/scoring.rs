@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-dimension → per-problem → grand-total aggregation, plus
 //! regression delta against a prior `BenchReport`.
 

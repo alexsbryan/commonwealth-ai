@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `AttachedDocumentSearchTool` — first-class Tool wrapping the
 //! existing RAG retrieval against a document attached to the current
 //! conversation.

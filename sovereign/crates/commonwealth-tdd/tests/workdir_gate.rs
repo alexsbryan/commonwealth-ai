@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! §7.1 Workdir-gate end-to-end tests. The gate is the structural
 //! safety boundary the whole solver takes a typed token through —
 //! these pin the refusal classes and the bypass scope of `force`.

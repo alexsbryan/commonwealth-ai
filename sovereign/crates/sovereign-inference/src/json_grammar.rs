@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! JSON Schema → GBNF (GGML BNF) grammar translator.
 //!
 //! We feed the result to `LlamaSampler::grammar`, which uses

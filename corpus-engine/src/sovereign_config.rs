@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Parser for `.sovereign/sovereign.toml` — per-project watcher configuration.
 //!
 //! The file is optional. [`SovereignConfig::load_or_default`] never fails —

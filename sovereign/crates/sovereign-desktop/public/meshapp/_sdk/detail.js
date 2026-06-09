@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // MeshApp SDK — cited drill-down: the glassbox primitives.
 //
 // Every relationship in an explorer dereferences to the source document it was

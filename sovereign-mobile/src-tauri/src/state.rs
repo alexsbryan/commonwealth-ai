@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared application state managed by Tauri. Holds the SQLite cache
 //! connection, the keychain-backed credential store, and helpers to
 //! resolve the active host into an authed [`ApiClient`].

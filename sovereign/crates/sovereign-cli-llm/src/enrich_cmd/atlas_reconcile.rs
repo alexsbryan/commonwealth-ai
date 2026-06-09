@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich reconcile <corpus>` — Phase 4 multi-origin entity
 //! reconciliation as a PRODUCTION pipeline step.
 //!
@@ -27,7 +28,7 @@ use corpus_engine::enrichment::reconciliation::{
 use serde::Serialize;
 
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich reconcile",

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Extractor for the `wikimedia/structured-wikipedia` HuggingFace dataset,
 //! which ships as a ZIP archive containing a JSONL file.
 //!

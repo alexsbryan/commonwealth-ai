@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Bridge between [`crate::state::AppState`] and the
 //! `corpus_engine::YieldHook` trait.
 //!

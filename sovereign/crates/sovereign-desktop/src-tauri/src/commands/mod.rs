@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Façade-level imports: only what the retained Response Types / helpers /
 // test module use. Each concern submodule carries its own import block
 // (over-import is fine there — see the submodule preambles).

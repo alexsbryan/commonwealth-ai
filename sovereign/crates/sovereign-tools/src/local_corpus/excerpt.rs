@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pick 3 representative chunks from a freshly-ingested corpus to
 //! display on the completion screen (spec §5.4).
 //!

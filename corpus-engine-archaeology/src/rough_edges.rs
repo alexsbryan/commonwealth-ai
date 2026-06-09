@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Internal contradiction + rough-edge detection over a code corpus.
 //!
 //! Two complementary signals:

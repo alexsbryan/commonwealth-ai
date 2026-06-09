@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Map the server's reduced provenance + citations into the `metadata`
 //! blob shape the shared `@sovereign/chat-ui` `RoutingMeta` /
 //! `SourceAttribution` components expect — the one place the spec's

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Curator stage — the Fast slot reduces a ~20-chunk retriever
 //! candidate set into a 4–8-chunk [`CuratedPackage`] with a
 //! per-section skeleton, a token budget, and a sufficiency verdict.

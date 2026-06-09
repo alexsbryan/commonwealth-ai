@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `RouterCircuitChecker` — monitors the LLM router circuit breaker.
 //!
 //! When the primary backend accumulates ≥ 3 consecutive failures, `HybridProvider`

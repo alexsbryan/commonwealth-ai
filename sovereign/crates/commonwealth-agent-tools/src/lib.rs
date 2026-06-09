@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Commonwealth canonical tool layer.
 //!
 //! Essential primitives that all agent runners (pi, codex, opencode,

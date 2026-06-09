@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Phase 6 retirement tests.
 //!
 //! The CLI refactor's Phase 6 retires the explicit "founding" /

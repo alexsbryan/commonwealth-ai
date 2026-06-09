@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tavily real-network e2e test — env-gated, silent on CI.
 //!
 //! Per ARCH §12.4 "Tests must not require GPU, network, or real

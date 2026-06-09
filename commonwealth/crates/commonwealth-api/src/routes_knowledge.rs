@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `/v1/knowledge/search` — the mesh-aware knowledge endpoint.
 //!
 //! This is the point where a Joiner's local Sovereign runtime (via

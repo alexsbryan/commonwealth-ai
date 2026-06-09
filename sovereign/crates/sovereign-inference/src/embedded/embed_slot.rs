@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Auto-split from the former 9669-line `embedded.rs` (PR5b). One slot /
 //! concern per file; re-exported flat through `embedded/mod.rs` so every
 //! `crate::embedded::<Item>` path stays valid.

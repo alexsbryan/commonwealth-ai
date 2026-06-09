@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-project state machine for the daemon's reindexer + watchers.
 //!
 //! `ProjectState` holds the live, read-mostly state that

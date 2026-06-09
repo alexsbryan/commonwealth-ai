@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign atlas stats` — Move 6 P8 observability.
 //!
 //! Per-corpus inventory: atom count, doc count (from

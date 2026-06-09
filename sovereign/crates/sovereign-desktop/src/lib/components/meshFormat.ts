@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Pure mesh display/format helpers extracted from MeshSettings.svelte
 // (§3.3 component decomposition): invite-link relay toggling, byte/token/
 // GB formatting, and the relay-kind + member-status label maps. No runes,

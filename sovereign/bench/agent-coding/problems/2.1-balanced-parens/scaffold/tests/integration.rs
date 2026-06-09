@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Smoke tests visible to the agent during development.
 //!
 //! These three cases are a SUBSET of the held-out grading suite. The

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Existing-test regression check (seam #3).
 //!
 //! For a feature added inside a real codebase (commonwealth-shape

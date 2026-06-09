@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   import { lcWatchConfirmDeletion, lcWatchResume } from "../../api";
   import type { WatchedFolderListEntry } from "../../types";

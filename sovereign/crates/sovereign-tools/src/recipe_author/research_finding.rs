@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `ResearchFindingTool` — durably commit a confirmed fact pulled
 //! from the network so the next session (or a checkpoint restore)
 //! doesn't have to re-discover it.

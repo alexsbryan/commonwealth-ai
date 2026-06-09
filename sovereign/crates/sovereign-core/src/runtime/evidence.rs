@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Evidence-shape signals and synthesis routing.
 //!
 //! Two concerns:

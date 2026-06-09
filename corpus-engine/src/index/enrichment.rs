@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Enrichment data access — embedding streams, bulk updates, field skeleton I/O.
 
 use std::collections::HashMap;

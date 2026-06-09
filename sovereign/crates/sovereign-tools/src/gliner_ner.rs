@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-chunk named entity recognition via GLiNER (pure Rust through
 //! `gline-rs`).
 //!

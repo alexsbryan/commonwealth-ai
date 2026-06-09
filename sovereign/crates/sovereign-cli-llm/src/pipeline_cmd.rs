@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign pipeline …` — generic ingestion-pipeline driver.
 //!
 //! Surface:
@@ -20,7 +21,7 @@ use sovereign_pipeline::driver::{DriverConfig, Shutdown};
 use sovereign_pipeline::{ledger, pod, recipe::Recipe, run_recipe, status, worklist::Worklist};
 use tokio::sync::Mutex;
 
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign pipeline",

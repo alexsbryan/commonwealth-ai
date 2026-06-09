@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Dogfood tests for the runed `insightStore` module. Two purposes:
 //
 // 1. Exercise the Vitest + jsdom + Svelte 5 $state setup on a runed

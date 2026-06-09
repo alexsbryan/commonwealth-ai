@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 fn main() {
     // The corpus catalog used to be loaded from a build-time
     // `data/corpora.toml` bundled via `include_str!`, but that file was

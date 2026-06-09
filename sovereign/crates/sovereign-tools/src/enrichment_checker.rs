@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `EnrichmentChecker` — health-checks field model enrichment for every corpus.
 //!
 //! Checks for enrichment completeness based on the `field_skeleton.json`

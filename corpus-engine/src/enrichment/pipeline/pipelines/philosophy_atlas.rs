@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Philosophy atlas pipeline — Phase C Step 7 of the v2.1 rollout.
 //!
 //! Parallel to [`super::literary_atlas::LiteraryAtlasPipeline`]:

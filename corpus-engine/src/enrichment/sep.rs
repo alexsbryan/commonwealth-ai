@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Stanford Encyclopedia of Philosophy parquet reader — extracts
 //! one article's paragraphs by category slug and groups them into
 //! numbered sections the atlas enrichment pipeline can consume.

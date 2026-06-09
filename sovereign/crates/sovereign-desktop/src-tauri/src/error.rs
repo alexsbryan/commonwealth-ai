@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `DesktopError` — the structured error for Tauri command handlers
 //! (§2.1 typed dispatch, §9 glassbox). It replaces the ad-hoc
 //! `.map_err(|e| e.to_string())` pattern that left ~295 handlers

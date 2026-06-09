@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! ATOS middleware framework — the spine of the M4 "sovereign-coder is
 //! the only surface" design.
 //!

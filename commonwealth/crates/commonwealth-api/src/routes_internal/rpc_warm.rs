@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Worker side of distributed-inference auto-warm orchestration.
 //!
 //! `POST /internal/rpc-warm` — a host that is about to distribute a large

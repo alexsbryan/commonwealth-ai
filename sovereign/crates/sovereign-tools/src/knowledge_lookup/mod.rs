@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `knowledge_lookup` — Tool-Mastery Framework Phase 5.
 //!
 //! A unified evidence front-door that collapses corpus search,

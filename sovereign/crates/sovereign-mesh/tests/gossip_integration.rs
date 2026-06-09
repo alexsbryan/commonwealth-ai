@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end gossip convergence test.
 //!
 //! Binds two real `commonwealth_api::internal_router` instances on

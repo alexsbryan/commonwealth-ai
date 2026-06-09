@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Ask move — non-streaming (`handle_ask_move_turn`) and streaming
 //! (`handle_ask_move_stream`) variants of the "deliberate, ask for
 //! clarification" path. Fires when classification confidence is too

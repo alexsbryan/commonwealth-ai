@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Smoke test for the Vitest + jsdom + jest-dom setup. Kept tiny — if this
 // fails the whole test runner is broken and there's no point investigating
 // feature-level tests.

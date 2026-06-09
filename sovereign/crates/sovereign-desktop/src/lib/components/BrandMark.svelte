@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Sovereign brand mark — "Crinkled Gold" asymmetric pentagon.
   // Source of truth is `src-tauri/icons/icon-source.svg`; this

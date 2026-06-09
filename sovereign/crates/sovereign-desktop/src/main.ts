@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // IBM Plex Sans Variable — chrome and outer-work face (ss03+ss05+calt at weight 420)
 import "@fontsource-variable/ibm-plex-sans";
 // Source Serif 4 Variable with optical-size axis — body and inner-work face (opsz 14, weight 380)

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign plan` — top-level plan-related commands.
 //!
 //! Two surfaces:

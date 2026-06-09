@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Pending engine-gap escalations. Each request is a JSON file in
   // the maintainer inbox; the card shows a one-line summary so the

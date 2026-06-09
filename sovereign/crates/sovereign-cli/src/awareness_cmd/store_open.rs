@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `.sovereign/` store openers shared across awareness subcommands.
 //!
 //! Mirrors `atos_cmd/stores.rs` but resolves *user-level* paths

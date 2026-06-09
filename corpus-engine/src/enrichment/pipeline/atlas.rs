@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atlas schema — v2.1 "unified atlas" atom and edge types.
 //!
 //! This module is the load-bearing vocabulary for the v2 enrichment

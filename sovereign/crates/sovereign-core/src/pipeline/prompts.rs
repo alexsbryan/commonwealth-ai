@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! System prompts for the team-pipeline stages, factored out so
 //! the curator-unit / presenter-delta `voice_eval` harness modes
 //! can target the same constants the runtime does.

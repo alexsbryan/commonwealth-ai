@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Singleton wrapper around `approvalMachine`. Exposed as a runed
 // module so every component (App.svelte, ApprovalCard, any future
 // consumer) subscribes to the same actor without prop drilling.

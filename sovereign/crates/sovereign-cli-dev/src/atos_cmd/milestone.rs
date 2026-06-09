@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Milestone lifecycle: `start-milestone`, `end-milestone`, `next`,
 //! plus the auto-redteam spawn and the subprocess driver.
 //!

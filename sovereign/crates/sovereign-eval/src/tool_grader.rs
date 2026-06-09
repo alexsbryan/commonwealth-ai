@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Replay-based per-call tool grader (seam #2).
 //!
 //! For each tool-call event captured in the manifest, re-issue the

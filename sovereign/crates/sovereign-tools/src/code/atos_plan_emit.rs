@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `atos_plan_emit` — structured plan emission for the ATOS Runner.
 //!
 //! ## Why this tool exists

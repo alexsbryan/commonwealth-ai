@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Held-out integration tests for problem 1.3 — `lower_bound`.
 
 use lower_bound::lower_bound;

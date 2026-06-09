@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Minimal app-wide toast store.
 //
 // Scope: ephemeral, non-blocking notifications that need to reach the

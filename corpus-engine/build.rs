@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Build-time vendoring of the canonical `sovereign-recipes/` tree into
 //! `OUT_DIR`.
 //!

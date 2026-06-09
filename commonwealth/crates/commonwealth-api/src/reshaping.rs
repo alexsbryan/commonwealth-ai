@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Synthetic file-I/O tool reshaping — the codex catalog-augmentation
 //! layer extracted from `routes_responses.rs` (PR6).
 //!

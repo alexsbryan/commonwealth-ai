@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Enron identity & counterparty explorer — composed from the MeshApp SDK.
 //
 // All host access is the permission-gated `window.meshApp` bridge (no

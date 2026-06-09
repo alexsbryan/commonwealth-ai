@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-section LLM-extraction cache — Move 6 Phase 4 primitive.
 //!
 //! Caches Phase 1 LLM extraction output (a `SectionExtraction` JSON

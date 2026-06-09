@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Search-related text + config assets, loaded at compile time per
 //! ARCH §6.2 (data vs. program). The strings + tables here are
 //! operator-tunable inputs that change without code changes —

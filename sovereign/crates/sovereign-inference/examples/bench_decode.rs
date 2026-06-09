@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Microbenchmark for the chat-slot decode path.
 //!
 //! Stands up a raw llama.cpp context (bypassing `ModelSlot`) with a

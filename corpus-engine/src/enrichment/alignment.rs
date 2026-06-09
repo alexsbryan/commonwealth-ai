@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Skeleton ↔ cluster alignment.
 //!
 //! Bridges the skeleton (top-down, authoritative) and the clusters

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Store-opening helpers used by every `sovereign atos` subcommand.
 //!
 //! The CLI deliberately reuses the same `.sovereign/` layout as

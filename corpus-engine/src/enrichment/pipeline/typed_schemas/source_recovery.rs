@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Source-recovery prompt fragments shared across typed-extension
 //! consumers.
 //!

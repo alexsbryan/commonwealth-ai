@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // ApprovalCard smoke tests. The card reads from the `approvalStore`
 // singleton; driving the store with events exercises the real
 // machine, the real subscribe path, and the Svelte rendering glue

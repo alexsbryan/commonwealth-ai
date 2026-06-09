@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Expand an already-installed corpus by relaxing its filter scope.
 //!
 //! `expand_corpus` is the in-place growth path for layered corpora —

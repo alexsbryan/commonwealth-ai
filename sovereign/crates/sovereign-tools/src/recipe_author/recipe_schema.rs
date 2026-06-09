@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! JSON Schema for the recipe TOML data model.
 //!
 //! Returned by `RecipeWriteStructuredTool::descriptor()` as the

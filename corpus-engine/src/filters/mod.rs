@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Document-level filters that sit between extraction and chunking.
 //!
 //! A `DocumentFilter` accepts or rejects each `ExtractedDoc` produced by

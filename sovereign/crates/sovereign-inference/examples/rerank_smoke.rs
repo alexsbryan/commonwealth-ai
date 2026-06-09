@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Smoke test: load jina-reranker-v3-Q6_K.gguf via StandaloneReranker,
 //! score a handful of (query, doc) pairs, print the scores. Run via:
 //!

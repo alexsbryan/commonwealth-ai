@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end exercise of the architecture-over-Enron substrate
 //! (Phases 1-4) on a synthetic mini-corpus.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Red-phase task — generate a single failing test capturing a new
 //! behavior. Sets the `GenerateOneFailing` polarity.
 

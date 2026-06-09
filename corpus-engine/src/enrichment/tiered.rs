@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Conversation tiered-retrieval enrichment runner (Phase B port).
 //!
 //! Spec: `sovereign/docs/specs/CONV_TIERED_PORT.md`.

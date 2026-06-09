@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Inference enrichment pass for `sovereign project plan`.
 //!
 //! `plan_composer.rs` produces a deterministic structural skeleton:

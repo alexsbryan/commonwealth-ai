@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { test, expect, bootToChat } from "../fixtures/test-base";
 
 // Placeholder narration regression test. The 400ms threshold and the

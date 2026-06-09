@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Entity / Relationship / PatternFinding data model for the
 //! investigation pipeline.
 //!

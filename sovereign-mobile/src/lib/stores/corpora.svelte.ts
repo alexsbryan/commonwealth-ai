@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Loaded CORPUS_REFs for the active host, used to badge a cited source
 // as private-to-this-host (acceptance §7). Refreshed by App on load /
 // reconnect; reads fall back to cache offline.

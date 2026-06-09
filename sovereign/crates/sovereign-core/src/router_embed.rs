@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Embedding-based intent classifier — k-NN over a hand-authored
 //! exemplar TOML, k=1 (max-similarity per intent).
 //!

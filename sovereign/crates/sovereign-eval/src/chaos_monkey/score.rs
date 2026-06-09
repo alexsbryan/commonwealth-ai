@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The chaos-monkey scorer: **two independent red-lines, no blended score.**
 //!
 //! A situated agent earns trust on two axes that must *both* hold, and that

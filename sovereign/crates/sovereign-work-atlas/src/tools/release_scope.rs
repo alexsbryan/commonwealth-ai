@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `release_scope` — drop a Claim. Idempotent: releasing twice is
 //! a no-op. Spec §3 forbids history — once released, the claim is
 //! gone.

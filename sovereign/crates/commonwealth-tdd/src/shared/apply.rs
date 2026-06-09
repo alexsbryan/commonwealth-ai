@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Apply a [`ParsedResponse`] to a workdir via the shared executor.
 //!
 //! Routes each [`EditAction`] variant to its matching

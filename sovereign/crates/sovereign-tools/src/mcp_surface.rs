@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared MCP-server surface contract.
 //!
 //! Sovereign exposes its tool registry via two HTTP entry points:

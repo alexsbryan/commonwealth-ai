@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Generic HTTP API acquirer.
 //!
 //! Replaces the never-implemented `api_paginated` stub with a real

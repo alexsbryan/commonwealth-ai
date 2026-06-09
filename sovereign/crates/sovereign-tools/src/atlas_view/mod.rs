@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atlas inspection surface for sovereign-desktop and the CLI.
 //!
 //! The atlas pipeline (corpus-engine) writes typed atom + edge files

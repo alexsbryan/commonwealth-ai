@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Disk-backed reader for atlas inspection.
 //!
 //! `FileAtlasReader` is the *only* path the desktop atlas-inspector

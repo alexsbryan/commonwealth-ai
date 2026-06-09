@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Unit tests for routingMachine. Drive the actor directly — no
 // DOM, no Svelte, no singleton. Mirrors approval.machine.test.ts.
 import { describe, it, expect, vi } from "vitest";

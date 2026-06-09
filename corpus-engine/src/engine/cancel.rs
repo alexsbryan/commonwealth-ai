@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Cooperative cancellation for long-running ingest tasks.
 //!
 //! The ingest loop is CPU-bound and holds a LanceDB writer open for hours

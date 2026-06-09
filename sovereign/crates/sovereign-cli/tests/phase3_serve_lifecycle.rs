@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Phase 3 — `sovereign init` auto-spawns `serve --background`.
 //!
 //! End-to-end checks that don't require a real index. The full

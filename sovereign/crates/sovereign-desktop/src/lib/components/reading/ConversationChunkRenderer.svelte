@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!--
   ConversationChunkRenderer — chosen by ReadingSurface when the cited
   chunk's `corpus_id == "conversation-history"`. Renders the chunk's

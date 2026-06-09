@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Attached-doc dispatch — the ReasonWithTools loop over a single
 //! attached document. Iterates inference + tool calls (search/triangulate)
 //! against the DocumentAsset until the model issues a `final` or hits

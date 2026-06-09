@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end test of `ThroughputObservedStream::Drop` →
 //! `InferenceReceived` ledger emission on a peer-routed stream.
 //!

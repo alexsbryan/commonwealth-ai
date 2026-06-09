@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Mesh join handshake — two discovery paths.
 //!
 //! Replaces the previous placeholder in `EmbeddedDaemon::join_mesh`

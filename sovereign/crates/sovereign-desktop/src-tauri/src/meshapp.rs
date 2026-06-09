@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! MeshApp bridge — host-side authorization model for sandboxed mesh-app
 //! webviews (e.g. the SF land-value-tax explorer).
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Run a shell command in a workdir with timeout + signal handling,
 //! returning parsed test results.
 

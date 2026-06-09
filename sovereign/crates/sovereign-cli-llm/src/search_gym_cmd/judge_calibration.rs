@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Judge calibration — proves the FastInferenceJudge agrees with
 //! hand-labeled ground truth before any harness result depends on
 //! its verdicts.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `acquire_source` / `make_extractor` / `make_chunker` — extracted out
 //! of `engine::ingest`.
 //!

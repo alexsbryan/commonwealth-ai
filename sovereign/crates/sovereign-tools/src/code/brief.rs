@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Brief assembler — renders a token-budgeted markdown brief for a
 //! given working set.
 //!

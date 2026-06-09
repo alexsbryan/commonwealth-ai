@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Memorable two-word node-name generator (e.g. "mac-peer",
 //! "CrispFalcon"). Used to give first-launch desktop users a default
 //! `node_name` better than the bare system hostname so they have a

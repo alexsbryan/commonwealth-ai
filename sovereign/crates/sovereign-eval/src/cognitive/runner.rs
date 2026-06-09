@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Calls the daemon's `/v1/chat/completions` endpoint once per item.
 //!
 //! Mirrors the transport shape from `crate::judge::call_chat_completions`:

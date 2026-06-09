@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! HTTP routes for the watched-folder reconciliation subsystem.
 //!
 //! Mounted onto the daemon's loopback-only client router via

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { test, expect, bootToChat } from "../fixtures/test-base";
 
 // Golden path. If this test ever fails, every other chat test is moot —

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Relational digest — one of the two new digest blocks added by the
 //! Relational + Strategic Awareness changeset (requirements §4.2).
 //!

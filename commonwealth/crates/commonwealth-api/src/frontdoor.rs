@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Frontdoor — harness-protocol → model-native language normalizer.
 //!
 //! Coding harnesses (codex, opencode, the OpenAI agents SDK, …) speak

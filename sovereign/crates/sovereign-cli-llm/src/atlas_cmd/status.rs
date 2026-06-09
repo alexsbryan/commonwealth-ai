@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign atlas status` — per-corpus atlas readiness display.
 //!
 //! Phase D1 — surfaces what `/internal/atlas/status` returns: atlas
@@ -11,7 +12,7 @@ use std::path::PathBuf;
 
 use sovereign_tools::atlas_status::{compute_atlas_status, status_for_corpus};
 
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign atlas status",

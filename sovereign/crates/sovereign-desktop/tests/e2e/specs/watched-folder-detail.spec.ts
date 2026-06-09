@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { test, expect, bootToChat } from "../fixtures/test-base";
 
 // Folder-ingest v1 §3.7 — glassbox folder-detail surface.

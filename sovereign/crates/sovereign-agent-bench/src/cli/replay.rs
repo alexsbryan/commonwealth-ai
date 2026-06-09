@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign agent-bench replay` — re-send a captured chat-completion
 //! request with optional overrides. The mechanism that settles
 //! "is it the prompt or the model?" debates without rerunning the

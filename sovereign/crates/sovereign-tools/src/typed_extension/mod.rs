@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Typed-extension LLM pass over RAPTOR cluster summaries.
 //!
 //! Spec: `sovereign/docs/specs/TYPED_EXTENSION_PASS.md`.

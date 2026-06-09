@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atlas-derived landscape digest for the `conversation-history`
 //! view.
 //!

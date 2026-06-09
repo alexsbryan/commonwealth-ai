@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign corpus scrub` — surface classified entities from a
 //! corpus's atlas + apply an EntityMap to bench TOMLs.
 //!
@@ -30,7 +31,7 @@ use std::path::{Path, PathBuf};
 use corpus_engine::pii::{scrub_pii, EntityMap};
 use serde::{Deserialize, Serialize};
 
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign corpus scrub",

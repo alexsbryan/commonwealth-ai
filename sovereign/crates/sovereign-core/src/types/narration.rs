@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Split from the monolithic types.rs (ARCH §3.2); re-exported by types/mod.rs,
 //! so every sovereign_core::types::* import path is unchanged (behaviour-preserving).
 #[allow(unused_imports)]

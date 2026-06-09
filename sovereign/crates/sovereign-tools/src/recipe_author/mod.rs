@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Agent-callable tools for recipe authoring.
 //!
 //! Lets the chat LLM run the same author → validate → test → fix

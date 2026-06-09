@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Auto-witness pipeline — copy held-out fixtures into the workdir,
 //! run `verify_cmd`, parse the test-runner output, score a pass
 //! fraction. Per-language parsers live in `test_result_parser.rs`.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! ATOS shared utilities extracted from `atos_cmd/run.rs`.
 //!
 //! Pure validators and shell runners used by both the CLI

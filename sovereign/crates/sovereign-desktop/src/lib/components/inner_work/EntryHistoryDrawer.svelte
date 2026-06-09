@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   /// Sliding drawer surfacing past inner-work entries and debug
   /// actions for today's session. Slides in from the left when

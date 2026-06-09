@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // MeshSettings smoke tests focused on the Phase A1 paste-link input.
 // Heavy lifting (mesh creation, state polling, diagnostics) is covered
 // elsewhere; these tests verify the dev-mode bypass for the OS

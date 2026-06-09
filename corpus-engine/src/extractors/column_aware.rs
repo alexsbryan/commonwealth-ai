@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Column-aware extractor (Phase 4 of the architecture-over-Enron push).
 //!
 //! Reads an [`Atom::Asset`](crate::enrichment::atlas::atoms::Asset)

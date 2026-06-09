@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Cross-corpus edge detection — Phase C Step 8.
 //!
 //! Connects atoms across two (or more) corpora's atlases. An atom

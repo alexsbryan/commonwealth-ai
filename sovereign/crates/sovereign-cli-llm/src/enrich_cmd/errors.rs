@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich errors <corpus> [--phase P] [--kind K] [--json]`
 //!
 //! One surface for every structured failure across every phase of a
@@ -32,8 +33,8 @@ use corpus_engine::enrichment::pipeline::{
 
 use super::config::EnrichConfig;
 use super::paths;
-use crate::util::dirs::sovereign_indexes;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::dirs::sovereign_indexes;
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich errors",

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end test of the recipe-authoring tool loop.
 //!
 //! Drives the five tools in the order an LLM would call them:

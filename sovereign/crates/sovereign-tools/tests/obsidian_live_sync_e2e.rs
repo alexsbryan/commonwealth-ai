@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end tests for the obsidian-vault live-sync wiring landed in
 //! the `Workstream A` reconciliation work.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `StorageSnapshot` integration test.
 //!
 //! `commonwealth-state::run_storage_snapshot_loop` is L1-pinned (the

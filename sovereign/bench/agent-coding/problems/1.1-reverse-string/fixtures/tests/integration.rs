@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Held-out integration tests for problem 1.1 — `reverse_string`.
 //!
 //! The witness installs this file at `tests/integration.rs` in the

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Injected via Playwright's addInitScript BEFORE the app bundle boots.
 // Impersonates `window.__TAURI_INTERNALS__` so @tauri-apps/api `invoke`
 // and `listen` resolve in-page without a real Tauri runtime.

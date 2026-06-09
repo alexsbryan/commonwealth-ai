@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign project amend` — the post-founding charter edit flow.
 //!
 //! ## Shape

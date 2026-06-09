@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign atos doctor` — one-pass health check.
 //!
 //! Prints a per-check ✓ / ✗ / ⚠ line and exits 0 iff every check is ✓

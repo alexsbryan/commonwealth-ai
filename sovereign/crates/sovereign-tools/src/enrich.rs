@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Enrichment build orchestration for non-CLI frontends.
 //!
 //! Spawns `sovereign-cli enrich <subcommand>` as a subprocess,

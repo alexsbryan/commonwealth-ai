@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `RecipeWriteTool` — create or update a recipe TOML, scoped to
 //! the local recipes directory.
 //!

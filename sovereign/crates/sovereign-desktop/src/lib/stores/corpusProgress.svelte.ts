@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Runed singleton for `corpus-progress` Tauri events — keyed by
 // `corpus_id`. The sovereign backend emits per-phase progress during
 // long-running corpus installs (download → extract → chunk → embed →

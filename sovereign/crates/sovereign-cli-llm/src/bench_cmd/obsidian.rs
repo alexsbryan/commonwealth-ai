@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign bench obsidian` — atlas correctness bench for the
 //! author's real obsidian vault.
 //!
@@ -38,7 +39,7 @@
 
 use std::path::PathBuf;
 
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 /// Default corpus id when `--corpus` is not supplied. Matches the
 /// `enrich init` example in the module doc-comment.

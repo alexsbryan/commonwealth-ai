@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! EngineeringDomain — stub for technical-tradeoff enrichment.
 //!
 //! The Stack Exchange knowledge layer (multi-answer threads from SO,

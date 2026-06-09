@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // SF Land-Value-Tax explorer — a first-party mesh app.
 //
 // Every number rendered here comes from the host's deterministic

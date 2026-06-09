@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich build` — one-shot atlas pipeline driver.
 //!
 //! Runs the full atlas flow against a corpus in the expected order
@@ -25,7 +26,7 @@ use super::{
     atlas_configuration, atlas_gaps, atlas_phase_cmd, atlas_resolve, atlas_tensions,
     atlas_tensions_classify, config::EnrichConfig, extract, paths, schema_review, seed_cmd,
 };
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 use corpus_engine::enrichment::pipeline::{
     BuildStep, EnrichProgress, EnrichProgressFn, PipelineRegistry, SeedStrategy,
 };

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tauri commands for the desktop's Atlas Inspector surface.
 //!
 //! Read-only browsing today (Phase 1): list corpora that have an

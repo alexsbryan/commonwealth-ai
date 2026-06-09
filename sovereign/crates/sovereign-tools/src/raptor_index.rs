@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Build the derived RAPTOR summary-node ANN index (`raptor_summaries.lance`)
 //! for a corpus from its `conv_raptor_nodes` SQLite rows.
 //!

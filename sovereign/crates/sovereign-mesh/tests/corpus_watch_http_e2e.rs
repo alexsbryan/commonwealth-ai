@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `/internal/corpus/watch/*` HTTP-surface integration test.
 //!
 //! Closes the biggest single bucket gap in the matrix: 14 routes,

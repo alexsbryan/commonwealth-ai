@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pure SQL → markdown report renderer.
 //!
 //! The five sections Yara reads in her epistemic report, in order:

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! POST /v1/responses — OpenAI Responses API adapter.
 //!
 //! This is a *wire-format adapter* over the existing

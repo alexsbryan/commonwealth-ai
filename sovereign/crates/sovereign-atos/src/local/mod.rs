@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Default [`crate::AtosOrchestrator`] implementation.
 //!
 //! Split per ARCH_PRINCIPLES.md §3 (soft ceiling on per-file concern

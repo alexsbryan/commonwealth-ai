@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! CommissiveQuery dispatch — persists a commitment/todo note
 //! anchored to the working-memory current_goal (or honestly anchorless
 //! when none is loaded). Fast-slot acknowledgement only; no synthesis.

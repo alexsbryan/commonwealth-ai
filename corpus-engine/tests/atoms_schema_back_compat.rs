@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atoms-file schema back-compatibility regression suite.
 //!
 //! Mirrors `recipe_back_compat.rs` for the atlas's `atoms.json`

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `ContributionEmitter` origin-stamping under concurrent load.
 //!
 //! The §10 ledger invariant says every recorded event carries

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `wikipedia-newsworthy` freshness daemon.
 //!
 //! Reads `Portal:Current_events` daily, derives a tracked set of

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Database/store construction — extracted verbatim from
 //! `bootstrap_with_progress` (§3.3). Opens (or reuses) the SQLite state
 //! store, wires the `InsightService` over the same connection, and

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Commonwealth HTTP API — the `:9741` front door.
 //!
 //! Panic-ratchet (tech-debt PR4): production code in this crate is held

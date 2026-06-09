@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared error-response builders for the sovereign-mesh HTTP surfaces.
 //!
 //! Why this exists: pre-consolidation, every route file (`admin_http`,

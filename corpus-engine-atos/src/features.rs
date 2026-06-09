@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Feature store — per-feature charters and milestones for the Agent
 //! Task Orchestration System (ATOS).
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Documentation fetcher — the production implementation of
 //! `honesty::Fetcher` that turns a URL into bytes indexed in the
 //! project's `ProjectDocsStore`.

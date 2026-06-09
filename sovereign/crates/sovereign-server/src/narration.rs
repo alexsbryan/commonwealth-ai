@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Broadcast bridge for runtime "glassbox" progress narration.
 //!
 //! The chat runtime narrates a turn's real work as it happens — routing,

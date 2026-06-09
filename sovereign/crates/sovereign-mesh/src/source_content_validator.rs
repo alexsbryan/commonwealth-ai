@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Source-content validation framework for tool-call arguments.
 //!
 //! Why this exists. The tool-envelope grammar (see

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign mobile` — opt-in serving of the phone-facing API.
 //!
 //! The capability is the headless-first sibling of the desktop app's "Mobile
@@ -24,11 +25,11 @@ use sovereign_core::setup_config::SetupConfig;
 /// Run a `mobile` subcommand. Returns the process exit code.
 pub async fn run_mobile(args: &[String]) -> i32 {
     if args.is_empty() {
-        crate::util::help::print(&HELP_MOBILE);
+        sovereign_cli_shared::help::print(&HELP_MOBILE);
         return 1;
     }
     if matches!(args[0].as_str(), "--help" | "-h" | "help") {
-        crate::util::help::print(&HELP_MOBILE);
+        sovereign_cli_shared::help::print(&HELP_MOBILE);
         return 0;
     }
 
@@ -38,7 +39,7 @@ pub async fn run_mobile(args: &[String]) -> i32 {
         "pair" => cmd_pair().await,
         other => {
             eprintln!("Unknown mobile subcommand: {other}");
-            crate::util::help::print(&HELP_MOBILE);
+            sovereign_cli_shared::help::print(&HELP_MOBILE);
             1
         }
     }
@@ -269,12 +270,12 @@ fn redact(token: &str) -> String {
     format!("{}…{}", &token[..12], &token[token.len() - 2..])
 }
 
-const HELP_MOBILE: crate::util::help::Help = crate::util::help::Help {
+const HELP_MOBILE: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign mobile",
     summary: "Serve the phone-facing API, riding on the daemon's resident models (no second load).",
     sections: &[
-        crate::util::help::HelpSection::Usage("sovereign mobile <subcommand> [args]"),
-        crate::util::help::HelpSection::Subcommands(&[
+        sovereign_cli_shared::help::HelpSection::Usage("sovereign mobile <subcommand> [args]"),
+        sovereign_cli_shared::help::HelpSection::Subcommands(&[
             (
                 "serve [--bind <addr>]",
                 "Run the mobile host in the foreground (for a server / systemd). Delegates inference to the local daemon.",
@@ -285,7 +286,7 @@ const HELP_MOBILE: crate::util::help::Help = crate::util::help::Help {
             ),
             ("pair", "Print the pairing card (address + tenant + token)"),
         ]),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Notes(
             "Requires a configured node (`sovereign setup`) and a running `sovereign daemon` \
              (the host forwards chat + embeddings to it). Settings + token live in \
              ~/.sovereign/mobile-host.toml.",

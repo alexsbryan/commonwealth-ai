@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Working notes store — persistent, searchable scratchpad for agents.
 //!
 //! Notes survive across sessions and are retrieved by full-text search,

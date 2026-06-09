@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atlas schema validation — Phase C Step 9.
 //!
 //! The protocol (spec §12): for every enriched corpus, compute a

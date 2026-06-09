@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! SCIP-based call graph with staleness tracking.
 //!
 //! Stores symbol definitions and call-site references in a SQLite

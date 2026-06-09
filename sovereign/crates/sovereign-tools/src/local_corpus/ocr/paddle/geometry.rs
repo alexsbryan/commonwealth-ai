@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Geometry for the detection→recognition handoff.
 //!
 //! For the prototype we use **axis-aligned** boxes: document text is

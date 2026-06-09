@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The reference class: relocation under a wealth tax. A thin
 //! `ReasoningClass` wrapper over the existing (test-covered) `case`,
 //! `perturb`, and `structural` modules — the science is unchanged; this

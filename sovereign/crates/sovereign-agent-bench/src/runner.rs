@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `AgentRunner` trait + run context + artifact.
 //!
 //! The seam between the bench harness and a concrete coding agent

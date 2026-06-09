@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Persistent cache for atlas Entity embeddings.
 //!
 //! The eval / runtime atlas-grounded retrieval path needs an embedding

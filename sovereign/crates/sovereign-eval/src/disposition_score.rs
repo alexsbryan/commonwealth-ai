@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Disposition-classification scorer — the classification analog of
 //! `entity_resolution_score`. Computes accuracy, macro-F1, per-category
 //! precision/recall/F1, and a confusion matrix for a per-case

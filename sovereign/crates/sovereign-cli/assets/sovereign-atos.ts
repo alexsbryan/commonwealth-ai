@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * sovereign-atos — opencode plugin that plumbs an opencode session into
  * the ATOS run ledger + digest preamble.

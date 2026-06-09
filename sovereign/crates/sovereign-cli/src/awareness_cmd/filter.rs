@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign awareness filter` — second-pass model filter that
 //! drops extracted initiatives that look like work artifacts
 //! ("Migration plan", "usage-based proposal") rather than stable,

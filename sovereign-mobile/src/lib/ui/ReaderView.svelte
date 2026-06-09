@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Glass-box reader — the mobile equivalent of the desktop reading
   // column. Tapping a citation opens the cited passage (highlighted) with

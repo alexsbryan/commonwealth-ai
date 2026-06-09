@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pure in-memory HDBSCAN over a `Vec<Vec<f32>>` — no LanceDB, no
 //! sampling, no random projection.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign drift detect` — narrative-vs-code drift in one command.
 //!
 //! Wraps the eight primitives (code index → structural atlas → for
@@ -72,8 +73,8 @@ struct DetectArgs {
 }
 
 pub async fn cmd_detect(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
-        crate::util::help::print(&HELP);
+    if sovereign_cli_shared::help::wants_help(args) {
+        sovereign_cli_shared::help::print(&HELP);
         return 0;
     }
 
@@ -81,7 +82,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         Ok(p) => p,
         Err(msg) => {
             eprintln!("error: {msg}");
-            crate::util::help::print(&HELP);
+            sovereign_cli_shared::help::print(&HELP);
             return 2;
         }
     };
@@ -1141,14 +1142,14 @@ fn parse_args(args: &[String]) -> Result<DetectArgs, String> {
     Ok(out)
 }
 
-const HELP: crate::util::help::Help = crate::util::help::Help {
+const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign drift detect",
     summary: "Generate a narrative-vs-code drift report end-to-end. Resilient: idempotent, auto-recovers from common failures, surfaces concrete remediation.",
     sections: &[
-        crate::util::help::HelpSection::Usage(
+        sovereign_cli_shared::help::HelpSection::Usage(
             "sovereign drift detect --code <path> --narrative <doc>... [--output <md>] [--project-id <id>] [--chat-model <slot>]",
         ),
-        crate::util::help::HelpSection::Flags(&[
+        sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--code <path>", "Path to the codebase to compare against. Indexed if not already cached."),
             ("--narrative <doc>", "Path to a markdown narrative document. Repeat for multiple. Each becomes its own atlas."),
             ("--output <md>", "Path for the markdown digest. Default: ./drift_report.md (JSON sidecar at <output>.json)."),
@@ -1156,13 +1157,13 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
             ("--chat-model <slot>", "Override chat-slot probe (default: fast, fallback: primary). Drift detect targets `fast` by default so it scales to operators without a heavyweight primary model; pass `--chat-model primary` for peak quality at the cost of ~5-10× LLM wall time."),
             ("--sovereign-bin <path>", "Path to the `sovereign` binary used for subprocess fan-out. Default: env SOVEREIGN_BIN, else this binary's own path."),
         ]),
-        crate::util::help::HelpSection::Examples(&[
+        sovereign_cli_shared::help::HelpSection::Examples(&[
             (
                 "sovereign drift detect --code /path/to/repo --narrative /path/to/ARCH.md --narrative /path/to/OVERVIEW.md",
                 "Compare two narrative docs against the repo. Re-runs short-circuit on cached steps.",
             ),
         ]),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_shared::help::HelpSection::Notes(
             "Idempotent: every step checks for cached output before running. Re-runs after a failure pick up where they left off. Auto-recovers from `enrich build` halting on too-short-section skips by running cluster+name+resolve directly.",
         ),
     ],

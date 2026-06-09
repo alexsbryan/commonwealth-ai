@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `TauriRoutingEventSink` — desktop implementation of the
 //! [`RoutingEventSink`](sovereign_core::traits::RoutingEventSink)
 //! trait defined in sovereign-core.

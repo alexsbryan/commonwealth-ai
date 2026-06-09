@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Crash-report bundler — the "Send report" affordance that follows
 //! a supervisor-detected daemon crash (see `crate::supervisor`).
 //!

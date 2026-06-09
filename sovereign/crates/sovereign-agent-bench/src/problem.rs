@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Problem TOML schema + loader.
 //!
 //! On-disk shape (per `~/.claude/plans/i-want-to-pickup-sorted-eagle.md`):

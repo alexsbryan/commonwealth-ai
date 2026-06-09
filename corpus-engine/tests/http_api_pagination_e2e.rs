@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end tests for the `http_api` acquirer.
 //!
 //! These exercise the full pipeline (template render → paginated

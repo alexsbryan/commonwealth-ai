@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Glassbox prompt-size accounting and configurable, conservative
 //! trimming of inbound chat-completion requests.
 //!

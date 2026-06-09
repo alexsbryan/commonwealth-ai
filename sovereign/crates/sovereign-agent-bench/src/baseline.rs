@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Baseline persistence + `latest.json` symlink retargeting.
 //!
 //! Duplicated shape of `sovereign-cli/src/bench_cmd/baselines.rs` per

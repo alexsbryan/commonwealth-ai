@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pi adapter — observer-only.
 //!
 //! Pi keeps its own tool registry (`read`, `write`, `bash`, `find`,

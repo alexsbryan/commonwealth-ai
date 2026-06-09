@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `MockAgentRunner` — deterministic runner for tests.
 //!
 //! Drops a fixed file set into the workdir, records a synthetic

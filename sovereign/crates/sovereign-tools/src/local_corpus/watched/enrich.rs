@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Folder-ingest v1 §3.3 — per-folder enrichment orchestration.
 //!
 //! Wraps `sovereign_tools::enrich::run_enrich_build` (the subprocess

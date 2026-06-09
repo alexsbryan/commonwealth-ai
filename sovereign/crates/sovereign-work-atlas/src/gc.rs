@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! TTL eviction for the work atlas.
 //!
 //! MeshStore's built-in `gc(ttl_seconds)` is app-wide and keyed on

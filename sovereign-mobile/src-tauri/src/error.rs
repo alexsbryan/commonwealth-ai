@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Crate error type. Serializes to a string so it can cross the Tauri
 //! command boundary into the WebView (`Result<T, Error>` from a
 //! `#[tauri::command]`).

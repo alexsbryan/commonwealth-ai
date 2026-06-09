@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Voice-judge wrapper — Phase 3.2 of the situated-team plan.
 //!
 //! Builds the `CompletionRequest` that runs the

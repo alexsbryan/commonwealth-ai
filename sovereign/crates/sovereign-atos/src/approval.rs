@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Spec-based feature approval — the M4 replacement for the
 //! `APPROVED:<feature-id>` magic token.
 //!

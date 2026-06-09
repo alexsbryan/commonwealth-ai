@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `join_key.secret` survives daemon restart and round-trips through
 //! `current_invite`.
 //!

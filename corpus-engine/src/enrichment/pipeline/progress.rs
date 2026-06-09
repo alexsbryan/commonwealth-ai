@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Typed progress events for the `enrich build` orchestration.
 //!
 //! Emitted by the library-level orchestrator (`build_with_progress`

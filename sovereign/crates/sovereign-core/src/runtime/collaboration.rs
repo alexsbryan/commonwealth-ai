@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Collaboration / refinement / Ask-move plumbing.
 //!
 //! Three concerns live here:

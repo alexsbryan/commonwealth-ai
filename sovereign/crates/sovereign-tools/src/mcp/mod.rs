@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! MCP (Model Context Protocol) client integration.
 //!
 //! Connects to MCP servers over stdio or HTTP+SSE transport,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Commit-message harvester (Phase 7.1).
 //!
 //! Reads non-noisy git commit messages between two HEAD positions

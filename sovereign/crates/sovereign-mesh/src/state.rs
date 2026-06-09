@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Mesh state translation — converts Commonwealth's internal state
 //! into UI-friendly representations for Sovereign's frontend.
 

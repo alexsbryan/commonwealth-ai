@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tombstone management — record, revive, expire, cap-evict.
 //!
 //! Soft-delete is implemented as a sidecar tombstone in

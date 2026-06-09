@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import type { Scenario } from "../fixtures/scenario-player";
 
 // Silent-fast: the actual dot-stare case. No narration, no doc-op, no

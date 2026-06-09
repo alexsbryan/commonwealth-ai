@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Glassbox card: did the on-disk recipe.toml parse? If not, why?
   //

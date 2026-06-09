@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Predicate evaluation + per-fixture / aggregate report.
 //!
 //! Reads a `Transcript` (from `runner.rs`) and a `Predicate` (from

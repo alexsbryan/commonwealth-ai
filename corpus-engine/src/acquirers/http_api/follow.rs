@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Document-follow logic for the HTTP API acquirer.
 //!
 //! When a recipe sets `[acquire.follow]`, the per-page response is

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Field model enrichment layer.
 //!
 //! Clusters chunk embeddings via HDBSCAN, extracts a field skeleton from

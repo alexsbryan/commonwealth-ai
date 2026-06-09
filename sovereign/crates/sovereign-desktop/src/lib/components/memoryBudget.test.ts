@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Pure-logic tests for the Models-tab memory-budget math (extracted
 // from SettingsPanel). The reactive wiring is covered by e2e; this pins
 // the device-memory tiering, the peak formula, and the thresholds.

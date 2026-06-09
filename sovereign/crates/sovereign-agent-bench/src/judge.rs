@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Single-trial LLM-judge against the local daemon.
 //!
 //! HTTP client over the OpenAI-compatible `/v1/chat/completions`

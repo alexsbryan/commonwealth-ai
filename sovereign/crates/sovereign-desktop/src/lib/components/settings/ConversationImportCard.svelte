@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // One chat source's import lifecycle UI (picker → progress → done /
   // reset-confirm / error), driven by a per-source `ImportsStore`

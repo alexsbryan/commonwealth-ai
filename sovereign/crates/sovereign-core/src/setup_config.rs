@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Persistent configuration written by `sovereign setup` and read by
 //! `sovereign daemon run`. Lives at `~/.sovereign/config.toml` —
 //! co-located with the rest of the user-scoped sovereign state (corpora,

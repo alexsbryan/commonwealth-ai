@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign newsworthy <subcommand>` — operator inspection for the
 //! `wikipedia-newsworthy` freshness daemon.
 //!

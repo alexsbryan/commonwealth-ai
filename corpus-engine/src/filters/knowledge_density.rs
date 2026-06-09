@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Knowledge-density document filter for Stack Exchange grouped Q&A.
 //!
 //! StackExchange's Stack Overflow site is moderated to systematically

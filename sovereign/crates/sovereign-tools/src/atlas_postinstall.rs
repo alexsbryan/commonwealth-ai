@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Post-install atlas hooks — build the structural atlas (and, in
 //! follow-up tracks, run triage + spawn Tier-2 extraction) the moment
 //! a corpus install finishes. No CLI handholding required.

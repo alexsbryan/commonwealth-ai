@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pure helpers for budgeting landscape-digest output.
 //!
 //! `estimate_tokens` is an upper-bound-biased BPE approximator used

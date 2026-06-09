@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Cognitive unit-test harness — the fast tier of the three-tier
 //! evaluation architecture.
 //!

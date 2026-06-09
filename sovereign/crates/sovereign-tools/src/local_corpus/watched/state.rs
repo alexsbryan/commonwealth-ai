@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-corpus state file `_watched_folder_state.json`.
 //!
 //! Holds three things the engine's manifest doesn't:

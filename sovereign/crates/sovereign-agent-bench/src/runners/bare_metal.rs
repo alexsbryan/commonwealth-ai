@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Bare-metal agent runner — single chat-completion call, no
 //! orchestration, no retry, no diversity. The minimum-ceremony
 //! baseline: emit one edit, apply, run tests, report.

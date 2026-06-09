@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Investigation enrichment pipeline.
 //!
 //! Builds a typed-relationship graph from a corpus by asking an

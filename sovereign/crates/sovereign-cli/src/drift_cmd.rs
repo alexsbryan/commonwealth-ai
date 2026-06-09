@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign drift [<feature-id>] [accept --reason "..."]` — spec drift.
 //!
 //! Merges the spec-drift surfaces:

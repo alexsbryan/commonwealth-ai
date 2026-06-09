@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Merged SCIP graph loader for code-intelligence tools.
 //!
 //! Lives here so both `sovereign-cli` (whose `tools_cmd` registry

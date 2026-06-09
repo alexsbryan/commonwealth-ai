@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Integration tests for the typed-extension pass.
 //!
 //! Drives `run_typed_extension` end-to-end with:

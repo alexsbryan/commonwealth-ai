@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich sep-ingest <category>` — scaffold a per-article
 //! SEP enrichment corpus from the cached parquet.
 //!
@@ -24,8 +25,8 @@ use std::path::PathBuf;
 
 use corpus_engine::enrichment::sep::{list_categories, load_article};
 
-use crate::util::dirs::{sovereign_indexes, sovereign_root};
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::dirs::{sovereign_indexes, sovereign_root};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich sep-ingest",

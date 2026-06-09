@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! ATOS opencode plugin distribution.
 //!
 //! The plugin source (`sovereign-atos.ts`) is the integration

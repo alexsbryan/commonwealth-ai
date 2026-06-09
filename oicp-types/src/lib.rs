@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! OICP — Open Inference Capabilities Protocol v0.3.0
 //!
 //! Canonical types per the specification at

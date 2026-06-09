@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Pure text/date helpers extracted from InnerWorkSurface.svelte (§3.3
 // component decomposition): witness-error humanization, the echo
 // similarity tokenizer, and the two date formatters. No runes, no IO —

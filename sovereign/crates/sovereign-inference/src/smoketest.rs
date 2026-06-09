@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Subprocess crash-isolation smoke test for chat-slot models.
 //!
 //! Some (model × backend) combos null-deref inside ggml's GPU

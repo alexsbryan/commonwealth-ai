@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared test helpers for sovereign-mesh integration tests.
 //!
 //! Used by tests under `tests/*.rs` via `mod common;`. Each helper

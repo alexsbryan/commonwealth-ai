@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-node admin endpoints: activity reporting, runtime model slot
 //! management, foreground-yield introspection, mesh quiesce flag,
 //! ingest budget throttle, and the join handshake.

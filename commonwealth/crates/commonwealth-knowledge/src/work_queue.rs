@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Coordinator-held work queue for pull-based corpus ingestion.
 //!
 //! Replaces the static "each peer gets a contiguous slice of the corpus"

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pattern detectors for the investigation pipeline.
 //!
 //! Three built-in detectors cover the common investigative

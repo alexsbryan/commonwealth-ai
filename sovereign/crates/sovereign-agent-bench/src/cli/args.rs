@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Argument parsing for the `run` subcommand. Hand-rolled (vs clap
 //! derive) to keep the surface contained — the CLI is small enough
 //! that adding a clap derive macro would be more boilerplate than it

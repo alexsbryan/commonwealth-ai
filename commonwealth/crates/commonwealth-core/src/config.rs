@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 use serde::{Deserialize, Serialize};
 
 /// Per-node daemon configuration. Loaded from `~/.commonwealth/config.toml`.

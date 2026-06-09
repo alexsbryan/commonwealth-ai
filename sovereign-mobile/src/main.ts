@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { mount } from "svelte";
 import App from "./App.svelte";
 // Lavender Court fonts — same fontsource bundle the desktop ships.

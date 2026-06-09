@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Multi-sequence autoregressive decode microbench.
 //!
 //! The chat slot in production is pinned to `n_seq_max = 1` because

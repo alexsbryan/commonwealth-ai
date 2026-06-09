@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Gossip-replicated per-peer view of which corpus shards each peer
 //! has finished ingesting locally.
 //!

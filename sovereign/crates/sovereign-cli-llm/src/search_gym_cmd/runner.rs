@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Fixture iteration + daemon HTTP + multi-turn tool-call loop.
 //!
 //! Responsibility split (§3.2): this file *executes* fixtures. It

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich validate <corpus> --questions <path>` — runs a
 //! QueryBattery against the corpus's atlas and prints a score table.
 //! Does NOT ask the model to generate answers; this validates the
@@ -10,7 +11,7 @@ use corpus_engine::enrichment::pipeline::{run_battery, Atlas, QueryBattery};
 use super::config::EnrichConfig;
 use super::inference_client::{probe_daemon, DaemonInferenceClient};
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich validate",

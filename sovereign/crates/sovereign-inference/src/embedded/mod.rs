@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `embedded` — local llama.cpp inference engine, split by concern (PR5b).
 //! Was a single 9669-line file; one slot / concern per submodule,
 //! re-exported flat so `crate::embedded::<Item>` paths are unchanged.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `score-diff` — diff two scored runs across all metrics.
 //!
 //! Without this, we have observations; with it, we have learning.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Worker-emitted events plus the `EventSink` indirection.
 //!
 //! Per ARCH §9 (glassbox): every non-obvious decision in the sweep

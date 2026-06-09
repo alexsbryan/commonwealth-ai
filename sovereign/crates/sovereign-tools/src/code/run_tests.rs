@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `run_tests` — trigger the test suite to run immediately.
 //!
 //! Cancels any in-progress run and starts a fresh one. Does not wait for the

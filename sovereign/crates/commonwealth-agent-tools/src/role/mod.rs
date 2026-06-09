@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Role layer — the counter-force structure on top of the
 //! canonical primitives.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { produce } from "immer";
 import type { InsightNodeDto } from "../types";
 import { listInsights, deleteInsight } from "../api";

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared infrastructure for the search-not-agent and bare-metal
 //! runners. Both runners emit a JSON action + raw code block, apply
 //! it to a workdir, and run tests; the differences (sample-and-pick

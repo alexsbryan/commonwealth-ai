@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Distributed-inference auto-warm orchestration — the HTTP layer.
 //!
 //! When a host decides to distribute a large primary across the mesh, it must

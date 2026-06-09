@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Worker-mode runner that delegates each work unit to a child
 //! `sovereign-cli daemon` process running on the same pod.
 //!

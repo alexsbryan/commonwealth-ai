@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pure composer for `sovereign project plan`.
 //!
 //! Takes a `DesignSignals` snapshot and the parsed state of

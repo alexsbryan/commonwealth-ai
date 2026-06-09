@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Public-API witness for the sharding contract.
 //!
 //! Inline tests in `src/sharding.rs` cover the per-op happy paths

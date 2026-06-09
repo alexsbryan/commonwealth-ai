@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Structural nudge generator (Phase 7.1).
 //!
 //! When the agent does work that *looks* architecturally

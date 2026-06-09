@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end test of the `wikipedia-newsworthy` watcher: a single
 //! `tick()` against a stub MediaWiki client must:
 //!

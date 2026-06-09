@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Domain registry — maps domain ID strings to factory functions.
 //!
 //! Replaces the match statement in `FieldModelEngine::from_recipe()` so

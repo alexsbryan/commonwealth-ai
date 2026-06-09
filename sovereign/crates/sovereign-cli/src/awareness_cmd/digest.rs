@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign awareness digest` — render the Relational + Strategic
 //! digest blocks the way they would appear in the system prompt.
 //!

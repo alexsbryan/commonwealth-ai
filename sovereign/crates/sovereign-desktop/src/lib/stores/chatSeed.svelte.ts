@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Chat-seed store.
 //
 // One question at a time, set from anywhere in the app, consumed by

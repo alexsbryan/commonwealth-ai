@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `DecisionExtractor` — Phase 7.2 per-turn decision extraction.
 //!
 //! Inserted in the pipeline AFTER `artifact_surface`. The flow is:

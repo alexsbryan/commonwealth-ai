@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Storage for the local [Activity ledger](commonwealth_core::activity),
 //! backed by [`MeshStore`] under the `activity-private` namespace.
 //!

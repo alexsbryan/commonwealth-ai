@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Plan-item store — SQLite-backed index of the implementation-plan
 //! entries for a single project.
 //!

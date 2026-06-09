@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod bulk_download;
 pub mod http_api;
 pub mod huggingface;

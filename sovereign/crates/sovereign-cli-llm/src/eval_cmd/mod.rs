@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign eval ...` — measure retrieval quality against a question
 //! bank.
 //!
@@ -40,7 +41,7 @@ use std::path::PathBuf;
 
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign eval",
@@ -457,7 +458,7 @@ async fn cmd_run(args: &[String]) -> i32 {
             bank.threads.len(),
             bank.bank.corpus,
         );
-        crate::util::tracing_init::init_tracing(
+        sovereign_cli_shared::tracing_init::init_tracing(
             "sovereign_cli=info,sovereign_tools::atlas_context_manager=info,\
              sovereign_tools::knowledge_view=warn",
         );
@@ -507,7 +508,7 @@ async fn cmd_run(args: &[String]) -> i32 {
     // background-init logs surface to stderr. Default filter is
     // chatty enough to see the atlas-context lifecycle without
     // drowning in lance-internal trace.
-    crate::util::tracing_init::init_tracing(
+    sovereign_cli_shared::tracing_init::init_tracing(
         "sovereign_cli=info,sovereign_tools::atlas_context_manager=info,\
          sovereign_tools::knowledge_view=warn",
     );

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Argumentative-essay Phase 1 — system prompt, JSON schema, parser.
 //!
 //! Empirical driver from the obsidian-vault bench loop: long-form

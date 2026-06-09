@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `write_note` — persist an agent working note.
 //!
 //! Notes survive across sessions and can be retrieved by `read_notes`.

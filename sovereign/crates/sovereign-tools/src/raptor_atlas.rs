@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! RAPTOR atlas — cluster-summarize-recurse tree replacing per-chunk
 //! LLM skeleton extraction.
 //!

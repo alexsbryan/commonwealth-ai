@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! LlguidanceConstraint perf bench.
 //!
 //! Drives the constraint engine against a real `LlamaModel` and

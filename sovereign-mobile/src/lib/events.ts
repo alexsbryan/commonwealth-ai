@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Wires the Rust core's Tauri events into the shared chat FSM. These
 // are the SAME event names the desktop backend emits, so the shared
 // chat.machine consumes mobile streams unchanged.

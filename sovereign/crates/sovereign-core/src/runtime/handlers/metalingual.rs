@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `MetalingualQuery` dispatch — source-anchored vocabulary lookup.
 //!
 //! Distinct from KnowledgeQuery: filters retrieval to the source the

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod alignment_workspace;
 pub mod anthropic_export;
 pub mod chatgpt_export;

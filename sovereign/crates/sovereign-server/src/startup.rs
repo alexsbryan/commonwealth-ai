@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Startup diagnostics and UX helpers.
 
 /// Query the Commonwealth daemon for mesh peer count and print a one-line

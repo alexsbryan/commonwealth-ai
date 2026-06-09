@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // MeshApp bridge shim — the host injects this into every `meshapp-*`
 // webview via Tauri's `initialization_script`. It is the SINGLE SOURCE OF
 // TRUTH: `commands/meshapp.rs` embeds it with `include_str!`, and the

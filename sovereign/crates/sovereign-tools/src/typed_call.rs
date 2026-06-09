@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared budget-retry loop for typed-extension LLM calls.
 //!
 //! Three sites duplicated this loop pre-lift:

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Convenience wrappers — preset (prompt, polarity,
 //! structural-test) combos. Each task is a pure function that
 //! consumes a workdir + intent and returns a [`Trial`] the caller

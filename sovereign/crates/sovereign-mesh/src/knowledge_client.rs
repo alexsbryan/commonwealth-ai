@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `MeshKnowledgeClient` — the Sovereign-side reqwest wrapper that
 //! bridges `sovereign-core::Runtime` to the local Commonwealth
 //! daemon's `/v1/knowledge/search` endpoint.

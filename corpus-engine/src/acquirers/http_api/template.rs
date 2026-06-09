@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! URL / body interpolation for the [`HttpApi`](super::HttpApiAcquirer) acquirer.
 //!
 //! Two responsibilities:

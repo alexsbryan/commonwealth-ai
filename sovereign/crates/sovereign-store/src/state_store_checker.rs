@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `StateStoreChecker` — health-checks the SQLite state database.
 //!
 //! Runs `PRAGMA integrity_check` and monitors WAL file size.

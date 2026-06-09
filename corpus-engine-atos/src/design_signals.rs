@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Structural extractor over a DESIGN.md document.
 //!
 //! Returns a [`DesignSignals`] snapshot — sections, an optional Anchors

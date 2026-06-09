@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! One-call setup for the watched-folder reconciliation subsystem.
 //!
 //! Both the standalone CLI daemon (`sovereign daemon`) and the

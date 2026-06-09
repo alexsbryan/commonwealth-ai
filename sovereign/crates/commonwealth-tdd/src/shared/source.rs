@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Source-file discovery + line-numbered rendering.
 //!
 //! Used by every phase's prompt builder: the model gets the

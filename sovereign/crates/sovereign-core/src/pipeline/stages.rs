@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared types passed between the five pipeline stages.
 //!
 //! These are the wire-shape the Curator emits and the Drafter +

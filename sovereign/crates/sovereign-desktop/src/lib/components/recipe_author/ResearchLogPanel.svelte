@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Research findings the agent has captured during the session.
   // Each finding is one `kind=research_finding` note carrying a

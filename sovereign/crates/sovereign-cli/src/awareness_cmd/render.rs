@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared output formatters for `sovereign awareness` subcommands.
 //!
 //! Status symbols mirror `enrich_cmd/status.rs:52-57` (`✓ ⚠ ·`); the

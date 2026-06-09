@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! I1 — the autonomous corpus self-supervision generator (FR-IN-1: no human in
 //! the loop).
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `GET /v1/models` HTTP-surface integration test.
 //!
 //! `daemon::tests::register_local_model_slots_writes_info_for_all_three_slots`

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   StepDonePayload,

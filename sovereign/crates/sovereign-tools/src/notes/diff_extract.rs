@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Diff-based decision extractor (Phase 7.2).
 //!
 //! Reads the cumulative diff of files modified during a session

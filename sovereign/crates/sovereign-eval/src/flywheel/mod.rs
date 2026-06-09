@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The Fidelity-Flywheel substrate: the shared contracts every signal source
 //! (I1–I5) and output channel reuses.
 //!

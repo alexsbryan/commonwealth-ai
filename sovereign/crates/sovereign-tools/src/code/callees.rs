@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `find_callees` — list all functions/methods that a given symbol calls.
 //!
 //! Backed by the SCIP symbol graph. Results include a staleness note when

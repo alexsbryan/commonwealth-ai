@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign-cli-llm` — sibling binary that owns every LLM-touching
 //! CLI verb (bench/chat/eval/atlas/enrich/recipe/pipeline/mesh/...) +
 //! every corpus_* dispatcher. Parent `sovereign` shim execs into this
@@ -13,6 +14,7 @@ mod bench_cmd;
 mod chat_cmd;
 mod claim_cmd;
 mod corpus_catalog_cmd;
+mod corpus_cmd;
 mod corpus_extract_entities_cmd;
 mod corpus_scrub_cmd;
 mod corpus_snapshot_cmd;
@@ -34,7 +36,6 @@ mod recipe_agent_cmd;
 mod recipe_agent_live_trial;
 mod recipe_cmd;
 mod search_gym_cmd;
-mod util;
 mod voice_eval;
 mod worker_pod_provider;
 
@@ -100,7 +101,7 @@ async fn async_main() {
         "alignment" => alignment_cmd::run_alignment(rest).await,
         "mesh" => mesh_cmd::run_mesh(rest).await,
         "mobile" => mobile_cmd::run_mobile(rest).await,
-        "corpus" => mesh_cmd::run_corpus(rest).await,
+        "corpus" => corpus_cmd::run_corpus(rest).await,
         "" => {
             eprintln!("sovereign-cli-llm: usage: sovereign-cli-llm <subcommand> [args...]");
             2

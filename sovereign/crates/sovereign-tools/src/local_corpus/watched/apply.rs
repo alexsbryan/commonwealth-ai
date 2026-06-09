@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Bridge `WatchedDiff` → `corpus_engine::update::CorpusUpdater::apply_update`.
 //!
 //! Builds a `VersionManifest` from the fresh walk snapshot, builds a

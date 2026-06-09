@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! SQLite backend for the mesh store.
 
 use std::path::Path;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atlas ingestion registry — string-id dispatch for strategies.
 //!
 //! Mirrors `enrichment::domain_registry::DomainRegistry` and

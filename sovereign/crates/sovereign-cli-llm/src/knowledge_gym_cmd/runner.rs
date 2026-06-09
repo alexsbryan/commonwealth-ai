@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Knowledge-gym replay loop + predicate evaluation.
 //!
 //! Phase 2 of Gym (Tool-Mastery follow-up) added multi-turn

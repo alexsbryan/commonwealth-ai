@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Cross-node behaviour without spinning up daemons.
 //!
 //! Models two workstations sharing a mesh by replicating MeshStore

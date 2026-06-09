@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! v0.3 reference-scenario integration tests (§11 of
 //! `commonwealth/docs/oicp-v0.3.md`). Each test drives the
 //! commonwealth-inference scheduler (`pick_slot_for_oicp`) through

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pre-build syntax validation.
 //!
 //! Closes the "model emits broken syntax → wastes a full `cargo build`

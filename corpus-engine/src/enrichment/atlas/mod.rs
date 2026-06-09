@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atlas Open/Closed surface.
 //!
 //! The v2.1 enrichment architecture separates the stable atlas output

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod delta;
 pub mod newsworthy_event_stream;
 pub mod newsworthy_watcher;

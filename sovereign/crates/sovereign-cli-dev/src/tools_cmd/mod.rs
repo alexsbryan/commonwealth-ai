@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign tools` — invoke code-intelligence tools directly from
 //! the CLI.
 //!

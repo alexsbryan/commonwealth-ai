@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Classify a failed exec into a coarse bucket.
 //!
 //! Failure buckets are how the operator decides what to do next:

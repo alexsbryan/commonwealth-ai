@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Streaming detectors shared by every agent runner.
 //!
 //! Per ARCH §10.3 (helper extraction at the third caller): the

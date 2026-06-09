@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pins that a daemon's `self_node_id` survives a restart against
 //! the same `data_dir`.
 //!

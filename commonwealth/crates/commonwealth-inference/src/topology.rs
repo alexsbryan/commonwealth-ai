@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Topology events that trigger scheduler replanning.
 //!
 //! These events bridge the discovery/gossip layer and the fault detector

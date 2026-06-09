@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `get_run_output` — retrieve the full raw output of a test run.
 //!
 //! `test_status` truncates failure output at 4096 characters. Call this tool

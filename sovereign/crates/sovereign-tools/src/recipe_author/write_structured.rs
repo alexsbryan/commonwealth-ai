@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `RecipeWriteStructuredTool` — write a recipe from a structured
 //! JSON object instead of a raw TOML string.
 //!

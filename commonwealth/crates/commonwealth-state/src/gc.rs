@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Retention garbage collector for the mesh store.
 //!
 //! Runs on a periodic interval and deletes entries older than `ttl_seconds`.

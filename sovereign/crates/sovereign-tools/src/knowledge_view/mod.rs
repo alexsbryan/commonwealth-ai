@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! KnowledgeView — declare a perspective on existing SQLite / Postgres
 //! rows so they can be ingested as a corpus by `corpus-engine`.
 //!

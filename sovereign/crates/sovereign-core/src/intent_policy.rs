@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Intent-keyed policy for the situated agent.
 //!
 //! Replaces skill-keyed policy as the load-bearing decision layer.

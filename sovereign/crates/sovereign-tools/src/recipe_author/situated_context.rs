@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Situated-context renderer for the recipe-author skill.
 //!
 //! Spec §2 principle 1 — "situated before expressing" — requires the

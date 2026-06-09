@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Slim chat surface for the recipe-author workspace. Reuses the
   // daemon's `send_message_stream` + `message-chunk` /

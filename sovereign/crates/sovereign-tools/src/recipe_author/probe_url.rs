@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `ProbeUrlTool` — single-shot HTTP GET that lets the recipe-author
 //! agent confirm an API contract before drafting a recipe around it.
 //!

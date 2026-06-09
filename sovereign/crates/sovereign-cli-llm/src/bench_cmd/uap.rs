@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign bench uap run|diagnose` — disposition-classification bench
 //! for the `uap-blue-book` corpus. The classification analog of
 //! `sovereign bench enron` (entity resolution).
@@ -30,7 +31,7 @@ use sovereign_eval::disposition_taxonomy::{era_mask, era_mask_union, year_of};
 
 use corpus_engine::enrichment::pipeline::types::ChatPrompt;
 
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign bench uap",

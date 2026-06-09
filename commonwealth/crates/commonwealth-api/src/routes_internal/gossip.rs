@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Gossip exchange + scheduling intent/plan endpoints.
 //!
 //! These three handlers form the cluster-coordination layer of the

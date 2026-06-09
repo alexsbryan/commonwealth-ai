@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! TOML parsing + parameter validation + serde error rewriting —
 //! extracted out of `crate::recipe`.
 //!

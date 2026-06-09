@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Regression coverage for recipes shipped in the repo. If a recipe
 //! file lands in `sovereign-recipes/` and is referenced from docs or
 //! commit history, it must continue to parse cleanly — otherwise the

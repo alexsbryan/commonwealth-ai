@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Indirection seam for the work atlas's "broadcast a claim now"
 //! requirement (§7 of the spec).
 //!

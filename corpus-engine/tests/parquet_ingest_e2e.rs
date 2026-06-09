@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end ingest tests for the SEP-style pipeline:
 //!   parquet source → Parquet extractor → paragraph chunker
 //!   → mock embed → LanceDB → optional enrichment via mock inference.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! MeshApp bridge — the permission-gated Tauri commands a sandboxed
 //! mesh-app webview reaches through `window.meshApp.*`.
 //!

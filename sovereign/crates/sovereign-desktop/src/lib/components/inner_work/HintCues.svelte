@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   /// Soft welcome hints for the inner-work surface. Staggered fade-in,
   /// linger, fade-out — each cue plays the same keyframe animation

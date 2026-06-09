@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pre-scan: classify every file in a local corpus BEFORE ingestion.
 //!
 //! Produces the `PreScanResult` the UI renders on the confirmation

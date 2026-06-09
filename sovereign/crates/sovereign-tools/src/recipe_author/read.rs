@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `RecipeReadTool` — read a recipe TOML.
 //!
 //! Mirrors `FileTool { action: "read" }` but scoped to the

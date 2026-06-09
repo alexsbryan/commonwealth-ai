@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The typed write-back surface for the Fidelity-Flywheel promotion loop.
 //!
 //! A [`ScaffoldingParam`] is the ONLY thing the loop may change — and it is

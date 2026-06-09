@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich diff <corpus> <run-a> <run-b>` — side-by-side
 //! diff of two phase 1 run output files so the developer can see what
 //! changed between exemplar iterations.
@@ -10,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::pipeline::{ExtractedQuestion, Phase1Output};
 
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich diff",

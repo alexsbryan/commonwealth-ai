@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Filesystem watcher for code corpora.
 //!
 //! Wraps the `notify` crate in a tokio-friendly shape: `notify`'s event

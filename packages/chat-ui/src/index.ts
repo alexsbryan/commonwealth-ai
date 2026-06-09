@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Barrel for the @sovereign/chat-ui shared package — the transport-
 // agnostic chat render surface used by both sovereign-desktop and
 // sovereign-mobile. Consumed as source via a Vite/tsconfig alias (no

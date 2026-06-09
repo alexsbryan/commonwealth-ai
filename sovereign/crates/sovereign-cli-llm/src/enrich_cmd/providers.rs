@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Multi-provider routing for `enrich extract` chat calls.
 //!
 //! The default flow is local-only: requests go to the running

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Snapshot restorer — extracted out of `crate::snapshot`.
 //!
 //! `restore_snapshot_archive` is the public entry; the rest are the

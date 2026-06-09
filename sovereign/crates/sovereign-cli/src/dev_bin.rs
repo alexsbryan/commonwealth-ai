@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Exec dispatch into the `sovereign-cli-dev` sibling binary
 //! (workbench: ATOS workflow + project lifecycle + code intel +
 //! tools).

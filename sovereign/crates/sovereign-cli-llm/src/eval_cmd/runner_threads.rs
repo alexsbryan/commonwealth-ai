@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Multi-turn thread bench runner — companion to `runner::run_bank_synth`.
 //!
 //! Where `run_bank_synth` drives one question per fresh `conversation_id`,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod inference_plan;
 pub mod model;
 pub mod model_aliases;

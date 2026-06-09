@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Markdown rendering with source citation, math, and code highlighting.
  *

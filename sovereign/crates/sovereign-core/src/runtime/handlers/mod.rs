@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-intent dispatch handlers for `Runtime`.
 //!
 //! Each handler module declares its own `impl Runtime { ... }` block

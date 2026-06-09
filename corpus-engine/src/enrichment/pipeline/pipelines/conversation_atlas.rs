@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Conversation-history atlas pipeline.
 //!
 //! Chat transcripts (claude.ai exports today; future: Slack, iMessage,

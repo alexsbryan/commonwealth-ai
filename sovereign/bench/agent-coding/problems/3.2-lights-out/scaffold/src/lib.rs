@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Light's Out solver.
 //!
 //! Replace the `todo!()` body of `solve` with a working

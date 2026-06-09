@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // approvalMachine — owns the UI side of the agent's oneshot
 // request/response loops for both *approval* (yes/no on a tool call)
 // and *user input* (free-text question). The Rust side emits two

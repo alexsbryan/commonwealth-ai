@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! RAPTOR summary-node ANN index — a derived, per-corpus LanceDB table over
 //! RAPTOR collapsed-tree *summary* embeddings, replacing the brute-force
 //! cosine scan in `apply_raptor_grounding`. Kept **separate** from the leaf

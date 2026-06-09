@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `read_notes` — retrieve agent working notes.
 //!
 //! Supports full-text search (BM25), symbol/file filtering, and kind

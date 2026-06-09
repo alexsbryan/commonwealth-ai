@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Typed-axis catalog — registry of axes the resolver projects into
 //! atoms.json and the bench scores against.
 //!

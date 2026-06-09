@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Collaborative corpus ingestion entry point.
 //!
 //! `POST /internal/corpus/collaborate` is the operator-facing kickoff:

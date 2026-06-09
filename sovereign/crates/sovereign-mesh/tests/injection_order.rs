@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Defensive test for the silent-no-op failure mode of
 //! `AppState::with_local_inference` and `with_mesh_mutation_hook`.
 //!

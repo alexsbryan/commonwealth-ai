@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Stage pre-scanned files into a single JSONL file that
 //! `corpus-engine`'s `jsonl` extractor can consume.
 //!

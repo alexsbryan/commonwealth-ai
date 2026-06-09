@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Sidebar list of recipe-author projects. Pure presentation —
   // mutations route through the parent (which talks to the store).

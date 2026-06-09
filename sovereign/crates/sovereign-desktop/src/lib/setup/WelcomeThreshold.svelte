@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   import InkStamp from "../components/onboarding/InkStamp.svelte";
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Bullet-grain chunker for `Portal:Current_events` Wikipedia pages.
 //!
 //! A Portal page's wikitext (after `wikipedia_api_article` extraction

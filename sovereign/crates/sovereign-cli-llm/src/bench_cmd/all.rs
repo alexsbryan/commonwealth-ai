@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign bench all` — cross-bench rollup driver.
 //!
 //! Discovers every bench under `sovereign/bench/`, scores each
@@ -28,7 +29,7 @@ use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 
 use crate::enrich_cmd::eval::{score_corpus, EvalReport, PhaseFilter};
 use crate::eval_cmd::runner::EvalRun;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 use super::baselines::{read_latest, write_dated_and_update_latest};
 use super::discover::{discover_benches, BenchSurface, CorpusState, DiscoveredBench};

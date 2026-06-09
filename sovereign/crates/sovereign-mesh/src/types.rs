@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! UI-friendly types for mesh status, member info, and contributions.
 
 use serde::{Deserialize, Serialize};

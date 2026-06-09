@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Phase 7 audit-hardening primitives.
 //!
 //! Lives next to `mcp_surface` and `spec_watcher` because all three

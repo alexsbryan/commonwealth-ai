@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! NoteStore ↔ alignment-corpus sync.
 //!
 //! Lets `~/.sovereign/notes.db` (the ATOS NoteStore at

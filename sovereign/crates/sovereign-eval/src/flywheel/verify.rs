@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The unified verifier: classify one answered / abstained probe into the
 //! five-way failure taxonomy (or Pass), reusing the chaos-monkey witness checks
 //! and `ResultRow` / `score` as the scorer of record.

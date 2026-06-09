@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Mesh-app explorer ops — the read-only projections a sandboxed explorer
 //! drives, factored out of the desktop so both the Tauri host AND the
 //! `sovereign meshapp dev` CLI server can serve them.

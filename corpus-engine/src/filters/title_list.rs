@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Filter that accepts articles whose normalized title appears in a
 //! supplied list. Used for curated sets like Wikipedia Vital Articles.
 //!

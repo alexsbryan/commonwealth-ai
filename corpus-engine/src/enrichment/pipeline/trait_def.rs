@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The v2 enrichment pipeline trait.
 //!
 //! `Pipeline` is a sibling of the v1 `Domain` trait, not an extension.

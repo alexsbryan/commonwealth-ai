@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `drift_findings` — point-of-edit query against the latest drift report.
 //!
 //! Sibling to `drift_posture`: `posture` answers "is the report

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Mechanism-Fidelity Validation Harness — pure logic.
 //!
 //! Decides, per policy mechanism, whether a frozen LLM agent reasons

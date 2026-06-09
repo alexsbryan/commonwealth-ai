@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign mcp` subcommand handlers.
 //!
 //! Read-only commands for inspecting and testing configured MCP servers.
@@ -8,12 +9,12 @@ use sovereign_tools::mcp::config::{McpServerConfig, McpTransportConfig};
 
 /// Run an MCP subcommand. Returns the exit code.
 pub async fn run_mcp(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
-        crate::util::help::print(&HELP);
+    if sovereign_cli_shared::help::wants_help(args) {
+        sovereign_cli_shared::help::print(&HELP);
         return 0;
     }
     if args.is_empty() {
-        crate::util::help::print(&HELP);
+        sovereign_cli_shared::help::print(&HELP);
         return 1;
     }
 
@@ -23,18 +24,18 @@ pub async fn run_mcp(args: &[String]) -> i32 {
         "tools" => cmd_tools(&args[1..]).await,
         other => {
             eprintln!("Unknown mcp subcommand: {other}");
-            crate::util::help::print(&HELP);
+            sovereign_cli_shared::help::print(&HELP);
             1
         }
     }
 }
 
-const HELP: crate::util::help::Help = crate::util::help::Help {
+const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "sovereign mcp",
     summary: "Inspect and test configured MCP (Model Context Protocol) servers.",
     sections: &[
-        crate::util::help::HelpSection::Usage("sovereign mcp <command> [args]"),
-        crate::util::help::HelpSection::Subcommands(&[
+        sovereign_cli_shared::help::HelpSection::Usage("sovereign mcp <command> [args]"),
+        sovereign_cli_shared::help::HelpSection::Subcommands(&[
             ("list", "List configured MCP servers with status"),
             ("test <server>", "Test connection to a named server"),
             (

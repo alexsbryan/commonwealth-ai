@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Index creation, resumption, and index-building logic.
 
 use std::path::Path;

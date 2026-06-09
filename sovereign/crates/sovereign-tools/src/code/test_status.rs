@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `test_status` — return the current state of the background test runner.
 //!
 //! Reads from [`TestResultStore`] — never triggers a run itself. The watcher

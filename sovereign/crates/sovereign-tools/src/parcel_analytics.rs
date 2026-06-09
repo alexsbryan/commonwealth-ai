@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `parcel_analytics` — deterministic land-value-tax aggregates over a
 //! corpus of Parcel atoms (default `sf-assessor-roll`).
 //!

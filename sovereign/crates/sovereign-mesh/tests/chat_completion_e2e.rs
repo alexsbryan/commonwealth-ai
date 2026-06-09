@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end mesh inference routing test.
 //!
 //! Exercises the full Joiner-side path without needing a real

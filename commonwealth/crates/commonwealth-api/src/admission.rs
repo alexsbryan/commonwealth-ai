@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Peer-request admission middleware.
 //!
 //! The desktop's friend-and-family launch story leans on three

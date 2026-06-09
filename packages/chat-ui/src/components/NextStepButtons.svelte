@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!--
   NextStepButtons — clickable grounded follow-up chips rendered
   under a completed KnowledgeQuery assistant message. The runtime

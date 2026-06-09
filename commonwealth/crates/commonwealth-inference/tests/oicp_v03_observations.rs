@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! v0.3 §7 observation-adjusted routing scenarios. These exercise
 //! the scheduler's second-pass scoring (effective_affinity,
 //! load_penalty, locality_bonus, cold_start_weight) rather than the

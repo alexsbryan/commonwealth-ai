@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign agent-bench aggregate` — walk one or more artifact roots,
 //! derive a `FailureClass` per (cell, problem), and emit a histogram
 //! plus per-class repro paths.

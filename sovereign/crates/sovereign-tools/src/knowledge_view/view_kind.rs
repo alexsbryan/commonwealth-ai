@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `ViewKind` — the type-safe handle for a KnowledgeView.
 //!
 //! Before this module existed, every caller that wanted to reason

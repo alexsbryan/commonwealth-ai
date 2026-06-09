@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Cost ledger for cloud pods launched by the pipeline tool.
 //!
 //! Each `pipeline pod up` appends a `PodRecord` to a JSON file at

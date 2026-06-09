@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Headless PaddleOCR over a list of image files — the data-prep OCR
 //! entrypoint for the UAP hero set (per-case NARA Blue Book page JPGs →
 //! text). Skips PDF rasterization entirely: NARA already provides

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pod-side HTTP endpoints for ephemeral workers.
 //!
 //! Spec: `sovereign/docs/EPHEMERAL_WORKER_PODS.md`. This module is the

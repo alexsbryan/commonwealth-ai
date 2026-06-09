@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Eligibility gate for mesh RPC inference workers — distribute only to
 //! PROVEN-STABLE workers, never thrash on a flapping one.
 //!

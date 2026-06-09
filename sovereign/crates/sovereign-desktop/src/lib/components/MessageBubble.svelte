@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   import AssistantMessage from "./AssistantMessage.svelte";
   import type { NextStepOffer, SearchAugmentation } from "../types";

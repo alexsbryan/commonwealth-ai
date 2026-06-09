@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Integration tests for `/internal/storage/budget`.
 //!
 //! Confirms the round-trip the desktop relies on: GET reports a

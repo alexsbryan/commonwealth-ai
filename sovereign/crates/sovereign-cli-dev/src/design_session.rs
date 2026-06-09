@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign project design` — the agent-collaborative main event.
 //!
 //! ## Role in the ATOS onboarding flow
@@ -679,7 +680,7 @@ fn prompt_for_gaps(gaps: &[GapMarker]) -> Vec<SoloAnswer> {
         );
         eprint!("    A (blank = skip): ");
         let _ = std::io::Write::flush(&mut std::io::stderr());
-        let answer = crate::util::prompts::prompt_string("").unwrap_or_default();
+        let answer = sovereign_cli_shared::prompts::prompt_string("").unwrap_or_default();
         let trimmed = answer.trim();
         if trimmed.is_empty() {
             continue;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end smoke for the rolling-summary memory compaction
 //! worker. Exercises the structural answer to the witness-prompt
 //! growth bug observed 2026-05-23 — see

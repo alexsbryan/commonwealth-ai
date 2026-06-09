@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `query_sharing=false` corpus locality test.
 //!
 //! The §7.1 promise — that KnowledgeView's three-map corpora

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Adaptive mesh scheduler integration tests.
 //!
 //! These tests exercise the full scheduler pipeline against the

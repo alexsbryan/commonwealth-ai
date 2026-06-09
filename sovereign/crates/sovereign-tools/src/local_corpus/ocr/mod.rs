@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! OCR pipeline for scanned PDFs in the folder-drop flow.
 //!
 //! Wired in front of `extract_stage::extract_one` when the per-corpus

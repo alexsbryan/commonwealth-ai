@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Cache-first reads + reconcile writes over the cached projections.
 //!
 //! Reads return the local cache immediately (offline-read / instant

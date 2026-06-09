@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Source-file → `ChapterInput` reconstruction used by every subcommand
 //! that needs to feed chapters into a phase runner.
 //!

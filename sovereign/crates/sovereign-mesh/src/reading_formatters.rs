@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pure formatters used by the glass-box reading surface.
 //!
 //! Why this lives outside `reading_http`: every function here is a

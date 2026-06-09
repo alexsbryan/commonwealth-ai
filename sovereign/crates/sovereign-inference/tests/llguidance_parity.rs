@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Parity fixtures for the JsonConstraint → llguidance migration.
 //!
 //! Background: `LLGUIDANCE_MIGRATION_AUDIT.md` (§4 fixture plan).

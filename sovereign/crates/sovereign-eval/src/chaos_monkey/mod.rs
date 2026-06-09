@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Chaos-Monkey: **grounded calibration under adversarial pressure.**
 //!
 //! Every other bench in the suite measures *competence when the deck is

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Construction helpers extracted from `bootstrap_with_progress`
 //! (§3.3 `state.rs` decomposition). Each builder is a **pure relocation**
 //! of a self-contained phase — same statements, same order, same `?`

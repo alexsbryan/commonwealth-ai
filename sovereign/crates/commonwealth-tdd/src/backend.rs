@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Chat-completion backend abstraction.
 //!
 //! Per ARCH_PRINCIPLES §12.4 ("tests must not require GPU, network,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-corpus chapter manifest.
 //!
 //! Lives at `~/.sovereign/indexes/<corpus>/chapters.json` — corpus

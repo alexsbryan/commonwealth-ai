@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Canonical filesystem paths that every subcommand agrees on.
 //!
 //! Before this module there were three `default_data_dir()` bodies

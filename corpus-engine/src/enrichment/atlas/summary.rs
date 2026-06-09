@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Cached atlas summary — atom count, Tier-2 count, fingerprint.
 //!
 //! Mesh gossip needs to advertise these per corpus on every round so

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `record_atos_event` — append one tool-execution event to the ATOS
 //! run ledger.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Mobile types. Re-exports the shared chat-render types from
 // @sovereign/chat-ui (so the copied `chat.machine.ts`'s `../types`
 // imports resolve to one source of truth) and adds the client-owned +

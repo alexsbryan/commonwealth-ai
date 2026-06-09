@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Runed singleton for the **Recipe Author Workspace** (M2).
 //
 // Owns three pieces of state:

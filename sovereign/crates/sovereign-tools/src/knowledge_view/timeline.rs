@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Phase 3 — interaction-timeline assembly.
 //!
 //! Reads the atlas `atoms.json` + `edges.json` for a personal or

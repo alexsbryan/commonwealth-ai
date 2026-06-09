@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Write-back coordinator: snapshot → write tags → (index notes) →
 //! rollback / clean. Everything in this module has filesystem side
 //! effects; the rest of `local_corpus` is purely in-memory

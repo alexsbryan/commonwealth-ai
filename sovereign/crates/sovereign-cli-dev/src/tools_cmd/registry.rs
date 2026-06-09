@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Build a `ToolRegistry` with enough infrastructure for agent-driven
 //! `sovereign tools <cmd>` invocations.
 //!
@@ -77,7 +78,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // stale orphan DB and report `running` indefinitely while the
     // daemon's actual store reflects fresh results — observed
     // 2026-05-06 with rows untouched since Apr 21.
-    let flat_stores_dir = crate::util::dirs::sovereign_root();
+    let flat_stores_dir = sovereign_cli_shared::dirs::sovereign_root();
 
     // Embed function: prefer the running daemon's embed slot so
     // `tools call notes` benefits from T1 semantic blend on the

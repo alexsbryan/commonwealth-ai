@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Internal mesh routes for app state and registry gossip.
 //!
 //! POST /internal/app/state    — receive gossiped AppState entries

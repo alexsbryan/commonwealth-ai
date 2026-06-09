@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Referential atlas pipeline — third instance of the v2 atlas
 //! `Pipeline` trait, alongside `literary_atlas` and `philosophy_atlas`.
 //!

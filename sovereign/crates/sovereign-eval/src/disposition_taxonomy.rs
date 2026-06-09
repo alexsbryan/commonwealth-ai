@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! UAP disposition taxonomy + date-conditioned era mask (UFO.md
 //! "Disposition taxonomy" + era-handling open decision #3, resolved
 //! here as the **date-conditioned label mask**).

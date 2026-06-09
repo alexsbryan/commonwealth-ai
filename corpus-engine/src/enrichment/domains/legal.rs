@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! LegalDomain — stub for legal corpus enrichment.
 
 use super::super::domain::*;

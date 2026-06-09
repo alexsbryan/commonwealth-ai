@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Deterministic land-value-tax analytics over Parcel atoms.
 //!
 //! Pure functions — no inference, no I/O. Every figure is a sum or

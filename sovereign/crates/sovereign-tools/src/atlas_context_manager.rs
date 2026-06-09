@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `AtlasContextManager` — daemon-side bag of pre-embedded atlas
 //! Entity contexts, one per installed corpus that has an `atlas/`
 //! dir.

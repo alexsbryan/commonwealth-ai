@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign corpus snapshot` — publish and inspect prebuilt-index
 //! tarballs (.tar.zst) for cold-start onboarding.
 //!
@@ -16,7 +17,7 @@ use corpus_engine::snapshot::{
 };
 use corpus_engine::CorpusIndex;
 
-use crate::util::help::{Help, HelpSection};
+use sovereign_cli_shared::help::{Help, HelpSection};
 
 fn home_dir() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"))
@@ -107,7 +108,7 @@ const HELP_SNAPSHOT_INSPECT: Help = Help {
 
 pub async fn run_snapshot(args: &[String]) -> i32 {
     if args.is_empty() || matches!(args[0].as_str(), "--help" | "-h" | "help") {
-        crate::util::help::print(&HELP_SNAPSHOT);
+        sovereign_cli_shared::help::print(&HELP_SNAPSHOT);
         return if args.is_empty() { 1 } else { 0 };
     }
     match args[0].as_str() {
@@ -116,7 +117,7 @@ pub async fn run_snapshot(args: &[String]) -> i32 {
         "restore" => cmd_restore(&args[1..]).await,
         other => {
             eprintln!("Unknown snapshot subcommand: {other}");
-            crate::util::help::print(&HELP_SNAPSHOT);
+            sovereign_cli_shared::help::print(&HELP_SNAPSHOT);
             1
         }
     }
@@ -243,7 +244,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
     let parsed = match parse_publish_args(args) {
         Ok(p) => p,
         Err(msg) if msg == "__help__" => {
-            crate::util::help::print(&HELP_SNAPSHOT_PUBLISH);
+            sovereign_cli_shared::help::print(&HELP_SNAPSHOT_PUBLISH);
             return 0;
         }
         Err(msg) => {
@@ -679,7 +680,7 @@ fn hash_file_sha256(path: &Path) -> std::result::Result<(String, u64), String> {
 
 fn cmd_inspect(args: &[String]) -> i32 {
     if args.is_empty() || matches!(args[0].as_str(), "--help" | "-h") {
-        crate::util::help::print(&HELP_SNAPSHOT_INSPECT);
+        sovereign_cli_shared::help::print(&HELP_SNAPSHOT_INSPECT);
         return if args.is_empty() { 2 } else { 0 };
     }
     let archive_path = PathBuf::from(&args[0]);
@@ -794,7 +795,7 @@ async fn cmd_restore(args: &[String]) -> i32 {
     let parsed = match parse_restore_args(args) {
         Ok(p) => p,
         Err(msg) if msg == "__help__" => {
-            crate::util::help::print(&HELP_SNAPSHOT_RESTORE);
+            sovereign_cli_shared::help::print(&HELP_SNAPSHOT_RESTORE);
             return 0;
         }
         Err(msg) => {

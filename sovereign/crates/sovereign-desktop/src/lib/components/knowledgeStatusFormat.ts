@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Pure display helpers extracted from KnowledgeStatus.svelte (§3.3
 // component decomposition): relative/absolute time formatting, the
 // catalog-tier classifier, and the enrichment-phase label map. No runes,

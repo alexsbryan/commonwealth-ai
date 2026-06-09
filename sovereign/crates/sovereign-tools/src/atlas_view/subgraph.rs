@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Curated atom-graph "landscape" subgraph for the desktop Atlas **Map** view.
 //!
 //! Turns a corpus's typed-atom atlas (`atoms.json` + `edges.json`) into a

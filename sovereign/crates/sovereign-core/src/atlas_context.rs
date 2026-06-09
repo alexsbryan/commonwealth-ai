@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atlas-grounded retrieval primitives shared between the eval CLI
 //! and the runtime chat path.
 //!

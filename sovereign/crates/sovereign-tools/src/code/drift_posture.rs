@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `drift_posture` — read the architectural-drift report's freshness
 //! state without re-running the LLM pipeline.
 //!

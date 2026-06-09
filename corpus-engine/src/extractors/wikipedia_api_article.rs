@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-article Wikipedia extractor — MediaWiki Action API responses.
 //!
 //! Consumes the JSON returned by:

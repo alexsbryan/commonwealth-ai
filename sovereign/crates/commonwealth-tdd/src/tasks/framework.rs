@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Test-framework detection + per-framework defaults. Ported from
 //! the old `red/framework.rs` because the auto-detected test
 //! command is useful for every task type, not just Red.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Project observation — everything `sovereign project init` can
 //! learn about a directory without asking the user a single question.
 //!

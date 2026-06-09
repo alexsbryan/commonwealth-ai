@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Lightweight validator for downloaded GGUF files.
 //!
 //! Used by both the CLI (`sovereign setup`) and the desktop

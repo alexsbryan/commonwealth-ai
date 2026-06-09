@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Inference-provider construction — extracted verbatim from
 //! `bootstrap_with_progress` (§3.3). Loads the embedded llama.cpp slots
 //! (after a crash-isolated GPU smoke test) and, in Local mode, wraps the

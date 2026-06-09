@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign refresh` — nudge the daemon to rebuild SCIP.
 //!
 //! Renamed from `sovereign project refresh` per the CLI refactor plan.

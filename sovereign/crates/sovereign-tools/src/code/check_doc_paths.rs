@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `check_doc_paths` — verify that file-path references in markdown docs still exist.
 //!
 //! Scans a markdown document for inline-code spans (`` `path/to/file` ``) that

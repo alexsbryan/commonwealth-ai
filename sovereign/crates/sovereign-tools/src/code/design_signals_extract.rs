@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `design_signals_extract` — structural parser over a DESIGN.md doc.
 //!
 //! Wraps `corpus_engine_atos::design_signals::extract` as an MCP tool. The

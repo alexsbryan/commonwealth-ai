@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! OICP v0.3 backend selection with observation-adjusted scoring.
 //!
 //! `pick_slot_for_oicp` chooses the best peer from a candidate list

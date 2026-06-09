@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Peer-to-peer model file distribution over the mesh's internal
 //! port. The friend-onboarding workstream (WS5) wants new peers to
 //! pull GGUFs from an existing mesh member instead of needing R2 /

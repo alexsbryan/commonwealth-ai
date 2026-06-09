@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Resolved atom types — the on-disk form of §2 of the v2.1 spec.
 //!
 //! Phase 1 produces `SectionExtraction` sketches (names, no IDs,

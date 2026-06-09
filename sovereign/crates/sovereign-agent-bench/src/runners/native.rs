@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Native agent runner. Drives the daemon's
 //! `/v1/chat/completions` directly with the
 //! `commonwealth-agent-tools` canonical primitive set. No subprocess

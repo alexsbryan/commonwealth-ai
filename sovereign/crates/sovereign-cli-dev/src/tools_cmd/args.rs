@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Flag parser for `sovereign tools`. Same shape as
 //! [`crate::atos_cmd::args`] so agents see consistent `--k=v` / `--k v`
 //! argument handling across subcommands.

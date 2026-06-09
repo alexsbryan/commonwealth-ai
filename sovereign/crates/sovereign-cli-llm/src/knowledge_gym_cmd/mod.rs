@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign knowledge-gym …` — correctness harness for the
 //! unified `knowledge_lookup` tool (Tool-Mastery framework Phase 5).
 //!

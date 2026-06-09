@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! OpenAI Responses API wire types — codex-driven subset.
 //!
 //! This module declares ONLY the types we accept on the wire and the

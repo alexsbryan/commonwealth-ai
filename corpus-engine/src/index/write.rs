@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Write operations — insert, delete, re-embed, and rebuild.
 
 use std::path::Path;

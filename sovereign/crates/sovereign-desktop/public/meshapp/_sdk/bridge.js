@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // MeshApp SDK — the host bridge client.
 //
 // `window.meshApp` is injected by the host (see `meshapp_shim.js`) and is the

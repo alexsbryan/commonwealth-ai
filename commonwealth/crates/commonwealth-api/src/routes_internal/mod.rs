@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Internal API surface (mTLS, port 9742). Façade module — handlers
 //! live in endpoint-scoped submodules; this file re-exports them so
 //! `server.rs` and the integration tests keep their existing import

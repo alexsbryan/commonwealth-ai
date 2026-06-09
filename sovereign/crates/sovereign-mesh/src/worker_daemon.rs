@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Worker-mode daemon entry point.
 //!
 //! Spec: `sovereign/docs/EPHEMERAL_WORKER_PODS.md`. Called from

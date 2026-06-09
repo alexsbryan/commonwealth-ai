@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Read-only drawer that shows the live recipe.toml. Collapsed by
   // default — the partner doesn't read TOML in the common path; this

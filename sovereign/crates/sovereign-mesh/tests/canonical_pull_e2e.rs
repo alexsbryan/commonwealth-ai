@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end test for the Phase 6 canonical-sync surface.
 //!
 //! Wires a real `commonwealth_api::internal_router` over an

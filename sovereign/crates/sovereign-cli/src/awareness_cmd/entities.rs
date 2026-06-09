@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign awareness entities` — list extracted entities.
 //!
 //! Aggregates Entity atoms across both relational atlas dirs

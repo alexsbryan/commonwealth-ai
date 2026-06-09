@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Shared TTFI types — consumed by both the production-shipping
 // recorder (src/lib/ttfi/recorder.ts) and the test-time scenario player
 // (tests/e2e/fixtures/scenario-player.ts). Keeping them in one place

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Domain trait and supporting types for field model enrichment.
 //!
 //! A `Domain` encodes the epistemic conventions of a field of knowledge.

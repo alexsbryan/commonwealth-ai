@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `project_context` — search indexed project documentation.
 //!
 //! Answers questions like "what are the conventions for error handling?"

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Epistemic tools — `claim_search` and `epistemic_landscape`.
 //!
 //! Both tools wrap a `corpus_engine::CorpusEngine` to expose field model

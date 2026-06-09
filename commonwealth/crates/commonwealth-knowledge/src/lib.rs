@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod embed_http;
 pub mod grounding;
 pub mod mesh_corpus;

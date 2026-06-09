@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Neutral helpers shared across every `sovereign-cli-*` binary.
 //!
 //! Lives outside `sovereign-cli` so the new per-domain binaries
@@ -18,6 +19,7 @@
 //! - [`prompts`]: interactive confirm / line-read helpers.
 //! - [`tracing_init`]: one-line `init_tracing(default_filter)`.
 
+pub mod args;
 pub mod deprecation;
 pub mod dirs;
 pub mod help;

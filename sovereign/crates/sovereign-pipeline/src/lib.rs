@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Generic ingestion-pipeline driver.
 //!
 //! See `recipe.rs` for the per-corpus surface and `driver.rs` for the

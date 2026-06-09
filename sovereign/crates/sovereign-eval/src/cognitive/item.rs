@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! On-disk TOML schema for a cognitive unit-test item.
 //!
 //! Each item is a single TOML file under

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `DecisionLogTool` — append a decision to a recipe-author project's
 //! decision log.
 //!

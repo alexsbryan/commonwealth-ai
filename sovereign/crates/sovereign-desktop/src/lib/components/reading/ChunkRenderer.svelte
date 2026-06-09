@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!--
   ChunkRenderer — renders a center chunk plus its immediate textual
   neighbors in source order, with the atom layer overlaid.

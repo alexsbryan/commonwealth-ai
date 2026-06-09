@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! In-memory app registry. Kept up-to-date via gossip.
 
 use std::collections::HashMap;

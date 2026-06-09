@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `ApprovalGate` — the M4 replacement for the old
 //! `APPROVED:<feature-id>` magic-token convention.
 //!

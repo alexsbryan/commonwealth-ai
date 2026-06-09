@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Recipe schema back-compatibility regression suite.
 //!
 //! **Purpose.** Pin canonical recipe-TOML shapes from successive

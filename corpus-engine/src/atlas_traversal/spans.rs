@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! AtomSpan detector — finds where atoms surface in a chunk's text.
 //!
 //! Powers the desktop reading surface's atom layer: for every chunk

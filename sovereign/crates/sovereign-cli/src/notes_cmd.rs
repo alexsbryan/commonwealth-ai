@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign notes` — read and write durable working notes.
 //!
 //! Merges:

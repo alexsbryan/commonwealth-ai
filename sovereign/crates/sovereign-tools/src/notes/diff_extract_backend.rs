@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Production backend for [`DiffDecisionExtractor`].
 //!
 //! Calls the daemon's OpenAI-compatible `/v1/chat/completions`

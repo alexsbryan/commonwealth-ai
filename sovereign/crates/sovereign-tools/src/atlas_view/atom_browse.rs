@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atom browse + filter API for the desktop's per-corpus inspector.
 //!
 //! `list_corpora` (in `reader.rs`) answers "which corpora have an

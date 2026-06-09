@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Thin binary entrypoint. Production callers reach this surface via
 //! `sovereign agent-bench …`; this binary exists so the crate can be
 //! built and tested standalone without dragging the full sovereign-cli.

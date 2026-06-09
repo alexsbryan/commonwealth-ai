@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Transport abstraction for MCP communication.
 
 use serde_json::Value;

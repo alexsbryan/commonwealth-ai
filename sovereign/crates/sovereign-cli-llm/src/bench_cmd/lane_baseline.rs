@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Lane baselines — promote an *absolute-verdict* bench into a
 //! *baseline-relative* CI gate.
 //!

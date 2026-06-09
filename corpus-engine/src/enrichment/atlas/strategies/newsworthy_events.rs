@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `newsworthy_events` — per-bullet atlas extraction for
 //! `wikipedia-newsworthy` (and any future portal-style corpus).
 //!

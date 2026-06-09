@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-document index recency — a source-agnostic freshness signal.
 //!
 //! Every (re)index of a document stamps `source_doc_id → unix_seconds`

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Skeleton response parsing, repair, and filtering logic.
 //!
 //! Extracted from `field_engine.rs` to keep the engine module focused on

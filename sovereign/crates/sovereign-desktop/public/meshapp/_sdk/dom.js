@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // MeshApp SDK — CSP-safe DOM helpers.
 //
 // Mesh-app bundles run under a strict CSP (`script-src 'self'`, no inline

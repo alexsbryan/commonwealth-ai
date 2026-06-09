@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Post-generation guardrail: verify every quoted passage in the
 //! model's final answer is verbatim-present in the document, and
 //! demote any that aren't.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `structure_first` — deterministic Wikipedia atlas ingestion.
 //!
 //! Walks an already-indexed Wikipedia corpus's LanceDB chunks and

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Public types for the unified TDD solver.
 //!
 //! The collapsed shape (2026-05-24): one [`Trial`] carries

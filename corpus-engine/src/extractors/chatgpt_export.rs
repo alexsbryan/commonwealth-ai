@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! OpenAI ChatGPT chat-export extractor.
 //!
 //! Parses the `conversations.json` produced by ChatGPT's "Export data"

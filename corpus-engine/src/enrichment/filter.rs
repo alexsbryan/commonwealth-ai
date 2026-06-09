@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Chunk eligibility filter — runs in microseconds, zero inference cost.
 //!
 //! `is_chunk_eligible()` decides whether a chunk is worth sending to the

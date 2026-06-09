@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;

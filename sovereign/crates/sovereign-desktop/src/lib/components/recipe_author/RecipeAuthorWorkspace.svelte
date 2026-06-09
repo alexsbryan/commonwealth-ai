@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Top-level recipe-author workspace. Two-panel layout:
   //   left  — project sidebar (list + new project)

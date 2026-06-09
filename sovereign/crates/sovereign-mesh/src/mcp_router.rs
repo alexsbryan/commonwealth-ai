@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! MCP (Model Context Protocol) HTTP/SSE router.
 //!
 //! Mounts at `/mcp`, `/mcp/message`, and `/mcp/stats`. Local-only —

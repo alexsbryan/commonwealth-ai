@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Brief assembler — render a [`TraversalResult`] into prose.
 //!
 //! The assembler is the only place in the atlas stack that makes

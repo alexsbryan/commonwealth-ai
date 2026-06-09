@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tailnet reachability detection.
 //!
 //! The **hard guarantee** (fail-closed off-tailnet) is structural, not

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Unit tests for approvalMachine. Drives the actor directly via
 // createActor — no DOM, no Svelte, no singleton store.
 import { describe, it, expect, vi } from "vitest";

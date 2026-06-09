@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atlas traversal + validation battery.
 //!
 //! Landing 4 piece: `Atlas::from_cache_dir` reads phase 3/5/6/7 caches

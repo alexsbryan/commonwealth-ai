@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-pair merge signals for [`super::multi_origin`].
 //!
 //! Each signal answers: "does this evidence support that `left` and

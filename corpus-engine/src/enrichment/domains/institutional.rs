@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! InstitutionalDomain — enrichment for engineering + project notes
 //! (decisions, invariants, open questions, postmortems) indexed as a
 //! `KnowledgeView` over the agent working-notes store.

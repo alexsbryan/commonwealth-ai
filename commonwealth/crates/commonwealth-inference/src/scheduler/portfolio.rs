@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 use crate::inference_plan::{ModelTransition, ShardPlan, TransitionState};
 use crate::model::ModelInfo;
 use commonwealth_core::ids::ModelId;

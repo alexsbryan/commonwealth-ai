@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich sheets-ingest <folder> --corpus <id>` — the
 //! described-asset substrate driver for spreadsheet corpora.
 //!

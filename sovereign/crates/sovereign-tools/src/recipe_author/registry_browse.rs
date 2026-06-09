@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `RegistryBrowseTool` — list recipes the agent can read for
 //! shape examples, including the user's locally-published ones.
 //!

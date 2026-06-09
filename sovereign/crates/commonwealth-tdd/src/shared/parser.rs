@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-language test-result parsers. Dispatches over [`Language`].
 //!
 //! Lifted from `sovereign-agent-bench/src/witness/test_result_parser.rs`

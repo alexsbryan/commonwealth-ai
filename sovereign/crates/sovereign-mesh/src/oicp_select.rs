@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! OICP-driven selection primitives shared across the mesh crate.
 //!
 //! Both sides of a mesh chat completion need the same scoring +

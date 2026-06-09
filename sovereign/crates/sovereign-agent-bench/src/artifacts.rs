@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-run artifact sink — agent workdir copy + per-judge prompts +
 //! pi stderr/JSONL. The operator's iteration surface: every run drops
 //! enough on disk that the next iteration can read "what did pi

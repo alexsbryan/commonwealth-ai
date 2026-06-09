@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Deterministic second-order re-fold of a finished investigation graph.
 //!
 //! The Phase-1 LLM extraction is the expensive part (~hours of 35B) and its

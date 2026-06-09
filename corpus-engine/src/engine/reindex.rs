@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Incremental per-file re-index — the hot path the `CodeWatcher`
 //! calls on every file save.
 //!

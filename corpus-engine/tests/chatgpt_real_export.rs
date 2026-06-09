@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Opt-in real-data smoke for the ChatGPT export extractor.
 //!
 //! Faithful unit fixtures (in `extractors/chatgpt_export.rs`) cover the

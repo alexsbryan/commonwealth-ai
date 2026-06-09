@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Reading-navigation bridge store — mirror of `atlasNavigation`.
 //
 // When the user clicks "Open in reading" on an evidence row inside

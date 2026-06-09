@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Adaptive concurrency — the driver dials its in-flight ceiling up
 //! and down based on the rolling failure rate.
 //!

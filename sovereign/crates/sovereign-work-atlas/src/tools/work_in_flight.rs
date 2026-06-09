@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `work_in_flight` — list live Claims overlapping a scope.
 //!
 //! Phase 1 emits only `ConfidenceGrade::Declared` (CodeWatcher-driven

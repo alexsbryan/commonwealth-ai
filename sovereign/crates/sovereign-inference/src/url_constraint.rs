@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! URL-allowlist constraint enforcer for citation-faithful generation.
 //!
 //! When the model receives a tool result containing

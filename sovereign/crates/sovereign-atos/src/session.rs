@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! ATOS session state, persisted in the gossip-replicated
 //! [`MeshStore`].
 //!

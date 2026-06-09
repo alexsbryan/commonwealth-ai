@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Wire `local_corpus`'s existing PDF text-extraction helper into the
 //! `CorpusEngine` so recipes declaring
 //! `extract = { type = "custom", kind = "pdf" }` can ingest PDFs

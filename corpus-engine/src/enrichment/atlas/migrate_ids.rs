@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Move 6 Phase 0 — atom-id migration from sequential `entity-NNNN`
 //! to content-hash `entity-<16 hex>`.
 //!

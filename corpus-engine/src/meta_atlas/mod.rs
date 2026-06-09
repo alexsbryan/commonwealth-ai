@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Meta-atlas substrate — cross-corpus stream-tagged index that
 //! retrieval consumes to inject stream-grouped anchored chunks.
 //!

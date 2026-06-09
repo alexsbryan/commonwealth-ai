@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Index health reporting for MCP tool responses.
 //!
 //! Every MCP tool that depends on the SCIP call graph attaches an

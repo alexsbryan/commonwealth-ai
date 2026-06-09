@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign atlas build-doc-index` — Move 6 Phase 1 backfill.
 //!
 //! Derives the per-corpus `doc_to_atoms.json` sidecar from each

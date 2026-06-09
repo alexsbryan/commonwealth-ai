@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! # commonwealth-tdd
 //!
 //! Unified TDD solver loop. One [`run_trial`](trial::run_trial)

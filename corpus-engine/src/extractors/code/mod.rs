@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tree-sitter-backed code extractor.
 //!
 //! Language-agnostic: one pipeline handles every language with a registered

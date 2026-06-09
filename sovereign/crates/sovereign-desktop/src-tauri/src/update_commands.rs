@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tauri commands that wrap `tauri-plugin-updater`.
 //!
 //! Two surfaces:

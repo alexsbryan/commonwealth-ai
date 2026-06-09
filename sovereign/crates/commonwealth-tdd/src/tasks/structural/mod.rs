@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Structural goal templates — language-agnostic.
 //!
 //! Each module here renders a per-framework structural test file

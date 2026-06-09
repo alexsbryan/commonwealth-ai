@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   // Chronological feed of decisions and deferred questions. The
   // dashboard's primary "what happened" surface — every non-trivial

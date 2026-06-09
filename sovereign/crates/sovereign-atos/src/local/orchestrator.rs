@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `LocalAtosOrchestrator` — default [`AtosOrchestrator`] impl backed
 //! by a pair of local [`FeatureStore`] / [`NoteStore`] handles.
 //!

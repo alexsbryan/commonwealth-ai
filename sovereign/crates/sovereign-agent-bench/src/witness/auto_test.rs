@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Auto-witness driver. Copies held-out fixtures into the agent's
 //! workdir, runs `verify_cmd`, parses the output, scores a pass
 //! fraction.

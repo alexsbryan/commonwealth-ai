@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tool-efficacy self-host harness.
 //!
 //! Reads what the daemon already records (`~/.sovereign/notes.db` and

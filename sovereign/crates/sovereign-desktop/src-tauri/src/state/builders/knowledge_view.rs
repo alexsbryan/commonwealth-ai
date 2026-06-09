@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! KnowledgeView manager construction — extracted verbatim from
 //! `bootstrap_with_progress` (§3.3). The desktop mirror of the
 //! server/CLI KnowledgeView wire-up. Narrowed to the values it needs

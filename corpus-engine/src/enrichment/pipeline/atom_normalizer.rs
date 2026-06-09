@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pipeline-agnostic post-processing for Phase 1 atoms.
 //!
 //! This module hosts the [`AtomPostProcessor`] trait and a small

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Phase 4 — `sovereign daemon` absorbs the setup wizard, and
 //! `sovereign install-service` becomes an explicit top-level command.
 //!

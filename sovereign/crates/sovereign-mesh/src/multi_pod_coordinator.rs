@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Multi-pod coordinator — fan one job out across N ephemeral worker pods.
 //!
 //! Spec: `sovereign/docs/EPHEMERAL_WORKER_PODS.md` §"Multi-pod jobs".

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `read_note_by_id` — fetch one note row by its id.
 //!
 //! Complements `read_notes` (bulk, filtered) and `read_note_digest` (M2)

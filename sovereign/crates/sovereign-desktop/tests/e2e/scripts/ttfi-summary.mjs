@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // TTFI report pretty-printer.
 //
 // Reads tests/e2e/.ttfi-report.json and prints a markdown table to

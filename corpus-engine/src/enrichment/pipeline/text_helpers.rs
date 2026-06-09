@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pure string-manipulation helpers — extracted out of `pipeline::types`.
 //!
 //! Used by every phase's `parse_*` to be forgiving about model output

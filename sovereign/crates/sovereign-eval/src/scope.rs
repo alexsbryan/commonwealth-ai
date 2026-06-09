@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Diff-scope analyzer (seam #1).
 //!
 //! For compound features inside a large existing codebase, "did the

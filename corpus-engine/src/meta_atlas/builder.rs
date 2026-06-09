@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Meta-atlas builder — walks every installed atlas, per-atom
 //! classifies articulation, clusters by `lookup_key`, persists to
 //! `~/.sovereign/meta-atlas/canonical_atoms.json`.

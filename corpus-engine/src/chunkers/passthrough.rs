@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Passthrough chunker — emits the input as a single [`TextChunk`].
 //!
 //! Used by extractors that already produce chunk-sized output (e.g. the

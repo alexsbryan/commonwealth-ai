@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Catalog-corpus retrieval helpers.
 //!
 //! When a query lands on a corpus whose `kind = Catalog`, the

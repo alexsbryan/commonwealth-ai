@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Lint-runner as a [`BackgroundWatcher`] plugin.
 //!
 //! Nearly identical to [`super::test_watcher::TestWatcher`] — the differences

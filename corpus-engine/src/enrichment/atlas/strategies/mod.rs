@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `AtlasIngestion` implementations.
 //!
 //! Each module here defines one strategy and a `register_into` hook

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Crate-internal helpers shared across every subcommand.
 //!
 //! The `sovereign-cli` binary grew organically: each new subcommand

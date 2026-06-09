@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! DESIGN.md onboarding — import an existing doc or drop a minimal
 //! template.
 //!
@@ -143,7 +144,7 @@ pub fn import_design(repo_root: &Path, source: &Path) -> OnboardOutcome {
             source_text.lines().count()
         );
 
-        let accept = crate::util::prompts::confirm(
+        let accept = sovereign_cli_shared::prompts::confirm(
             "    Overwrite the existing DESIGN.md?",
             /* default_yes */ false,
         );

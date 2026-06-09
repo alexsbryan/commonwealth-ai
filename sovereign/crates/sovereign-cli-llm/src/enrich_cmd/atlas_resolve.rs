@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign enrich atlas-resolve` — Phase A Step 3a + Step 3b
 //! driver.
 //!
@@ -29,7 +30,7 @@ use corpus_engine::types::EmbedFn;
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
 use super::paths;
-use crate::util::help::{self, Help, HelpSection};
+use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "sovereign enrich atlas-resolve",

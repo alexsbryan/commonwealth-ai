@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Document Asset Manager — ingest once, query forever.
 //!
 //! Handles the full lifecycle of a document asset:

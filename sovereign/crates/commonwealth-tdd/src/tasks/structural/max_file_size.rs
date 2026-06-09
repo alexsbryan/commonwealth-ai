@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `max_file_size` structural goal — every source file in the
 //! workdir must be ≤ N lines. One template per framework; the
 //! template is concrete-language test code that walks the workdir

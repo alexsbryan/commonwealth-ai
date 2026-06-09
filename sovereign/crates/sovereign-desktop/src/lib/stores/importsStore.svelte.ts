@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Persistent state for Settings → Imports.
 //
 // Originally ImportsTab.svelte held this state in component-local

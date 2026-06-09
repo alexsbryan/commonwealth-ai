@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared argument parsing for `sovereign chat` subcommands.
 //!
 //! Every subcommand takes the same global flags (`--daemon`, `--data-dir`,
@@ -9,7 +10,7 @@ use std::path::PathBuf;
 
 use sovereign_core::setup_config::SetupConfig;
 
-use crate::util::urls::DEFAULT_CLIENT_PORT;
+use sovereign_cli_shared::urls::DEFAULT_CLIENT_PORT;
 
 /// Shared config resolved once per subcommand invocation. Subcommands
 /// pass this to `bootstrap::build_runtime` and consult it for output-

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Direct-invocation E2E tests for the Phase 3 filesystem watcher.
 //!
 //! These mirror the MCP-layer tests T-12/T-13/T-14/T-20 from the

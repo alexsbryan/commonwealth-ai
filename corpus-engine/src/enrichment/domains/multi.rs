@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! MultiDomain — routes to per-cluster domain implementations.
 //! Constructor only; Domain methods use todo!() except id/name.
 
