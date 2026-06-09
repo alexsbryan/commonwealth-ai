@@ -36,6 +36,12 @@
   import { enrichProgressStore } from "../stores/enrichProgress.svelte";
   import { chatSeedStore } from "../stores/chatSeed.svelte";
   import StarterChips from "./StarterChips.svelte";
+  import {
+    interleaveStarters,
+    visibleStarters,
+    advanceStarterCursor,
+    type StarterWithCorpus,
+  } from "./starterQuestions";
   import BrandMark from "./BrandMark.svelte";
   import { MAX_TURN_MESSAGE_CHARS, OVERSIZE_MESSAGE_HINT } from "../types";
   import { WordBufferedStream } from "@sovereign/chat-ui";
@@ -89,8 +95,8 @@
   // round-robin merge across corpora collides on the bare id and
   // crashes Svelte's keyed-each with `each_key_duplicate`. That
   // crash freezes ChatView's reactive subtree, which is what was
-  // making conversation switches feel "stuck".
-  type StarterWithCorpus = StarterQuestion & { corpus_id: string };
+  // making conversation switches feel "stuck". `StarterWithCorpus` and
+  // the pool math now live in `./starterQuestions` (unit-tested).
 
   // Larger pool that the cycle button advances through two at a time.
   // 12 keeps fetches cheap (each enrich_get_starter_questions call is
@@ -107,14 +113,9 @@
   let starterSpinning = $state(false);
   let buildingCorporaCount = $state(0);
 
-  let starters = $derived.by(() => {
-    if (starterPool.length === 0) return [] as StarterWithCorpus[];
-    const out: StarterWithCorpus[] = [];
-    for (let i = 0; i < STARTERS_VISIBLE; i++) {
-      out.push(starterPool[(starterCursor + i) % starterPool.length]);
-    }
-    return out;
-  });
+  let starters = $derived(
+    visibleStarters(starterPool, starterCursor, STARTERS_VISIBLE),
+  );
 
   // Used to suppress the cycle button when the pool is too small to
   // produce a fresh second pair on click (avoids the user mashing it
@@ -148,20 +149,7 @@
         }),
       );
       // Round-robin interleave to keep the cycle order corpus-fair.
-      const interleaved: StarterWithCorpus[] = [];
-      let idx = 0;
-      while (
-        interleaved.length < STARTER_POOL_TARGET &&
-        perCorpus.some((p) => p.length > idx)
-      ) {
-        for (const row of perCorpus) {
-          if (idx < row.length && interleaved.length < STARTER_POOL_TARGET) {
-            interleaved.push(row[idx]);
-          }
-        }
-        idx += 1;
-      }
-      starterPool = interleaved;
+      starterPool = interleaveStarters(perCorpus, STARTER_POOL_TARGET);
       starterCursor = 0;
     } catch (e) {
       console.warn("refreshStarters failed:", e);
@@ -176,13 +164,13 @@
     // Advance two at a time so the visible pair fully turns over.
     // If we'd wrap on the next advance, refresh in the background so
     // the third loop pulls fresh atoms rather than recycling.
-    const next = starterCursor + STARTERS_VISIBLE;
-    if (next >= starterPool.length) {
-      starterCursor = 0;
-      void refreshStarters();
-    } else {
-      starterCursor = next;
-    }
+    const { cursor, shouldRefresh } = advanceStarterCursor(
+      starterCursor,
+      starterPool.length,
+      STARTERS_VISIBLE,
+    );
+    starterCursor = cursor;
+    if (shouldRefresh) void refreshStarters();
     // Match the CSS transition (320ms) so the icon settles after the
     // chip-swap rather than mid-flight.
     window.setTimeout(() => {

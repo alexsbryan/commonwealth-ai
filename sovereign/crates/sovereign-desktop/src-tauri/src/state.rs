@@ -7,21 +7,19 @@ use corpus_engine::CorpusEngine;
 use corpus_engine_atos::FeatureStore;
 use corpus_engine_notes::NoteStore;
 
-use sovereign_core::health_monitor::{HealthMonitor, MonitorConfig};
-use sovereign_core::insight::{InsightService, InsightSinkRegistry};
+use sovereign_core::health_monitor::HealthMonitor;
+use sovereign_core::insight::InsightService;
 use sovereign_core::model_family::{
     EmbedModelInfo, ModelFamily, NormalizationStrategy, PoolingStrategy,
 };
 use sovereign_core::planner::LlmPlanner;
 use sovereign_core::router::LlmRouter;
 use sovereign_core::runtime::Runtime;
-use sovereign_core::traits::{InferenceProvider, InsightStore, StateStore};
+use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::InferenceConfig;
 use sovereign_core::{SkillRegistry, ToolRegistry};
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
-use sovereign_store::insight_store::SqliteInsightStore;
 use sovereign_store::sqlite::SqliteStateStore;
-use sovereign_tools::index_validator::EmbedSlotConfig;
 use sovereign_tools::local_corpus::LocalCorpusManager;
 use sovereign_tools::shell::ShellTool;
 use tokio_util::sync::CancellationToken;
@@ -39,6 +37,9 @@ use builtin_skills::dev_workspace_skills_dir;
 // submodule; re-exported so callers keep using `crate::state::DesktopConfig`.
 mod config;
 pub use config::*;
+
+// Construction helpers for `bootstrap_with_progress` (§3.3).
+mod builders;
 
 // ─── App State ───────────────────────────────────────────────
 
@@ -424,44 +425,15 @@ pub async fn bootstrap_with_progress(
     };
 
     // Open database.
-    let store: Arc<dyn StateStore> = {
-        let existing = state.store.read().await;
-        if let Some(ref s) = *existing {
-            Arc::clone(s)
-        } else {
-            drop(existing);
-            emit(BootstrapPhase::OpeningDatabase);
-            let db_path = config.data_dir.join("sovereign.db");
-            if let Some(parent) = db_path.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("Failed to create data dir: {e}"))?;
-            }
-            tracing::info!("Database: {}", db_path.display());
-            let sqlite_store = SqliteStateStore::open(&db_path)
-                .map_err(|e| format!("Failed to open database: {e}"))?;
-
-            // Create insight store sharing the same connection.
-            let insight_store: Arc<dyn InsightStore> =
-                Arc::new(SqliteInsightStore::new(sqlite_store.connection()));
-            let insight_service = Arc::new(InsightService::new(
-                insight_store,
-                Arc::new(InsightSinkRegistry::new()),
-                Arc::clone(&inference),
-            ));
-            *state.insight_service.write().await = Some(insight_service);
-
-            // Two handles for KnowledgeView wire-up: concrete Arc for
-            // `set_observer` (called once the manager exists below),
-            // trait-object Arc for the runtime + tools.
-            let store_concrete: Arc<SqliteStateStore> = Arc::new(sqlite_store);
-            let s: Arc<dyn StateStore> = store_concrete.clone();
-            *state.store.write().await = Some(Arc::clone(&s));
-            // Stash the concrete handle in the AppState so the later
-            // KnowledgeView wiring can call `set_observer` on it.
-            *state.sqlite_store.write().await = Some(store_concrete);
-            s
-        }
-    };
+    let store: Arc<dyn StateStore> = builders::store::open_store(
+        &state.store,
+        &state.sqlite_store,
+        &state.insight_service,
+        &config,
+        &inference,
+        &emit,
+    )
+    .await?;
 
     // Open the recipe-author backing stores in BOTH bootstrap modes.
     // The CLI live-trial uses these too; desktop must mirror them so
@@ -1268,82 +1240,16 @@ pub async fn bootstrap_with_progress(
     }
 
     // ── Health Monitor ────────────────────────────────────────────────────────
-    // Only build the monitor once (it survives Runtime rebuilds).
-    if state.health_monitor.read().await.is_none() {
-        let embed_dims = config
-            .embed_model_path
-            .as_ref()
-            .map(|_| {
-                // If we successfully embedded a probe above, use that dimension.
-                // Fall back to a reasonable default — the checker will detect mismatches.
-                0usize
-            })
-            .unwrap_or(0);
-        let embed_slot = Arc::new(tokio::sync::RwLock::new(EmbedSlotConfig {
-            model_id: embed_model_name.clone(),
-            output_dims: embed_dims,
-        }));
-
-        let monitor = Arc::new(HealthMonitor::new(
-            MonitorConfig::default(),
-            Arc::clone(&store),
-        ));
-
-        // Register CorpusIndexChecker.
-        monitor
-            .register(Arc::new(
-                sovereign_tools::index_validator::CorpusIndexChecker::new(
-                    Arc::clone(&corpus_engine),
-                    Arc::clone(&embed_slot),
-                ),
-            ))
-            .await;
-
-        // Register EnrichmentChecker.
-        monitor
-            .register(Arc::new(
-                sovereign_tools::enrichment_checker::EnrichmentChecker::new(Arc::clone(
-                    &corpus_engine,
-                )),
-            ))
-            .await;
-
-        // Register StateStoreChecker (SQLite only).
-        let db_path = config.data_dir.join("sovereign.db");
-        if let Ok(sqlite_store) = SqliteStateStore::open(&db_path) {
-            monitor
-                .register(Arc::new(
-                    sovereign_store::state_store_checker::StateStoreChecker::new(
-                        Arc::new(sqlite_store),
-                        db_path,
-                    ),
-                ))
-                .await;
-        }
-
-        // Register RouterCircuitChecker.
-        // Only wire if HybridProvider exposes a primary health tracker.
-        // We use the inference provider directly for probe completion.
-        // Wire RouterCircuitChecker with a standalone HealthTracker.
-        // The monitor probes the inference provider on repair to test liveness.
-        {
-            let tracker = Arc::new(sovereign_inference::health::HealthTracker::new());
-            monitor
-                .register(Arc::new(
-                    sovereign_inference::router_circuit::RouterCircuitChecker::new(
-                        Arc::clone(&tracker),
-                        Arc::clone(&inference),
-                    ),
-                ))
-                .await;
-        }
-
-        let m = Arc::clone(&monitor);
-        let shutdown = state.health_shutdown.clone();
-        tokio::spawn(async move { m.run(shutdown).await });
-        *state.health_monitor.write().await = Some(monitor);
-        tracing::info!("HealthMonitor started");
-    }
+    builders::health::build_health_monitor(
+        &state.health_monitor,
+        &state.health_shutdown,
+        &config,
+        &store,
+        &corpus_engine,
+        &inference,
+        &embed_model_name,
+    )
+    .await;
 
     tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(Arc::clone(
         &corpus_engine,
