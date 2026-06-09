@@ -21,6 +21,14 @@ pub struct RemoteApiProvider {
     api_key: Option<String>,
     model_id: String,
     context_size: u32,
+    /// Query-side instruction prefix for this model, resolved once at
+    /// construction from the bundled manifest (empty for chat / non-embedding
+    /// models). The embedded engine applies this in `embed_query_sync`; the
+    /// remote `/embeddings` API has no query/document distinction, so the
+    /// client prepends it before sending — making the remote query-embedding
+    /// path bit-identical to the embedded one. See
+    /// `ModelsManifest::embed_query_instruction`.
+    query_instruction: String,
 }
 
 /// Default request timeout for `RemoteApiProvider`. Matches the
@@ -62,6 +70,8 @@ impl RemoteApiProvider {
             api_key,
             model_id: model_id.to_string(),
             context_size,
+            query_instruction: sovereign_core::models_manifest::DEFAULT_MANIFEST
+                .embed_query_instruction(model_id),
         }
     }
 
@@ -87,6 +97,8 @@ impl RemoteApiProvider {
             api_key: Some(bearer),
             model_id: model_id.to_string(),
             context_size,
+            query_instruction: sovereign_core::models_manifest::DEFAULT_MANIFEST
+                .embed_query_instruction(model_id),
         }
     }
 
@@ -624,6 +636,22 @@ impl InferenceProvider for RemoteApiProvider {
             .ok_or(Error::Inference(
                 "No embedding data in response".to_string(),
             ))
+    }
+
+    /// Embed a *query* with this model's query-side instruction prefix.
+    ///
+    /// The OpenAI `/embeddings` endpoint has no query/document distinction, so
+    /// the prefix is applied client-side: prepend it, then embed via the same
+    /// HTTP path. This makes the result bit-identical to the embedded engine's
+    /// `embed_query_sync` (which prepends the same `query_instruction`). When
+    /// the model declares no query instruction (chat / non-embedding ids), the
+    /// prefix is empty and this is exactly `embed()` — no behaviour change.
+    async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
+        if self.query_instruction.is_empty() {
+            return self.embed(query).await;
+        }
+        let prefixed = format!("{}{query}", self.query_instruction);
+        self.embed(&prefixed).await
     }
 
     fn capabilities(&self) -> ProviderCapabilities {

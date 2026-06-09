@@ -347,6 +347,50 @@ impl ModelsManifest {
         }
         best.map(|(_, family)| parse_family(family))
     }
+
+    /// Resolve the query-side instruction prefix for an embedding model id
+    /// (e.g. Qwen3-Embedding's `"Instruct: …\nQuery: "`). This is the prefix
+    /// the embedded engine applies in `embed_query_sync`; the remote/daemon
+    /// path historically dropped it because the OpenAI `/embeddings` API has
+    /// no query/document distinction.
+    ///
+    /// Manifest-first: resolve the family via [`Self::embed_family_for_file`]
+    /// and read its `EmbedQuirks.query_instruction`. Falls back to the
+    /// manifest's own embed-slot family when the id *clearly names* an
+    /// embedding model but doesn't substring-match a manifest filename — the
+    /// real case here is a deployment that renamed the GGUF to
+    /// `qwen-embedding-0.6b.gguf`, which the manifest (listing
+    /// `Qwen3-Embedding-0.6B-Q8_0.gguf`) can't match. The fallback family is
+    /// *derived* from the manifest, not hardcoded, so a future non-Qwen
+    /// embedder added to `models.toml` still resolves correctly.
+    ///
+    /// Returns `""` for non-embedding ids (chat models, unknown) — making the
+    /// caller's `embed_query` prefix a safe no-op there.
+    pub fn embed_query_instruction(&self, model_id: &str) -> String {
+        // Operator escape hatch: restore the pre-fix behaviour (no query
+        // prefix, embed_query == embed) without a rebuild. Also the A/B knob
+        // used to attribute retrieval deltas to the prefix on the eval banks.
+        if std::env::var("SOVEREIGN_DISABLE_QUERY_PREFIX").is_ok_and(|v| v != "0") {
+            return String::new();
+        }
+        let family = self.embed_family_for_file(model_id).or_else(|| {
+            if !model_id.to_ascii_lowercase().contains("embed") {
+                return None;
+            }
+            // The id names an embedding model but didn't match a filename.
+            // Use the family of any declared embed slot (they are homogeneous
+            // in practice — all Qwen3Embedding today — and this stays correct
+            // if that changes, since it reads the manifest, not a constant).
+            self.profiles
+                .values()
+                .find_map(|p| p.embed.as_ref())
+                .map(|slot| parse_family(slot.family.as_str()))
+        });
+        family
+            .and_then(|f| f.default_quirks().embed)
+            .map(|eq| eq.query_instruction)
+            .unwrap_or_default()
+    }
 }
 
 /// Parse the TOML `family = "..."` string into a [`ModelFamily`]
@@ -421,6 +465,28 @@ mod tests {
             m.profiles.len(),
             m.profiles.keys().collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn embed_query_instruction_resolves_qwen_embedding() {
+        let m = &*DEFAULT_MANIFEST;
+        // Manifest filename → matches directly.
+        let from_file = m.embed_query_instruction("Qwen3-Embedding-0.6B-Q8_0.gguf");
+        assert!(
+            from_file.starts_with("Instruct:"),
+            "manifest filename should resolve the Qwen3-Embedding query prefix, got {from_file:?}"
+        );
+        // Daemon-advertised stem (`qwen-embedding-0.6b`) does NOT substring-match
+        // any manifest filename — this is the renamed-GGUF case the fallback
+        // exists for. It must still resolve.
+        let from_stem = m.embed_query_instruction("qwen-embedding-0.6b");
+        assert_eq!(
+            from_stem, from_file,
+            "renamed-stem fallback must resolve the same prefix as the manifest filename"
+        );
+        // Non-embedding ids resolve to empty → embed_query is a no-op.
+        assert!(m.embed_query_instruction("Qwen3.5-9B-Q4_K_M").is_empty());
+        assert!(m.embed_query_instruction("some-random-chat-model").is_empty());
     }
 
     #[test]

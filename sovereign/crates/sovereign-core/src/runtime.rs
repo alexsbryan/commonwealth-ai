@@ -206,6 +206,7 @@ tier, distinct from RETRIEVED and PARAMETRIC:\n\
   the per-work corpus's full-text passages instead of offering to \
   ingest again.";
 
+
 /// Thinking directive — orients `<think>` toward substantive reasoning.
 ///
 /// Without this, models default to source-adequacy bookkeeping in their

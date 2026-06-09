@@ -1194,10 +1194,17 @@ impl Runtime {
                 }
             }
             SynthesisRoute::PrimarySynthesis => {
-                let base = if gap_note.is_empty() {
-                    format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{THINKING_DIRECTIVE}")
+                // THINKING_DIRECTIVE is a `<think>`-block contract; pass it only
+                // when a think budget is allocated (thinking enabled).
+                let thinking = if self.inference_config.think_budget > 0 {
+                    format!("\n\n{THINKING_DIRECTIVE}")
                 } else {
-                    format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{gap_note}\n\n{THINKING_DIRECTIVE}")
+                    String::new()
+                };
+                let base = if gap_note.is_empty() {
+                    format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}{thinking}")
+                } else {
+                    format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{gap_note}{thinking}")
                 };
                 let budget_note = crate::runtime::build_response_length_directive(
                     self.inference_config.max_tokens,

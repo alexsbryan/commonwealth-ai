@@ -118,6 +118,14 @@ impl InferenceProvider for SplitInferenceProvider {
         self.embed.embed(text).await
     }
 
+    /// Route to the embed provider's `embed_query` so its model-specific
+    /// query-instruction prefix is applied. Without this override the trait
+    /// default would call `SplitInferenceProvider::embed` (the document path),
+    /// silently dropping the prefix — the latent bug this fixes.
+    async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
+        self.embed.embed_query(query).await
+    }
+
     fn model_id_for(&self, _speed: Speed) -> String {
         // We only have one chat slot over HTTP; the daemon itself
         // maps Fast/Slow to its loaded models. Reporting the request
