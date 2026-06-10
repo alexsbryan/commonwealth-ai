@@ -8,6 +8,9 @@ import { defineConfig, devices } from "@playwright/test";
 // with deterministic cadence (the whole point of these tests).
 export default defineConfig({
   testDir: "./tests/e2e/specs",
+  // Truncates test-results/ledger-synthetic.jsonl (the command-coverage
+  // ledger) so each run's coverage report is self-contained.
+  globalSetup: "./tests/e2e/global-setup-ledger.mjs",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
