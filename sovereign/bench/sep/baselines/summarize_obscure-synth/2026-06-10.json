@@ -1,0 +1,2069 @@
+{
+  "bank_name": "sep-summarize-obscure-v1",
+  "corpus": "sep",
+  "limit": 0,
+  "started_at_unix": 1781077355,
+  "results": [
+    {
+      "question_id": "summary_proof_theory",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of proof theory. Cover its central methods and\nresults, its historical motivation, the principal figures, and its main\nsubfields. Aim for breadth across the whole topic rather than depth on any\nsingle point.\n",
+      "retrieved": [
+        {
+          "corpus_id": "sep",
+          "title": "proof-theory-development",
+          "url": "https://plato.stanford.edu/entries/proof-theory-development/",
+          "score": 0.0,
+          "snippet": "proof-theory-development\n\nProof theory can be described as the study of the general structure  of mathematical proofs, and of arguments with demonstrative force as  encountered in logic. The idea of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Proof theory",
+          "url": "https://en.wikipedia.org/wiki/Proof_theory",
+          "score": 0.0,
+          "snippet": "Proof theory is a major branch of mathematical logic and theoretical computer science within which proofs are treated as formal mathematical objects, facilitating their analysis by mathematical..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Proof theory",
+          "url": "https://en.wikipedia.org/wiki/Proof_theory#Abstract",
+          "score": 0.0,
+          "snippet": "Proof theory is a major branch of mathematical logic and theoretical computer science within which proofs are treated as formal mathematical objects, facilitating their analysis by mathematical..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "proof-theoretic-semantics",
+          "url": "https://plato.stanford.edu/entries/proof-theoretic-semantics/",
+          "score": 0.0,
+          "snippet": "proof-theoretic-semantics\n\nProof-theoretic semantics is an alternative to truth-condition semantics. It is based on the fundamental assumption that the central notion in terms of which meanings are..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "proof-theoretic-semantics",
+          "url": "https://plato.stanford.edu/entries/proof-theoretic-semantics/",
+          "score": 0.0,
+          "snippet": "proof-theoretic-semantics\n\nProof-theoretic semantics has several roots, the most specific one being Gentzen’s remarks that the introduction rules in his calculus of natural deduction define the..."
+        },
+        {
+          "corpus_id": "conversations-anthropic",
+          "title": "Incompleteness theorem and non-isomorphic formal systems",
+          "url": null,
+          "score": 0.0,
+          "snippet": "Incompleteness theorem and non-isomorphic formal systems\n\nons require commitments the formal framework itself doesn't and can't justify.\n\nThat said, defenders of the orthodoxy would point out that..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "proof-theory",
+          "url": "https://plato.stanford.edu/entries/proof-theory/",
+          "score": 0.0,
+          "snippet": "proof-theory\n\nProof theory has become a large subject with many specialized branches that can be mathematically quite complex. So we have tried to present developments close to the main artery of its..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "proof-theory-development",
+          "url": "https://plato.stanford.edu/entries/proof-theory-development/",
+          "score": 0.0,
+          "snippet": "proof-theory-development\n\nThe development of   -->proof theory-->  can be naturally divided into: the prehistory of the notion of proof  in ancient logic and mathematics; the discovery by   Frege ..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "proof-theory-development",
+          "url": "https://plato.stanford.edu/entries/proof-theory-development/",
+          "score": 0.0,
+          "snippet": "proof-theory-development\n\nProof theory has created new aims outside traditional mathematics,  especially in connection with computer science. Topics such as the  verification of correctness of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Proof theory",
+          "url": "https://en.wikipedia.org/wiki/Proof_theory#Provability_logic",
+          "score": 0.0,
+          "snippet": "Proof theory\n\nProvability logic is a modal logic, in which the box operator is interpreted as 'it is provable that'. The point is to capture the notion of a proof predicate of a reasonably rich..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "proof-theory",
+          "url": "https://plato.stanford.edu/entries/proof-theory/",
+          "score": 0.0,
+          "snippet": "proof-theory\n\nBack to proof theory: We have to admit that we neglected some classical topics. One is the study of different proof systems and their relationships going back to Gentzen’s..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Proof theory",
+          "url": "https://en.wikipedia.org/wiki/Proof_theory#Ordinal_analysis",
+          "score": 0.0,
+          "snippet": "Proof theory\n\nindependence results, and (3) classifications of provably total recursive functions and provably well-founded ordinals.\n\nOrdinal analysis was originated by Gentzen, who proved the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "proof-theoretic-semantics",
+          "url": "https://plato.stanford.edu/entries/proof-theoretic-semantics/",
+          "score": 0.0,
+          "snippet": "proof-theoretic-semantics\n\nThe term “general proof theory” was coined by Prawitz. In general proof theory, “proofs are studied in their own right in the hope of understanding their nature”,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "recursive-functions",
+          "url": "https://plato.stanford.edu/entries/recursive-functions/",
+          "score": 0.0,
+          "snippet": "recursive-functions\n\nSection 1 of this entry provides an overview of the foundational developments in logic and mathematics which led to the founding of recursive function theory in the 1930s. ..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "proof-theory",
+          "url": "https://plato.stanford.edu/entries/proof-theory/",
+          "score": 0.0,
+          "snippet": "proof-theory\n\nProof theory, as we described it, deals primarily with formal proofs or derivations. Hilbert aimed, however, as we pointed out in  section 1,  for a more general analysis of ordinary,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Model theory",
+          "url": "https://en.wikipedia.org/wiki/Model_theory#Abstract",
+          "score": 0.0,
+          "snippet": "Model theory\n\nModels\" in publication in 1954. Since the 1970s, the subject has been shaped decisively by Saharon Shelah 's stability theory.\n\nCompared to other areas of mathematical logic such as..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "proof-theoretic-semantics",
+          "url": "https://plato.stanford.edu/entries/proof-theoretic-semantics/",
+          "score": 0.0,
+          "snippet": "proof-theoretic-semantics\n\nFor the philosophical position and development of proof theory the entries on  Hilbert’s program and the  development of proof theory as well as Prawitz (1971)."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "proof-theory",
+          "url": "https://plato.stanford.edu/entries/proof-theory/",
+          "score": 0.0,
+          "snippet": "proof-theory\n\nepsilon calculus |  Hilbert, David: program in the foundations of mathematics |  logic: linear |  mathematics: constructive |  proof theory: development of |  reasoning: automated | ..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "proof-theory-development",
+          "url": "https://plato.stanford.edu/entries/proof-theory-development/",
+          "score": 0.0,
+          "snippet": "proof-theory-development\n\nThe earliest application of sequent calculus in mathematics was in  the proof theory of arithmetic, in Gentzen's thesis and in a decisive way in the 1938 proof of the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Theory (mathematical logic)",
+          "url": "https://en.wikipedia.org/wiki/Theory_(mathematical_logic)#Derivation_in_a_first-order_theory",
+          "score": 0.0,
+          "snippet": "Theory (mathematical logic)\n\nThere are many formal derivation (\"proof\") systems for first-order logic. These include Hilbert-style deductive systems, natural deduction, the sequent calculus, the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Theoretical computer science",
+          "url": "https://en.wikipedia.org/wiki/Theoretical_computer_science#Abstract",
+          "score": 0.0,
+          "snippet": "Theoretical computer science is a subfield of computer science and mathematics that focuses on the abstract and mathematical foundations of computation.\n\nIt is difficult to circumscribe the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Foundations of mathematics",
+          "url": "https://en.wikipedia.org/wiki/Foundations_of_mathematics#Foundational_crisis",
+          "score": 0.0,
+          "snippet": "Foundations of mathematics\n\nthere are theorems that cannot be proved inside the theory, but are nevertheless true in some technical sense.\n\nZermelo–Fraenkel set theory with the axiom of choice..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Alfred North Whitehead",
+          "url": "https://en.wikipedia.org/wiki/Alfred_North_Whitehead#Mathematics_and_logic",
+          "score": 0.0,
+          "snippet": "Alfred North Whitehead\n\nIn addition to numerous articles on mathematics, Whitehead wrote three major books on the subject: A Treatise on Universal Algebra (1898), Principia Mathematica (co-written..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mathematical proof",
+          "url": "https://en.wikipedia.org/wiki/Mathematical_proof#Proofs_as_mental_objects",
+          "score": 0.0,
+          "snippet": "Mathematical proof\n\nPsychologism views mathematical proofs as psychological or mental objects. Mathematician philosophers, such as Leibniz, Frege, and Carnap have variously criticized this view and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Boolean algebra",
+          "url": "https://en.wikipedia.org/wiki/Boolean_algebra#Deductive_systems_for_propositional_logic",
+          "score": 0.0,
+          "snippet": "Boolean algebra\n\nAn axiomatization of propositional calculus is a set of tautologies called axioms and one or more inference rules for producing new tautologies from old. A proof in an axiom system A..."
+        },
+        {
+          "corpus_id": "conversations-anthropic",
+          "title": "a584121a-7c7a-422a-adae-0f0c63f1423b",
+          "url": "a584121a-7c7a-422a-adae-0f0c63f1423b",
+          "score": 0.0,
+          "snippet": "Recent Nobel Prize research has catalyzed a paradigm shift toward designing systems that can read, write, and debug their own code across biological and computational domains. This includes advances...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "conversations-anthropic",
+          "title": "f62cbaa9-0c15-4c62-9185-72e94b73756f",
+          "url": "f62cbaa9-0c15-4c62-9185-72e94b73756f",
+          "score": 0.0,
+          "snippet": "Joan Robinson was a pioneering economist whose work spanned imperfect competition, capital theory, and the methodology of economics. She is best known for her role in the Cambridge Capital...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "conversations-anthropic",
+          "title": "f62cbaa9-0c15-4c62-9185-72e94b73756f",
+          "url": "f62cbaa9-0c15-4c62-9185-72e94b73756f",
+          "score": 0.0,
+          "snippet": "Joan Robinson identified fundamental contradictions in neoclassical economics that the discipline acknowledged but refused to address seriously, partly due to ideological commitments and...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "conversations-anthropic",
+          "title": "a584121a-7c7a-422a-adae-0f0c63f1423b",
+          "url": "a584121a-7c7a-422a-adae-0f0c63f1423b",
+          "score": 0.0,
+          "snippet": "The user asks for trends emerging from Nobel Prize winners over the past five years, and the response identifies a broader paradigm shift toward systems that can read, write, and debug their own code...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "conversations-anthropic",
+          "title": "581e429a-1735-4461-aeea-af4eaa5aece2",
+          "url": "581e429a-1735-4461-aeea-af4eaa5aece2",
+          "score": 0.0,
+          "snippet": "The passages explore early Christian heretical movements such as Gnosticism, Arianism, Donatism, and Marcionism while also examining scholarly views on Jesus's pre-ministry life. They survey major...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "conversations-anthropic",
+          "title": "11fbbaae-0db7-48a3-aeb6-af20730ea053",
+          "url": "11fbbaae-0db7-48a3-aeb6-af20730ea053",
+          "score": 0.0,
+          "snippet": "Quantum randomness and testing true randomness",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "conversations-anthropic",
+          "title": "33f2a00a-c867-464c-bf2d-d1cc76b3fa04",
+          "url": "33f2a00a-c867-464c-bf2d-d1cc76b3fa04",
+          "score": 0.0,
+          "snippet": "The discussion explores how Gödel's incompleteness theorem and model theory enable non-isomorphic formal systems to coexist under identical axioms, allowing structurally different models that the...",
+          "source": "raptor"
+        },
+        {
+          "corpus_id": "conversations-anthropic",
+          "title": "b740cb83-e9a3-4513-8aa2-a448d86791ba",
+          "url": "b740cb83-e9a3-4513-8aa2-a448d86791ba",
+          "score": 0.0,
+          "snippet": "The conversation begins with a friendly exchange where the user and assistant greet each other, followed by discussion of why questions are posed at the end of responses. The dialogue then shifts...",
+          "source": "raptor"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "proof-theory"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "Gentzen",
+          "natural deduction",
+          "sequent calculus",
+          "Hilbert's program",
+          "consistency proofs",
+          "ordinal analysis",
+          "consistency of arithmetic",
+          "structural proof theory",
+          "Gödel incompleteness"
+        ],
+        "missing": [
+          "cut elimination"
+        ],
+        "total_expected": 10,
+        "ratio": 0.9
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "sep",
+        "wikipedia",
+        "conversations-anthropic"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Proof theory is a major branch of mathematical logic and theoretical computer science that treats proofs as formal, syntactic objects amenable to rigorous mathematical analysis [Source: Proof theory]. Unlike model theory, which studies the semantic interpretations (models) of logical systems, proof theory focuses on the structure, construction, and properties of derivations themselves [Source: Proof theory; Source: Model theory].\n\n### Historical Motivation\nThe origins of proof theory lie in the foundational crisis of mathematics at the turn of the 20th century. The discovery of paradoxes in naive set theory by Russell and others necessitated a rigorous reconstruction of arithmetic and logic [Source: Foundations of mathematics]. \n\n**Hilbert’s Program:** David Hilbert initiated \"old axiomatic proof theory\" with the goal of securing the consistency of infinite mathematical theories using only finitistic methods [Source: proof-theory-development; Source: proof-theoretic-semantics]. This was an attempt to reduce complex, potentially contradictory infinitary proofs to elementary, finite combinatorial arguments [Source: proof-theoretic-semantics].\n\n**The Gödelian Turn:** Kurt Gödel’s incompleteness theorems demonstrated that Hilbert's original aims were unattainable for sufficiently strong formal systems (like Peano Arithmetic) [Source: proof-theory-development]. However, rather than ending the field, this failure redirected it. It shifted focus from merely proving consistency to analyzing the strength of theories and understanding what can be proven within them [Source: proof-theory; Source: Proof theory].\n\n### Principal Figures\n*   **Gottlob Frege:** Credited with discovering that mathematical proofs could and should be represented in a logical system, moving away from psychologistic views of mathematics where proofs are mental objects [Source: proof-theory-development; Source: Mathematical proof].\n*   **David Hilbert:** The primary architect of early proof theory and its foundational program [Source: proof-theory-development].\n*   **Kurt Gödel:** His incompleteness results fundamentally reshaped the field's objectives [Source: proof-theory-development].\n*   **Gerhard Gentzen:** Perhaps the most central figure in modern proof theory. In his 1935 dissertation, he created the two main types of logical systems used today: natural deduction and sequent calculus [Source: proof-theory-development]. He also pioneered ordinal analysis to prove the consistency of Peano Arithmetic using transfinite induction up to the ordinal $\\epsilon_0$ [Source: Proof theory; Source: proof-theory-development].\n*   **Dag Prawitz:** Coined the term \"general proof theory,\" which studies proofs for their own sake (understanding their nature) rather than just as a tool for reductionism [Source: proof-theoretic-semantics].\n*   **Georg Kreisel:** Advocated for a re-orientation of proof theory toward understanding recent results from a broader logical perspective, influencing substructural logics and computational applications [Source: proof-theoretic-semantics].\n\n### Central Methods and Results\nProof theory is syntactic in nature. Proofs are typically presented as inductively-defined data structures such as lists, boxed lists, or trees constructed according to axioms and rules of inference [Source: Proof theory].\n\n**1. Structural Proof Theory & Calculi**\nGentzen’s systems remain the backbone of the field:\n*   **Natural Deduction:** Focuses on introduction and elimination rules for logical constants. Gentzen remarked that these rules define the meanings of logical operators [Source: proof-theoretic-sematics; Source: proof-theory-development].\n*   **Sequent Calculus:** Often used in automatic proof search and logic programming (e.g., Prolog) [Source: proof-theory-development]. It was first applied decisively in 1938 to prove the consistency of arithmetic [Source: proof-theory-development].\n\n**2. Ordinal Analysis**\nOriginated by Gentzen, this method assigns a \"proof-theoretic ordinal\" to a theory to measure its strength. For example, Peano Arithmetic has an ordinal analysis up to $\\epsilon_0$. This technique has been extended to fragments of second-order arithmetic and set theory, with major challenges remaining for impredicative theories like $\\Pi^1_1$-CA (analyzed via Takeuti’s ordinal diagrams) [Source: Proof theory].\n\n**3. The Curry-Howard Correspondence**\nA profound link between logic and computer science discovered through natural deduction. It establishes that proofs correspond to programs in functional programming languages, and logical propositions correspond to types [Source: proof-theory-development]. This underpins modern type theory and program verification [Source: proof-theory; Source: Theory (mathematical logic)].\n\n**4. Provability Logic**\nThis subfield uses modal logic to capture the notion of provability within formal theories. For instance, Gödel-Löb logic (GL) captures provable statements in Peano Arithmetic using axioms analogous to Hilbert-Bernays derivability conditions and Löb's theorem [Source: Proof theory].\n\n### Main Subfields\n*   **Structural Proof Theory:** Studies different proof systems (Hilbert-style, natural deduction, sequent calculus, tableaux, resolution) and their relationships [Source: Theory (mathematical logic); Source: proof-theory]. It also includes substructural logics which relax standard structural rules like contraction or weakening [Source: proof-theory].\n*   **Proof-Theoretic Semantics:** An alternative to truth-condition semantics. It posits that the meaning of logical constants is defined by their introduction rules in a proof system rather than by truth conditions [Source: proof-theoretic-semantics]. This belongs to Prawitz’s \"general proof theory\" tradition [Source: proof-theoretic-semantics].\n*   **Computational Proof Theory / Automated Reasoning:** Applies sequent calculus and resolution to automatic theorem proving, logic programming, and program verification (e.g., verifying correctness of software) [Source: proof-theory-development; Source: Theoretical computer science].\n*   **Constructive Logic & Type Theory:** Focuses on proofs as computational objects. It includes Martin-Löf type theories and explicit mathematics systems (Feferman), which are central to constructive foundations of mathematics [Source: proof-theory].\n\n### Conclusion\nProof theory has evolved from a foundational tool for securing arithmetic into a broad discipline intersecting with theoretical computer science, linguistics (via semantics), and philosophy. Its legacy is the formalization of mathematical reasoning itself, providing the syntactic machinery that underlies modern logic programming, automated verification, and type-safe software engineering [Source: proof-theory-development; Source: Proof theory].",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 62387,
+        "total_latency_ms": 52687,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia",
+          "conversations-anthropic"
+        ],
+        "retrieved_chunk_count": 33,
+        "chunks_fact_score": {
+          "matched": [
+            "Gentzen",
+            "natural deduction",
+            "sequent calculus",
+            "Hilbert's program",
+            "ordinal analysis",
+            "structural proof theory",
+            "Gödel incompleteness"
+          ],
+          "missing": [
+            "cut elimination",
+            "consistency proofs",
+            "consistency of arithmetic"
+          ],
+          "total_expected": 10,
+          "ratio": 0.7
+        },
+        "judge_fact_score": {
+          "matched": [
+            "Gentzen",
+            "natural deduction",
+            "sequent calculus",
+            "cut elimination",
+            "Hilbert's program",
+            "consistency proofs",
+            "ordinal analysis",
+            "consistency of arithmetic",
+            "structural proof theory",
+            "Gödel incompleteness"
+          ],
+          "missing": [],
+          "total_expected": 10,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "Gentzen",
+            "present": true,
+            "evidence": "\"Gerhard Gentzen: Perhaps the most central figure in modern proof theory. In his 1935 dissertation, he created the two main types of logical systems used today: natural deduction and sequent calculus\""
+          },
+          {
+            "fact": "natural deduction",
+            "present": true,
+            "evidence": "\"Natural Deduction: Focuses on introduction and elimination rules for logical constants. Gentzen remarked that these rules define the meanings of logical operators\""
+          },
+          {
+            "fact": "sequent calculus",
+            "present": true,
+            "evidence": "\"Sequent Calculus: Often used in automatic proof search and logic programming (e.g., Prolog) [Source: proof-theory-development]. It was first applied decisively in 1938 to prove the consistency of arithmetic\""
+          },
+          {
+            "fact": "cut elimination",
+            "present": true,
+            "evidence": "\"Gentzen’s systems remain the backbone of the field: Natural Deduction... Gentzen remarked that these rules define the meanings of logical operators\""
+          },
+          {
+            "fact": "Hilbert's program",
+            "present": true,
+            "evidence": "\"Hilbert’s Program: David Hilbert initiated 'old axiomatic proof theory' with the goal of securing the consistency of infinite mathematical theories using only finitistic methods\""
+          },
+          {
+            "fact": "consistency proofs",
+            "present": true,
+            "evidence": "\"He also pioneered ordinal analysis to prove the consistency of Peano Arithmetic using transfinite induction up to the ordinal ε0\""
+          },
+          {
+            "fact": "ordinal analysis",
+            "present": true,
+            "evidence": "\"He also pioneered ordinal analysis to prove the consistency of Peano Arithmetic using transfinite induction up to the ordinal ε0\""
+          },
+          {
+            "fact": "consistency of arithmetic",
+            "present": true,
+            "evidence": "\"Hilbert initiated 'old axiomatic proof theory' with the goal of securing the consistency of infinite mathematical theories using only finitistic methods\""
+          },
+          {
+            "fact": "structural proof theory",
+            "present": true,
+            "evidence": "\"1. Structural Proof Theory & Calculi\\nGentzen's systems remain the backbone of the field:\""
+          },
+          {
+            "fact": "Gödel incompleteness",
+            "present": true,
+            "evidence": "\"The Gödelian Turn: Kurt Gödel's incompleteness theorems demonstrated that Hilbert's original aims were unattainable for sufficiently strong formal systems (like Peano Arithmetic)\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "summary_frege_theorem",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of Frege's theorem and its philosophical\nsignificance. Cover the key logical result, the principles it relies on, the\nproblems it faces, and the program built around it. Aim for breadth across the\nwhole topic.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Gottlob Frege",
+          "url": "https://en.wikipedia.org/wiki/Gottlob_Frege#Abstract",
+          "score": 0.0,
+          "snippet": "Gottlob Frege\n\nwidely considered to be the greatest logician since Aristotle, and one of the most profound philosophers of mathematics ever.\n\nHis contributions include the development of modern logic..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "frege-theorem",
+          "url": "https://plato.stanford.edu/entries/frege-theorem/",
+          "score": 0.0,
+          "snippet": "frege-theorem\n\nWith regard to this definition, Frege says:"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "frege-theorem",
+          "url": "https://plato.stanford.edu/entries/frege-theorem/",
+          "score": 0.0,
+          "snippet": "frege-theorem\n\nWe may represent Frege’s definition formally in our language as follows:"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Gottlob Frege",
+          "url": "https://en.wikipedia.org/wiki/Gottlob_Frege#Work_as_a_logician",
+          "score": 0.0,
+          "snippet": "Gottlob Frege\n\nsome boy who loves some girl\" and similar sentences, in complete parallel with his treatment of, say, \"every boy is foolish\".\n\nA frequently noted example is that Aristotle's logic is..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "principia-mathematica",
+          "url": "https://plato.stanford.edu/entries/principia-mathematica/",
+          "score": 0.0,
+          "snippet": "principia-mathematica\n\nThough Frege’s system was subject to Russell’s Paradox, subsequent examination of his system shows how much of the development of arithmetic is possible independently of..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "frege-theorem",
+          "url": "https://plato.stanford.edu/entries/frege-theorem/",
+          "score": 0.0,
+          "snippet": "frege-theorem\n\nThe principal goal of this entry is to present Frege’s Theorem in the most logically perspicuous manner, without using Frege’s own notation. Of course, Frege’s own notation is..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "philosophy-mathematics",
+          "url": "https://plato.stanford.edu/entries/philosophy-mathematics/",
+          "score": 0.0,
+          "snippet": "philosophy-mathematics\n\nFrege devoted much of his career to trying to show how mathematics can be reduced to logic (Frege 1884). He managed to derive the principles of (second-order) Peano arithmetic..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "proof-theory-development",
+          "url": "https://plato.stanford.edu/entries/proof-theory-development/",
+          "score": 0.0,
+          "snippet": "proof-theory-development\n\nAs we know today, Frege's principles of proof are complete for  classical predicate logic."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Analytic philosophy",
+          "url": "https://en.wikipedia.org/wiki/Analytic_philosophy#Frege",
+          "score": 0.0,
+          "snippet": "Analytic philosophy\n\nGottlob Frege (1848–1925) was a German geometry professor at the University of Jena who is understood as the father of analytic philosophy. Frege proved influential as a...",
+          "source": "meta_atlas_boost"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Gottlob Frege",
+          "url": "https://en.wikipedia.org/wiki/Gottlob_Frege#Work_as_a_logician",
+          "score": 0.0,
+          "snippet": "Gottlob Frege\n\nGödel 's (1906–78) incompleteness theorems, and to Alfred Tarski 's (1901–83) theory of truth, is ultimately due to Frege.\n\nOne of Frege's stated purposes was to isolate genuinely..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "frege",
+          "url": "https://plato.stanford.edu/entries/frege/",
+          "score": 0.0,
+          "snippet": "frege\n\nFrege, Gottlob: controversy with Hilbert |  Frege, Gottlob: theorem and foundations for arithmetic |  logic: classical |  logic: intensional |  logicism and neologicism |  mathematics,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "frege-theorem",
+          "url": "https://plato.stanford.edu/entries/frege-theorem/",
+          "score": 0.0,
+          "snippet": "frege-theorem\n\nFrege’s Theorem is that the five Dedekind/Peano axioms for number theory can be derived from Hume’s Principle in second-order logic. In this section, we reconstruct the proof of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Gottlob Frege",
+          "url": "https://en.wikipedia.org/wiki/Gottlob_Frege#Childhood_(1848–69)",
+          "score": 0.0,
+          "snippet": "Gottlob Frege\n\nFrege was born in 1848 in Wismar, Mecklenburg-Schwerin (today part of Mecklenburg-Vorpommern). His father Carl (Karl) Alexander Frege (1809–1866) was the co-founder and headmaster of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Gödel's incompleteness theorems",
+          "url": "https://en.wikipedia.org/wiki/G%C3%B6del%27s_incompleteness_theorems#Consequences_for_logicism_and_Hilbert's_second_problem",
+          "score": 0.0,
+          "snippet": "Gödel's incompleteness theorems\n\nThe incompleteness theorem is sometimes thought to have severe consequences for the program of logicism proposed by Gottlob Frege and Bertrand Russell, which aimed..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Logic",
+          "url": "https://en.wikipedia.org/wiki/Logic#Mathematical_logic",
+          "score": 0.0,
+          "snippet": "Logic\n\nMany attempts to realize this program failed, from the crippling of Frege's project in his Grundgesetze by Russell's paradox, to the defeat of Hilbert's program by Gödel's incompleteness..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mathematical logic",
+          "url": "https://en.wikipedia.org/wiki/Mathematical_logic#Connections_with_computer_science",
+          "score": 0.0,
+          "snippet": "Mathematical logic\n\ntechniques for the automatic checking or even finding of proofs, such as automated theorem proving and logic programming.\n\nDescriptive complexity theory relates logics to..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Gottlob Frege",
+          "url": "https://en.wikipedia.org/wiki/Gottlob_Frege#Work_as_a_logician",
+          "score": 0.0,
+          "snippet": "Gottlob Frege\n\nBertrand Russell, just when the printing of this volume was nearing its completion.\" (This letter and Frege's reply are translated in Jean van Heijenoort 1967.)",
+          "source": "meta_atlas_boost"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+          "score": 0.0,
+          "snippet": "in which a problem is solved by proving a contradiction from premises that include the negation of the problem to be solved.\n\nInference in both Horn clause logic and first-order logic is undecidable,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Kurt Gödel",
+          "url": "https://en.wikipedia.org/wiki/Kurt_G%C3%B6del#Abstract",
+          "score": 0.0,
+          "snippet": "Kurt Gödel\n\nThe second incompleteness theorem, which follows from the first, states that the system cannot prove its own consistency.\n\nGödel also showed that neither the axiom of choice nor the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Gödel's incompleteness theorems",
+          "url": "https://en.wikipedia.org/wiki/G%C3%B6del%27s_incompleteness_theorems#Examples_of_undecidable_statements",
+          "score": 0.0,
+          "snippet": "Gödel's incompleteness theorems\n\nshowed that the Whitehead problem in group theory is undecidable, in the first sense of the term, in standard set theory.\n\nGregory Chaitin produced undecidable..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Analytic philosophy",
+          "url": "https://en.wikipedia.org/wiki/Analytic_philosophy",
+          "score": 0.0,
+          "snippet": "Analytic philosophy is an analysis focused, broad, contemporary movement or tradition within Western philosophy, especially anglophone philosophy. Analytic philosophy is characterized by a clarity of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Analytic philosophy",
+          "url": "https://en.wikipedia.org/wiki/Analytic_philosophy",
+          "score": 0.0,
+          "snippet": "Analytic philosophy\n\nQuine, and Karl Popper. After the decline of logical positivism, Saul Kripke, David Lewis, and others led a revival in metaphysics. Analytic philosophy is often contrasted with..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Analytic philosophy",
+          "url": "https://en.wikipedia.org/wiki/Analytic_philosophy#Abstract",
+          "score": 0.0,
+          "snippet": "Analytic philosophy is an analysis focused, broad, contemporary movement or tradition within Western philosophy, especially anglophone philosophy. Analytic philosophy is characterized by a clarity of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Logic",
+          "url": "https://en.wikipedia.org/wiki/Logic",
+          "score": 0.0,
+          "snippet": "Logic is the study of correct reasoning. It includes both formal and informal logic. Formal logic is the study of deductively valid inferences or logical truths. It examines how conclusions follow..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Logic",
+          "url": "https://en.wikipedia.org/wiki/Logic",
+          "score": 0.0,
+          "snippet": "Logic\n\nPremises and conclusions express propositions or claims that can be true or false. An important feature of propositions is their internal structure. For example, complex propositions are made..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Logic",
+          "url": "https://en.wikipedia.org/wiki/Logic",
+          "score": 0.0,
+          "snippet": "Logic\n\nMany arguments in everyday discourse and the sciences are ampliative arguments. They are divided into inductive and abductive arguments. Inductive arguments are statistical generalizations,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mathematical logic",
+          "url": "https://en.wikipedia.org/wiki/Mathematical_logic",
+          "score": 0.0,
+          "snippet": "Mathematical logic is the study of formal logic within mathematics. Major subareas include model theory, proof theory, set theory, and recursion theory. Research in mathematical logic commonly..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mathematical logic",
+          "url": "https://en.wikipedia.org/wiki/Mathematical_logic",
+          "score": 0.0,
+          "snippet": "Mathematical logic\n\nWork in set theory showed that almost all ordinary mathematics can be formalized in terms of sets, although there are some theorems that cannot be proven in common axiom systems..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mathematical logic",
+          "url": "https://en.wikipedia.org/wiki/Mathematical_logic#Abstract",
+          "score": 0.0,
+          "snippet": "Mathematical logic is the study of formal logic within mathematics. Major subareas include model theory, proof theory, set theory, and recursion theory (also known as computability theory). Research..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "frege-theorem"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "Hume's principle",
+          "Peano axioms",
+          "Basic Law V",
+          "Russell's paradox",
+          "neo-logicism",
+          "second-order logic",
+          "Grundgesetze",
+          "abstraction principles",
+          "logicism"
+        ],
+        "missing": [
+          "the Caesar problem"
+        ],
+        "total_expected": 10,
+        "ratio": 0.9
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "### Frege’s Theorem: A Comprehensive Overview\n\nFrege’s theorem is a landmark result in the philosophy of mathematics and logic. It demonstrates that **the five Dedekind/Peano axioms for number theory can be derived from Hume’s Principle in second-order logic** [Source: frege-theorem]. This derivation provides a rigorous foundation for arithmetic without relying on set-theoretic constructions, thereby revitalizing the logicalist program after its initial collapse due to Russell's Paradox.\n\n#### 1. Key Logical Result\nThe core achievement of Frege’s theorem is the reconstruction of Peano Arithmetic (specifically, the natural numbers with their successor structure) using only logical principles and Hume’s Principle. The result establishes that if one accepts Hume’s Principle as a logical truth, then all standard properties of natural numbers follow logically.\n\n*   **Derivation:** From Hume’s Principle within second-order logic, one can define cardinal numbers and prove the existence of an infinite domain satisfying the Dedekind-Peano axioms [Source: frege-theorem].\n*   **Consistency Fragment:** Although Frege’s original system (*Grundgesetze*) was inconsistent due to Basic Law V, subsequent analysis showed that much of his development of arithmetic is possible in a consistent fragment of his system. This isolated fragment forms the basis for what is now called \"Frege's Theorem\" [Source: principia-mathematica].\n\n#### 2. Principles It Relies On\nThe theorem rests on two main pillars: Second-Order Logic (SOL) and Hume’s Principle.\n\n**A. Second-Order Logic**\nUnlike first-order logic, second-order logic allows quantification over properties and relations (predicates), not just individual objects. This expressive power is necessary to define cardinal numbers as equivalence classes of concepts under one-to-one correspondence. Frege managed to derive Peano arithmetic using this stronger logical framework [Source: philosophy-mathematics].\n\n**B. Hume’s Principle**\nHume’s Principle states that the number of Fs equals the number of Gs if and only if the F's can be put into a one-to-one correspondence with the G's. Formally:\n$$ \\#F = \\#G \\iff F \\approx G $$\nwhere $\\#$ denotes the cardinality operator and $\\approx$ denotes equinumerosity (one-to-one correspondence).\n\n*   **Logical Status:** The central philosophical debate is whether Hume’s Principle is a *logical truth*. Frege originally subsumed it under his Basic Law V, which was deemed non-logic due to its inconsistency [Source: philosophy-mathematics]. However, modern proponents argue that Hume’s Principle itself is analytic or logical in nature, distinct from the problematic Basic Law V.\n\n#### 3. Problems It Faces\nDespite its elegance, Frege's theorem faces significant challenges regarding its status as a foundation for logicism.\n\n**A. The Problem of \"Logic\"**\nThe primary objection is whether second-order logic with standard semantics counts as \"pure logic.\" Critics (such as Quine) argue that SOL involves ontological commitments similar to set theory, thereby failing to reduce arithmetic to *logic* alone. If SOL is not purely logical, then deriving Peano axioms from it does not vindicate strict logicism [Source: philosophy-mathematics].\n\n**B. Gödel’s Incompleteness Theorems**\nGödel’s incompleteness theorems show that any consistent formal system capable of expressing basic arithmetic cannot prove its own consistency and contains true statements unprovable within the system. Some logicians believed this struck a fatal blow to logicism because it implied arithmetic could never be fully captured by a finite set of logical axioms [Source: Logic], [Source: Kurt Gödel]. However, Bob Hale and Crispin Wright argue that incompleteness applies equally to first-order logic as to arithmetic; thus, if one accepts second-order logic (which is incomplete in a similar sense), the theorem does not undermine the derivation itself [Source: Gödel's incompleteness theorems].\n\n**C. Epistemic Access**\nEven if Hume’s Principle yields numbers, critics question how we gain epistemic access to these abstract objects defined via equivalence classes. This ties into broader debates about the nature of mathematical knowledge and whether it can be purely analytic [Source: Gottlob Frege].\n\n#### 4. The Program Built Around It: Neologicism\nThe revival of interest in Frege’s theorem led to **Neologicism**, primarily championed by philosophers Bob Hale and Crispin Wright (notably in their work *The Reason’s Proper Form*).\n\n*   **Core Claim:** Neologicists argue that arithmetic is reducible to logic because Hume’s Principle can be justified as a conceptual truth or an implicit definition within second-order logic, without invoking Basic Law V.\n*   **Significance:** This approach attempts to salvage the core insight of Fregean logicism—that numbers are logical objects—while avoiding Russell's Paradox. By isolating Hume’s Principle from Basic Law V, they construct a consistent foundation for arithmetic [Source: frege].\n*   **Impact on Analytic Philosophy:** The debate surrounding Frege’s theorem has deeply influenced contemporary philosophy of mathematics, particularly regarding the nature of abstraction principles and the boundaries between logic and mathematics. It connects directly to Frege’s broader project of reducing mathematics to logic, a goal he pursued in *The Foundations of Arithmetic* (1884) [Source: Gottlob Frege], [Source: philosophy-mathematics].\n\n#### 5. Philosophical Significance\nFrege’s theorem holds profound significance beyond technical foundations:\n\n1.  **Vindication of Logicism:** It shows that much of what was lost with Russell's Paradox can be recovered. A significant portion of arithmetic is indeed derivable from logical principles alone, supporting Frege’s view that \"arithmetic is a branch of logic\" [Source: Gottlob Frege].\n2.  **Abstraction Principles:** The theorem highlights the role of abstraction in mathematics—defining objects (numbers) by their relations to concepts rather than as sets or mental constructs. This has influenced debates on nominalism and realism.\n3.  **Linguistic Turn:** Frege’s work, including his analysis of sense and reference, contributed significantly to the linguistic turn in analytic philosophy. His precise formalization allowed for clearer analysis of meaning and truth conditions [Source: Gottlob Frege], [Source: Analytic philosophy].\n\nIn summary, Frege’s theorem demonstrates that Peano Arithmetic can be derived from Hume's Principle within second-order logic. While it faces challenges regarding whether SOL is \"pure\" logic and how we access abstract objects, it remains a cornerstone of modern neo-logicism and continues to shape foundational debates in mathematics and philosophy.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 52332,
+        "total_latency_ms": 40399,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "sep"
+        ],
+        "retrieved_chunk_count": 29,
+        "chunks_fact_score": {
+          "matched": [
+            "Hume's principle",
+            "Peano axioms",
+            "Russell's paradox",
+            "neo-logicism",
+            "second-order logic",
+            "Grundgesetze",
+            "logicism"
+          ],
+          "missing": [
+            "Basic Law V",
+            "the Caesar problem",
+            "abstraction principles"
+          ],
+          "total_expected": 10,
+          "ratio": 0.7
+        },
+        "judge_fact_score": {
+          "matched": [
+            "Hume's principle",
+            "Peano axioms",
+            "Basic Law V",
+            "Russell's paradox",
+            "neo-logicism",
+            "second-order logic",
+            "the Caesar problem",
+            "Grundgesetze",
+            "abstraction principles",
+            "logicism"
+          ],
+          "missing": [],
+          "total_expected": 10,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "Hume's principle",
+            "present": true,
+            "evidence": "\"the five Dedekind/Peano axioms for number theory can be derived from Hume's Principle in second-order logic\""
+          },
+          {
+            "fact": "Peano axioms",
+            "present": true,
+            "evidence": "\"the five Dedekind/Peano axioms for number theory can be derived from Hume's Principle in second-order logic\""
+          },
+          {
+            "fact": "Basic Law V",
+            "present": true,
+            "evidence": "\"Although Frege's original system (Grundgesetze) was inconsistent due to Basic Law V, subsequent analysis showed that much of his development of arithmetic is possible in a consistent fragment of his system.\""
+          },
+          {
+            "fact": "Russell's paradox",
+            "present": true,
+            "evidence": "\"...revitalizing the logicalist program after its initial collapse due to Russell's Paradox.\""
+          },
+          {
+            "fact": "neo-logicism",
+            "present": true,
+            "evidence": "\"The revival of interest in Frege's theorem led to Neologicism, primarily championed by philosophers Bob Hale and Crispin Wright (notably in their work The Reason's Proper Form).\""
+          },
+          {
+            "fact": "second-order logic",
+            "present": true,
+            "evidence": "\"The core achievement of Frege's theorem is the reconstruction of Peano Arithmetic (specifically, the natural numbers with their successor structure) using only logical principles and Hume's Principle.\""
+          },
+          {
+            "fact": "the Caesar problem",
+            "present": true,
+            "evidence": "\"The primary objection is whether second-order logic with standard semantics counts as 'pure logic.' Critics (such as Quine) argue that SOL involves ontological commitments similar to set theory, thereby failing to reduce arithmetic to *logic* alone.\""
+          },
+          {
+            "fact": "Grundgesetze",
+            "present": true,
+            "evidence": "\"Although Frege's original system (Grundgesetze) was inconsistent due to Basic Law V, subsequent analysis showed that much of his development of arithmetic is possible in a consistent fragment of his system.\""
+          },
+          {
+            "fact": "abstraction principles",
+            "present": true,
+            "evidence": "\"The theorem highlights the role of abstraction in mathematics—defining objects (numbers) by their relations to concepts rather than as sets or mental constructs.\""
+          },
+          {
+            "fact": "logicism",
+            "present": true,
+            "evidence": "\"Frege’s theorem is a landmark result in the philosophy of mathematics and logic. It demonstrates that **the five Dedekind/Peano axioms for number theory can be derived from Hume’s Principle in second-order logic**\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "summary_recursive_functions",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of the theory of recursive functions. Cover the\nmain classes of functions, the central thesis connecting them to computability,\nthe key constructions, and the principal figures. Aim for breadth across the\nwhole topic.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Function (mathematics)",
+          "url": "https://en.wikipedia.org/wiki/Function_(mathematics)#In_computer_science",
+          "score": 0.0,
+          "snippet": "Function (mathematics)\n\nthesis is the claim that every philosophically acceptable definition of a computable function defines also the same functions.\n\nGeneral recursive functions are partial..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Function (mathematics)",
+          "url": "https://en.wikipedia.org/wiki/Function_(mathematics)#In_computer_science",
+          "score": 0.0,
+          "snippet": "Function (mathematics)\n\nprogramming is that it makes easier program proofs, as being based on a well founded theory, the lambda calculus (see below).\n\nExcept for computer-language terminology,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "recursive-functions",
+          "url": "https://plato.stanford.edu/entries/recursive-functions/",
+          "score": 0.0,
+          "snippet": "recursive-functions\n\nComputability Theory is a subfield of contemporary mathematical logic devoted to the classification of functions and sets of natural numbers in terms of their absolute and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "recursive-functions",
+          "url": "https://plato.stanford.edu/entries/recursive-functions/",
+          "score": 0.0,
+          "snippet": "recursive-functions\n\nSection 1 of this entry provides an overview of the foundational developments in logic and mathematics which led to the founding of recursive function theory in the 1930s. ..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Computable function",
+          "url": "https://en.wikipedia.org/wiki/Computable_function#Relation_to_recursively_defined_functions",
+          "score": 0.0,
+          "snippet": "Computable function\n\nAny function defined recursively in a well-ordered way is computable: each value can be computed by expanding a tree of recursive calls to the function, and this expansion must..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "recursive-functions",
+          "url": "https://plato.stanford.edu/entries/recursive-functions/",
+          "score": 0.0,
+          "snippet": "recursive-functions\n\nThe first step in relating such classifications to computability-theoretic notions is provided by the following:"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "recursive-functions",
+          "url": "https://plato.stanford.edu/entries/recursive-functions/",
+          "score": 0.0,
+          "snippet": "recursive-functions\n\nThis section presents definitions of the major classes of recursively defined functions studied in computability theory. Of these the primitive recursive functions..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "computability",
+          "url": "https://plato.stanford.edu/entries/computability/",
+          "score": 0.0,
+          "snippet": "computability\n\nGödel defined the set of Recursive functions to be the closure of the initial primitive recursive functions under composition, primitive recursion, and \\(\\mu\\) . With this definition,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Church–Turing thesis",
+          "url": "https://en.wikipedia.org/wiki/Church%E2%80%93Turing_thesis",
+          "score": 0.0,
+          "snippet": "Church–Turing thesis\n\nIn computability theory, the Church–Turing thesis is a thesis about the nature of computable functions. It states that a function on the natural numbers can be calculated by..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Church–Turing thesis",
+          "url": "https://en.wikipedia.org/wiki/Church%E2%80%93Turing_thesis",
+          "score": 0.0,
+          "snippet": "Church–Turing thesis\n\nIn computability theory, the Church–Turing thesis is a thesis about the nature of computable functions. It states that a function on the natural numbers can be calculated by..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "computability",
+          "url": "https://plato.stanford.edu/entries/computability/",
+          "score": 0.0,
+          "snippet": "computability\n\n-->Church, Alonzo: logic, contributions to--> |  Church-Turing Thesis |  computational complexity theory |  Gödel, Kurt |  quantum theory: quantum computing |  recursive functions | ..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Primitive recursive function",
+          "url": "https://en.wikipedia.org/wiki/Primitive_recursive_function#History",
+          "score": 0.0,
+          "snippet": "Primitive recursive function\n\nRecursive definitions had been used more or less formally in mathematics before, but the construction of primitive recursion is traced back to Richard Dedekind 's..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Recursion (computer science)",
+          "url": "https://en.wikipedia.org/wiki/Recursion_(computer_science)#Abstract",
+          "score": 0.0,
+          "snippet": "Recursion (computer science)\n\nIn computer science, recursion is a method of solving a computational problem where the solution depends on solutions to smaller instances of the same problem. Recursion..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "church-turing",
+          "url": "https://plato.stanford.edu/entries/church-turing/",
+          "score": 0.0,
+          "snippet": "church-turing\n\nThe concept of a recursive function is due to Kurt Gödel and Jacques Herbrand (Gödel 1934; Herbrand 1932). The class of lambda-definable functions (of positive integers) and the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Primitive recursive function",
+          "url": "https://en.wikipedia.org/wiki/Primitive_recursive_function#Limitations",
+          "score": 0.0,
+          "snippet": "Primitive recursive function\n\nHowever a diagonal argument will show that the function e v {\\displaystyle ev} of two arguments is not primitive recursive.\n\nThis argument can be applied to any class of..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "computability",
+          "url": "https://plato.stanford.edu/entries/computability/",
+          "score": 0.0,
+          "snippet": "computability\n\nWe begin with the three initial primitive recursive functions:"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Church–Turing thesis",
+          "url": "https://en.wikipedia.org/wiki/Church%E2%80%93Turing_thesis#Circa_1930–1952",
+          "score": 0.0,
+          "snippet": "Church–Turing thesis\n\nstate a set of axioms which would embody the generally accepted properties of this notion, and to do something on that basis.\n\nBut Gödel offered no further guidance...."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "General recursive function",
+          "url": "https://en.wikipedia.org/wiki/General_recursive_function#Abstract",
+          "score": 0.0,
+          "snippet": "General recursive function\n\nIn mathematical logic and computer science, a general recursive function, partial recursive function, or μ-recursive function is a partial function from natural numbers..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "General recursive function",
+          "url": "https://en.wikipedia.org/wiki/General_recursive_function#Abstract",
+          "score": 0.0,
+          "snippet": "General recursive function\n\nnot every total recursive function is a primitive recursive function — the most famous example is the Ackermann function.\n\nOther equivalent classes of functions are the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Primitive recursive function",
+          "url": "https://en.wikipedia.org/wiki/Primitive_recursive_function#Computer_language_definition",
+          "score": 0.0,
+          "snippet": "Primitive recursive function\n\n(WHILE, GOTO) makes the language general recursive and Turing-complete, as are all real-world computer programming languages.\n\nThe definition of primitive recursive..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Church–Turing thesis",
+          "url": "https://en.wikipedia.org/wiki/Church%E2%80%93Turing_thesis",
+          "score": 0.0,
+          "snippet": "Church–Turing thesis\n\nof functions that is closed under composition, recursion, and minimization, and includes zero, successor, and all projections.\n\n- In 1936, Alonzo Church created a method for..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "General recursive function",
+          "url": "https://en.wikipedia.org/wiki/General_recursive_function",
+          "score": 0.0,
+          "snippet": "General recursive function\n\nIn mathematical logic and computer science, a general recursive function, partial recursive function, or μ-recursive function is a partial function from natural numbers..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "General recursive function",
+          "url": "https://en.wikipedia.org/wiki/General_recursive_function",
+          "score": 0.0,
+          "snippet": "General recursive function\n\nThe subset of all total recursive functions with values in {0,1} is known in computational complexity theory as the complexity class R."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Function (mathematics)",
+          "url": "https://en.wikipedia.org/wiki/Function_(mathematics)",
+          "score": 0.0,
+          "snippet": "Function (mathematics)\n\nIn mathematics, a function from a set X to a set Y assigns to each element of X exactly one element of Y. The set X is called the domain of the function and the set Y is..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Function (mathematics)",
+          "url": "https://en.wikipedia.org/wiki/Function_(mathematics)",
+          "score": 0.0,
+          "snippet": "Function (mathematics)\n\nCommonly, a specific function is defined by means of an expression depending on x, such as f = x 2 + 1 ; in this case, some computation, called function evaluation, may be..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "recursive-functions"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "primitive recursive functions",
+          "minimization operator",
+          "Church-Turing thesis",
+          "partial recursive functions",
+          "Ackermann function",
+          "computability",
+          "general recursion",
+          "the halting problem"
+        ],
+        "missing": [
+          "Kleene normal form",
+          "total versus partial functions"
+        ],
+        "total_expected": 10,
+        "ratio": 0.8
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The theory of recursive functions is the foundational branch of mathematical logic and computability theory that formalizes the intuitive notion of \"effective calculability\" or algorithmic computation. It provides a rigorous classification of which functions on natural numbers can be computed by mechanical means, establishing the bedrock for modern computer science.\n\n### 1. Principal Figures and Historical Context\nThe development of recursive function theory in the 1930s was driven by the need to define precisely what it meant for a function to be \"effectively calculable.\" Several key figures contributed distinct but equivalent models:\n\n*   **Kurt Gödel:** Introduced the concept of general recursive functions in his 1934 lectures (transcribed by Kleene and Rosser). He defined them as the closure of initial functions under composition, primitive recursion, and minimization ($\\mu$) [Source: computability].\n*   **Jacques Herbrand:** Collaborated with Gödel on the early formulation of recursive definitions; he suggested modifications to Gödel’s original recursion schema [Source: church-turing].\n*   **Alonzo Church:** Developed $\\lambda$-calculus in 1936 as an alternative formalism for defining computable functions without set theory. He proved that $\\lambda$-definable functions are identical to general recursive functions [Source: church-turing][Source: Function (mathematics)].\n*   **Alan Turing:** Introduced Turing machines, providing a machine-based model of computation. The equivalence between Turing-computable functions and recursive functions is central to the Church–Turing thesis [Source: General recursive function][Source: Church–Turing thesis].\n*   **Thoralf Skolem:** First proposed primitive recursive arithmetic in 1923 [Source: Primitive recursive function].\n*   **Wilhelm Ackermann:** Proved in 1928 that his eponymous function was not primitive recursive, demonstrating that primitive recursion alone could not capture all computable total functions [Source: Primitive recursive function].\n*   **Rózsa Péter:** Coined the current terminology (\"primitive recursive\") in 1934 after Ackermann’s result clarified the distinction between primitive and general recursiveness [Source: Primitive recursive function].\n\n### 2. The Central Thesis: Church–Turing Thesis\nThe unifying principle of this field is the **Church–Turing thesis**. It states that a function on natural numbers can be calculated by an effective method (paper-and-pencil algorithm) if and only if it is computable by a Turing machine, $\\lambda$-definable, or general recursive [Source: Church–Turing thesis][Source: Function (mathematics)].\n\nBefore these formalizations, mathematicians used the informal term \"effectively calculable.\" The convergence of Gödel’s recursion, Herbrand’s logic, Church’s $\\lambda$-calculus, and Turing’s machines provided strong evidence for this equivalence. While not a mathematical theorem (as \"effective method\" lacks a pre-existing rigorous definition), its robustness across independent models has made it universally accepted in computer science and mathematics [Source: Church–Turing thesis].\n\n### 3. Main Classes of Functions\nRecursive function theory classifies functions based on how they are constructed from basic building blocks using specific operators.\n\n#### A. Initial Functions\nAll recursive classes start with three initial primitive recursive functions defined on natural numbers ($\\mathbb{N}$):\n1.  **Zero Function:** $Z(x) = 0$\n2.  **Successor Function:** $S(x) = x + 1$\n3.  **Projection Functions:** $P_i^n(x_1, ..., x_n) = x_i$ (selects the $i$-th argument) [Source: computability][Source: Church–Turing thesis]\n\n#### B. Primitive Recursive Functions ($\\mathbf{PR}$)\nThis class is formed by closing the initial functions under two operations:\n1.  **Composition:** Combining existing functions to create new ones.\n2.  **Primitive Recursion:** Defining a function $f$ in terms of its value at $n$ and its value at $n+1$. This corresponds to bounded loops or iteration with a known number of steps.\n\n**Characteristics:**\n*   Every primitive recursive function is total (defined for all inputs).\n*   They include virtually all standard number-theoretic functions studied in ordinary mathematics (addition, multiplication, exponentiation, factorial) [Source: General recursive functions][Source: Primitive recursive function].\n*   The computation always halts because the recursion depth is determined by the input values themselves [Source: Primitive recursive function].\n\n#### C. Partial Recursive Functions ($\\mathbf{PartREC}$ / $\\mu$-Recursive Functions)\nAlso called **general recursive functions**, this class extends primitive recursiveness by adding a third operator:\n1.  **Minimization ($\\mu$):** Also known as unbounded search. It finds the smallest argument $y$ such that a given predicate holds. This operation can lead to non-termination if no such $y$ exists.\n\n**Characteristics:**\n*   These are partial functions (they may be undefined for some inputs).\n*   They capture exactly the set of Turing-computable functions [Source: General recursive function].\n*   The halting problem is undecidable for general recursive functions, unlike primitive recursive ones [Source: Primitive recursive function].\n\n#### D. Total Recursive Functions vs. Primitive Recursive Functions\nNot every total computable function is primitive recursive. A famous counterexample is the **Ackermann function**, which grows faster than any primitive recursive function and requires unbounded minimization to define properly [Source: General recursive function][Source: Primitive recursive function]. This demonstrates that $\\mathbf{PR} \\subsetneq \\mathbf{TotalREC}$ (where $\\mathbf{TotalREC}$ is the set of all total partial-recursive functions).\n\n### 4. Key Constructions and Concepts\n\n*   **Lambda Calculus:** An alternative formalism using variable binding and substitution rather than arithmetic recursion. It provides the theoretical background for functional programming languages like Lisp, Haskell, and Scheme [Source: Function (mathematics)][Source: church-turing].\n*   **The Recursion Theorem:** A central result in computability theory highlighting how self-reference works within computation. It allows a function to access its own description during execution, enabling techniques like quining and fixed-point constructions [Source: recursive-functions][Source: Computable function].\n*   **Diagonalization Arguments:** Used to prove that certain classes of functions are incomplete. For example, diagonalization shows that there is no primitive recursive enumeration of all total computable functions, implying the existence of total computable functions outside $\\mathbf{PR}$ [Source: Primitive recursive function].\n*   **Kőnig’s Lemma:** Invoked to show that well-ordered recursive definitions always terminate, ensuring that any function defined via well-founded recursion is computable [Source: Computable function].\n\n### 5. Relationship to Other Models\nThe theory establishes equivalence across multiple computational models:\n*   **Turing Machines:** General recursive functions = Turing-computable partial functions [Source: General recursive function].\n*   **$\\lambda$-Calculus:** Lambda-definable functions = general recursive functions (Church and Kleene proved this identity) [Source: church-turing].\n*   **Markov Algorithms & Post Machines:** Also equivalent in power to Turing machines and $\\mu$-recursive functions [Source: computability][Source: General recursive function].\n\nIn summary, the theory of recursive functions provides a robust, mathematically precise characterization of algorithmic computation. By distinguishing between primitive recursion (bounded, always halting) and general recursion (unbounded search, potentially non-halting), it delineates the boundary between decidable total computations and the broader class of all effectively calculable partial functions. This framework underpins modern complexity classes (such as $R$, the set of total recursive boolean-valued functions) and theoretical computer science [Source: General recursive function].",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 52710,
+        "total_latency_ms": 45612,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "sep"
+        ],
+        "retrieved_chunk_count": 25,
+        "chunks_fact_score": {
+          "matched": [
+            "primitive recursive functions",
+            "Church-Turing thesis",
+            "partial recursive functions",
+            "Ackermann function",
+            "computability",
+            "general recursion"
+          ],
+          "missing": [
+            "minimization operator",
+            "Kleene normal form",
+            "the halting problem",
+            "total versus partial functions"
+          ],
+          "total_expected": 10,
+          "ratio": 0.6
+        },
+        "judge_fact_score": {
+          "matched": [
+            "primitive recursive functions",
+            "minimization operator",
+            "Church-Turing thesis",
+            "partial recursive functions",
+            "Ackermann function",
+            "computability",
+            "Kleene normal form",
+            "general recursion",
+            "the halting problem",
+            "total versus partial functions"
+          ],
+          "missing": [],
+          "total_expected": 10,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "primitive recursive functions",
+            "present": true,
+            "evidence": "\"Primitive Recursion: Defining a function f in terms of its value at n and its value at n+1. This corresponds to bounded loops or iteration with a known number of steps.\""
+          },
+          {
+            "fact": "minimization operator",
+            "present": true,
+            "evidence": "\"Minimization ($\\mu$): Also known as unbounded search. It finds the smallest argument $y$ such that a given predicate holds.\""
+          },
+          {
+            "fact": "Church-Turing thesis",
+            "present": true,
+            "evidence": "\"The unifying principle of this field is the Church–Turing thesis. It states that a function on natural numbers can be calculated by an effective method (paper-and-pencil algorithm) if and only if it is computable by a Turing machine, λ-definable, or general recursive\""
+          },
+          {
+            "fact": "partial recursive functions",
+            "present": true,
+            "evidence": "\"Partial Recursive Functions (PartREC / μ-Recursive Functions)\""
+          },
+          {
+            "fact": "Ackermann function",
+            "present": true,
+            "evidence": "\"Wilhelm Ackermann: Proved in 1928 that his eponymous function was not primitive recursive, demonstrating that primitive recursion alone could not capture all computable total functions\""
+          },
+          {
+            "fact": "computability",
+            "present": true,
+            "evidence": "\"The theory of recursive functions is the foundational branch of mathematical logic and computability theory that formalizes the intuitive notion of 'effective calculability' or algorithmic computation.\""
+          },
+          {
+            "fact": "Kleene normal form",
+            "present": true,
+            "evidence": "\"Kleene and Rosser\""
+          },
+          {
+            "fact": "general recursion",
+            "present": true,
+            "evidence": "\"Also called general recursive functions, this class extends primitive recursiveness by adding a third operator: 1. Minimization (μ): Also known as unbounded search.\""
+          },
+          {
+            "fact": "the halting problem",
+            "present": true,
+            "evidence": "\"The halting problem is undecidable for general recursive functions, unlike primitive recursive ones\""
+          },
+          {
+            "fact": "total versus partial functions",
+            "present": true,
+            "evidence": "\"These are partial functions (they may be undefined for some inputs).\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "summary_common_knowledge",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of common knowledge as a topic in logic and\nthe theory of rationality. Cover its definition, the formal treatments, the key\nresults, and its applications. Aim for breadth across the whole topic.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Common knowledge (logic)",
+          "url": "https://en.wikipedia.org/wiki/Common_knowledge_(logic)#Set_theoretic_(semantic_characterization)",
+          "score": 0.0,
+          "snippet": "Common knowledge (logic)\n\nthen define a common knowledge function,\n\nC (e) = ⋂ n = 1 ∞ E n (e). {\\displaystyle C(e)=\\bigcap _{n=1}^{\\infty }E^{n}(e).}\n\nThe equivalence with the syntactic approach..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "epistemic-game",
+          "url": "https://plato.stanford.edu/entries/epistemic-game/",
+          "score": 0.0,
+          "snippet": "epistemic-game\n\nCommon knowledge of rationality is an informal assumption that game theorists, philosophers and other social scientists often appeal to when analyzing social interactive situations...."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "common-knowledge",
+          "url": "https://plato.stanford.edu/entries/common-knowledge/",
+          "score": 0.0,
+          "snippet": "common-knowledge\n\nAumann (1976) gives the first mathematically rigorous formulation of common knowledge using set theory. Schiffer (1972) uses the formal vocabulary of epistemic logic (Hintikka 1962)..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence#Logic",
+          "score": 0.0,
+          "snippet": "Artificial intelligence\n\nFormal logic is used for reasoning and knowledge representation. Formal logic comes in two main forms: propositional logic (which operates on statements that are true or..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "convention",
+          "url": "https://plato.stanford.edu/entries/convention/",
+          "score": 0.0,
+          "snippet": "convention\n\nNotably, Lewis introduces the concept of common knowledge. Roughly, \\(p\\) is common knowledge iff everyone knows \\(p\\), everyone knows that everyone knows \\(p\\), everyone knows that..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "common-knowledge",
+          "url": "https://plato.stanford.edu/entries/common-knowledge/",
+          "score": 0.0,
+          "snippet": "common-knowledge\n\nare common knowledge. Then common knowledge of Bayesian rationality is satisfied if, and only if, \\(\\boldsymbol{\\mu}\\) is an endogenous correlated equilibrium.  Proof."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Theory",
+          "url": "https://en.wikipedia.org/wiki/Theory#Formality",
+          "score": 0.0,
+          "snippet": "Theory\n\nTheories are analytical tools for understanding, explaining, and making predictions about a given subject matter. There are theories in many and varied fields of study, including the arts and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "common-knowledge",
+          "url": "https://plato.stanford.edu/entries/common-knowledge/",
+          "score": 0.0,
+          "snippet": "common-knowledge\n\nare common knowledge. Then common knowledge of Bayesian rationality is satisfied if, and only if, \\(\\boldsymbol{\\mu}\\) is a Nash equilibrium."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "dynamic-epistemic",
+          "url": "https://plato.stanford.edu/entries/dynamic-epistemic/",
+          "score": 0.0,
+          "snippet": "dynamic-epistemic\n\nbelief, formal representations of |  common knowledge |  epistemic paradoxes |  epistemology |  Fitch’s paradox of knowability |  logic, history of: modal logic |  logic: and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "epistemic-game",
+          "url": "https://plato.stanford.edu/entries/epistemic-game/",
+          "score": 0.0,
+          "snippet": "epistemic-game\n\nCommon knowledge of rationality is neither necessary nor sufficient for Nash Equilibrium."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+          "score": 0.0,
+          "snippet": "bird flocking) and ant colony optimization (inspired by ant trails).\n\nFormal logic is used for reasoning and knowledge representation.\nFormal logic comes in two main forms: propositional logic (which..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Common knowledge (logic)",
+          "url": "https://en.wikipedia.org/wiki/Common_knowledge_(logic)#Puzzle",
+          "score": 0.0,
+          "snippet": "Common knowledge (logic)\n\nThe idea of common knowledge is often introduced by some variant of induction puzzles (e.g. Muddy children puzzle):\n\nOn an island, there are k people who have blue eyes, and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "common-knowledge",
+          "url": "https://plato.stanford.edu/entries/common-knowledge/",
+          "score": 0.0,
+          "snippet": "common-knowledge\n\nRationalizability can be defined formally in several ways. A variation of Bernheim’s original (1984) definition is given here."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "epistemic-game",
+          "url": "https://plato.stanford.edu/entries/epistemic-game/",
+          "score": 0.0,
+          "snippet": "epistemic-game\n\nThe central result of epistemic game theory is that “rationality and common belief in rationality implies iterated elimination of strictly dominated strategies.” This result is..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Knowledge",
+          "url": "https://en.wikipedia.org/wiki/Knowledge#Others",
+          "score": 0.0,
+          "snippet": "Knowledge\n\nVarious other types of knowledge are discussed in the academic literature. In philosophy, \"self-knowledge\" refers to a person's knowledge of their own sensations, thoughts, beliefs, and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mental state",
+          "url": "https://en.wikipedia.org/wiki/Mental_state#Rational,_irrational_and_arational",
+          "score": 0.0,
+          "snippet": "Mental state\n\nCertain mental states, like beliefs and intentions, are rationally evaluable: they are either rational or irrational depending on whether they obey the norms of rationality. But other..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Rationalism",
+          "url": "https://en.wikipedia.org/wiki/Rationalism#Intuition/deduction_thesis",
+          "score": 0.0,
+          "snippet": "Rationalism\n\nadhere to the infallibility of intuition, the more controversial their truths or claims and the more radical their rationalism.\n\nIn addition to different subjects, rationalists sometimes..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Common knowledge (logic)",
+          "url": "https://en.wikipedia.org/wiki/Common_knowledge_(logic)#Applications",
+          "score": 0.0,
+          "snippet": "Common knowledge (logic)\n\nproven by Milgrom shows that, given certain conditions on market efficiency and information, speculative trade is impossible.\n\nThe concept of common knowledge is central in..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-ai",
+          "url": "https://plato.stanford.edu/entries/logic-ai/",
+          "score": 0.0,
+          "snippet": "logic-ai\n\nThis cooperative formalization effort (1) seeks to account for many areas of knowledge, and at the same time (2) attempts to see how this formalized knowledge can be brought to bear on..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Artificial intelligence",
+          "url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+          "score": 0.0,
+          "snippet": "are told differently and will remain true even when other facts are changing); and many other aspects and domains of knowledge.\n\nAmong the most difficult problems in knowledge representation are the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Common knowledge (logic)",
+          "url": "https://en.wikipedia.org/wiki/Common_knowledge_(logic)",
+          "score": 0.0,
+          "snippet": "Common knowledge (logic)\n\nCommon knowledge is a special kind of knowledge for a group of agents. There is common knowledge of p in a group of agents G when all the agents in G know p, they all know..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mental state",
+          "url": "https://en.wikipedia.org/wiki/Mental_state",
+          "score": 0.0,
+          "snippet": "Mental state\n\nA mental state, or a mental property, is a state of mind of a person. Mental states comprise a diverse class, including perception, pain/pleasure experience, belief, desire, intention,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mental state",
+          "url": "https://en.wikipedia.org/wiki/Mental_state",
+          "score": 0.0,
+          "snippet": "Mental state\n\nSome philosophers deny all the aforementioned approaches by holding that the term \"mental\" refers to a cluster of loosely related ideas without an underlying unifying feature shared by..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mental state",
+          "url": "https://en.wikipedia.org/wiki/Mental_state",
+          "score": 0.0,
+          "snippet": "Mental state\n\nAn influential classification of mental states is due to Franz Brentano, who argues that there are only three basic kinds: presentations, judgments, and phenomena of love and hate...."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-ai",
+          "url": "https://plato.stanford.edu/entries/logic-ai/",
+          "score": 0.0,
+          "snippet": "logic-ai\n\nArtificial Intelligence (referred to hereafter by its nickname, “AI”) is the subfield of Computer Science devoted to developing programs that enable computers to display behavior that..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-ai",
+          "url": "https://plato.stanford.edu/entries/logic-ai/",
+          "score": 0.0,
+          "snippet": "logic-ai\n\nThroughout its relatively short history, AI has been heavily influenced by logical ideas. AI has drawn on many research methodologies:  the value and relative importance of logical..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-ai",
+          "url": "https://plato.stanford.edu/entries/logic-ai/",
+          "score": 0.0,
+          "snippet": "logic-ai\n\nThe relations between AI and philosophical logic are part of a larger story. It is hard to find a major philosophical theme that doesn’t become entangled with issues having to do with..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "common-knowledge"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "mutual knowledge",
+          "fixed-point definition",
+          "Aumann",
+          "coordination problems",
+          "Lewis convention",
+          "iterated knowledge hierarchy",
+          "epistemic logic",
+          "common belief"
+        ],
+        "missing": [
+          "agreement theorem",
+          "coordinated attack problem"
+        ],
+        "total_expected": 10,
+        "ratio": 0.8
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "### Common Knowledge in Logic and the Theory of Rationality\n\nCommon knowledge is a foundational concept in epistemic logic, game theory, philosophy, and computer science. It describes a state where not only do all agents in a group know a fact $p$, but they also know that everyone else knows it, and know that they know that everyone knows it, ad infinitum. This infinite hierarchy distinguishes common knowledge from mutual (or distributed) knowledge, where each agent simply possesses the information independently.\n\n#### 1. Definition and Origins\nThe intuitive notion of common knowledge was first introduced into philosophical literature by **David Kellogg Lewis** in his study *Convention* (1969), alongside independent work by sociologist **Morris Friedell**. Roughly, a proposition $p$ is common knowledge if:\n- Everyone knows $p$.\n- Everyone knows that everyone knows $p$.\n- Everyone knows that everyone knows that everyone knows $p$, etc., to infinity [Source: convention].\n\nWhile Lewis provided the informal framework for conventions based on this concept, the first mathematically rigorous formulation using set theory was given by **Robert Aumann** in 1976. Simultaneously or shortly thereafter, **Stephen Schiffer** (1972) used the formal vocabulary of epistemic logic (developed by Hintikka in 1962) to define it as a hierarchy of propositions within an augmented sentential logic system [Source: common-knowledge].\n\n#### 2. Formal Treatments\nThere are two primary approaches to formally defining common knowledge: the semantic/set-theoretic approach and the syntactic/epistemic logical approach.\n\n*   **Set-Theoretic Approach (Aumann):** Robert Aumann defined common knowledge using partitions on a state space $S$. If each agent $i$ has a partition $P_i$ representing their information, one can define operators for \"everyone knows\" ($E$). Common knowledge is then defined as the infinite intersection of these iterated knowledge sets:\n    $$C(e) = \\bigcap_{n=1}^{\\infty} E^n(e)$$ [Source: Common knowledge (logic)]. This framework allows for precise analysis in probabilistic settings.\n\n*   **Epistemic Logic Approach:** Schiffer and later researchers like Bacharach (1992), Bicchieri (1993), and Fagin et al. (1995) adopted a syntactic approach. They augment standard logic with knowledge operators $K_i$ for each agent $i$. Common knowledge ($C_G p$) is defined as the fixed point of these operators, representing an infinite conjunction of higher-order beliefs [Source: common-knowledge]. This method is widely used in computer science for reasoning about multi-agent systems [Source: Artificial intelligence].\n\n#### 3. Key Results\nThe concept has led to several pivotal results in game theory and economics:\n\n*   **Epistemic Foundations of Game Theory:** A central result in epistemic game theory states that \"rationality and common belief in rationality implies iterated elimination of strictly dominated strategies\" (Vanderschraaf & Sillari, 2009). This highlights the importance of higher-order information in strategic decision-making [Source: epistemic-game].\n*   **Nash Equilibrium vs. Common Knowledge:** It was long assumed that common knowledge of rationality was fundamental for Nash equilibrium. However, Aumann and Brandenburger (1995) showed that in two-player games, common knowledge of rationality is *not* necessary as an epistemic condition for Nash equilibrium strategies [Source: Common knowledge (logic)]. Furthermore, it has been demonstrated that common knowledge of rationality is neither necessary nor sufficient for Nash Equilibrium in general contexts [Source: epistemic-game].\n*   **Bayesian Rationality:** In specific settings, if certain conditions are met, common knowledge of Bayesian rationality holds if and only if the probability distribution $\\boldsymbol{\\mu}$ represents a Nash equilibrium or an endogenous correlated equilibrium [Source: common-knowledge].\n*   **Market Efficiency:** Aumann’s work also includes results showing that under certain conditions on market efficiency and information, speculative trade is impossible—a result proven by Milgrom—relying heavily on the concept of common knowledge among traders [Source: Common knowledge (logic)].\n\n#### 4. Applications\n\n*   **Game Theory and Economics:** As noted, it serves as an epistemic assumption in analyzing social interactive situations. It helps explain coordination problems, conventions, and market behaviors where agents must anticipate not just others' actions, but their expectations about those actions [Source: convention][Source: epistemic-game].\n*   **Computer Science and AI:** Computer scientists use languages incorporating epistemic logics to reason about multi-agent systems. In Artificial Intelligence, formal logic is used for reasoning and knowledge representation. While propositional and predicate logic handle truth values and relations, epistemic extensions allow autonomous agents to model what other agents know or believe, which is crucial for cooperative problem-solving and communication protocols [Source: Artificial intelligence][Source: Common knowledge (logic)].\n*   **Philosophy of Language and Conventions:** Lewis’s work ties common knowledge directly to the emergence of social conventions. For a convention to stabilize, it must be common knowledge that everyone follows it; otherwise, coordination fails due to uncertainty about others' compliance [Source: convention].\n\n#### 5. Illustrative Examples\nThe concept is often introduced via induction puzzles such as the **Muddy Children Puzzle** or the **Blue-Eyed Islanders Problem**. In these scenarios, public announcements transform mutual knowledge into common knowledge. Initially, agents may know facts about each other (e.g., \"I see someone with blue eyes\"), but without a public announcement making this fact *common* knowledge, no one can deduce their own state through logical induction until sufficient time passes or further information is revealed [Source: Common knowledge (logic)].\n\n### Summary of Gaps and Nuances\nWhile the sources provided cover the definitions by Lewis, Aumann, and Schiffer, and key results in game theory, they do not extensively detail the technical proofs behind the equivalence between syntactic and semantic approaches beyond noting it exists. Additionally, while the sources mention that common knowledge is central to AI reasoning, they provide limited specific examples of algorithms implementing epistemic logic compared to standard propositional/predicate logic applications. The controversy regarding the precise relation between Lewis’s informal remarks and later formalizations (Aumann/Schiffer) is noted but not elaborated upon [Source: convention].",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 45685,
+        "total_latency_ms": 38980,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "sep"
+        ],
+        "retrieved_chunk_count": 27,
+        "chunks_fact_score": {
+          "matched": [
+            "Aumann",
+            "Lewis convention",
+            "epistemic logic",
+            "common belief"
+          ],
+          "missing": [
+            "mutual knowledge",
+            "fixed-point definition",
+            "coordination problems",
+            "iterated knowledge hierarchy",
+            "agreement theorem",
+            "coordinated attack problem"
+          ],
+          "total_expected": 10,
+          "ratio": 0.4
+        },
+        "judge_fact_score": {
+          "matched": [
+            "mutual knowledge",
+            "fixed-point definition",
+            "Aumann",
+            "coordination problems",
+            "Lewis convention",
+            "iterated knowledge hierarchy",
+            "coordinated attack problem",
+            "epistemic logic",
+            "common belief"
+          ],
+          "missing": [
+            "agreement theorem"
+          ],
+          "total_expected": 10,
+          "ratio": 0.9
+        },
+        "judge_evidence": [
+          {
+            "fact": "mutual knowledge",
+            "present": true,
+            "evidence": "\"This infinite hierarchy distinguishes common knowledge from mutual (or distributed) knowledge, where each agent simply possesses the information independently.\""
+          },
+          {
+            "fact": "fixed-point definition",
+            "present": true,
+            "evidence": "\"Common knowledge ($C_G p$) is defined as the fixed point of these operators, representing an infinite conjunction of higher-order beliefs\""
+          },
+          {
+            "fact": "Aumann",
+            "present": true,
+            "evidence": "\"the first mathematically rigorous formulation using set theory was given by Robert Aumann in 1976\""
+          },
+          {
+            "fact": "coordination problems",
+            "present": true,
+            "evidence": "\"It helps explain coordination problems, conventions, and market behaviors where agents must anticipate not just others' actions\""
+          },
+          {
+            "fact": "Lewis convention",
+            "present": true,
+            "evidence": "\"The intuitive notion of common knowledge was first introduced into philosophical literature by David Kellogg Lewis in his study Convention (1969)\""
+          },
+          {
+            "fact": "iterated knowledge hierarchy",
+            "present": true,
+            "evidence": "\"This infinite hierarchy distinguishes common knowledge from mutual (or distributed) knowledge, where each agent simply possesses the information independently.\""
+          },
+          {
+            "fact": "agreement theorem",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "coordinated attack problem",
+            "present": true,
+            "evidence": "\"It helps explain coordination problems, conventions, and market behaviors where agents must anticipate not just others' actions, but their expectations about those actions\""
+          },
+          {
+            "fact": "epistemic logic",
+            "present": true,
+            "evidence": "\"Common knowledge is a foundational concept in epistemic logic, game theory, philosophy, and computer science.\""
+          },
+          {
+            "fact": "common belief",
+            "present": true,
+            "evidence": "\"Common knowledge is a foundational concept in epistemic logic, game theory, philosophy, and computer science. It describes a state where not only do all agents in a group know a fact p...\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "summary_principia_mathematica",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of the logical system of Principia Mathematica.\nCover its goals, its central logical machinery, the difficulties it confronted,\nand its significance. Aim for breadth across the whole topic.\n",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Alfred North Whitehead",
+          "url": "https://en.wikipedia.org/wiki/Alfred_North_Whitehead#Principia_Mathematica",
+          "score": 0.0,
+          "snippet": "Alfred North Whitehead\n\nVolume II to prove that 1+1=2, a proof humorously accompanied by the comment, \"The above proposition is occasionally useful.\"\n\nWhitehead and Russell had thought originally..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "principia-mathematica",
+          "url": "https://plato.stanford.edu/entries/principia-mathematica/",
+          "score": 0.0,
+          "snippet": "principia-mathematica\n\nRussell had written The Principles of Mathematics (PoM), which presents the basic elements of his logicist program, before discovering Frege’s similar work in Foundations of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Alfred North Whitehead",
+          "url": "https://en.wikipedia.org/wiki/Alfred_North_Whitehead#Principia_Mathematica",
+          "score": 0.0,
+          "snippet": "Alfred North Whitehead\n\ninitial loss, today there is likely no major academic library in the world which does not hold a copy of Principia Mathematica.\n\nThe ultimate substantive legacy of Principia..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "principia-mathematica",
+          "url": "https://plato.stanford.edu/entries/principia-mathematica/",
+          "score": 0.0,
+          "snippet": "principia-mathematica\n\nPrincipia Mathematica originally appeared in three volumes."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Peano axioms",
+          "url": "https://en.wikipedia.org/wiki/Peano_axioms",
+          "score": 0.0,
+          "snippet": "Peano axioms\n\nIn 1888, Richard Dedekind proposed another axiomatization of natural-number arithmetic, and in 1889, Peano published a simplified version of them as a collection of axioms in his book...",
+          "source": "meta_atlas_boost"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Principia Mathematica",
+          "url": "https://en.wikipedia.org/wiki/Principia_Mathematica#Theoretical_basis",
+          "score": 0.0,
+          "snippet": "Principia Mathematica\n\nAs noted in the criticism of the theory by Kurt Gödel (below), unlike a formalist theory, the \"logicistic\" theory of PM has no \"precise statement of the syntax of the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "principia-mathematica",
+          "url": "https://plato.stanford.edu/entries/principia-mathematica/",
+          "score": 0.0,
+          "snippet": "principia-mathematica\n\nCover of the first paperback issue of Principia Mathematica to ∗56 (1962)"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "principia-mathematica",
+          "url": "https://plato.stanford.edu/entries/principia-mathematica/",
+          "score": 0.0,
+          "snippet": "principia-mathematica\n\nThis entry includes a presentation of the main definitions and theorems used in the development of the logicist project in PM. The entry indicates a path through the whole work..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Principia Mathematica",
+          "url": "https://en.wikipedia.org/wiki/Principia_Mathematica#Abstract",
+          "score": 0.0,
+          "snippet": "Principia Mathematica\n\nI can remember Bertrand Russell telling me of a horrible dream. He was in the top floor of the University Library, about A.D. 2100. A library assistant was going round the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "pm-notation",
+          "url": "https://plato.stanford.edu/entries/pm-notation/",
+          "score": 0.0,
+          "snippet": "pm-notation\n\nPrincipia Mathematica [PM] was written jointly by Alfred North Whitehead and Bertrand Russell over several years, and published in three volumes, which appeared between 1910 and 1913. It..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Principia Mathematica",
+          "url": "https://en.wikipedia.org/wiki/Principia_Mathematica#Abstract",
+          "score": 0.0,
+          "snippet": "Principia Mathematica\n\nhad been left obscure and doubtful in the former work, we have now arrived at what we believe to be satisfactory solutions.\"\n\nPM, according to its introduction, had three aims:..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "proof-theory-development",
+          "url": "https://plato.stanford.edu/entries/proof-theory-development/",
+          "score": 0.0,
+          "snippet": "proof-theory-development\n\nRussell  took up Frege's logic, but used the notation and formal rules of proof of Peano, in a paper of 1906 with the title “The theory of implication.”  Its formal..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Principia Mathematica",
+          "url": "https://en.wikipedia.org/wiki/Principia_Mathematica#Gödel_1930,_1931",
+          "score": 0.0,
+          "snippet": "Principia Mathematica\n\nIn 1930, Gödel's completeness theorem showed that first-order predicate logic itself was complete in a much weaker sense—that is, any sentence that is unprovable from a..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Alfred North Whitehead",
+          "url": "https://en.wikipedia.org/wiki/Alfred_North_Whitehead#Mathematics_and_logic",
+          "score": 0.0,
+          "snippet": "Alfred North Whitehead\n\nIn addition to numerous articles on mathematics, Whitehead wrote three major books on the subject: A Treatise on Universal Algebra (1898), Principia Mathematica (co-written..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Russell's paradox",
+          "url": "https://en.wikipedia.org/wiki/Russell%27s_paradox#History",
+          "score": 0.0,
+          "snippet": "Russell's paradox\n\nif instead of F(Fu) we write (do) : F(Ou). Ou = Fu. That disposes of Russell's paradox. (Tractatus Logico-Philosophicus, 3.333)\n\nRussell and Alfred North Whitehead wrote their..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "proof-theory-development",
+          "url": "https://plato.stanford.edu/entries/proof-theory-development/",
+          "score": 0.0,
+          "snippet": "proof-theory-development\n\nFor Gentzen, the aims were, along with those of Hilbert, to  understand the structure of mathematical proofs. This program was a  complete success as far as pure logic and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Principia Mathematica",
+          "url": "https://en.wikipedia.org/wiki/Principia_Mathematica",
+          "score": 0.0,
+          "snippet": "Principia Mathematica\n\nBut as we advanced, it became increasingly evident that the subject is a very much larger one than we had supposed; moreover on many fundamental questions which had been left..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Philosophy of mathematics",
+          "url": "https://en.wikipedia.org/wiki/Philosophy_of_mathematics#Logic_and_rigor",
+          "score": 0.0,
+          "snippet": "Philosophy of mathematics\n\n(infinite cardinals). Even more striking, Russell's paradox shows that the phrase \"the set of all sets\" is self contradictory.\n\nSeveral methods have been proposed to solve..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Theory (mathematical logic)",
+          "url": "https://en.wikipedia.org/wiki/Theory_(mathematical_logic)#Derivation_in_a_first-order_theory",
+          "score": 0.0,
+          "snippet": "Theory (mathematical logic)\n\nThere are many formal derivation (\"proof\") systems for first-order logic. These include Hilbert-style deductive systems, natural deduction, the sequent calculus, the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Kurt Gödel",
+          "url": "https://en.wikipedia.org/wiki/Kurt_G%C3%B6del#Incompleteness_theorems",
+          "score": 0.0,
+          "snippet": "Kurt Gödel's achievement in modern logic is singular and monumental—indeed it is more than a monument, it is a landmark which will remain visible far in space and time.... The subject of logic has..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Peano axioms",
+          "url": "https://en.wikipedia.org/wiki/Peano_axioms",
+          "score": 0.0,
+          "snippet": "Peano axioms\n\nIn mathematical logic, the Peano axioms, also known as the Dedekind–Peano axioms or the Peano postulates, are axioms for the natural numbers presented by the 19th-century Italian..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Peano axioms",
+          "url": "https://en.wikipedia.org/wiki/Peano_axioms",
+          "score": 0.0,
+          "snippet": "Peano axioms\n\nA weaker first-order system is obtained by explicitly adding the addition and multiplication operation symbols and replacing the second-order induction axiom with a first-order axiom..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Peano axioms",
+          "url": "https://en.wikipedia.org/wiki/Peano_axioms#Abstract",
+          "score": 0.0,
+          "snippet": "Peano axioms\n\nIn mathematical logic, the Peano axioms (/ p i ˈ ɑː n oʊ /,), also known as the Dedekind–Peano axioms or the Peano postulates, are axioms for the natural numbers presented by the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "proof-theory-development",
+          "url": "https://plato.stanford.edu/entries/proof-theory-development/",
+          "score": 0.0,
+          "snippet": "proof-theory-development\n\nThe development of   -->proof theory-->  can be naturally divided into: the prehistory of the notion of proof  in ancient logic and mathematics; the discovery by   Frege ..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "proof-theory-development",
+          "url": "https://plato.stanford.edu/entries/proof-theory-development/",
+          "score": 0.0,
+          "snippet": "proof-theory-development\n\nProof theory can be described as the study of the general structure  of mathematical proofs, and of arguments with demonstrative force as  encountered in logic. The idea of..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "pm-notation",
+          "url": "https://plato.stanford.edu/entries/pm-notation/",
+          "score": 0.0,
+          "snippet": "pm-notation\n\nPrincipia Mathematica [PM] by A.N. Whitehead and Bertrand Russell, published 1910–1913 in three volumes by Cambridge University Press, contains a derivation of large portions of..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "pm-notation",
+          "url": "https://plato.stanford.edu/entries/pm-notation/",
+          "score": 0.0,
+          "snippet": "pm-notation\n\nThis entry is intended to assist the student of PM in reading the symbolic portion of the work. What follows is a partial translation of the symbolism into a more contemporary notation,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "pm-notation",
+          "url": "https://plato.stanford.edu/entries/pm-notation/",
+          "score": 0.0,
+          "snippet": "pm-notation\n\nBelow the reader will find, in the order in which they are introduced in PM, the following symbols, which are briefly described. More detail is provided in what follows:"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "principia-mathematica"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "Russell and Whitehead",
+          "logicism",
+          "axiom of reducibility",
+          "Russell's paradox",
+          "axiom of infinity"
+        ],
+        "missing": [
+          "ramified type theory",
+          "the no-class theory",
+          "vicious circle principle",
+          "theory of descriptions",
+          "deriving arithmetic"
+        ],
+        "total_expected": 10,
+        "ratio": 0.5
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "# The Logical System of *Principia Mathematica*\n\n**Thorough overview from available sources, not exhaustive.**\n\nThe *Principia Mathematica* (PM), written by Alfred North Whitehead and Bertrand Russell and published in three volumes between 1910 and 1913 [Source: Principia Mathematica], is a monumental work that sought to ground all of mathematics in formal logic. It remains one of the most significant texts in the history of analytic philosophy and mathematical logic. Below is an overview of its goals, central machinery, difficulties, and significance.\n\n### Goals\nAccording to its introduction, PM had three primary aims: \n1. To analyze the ideas and methods of mathematical logic as much as possible while minimizing primitive notions, axioms, and inference rules [Source: Principia Mathematica].\n2. To precisely express mathematical propositions using symbolic logic with the most convenient notation allowed by precision [Source: Principia Mathmatica].\n3. To solve the paradoxes that plagued set theory at the turn of the 20th century (such as Russell's Paradox) [Source: Principia Mathematica]. \n\nThe overarching project was \"logicism\"—the view that mathematics is an extension of logic. Whitehead and Russell aimed to show that all fundamental truths about numbers could be derived from purely logical principles [Source: pm-notation].\n\n### Central Logical Machinery\nTo achieve its goals, PM developed a complex system of formal logic characterized by several key innovations:\n\n*   **Theory of Types:** The most famous contribution of PM is the Theory of Types, devised specifically to banish the paradoxes of naive set theory [Source: Russell's paradox]. By stratifying entities into types (e.g., individuals, sets of individuals, sets of sets), it prevented self-referential statements like \"the set of all sets\" which lead to contradictions such as Russell’s Paradox [Source: Philosophy of mathematics; Source: Russell's paradox]. \n*   **Symbolic Notation and Axiomatic Structure:** While influenced by Frege’s logical ideas, PM adopted the notation and formal rules of proof from Giuseppe Peano [Source: proof-theory-development]. The system relied on a small number of primitive notions and inference rules—primarily *modus ponens* and universal generalization—to derive complex mathematical truths [Source: proof-theory-development].\n*   **Derivation of Arithmetic:** Using this machinery, Whitehead and Russell famously derived large portions of mathematics. This included Volume II, which contained their derivation that $1+1=2$, humorously accompanied by the comment \"The above proposition is occasionally useful\" [Source: Alfred North Whitehead].\n\n### Difficulties Confronted\nDespite its ambition, PM faced significant theoretical and practical difficulties:\n\n*   **Gödel’s Incompleteness Theorems (1931):** Kurt Gödel demonstrated definitively that for any set of axioms proposed to encapsulate mathematics, there will always be truths that cannot be deduced from them [Source: Alfred North Whitehead; Source: Kurt Gödel]. While Gödel's completeness theorem showed first-order predicate logic was complete in a weaker sense, it did not save PM from the stronger implication of incompleteness—that no single formal system can capture all mathematical truth [Source: Principia Mathematica]. \n*   **Complexity and Accessibility:** Originally expected to take one year, the work took ten years to write. It resulted in over 2,000 pages of dense symbolism aimed at professional mathematicians [Source: Alfred North Whitehead]. The notation became so archaic that modern students often struggle to read it without specialized guides [Source: pm-notation; Source: Russell's paradox anecdote].\n*   **\"Logicistic\" Ambiguities:** Critics noted that unlike a purely formalist theory, PM lacked a precise statement of its syntax [Source: Principia Mathematica]. Furthermore, while intended as pure logic, many argue that PM relied on non-logical axioms (such as the Axiom of Infinity and the Axiom of Reducibility) to function, meaning mathematics was not derived *purely* from logical truths [Source: Theory (mathematical logic); Source: Russell's paradox].\n\n### Significance\nThe legacy of *Principia Mathematica* is mixed but undeniably profound. \n\n**Historical Impact:** It revolutionized mathematical logic by establishing it as a rigorous discipline. The work laid the groundwork for subsequent developments in proof theory, including Gentzen’s creation of natural deduction and sequent calculus [Source: proof-theory-development]. Even though its specific notation has been superseded by contemporary systems, PM remains a foundational text that shaped \"Early Analytic Philosophy\" [Source: pm-notation].\n\n**Philosophical Legacy:** While Gödel proved that PM could not achieve its ultimate goal of capturing all mathematics within one formal system, it successfully demonstrated how much of mathematics *could* be formalized. Today, virtually every major academic library holds a copy, serving as an essential historical artifact rather than a practical manual for modern mathematicians [Source: Alfred North Whitehead].",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 43661,
+        "total_latency_ms": 32529,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "sep"
+        ],
+        "retrieved_chunk_count": 28,
+        "chunks_fact_score": {
+          "matched": [
+            "Russell and Whitehead",
+            "Russell's paradox"
+          ],
+          "missing": [
+            "ramified type theory",
+            "logicism",
+            "axiom of reducibility",
+            "the no-class theory",
+            "vicious circle principle",
+            "theory of descriptions",
+            "deriving arithmetic",
+            "axiom of infinity"
+          ],
+          "total_expected": 10,
+          "ratio": 0.2
+        },
+        "judge_fact_score": {
+          "matched": [
+            "Russell and Whitehead",
+            "ramified type theory",
+            "logicism",
+            "axiom of reducibility",
+            "deriving arithmetic",
+            "Russell's paradox",
+            "axiom of infinity"
+          ],
+          "missing": [
+            "the no-class theory",
+            "vicious circle principle",
+            "theory of descriptions"
+          ],
+          "total_expected": 10,
+          "ratio": 0.7
+        },
+        "judge_evidence": [
+          {
+            "fact": "Russell and Whitehead",
+            "present": true,
+            "evidence": "\"The Principia Mathematica (PM), written by Alfred North Whitehead and Bertrand Russell...\""
+          },
+          {
+            "fact": "ramified type theory",
+            "present": true,
+            "evidence": "\"Theory of Types: The most famous contribution of PM is the Theory of Types, devised specifically to banish the paradoxes of naive set theory\""
+          },
+          {
+            "fact": "logicism",
+            "present": true,
+            "evidence": "\"The overarching project was 'logicism'—the view that mathematics is an extension of logic.\""
+          },
+          {
+            "fact": "axiom of reducibility",
+            "present": true,
+            "evidence": "\"...many argue that PM relied on non-logical axioms (such as the Axiom of Infinity and the Axiom of Reducibility) to function, meaning mathematics was not derived purely from logical truths\""
+          },
+          {
+            "fact": "the no-class theory",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "vicious circle principle",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "theory of descriptions",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "deriving arithmetic",
+            "present": true,
+            "evidence": "\"Derivation of Arithmetic: Using this machinery, Whitehead and Russell famously derived large portions of mathematics. This included Volume II, which contained their derivation that 1+1=2...\""
+          },
+          {
+            "fact": "Russell's paradox",
+            "present": true,
+            "evidence": "\"To solve the paradoxes that plagued set theory at the turn of the 20th century (such as Russell's Paradox)\""
+          },
+          {
+            "fact": "axiom of infinity",
+            "present": true,
+            "evidence": "\"Furthermore, while intended as pure logic, many argue that PM relied on non-logical axioms (such as the Axiom of Infinity and the Axiom of Reducibility) to function\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "summary_ibn_rushd",
+      "category": "comprehensive_summary",
+      "question": "Provide a comprehensive overview of the philosophy of Ibn Rushd (Averroes).\nCover his major works and commitments, his treatment of philosophy and religion,\nhis most influential doctrines, and his later influence. Aim for breadth across\nthe whole topic.\n",
+      "retrieved": [
+        {
+          "corpus_id": "sep",
+          "title": "medieval-philosophy",
+          "url": "https://plato.stanford.edu/entries/medieval-philosophy/",
+          "score": 0.0,
+          "snippet": "medieval-philosophy\n\nIbn Rushd (“Averroes” in Latin; 1126–98) was an Islamic judge and legal theorist, servant of the harshly anti-Jewish and anti-Christian Almohad regime, and also perhaps the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Averroes",
+          "url": "https://en.wikipedia.org/wiki/Averroes#Abstract",
+          "score": 0.0,
+          "snippet": "Averroes\n\nIbn Rushd (Arabic: ابن رشد; full name in Arabic: أبو الوليد محمد بن أحمد بن رشد, romanized: Abū al-Walīd Muḥammad ibn Aḥmad ibn Rushd; 14 April 1126 –..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ibn-rushd",
+          "url": "https://plato.stanford.edu/entries/ibn-rushd/",
+          "score": 0.0,
+          "snippet": "ibn-rushd\n\nFor further details see the entry on  Ibn Rushd’s natural philosophy  and the entry on  causation in Arabic and Islamic thought."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ibn-rushd",
+          "url": "https://plato.stanford.edu/entries/ibn-rushd/",
+          "score": 0.0,
+          "snippet": "ibn-rushd\n\nIbn Rushd remained productive for at least four decades. He was the author of a large corpus that extends over medicine, logic and philosophy in all its branches, including natural..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ibn-rushd",
+          "url": "https://plato.stanford.edu/entries/ibn-rushd/",
+          "score": 0.0,
+          "snippet": "ibn-rushd\n\nIbn Rushd’s philosophy quickly found a second home in Judaism, where it became so prominent as even to supplant Aristotle as the paramount authority in philosophy and science (Harvey..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ibn-arabi",
+          "url": "https://plato.stanford.edu/entries/ibn-arabi/",
+          "score": 0.0,
+          "snippet": "ibn-arabi\n\nal-Ghazali |  al-Kindi |  Arabic and Islamic Philosophy, special topics in: mysticism |  -->avicenna--> |  Ibn Rushd [Averroes] |  -->Ibn Taymiyya--> |  -->Latin Averroism--> |  Mulla..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ibn-rushd-natural",
+          "url": "https://plato.stanford.edu/entries/ibn-rushd-natural/",
+          "score": 0.0,
+          "snippet": "ibn-rushd-natural\n\nThe natural philosophy of Averroes goes far beyond paraphrasing Aristotle’s texts; it echoes the discussions of the Greek commentators, and the Arab philosophers on key issues...."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ibn-rushd",
+          "url": "https://plato.stanford.edu/entries/ibn-rushd/",
+          "score": 0.0,
+          "snippet": "ibn-rushd\n\nThird, evidence has emerged that some of Ibn Rushd’s books were transmitted east, to Egypt and the Levant, and used by philosophers and scholars there. In addition to copies of the Kashf..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Averroes",
+          "url": "https://en.wikipedia.org/wiki/Averroes#Cultural_references",
+          "score": 0.0,
+          "snippet": "Averroes\n\nmembers include the starfruit and the bilimbi), the lunar crater ibn Rushd, and the asteroid 8318 Averroes are named after him.\n\nMael Malihabadi's 1957 Urdu historical fiction novel Falsafi..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Transmission of the Greek Classics",
+          "url": "https://en.wikipedia.org/wiki/Transmission_of_the_Greek_Classics#After_translation:_Arabic_commentary_on_Greek_works",
+          "score": 0.0,
+          "snippet": "Transmission of the Greek Classics\n\nissues of religion and philosophy, choosing rather to speak only through the words of the various philosophies he came across.\n\nDecades after Al-Farabi, Ibn Sina..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of philosophy",
+          "url": "https://en.wikipedia.org/wiki/History_of_philosophy#Later_classical",
+          "score": 0.0,
+          "snippet": "History of philosophy\n\nHe categorized souls into different levels: plants possess the simplest form of souls, while the souls of animals and humans have additional faculties, such as the ability to..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ibn-rushd-natural",
+          "url": "https://plato.stanford.edu/entries/ibn-rushd-natural/",
+          "score": 0.0,
+          "snippet": "ibn-rushd-natural\n\nAverroes composed Long, Middle, and Short commentaries on Aristotle’s Physics and some essays, masā’il, quaestiones, on physical matters. The Middle and Short commentaries..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Islamic philosophy",
+          "url": "https://en.wikipedia.org/wiki/Islamic_philosophy#Avicennian_logic",
+          "score": 0.0,
+          "snippet": "Islamic philosophy\n\nAvicenna (980–1037) developed his own system of logic known as \"Avicennian logic\" as an alternative to Aristotelian logic. By the 12th century, Avicennian logic had replaced..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nasir al-Din al-Tusi",
+          "url": "https://en.wikipedia.org/wiki/Nasir_al-Din_al-Tusi#Philosophy",
+          "score": 0.0,
+          "snippet": "Nasir al-Din al-Tusi\n\nTusi contributed many writings to the topic of philosophy. Amongst his philosophical work are his disagreements with fellow philosopher Avicenna. His most famous philosophical..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "al-baghdadi",
+          "url": "https://plato.stanford.edu/entries/al-baghdadi/",
+          "score": 0.0,
+          "snippet": "al-baghdadi\n\nal-Farabi |  al-Kindi |  Arabic and Islamic Philosophy, historical and methodological topics in: Greek sources |  Aristotle |  Ibn Rushd [Averroes] |  Ibn Sina [Avicenna] |  Plato | ..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Abu Bakr ibn al-Arabi",
+          "url": "https://en.wikipedia.org/wiki/Abu_Bakr_ibn_al-Arabi#Biography",
+          "score": 0.0,
+          "snippet": "Abu Bakr ibn al-Arabi\n\nal-Ghazālī, an Islamic theologian, philosopher and Sufi mystic. Ibn al-'Arabi studied with him, beginning at the age of 21.\n\nIbn al-'Arabi took a close and strong interest in..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Abu Bakr ibn al-Arabi",
+          "url": "https://en.wikipedia.org/wiki/Abu_Bakr_ibn_al-Arabi#Biography",
+          "score": 0.0,
+          "snippet": "Abu Bakr ibn al-Arabi\n\nal-Ghazālī, an Islamic theologian, philosopher and Sufi mystic. Ibn al-Arabi studied with him, beginning at the age of 21.\n\nIbn al-'Arabi took a close and strong interest in..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Islamic Golden Age",
+          "url": "https://en.wikipedia.org/wiki/Islamic_Golden_Age#Philosophy",
+          "score": 0.0,
+          "snippet": "Islamic Golden Age\n\nIbn Sina (Avicenna) and Ibn Rushd (Averroes) played a major role in interpreting the works of Aristotle, whose ideas came to dominate the non-religious thought of the Christian..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Islamic philosophy",
+          "url": "https://en.wikipedia.org/wiki/Islamic_philosophy#Early_Islamic_philosophy",
+          "score": 0.0,
+          "snippet": "Islamic philosophy\n\nIn early Islamic thought, which refers to philosophy during the \" Islamic Golden Age \", traditionally dated between the 8th and 12th centuries, two main currents may be..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ibn Taymiyya",
+          "url": "https://en.wikipedia.org/wiki/Ibn_Taymiyya#His_risāla_on_visits_to_tombs_and_his_final_imprisonment",
+          "score": 0.0,
+          "snippet": "Ibn Taymiyya\n\nIn 1310, Ibn Taymiyya had written a risāla (treatise) called Ziyārat al-Qubūr or according to another source, Shadd al-rihal. It dealt with the validity and permissibility of making..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ibn-rushd-natural",
+          "url": "https://plato.stanford.edu/entries/ibn-rushd-natural/",
+          "score": 0.0,
+          "snippet": "ibn-rushd-natural\n\nPhilosophy has been divided into theoretical and practical since the time of Aristotle’s distinction of the sciences, and within theoretical philosophy, the enquire on nature was..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ibn-rushd-natural",
+          "url": "https://plato.stanford.edu/entries/ibn-rushd-natural/",
+          "score": 0.0,
+          "snippet": "ibn-rushd-natural\n\nThe Iranian philosopher Ibn Sina [Avicenna] (d. 1037 CE) organized his philosophical encyclopedia “The Healing” in four sections: Logic, mathematical, and natural sciences, and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "al-baghdadi",
+          "url": "https://plato.stanford.edu/entries/al-baghdadi/",
+          "score": 0.0,
+          "snippet": "al-baghdadi\n\nThe Greek-Arabic sciences penetrated in the Islamic world during the 8th and 9th centuries AD due to the massive activity of the translators and al-Kindi’s vision of knowledge and also..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "al-baghdadi",
+          "url": "https://plato.stanford.edu/entries/al-baghdadi/",
+          "score": 0.0,
+          "snippet": "al-baghdadi\n\n‘Abd al-Latif was a philosopher and polymath who lived between the Second Crusade (1147–1149 AD) and the end of the Fifth Crusade (1217–1231 AD). He was born in Baghdad in 1162 and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "al-baghdadi",
+          "url": "https://plato.stanford.edu/entries/al-baghdadi/",
+          "score": 0.0,
+          "snippet": "al-baghdadi\n\n‘Abd al-Latif’s intellectual position comes across in his autobiography (sira). It seems to have formed part of a larger work no longer extant which he wrote for his son Sharaf..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Transmission of the Greek Classics",
+          "url": "https://en.wikipedia.org/wiki/Transmission_of_the_Greek_Classics",
+          "score": 0.0,
+          "snippet": "Transmission of the Greek Classics\n\nThe transmission of the Greek Classics to Latin Western Europe during the Middle Ages was a key factor in the development of intellectual life in Western Europe...."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Transmission of the Greek Classics",
+          "url": "https://en.wikipedia.org/wiki/Transmission_of_the_Greek_Classics",
+          "score": 0.0,
+          "snippet": "Transmission of the Greek Classics\n\nWith increasing Western presence in the East due to the Crusades, and the gradual collapse of the Byzantine Empire during the Late Middle Ages, many Byzantine..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Transmission of the Greek Classics",
+          "url": "https://en.wikipedia.org/wiki/Transmission_of_the_Greek_Classics#Abstract",
+          "score": 0.0,
+          "snippet": "Transmission of the Greek Classics\n\nThe transmission of the Greek Classics to Latin Western Europe during the Middle Ages was a key factor in the development of intellectual life in Western Europe...."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "medieval-philosophy",
+          "url": "https://plato.stanford.edu/entries/medieval-philosophy/",
+          "score": 0.0,
+          "snippet": "medieval-philosophy\n\n[Editor’s Note: The following new entry by John Marenbon replaces the  former entry  on this topic by the previous author.]"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "medieval-philosophy",
+          "url": "https://plato.stanford.edu/entries/medieval-philosophy/",
+          "score": 0.0,
+          "snippet": "medieval-philosophy\n\n“Medieval philosophy” has changed its meaning among specialists over the last twenty years. The change is not in chronology, where views remain divided (see  §5):  most..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "medieval-philosophy",
+          "url": "https://plato.stanford.edu/entries/medieval-philosophy/",
+          "score": 0.0,
+          "snippet": "medieval-philosophy\n\nRather, the change is about geography, and so language and culture. In the nineteenth and twentieth centuries, medieval philosophy was regarded as having taken place in Western..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "ibn-rushd"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "commentaries on Aristotle",
+          "unity of the intellect",
+          "philosophy and religion",
+          "eternity of the world",
+          "Latin Averroism",
+          "against al-Ghazali",
+          "the Decisive Treatise",
+          "natural philosophy"
+        ],
+        "missing": [
+          "Tahafut al-Tahafut",
+          "demonstrative knowledge"
+        ],
+        "total_expected": 10,
+        "ratio": 0.8
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "sep",
+        "wikipedia"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "# Ibn Rushd (Averroes): A Comprehensive Overview\n\nIbn Rushd, known in the Latin West as Averroes (1126–1198), was an Andalusian polymath and jurist who served under the Almohad regime. He is widely regarded as perhaps \"the most devoted Aristotelian of the Middle Ages\" [Source: medieval-philosophy]. While his Eastern counterparts relied on Avicenna (Ibn Sina) for philosophical study, Averroes returned to the letter of Aristotle’s texts themselves, producing a massive corpus that included short, middle, and long commentaries on nearly the entire Aristotelian canon [Source: medieval-philosophia; Source: ibn-rushd-natural].\n\n### Major Works and Commitments\nAverroes was an incredibly prolific author, writing more than 100 books and treatises across philosophy, theology, medicine, astronomy, physics, psychology, mathematics, Islamic jurisprudence (*fiqh*), legal theory (*usūl al-fiqh*), religious foundations (*usūl al-dīn*), and linguistics [Source: Averroes; Source: ibn-rushd]. \n\nHis philosophical output is defined by his commentaries on Aristotle. He wrote short and \"Middle\" paraphrase commentaries on almost the entire Aristotelian corpus, as well as \"Great\" (or Long) detailed section-by-section expositions for some texts [Source: medieval-philosophy]. In natural philosophy specifically, he composed these three tiers of commentary on Aristotle’s *Physics* [Source: ibn-rushd-natural]. The Middle Commentaries were favored by later Jewish philosophers, but the Long Commentary was revised in its final stages to represent the last stage of Averroes' thought and became the most influential version [Source: ibn-rushd-natural].\n\nAverroes organized his work according to strict Aristotelian categories. He stuck to the organization implemented by Andronicus of Rhodes, giving \"the science of the soul\" a place of its own within theoretical philosophy [Source: ibn-rushd-natural]. His natural philosophy went beyond mere paraphrasing; it engaged deeply with Greek commentators and Arab predecessors on key issues such as body, extension, motion, change, time, finiteness, infiniteness, and nature itself [Source: ibn-rushd; Source: ibn-rushd-natural].\n\n### Philosophy and Religion\nThe central tension in Averroes' career was defending *falsafa* (philosophy) against Islamic jurists and Asharite theologians like Al-Ghazali. He faced the challenge of legitimizing the study of philosophy and proving that its doctrines were consistent with Islam [Source: ibn-rushd-natural]. \n\nAverroes argued that philosophy grants man his intellectual perfection and true happiness [Source: ibn-rushd-natural]. His approach to reconciling reason and revelation became known as **Double Truth** or, more accurately, a doctrine where philosophical truth and religious truth are compatible but expressed differently for different audiences. While not explicitly detailed in every source, this is historically understood through works like *The Incoherence of the Incoherence* (a rebuttal to Al-Ghazali) and *The Decisive Treatise*. Evidence suggests he transmitted these ideas eastward; copies of his *Kashf* (Decisive Treatise) and *Incoherence* were found in Turkey, Egypt, and India [Source: ibn-rushd].\n\n### Most Influential Doctrines\n1.  **Unity of Truth:** Averroes adopted a theory where philosophical inquiry and religious revelation arrive at the same truth. This influenced later thinkers such as Abd al-Latīf al-Baghdādī, who adopted the \"theory of the unity of truth\" from him [Source: ibn-rushd].\n2.  **The Intellect:** In psychology and metaphysics, Averroes famously argued for the unity of the material intellect (a controversial position suggesting that human rationality is shared rather than individual). He categorized souls into levels: plants possess simple souls, while animals and humans have additional faculties to move, sense, and think rationally [Source: ibn-rushd-natural; Source: History of philosophy]. \n3.  **Eternity of the World:** Following Aristotle, he defended the eternity of the world against creationist views, a stance that drew heavy criticism from theologians like Al-Ghazili but was foundational to his natural science defense [Source: Transmission of the Greek Classics; Source: ibn-rushd-natural].\n4.  **Aristotelian Fidelity:** Unlike Avicenna, who developed \"Avicennian logic\" as an alternative system that dominated the Islamic East by the 12th century, Averroes remained faithful to the Peripatetic tradition and Andronicus's organization of texts [Source: Islamic philosophy; Source: ibn-rushd-natural].\n\n### Later Influence\nIbn Rushd’s influence extended far beyond the Islamic world, profoundly shaping both Jewish and Christian medieval thought.\n\n*   **Jewish Philosophy:** His work found a second home in Judaism, where it became so prominent it arguably supplanted Aristotle as the paramount authority in philosophy and science among Jews (Harvey 2000). The critical event was Maimonides acquiring Ibn Rushd’s commentaries around 1190 from Egypt. Maimonides' subsequent praise precipitated four centuries of fascination with Averroes among Jewish philosophers [Source: ibn-rushd]. Both Middle and Long Commentaries on *Physics* were translated into Hebrew and drew significant interest [Source: ibn-rushd-natural].\n*   **Latin West:** Translation of philosophical texts from Arabic to Latin \"led to the transformation of almost all philosophical disciplines in the medieval Latin world\" [Source: Islamic Golden Age]. His influence was particularly strong in natural philosophy, psychology, metaphysics, logic, and ethics [Source: Islamic Golden Age]. This led to the rise of **Latin Averroism**, a distinct school within European scholasticism that grappled heavily with his views on the intellect and the eternity of the universe (often leading to ecclesiastical condemnations) [Source: al-arabi; Source: ibn-rushd].\n*   **Islamic World:** While highly influential in the West, his reception in the Islamic East was more mixed due to the dominance of Avicennism. However, some texts did travel east to Egypt and the Levant, influencing scholars like Abd al-Latīf al-Baghādādī [Source: ibn-rushd].\n\n### Summary of Key Figures and Context\nAverroes operated in a landscape defined by previous giants. He critiqued Al-Ghazali’s theology (studied by figures like Abu Bakr Ibn al-Arabi) and stood as an Aristotelian counterpoint to Avicenna's Neoplatonic-inflected system [Source: Abu Bakr ibn al-Arabi; Source: Islamic philosophy]. Later critics included Ibn Taymiyya, who condemned various philosophical innovations, though Averroes himself predated the peak of these later orthodox reactions [Source: Ibn Taymiyya]. \n\nHis legacy is preserved not only in texts but also in modern nomenclature: the lunar crater *ibn Rushd* and asteroid *8318 Averroes* are named after him [Source: Averroes].\n\n***\n\n**Note on Sources:** This overview synthesizes information from general knowledge regarding Averroes' specific doctrines (such as the Unity of Intellect) which were implied by his \"devoted Aristotelian\" status and influence on Latin/Jewish thought, alongside explicit details provided in the retrieved passages. The retrieval did not contain full text of *The Incoherence*, so its contents are described generally based on standard historical attribution rather than direct passage citation.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 56644,
+        "total_latency_ms": 46778,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 31,
+        "chunks_fact_score": {
+          "matched": [
+            "commentaries on Aristotle",
+            "philosophy and religion",
+            "Latin Averroism",
+            "natural philosophy"
+          ],
+          "missing": [
+            "unity of the intellect",
+            "Tahafut al-Tahafut",
+            "eternity of the world",
+            "demonstrative knowledge",
+            "against al-Ghazali",
+            "the Decisive Treatise"
+          ],
+          "total_expected": 10,
+          "ratio": 0.4
+        },
+        "judge_fact_score": {
+          "matched": [
+            "commentaries on Aristotle",
+            "unity of the intellect",
+            "philosophy and religion",
+            "eternity of the world",
+            "Latin Averroism",
+            "demonstrative knowledge",
+            "against al-Ghazali",
+            "the Decisive Treatise",
+            "natural philosophy"
+          ],
+          "missing": [
+            "Tahafut al-Tahafut"
+          ],
+          "total_expected": 10,
+          "ratio": 0.9
+        },
+        "judge_evidence": [
+          {
+            "fact": "commentaries on Aristotle",
+            "present": true,
+            "evidence": "\"producing a massive corpus that included short, middle, and long commentaries on nearly the entire Aristotelian canon\""
+          },
+          {
+            "fact": "unity of the intellect",
+            "present": true,
+            "evidence": "\"Unity of Truth: Averroes adopted a theory where philosophical inquiry and religious revelation arrive at the same truth.\""
+          },
+          {
+            "fact": "philosophy and religion",
+            "present": true,
+            "evidence": "\"The central tension in Averroes' career was defending falsafa (philosophy) against Islamic jurists and Asharite theologians like Al-Ghazali.\""
+          },
+          {
+            "fact": "Tahafut al-Tahafut",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "eternity of the world",
+            "present": true,
+            "evidence": "\"Eternity of the World: Following Aristotle, he defended the eternity of the world against creationist views...\""
+          },
+          {
+            "fact": "Latin Averroism",
+            "present": true,
+            "evidence": "\"This led to the rise of Latin Averroism, a distinct school within European scholasticism that grappled heavily with his views on the intellect and the eternity of the universe\""
+          },
+          {
+            "fact": "demonstrative knowledge",
+            "present": true,
+            "evidence": "\"Averroes argued that philosophy grants man his intellectual perfection and true happiness\""
+          },
+          {
+            "fact": "against al-Ghazali",
+            "present": true,
+            "evidence": "\"The central tension in Averroes' career was defending falsafa (philosophy) against Islamic jurists and Asharite theologians like Al-Ghazali.\""
+          },
+          {
+            "fact": "the Decisive Treatise",
+            "present": true,
+            "evidence": "\"While not explicitly detailed in every source, this is historically understood through works like The Incoherence of the Incoherence (a rebuttal to Al-Ghazali) and The Decisive Treatise.\""
+          },
+          {
+            "fact": "natural philosophy",
+            "present": true,
+            "evidence": "\"In natural philosophy specifically, he composed these three tiers of commentary on Aristotle's Physics\""
+          }
+        ]
+      }
+    }
+  ]
+}

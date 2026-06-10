@@ -835,8 +835,16 @@ mod numeric_audit;
 mod question_analysis;
 mod retrieval;
 mod retrieval_helpers;
+/// Public (doc-hidden) so the integration-test harness can drive the
+/// runner with mocked steps against a real `Runtime` — the in-crate
+/// unit-test route is blocked by the sovereign-store circular dev-dep
+/// (two `sovereign_core` identities). Not a supported external API.
+#[doc(hidden)]
+pub mod retrieval_pipeline;
 mod system_message;
 mod types;
+
+pub(crate) use self::retrieval_pipeline::{deep_pipeline, kq_pipeline, PipelineState};
 
 pub struct Runtime {
     pub inference: Arc<dyn InferenceProvider>,
