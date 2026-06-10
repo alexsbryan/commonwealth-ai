@@ -39,7 +39,7 @@ const HELP: Help = Help {
     summary: "Grounded-calibration audit: answer + cite when the fact is in persistence, abstain honestly when it isn't, resist distractors.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench chaos-monkey run --bank <bank.toml> [--corpus <id>] [--judge-model <stem>] [--critic-model <stem>] [--manifest <toml>] [--out <jsonl>] [--limit N] [--naked] [--grounding-verify]",
+            "sovereign bench chaos-monkey run --bank <bank.toml> [--transport direct|desktop-bridge] [--bridge-url <url>] [--corpus <id>] [--judge-model <stem>] [--critic-model <stem>] [--manifest <toml>] [--out <jsonl>] [--limit N] [--naked] [--grounding-verify]",
         ),
         HelpSection::Subcommands(&[(
             "run",
@@ -94,6 +94,12 @@ struct Args {
     /// it to a grounded abstention. Tier-agnostic honesty lever. No-op under
     /// --naked (no chunks to verify against).
     grounding_verify: bool,
+    /// Answer source: in-process sealed Runtime (direct, the default) or a
+    /// live desktop's command bridge — same bank, same judges, same scorer,
+    /// so the two-red-line verdict delta isolates the desktop layer. The
+    /// judge still runs against the daemon in both modes.
+    bridge: bool,
+    bridge_url: String,
 }
 
 fn parse_args(rest: &[String]) -> Result<Args, String> {
@@ -114,6 +120,8 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut limit = None;
     let mut naked = false;
     let mut grounding_verify = false;
+    let mut bridge = false;
+    let mut bridge_url = super::desktop_bridge::DEFAULT_BRIDGE_URL.to_string();
 
     let mut i = 0;
     macro_rules! val {
@@ -134,6 +142,18 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             "--limit" => limit = Some(val!("--limit").parse().map_err(|_| "--limit must be a usize")?),
             "--naked" => naked = true,
             "--grounding-verify" => grounding_verify = true,
+            "--transport" => {
+                bridge = match val!("--transport").as_str() {
+                    "direct" => false,
+                    "desktop-bridge" => true,
+                    other => {
+                        return Err(format!(
+                            "--transport must be `direct` or `desktop-bridge`, got `{other}`"
+                        ))
+                    }
+                };
+            }
+            "--bridge-url" => bridge_url = val!("--bridge-url"),
             other => return Err(format!("unknown flag `{other}`")),
         }
         i += 1;
@@ -149,6 +169,8 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         limit,
         naked,
         grounding_verify,
+        bridge,
+        bridge_url,
     })
 }
 
@@ -201,11 +223,33 @@ async fn run(rest: &[String]) -> i32 {
         gates.max_hallucination,
     );
 
-    let session = match build_session(&globals).await {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error: could not build chat session: {e}");
+    // Direct transport needs an in-process Runtime; bridge transport
+    // dispatches through a live desktop instead (no session at all —
+    // the judge below talks to the daemon directly).
+    let (session, bridge_client) = if args.bridge {
+        let client = super::desktop_bridge::BridgeClient::new(&args.bridge_url);
+        if let Err(e) = client.healthz().await {
+            eprintln!("error: {e}");
             return 1;
+        }
+        // Completions must land in the replay ring before the first turn.
+        if let Err(e) = client.listen("message-complete").await {
+            eprintln!("error: {e}");
+            return 1;
+        }
+        if let Err(e) = client.listen("message-error").await {
+            eprintln!("error: {e}");
+            return 1;
+        }
+        eprintln!("[chaos] transport=desktop-bridge ({})", args.bridge_url);
+        (None, Some(client))
+    } else {
+        match build_session(&globals).await {
+            Ok(s) => (Some(s), None),
+            Err(e) => {
+                eprintln!("error: could not build chat session: {e}");
+                return 1;
+            }
         }
     };
     let v1 = format!("{}/v1", args.base_url.trim_end_matches('/'));
@@ -251,7 +295,33 @@ async fn run(rest: &[String]) -> i32 {
             .chat_model
             .clone()
             .unwrap_or_else(|| "primary".to_string());
-        let row = score_question(&session, judge.as_ref(), &args.judge_model, critic.as_ref(), &args.critic_model, &corpus, &model_id, q, naked_provider.as_deref(), naked_max, args.grounding_verify).await;
+        // Answer source per transport; everything downstream (judges,
+        // critic gate, deterministic checks, scorer) is shared verbatim.
+        let live = match (naked_provider.as_deref(), &bridge_client, &session) {
+            (Some(p), _, _) => run_naked(p, &model_id, &q.question, naked_max).await,
+            (None, Some(client), _) => {
+                match super::desktop_bridge::run_bridge_live(
+                    client,
+                    Some(&corpus),
+                    &q.question,
+                    "bench:chaos-monkey",
+                )
+                .await
+                {
+                    Ok(l) => l.answer,
+                    Err(e) => {
+                        eprintln!("  [{:>2}/{}] bridge turn failed: {e}", qi + 1, take);
+                        crate::bench_cmd::live_runner::LiveAnswer {
+                            visible: String::new(),
+                            retrieved_chunk_texts: Vec::new(),
+                        }
+                    }
+                }
+            }
+            (None, None, Some(session)) => run_live(session, &corpus, &q.question).await,
+            (None, None, None) => unreachable!("one of session/bridge is always built"),
+        };
+        let row = score_question(live, judge.as_ref(), &args.judge_model, critic.as_ref(), &args.critic_model, &corpus, &model_id, q, naked_provider.is_some(), args.grounding_verify).await;
         eprintln!(
             "  [{:>2}/{}] {:<20} expect={:<7} act={:<9} pass={}",
             qi + 1,
@@ -279,10 +349,14 @@ async fn run(rest: &[String]) -> i32 {
     }
 }
 
-/// Run one question through the sealed chat path + score it.
+/// Score one already-answered question. The answer (`live`) comes from
+/// whichever transport the caller used — sealed in-process Runtime,
+/// desktop bridge, or naked baseline — so the judges, the critic's
+/// grounding gate, and the deterministic checks are one implementation
+/// across all of them.
 #[allow(clippy::too_many_arguments)]
 async fn score_question(
-    session: &crate::chat_cmd::bootstrap::ChatSession,
+    live: crate::bench_cmd::live_runner::LiveAnswer,
     judge: &dyn InferenceProvider,
     judge_model: &str,
     critic: &dyn InferenceProvider,
@@ -290,16 +364,9 @@ async fn score_question(
     corpus: &str,
     model_id: &str,
     q: &ChaosQuestion,
-    naked_provider: Option<&dyn InferenceProvider>,
-    naked_max: usize,
+    naked: bool,
     grounding_verify: bool,
 ) -> ResultRow {
-    // --naked: bypass the Runtime entirely (bare model, no system/retrieval).
-    // Otherwise the normal sealed live path (router → retrieval → synthesis).
-    let live = match naked_provider {
-        Some(p) => run_naked(p, model_id, &q.question, naked_max).await,
-        None => run_live(session, corpus, &q.question).await,
-    };
     let visible = live.visible;
     let chunk_texts = live.retrieved_chunk_texts;
 
@@ -310,7 +377,7 @@ async fn score_question(
     // the action directly rather than re-classifying a canned message (a weak
     // judge mis-reads "the sources don't contain that" as a substantive answer).
     let gated = grounding_verify
-        && naked_provider.is_none()
+        && !naked
         && !chunk_texts.is_empty()
         && verify_grounding(critic, critic_model, &q.question, &visible, &chunk_texts).await
             == Some(true);
