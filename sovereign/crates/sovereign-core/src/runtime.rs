@@ -1729,7 +1729,16 @@ impl Runtime {
         // `redirect_turn` can reuse work without re-searching.
         self.sessions.sweep_expired();
         let skill_id = self.skills.primary_skill_id_for_conversation();
-        let (_session_id, _cancel_token) = self.sessions.begin(
+        // The cancel token is LIVE plumbing, not bookkeeping: the
+        // desktop's `cancel_stream` (and `redirect_turn`) cancels it,
+        // and the streaming forward loops below select! on it —
+        // terminating the turn with FinishReason::Cancelled and
+        // dropping the provider stream (the embedded engine stops
+        // decoding on receiver-drop). Before 2026-06-10 this binding
+        // was discarded (`_cancel_token`) and cancel was a no-op:
+        // "cancelled" turns ran to natural completion (harness note
+        // df66cb8d).
+        let (_session_id, cancel_token) = self.sessions.begin(
             conversation_id.to_string(),
             skill_id,
             message.to_string(),
@@ -2274,6 +2283,7 @@ impl Runtime {
                 }
             }
 
+            let cancel_for_stream = cancel_token.clone();
             tokio::spawn(async move {
                 let started = std::time::Instant::now();
 
@@ -2299,7 +2309,28 @@ impl Runtime {
                 let mut retried = false;
 
                 'synth: loop {
-                    while let Some(frame) = s.next().await {
+                    loop {
+                        // Cancellation races the next frame. `biased`
+                        // so a pending cancel wins over buffered
+                        // tokens — the user asked us to stop NOW.
+                        // Dropping `s` (when the spawn unwinds past
+                        // 'synth) closes the provider channel; the
+                        // embedded engine breaks on the failed send.
+                        let frame = tokio::select! {
+                            biased;
+                            _ = cancel_for_stream.cancelled() => {
+                                tracing::info!(
+                                    chars_streamed = full_text.chars().count(),
+                                    "kq-stream: cancelled by session token — terminating with FinishReason::Cancelled"
+                                );
+                                observed_finish = Some(crate::types::FinishReason::Cancelled);
+                                break 'synth;
+                            }
+                            f = s.next() => match f {
+                                Some(fr) => fr,
+                                None => break,
+                            },
+                        };
                         use crate::types::StreamFrame;
                         match frame {
                             StreamFrame::Token(chunk) => {
@@ -2979,6 +3010,7 @@ impl Runtime {
 
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(64);
 
+        let cancel_for_stream = cancel_token.clone();
         tokio::spawn(async move {
             let started = std::time::Instant::now();
             let mut full_text = String::new();
@@ -3004,7 +3036,24 @@ impl Runtime {
             let mut retried = false;
 
             'synth: loop {
-                while let Some(frame) = s.next().await {
+                loop {
+                    // Cancellation races the next frame — see the
+                    // matching note on the KQ loop above.
+                    let frame = tokio::select! {
+                        biased;
+                        _ = cancel_for_stream.cancelled() => {
+                            tracing::info!(
+                                chars_streamed = full_text.chars().count(),
+                                "deep-stream: cancelled by session token — terminating with FinishReason::Cancelled"
+                            );
+                            observed_finish = Some(crate::types::FinishReason::Cancelled);
+                            break 'synth;
+                        }
+                        f = s.next() => match f {
+                            Some(fr) => fr,
+                            None => break,
+                        },
+                    };
                     use crate::types::StreamFrame;
                     match frame {
                         StreamFrame::Token(chunk) => {

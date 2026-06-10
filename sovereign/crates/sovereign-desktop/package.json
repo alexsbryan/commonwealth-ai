@@ -19,6 +19,8 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:real": "playwright test -c playwright.real.config.ts",
     "test:e2e:faults": "playwright test -c playwright.faults.config.ts",
+    "soak": "node tests/e2e/scripts/soak.mjs",
+    "report:soak": "node tests/e2e/scripts/soak-report.mjs",
     "report:coverage:real": "node tests/e2e/scripts/coverage-report.mjs test-artifacts/ledger-synthetic.jsonl test-artifacts/ledger-real.jsonl",
     "test:ttfi": "playwright test specs/ttfi.spec.ts",
     "report:ttfi": "node tests/e2e/scripts/ttfi-summary.mjs",
