@@ -623,6 +623,24 @@ asserts `all_wired()` so it can't silently re-diverge. Effort-tier escalation +
 robust coarse-verdict recovery default **ON** (`SOVEREIGN_KQ_EFFORT_TIER=0` /
 `SOVEREIGN_ROUTER_ROBUST_COARSE=0` disable).
 
+**Synthesis role layer (`role.rs`).** The knowledge-turn path is organized as
+three data-defined roles — the synthesis-side counterpart to the agent-loop
+roles in `commonwealth-agent-tools/src/role/`, lifting the same
+`RoleProfile`/`RoleModelMap` shape (ARCH §6: profiles are *data*). **Router**
+classifies + resolves the route (mechanism: `EmbedRouter` +
+`resolve_synthesis_route`); **Synthesizer** assembles the grounded answer
+(mechanism: `build_synthesis_system_prompt` — the one prompt-body builder all
+synthesis sites now call); **Critic** is a *separate verification pass*
+(mechanism today: the bench grounding/abstain/caveat classifiers — defined in
+`role.rs` so bench + any future prod critic share one definition, **not yet
+wired into prod synthesis**). Each `RoleProfile` ships with its
+`verify_predicate` (the keystone: the predicate defines correctness, the bench
+measures it). Two SSOT decisions back this: `build_synthesis_system_prompt`
+(one prompt body, byte-equivalence-tested) and `resolve_synthesis_route` (the
+single traced FastFocused-vs-PrimarySynthesis decision with a typed
+`RouteReason`, truth-table-tested against the legacy ladder) — together they
+end the "live path mis-identified three times" illegibility.
+
 Per-intent handlers live in
 `sovereign-core/src/runtime/handlers/{simple,ask_move,conation,commissive,metalingual,expressive,document_op,complex_task,attached_doc,knowledge_query}.rs`
 as `impl Runtime` across files (no vtable hop on dispatch).

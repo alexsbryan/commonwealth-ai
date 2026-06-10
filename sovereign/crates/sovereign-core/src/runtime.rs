@@ -797,7 +797,7 @@ pub(crate) use self::collaboration::{
 pub use self::evidence::build_test_evidence_shape;
 pub(crate) use self::evidence::{
     compute_evidence_shape, decide_expansion_strategy, is_grounding_candidate, operation_of,
-    route_from_evidence, EvidenceShape, ExpansionStrategy, SynthesisRoute,
+    resolve_synthesis_route, EvidenceShape, ExpansionStrategy, SynthesisRoute,
     EVIDENCE_MIN_TOKEN_COVERAGE,
 };
 pub(crate) use self::intent_helpers::{

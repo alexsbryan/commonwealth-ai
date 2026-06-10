@@ -25,6 +25,7 @@ pub mod planner;
 pub mod query_session;
 pub mod registry;
 pub mod current_info_classifier;
+pub mod role;
 pub mod router;
 pub mod effort_classifier;
 pub mod router_bootstrap;
