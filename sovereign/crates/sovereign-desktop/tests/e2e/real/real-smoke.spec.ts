@@ -20,14 +20,14 @@ test("real stack: send a message, stream real tokens, verify invariants", async 
 
   const messageId = await sendAndAwaitTurn(
     page,
-    "Reply with one short sentence: what is 2+2?",
+    "What is the chemical symbol for gold?",
   );
 
   const facts = await assertTurnInvariants(page, bridge, messageId);
   expect(facts.chunkCount).toBeGreaterThan(0);
 
   // The user bubble and the terminal assistant text both rendered.
-  await expect(page.locator(".bubble.user .content").last()).toContainText("2+2");
+  await expect(page.locator(".bubble.user .content").last()).toContainText("chemical symbol");
   const rendered = (await page.locator(".sv-ai-msg .sv-prose").last().textContent()) ?? "";
   expect(rendered.trim().length).toBeGreaterThan(0);
 });

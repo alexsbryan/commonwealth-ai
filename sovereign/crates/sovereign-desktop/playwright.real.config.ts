@@ -15,6 +15,9 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/e2e/real",
+  // The fault-injection suite owns its own lifecycle (supervised app,
+  // process kills) — playwright.faults.config.ts.
+  testIgnore: "**/faults/**",
   globalSetup: "./tests/e2e/real/global-setup.ts",
   globalTeardown: "./tests/e2e/real/global-teardown.ts",
   fullyParallel: false,
