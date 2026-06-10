@@ -156,8 +156,13 @@ pub async fn cmd_routing_replay(args: &[String]) -> i32 {
         let turn = run_bridge_live(&client, None, &q.question, "bench:routing-replay").await;
         let (fired, glassbox_ok) = match &turn {
             Ok(t) => {
+                // Two metadata contracts coexist: referential handlers
+                // attach a full ResponseProvenance (`provenance.intent`),
+                // speech-act handlers (conation/commissive/expressive/
+                // metalingual) attach a top-level `intent` only.
                 let fired = t.metadata["provenance"]["intent"]
                     .as_str()
+                    .or_else(|| t.metadata["intent"].as_str())
                     .unwrap_or("")
                     .to_string();
                 let ok = !fired.is_empty();

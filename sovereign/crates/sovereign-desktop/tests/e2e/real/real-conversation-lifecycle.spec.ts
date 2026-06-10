@@ -15,7 +15,7 @@ test("create → turn → rename → switch → delete, UI and store agreeing", 
 
   // Create via the UI button; first turn binds the conversation.
   await page.locator(".new-btn").click();
-  const messageId = await sendAndAwaitTurn(page, "Reply with the single word: lifecycle");
+  const messageId = await sendAndAwaitTurn(page, "What is the capital of France?");
   await assertTurnInvariants(page, bridge, messageId);
 
   // The store gained exactly one conversation.
@@ -57,7 +57,7 @@ test("create → turn → rename → switch → delete, UI and store agreeing", 
 
   // Switch: select our conversation, its messages render.
   await page.locator(".convo-title", { hasText: "lifecycle-renamed" }).first().click();
-  await expect(page.locator(".bubble.user .content").last()).toContainText("lifecycle");
+  await expect(page.locator(".bubble.user .content").last()).toContainText("capital of France");
 
   // Delete via the UI: armDelete is a two-click confirm.
   const row = page.locator(".convo-item", { hasText: "lifecycle-renamed" }).first();

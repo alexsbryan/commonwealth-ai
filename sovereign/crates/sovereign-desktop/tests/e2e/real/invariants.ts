@@ -110,22 +110,29 @@ export async function assertTurnInvariants(
     "concat(message-chunk) must equal message-complete.full_text byte-for-byte",
   ).toBe(complete.full_text);
 
-  // ── 2. Provenance presence ──
+  // ── 2. Glassbox intent presence ──
+  // Two metadata contracts coexist (see routing_replay.rs): referential
+  // handlers attach a full ResponseProvenance under `provenance`;
+  // speech-act handlers (conation/commissive/expressive/metalingual)
+  // attach a top-level `intent` only. Every turn must carry ONE of
+  // them — a turn with neither is invisible to the user's provenance
+  // surfaces.
   const meta = complete.metadata;
   expect(meta, "message-complete.metadata must be present").toBeTruthy();
   const prov = meta?.provenance;
-  expect(prov, "metadata.provenance must be present").toBeTruthy();
+  const intent = prov?.intent ?? meta?.intent;
   expect(
-    typeof prov?.intent === "string" && prov.intent.length > 0,
-    `provenance.intent must be a non-empty string (got ${JSON.stringify(prov?.intent)})`,
+    typeof intent === "string" && intent.length > 0,
+    `turn carries no intent in provenance.intent OR metadata.intent ` +
+      `(metadata keys: ${Object.keys(meta ?? {}).join(", ")})`,
   ).toBe(true);
-  if (opts.expectFinish !== null) {
+  if (opts.expectFinish !== null && prov) {
     if (opts.expectFinish !== undefined) {
       expect(
-        prov?.finish_reason,
+        prov.finish_reason,
         `finish_reason should be ${JSON.stringify(opts.expectFinish)}`,
       ).toBe(opts.expectFinish);
-    } else if (prov?.finish_reason !== undefined) {
+    } else if (prov.finish_reason !== undefined) {
       expect(
         ["stop", "length"],
         `unexpected finish_reason ${JSON.stringify(prov.finish_reason)}`,
