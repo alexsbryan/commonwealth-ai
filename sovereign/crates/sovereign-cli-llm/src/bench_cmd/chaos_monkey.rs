@@ -39,7 +39,7 @@ const HELP: Help = Help {
     summary: "Grounded-calibration audit: answer + cite when the fact is in persistence, abstain honestly when it isn't, resist distractors.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench chaos-monkey run --bank <bank.toml> [--corpus <id>] [--judge-model <stem>] [--manifest <toml>] [--out <jsonl>] [--limit N] [--naked] [--grounding-verify]",
+            "sovereign bench chaos-monkey run --bank <bank.toml> [--corpus <id>] [--judge-model <stem>] [--critic-model <stem>] [--manifest <toml>] [--out <jsonl>] [--limit N] [--naked] [--grounding-verify]",
         ),
         HelpSection::Subcommands(&[(
             "run",
@@ -72,6 +72,13 @@ struct Args {
     bank: PathBuf,
     corpus: Option<String>,
     judge_model: String,
+    /// Model handle for the CRITIC role — the `verify_grounding` pass (the
+    /// production abstention gate, a SEPARATE forward pass from the
+    /// Synthesizer). Defaults to the Critic `RoleProfile`'s preferred tier
+    /// (`sovereign_core::role` → primary), NOT the lighter measurement
+    /// `judge_model`: the keystone is "Critic(35B) catches fabrications".
+    /// Override with `--critic-model`.
+    critic_model: String,
     base_url: String,
     manifest: Option<PathBuf>,
     out: PathBuf,
@@ -93,6 +100,14 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut bank: Option<PathBuf> = None;
     let mut corpus = None;
     let mut judge_model = "fast".to_string();
+    // Critic role's model comes from its RoleProfile (preferred_tier → primary),
+    // making `role.rs` load-bearing here. Override with `--critic-model`.
+    let mut critic_model = sovereign_core::role::default_profile_for(
+        sovereign_core::role::Role::Critic,
+    )
+    .preferred_tier
+    .model_stem()
+    .to_string();
     let mut base_url = "http://localhost:9741".to_string();
     let mut manifest = None;
     let mut out = PathBuf::from("target/chaos-monkey/results.jsonl");
@@ -112,6 +127,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             "--bank" => bank = Some(PathBuf::from(val!("--bank"))),
             "--corpus" => corpus = Some(val!("--corpus")),
             "--judge-model" => judge_model = val!("--judge-model"),
+            "--critic-model" => critic_model = val!("--critic-model"),
             "--base-url" => base_url = val!("--base-url"),
             "--manifest" => manifest = Some(PathBuf::from(val!("--manifest"))),
             "--out" => out = PathBuf::from(val!("--out")),
@@ -126,6 +142,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         bank: bank.ok_or("--bank is required")?,
         corpus,
         judge_model,
+        critic_model,
         base_url,
         manifest,
         out,
@@ -199,6 +216,22 @@ async fn run(rest: &[String]) -> i32 {
         PROVIDER_CTX,
     ));
 
+    // Critic role (the `verify_grounding` gate) runs on its own provider —
+    // model sourced from the Critic RoleProfile (primary), a SEPARATE forward
+    // pass from both the Synthesizer and the lighter measurement judge. Reuse
+    // the judge Arc when they happen to be the same handle.
+    let critic: std::sync::Arc<dyn InferenceProvider> = if args.critic_model == args.judge_model {
+        std::sync::Arc::clone(&judge)
+    } else {
+        std::sync::Arc::new(RemoteApiProvider::new(&v1, None, &args.critic_model, PROVIDER_CTX))
+    };
+    if args.grounding_verify {
+        eprintln!(
+            "[chaos] critic (grounding-verify) model={} (RoleProfile::Critic preferred_tier); judge model={}",
+            args.critic_model, args.judge_model
+        );
+    }
+
     // True-baseline control: a bare provider that hits the daemon's /v1
     // directly with no system prompt and no retrieval (set up only in --naked
     // mode). score_question routes through `run_naked` when this is Some.
@@ -218,7 +251,7 @@ async fn run(rest: &[String]) -> i32 {
             .chat_model
             .clone()
             .unwrap_or_else(|| "primary".to_string());
-        let row = score_question(&session, judge.as_ref(), &args.judge_model, &corpus, &model_id, q, naked_provider.as_deref(), naked_max, args.grounding_verify).await;
+        let row = score_question(&session, judge.as_ref(), &args.judge_model, critic.as_ref(), &args.critic_model, &corpus, &model_id, q, naked_provider.as_deref(), naked_max, args.grounding_verify).await;
         eprintln!(
             "  [{:>2}/{}] {:<20} expect={:<7} act={:<9} pass={}",
             qi + 1,
@@ -247,10 +280,13 @@ async fn run(rest: &[String]) -> i32 {
 }
 
 /// Run one question through the sealed chat path + score it.
+#[allow(clippy::too_many_arguments)]
 async fn score_question(
     session: &crate::chat_cmd::bootstrap::ChatSession,
     judge: &dyn InferenceProvider,
     judge_model: &str,
+    critic: &dyn InferenceProvider,
+    critic_model: &str,
     corpus: &str,
     model_id: &str,
     q: &ChaosQuestion,
@@ -276,7 +312,7 @@ async fn score_question(
     let gated = grounding_verify
         && naked_provider.is_none()
         && !chunk_texts.is_empty()
-        && verify_grounding(judge, judge_model, &q.question, &visible, &chunk_texts).await
+        && verify_grounding(critic, critic_model, &q.question, &visible, &chunk_texts).await
             == Some(true);
 
     // The one model-side judgement: did it answer substantively or decline?

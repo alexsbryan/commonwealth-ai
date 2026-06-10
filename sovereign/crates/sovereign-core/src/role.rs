@@ -85,6 +85,19 @@ pub enum Tier {
     Primary,
 }
 
+impl Tier {
+    /// The daemon model-handle stem this tier resolves to (`/v1/models`
+    /// aliases). The bridge from the role vocabulary to an actual slot — a
+    /// caller that knows a role resolves its model via
+    /// `default_profile_for(role).preferred_tier.model_stem()`.
+    pub const fn model_stem(&self) -> &'static str {
+        match self {
+            Tier::Fast => "fast",
+            Tier::Primary => "primary",
+        }
+    }
+}
+
 /// Per-role sampling overrides — lifted from the agent-tools shape. `None`
 /// fields fall back to the caller's inference config.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -264,6 +277,19 @@ mod tests {
         );
         assert!(!default_profile_for(Role::Router).separate_forward_pass);
         assert!(!default_profile_for(Role::Synthesizer).separate_forward_pass);
+    }
+
+    #[test]
+    fn tier_model_stems_and_critic_resolves_primary() {
+        assert_eq!(Tier::Fast.model_stem(), "fast");
+        assert_eq!(Tier::Primary.model_stem(), "primary");
+        // The bench sources the Critic's model from its profile — this is the
+        // handle that puts verify_grounding on the 35B (the keystone's
+        // "Critic(35B)"), instead of the bench's default fast judge.
+        assert_eq!(
+            default_profile_for(Role::Critic).preferred_tier.model_stem(),
+            "primary"
+        );
     }
 
     #[test]
