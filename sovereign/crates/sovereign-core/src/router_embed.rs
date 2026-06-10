@@ -128,8 +128,17 @@ impl EmbedRouter {
     pub async fn load(path: &Path, inference: Arc<dyn InferenceProvider>) -> Result<Self> {
         let raw = std::fs::read_to_string(path)
             .map_err(|e| Error::InvalidInput(format!("read exemplars {}: {e}", path.display())))?;
-        let parsed: ExemplarFile = toml::from_str(&raw)
-            .map_err(|e| Error::InvalidInput(format!("parse exemplars {}: {e}", path.display())))?;
+        Self::from_toml_str(&raw, inference).await
+    }
+
+    /// Build from in-memory TOML (the baked default in
+    /// [`crate::router_bootstrap`], or any caller-supplied content). Identical
+    /// parse + embed path to [`Self::load`] minus the file read, so a binary
+    /// with no on-disk exemplars (a desktop `.app`) still gets the embed router
+    /// — bench/desktop parity by construction.
+    pub async fn from_toml_str(raw: &str, inference: Arc<dyn InferenceProvider>) -> Result<Self> {
+        let parsed: ExemplarFile = toml::from_str(raw)
+            .map_err(|e| Error::InvalidInput(format!("parse exemplars: {e}")))?;
 
         let mut exemplars = Vec::with_capacity(parsed.example.len());
         for row in parsed.example {
@@ -149,7 +158,6 @@ impl EmbedRouter {
         tracing::info!(
             target: "router.embed",
             exemplar_count = exemplars.len(),
-            path = %path.display(),
             "embed-router loaded"
         );
 

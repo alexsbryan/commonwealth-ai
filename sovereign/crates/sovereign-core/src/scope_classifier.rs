@@ -96,13 +96,20 @@ impl PersonalScopeClassifier {
         let raw = std::fs::read_to_string(path).map_err(|e| {
             Error::InvalidInput(format!("read scope examples {}: {e}", path.display()))
         })?;
-        let parsed: ScopeExamplesFile = toml::from_str(&raw).map_err(|e| {
-            Error::InvalidInput(format!("parse scope examples {}: {e}", path.display()))
-        })?;
+        Self::from_toml_str(&raw, inference).await
+    }
+
+    /// Build from in-memory TOML (the baked default in
+    /// [`crate::router_bootstrap`], or any caller-supplied content). Identical
+    /// parse + centroid path to [`Self::load`] minus the file read, so a binary
+    /// with no on-disk exemplars still gets the classifier — bench/desktop
+    /// parity by construction.
+    pub async fn from_toml_str(raw: &str, inference: Arc<dyn InferenceProvider>) -> Result<Self> {
+        let parsed: ScopeExamplesFile = toml::from_str(raw)
+            .map_err(|e| Error::InvalidInput(format!("parse scope examples: {e}")))?;
         if parsed.personal.examples.is_empty() || parsed.external.examples.is_empty() {
             return Err(Error::InvalidInput(
-                "scope_examples.toml needs non-empty [personal].examples and [external].examples"
-                    .into(),
+                "scope examples need non-empty [personal].examples and [external].examples".into(),
             ));
         }
 
@@ -124,7 +131,6 @@ impl PersonalScopeClassifier {
             n_personal,
             n_external,
             dims = centroid_personal.len(),
-            path = %path.display(),
             "personal-scope classifier loaded"
         );
 

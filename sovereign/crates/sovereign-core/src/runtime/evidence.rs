@@ -22,7 +22,7 @@
 
 use corpus_engine::ScoredChunk;
 
-use crate::types::Intent;
+use crate::types::{Intent, Operation};
 
 /// Minimum token length for a query word to count toward title-match
 /// or content-coverage. Short tokens like "the", "and", "can", "you"
@@ -385,6 +385,40 @@ pub(crate) fn route_from_evidence(shape: &EvidenceShape) -> SynthesisRoute {
     }
 
     SynthesisRoute::PrimarySynthesis
+}
+
+/// Map a referential intent (+ the atom-enum flag) to its MECE cognitive
+/// [`Operation`] — the *what-the-answer-does* axis, decoupled from *effort*
+/// (which tier serves it). Returns `None` for non-referential intents
+/// (`Metalingual`/`Conation`/`Commissive`/`Expressive`/actions), which route
+/// through their own handlers and are outside the operation × effort frame.
+///
+/// Precedence mirrors the legacy route ladder at
+/// `prepare_knowledge_query_plan` (`ComparisonQuery` is checked *before* the
+/// atom-enum pin, so a comparison that also carries an atom-enum set is still
+/// `Compare`). Behaviour-preserving: this only *names* the operation today;
+/// nothing routes on it yet (Step 2 wires effort → tier). See
+/// `sovereign/docs/QUERY_TAXONOMY_MECE.md`.
+pub(crate) fn operation_of(intent: &Intent, has_atom_enum: bool) -> Option<Operation> {
+    match intent {
+        // Comparison is its own operation and is checked first (mirrors the
+        // legacy ladder: Comparison pinned before the atom-enum pin).
+        Intent::ComparisonQuery => Some(Operation::Compare),
+        // Within the referential Answer family, the atom-enum flag promotes
+        // the turn to Enumerate (a set/roster). The flag is only meaningful
+        // here — it is set during corpus retrieval for set-questions — so it
+        // never reaches the non-referential arm below.
+        Intent::SimpleQuery | Intent::KnowledgeQuery | Intent::DeepQuery => {
+            if has_atom_enum {
+                Some(Operation::Enumerate)
+            } else {
+                Some(Operation::Answer)
+            }
+        }
+        // Non-referential intents (Jakobson/speech-act + actions) have no
+        // referential Operation, regardless of any flag.
+        _ => None,
+    }
 }
 
 /// Which cohesion expander a knowledge turn should run after evidence-
@@ -916,6 +950,42 @@ mod evidence_shape_tests {
         let shape = compute_evidence_shape(&chunks, "tell me about the scheduler design");
         assert!(shape.title_match);
         assert!(!shape.is_off_target());
+    }
+}
+
+#[cfg(test)]
+mod operation_tests {
+    use super::operation_of;
+    use crate::types::{Intent, Operation};
+
+    #[test]
+    fn operation_of_maps_referential_intents() {
+        // Comparison is its own operation, and dominates the atom-enum flag
+        // (mirrors the legacy route ladder: Comparison checked first).
+        assert_eq!(operation_of(&Intent::ComparisonQuery, false), Some(Operation::Compare));
+        assert_eq!(operation_of(&Intent::ComparisonQuery, true), Some(Operation::Compare));
+        // Atom-enum flag → Enumerate, regardless of the carrier intent.
+        assert_eq!(operation_of(&Intent::KnowledgeQuery, true), Some(Operation::Enumerate));
+        assert_eq!(operation_of(&Intent::DeepQuery, true), Some(Operation::Enumerate));
+        // Simple / Knowledge / Deep all collapse to one Answer operation —
+        // they differ only in effort, not in what the answer does.
+        assert_eq!(operation_of(&Intent::SimpleQuery, false), Some(Operation::Answer));
+        assert_eq!(operation_of(&Intent::KnowledgeQuery, false), Some(Operation::Answer));
+        assert_eq!(operation_of(&Intent::DeepQuery, false), Some(Operation::Answer));
+    }
+
+    #[test]
+    fn operation_of_is_none_for_non_referential_intents() {
+        // Jakobson/speech-act + action intents are outside the operation×effort
+        // frame — they keep their own handlers.
+        assert_eq!(operation_of(&Intent::MetalingualQuery, false), None);
+        assert_eq!(operation_of(&Intent::ConationQuery, false), None);
+        assert_eq!(operation_of(&Intent::CommissiveQuery, false), None);
+        assert_eq!(operation_of(&Intent::ExpressiveQuery, false), None);
+        assert_eq!(operation_of(&Intent::ComplexTask, false), None);
+        // ...even when the atom-enum flag is set, a non-referential intent
+        // has no referential Operation.
+        assert_eq!(operation_of(&Intent::ExpressiveQuery, true), None);
     }
 }
 

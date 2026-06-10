@@ -94,12 +94,20 @@ impl CurrentInfoClassifier {
         let raw = std::fs::read_to_string(path).map_err(|e| {
             Error::InvalidInput(format!("read current-info examples {}: {e}", path.display()))
         })?;
-        let parsed: CurrentInfoExamplesFile = toml::from_str(&raw).map_err(|e| {
-            Error::InvalidInput(format!("parse current-info examples {}: {e}", path.display()))
-        })?;
+        Self::from_toml_str(&raw, inference).await
+    }
+
+    /// Build from in-memory TOML (the baked default in
+    /// [`crate::router_bootstrap`], or any caller-supplied content). Identical
+    /// parse + centroid path to [`Self::load`] minus the file read, so a binary
+    /// with no on-disk exemplars still gets the classifier — bench/desktop
+    /// parity by construction.
+    pub async fn from_toml_str(raw: &str, inference: Arc<dyn InferenceProvider>) -> Result<Self> {
+        let parsed: CurrentInfoExamplesFile = toml::from_str(raw)
+            .map_err(|e| Error::InvalidInput(format!("parse current-info examples: {e}")))?;
         if parsed.current.examples.is_empty() || parsed.evergreen.examples.is_empty() {
             return Err(Error::InvalidInput(
-                "current_info_examples.toml needs non-empty [current].examples and [evergreen].examples"
+                "current-info examples need non-empty [current].examples and [evergreen].examples"
                     .into(),
             ));
         }
@@ -122,7 +130,6 @@ impl CurrentInfoClassifier {
             n_current,
             n_evergreen,
             dims = centroid_current.len(),
-            path = %path.display(),
             "current-info classifier loaded"
         );
 

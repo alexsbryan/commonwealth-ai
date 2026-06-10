@@ -31,7 +31,6 @@ use futures::Stream;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::planner::LlmPlanner;
-use sovereign_core::router::LlmRouter;
 use sovereign_core::runtime::Runtime;
 use sovereign_core::traits::{ApprovalChannel, InferenceProvider, StateStore};
 use sovereign_core::types::*;
@@ -367,53 +366,25 @@ pub async fn build_session_with_skills(
     //    classifier before the heuristic + LLM cascade. Falls through
     //    to the legacy stack on load failure or low-confidence
     //    classifications.
-    let mut llm_router = LlmRouter::new(
+    // Router classifier stack — built through the shared `router_bootstrap`
+    // helper so the CLI/bench, desktop, and served daemon all wire the SAME
+    // classifiers (parity by construction; see sovereign-core/router_bootstrap.rs).
+    // `from_env_and_repo` keeps the `$SOVEREIGN_*` overlay + repo-relative
+    // exemplars for dev tuning; a packaged build falls through to the baked set.
+    let (llm_router, router_report) = sovereign_core::router_bootstrap::build_llm_router(
         Arc::clone(&inference),
         Arc::clone(&store),
         Arc::clone(&skills),
+        &sovereign_core::router_bootstrap::ExemplarOverrides::from_env_and_repo(),
+    )
+    .await;
+    eprintln!(
+        "Router classifier stack: embed={} scope={} effort={} current_info={}",
+        router_report.embed_router.is_some(),
+        router_report.scope.is_some(),
+        router_report.effort.is_some(),
+        router_report.current_info.is_some(),
     );
-    if let Some(path) = resolve_router_exemplars_path() {
-        match sovereign_core::router_embed::EmbedRouter::load(&path, Arc::clone(&inference)).await {
-            Ok(embed) => {
-                eprintln!(
-                    "Router embed exemplars: {} loaded from {}",
-                    embed.exemplar_count(),
-                    path.display()
-                );
-                llm_router = llm_router.with_embed_router(Arc::new(embed));
-            }
-            Err(e) => {
-                eprintln!(
-                    "warn: embed-router load failed ({}); falling back to heuristic + LLM stack",
-                    e
-                );
-            }
-        }
-    }
-    if let Some(path) = resolve_scope_examples_path() {
-        match sovereign_core::scope_classifier::PersonalScopeClassifier::load(
-            &path,
-            Arc::clone(&inference),
-        )
-        .await
-        {
-            Ok(scope_cls) => {
-                eprintln!(
-                    "Router scope classifier: {} personal / {} external examples from {}",
-                    scope_cls.personal_count(),
-                    scope_cls.external_count(),
-                    path.display()
-                );
-                llm_router = llm_router.with_scope_classifier(Arc::new(scope_cls));
-            }
-            Err(e) => {
-                eprintln!(
-                    "warn: scope classifier load failed ({}); routing without personal-scope bias",
-                    e
-                );
-            }
-        }
-    }
     let router: Box<dyn sovereign_core::traits::Router> = Box::new(llm_router);
     let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
 
@@ -926,43 +897,6 @@ async fn load_wikipedia_graph(
                 );
             }
         }
-    }
-    None
-}
-
-/// Resolve the path to `router/exemplars.toml`. Checks
-/// `$SOVEREIGN_ROUTER_EXEMPLARS` (an absolute or cwd-relative path)
-/// first, falls back to the canonical in-repo path. Returns `None`
-/// when neither candidate exists so callers can silently skip embed
-/// routing in deployments that don't ship the exemplars.
-fn resolve_router_exemplars_path() -> Option<PathBuf> {
-    if let Ok(env) = std::env::var("SOVEREIGN_ROUTER_EXEMPLARS") {
-        let p = PathBuf::from(env);
-        if p.is_file() {
-            return Some(p);
-        }
-    }
-    let default = PathBuf::from("sovereign/router/exemplars.toml");
-    if default.is_file() {
-        return Some(default);
-    }
-    None
-}
-
-/// Resolve the path to `router/scope_examples.toml`. Mirrors
-/// `resolve_router_exemplars_path` — `$SOVEREIGN_SCOPE_EXAMPLES`
-/// override, then in-repo canonical, then `None` so the classifier
-/// is silently skipped in deployments that don't ship the examples.
-fn resolve_scope_examples_path() -> Option<PathBuf> {
-    if let Ok(env) = std::env::var("SOVEREIGN_SCOPE_EXAMPLES") {
-        let p = PathBuf::from(env);
-        if p.is_file() {
-            return Some(p);
-        }
-    }
-    let default = PathBuf::from("sovereign/router/scope_examples.toml");
-    if default.is_file() {
-        return Some(default);
     }
     None
 }

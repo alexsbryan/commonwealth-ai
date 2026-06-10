@@ -274,6 +274,12 @@ pub struct LlmRouter {
     /// scope to restrict to user-owned corpora when the classifier
     /// fires `Some("personal")`.
     scope_classifier: Option<Arc<crate::scope_classifier::PersonalScopeClassifier>>,
+    /// Optional binary effort classifier (high/low). When installed it runs
+    /// off the same query embedding as the scope classifier and supplies the
+    /// deterministic effort signal the flaky 4B coarse verdict lacks — a
+    /// `High` verdict escalates a referential `Answer` to `DeepQuery` (primary
+    /// slot). See `effort_classifier.rs` + `docs/QUERY_TAXONOMY_MECE.md`.
+    effort_classifier: Option<Arc<crate::effort_classifier::EffortClassifier>>,
     /// Optional binary classifier for the current-info (time-sensitive
     /// → external search) axis. When installed it REPLACES the
     /// `needs_current_info` keyword heuristic that drives the
@@ -364,6 +370,7 @@ impl LlmRouter {
             skills,
             embed_router: None,
             scope_classifier: None,
+            effort_classifier: None,
             current_info_classifier: None,
             tool_embed_cache: std::sync::RwLock::new(None),
         }
@@ -438,6 +445,18 @@ impl LlmRouter {
         classifier: Arc<crate::scope_classifier::PersonalScopeClassifier>,
     ) -> Self {
         self.scope_classifier = Some(classifier);
+        self
+    }
+
+    /// Install the binary effort classifier. Runs off the same query embedding
+    /// as the scope classifier; a `High` verdict escalates a referential
+    /// `Answer` (KnowledgeQuery/SimpleQuery) to `DeepQuery` so exhaustive asks
+    /// reach the primary slot deterministically.
+    pub fn with_effort_classifier(
+        mut self,
+        classifier: Arc<crate::effort_classifier::EffortClassifier>,
+    ) -> Self {
+        self.effort_classifier = Some(classifier);
         self
     }
 
@@ -1219,7 +1238,99 @@ Reply with JSON only:
             .trim_start_matches("```")
             .trim_end_matches("```")
             .trim();
-        serde_json::from_str(cleaned).unwrap_or_default()
+        // Robust extraction (gated on SOVEREIGN_ROUTER_ROBUST_COARSE).
+        // Small fast models (4B-IQ/Q8) frequently emit the JSON verdict and
+        // then LEAK chain-of-thought after it — e.g.
+        //   {"intent":"REASONING"}\n</think>\n\nThe user is asking…
+        // Note the LONE `</think>` with no opener: the `<think>` strip above
+        // requires both tags, so it's skipped, `serde_json::from_str` fails on
+        // the trailing prose, and we `unwrap_or_default()` to an empty intent →
+        // the `_ => KnowledgeQuery` arm in `classify`, silently dropping a
+        // correct REASONING→DeepQuery verdict (the maximal-essay misroute,
+        // 2026-06-09). Extract the first balanced `{…}` object and parse that.
+        // Flag default-off so the A/B is flag-off (current) vs on; flip the
+        // default once the bench confirms the recovered escalations don't
+        // regress sep/wiki/marathon.
+        let candidate = if Self::robust_coarse_enabled() {
+            Self::extract_first_json_object(cleaned).unwrap_or(cleaned)
+        } else {
+            cleaned
+        };
+        serde_json::from_str(candidate).unwrap_or_default()
+    }
+
+    /// Gate for the robust first-JSON-object extraction in
+    /// [`Self::parse_coarse`]. **Default ON** (2026-06-09): recovers the 4B's
+    /// `REASONING` verdict it was silently dropping (lone `</think>` after a
+    /// CoT leak). Validated by the chaos + SEP/Wiki no-regression A/B.
+    /// Set `SOVEREIGN_ROUTER_ROBUST_COARSE=0` (or empty) to disable.
+    fn robust_coarse_enabled() -> bool {
+        std::env::var("SOVEREIGN_ROUTER_ROBUST_COARSE").map_or(true, |v| v != "0" && !v.is_empty())
+    }
+
+    /// Gate for effort-tier escalation (high-effort `Answer` → `DeepQuery` →
+    /// primary slot). **Default ON** (2026-06-09): SEP/Wiki no-regression PASS
+    /// — judge SEP +0.036 / Wiki flat, no question regressed, SEP source recall
+    /// +0.467, the long-stubborn trolley question's judge +0.143. Escalation is
+    /// monotone (only promotes; never downgrades) and conservative (6/41 flips).
+    /// Set `SOVEREIGN_KQ_EFFORT_TIER=0` (or empty) to disable.
+    fn effort_tier_enabled() -> bool {
+        std::env::var("SOVEREIGN_KQ_EFFORT_TIER").map_or(true, |v| v != "0" && !v.is_empty())
+    }
+
+    /// Promote a referential `Answer` intent (`KnowledgeQuery`/`SimpleQuery`) to
+    /// `DeepQuery` (→ primary slot) when the effort verdict is `High`. The MECE
+    /// effort axis (`docs/QUERY_TAXONOMY_MECE.md`): same operation, higher
+    /// effort → bigger model. Leaves `Compare`/`Enumerate`/non-referential
+    /// intents untouched (Comparison stays fast — a preserved bench learning).
+    /// No-op unless [`Self::effort_tier_enabled`].
+    fn escalate_for_effort(intent: Intent, effort: Option<Effort>) -> Intent {
+        if !Self::effort_tier_enabled() {
+            return intent;
+        }
+        Self::apply_effort_escalation(intent, effort)
+    }
+
+    /// Pure escalation mapping (no env gate) — the unit-testable core of
+    /// [`Self::escalate_for_effort`].
+    fn apply_effort_escalation(intent: Intent, effort: Option<Effort>) -> Intent {
+        if !matches!(effort, Some(Effort::High)) {
+            return intent;
+        }
+        match intent {
+            Intent::KnowledgeQuery | Intent::SimpleQuery => Intent::DeepQuery,
+            other => other,
+        }
+    }
+
+    /// Return the first balanced `{…}` JSON object substring in `s`, tolerant
+    /// of leading/trailing prose and a lone `</think>` the model leaks after
+    /// its verdict. String-aware (braces inside `"…"` don't count) with
+    /// backslash escaping. `None` when there is no balanced object.
+    fn extract_first_json_object(s: &str) -> Option<&str> {
+        let start = s.find('{')?;
+        let mut depth = 0usize;
+        let mut in_str = false;
+        let mut esc = false;
+        for (i, c) in s[start..].char_indices() {
+            if esc {
+                esc = false;
+                continue;
+            }
+            match c {
+                '\\' if in_str => esc = true,
+                '"' => in_str = !in_str,
+                '{' if !in_str => depth += 1,
+                '}' if !in_str => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(&s[start..start + i + c.len_utf8()]);
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
     }
 
     /// Parse a Pass 2.5 tool-selection JSON response. Returns
@@ -1483,6 +1594,22 @@ impl Router for LlmRouter {
         // exemplars from OTHER intents, erasing the scope hint. See
         // `scope_classifier.rs` module docs for the full post-mortem.
         let mut scope_hint: Option<String> = None;
+        // Effort verdict (high/low). Computed up front via the effort
+        // classifier's OWN unprefixed embed (NOT the embed-router's prefixed
+        // `embed_query` embedding — the retrieval prefix collapses the effort
+        // signal, see effort_classifier.rs). Hoisted here so it survives to
+        // BOTH the embed-confident return and the coarse-fallback return — the
+        // maximal asks abstain on the embed intent and resolve via the coarse
+        // path, so the escalation must apply there too. The extra embed is paid
+        // only when escalation is enabled. `None` otherwise.
+        let effort: Option<Effort> = if Self::effort_tier_enabled() {
+            match self.effort_classifier.as_ref() {
+                Some(ec) => ec.classify(message, &*self.inference).await.ok().flatten(),
+                None => None,
+            }
+        } else {
+            None
+        };
 
         if let Some(embed) = self.embed_router.as_ref() {
             match embed
@@ -1490,8 +1617,8 @@ impl Router for LlmRouter {
                 .await
             {
                 Ok((intent_verdict, query_embedding)) => {
-                    // Run scope classifier off the same embedding —
-                    // single embed call serves both decisions.
+                    // Scope classifier runs off the embed-router's query
+                    // embedding (single embed call serves both intent + scope).
                     if let Some(scope_cls) = self.scope_classifier.as_ref() {
                         scope_hint = scope_cls.classify_from_embedding(&query_embedding);
                     }
@@ -1553,26 +1680,31 @@ impl Router for LlmRouter {
                                 scope: scope_hint.clone(),
                             });
                         }
+                        // Effort escalation: a confident embed intent that is a
+                        // referential Answer (Knowledge/Simple) but high-effort
+                        // is promoted to DeepQuery (primary slot). Flag-gated.
+                        let routed = Self::escalate_for_effort(verdict.intent.clone(), effort);
                         let latency_ms = start.elapsed().as_millis() as i64;
                         let hash = message_hash(message);
-                        let intent_str = format!("{:?}", verdict.intent);
+                        let intent_str = format!("{routed:?}");
                         let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
                         let _ = self
                             .store
                             .log_routing_meta(&hash, "EMBED_ROUTER", None)
                             .await;
                         eprintln!(
-                            "[router] \"{}\" → {:?} (embed: sim={:.3} margin={:.3} nearest={:?} scope={:?})",
+                            "[router] \"{}\" → {:?} (embed: sim={:.3} margin={:.3} nearest={:?} scope={:?} effort={:?})",
                             &message[..message.len().min(50)],
-                            verdict.intent,
+                            routed,
                             verdict.top_sim,
                             verdict.margin,
                             verdict.nearest_exemplar,
                             scope_hint,
+                            effort,
                         );
                         return Ok(RouterClassification {
                             primary: IntentCandidate {
-                                intent: verdict.intent,
+                                intent: routed,
                                 confidence: 0.95,
                             },
                             alternatives: Vec::new(),
@@ -1776,6 +1908,13 @@ impl Router for LlmRouter {
                 (Intent::KnowledgeQuery, None)
             }
         };
+
+        // Effort escalation on the coarse-resolved intent. This is the path the
+        // maximal-essay asks take (they abstain on the embed intent), so the
+        // deterministic effort verdict here is what makes their escalation to
+        // the primary slot reliable — independent of the flaky 4B coarse
+        // verdict. Flag-gated; only promotes referential Answer intents.
+        let intent = Self::escalate_for_effort(intent, effort);
 
         let latency_ms = start.elapsed().as_millis() as i64;
 
@@ -2186,6 +2325,78 @@ mod tests {
         let c = LlmRouter::parse_coarse("I cannot classify this message.");
         assert_eq!(c.intent, "");
         assert_eq!(c.confidence, 0.0);
+    }
+
+    #[test]
+    fn extract_first_json_object_recovers_leaked_verdict() {
+        // The maximal-essay misroute (2026-06-09): the 4B emits the verdict and
+        // then LEAKS CoT after it, with a LONE `</think>` (no opener). The bare
+        // `serde_json::from_str` on this fails → empty default → KnowledgeQuery,
+        // dropping the correct REASONING→DeepQuery verdict.
+        let raw = "{\"intent\": \"REASONING\"}\n</think>\n\nThe user is asking for an exhaustive account…";
+        let obj = LlmRouter::extract_first_json_object(raw).expect("first JSON object");
+        assert_eq!(obj, "{\"intent\": \"REASONING\"}");
+        // Recovered object parses to the correct intent.
+        let parsed: CoarseClassification = serde_json::from_str(obj).unwrap();
+        assert_eq!(parsed.intent, "REASONING");
+    }
+
+    #[test]
+    fn apply_effort_escalation_promotes_only_answer_intents_on_high() {
+        use crate::types::Effort;
+        // High effort promotes the referential Answer intents to DeepQuery.
+        assert_eq!(
+            LlmRouter::apply_effort_escalation(Intent::KnowledgeQuery, Some(Effort::High)),
+            Intent::DeepQuery
+        );
+        assert_eq!(
+            LlmRouter::apply_effort_escalation(Intent::SimpleQuery, Some(Effort::High)),
+            Intent::DeepQuery
+        );
+        // Low / absent effort never escalates.
+        assert_eq!(
+            LlmRouter::apply_effort_escalation(Intent::KnowledgeQuery, Some(Effort::Low)),
+            Intent::KnowledgeQuery
+        );
+        assert_eq!(
+            LlmRouter::apply_effort_escalation(Intent::KnowledgeQuery, None),
+            Intent::KnowledgeQuery
+        );
+        // Non-Answer intents are never escalated, even at High effort
+        // (Comparison stays fast — preserved bench learning).
+        assert_eq!(
+            LlmRouter::apply_effort_escalation(Intent::ComparisonQuery, Some(Effort::High)),
+            Intent::ComparisonQuery
+        );
+        assert_eq!(
+            LlmRouter::apply_effort_escalation(Intent::DeepQuery, Some(Effort::High)),
+            Intent::DeepQuery
+        );
+        assert_eq!(
+            LlmRouter::apply_effort_escalation(Intent::MetalingualQuery, Some(Effort::High)),
+            Intent::MetalingualQuery
+        );
+    }
+
+    #[test]
+    fn extract_first_json_object_handles_clean_prose_and_strings() {
+        // Clean object unchanged.
+        assert_eq!(
+            LlmRouter::extract_first_json_object(r#"{"intent":"LOOKUP"}"#),
+            Some(r#"{"intent":"LOOKUP"}"#)
+        );
+        // Leading prose before the object.
+        assert_eq!(
+            LlmRouter::extract_first_json_object(r#"Sure: {"intent":"SIMPLE"} done"#),
+            Some(r#"{"intent":"SIMPLE"}"#)
+        );
+        // Braces inside a string value don't unbalance the scan.
+        assert_eq!(
+            LlmRouter::extract_first_json_object(r#"{"intent":"X","r":"a{b}c"}"#),
+            Some(r#"{"intent":"X","r":"a{b}c"}"#)
+        );
+        // No JSON object present.
+        assert_eq!(LlmRouter::extract_first_json_object("no json here"), None);
     }
 
     // ── parse_self_assessment ───────────────────────────────────

@@ -14,7 +14,6 @@ use sovereign_core::model_family::{
     EmbedModelInfo, NormalizationStrategy, PoolingStrategy,
 };
 use sovereign_core::planner::LlmPlanner;
-use sovereign_core::router::LlmRouter;
 use sovereign_core::runtime::Runtime;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::InferenceConfig;
@@ -381,12 +380,30 @@ pub async fn bootstrap_with_progress(
     tracing::info!("Skills: {} loaded", skills.list().len());
     let skills = Arc::new(skills);
 
-    // Router.
-    let router: Box<dyn sovereign_core::traits::Router> = Box::new(LlmRouter::new(
+    // Router classifier stack — built through the shared `router_bootstrap`
+    // helper so the desktop app wires the SAME embed router + scope + effort +
+    // current-info classifiers as the CLI/bench and served daemon. Before this,
+    // the desktop built a BARE LlmRouter with no classifiers, so desktop chat
+    // never ran the deep-routing the benches validate ("desktop kind of sucks
+    // even as the benches improve"). Parity is now by construction
+    // (sovereign-core/router_bootstrap.rs). Exemplars are baked into the binary,
+    // so this works inside the packaged `.app` with no on-disk files present.
+    let (llm_router, router_report) = sovereign_core::router_bootstrap::build_llm_router(
         Arc::clone(&inference),
         Arc::clone(&store),
         Arc::clone(&skills),
-    ));
+        &sovereign_core::router_bootstrap::ExemplarOverrides::from_env_and_repo(),
+    )
+    .await;
+    tracing::info!(
+        embed = router_report.embed_router.is_some(),
+        scope = router_report.scope.is_some(),
+        effort = router_report.effort.is_some(),
+        current_info = router_report.current_info.is_some(),
+        all_wired = router_report.all_wired(),
+        "router classifier stack assembled"
+    );
+    let router: Box<dyn sovereign_core::traits::Router> = Box::new(llm_router);
 
     // Planner.
     let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));

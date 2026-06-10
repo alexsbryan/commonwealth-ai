@@ -652,8 +652,9 @@ pub(crate) use self::collaboration::{
 };
 pub use self::evidence::build_test_evidence_shape;
 pub(crate) use self::evidence::{
-    compute_evidence_shape, decide_expansion_strategy, is_grounding_candidate, route_from_evidence,
-    EvidenceShape, ExpansionStrategy, SynthesisRoute, EVIDENCE_MIN_TOKEN_COVERAGE,
+    compute_evidence_shape, decide_expansion_strategy, is_grounding_candidate, operation_of,
+    route_from_evidence, EvidenceShape, ExpansionStrategy, SynthesisRoute,
+    EVIDENCE_MIN_TOKEN_COVERAGE,
 };
 pub(crate) use self::intent_helpers::{
     build_clarification_question, default_oicp_for_intent, format_interpretation, intent_hint,
