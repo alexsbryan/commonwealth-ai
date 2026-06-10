@@ -863,13 +863,13 @@ impl Runtime {
                 .map(|s| s == "atom-enum")
                 .unwrap_or(false)
         });
-        let route = if matches!(intent, Intent::ComparisonQuery) {
-            SynthesisRoute::FastFocused
-        } else if has_atom_enum {
-            SynthesisRoute::PrimarySynthesis
-        } else {
-            route_from_evidence(&shape)
-        };
+        // Single capability decision. The route ladder lives in one place —
+        // evidence.rs::resolve_synthesis_route, pure + unit-tested against the
+        // legacy truth table — so "why did THIS query hit the fast/primary
+        // slot?" is answerable at one site (it was mis-identified three times
+        // when this was inlined). `decision.reason` is surfaced in the trace.
+        let decision = resolve_synthesis_route(&intent, has_atom_enum, &shape);
+        let route = decision.route;
         // MECE operation axis (QUERY_TAXONOMY_MECE.md) — emitted alongside the
         // legacy route for glassbox legibility. Naming-only today: nothing
         // routes on `operation` yet (Step 2 will wire effort → tier); the
@@ -885,6 +885,7 @@ impl Runtime {
             title_match = shape.title_match,
             top_source = %shape.top_source_label,
             route = ?route,
+            reason = ?decision.reason,
             operation = ?operation,
             "KnowledgeQuery: evidence-shape routing decision"
         );

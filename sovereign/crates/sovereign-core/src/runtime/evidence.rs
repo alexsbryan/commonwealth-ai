@@ -387,6 +387,147 @@ pub(crate) fn route_from_evidence(shape: &EvidenceShape) -> SynthesisRoute {
     SynthesisRoute::PrimarySynthesis
 }
 
+/// Why a synthesis route was chosen — a typed reason that travels with the
+/// route so "why did THIS query hit the fast/primary slot?" is answerable from
+/// one trace field. The session proved the live path was mis-identified three
+/// times when this ladder was inlined in the handler; the typed reason makes
+/// the WHY explicit. Ordered by the priority in which they apply.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RouteReason {
+    /// `ComparisonQuery`: a bounded-axes contrast — the Fast slot's constrained
+    /// prompt does the structuring the primary model would otherwise do, so we
+    /// pin Fast regardless of evidence shape.
+    ComparisonPin,
+    /// Atom-enumeration fired: the directed set is many low-cosine entity
+    /// chunks, so the evidence shape reads single-focus; pin Primary so it
+    /// writes the full list cleanly instead of narrating per-passage on Fast.
+    AtomEnumPin,
+    /// No pin applied — the evidence-shape heuristic (`route_from_evidence`)
+    /// chose the route.
+    EvidenceShape,
+}
+
+/// The synthesis-route decision: the chosen route plus the reason for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RouteDecision {
+    pub(crate) route: SynthesisRoute,
+    pub(crate) reason: RouteReason,
+}
+
+/// Resolve the synthesis route in ONE place — the capability decision (Router
+/// role → slot/tier). Pure + total so it's unit-testable against the legacy
+/// ladder truth table; the caller emits the glassbox trace (it also has the
+/// `operation` axis + full shape detail to log alongside the `reason`).
+///
+/// Priority ladder — PRESERVED byte-for-byte from the former inline
+/// `KnowledgeQuery` handler logic:
+///   1. `ComparisonQuery` → `FastFocused`               (`ComparisonPin`)
+///   2. `has_atom_enum`   → `PrimarySynthesis`           (`AtomEnumPin`)
+///   3. else              → `route_from_evidence(shape)` (`EvidenceShape`)
+pub(crate) fn resolve_synthesis_route(
+    intent: &Intent,
+    has_atom_enum: bool,
+    shape: &EvidenceShape,
+) -> RouteDecision {
+    if matches!(intent, Intent::ComparisonQuery) {
+        RouteDecision {
+            route: SynthesisRoute::FastFocused,
+            reason: RouteReason::ComparisonPin,
+        }
+    } else if has_atom_enum {
+        RouteDecision {
+            route: SynthesisRoute::PrimarySynthesis,
+            reason: RouteReason::AtomEnumPin,
+        }
+    } else {
+        RouteDecision {
+            route: route_from_evidence(shape),
+            reason: RouteReason::EvidenceShape,
+        }
+    }
+}
+
+#[cfg(test)]
+mod route_resolver_tests {
+    use super::*;
+    use crate::types::Intent;
+
+    /// A shape `route_from_evidence` sends to Fast (decisive ≥3 same-source
+    /// repeat) and one it sends to Primary (flat, no repeat, no title match).
+    fn fast_shape() -> EvidenceShape {
+        build_test_evidence_shape(5, 1, false, 3)
+    }
+    fn primary_shape() -> EvidenceShape {
+        build_test_evidence_shape(5, 4, false, 1)
+    }
+
+    /// Re-implements the PRE-refactor inline ladder so the resolver is pinned
+    /// byte-for-byte against the historical logic.
+    fn legacy(intent: &Intent, has_atom_enum: bool, shape: &EvidenceShape) -> SynthesisRoute {
+        if matches!(intent, Intent::ComparisonQuery) {
+            SynthesisRoute::FastFocused
+        } else if has_atom_enum {
+            SynthesisRoute::PrimarySynthesis
+        } else {
+            route_from_evidence(shape)
+        }
+    }
+
+    #[test]
+    fn test_shapes_route_as_expected() {
+        assert_eq!(
+            route_from_evidence(&fast_shape()),
+            SynthesisRoute::FastFocused
+        );
+        assert_eq!(
+            route_from_evidence(&primary_shape()),
+            SynthesisRoute::PrimarySynthesis
+        );
+    }
+
+    #[test]
+    fn resolver_matches_legacy_ladder_truth_table() {
+        let intents = [
+            Intent::ComparisonQuery,
+            Intent::KnowledgeQuery,
+            Intent::DeepQuery,
+            Intent::SimpleQuery,
+        ];
+        for intent in &intents {
+            for &has_atom_enum in &[false, true] {
+                for shape in [fast_shape(), primary_shape()] {
+                    let got = resolve_synthesis_route(intent, has_atom_enum, &shape);
+                    let want = legacy(intent, has_atom_enum, &shape);
+                    assert_eq!(
+                        got.route, want,
+                        "route mismatch: intent={intent:?} atom_enum={has_atom_enum} repeat={}",
+                        shape.top_source_repeat_count
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn reasons_follow_priority() {
+        // Comparison wins even with atom_enum set + a primary-leaning shape.
+        assert_eq!(
+            resolve_synthesis_route(&Intent::ComparisonQuery, true, &primary_shape()).reason,
+            RouteReason::ComparisonPin
+        );
+        // Atom-enum wins for non-comparison regardless of shape.
+        assert_eq!(
+            resolve_synthesis_route(&Intent::KnowledgeQuery, true, &fast_shape()).reason,
+            RouteReason::AtomEnumPin
+        );
+        // Else delegates to the evidence-shape heuristic.
+        assert_eq!(
+            resolve_synthesis_route(&Intent::KnowledgeQuery, false, &fast_shape()).reason,
+            RouteReason::EvidenceShape
+        );
+    }
+}
+
 /// Map a referential intent (+ the atom-enum flag) to its MECE cognitive
 /// [`Operation`] — the *what-the-answer-does* axis, decoupled from *effort*
 /// (which tier serves it). Returns `None` for non-referential intents

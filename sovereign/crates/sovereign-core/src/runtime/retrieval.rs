@@ -3198,22 +3198,30 @@ impl Runtime {
                 .unwrap_or_default();
             for doc in &store_chunks {
                 // Only include corpus-type documents, not user uploads.
-                if matches!(doc.source_type, SourceType::Corpus { .. }) {
-                    all_chunks.push(corpus_engine::ScoredChunk {
-                        content: doc.content.clone(),
-                        title: Some(doc.source.clone()),
-                        url: None,
-                        corpus_id: match &doc.source_type {
-                            SourceType::Corpus { corpus_id } => corpus_id.clone(),
-                            _ => "unknown".to_string(),
-                        },
-                        score: 0.5,
-                        metadata: HashMap::new(),
-                        chunk_id: None,
-                        source_doc_id: None,
-                        vector_distance: None,
-                    });
+                let SourceType::Corpus { corpus_id } = &doc.source_type else {
+                    continue;
+                };
+                // Honor the per-conversation isolate seal. The corpus-engine
+                // retrieval paths enforce `enabled_corpora` via
+                // `apply_corpus_allow_list`; this StateStore path was the one
+                // gap — a corpus-scoped conversation must not pull store-ingested
+                // corpus docs from OTHER corpora.
+                if let Some(allow) = context.conversation.enabled_corpora.as_deref() {
+                    if !allow.iter().any(|c| c == corpus_id) {
+                        continue;
+                    }
                 }
+                all_chunks.push(corpus_engine::ScoredChunk {
+                    content: doc.content.clone(),
+                    title: Some(doc.source.clone()),
+                    url: None,
+                    corpus_id: corpus_id.clone(),
+                    score: 0.5,
+                    metadata: HashMap::new(),
+                    chunk_id: None,
+                    source_doc_id: None,
+                    vector_distance: None,
+                });
             }
         }
 
@@ -3646,6 +3654,28 @@ impl Runtime {
         } else {
             format!("{history}\n\nAssistant:")
         };
+
+        // Seal audit (glassbox, ARCH §0.1/§9). When the conversation is scoped
+        // to specific corpora (the `--isolate` seal / a corpus-pinned chat),
+        // every retrieved chunk MUST belong to an allowed corpus (or its
+        // `atlas:`-virtual / layer child). A chunk from outside the seal is a
+        // cross-corpus bleed — log it loudly (with the offending corpora) so a
+        // single live `--isolate` run confirms the seal holds end-to-end across
+        // ALL injection paths, not just the ones audited statically.
+        // `conversation-history` is exempt (prior turns, not a corpus source).
+        if let Some(allow) = context.conversation.enabled_corpora.as_deref() {
+            let bleed = corpora_outside_seal(&all_chunks, Some(allow));
+            if bleed.is_empty() {
+                tracing::info!(target: "retrieval.seal", allowed = ?allow, "DeepQuery: corpus seal intact");
+            } else {
+                tracing::warn!(
+                    target: "retrieval.seal",
+                    allowed = ?allow,
+                    bleed = ?bleed,
+                    "DeepQuery: cross-corpus bleed — chunks from corpora outside the conversation seal"
+                );
+            }
+        }
 
         // 6. System message — layered confidence when knowledge is present.
         // Folder-ingest v1 §6.3: when a watched-folder corpus
@@ -4433,6 +4463,34 @@ fn rerank_config_for_corpus(
 /// caller knowing the layer hierarchy. `None` is the no-filter
 /// signal — every index passes, bit-identical to pre-feature
 /// behavior.
+/// Corpora present in `chunks` that fall OUTSIDE the conversation seal `allow`
+/// (deduped). The read side of the isolate contract: `apply_corpus_allow_list`
+/// keeps retrieval *in* the seal at fetch time; this detects any chunk that
+/// nonetheless escaped it, across every injection path, for the DeepQuery
+/// seal-audit trace. `conversation-history` is exempt (prior turns, not a
+/// corpus source); `atlas:<corpus>` virtual chunks are checked against their
+/// underlying `<corpus>`. Returns empty when `allow` is `None` (no seal) or the
+/// seal holds.
+fn corpora_outside_seal<'a>(
+    chunks: &'a [corpus_engine::ScoredChunk],
+    allow: Option<&[String]>,
+) -> Vec<&'a str> {
+    let Some(allow) = allow else {
+        return Vec::new();
+    };
+    let allow_set: std::collections::HashSet<&str> = allow.iter().map(String::as_str).collect();
+    chunks
+        .iter()
+        .map(|c| c.corpus_id.as_str())
+        .filter(|cid| {
+            let base = cid.strip_prefix("atlas:").unwrap_or(cid);
+            *cid != "conversation-history" && !allow_set.contains(base)
+        })
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect()
+}
+
 fn apply_corpus_allow_list(
     indexes: Vec<corpus_engine::IndexInfo>,
     allow: Option<&[String]>,
@@ -4458,6 +4516,7 @@ fn apply_corpus_allow_list(
 mod allow_list_tests {
     use super::apply_corpus_allow_list;
     use super::rerank_config_for_corpus;
+    use super::{corpora_outside_seal, raptor_scored_chunk};
 
     #[test]
     fn dedup_by_source_corpus_opts_into_per_article() {
@@ -4558,5 +4617,33 @@ mod allow_list_tests {
         let allow: Vec<String> = vec![];
         let out = apply_corpus_allow_list(pool, Some(&allow));
         assert!(out.is_empty());
+    }
+
+    #[test]
+    fn corpora_outside_seal_flags_only_disallowed() {
+        let chunks = vec![
+            raptor_scored_chunk("c1".into(), "wikipedia".into(), 0, "a".into(), 0.9),
+            raptor_scored_chunk("c2".into(), "sep".into(), 0, "b".into(), 0.8),
+            // `atlas:sep` is a virtual chunk over the `sep` corpus.
+            raptor_scored_chunk("c3".into(), "atlas:sep".into(), 0, "c".into(), 0.7),
+            raptor_scored_chunk("c4".into(), "conversation-history".into(), 0, "d".into(), 0.6),
+        ];
+        // No seal → nothing flagged.
+        assert!(corpora_outside_seal(&chunks, None).is_empty());
+
+        // Sealed to `sep`: only `wikipedia` bleeds. `sep`, its `atlas:` virtual,
+        // and conversation-history are all in-seal / exempt.
+        let allow_sep = vec!["sep".to_string()];
+        assert_eq!(
+            corpora_outside_seal(&chunks, Some(&allow_sep)),
+            vec!["wikipedia"]
+        );
+
+        // Sealed to `wikipedia`: `sep` bleeds AND `atlas:sep` bleeds (its
+        // underlying corpus is outside the seal).
+        let allow_wiki = vec!["wikipedia".to_string()];
+        let mut bleed = corpora_outside_seal(&chunks, Some(&allow_wiki));
+        bleed.sort_unstable();
+        assert_eq!(bleed, vec!["atlas:sep", "sep"]);
     }
 }
