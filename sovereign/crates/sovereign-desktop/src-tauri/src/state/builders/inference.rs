@@ -74,9 +74,25 @@ pub(crate) async fn load_inference(
             if !env_force_cpu {
                 let smoke_gpu_layers =
                     sovereign_inference::hardware::HardwareProfile::detect().recommended_gpu_layers;
-                if smoke_gpu_layers > 0 {
+                let smoke_ctx = effective_ctx.min(2048);
+                if smoke_gpu_layers > 0
+                    && crate::smoketest::cached_ok(&config.model_path, smoke_gpu_layers, smoke_ctx)
+                {
+                    // The child probe fully loads the fast GGUF
+                    // (~3-6s on a 9B) to answer a question whose
+                    // inputs haven't changed since the last pass.
+                    // Verdict-cache hit → skip it. Any change to the
+                    // model file, gpu_layers, ctx or app version
+                    // misses and re-probes (crash protection intact
+                    // for every NEW combo — the case it exists for).
+                    tracing::info!(
+                        model = %config.model_path.display(),
+                        gpu_layers = smoke_gpu_layers,
+                        "smoketest: skipped — cached pass for unchanged model/config \
+                         (SOVEREIGN_SMOKETEST_CACHE=0 to force)"
+                    );
+                } else if smoke_gpu_layers > 0 {
                     emit(BootstrapPhase::SmokeTesting);
-                    let smoke_ctx = effective_ctx.min(2048);
                     tracing::info!(
                         model = %config.model_path.display(),
                         gpu_layers = smoke_gpu_layers,
@@ -92,6 +108,11 @@ pub(crate) async fn load_inference(
                     match &outcome {
                         crate::smoketest::SmokeResult::Ok => {
                             tracing::info!("smoketest: GPU path ok — proceeding");
+                            crate::smoketest::record_ok(
+                                &config.model_path,
+                                smoke_gpu_layers,
+                                smoke_ctx,
+                            );
                         }
                         other if other.suggests_cpu_fallback() => {
                             tracing::error!(

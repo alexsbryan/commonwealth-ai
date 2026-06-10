@@ -137,6 +137,17 @@ impl EmbedRouter {
     /// with no on-disk exemplars (a desktop `.app`) still gets the embed router
     /// — bench/desktop parity by construction.
     pub async fn from_toml_str(raw: &str, inference: Arc<dyn InferenceProvider>) -> Result<Self> {
+        Self::from_toml_str_cached(raw, inference, None).await
+    }
+
+    /// [`Self::from_toml_str`] with an optional boot embed cache —
+    /// exemplar embeddings are static per (text, model), and embedding
+    /// ~175 of them sequentially at every boot is splash-screen time.
+    pub async fn from_toml_str_cached(
+        raw: &str,
+        inference: Arc<dyn InferenceProvider>,
+        mut cache: Option<&mut crate::router_embed_cache::BootEmbedCache>,
+    ) -> Result<Self> {
         let parsed: ExemplarFile = toml::from_str(raw)
             .map_err(|e| Error::InvalidInput(format!("parse exemplars: {e}")))?;
 
@@ -145,7 +156,10 @@ impl EmbedRouter {
             let intent = parse_intent(&row.intent).map_err(|e| {
                 Error::InvalidInput(format!("exemplar `{}`: {e}", truncate(&row.query, 60)))
             })?;
-            let mut emb = inference.embed_query(&row.query).await?;
+            let mut emb = match cache.as_deref_mut() {
+                Some(c) => c.embed_query_cached(&*inference, &row.query).await?,
+                None => inference.embed_query(&row.query).await?,
+            };
             normalize(&mut emb);
             exemplars.push(Exemplar {
                 intent,

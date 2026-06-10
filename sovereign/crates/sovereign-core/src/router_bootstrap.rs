@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 use crate::current_info_classifier::CurrentInfoClassifier;
 use crate::effort_classifier::EffortClassifier;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::router::LlmRouter;
 use crate::router_embed::EmbedRouter;
 use crate::scope_classifier::PersonalScopeClassifier;
@@ -133,10 +133,16 @@ pub async fn build_llm_router(
     let mut router = LlmRouter::new(Arc::clone(&inference), store, skills);
     let mut report = RouterBuildReport::default();
 
+    // Exemplar embeddings are static per (text, embed model); without
+    // the cache the four classifiers below re-embed ~310 strings
+    // sequentially at every boot (~5.7s of desktop splash, measured
+    // 2026-06-10). Validity is a sentinel cosine probe inside `open`.
+    let mut embed_cache = crate::router_embed_cache::BootEmbedCache::open(&*inference).await;
+
     // 1. Embed router — the primary, deterministic intent pre-check. When it
     //    returns a confident verdict the router skips the heuristic + LLM
     //    cascade entirely.
-    match load_embed(&overrides.router, &inference).await {
+    match load_embed(&overrides.router, &inference, &mut embed_cache).await {
         Ok((er, src)) => {
             tracing::info!(target: "router.bootstrap", exemplars = er.exemplar_count(), source = ?src, "embed router wired");
             router = router.with_embed_router(Arc::new(er));
@@ -147,7 +153,7 @@ pub async fn build_llm_router(
     }
 
     // 2. Personal-scope classifier — populates `RouterClassification.scope`.
-    match load_scope(&overrides.scope, &inference).await {
+    match load_scope(&overrides.scope, &inference, &mut embed_cache).await {
         Ok((c, src)) => {
             tracing::info!(target: "router.bootstrap", personal = c.personal_count(), external = c.external_count(), source = ?src, "scope classifier wired");
             router = router.with_scope_classifier(Arc::new(c));
@@ -159,7 +165,7 @@ pub async fn build_llm_router(
 
     // 3. Effort classifier — escalates a high-effort referential `Answer` to
     //    `DeepQuery` so exhaustive asks reach the primary slot.
-    match load_effort(&overrides.effort, &inference).await {
+    match load_effort(&overrides.effort, &inference, &mut embed_cache).await {
         Ok((c, src)) => {
             tracing::info!(target: "router.bootstrap", high = c.high_count(), low = c.low_count(), source = ?src, "effort classifier wired");
             router = router.with_effort_classifier(Arc::new(c));
@@ -171,7 +177,7 @@ pub async fn build_llm_router(
 
     // 4. Current-info classifier — drives the `force_action` pre-check
     //    (time-sensitivity) instead of the keyword heuristic.
-    match load_current_info(&overrides.current_info, &inference).await {
+    match load_current_info(&overrides.current_info, &inference, &mut embed_cache).await {
         Ok((c, src)) => {
             tracing::info!(target: "router.bootstrap", current = c.current_count(), evergreen = c.evergreen_count(), source = ?src, "current-info classifier wired");
             router = router.with_current_info_classifier(Arc::new(c));
@@ -180,6 +186,8 @@ pub async fn build_llm_router(
         Err(e) => tracing::warn!(target: "router.bootstrap", error = %e,
             "current-info classifier unavailable; force_action falls back to keyword heuristic"),
     }
+
+    embed_cache.flush();
 
     tracing::info!(
         target: "router.bootstrap",
@@ -193,17 +201,31 @@ pub async fn build_llm_router(
     (router, report)
 }
 
+/// Read an override file for the cached constructors below. Same
+/// error surface the classifiers' own `load` produces.
+fn read_override(p: &PathBuf, what: &str) -> Result<String> {
+    std::fs::read_to_string(p)
+        .map_err(|e| Error::InvalidInput(format!("read {what} {}: {e}", p.display())))
+}
+
 async fn load_embed(
     over: &Option<PathBuf>,
     inf: &Arc<dyn InferenceProvider>,
+    cache: &mut crate::router_embed_cache::BootEmbedCache,
 ) -> Result<(EmbedRouter, ClassifierSource)> {
     Ok(match over {
         Some(p) => (
-            EmbedRouter::load(p, Arc::clone(inf)).await?,
+            EmbedRouter::from_toml_str_cached(
+                &read_override(p, "exemplars")?,
+                Arc::clone(inf),
+                Some(cache),
+            )
+            .await?,
             ClassifierSource::Path(p.clone()),
         ),
         None => (
-            EmbedRouter::from_toml_str(BAKED_ROUTER_EXEMPLARS, Arc::clone(inf)).await?,
+            EmbedRouter::from_toml_str_cached(BAKED_ROUTER_EXEMPLARS, Arc::clone(inf), Some(cache))
+                .await?,
             ClassifierSource::Baked,
         ),
     })
@@ -212,14 +234,25 @@ async fn load_embed(
 async fn load_scope(
     over: &Option<PathBuf>,
     inf: &Arc<dyn InferenceProvider>,
+    cache: &mut crate::router_embed_cache::BootEmbedCache,
 ) -> Result<(PersonalScopeClassifier, ClassifierSource)> {
     Ok(match over {
         Some(p) => (
-            PersonalScopeClassifier::load(p, Arc::clone(inf)).await?,
+            PersonalScopeClassifier::from_toml_str_cached(
+                &read_override(p, "scope examples")?,
+                Arc::clone(inf),
+                Some(cache),
+            )
+            .await?,
             ClassifierSource::Path(p.clone()),
         ),
         None => (
-            PersonalScopeClassifier::from_toml_str(BAKED_SCOPE_EXAMPLES, Arc::clone(inf)).await?,
+            PersonalScopeClassifier::from_toml_str_cached(
+                BAKED_SCOPE_EXAMPLES,
+                Arc::clone(inf),
+                Some(cache),
+            )
+            .await?,
             ClassifierSource::Baked,
         ),
     })
@@ -228,14 +261,25 @@ async fn load_scope(
 async fn load_effort(
     over: &Option<PathBuf>,
     inf: &Arc<dyn InferenceProvider>,
+    cache: &mut crate::router_embed_cache::BootEmbedCache,
 ) -> Result<(EffortClassifier, ClassifierSource)> {
     Ok(match over {
         Some(p) => (
-            EffortClassifier::load(p, Arc::clone(inf)).await?,
+            EffortClassifier::from_toml_str_cached(
+                &read_override(p, "effort examples")?,
+                Arc::clone(inf),
+                Some(cache),
+            )
+            .await?,
             ClassifierSource::Path(p.clone()),
         ),
         None => (
-            EffortClassifier::from_toml_str(BAKED_EFFORT_EXAMPLES, Arc::clone(inf)).await?,
+            EffortClassifier::from_toml_str_cached(
+                BAKED_EFFORT_EXAMPLES,
+                Arc::clone(inf),
+                Some(cache),
+            )
+            .await?,
             ClassifierSource::Baked,
         ),
     })
@@ -244,15 +288,25 @@ async fn load_effort(
 async fn load_current_info(
     over: &Option<PathBuf>,
     inf: &Arc<dyn InferenceProvider>,
+    cache: &mut crate::router_embed_cache::BootEmbedCache,
 ) -> Result<(CurrentInfoClassifier, ClassifierSource)> {
     Ok(match over {
         Some(p) => (
-            CurrentInfoClassifier::load(p, Arc::clone(inf)).await?,
+            CurrentInfoClassifier::from_toml_str_cached(
+                &read_override(p, "current-info examples")?,
+                Arc::clone(inf),
+                Some(cache),
+            )
+            .await?,
             ClassifierSource::Path(p.clone()),
         ),
         None => (
-            CurrentInfoClassifier::from_toml_str(BAKED_CURRENT_INFO_EXAMPLES, Arc::clone(inf))
-                .await?,
+            CurrentInfoClassifier::from_toml_str_cached(
+                BAKED_CURRENT_INFO_EXAMPLES,
+                Arc::clone(inf),
+                Some(cache),
+            )
+            .await?,
             ClassifierSource::Baked,
         ),
     })
