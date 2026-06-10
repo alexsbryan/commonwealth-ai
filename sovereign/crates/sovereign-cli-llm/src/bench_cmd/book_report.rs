@@ -47,8 +47,25 @@ const HELP: Help = Help {
     command: "sovereign bench book-report",
     summary: "Attach-document benchmark on Conrad's The Secret Agent. Fetch → attach → state-stream → tier dispatch → mechanical + LLM-judge scoring.",
     sections: &[
-        HelpSection::Usage("sovereign bench book-report [--reuse-asset <id>] [--rebuild-skeleton] [--rebuild-raptor] [--tier <N>] [--questions <ids>] [--list-assets] [--cache-dir <path>] [--output <path>] [--refresh-source]"),
+        HelpSection::Usage("sovereign bench book-report [--transport direct|desktop-bridge] [--bridge-url <url>] [--compare <timings.json>] [--reuse-asset <id>] [--rebuild-skeleton] [--rebuild-raptor] [--tier <N>] [--questions <ids>] [--list-assets] [--cache-dir <path>] [--output <path>] [--refresh-source]"),
         HelpSection::Flags(&[
+            (
+                "--transport <direct|desktop-bridge>",
+                "Answer source. `direct` (default): in-process Runtime + daemon inference — the \
+                 historical bench path. `desktop-bridge`: dispatch every question through a REAL \
+                 running sovereign-desktop's command surface (upload_document_asset / ask_document \
+                 over the :9745 command bridge) — same bank, same scorers, so a score delta vs a \
+                 direct-transport baseline isolates the desktop layer.",
+            ),
+            (
+                "--bridge-url <url>",
+                "Command-bridge origin for --transport desktop-bridge. Default http://127.0.0.1:9745.",
+            ),
+            (
+                "--compare <timings.json>",
+                "After the run, print a per-question delta table against a prior run's persisted \
+                 report (any transport). Mechanical %, judge score, latency, sources.",
+            ),
             (
                 "--reuse-asset <id>",
                 "Skip fetch + ingest; reuse an existing DocumentAsset from the daemon's store. \
@@ -263,9 +280,20 @@ pub async fn cmd_book_report(args: &[String]) -> i32 {
         return 2;
     }
 
-    match run(opts).await {
+    let compare = opts.compare.clone();
+    let outcome = match opts.transport {
+        Transport::Direct => run(opts).await,
+        Transport::DesktopBridge => run_bridge(opts).await,
+    };
+    match outcome {
         Ok(report) => {
             print_summary(&report);
+            if let Some(baseline_path) = compare {
+                if let Err(e) = print_delta(&report, &baseline_path) {
+                    eprintln!("compare: {e}");
+                    return 1;
+                }
+            }
             0
         }
         Err(e) => {
@@ -303,6 +331,18 @@ struct Opts {
     /// RAPTOR pipeline shipped (~2-3 min vs ~20 min for full
     /// re-ingest).
     rebuild_raptor: bool,
+    /// Answer source: in-process Runtime (direct) or a live desktop's
+    /// command bridge.
+    transport: Transport,
+    bridge_url: String,
+    /// Prior run's timings.json to diff against after this run.
+    compare: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Transport {
+    Direct,
+    DesktopBridge,
 }
 
 fn parse_args(args: &[String]) -> Result<Opts, String> {
@@ -316,9 +356,34 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
     let mut question_ids: Option<Vec<String>> = None;
     let mut rebuild_skeleton = false;
     let mut rebuild_raptor = false;
+    let mut transport = Transport::Direct;
+    let mut bridge_url = super::desktop_bridge::DEFAULT_BRIDGE_URL.to_string();
+    let mut compare: Option<PathBuf> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--transport" => {
+                i += 1;
+                transport = match args.get(i).map(String::as_str) {
+                    Some("direct") => Transport::Direct,
+                    Some("desktop-bridge") => Transport::DesktopBridge,
+                    other => {
+                        return Err(format!(
+                            "--transport must be `direct` or `desktop-bridge`, got {other:?}"
+                        ))
+                    }
+                };
+            }
+            "--bridge-url" => {
+                i += 1;
+                bridge_url = args.get(i).ok_or("--bridge-url requires a url")?.clone();
+            }
+            "--compare" => {
+                i += 1;
+                compare = Some(PathBuf::from(
+                    args.get(i).ok_or("--compare requires a path")?,
+                ));
+            }
             "--cache-dir" => {
                 i += 1;
                 cache_dir = Some(PathBuf::from(
@@ -385,6 +450,9 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
         question_ids,
         rebuild_skeleton,
         rebuild_raptor,
+        transport,
+        bridge_url,
+        compare,
     })
 }
 
@@ -571,6 +639,383 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
 
     persist_report(&report, opts.output.as_deref()).map_err(|e| format!("persist report: {e}"))?;
     Ok(report)
+}
+
+/// `--transport desktop-bridge`: dispatch the bank through a REAL
+/// running sovereign-desktop's command surface instead of an
+/// in-process Runtime. Same bank, same `score_question`, same
+/// hallucination detector, same report shape — so a delta against a
+/// direct-transport baseline isolates the desktop layer (command glue,
+/// desktop Runtime wiring, embedded inference).
+///
+/// Mapping: attach = `upload_document_asset` (the DocumentPicker
+/// flow), questions = `ask_document` (the DocumentConversation flow).
+/// Asset reuse: `--reuse-asset <id>` looks up by id; otherwise an
+/// existing Ready asset whose title matches the source file is reused
+/// automatically, else the source is uploaded and ingest is awaited.
+///
+/// LLM-judge: runs only if a daemon is reachable (the judge needs an
+/// inference provider in THIS process). Without one, Tier 2-5 rows
+/// carry `judge_error: no provider` and the mechanical + hallucination
+/// columns remain fully comparable.
+async fn run_bridge(opts: Opts) -> Result<BookReportRun, String> {
+    use super::desktop_bridge::BridgeClient;
+
+    let started_at = chrono::Utc::now();
+    let bench_id = format!("book-report-bridge-{}", started_at.format("%Y%m%dT%H%M%S"));
+    const SPEC: &str = "bench:book-report";
+
+    eprintln!("[1/4] fetch — Gutenberg #974 (The Secret Agent)");
+    let source = fetch_source(&opts.cache_dir, opts.refresh_source)
+        .await
+        .map_err(|e| format!("fetch failed: {e}"))?;
+    let source_text = std::fs::read_to_string(&source.local_path)
+        .map_err(|e| format!("read source {}: {e}", source.local_path.display()))?;
+
+    eprintln!("[2/4] bridge — probing {}", opts.bridge_url);
+    let bridge = BridgeClient::new(&opts.bridge_url);
+    bridge.healthz().await?;
+
+    // Optional judge provider: Tier 2-5 judging runs in THIS process.
+    let judge_session = match build_session(&default_globals_for_voice_eval()).await {
+        Ok(s) => {
+            eprintln!("      judge: daemon reachable — LLM-judge enabled for Tier 2-5");
+            Some(s)
+        }
+        Err(e) => {
+            eprintln!("      judge: no daemon ({e}); Tier 2-5 rows will carry judge_error");
+            None
+        }
+    };
+
+    // ── Asset: reuse by id, by title, or upload + await ingest ──
+    eprintln!("[3/4] attach — resolving document asset on the desktop");
+    let attach_start = Instant::now();
+    let assets: Vec<serde_json::Value> = bridge
+        .invoke("list_document_assets", serde_json::json!({}), SPEC)
+        .await?;
+    let source_title = source
+        .local_path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let find_ready = |list: &[serde_json::Value]| -> Option<(String, String)> {
+        list.iter()
+            .filter(|a| {
+                serde_json::to_string(&a["state"])
+                    .unwrap_or_default()
+                    .to_lowercase()
+                    .contains("ready")
+            })
+            .find(|a| {
+                if let Some(id) = &opts.reuse_asset {
+                    a["id"].as_str() == Some(id)
+                } else {
+                    a["title"]
+                        .as_str()
+                        .is_some_and(|t| t.contains(&source_title) || t.contains("Secret Agent"))
+                }
+            })
+            .map(|a| {
+                (
+                    a["id"].as_str().unwrap_or_default().to_string(),
+                    a["title"].as_str().unwrap_or_default().to_string(),
+                )
+            })
+    };
+
+    let (asset_id, terminal_phase) = if let Some((id, title)) = find_ready(&assets) {
+        eprintln!("      reusing Ready asset {id} (\"{title}\")");
+        (id, "reused".to_string())
+    } else if opts.reuse_asset.is_some() {
+        return Err(format!(
+            "--reuse-asset {:?}: no Ready asset with that id on the desktop. \
+             Available: {}",
+            opts.reuse_asset,
+            assets
+                .iter()
+                .map(|a| format!("{}={:?}", a["id"], a["state"]))
+                .collect::<Vec<_>>()
+                .join(", "),
+        ));
+    } else {
+        eprintln!("      uploading {} via upload_document_asset", source.local_path.display());
+        let uploaded: serde_json::Value = bridge
+            .invoke(
+                "upload_document_asset",
+                serde_json::json!({ "filePath": source.local_path.to_string_lossy() }),
+                SPEC,
+            )
+            .await?;
+        let id = uploaded["asset"]["id"]
+            .as_str()
+            .ok_or("upload_document_asset returned no asset.id")?
+            .to_string();
+        // Real ingest of a full novel: chunking + embedding + skeleton
+        // on the desktop's models. Generous budget; progress is on the
+        // desktop's own UI/event surface.
+        let deadline = Instant::now() + std::time::Duration::from_secs(45 * 60);
+        loop {
+            let asset: serde_json::Value = bridge
+                .invoke("get_document_asset", serde_json::json!({ "assetId": id }), SPEC)
+                .await?;
+            let state = serde_json::to_string(&asset["state"])
+                .unwrap_or_default()
+                .to_lowercase();
+            if state.contains("ready") {
+                break;
+            }
+            if state.contains("failed") {
+                return Err(format!("desktop ingest failed: state={state}"));
+            }
+            if Instant::now() > deadline {
+                return Err("desktop ingest did not reach Ready within 45min".into());
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+        }
+        eprintln!("      ingest Ready in {}s", attach_start.elapsed().as_secs());
+        (id, "ready".to_string())
+    };
+    let attach_ms = attach_start.elapsed().as_millis() as u64;
+
+    let conversation: serde_json::Value = bridge
+        .invoke("create_conversation", serde_json::json!({}), SPEC)
+        .await?;
+    let conversation_id = conversation["id"]
+        .as_str()
+        .ok_or("create_conversation returned no id")?
+        .to_string();
+
+    // ── Questions through ask_document, scored identically ──
+    let bench_cfg: BenchConfig =
+        toml::from_str(BENCH_TOML).map_err(|e| format!("parse embedded bench.toml: {e}"))?;
+    let filtered = filter_questions(&bench_cfg.questions, opts.tier, opts.question_ids.as_deref());
+    eprintln!(
+        "[4/4] questions — {} of {} match filters (transport=desktop-bridge)",
+        filtered.len(),
+        bench_cfg.questions.len(),
+    );
+
+    let mut results: Vec<QuestionResult> = Vec::with_capacity(filtered.len());
+    for q in &filtered {
+        eprintln!("      [{}] T{} {}", q.id, q.tier, truncate(&q.prompt, 60));
+        let q_start = Instant::now();
+        let ask: Result<serde_json::Value, String> = bridge
+            .invoke(
+                "ask_document",
+                serde_json::json!({
+                    "assetId": asset_id,
+                    "question": q.prompt,
+                    "conversationId": conversation_id,
+                }),
+                SPEC,
+            )
+            .await;
+        let dispatch_ms = q_start.elapsed().as_millis() as u64;
+
+        let (response, operation, sources_count, dispatch_err) = match ask {
+            Ok(v) => {
+                let response = v["response"].as_str().unwrap_or_default().to_string();
+                let operation = operation_label(&v["operation"]);
+                let sources = v["sources"].as_array().map(|a| a.len()).unwrap_or(0);
+                (response, operation, sources, None)
+            }
+            Err(e) => {
+                eprintln!("        → dispatch error: {e}");
+                (String::new(), String::new(), 0, Some(e))
+            }
+        };
+
+        let (facts_hit, facts_missed, mechanical_score_pct) = score_question(q, &response);
+        let hallucinated_quotes = if response.is_empty() {
+            Vec::new()
+        } else {
+            detect_hallucinations(&response, &source_text)
+        };
+        let (judge_score, judge_rationale) = if q.tier >= 2 && !response.is_empty() {
+            match &judge_session {
+                Some(session) => {
+                    let resolved =
+                        resolve_reference_passages(&q.reference_passages, &source_text);
+                    match run_llm_judge(
+                        session.inference.as_ref(),
+                        q,
+                        &response,
+                        &resolved,
+                        &hallucinated_quotes,
+                    )
+                    .await
+                    {
+                        Ok(j) => (Some(j.score), Some(j.rationale)),
+                        Err(e) => (None, Some(format!("judge_error: {e}"))),
+                    }
+                }
+                None => (None, Some("judge_error: no provider (daemon down)".into())),
+            }
+        } else {
+            (None, None)
+        };
+
+        let display_score = if q.tier == 1 {
+            format!("{}%", mechanical_score_pct)
+        } else {
+            judge_score
+                .map(|s| format!("{}/5", s))
+                .unwrap_or_else(|| "—".to_string())
+        };
+        eprintln!(
+            "        → {}ms · {} sources · op={} · score={}{}",
+            dispatch_ms,
+            sources_count,
+            operation,
+            display_score,
+            if hallucinated_quotes.is_empty() {
+                String::new()
+            } else {
+                format!(" · ⚠ {} fabricated quote(s)", hallucinated_quotes.len())
+            },
+        );
+
+        results.push(QuestionResult {
+            id: q.id.clone(),
+            tier: q.tier,
+            prompt: q.prompt.clone(),
+            skipped_reason: dispatch_err.map(|e| format!("dispatch_failed: {e}")),
+            response,
+            operation,
+            sources_count,
+            latency_ms: dispatch_ms,
+            expected_facts: q.expected_facts.clone(),
+            facts_hit,
+            facts_missed,
+            mechanical_score_pct,
+            judge_score,
+            judge_rationale,
+            hallucinated_quotes: Some(hallucinated_quotes),
+            narration_log: Vec::new(), // narration is in-process only; bridge rows carry none
+        });
+    }
+
+    let tier_summary = summarize_tiers(&results);
+    let report = BookReportRun {
+        bench_id,
+        started_at_unix: started_at.timestamp() as u64,
+        source,
+        asset_id,
+        chat_model: judge_session
+            .as_ref()
+            .map(|s| s.inference.model_id_for(Speed::Slow)),
+        attach_ms,
+        time_to_rag_ready_ms: None,
+        time_to_ready_ms: None,
+        transitions: vec![StateTransition {
+            ms_since_attach: 0,
+            phase: terminal_phase.clone(),
+            detail: serde_json::json!({ "transport": "desktop-bridge" }),
+        }],
+        terminated_at_phase: terminal_phase,
+        questions: results,
+        tier_summary,
+    };
+    persist_report(&report, opts.output.as_deref()).map_err(|e| format!("persist report: {e}"))?;
+    Ok(report)
+}
+
+/// Human label for a `DocumentAssetOperation` JSON value — externally
+/// tagged enums serialize as `{"Variant": {...}}` or `"Variant"`.
+fn operation_label(op: &serde_json::Value) -> String {
+    match op {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Object(map) => map.keys().next().cloned().unwrap_or_default(),
+        serde_json::Value::Null => "none".to_string(),
+        other => other.to_string(),
+    }
+}
+
+/// Slim view of a persisted report for `--compare` — only the fields
+/// the delta table needs, so old reports with different shapes load.
+#[derive(Debug, Deserialize)]
+struct BaselineReport {
+    bench_id: String,
+    #[serde(default)]
+    chat_model: Option<String>,
+    #[serde(default)]
+    questions: Vec<BaselineQuestion>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BaselineQuestion {
+    id: String,
+    tier: u8,
+    #[serde(default)]
+    mechanical_score_pct: u8,
+    #[serde(default)]
+    judge_score: Option<u8>,
+    #[serde(default)]
+    latency_ms: u64,
+    #[serde(default)]
+    sources_count: usize,
+    #[serde(default)]
+    hallucinated_quotes: Option<Vec<String>>,
+}
+
+/// Per-question delta table: this run vs a persisted baseline. The
+/// load-bearing read: a mechanical/judge gap on the SAME bank + scorer
+/// is a transport-layer finding, not bank drift.
+fn print_delta(report: &BookReportRun, baseline_path: &Path) -> Result<(), String> {
+    let raw = std::fs::read_to_string(baseline_path)
+        .map_err(|e| format!("read baseline {}: {e}", baseline_path.display()))?;
+    let baseline: BaselineReport =
+        serde_json::from_str(&raw).map_err(|e| format!("parse baseline: {e}"))?;
+
+    println!("\n── delta vs {} ──", baseline.bench_id);
+    println!(
+        "   baseline model: {} · this run: {}",
+        baseline.chat_model.as_deref().unwrap_or("?"),
+        report.chat_model.as_deref().unwrap_or("?"),
+    );
+    println!(
+        "   {:<22} {:>4} {:>11} {:>11} {:>14} {:>13}",
+        "question", "tier", "mech Δ", "judge Δ", "latency Δms", "sources Δ"
+    );
+    let mut mech_deltas: Vec<i32> = Vec::new();
+    for q in &report.questions {
+        let Some(base) = baseline.questions.iter().find(|b| b.id == q.id) else {
+            println!("   {:<22} {:>4} (not in baseline)", q.id, q.tier);
+            continue;
+        };
+        let mech_delta = q.mechanical_score_pct as i32 - base.mechanical_score_pct as i32;
+        mech_deltas.push(mech_delta);
+        let judge_delta = match (q.judge_score, base.judge_score) {
+            (Some(a), Some(b)) => format!("{:+}", a as i32 - b as i32),
+            _ => "—".to_string(),
+        };
+        let hallu = |h: &Option<Vec<String>>| h.as_ref().map(|v| v.len()).unwrap_or(0);
+        let hallu_note = if hallu(&q.hallucinated_quotes) != hallu(&base.hallucinated_quotes) {
+            format!(
+                "  ⚠ fabricated quotes {} → {}",
+                hallu(&base.hallucinated_quotes),
+                hallu(&q.hallucinated_quotes)
+            )
+        } else {
+            String::new()
+        };
+        println!(
+            "   {:<22} {:>4} {:>10}% {:>11} {:>+14} {:>+13}{}",
+            q.id,
+            q.tier,
+            format!("{mech_delta:+}"),
+            judge_delta,
+            q.latency_ms as i64 - base.latency_ms as i64,
+            q.sources_count as i64 - base.sources_count as i64,
+            hallu_note,
+        );
+    }
+    if !mech_deltas.is_empty() {
+        let mean: f64 = mech_deltas.iter().sum::<i32>() as f64 / mech_deltas.len() as f64;
+        println!("   mean mechanical delta: {mean:+.1} pts across {} questions", mech_deltas.len());
+    }
+    Ok(())
 }
 
 /// Fire every question in the bank, score each one.
