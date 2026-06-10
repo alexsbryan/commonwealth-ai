@@ -162,6 +162,90 @@ async fn valid_join_key_admits_new_member_and_fires_hook() {
 }
 
 #[tokio::test]
+async fn join_with_pubkey_and_valid_proof_records_identity() {
+    use commonwealth_transport::identity;
+
+    let (founder_state, _founder_id, join_key, _hook) = build_founder();
+    let addr = spawn_internal_router(founder_state.clone()).await;
+
+    let joiner_addr: SocketAddr = "127.0.0.1:9878".parse().unwrap();
+    let proposed_id = NodeId::from_u128(0x6060_6060_6060_6060);
+    let key = ed25519_dalek::SigningKey::from_bytes(&[42u8; 32]);
+    let pubkey = identity::node_pubkey(&key);
+    let proof = identity::sign_join_proof(&key, &proposed_id, "KeyedJoiner");
+
+    let resp = reqwest::Client::new()
+        .post(format!("http://{addr}/internal/join"))
+        .json(&json!({
+            "join_key": join_key,
+            "joining_node_name": "KeyedJoiner",
+            "joining_node_addresses": [joiner_addr],
+            "proposed_node_id": proposed_id,
+            "node_pubkey": pubkey,
+            "pubkey_proof": proof,
+        }))
+        .send()
+        .await
+        .expect("/internal/join must be reachable");
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+
+    // The founder's live mesh records the joiner WITH its pubkey —
+    // the identity that a future dial-by-key transport dials.
+    let live = founder_state.inner.mesh.read().await;
+    let joiner = live
+        .members
+        .values()
+        .find(|m| m.name == "KeyedJoiner")
+        .expect("joiner admitted");
+    assert_eq!(
+        joiner.node_pubkey,
+        Some(pubkey),
+        "founder must record the proven identity pubkey"
+    );
+}
+
+#[tokio::test]
+async fn join_with_pubkey_but_bad_proof_is_rejected_401() {
+    use commonwealth_transport::identity;
+
+    let (founder_state, _founder_id, join_key, hook_counter) = build_founder();
+    let addr = spawn_internal_router(founder_state.clone()).await;
+
+    let joiner_addr: SocketAddr = "127.0.0.1:9879".parse().unwrap();
+    let proposed_id = NodeId::from_u128(0x7070_7070_7070_7070);
+    let key = ed25519_dalek::SigningKey::from_bytes(&[42u8; 32]);
+    // Proof signed by a DIFFERENT key than the presented pubkey —
+    // the imposter scenario the PoP exists to block.
+    let other = ed25519_dalek::SigningKey::from_bytes(&[43u8; 32]);
+    let proof = identity::sign_join_proof(&other, &proposed_id, "Imposter");
+
+    let resp = reqwest::Client::new()
+        .post(format!("http://{addr}/internal/join"))
+        .json(&json!({
+            "join_key": join_key,
+            "joining_node_name": "Imposter",
+            "joining_node_addresses": [joiner_addr],
+            "proposed_node_id": proposed_id,
+            "node_pubkey": identity::node_pubkey(&key),
+            "pubkey_proof": proof,
+        }))
+        .send()
+        .await
+        .expect("/internal/join must be reachable");
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::UNAUTHORIZED,
+        "unproven pubkey must be a loud 401, never a silent admit"
+    );
+    assert_eq!(
+        founder_state.inner.mesh.read().await.members.len(),
+        1,
+        "rejected join must not mutate the founder's mesh"
+    );
+    assert_eq!(hook_counter.load(Ordering::Relaxed), 0);
+}
+
+#[tokio::test]
 async fn invalid_join_key_rejects_with_401_and_does_not_mutate() {
     let (founder_state, _founder_id, _real_key, hook_counter) = build_founder();
     let addr = spawn_internal_router(founder_state.clone()).await;

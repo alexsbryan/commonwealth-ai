@@ -597,6 +597,17 @@ pub struct JoinRequest {
     /// unchanged.
     #[serde(default)]
     pub proposed_node_id: Option<NodeId>,
+    /// The joiner's Ed25519 identity pubkey (the future dial-by-key
+    /// transport identity). Optional and serde-defaulted: pre-identity
+    /// joiners omit it and are admitted exactly as before.
+    #[serde(default)]
+    pub node_pubkey: Option<commonwealth_core::ids::NodePubkey>,
+    /// Hex Ed25519 proof of possession over
+    /// `"cwth-join-pubkey-binding:" || proposed_node_id || name`.
+    /// Required whenever `node_pubkey` is present; a bad or missing
+    /// proof is a loud 401, never a silent admit-without-key.
+    #[serde(default)]
+    pub pubkey_proof: Option<String>,
 }
 
 /// Wire shape for the full mesh snapshot. The Rust `Mesh` stores
@@ -667,15 +678,51 @@ pub async fn join(
     Json(req): Json<JoinRequest>,
 ) -> Result<Json<JoinResponse>, (StatusCode, Json<JoinRejection>)> {
     let self_node_id = *state.inner.self_node_id_swap.load_full().as_ref();
+
+    // Identity proof of possession — verified BEFORE taking the mesh
+    // write lock. Only enforced when the joiner presents a pubkey:
+    // pre-identity joiners are admitted exactly as before. A pubkey
+    // with a missing/invalid proof is a loud 401 (never a silent
+    // admit-without-key), because admitting an unproven key would
+    // bind a transport identity the joiner may not control.
+    if let Some(pubkey) = req.node_pubkey.as_ref() {
+        let proven = match (req.proposed_node_id.as_ref(), req.pubkey_proof.as_deref()) {
+            (Some(node_id), Some(proof)) => commonwealth_transport::identity::verify_join_proof(
+                pubkey,
+                node_id,
+                &req.joining_node_name,
+                proof,
+            ),
+            // The proof binds the proposed_node_id; modern joiners
+            // always persist + send one. A pubkey without it (or
+            // without a proof) is malformed.
+            _ => false,
+        };
+        if !proven {
+            tracing::warn!(
+                joining_name = %req.joining_node_name,
+                pubkey = %pubkey,
+                "handshake_rejected: node_pubkey presented without a valid proof of possession"
+            );
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                Json(JoinRejection {
+                    reason: "node_pubkey proof of possession missing or invalid".into(),
+                }),
+            ));
+        }
+    }
+
     let mut mesh = state.inner.mesh.write().await;
 
-    match membership::accept_join_with_proposed_id(
+    match membership::accept_join_with_identity(
         &mut mesh,
         &req.join_key,
         &req.joining_node_name,
         req.joining_node_addresses,
         self_node_id,
         req.proposed_node_id,
+        req.node_pubkey,
     ) {
         Ok(new_id) => {
             tracing::info!(

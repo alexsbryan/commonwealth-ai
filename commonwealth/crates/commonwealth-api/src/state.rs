@@ -219,6 +219,23 @@ pub struct AppStateInner {
     /// already loaded itself" — same trust boundary as the
     /// inference path.
     pub servable_model_files: ArcSwap<Vec<std::path::PathBuf>>,
+    /// This node's Ed25519 identity pubkey (see
+    /// `commonwealth_core::ids::NodePubkey`). Installed by the
+    /// embedded daemon at startup from `<data_dir>/node_key`; `None`
+    /// in tests and on daemons that don't manage an identity key.
+    /// Gossip stamps it into our own `MemberRecord` every round so
+    /// in-place upgrades publish the key without a rejoin.
+    pub self_node_pubkey: std::sync::RwLock<Option<commonwealth_core::ids::NodePubkey>>,
+    /// How this daemon reaches mesh peers — the PeerTransport seam.
+    /// Every route handler that dials a peer resolves URLs through
+    /// this instead of formatting `http://{ip}:{port}` inline, so a
+    /// future transport (dial-by-key iroh) slots in without touching
+    /// call sites. Defaults to `IpTransport::default()` (client port
+    /// 9741); the embedded daemon re-installs one configured with
+    /// its resolved client port via
+    /// [`AppState::install_peer_transport`] at startup. Set-once-
+    /// read-many: a plain `std::sync::RwLock` read per resolution.
+    pub peer_transport: std::sync::RwLock<Arc<dyn commonwealth_transport::PeerTransport>>,
     /// ATOS middleware registry. Holds one instance of each
     /// middleware the pipelines can reference by id.
     pub middleware_registry: Arc<crate::middleware::MiddlewareRegistry>,
@@ -493,6 +510,52 @@ impl AppState {
         self.inner.servable_model_files.store(Arc::new(files));
     }
 
+    /// This node's identity pubkey, if one was installed.
+    pub fn self_node_pubkey(&self) -> Option<commonwealth_core::ids::NodePubkey> {
+        *self
+            .inner
+            .self_node_pubkey
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Install this node's identity pubkey. The embedded daemon
+    /// calls this at startup after `load_or_generate_node_key`.
+    pub fn install_self_node_pubkey(&self, pubkey: commonwealth_core::ids::NodePubkey) {
+        *self
+            .inner
+            .self_node_pubkey
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(pubkey);
+    }
+
+    /// Snapshot of the active [`PeerTransport`]. Cheap (one RwLock
+    /// read + Arc clone); call per dial, don't cache across awaits —
+    /// the daemon may re-install at startup.
+    pub fn peer_transport(&self) -> Arc<dyn commonwealth_transport::PeerTransport> {
+        self.inner
+            .peer_transport
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Replace the peer transport. The embedded daemon calls this
+    /// once at startup with an `IpTransport` configured for its
+    /// resolved client port (the `AppState::new*` default assumes
+    /// 9741). Same install-at-boot pattern as
+    /// [`AppState::install_slot_aliases`].
+    pub fn install_peer_transport(
+        &self,
+        transport: Arc<dyn commonwealth_transport::PeerTransport>,
+    ) {
+        *self
+            .inner
+            .peer_transport
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = transport;
+    }
+
     pub fn new(self_node_id: NodeId, mesh: Mesh) -> Self {
         // Test-support constructor (callers in tests/ + the test-harness);
         // in-memory MeshStore creation is infallible — fail-fast is correct.
@@ -587,6 +650,10 @@ impl AppState {
                     commonwealth_core::pipeline_aliases::PipelineAliasTable::default_table(),
                 slot_aliases: ArcSwap::from_pointee(std::collections::HashMap::new()),
                 servable_model_files: ArcSwap::from_pointee(Vec::new()),
+                self_node_pubkey: std::sync::RwLock::new(None),
+                peer_transport: std::sync::RwLock::new(Arc::new(
+                    commonwealth_transport::IpTransport::default(),
+                )),
                 middleware_registry: Arc::new(middleware_registry),
                 session_store,
                 repo_root: std::env::current_dir().ok(),

@@ -675,8 +675,19 @@ impl EmbeddedDaemon {
         // would stamp a fresh random ID, so rejoining users would
         // appear as new peers every time their mesh.json got wiped.
         let stable_id = persist::load_or_generate_self_node_id(&self.data_dir);
-        let (mesh, join_key) =
-            membership::init_mesh_with_node_id(mesh_name, node_name, addrs, stable_id);
+        // Identity key lives beside node_id; its pubkey rides in the
+        // founder's MemberRecord so the trust ring is dial-by-key
+        // ready. The seed at `<data_dir>/node_key` doubles as the
+        // future iroh SecretKey.
+        let identity_key =
+            commonwealth_transport::identity::load_or_generate_node_key(&self.data_dir);
+        let (mesh, join_key) = membership::init_mesh_with_identity(
+            mesh_name,
+            node_name,
+            addrs,
+            stable_id,
+            Some(commonwealth_transport::identity::node_pubkey(&identity_key)),
+        );
         let node_id = stable_id;
         let _ = mesh
             .members
@@ -858,6 +869,21 @@ impl EmbeddedDaemon {
             }
         };
 
+        // Identity: present our pubkey with a proof of possession
+        // bound to (stable_id, node_name). The founder records the
+        // key in our MemberRecord; pre-identity founders ignore the
+        // extra fields (serde-default on their side).
+        let identity_key =
+            commonwealth_transport::identity::load_or_generate_node_key(&self.data_dir);
+        let identity = Some((
+            commonwealth_transport::identity::node_pubkey(&identity_key),
+            commonwealth_transport::identity::sign_join_proof(
+                &identity_key,
+                &stable_id,
+                node_name,
+            ),
+        ));
+
         let handshake = crate::join::perform_join(
             &mesh_name,
             &join_key,
@@ -870,6 +896,7 @@ impl EmbeddedDaemon {
             // or matches our name; else mints a fresh one (first
             // join from a new machine to this mesh).
             Some(stable_id),
+            identity,
         )
         .await;
 
@@ -1133,85 +1160,24 @@ impl EmbeddedDaemon {
     /// every peer is offline — callers should fall back to local
     /// inference in any of those cases.
     pub async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
-        // Uniform-port assumption: every peer's client API listens on
-        // the same `client_port` this daemon exposes locally. Mixed-
-        // port mesh deployments need a `MemberRecord.client_port`
-        // wire-protocol field (tracked in §10.1) — until then,
-        // operators who configure non-default `client_port` should
-        // configure every peer the same.
-        let (peer_client_port, _) = self.resolved_ports().await;
         let state = self.state.read().await;
         let app_state = match &*state {
             DaemonState::Running { app_state, .. } => app_state.clone(),
             DaemonState::Stopped => return Vec::new(),
         };
         drop(state);
-        let mesh = app_state.inner.mesh.read().await;
-        let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
-        mesh.members
-            .values()
-            .filter(|m| m.node_id != self_id)
-            .filter(|m| {
-                matches!(
-                    m.status,
-                    commonwealth_core::mesh::NodeStatus::Online
-                        | commonwealth_core::mesh::NodeStatus::Busy
-                )
-            })
-            .filter(|m| !m.addresses.is_empty())
-            .map(|m| PeerInferenceEndpoint {
-                node_id: m.node_id,
-                name: m.name.clone(),
-                // Rewrite each gossiped address's port (which is the
-                // peer's *internal* port — that's what the join
-                // handshake targets) to the peer's *client* port —
-                // we assume it matches our own `client_port`, see
-                // the uniform-port note above.
-                //
-                // Sort by `peer_addr::rank` so the inference fallback
-                // chain in `peer_inference.rs` tries IPv4 (typically
-                // Tailscale CGNAT) before IPv6 ULA. Without this sort
-                // a peer with an IPv6 address ahead of its IPv4 in the
-                // gossiped list fails on the first attempt in
-                // toolbox/container environments that lack an IPv6
-                // route to the tailnet.
-                base_urls: commonwealth_core::peer_addr::sorted_addresses(&m.addresses.to_vec())
-                    .iter()
-                    .map(|addr| {
-                        let ip = addr.ip();
-                        if ip.is_ipv6() {
-                            format!("http://[{ip}]:{peer_client_port}/v1")
-                        } else {
-                            format!("http://{ip}:{peer_client_port}/v1")
-                        }
-                    })
-                    .collect(),
-                system_ram_gb: m.capabilities.hardware.system_ram_gb,
-                benchmark: m.capabilities.benchmark.clone(),
-                current_in_flight: m.capabilities.current_in_flight,
-                // Mesh peers always use the default plain-HTTP transport
-                // — TLS pinning is reserved for ephemeral worker pods,
-                // which surface through `PinnedWorkerEndpointSource` in
-                // a separate path.
-                transport: None,
-            })
-            .collect()
-    }
-
-    /// Auto-discover mesh RPC inference workers: probe each online peer's
-    /// `/status` for an advertised `rpc_worker.port` and return reachable
-    /// `ip:port` RPC endpoints. Fed to the embedded engine's worker provider so
-    /// a host needs no manual `SOVEREIGN_RPC_WORKERS`. Best-effort — peers that
-    /// don't respond or aren't serving a worker are simply omitted.
-    pub async fn discover_rpc_workers(&self) -> Vec<String> {
-        let (peer_client_port, _) = self.resolved_ports().await;
-        let members: Vec<(String, Vec<std::net::SocketAddr>)> = {
-            let state = self.state.read().await;
-            let app_state = match &*state {
-                DaemonState::Running { app_state, .. } => app_state.clone(),
-                DaemonState::Stopped => return Vec::new(),
-            };
-            drop(state);
+        // The PeerTransport seam resolves dial candidates: for the
+        // Inference class, `IpTransport` rewrites each gossiped
+        // address's port (the peer's *internal* port — that's what
+        // the join handshake targets) to the *client* port and sorts
+        // by `peer_addr::rank` so the inference fallback chain in
+        // `peer_inference.rs` tries IPv4 (typically Tailscale CGNAT)
+        // before IPv6 ULA. The uniform-port assumption (every peer's
+        // client API on the same `client_port` as ours, pending a
+        // `MemberRecord.client_port` wire field — §10.1) lives in
+        // the transport's construction at `start_daemon`.
+        let transport = app_state.peer_transport();
+        let members: Vec<commonwealth_core::mesh::MemberRecord> = {
             let mesh = app_state.inner.mesh.read().await;
             let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
             mesh.members
@@ -1225,12 +1191,66 @@ impl EmbeddedDaemon {
                     )
                 })
                 .filter(|m| !m.addresses.is_empty())
-                .map(|m| {
-                    (
-                        m.name.clone(),
-                        commonwealth_core::peer_addr::sorted_addresses(&m.addresses.to_vec()),
+                .cloned()
+                .collect()
+        };
+        let mut endpoints = Vec::with_capacity(members.len());
+        for m in members {
+            let base_urls: Vec<String> = transport
+                .endpoints(
+                    &commonwealth_transport::peer_contact(&m),
+                    commonwealth_transport::TrafficClass::Inference,
+                )
+                .await
+                .into_iter()
+                .map(|ep| format!("{}/v1", ep.base_url))
+                .collect();
+            endpoints.push(PeerInferenceEndpoint {
+                node_id: m.node_id,
+                name: m.name.clone(),
+                base_urls,
+                system_ram_gb: m.capabilities.hardware.system_ram_gb,
+                benchmark: m.capabilities.benchmark.clone(),
+                current_in_flight: m.capabilities.current_in_flight,
+                // Mesh peers always use the default plain-HTTP transport
+                // — TLS pinning is reserved for ephemeral worker pods,
+                // which surface through `PinnedWorkerEndpointSource` in
+                // a separate path.
+                transport: None,
+            });
+        }
+        endpoints
+    }
+
+    /// Auto-discover mesh RPC inference workers: probe each online peer's
+    /// `/status` for an advertised `rpc_worker.port` and return reachable
+    /// `ip:port` RPC endpoints. Fed to the embedded engine's worker provider so
+    /// a host needs no manual `SOVEREIGN_RPC_WORKERS`. Best-effort — peers that
+    /// don't respond or aren't serving a worker are simply omitted.
+    pub async fn discover_rpc_workers(&self) -> Vec<String> {
+        let app_state = {
+            let state = self.state.read().await;
+            match &*state {
+                DaemonState::Running { app_state, .. } => app_state.clone(),
+                DaemonState::Stopped => return Vec::new(),
+            }
+        };
+        let transport = app_state.peer_transport();
+        let members: Vec<commonwealth_core::mesh::MemberRecord> = {
+            let mesh = app_state.inner.mesh.read().await;
+            let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
+            mesh.members
+                .values()
+                .filter(|m| m.node_id != self_id)
+                .filter(|m| {
+                    matches!(
+                        m.status,
+                        commonwealth_core::mesh::NodeStatus::Online
+                            | commonwealth_core::mesh::NodeStatus::Busy
                     )
                 })
+                .filter(|m| !m.addresses.is_empty())
+                .cloned()
                 .collect()
         };
 
@@ -1243,15 +1263,30 @@ impl EmbeddedDaemon {
         };
 
         let mut out = Vec::new();
-        for (name, addrs) in members {
-            for addr in addrs {
-                let ip = addr.ip();
-                let host = if ip.is_ipv6() {
-                    format!("[{ip}]")
-                } else {
-                    format!("{ip}")
+        for m in members {
+            let name = m.name.clone();
+            let probes = transport
+                .endpoints(
+                    &commonwealth_transport::peer_contact(&m),
+                    commonwealth_transport::TrafficClass::StatusProbe,
+                )
+                .await;
+            for probe in &probes {
+                let status_url = format!("{}/status", probe.base_url);
+                // The RPC worker speaks raw TCP at `host:port` — an
+                // IP-overlay address by construction, so derive the
+                // host from the probe URL's authority. A future
+                // identity-keyed transport must keep rpc-server
+                // traffic on the IP overlay (or a tunnel proxy);
+                // see the commonwealth-transport docs.
+                let Some(host) = probe
+                    .base_url
+                    .strip_prefix("http://")
+                    .and_then(|a| a.rsplit_once(':'))
+                    .map(|(host, _)| host.to_string())
+                else {
+                    continue;
                 };
-                let status_url = format!("http://{host}:{peer_client_port}/status");
                 if let Ok(resp) = client.get(&status_url).send().await {
                     if resp.status().is_success() {
                         if let Ok(json) = resp.json::<serde_json::Value>().await {
@@ -1319,6 +1354,30 @@ impl EmbeddedDaemon {
             app_registry,
             corpus_engine.clone(),
         );
+
+        // Route every peer dial through an `IpTransport` configured
+        // with OUR resolved client port (the `AppState::new*` default
+        // assumes 9741) — this is where the uniform-port assumption
+        // for the Inference/StatusProbe port rewrite is anchored.
+        // RwLock-based installer, so it is exempt from the
+        // `Arc::get_mut` ordering constraint documented below.
+        app_state.install_peer_transport(Arc::new(commonwealth_transport::IpTransport::new(
+            client_port,
+        )));
+
+        // Publish this install's identity pubkey (key beside node_id
+        // at `<data_dir>/node_key`; same unconditional
+        // load-or-generate posture as the stable NodeId). Gossip
+        // stamps it into our MemberRecord every round, which is also
+        // the in-place upgrade path for meshes created before
+        // identity keys existed.
+        {
+            let identity_key =
+                commonwealth_transport::identity::load_or_generate_node_key(&self.data_dir);
+            app_state.install_self_node_pubkey(commonwealth_transport::identity::node_pubkey(
+                &identity_key,
+            ));
+        }
 
         // ── Order is load-bearing ─────────────────────────────────
         //

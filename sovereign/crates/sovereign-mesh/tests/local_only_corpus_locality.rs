@@ -147,6 +147,7 @@ async fn query_sharing_false_corpus_does_not_publish_to_hosted_corpora() {
     members.insert(
         self_id,
         MemberRecord {
+            node_pubkey: None,
             node_id: self_id,
             name: "Self".into(),
             invited_by: self_id,

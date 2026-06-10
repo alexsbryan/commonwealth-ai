@@ -12,13 +12,24 @@ use crate::error::Result;
 pub struct HostConnection {
     pub id: String,
     pub display_name: String,
-    /// MagicDNS name or overlay IP + port (e.g. `beefymac.tail-scale.ts:8080`).
+    /// Opaque transport address, interpreted per `endpoint_kind`.
+    /// For kind `tailnet`: a MagicDNS name or overlay IP + port
+    /// (e.g. `beefymac.tail-scale.ts:8080`). The field name is kept
+    /// for column/wire compat.
     pub tailnet_address: String,
+    /// How `tailnet_address` is interpreted — see
+    /// [`crate::connection::EndpointKind`]. `'tailnet'` today.
+    #[serde(default = "default_endpoint_kind")]
+    pub endpoint_kind: String,
     pub is_default: bool,
     /// `reachable | host_down | off_tailnet` — last observed; the live
     /// value comes from the connectivity monitor.
     pub last_status: String,
     pub created_at: i64,
+}
+
+fn default_endpoint_kind() -> String {
+    "tailnet".to_string()
 }
 
 pub fn insert(conn: &Connection, hc: &HostConnection) -> Result<()> {
@@ -34,12 +45,13 @@ pub fn insert(conn: &Connection, hc: &HostConnection) -> Result<()> {
     }
     conn.execute(
         "INSERT INTO host_connection
-           (id, display_name, tailnet_address, is_default, last_status, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+           (id, display_name, tailnet_address, endpoint_kind, is_default, last_status, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
             hc.id,
             hc.display_name,
             hc.tailnet_address,
+            hc.endpoint_kind,
             is_default as i64,
             hc.last_status,
             hc.created_at,
@@ -50,7 +62,7 @@ pub fn insert(conn: &Connection, hc: &HostConnection) -> Result<()> {
 
 pub fn list(conn: &Connection) -> Result<Vec<HostConnection>> {
     let mut stmt = conn.prepare(
-        "SELECT id, display_name, tailnet_address, is_default, last_status, created_at
+        "SELECT id, display_name, tailnet_address, endpoint_kind, is_default, last_status, created_at
          FROM host_connection ORDER BY created_at ASC",
     )?;
     let rows = stmt
@@ -59,9 +71,10 @@ pub fn list(conn: &Connection) -> Result<Vec<HostConnection>> {
                 id: r.get(0)?,
                 display_name: r.get(1)?,
                 tailnet_address: r.get(2)?,
-                is_default: r.get::<_, i64>(3)? != 0,
-                last_status: r.get(4)?,
-                created_at: r.get(5)?,
+                endpoint_kind: r.get(3)?,
+                is_default: r.get::<_, i64>(4)? != 0,
+                last_status: r.get(5)?,
+                created_at: r.get(6)?,
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -98,6 +111,87 @@ pub fn exists(conn: &Connection, id: &str) -> Result<bool> {
         params![id],
         |r| r.get(0),
     )?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::connection::EndpointKind;
+
+    fn fresh_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::cache::schema::migrate(&conn).unwrap();
+        conn
+    }
+
+    fn host(id: &str) -> HostConnection {
+        HostConnection {
+            id: id.into(),
+            display_name: "Beefy Mac".into(),
+            tailnet_address: "beefymac.tail-scale.ts:8080".into(),
+            endpoint_kind: "tailnet".into(),
+            is_default: false,
+            last_status: "off_tailnet".into(),
+            created_at: 1,
+        }
+    }
+
+    #[test]
+    fn crud_round_trips_endpoint_kind() {
+        let conn = fresh_db();
+        insert(&conn, &host("h1")).unwrap();
+        let got = get_default(&conn).unwrap().expect("first host is default");
+        assert_eq!(got.endpoint_kind, "tailnet");
+        assert_eq!(got.tailnet_address, "beefymac.tail-scale.ts:8080");
+    }
+
+    /// A DB created BEFORE the endpoint_kind column existed must
+    /// migrate in place: column added, existing rows readable as
+    /// kind 'tailnet'.
+    #[test]
+    fn pre_endpoint_kind_db_migrates_with_tailnet_default() {
+        let conn = Connection::open_in_memory().unwrap();
+        // Old-shape table + a row, as a pre-seam app build wrote it.
+        conn.execute_batch(
+            r#"
+            CREATE TABLE host_connection (
+                id              TEXT PRIMARY KEY,
+                display_name    TEXT NOT NULL,
+                tailnet_address TEXT NOT NULL,
+                is_default      INTEGER NOT NULL DEFAULT 0,
+                last_status     TEXT NOT NULL DEFAULT 'off_tailnet',
+                created_at      INTEGER NOT NULL
+            );
+            INSERT INTO host_connection
+                (id, display_name, tailnet_address, is_default, last_status, created_at)
+            VALUES ('old', 'Old Host', '100.64.0.5:8080', 1, 'reachable', 1);
+            "#,
+        )
+        .unwrap();
+
+        crate::cache::schema::migrate(&conn).unwrap();
+        // Idempotency: a second migrate must not error on the
+        // now-present column.
+        crate::cache::schema::migrate(&conn).unwrap();
+
+        let hosts = list(&conn).unwrap();
+        assert_eq!(hosts.len(), 1);
+        assert_eq!(hosts[0].endpoint_kind, "tailnet");
+        assert_eq!(hosts[0].tailnet_address, "100.64.0.5:8080");
+    }
+
+    #[test]
+    fn endpoint_kind_parse_is_loud_on_unknown() {
+        assert_eq!(
+            EndpointKind::parse("tailnet").unwrap(),
+            EndpointKind::Tailnet
+        );
+        let err = EndpointKind::parse("iroh").unwrap_err();
+        assert!(
+            err.to_string().contains("endpoint_kind"),
+            "error must name the field: {err}"
+        );
+    }
 }
 
 /// Delete a host connection. If it was the default and other hosts

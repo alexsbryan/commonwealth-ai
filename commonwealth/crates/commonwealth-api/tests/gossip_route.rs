@@ -19,6 +19,7 @@ use tower::ServiceExt;
 
 fn member(id: NodeId, name: &str, last_seen: u64) -> MemberRecord {
     MemberRecord {
+        node_pubkey: None,
         node_id: id,
         name: name.into(),
         invited_by: id,

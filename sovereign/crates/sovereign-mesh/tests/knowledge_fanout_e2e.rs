@@ -171,6 +171,7 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
     members_a.insert(
         id_a,
         MemberRecord {
+            node_pubkey: None,
             node_id: id_a,
             name: "Founder".into(),
             invited_by: id_a,
@@ -212,6 +213,7 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
     members_b.insert(
         id_b,
         MemberRecord {
+            node_pubkey: None,
             node_id: id_b,
             name: "Joiner".into(),
             invited_by: id_a,
@@ -227,6 +229,7 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
     members_b.insert(
         id_a,
         MemberRecord {
+            node_pubkey: None,
             node_id: id_a,
             name: "Founder".into(),
             invited_by: id_a,
@@ -354,6 +357,7 @@ async fn offline_peer_is_excluded_from_fan_out_plan() {
     members_b.insert(
         id_b,
         MemberRecord {
+            node_pubkey: None,
             node_id: id_b,
             name: "Joiner".into(),
             invited_by: id_a,
@@ -367,6 +371,7 @@ async fn offline_peer_is_excluded_from_fan_out_plan() {
     members_b.insert(
         id_a,
         MemberRecord {
+            node_pubkey: None,
             node_id: id_a,
             name: "Sleeper".into(),
             invited_by: id_a,
@@ -470,6 +475,7 @@ async fn fan_out_stamps_x_node_id_so_peer_emits_ledger() {
     members_b.insert(
         id_b,
         MemberRecord {
+            node_pubkey: None,
             node_id: id_b,
             name: "Joiner".into(),
             invited_by: id_a,
@@ -483,6 +489,7 @@ async fn fan_out_stamps_x_node_id_so_peer_emits_ledger() {
     members_b.insert(
         id_a,
         MemberRecord {
+            node_pubkey: None,
             node_id: id_a,
             name: "Founder".into(),
             invited_by: id_a,

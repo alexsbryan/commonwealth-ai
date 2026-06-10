@@ -104,6 +104,7 @@ fn member(
     hosted: Vec<String>,
 ) -> MemberRecord {
     MemberRecord {
+        node_pubkey: None,
         node_id: id,
         name: name.into(),
         invited_by: id,

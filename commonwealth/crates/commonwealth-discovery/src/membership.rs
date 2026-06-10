@@ -73,12 +73,26 @@ pub fn init_mesh_with_node_id(
     addresses: Vec<SocketAddr>,
     node_id: NodeId,
 ) -> (Mesh, String) {
+    init_mesh_with_identity(name, node_name, addresses, node_id, None)
+}
+
+/// Same as [`init_mesh_with_node_id`] but also stamps the founder's
+/// Ed25519 identity pubkey into its `MemberRecord`. `None` keeps
+/// the pre-identity behaviour (older daemons, tests).
+pub fn init_mesh_with_identity(
+    name: &str,
+    node_name: &str,
+    addresses: Vec<SocketAddr>,
+    node_id: NodeId,
+    node_pubkey: Option<commonwealth_core::ids::NodePubkey>,
+) -> (Mesh, String) {
     let join_key = generate_join_key();
     let join_key_hash = hash_join_key(&join_key);
     let mesh_id = MeshId::generate();
     let now = now_secs();
 
     let founder = MemberRecord {
+        node_pubkey,
         node_id,
         name: node_name.to_string(),
         invited_by: node_id, // Founder invites themselves.
@@ -174,6 +188,33 @@ pub fn accept_join_with_proposed_id(
     invited_by: NodeId,
     proposed_id: Option<NodeId>,
 ) -> Result<NodeId> {
+    accept_join_with_identity(
+        mesh,
+        join_key,
+        new_node_name,
+        new_node_addresses,
+        invited_by,
+        proposed_id,
+        None,
+    )
+}
+
+/// Same as [`accept_join_with_proposed_id`] but also records the
+/// joiner's Ed25519 identity pubkey. The caller (the join route)
+/// MUST have verified the proof of possession before passing
+/// `Some(pubkey)` here — this function records, it does not verify.
+/// On rejoin, a presented pubkey refreshes the stored one (same
+/// machine, possibly newly-keyed install); absent one, the stored
+/// key is kept.
+pub fn accept_join_with_identity(
+    mesh: &mut Mesh,
+    join_key: &str,
+    new_node_name: &str,
+    new_node_addresses: Vec<SocketAddr>,
+    invited_by: NodeId,
+    proposed_id: Option<NodeId>,
+    node_pubkey: Option<commonwealth_core::ids::NodePubkey>,
+) -> Result<NodeId> {
     // Verify join key.
     if !verify_join_key(join_key, &mesh.join_key_hash) {
         return Err(Error::InvalidJoinKey("join key does not match".into()));
@@ -191,6 +232,9 @@ pub fn accept_join_with_proposed_id(
                 refreshed.addresses = new_node_addresses;
                 refreshed.last_seen = now;
                 refreshed.status = NodeStatus::Online;
+                if node_pubkey.is_some() {
+                    refreshed.node_pubkey = node_pubkey;
+                }
                 mesh.members.insert(id, refreshed);
                 return Ok(id);
             }
@@ -204,6 +248,7 @@ pub fn accept_join_with_proposed_id(
     };
 
     let member = MemberRecord {
+        node_pubkey,
         node_id: new_node_id,
         name: new_node_name.to_string(),
         invited_by,

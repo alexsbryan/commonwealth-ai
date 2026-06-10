@@ -49,6 +49,9 @@ members = [
 
     # Commonwealth — symmetric mesh daemon.
     "commonwealth/crates/commonwealth-core",
+    # PeerTransport seam — (peer, traffic class) → dialable endpoints.
+    # IP overlay today; iroh slots in behind the same trait later.
+    "commonwealth/crates/commonwealth-transport",
     "commonwealth/crates/commonwealth-discovery",
     "commonwealth/crates/commonwealth-inference",
     "commonwealth/crates/commonwealth-api",
@@ -117,6 +120,7 @@ sovereign-eval = { path = "sovereign/crates/sovereign-eval" }
 commonwealth-agent-tools = { path = "sovereign/crates/commonwealth-agent-tools" }
 commonwealth-tdd = { path = "sovereign/crates/commonwealth-tdd" }
 commonwealth-core = { path = "commonwealth/crates/commonwealth-core" }
+commonwealth-transport = { path = "commonwealth/crates/commonwealth-transport" }
 commonwealth-discovery = { path = "commonwealth/crates/commonwealth-discovery" }
 commonwealth-inference = { path = "commonwealth/crates/commonwealth-inference" }
 commonwealth-api = { path = "commonwealth/crates/commonwealth-api" }
@@ -178,6 +182,14 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # Identity / time
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
+# Node identity keys (mesh trust ring; the seed doubles as a future
+# iroh SecretKey). Hoisted 2026-06-10 from sovereign-mesh's inline
+# decl so commonwealth-transport tracks the same version.
+ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
+# EXPERIMENTAL dial-by-key transport — only compiled behind
+# commonwealth-transport's `iroh` feature (off by default; spike
+# test via `cargo test -p sovereign-mesh --features iroh-experimental`).
+iroh = "1.0.0-rc.1"
 
 # Concurrency
 dashmap = "6"

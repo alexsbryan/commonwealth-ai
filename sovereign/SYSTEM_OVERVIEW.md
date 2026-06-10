@@ -162,6 +162,7 @@ Top-level: `modes/` (skills — recipe-author, inner-work),
 ```
 crates/
 ├── commonwealth-core         # Shared types — ids, mesh, capabilities, ledger, aliases
+├── commonwealth-transport    # PeerTransport seam — (peer, traffic class) → endpoints; IP today, iroh-ready
 ├── commonwealth-discovery    # mDNS, gossip, latency probe, hardware, TLS, peering
 ├── commonwealth-inference    # Scheduling + orchestration
 ├── commonwealth-api          # HTTP servers (client 9741 + internal 9742 mTLS)
@@ -916,6 +917,16 @@ the plan healthy as nodes come and go.
   `membership::generate_join_key` stores BLAKE3 hash, discards
   plaintext. `verify_join_key` is constant-time. First node calls
   `init_mesh`; subsequent nodes call `accept_join`.
+- **Node identity keys** — every node persists an Ed25519 keypair at
+  `<data_dir>/node_key` (sibling of `node_id`;
+  `commonwealth-transport/src/identity.rs`). The pubkey travels as
+  `MemberRecord.node_pubkey` (serde-defaulted — pre-identity builds
+  interop), is proven at join time (proof-of-possession signature in
+  `JoinRequest`, bad proof → 401), self-stamped by gossip every round
+  (the in-place upgrade path), and protected by an anti-downgrade
+  rule in `Mesh::merge_from` (a relayed record without the key never
+  strips a known one). The seed is byte-compatible with an iroh
+  `SecretKey` — it IS the future dial-by-key transport identity.
 - **mDNS** — `_commonwealth._tcp.local` advertising `node_id`,
   `mesh_id`, `name`.
 - **Gossip** — 10s epidemic loop, 2–3 random peers per round.
@@ -930,6 +941,43 @@ the plan healthy as nodes come and go.
   pinned on the internal API.
 - **Mesh peering** — `peering.rs`; two `PeerTrustLevel`s:
   `ModelAndKnowledgeSharing`, `Full`.
+
+### The PeerTransport seam (commonwealth-transport)
+
+How this node reaches a peer is decided in exactly one place:
+`commonwealth-transport`'s `PeerTransport` trait resolves
+*(PeerContact, TrafficClass) → ordered base URLs*; call sites keep
+their own reqwest clients/timeouts and append route paths. The live
+instance hangs off commonwealth-api's `AppState`
+(`peer_transport()` / `install_peer_transport`).
+
+- **`IpTransport`** (production): today's tailnet/LAN overlay. Owns
+  the Tailscale CGNAT/ULA address ranking (`peer_addr::rank` — no
+  other production caller) and the last-working-address promotion
+  that used to live as duplicate caches in gossip and knowledge
+  fan-out. Port policy per class: Gossip/ControlPlane/
+  KnowledgeSearch/ModelTransfer use the gossiped address verbatim;
+  Inference/StatusProbe rewrite to the (assumed-uniform) client
+  port. Golden URL-vector tests pin byte-identical output vs the
+  pre-seam inline `format!` strings.
+- **`IrohTransport`** (experimental, cargo feature
+  `commonwealth-transport/iroh`, pinned `iroh 1.0.0-rc.1`):
+  dial-by-Ed25519-pubkey QUIC, bridged to HTTP via localhost
+  byte-tunnels (client TCP bridge + `IrohAcceptor` → existing axum
+  listener). Spike proof:
+  `sovereign-mesh/tests/iroh_transport_e2e.rs` (run with
+  `--features iroh-experimental`) drives a real gossip round dialed
+  by pubkey. Never compiled by default gates.
+- **Out of seam, by design**: the join handshake (pre-membership
+  bootstrap), worker-pod `PinnedTransport` (separate trust model),
+  loopback self-probes, and the raw-TCP `llama-server`/`rpc-server`
+  tensor traffic (stays on the IP overlay until a tunnel proxy is
+  worth building).
+- **Migration order** (when a second transport goes live) is encoded
+  by `TrafficClass`, not config: a small `RoutedTransport` mapping
+  classes → transports slots into the same `Arc<dyn PeerTransport>`
+  — gossip/membership first, blob/model transfer next, inference
+  streaming last, raw RPC tensor traffic remaining on IP.
 
 ### Scheduling + orchestration
 

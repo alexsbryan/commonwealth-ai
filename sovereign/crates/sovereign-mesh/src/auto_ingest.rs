@@ -711,11 +711,24 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
             tracing::debug!(handoff = %handoff.handoff_id, "pull_loops: handoff has no merge_leader");
             continue;
         };
-        let coordinator_url = {
+        let coordinator_contact = {
             let mesh = state.inner.mesh.read().await;
             mesh.members
                 .get(&coordinator_id)
-                .and_then(|m| best_peer_url(&m.addresses.to_vec()))
+                .map(commonwealth_transport::peer_contact)
+        };
+        // Best transport candidate (ranked by `peer_addr::rank`, so
+        // this matches the order used by gossip and inference
+        // fallback) — the pull loop pins one coordinator URL.
+        let coordinator_url = match &coordinator_contact {
+            Some(contact) => state
+                .peer_transport()
+                .endpoints(contact, commonwealth_transport::TrafficClass::ControlPlane)
+                .await
+                .into_iter()
+                .next()
+                .map(|ep| ep.base_url),
+            None => None,
         };
         let Some(coordinator_url) = coordinator_url else {
             tracing::warn!(
@@ -749,21 +762,6 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
             "pull_loops: spawned pull loop"
         );
     }
-}
-
-/// Pick the best reachable URL for a peer. Delegates to
-/// `peer_addr::rank` so this matches the order used by gossip and
-/// inference fallback. The previous local sort had IPv4 CGNAT and
-/// IPv6 ULA tied at rank 0, leading to nondeterministic IPv6-first
-/// picks that broke on hosts without IPv6 routing.
-fn best_peer_url(addrs: &[std::net::SocketAddr]) -> Option<String> {
-    let sorted = commonwealth_core::peer_addr::sorted_addresses(addrs);
-    let best = *sorted.first()?;
-    let host = match best.ip() {
-        std::net::IpAddr::V4(_) => best.ip().to_string(),
-        std::net::IpAddr::V6(v6) => format!("[{v6}]"),
-    };
-    Some(format!("http://{host}:{}", best.port()))
 }
 
 /// Inner pull loop. Runs until the queue drains (204 from `next_unit`)
@@ -1189,27 +1187,20 @@ async fn find_best_peer_canonical(
             if fp.is_empty() {
                 continue;
             }
-            // Build the full candidate-URL list from every published
-            // address. Whatever ports gossip recorded are ignored —
-            // the canonical-stream endpoint lives on the internal
-            // mesh port (9742) regardless of how the peer happens
-            // to bind its client port. The pull function tries each
-            // in turn so a topology change (peer roams off LAN onto
-            // Tailscale, etc.) doesn't strand the request on a
-            // dead address.
-            //
-            // IPv6 addresses must be bracketed in URLs.
-            let candidate_urls: Vec<String> = member
-                .addresses
-                .iter()
-                .map(|addr| {
-                    let ip = addr.ip();
-                    if ip.is_ipv6() {
-                        format!("http://[{ip}]:9742")
-                    } else {
-                        format!("http://{ip}:9742")
-                    }
-                })
+            // Build the full candidate-URL list via the transport
+            // (ControlPlane class: gossiped internal-port addresses,
+            // ranked). The pull function tries each in turn so a
+            // topology change (peer roams off LAN onto Tailscale,
+            // etc.) doesn't strand the request on a dead address.
+            let candidate_urls: Vec<String> = state
+                .peer_transport()
+                .endpoints(
+                    &commonwealth_transport::peer_contact(member),
+                    commonwealth_transport::TrafficClass::ControlPlane,
+                )
+                .await
+                .into_iter()
+                .map(|ep| ep.base_url)
                 .collect();
             if candidate_urls.is_empty() {
                 continue;

@@ -18,32 +18,24 @@
 //!
 //! Reuses `Mesh::merge_from` for the actual last-writer-wins
 //! reconciliation. This module is just the network plumbing on top.
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use commonwealth_api::state::AppState;
 use commonwealth_core::ids::MeshId;
-use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::{MemberRecord, Mesh, MeshPeering, NodeStatus};
+use commonwealth_transport::{peer_contact, PeerContact, TrafficClass};
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
 use crate::capabilities::build_local_capabilities;
 
-/// Per-peer cache of the last `SocketAddr` we successfully reached on.
-/// Reordered to the front of `addrs` on the next round so a peer
-/// whose first stored address is unreachable (e.g. a stale LAN IP
-/// shadowed by a working Tailscale address) doesn't burn
-/// `PEER_TIMEOUT` per cycle. Process-global because the gossip loop
-/// is a singleton; missing entries fall back to the legacy
-/// stored-order iteration. Cleared implicitly on daemon restart.
-fn last_working_address_cache() -> &'static Mutex<HashMap<NodeId, SocketAddr>> {
-    static CACHE: OnceLock<Mutex<HashMap<NodeId, SocketAddr>>> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
-}
+// Address ordering and the last-working-address promotion both live
+// in the PeerTransport seam now (`IpTransport` in
+// commonwealth-transport) — this module used to carry a
+// process-global `last_working_address_cache`; the transport on
+// `AppState` has the same effective lifetime (one per daemon run)
+// and shares the hint with every other traffic class.
 
 /// Default: send to at most this many peers per round. Small mesh
 /// sizes make higher fan-out pointless; bandwidth is negligible at
@@ -180,7 +172,7 @@ pub async fn run_one_round(
     // info only when the advertised set changed (new corpus
     // installed, one removed) — the every-10s heartbeat otherwise
     // logs at debug. Same gating policy as `mesh_state: rebuilt`.
-    let candidates: Vec<(NodeId, Vec<std::net::SocketAddr>)> = {
+    let candidates: Vec<PeerContact> = {
         let mut mesh = app_state.inner.mesh.write().await;
         let prior_corpora: std::collections::BTreeSet<String> = mesh
             .members
@@ -221,6 +213,14 @@ pub async fn run_one_round(
             // started (typically empty, since the user hasn't yet
             // run the install).
             me.capabilities = fresh_caps;
+            // Stamp our identity pubkey every round. This is how a
+            // node that upgraded in place (mesh created/joined
+            // before identity keys existed) publishes its key
+            // without a rejoin — within one gossip interval the
+            // whole mesh learns it.
+            if let Some(pubkey) = app_state.self_node_pubkey() {
+                me.node_pubkey = Some(pubkey);
+            }
         }
         for (id, m) in mesh.members.iter_mut() {
             if *id == self_id {
@@ -256,14 +256,10 @@ pub async fn run_one_round(
         mesh.members
             .values()
             .filter(|m| m.node_id != self_id)
-            .map(|m| {
-                // Sort IPv4-first so first-contact rounds (before
-                // `last_working_address_cache` has a hint) try IPv4
-                // before falling through to IPv6. Subsequent rounds
-                // are reordered by the cache regardless.
-                let addrs = commonwealth_core::peer_addr::sorted_addresses(&m.addresses.to_vec());
-                (m.node_id, addrs)
-            })
+            // The transport sorts candidates IPv4-first on
+            // resolution and promotes the last-working address,
+            // so the contact carries the raw gossiped list.
+            .map(peer_contact)
             .collect()
     };
 
@@ -294,61 +290,47 @@ pub async fn run_one_round(
         .build()
         .map_err(|e| GossipError::ClientBuild(e.to_string()))?;
 
-    for (peer_id, addrs) in selection {
-        if addrs.is_empty() {
+    let transport = app_state.peer_transport();
+    for contact in selection {
+        let peer_id = contact.node_id;
+        // The transport resolves and orders candidates: the address
+        // that worked last round goes first. The common case is
+        // "Tailscale 100.x stable, LAN 192.168.x stale because the
+        // Mac is on a different subnet from linux-peer" — without
+        // that hint, every round burns `PEER_TIMEOUT` (3s) on the
+        // dead LAN address before falling through to Tailscale.
+        // Best-effort: a stale hint just slows down THIS round, and
+        // the next success rewrites it.
+        let endpoints = transport.endpoints(&contact, TrafficClass::Gossip).await;
+        if endpoints.is_empty() {
             debug!(peer = %peer_id, "gossip: no addresses on record, skipping");
             continue;
         }
-        // Reorder: the address that worked last round goes first. The
-        // common case is "Tailscale 100.x stable, LAN 192.168.x stale
-        // because the Mac is on a different subnet from linux-peer" —
-        // without this hint, every round burns `PEER_TIMEOUT` (3s) on
-        // the dead LAN address before falling through to Tailscale.
-        // The cache is best-effort: a stored address that no longer
-        // works just slows down THIS round (then falls through to the
-        // rest), and the next success rewrites the cache.
-        let preferred: Option<SocketAddr> = last_working_address_cache()
-            .lock()
-            .ok()
-            .and_then(|c| c.get(&peer_id).copied());
-        let ordered_addrs: Vec<SocketAddr> = match preferred {
-            Some(p) if addrs.contains(&p) => {
-                let mut v = Vec::with_capacity(addrs.len());
-                v.push(p);
-                v.extend(addrs.iter().filter(|a| **a != p).copied());
-                v
-            }
-            _ => addrs.clone(),
-        };
-        for addr in &ordered_addrs {
+        for ep in &endpoints {
             // Per-address timing so we can diagnose the Online↔Offline
             // flap (see todo `f152dfe7` #4). Each line is one address
             // attempt with elapsed ms and outcome, so offline decay can
             // be correlated with a run of failed reaches on a specific
             // address family (LAN vs Tailscale).
             let attempt_start = Instant::now();
-            match gossip_with_peer(&http, *addr, &my_snapshot).await {
+            match gossip_with_peer(&http, &ep.base_url, &my_snapshot).await {
                 Ok(their_view) => {
                     let reach_ms = attempt_start.elapsed().as_millis() as u64;
                     info!(
                         peer = %peer_id,
-                        peer_addr = %addr,
+                        peer_addr = %ep.label,
                         reach_ms,
                         "gossip: reach ok"
                     );
-                    // Pin this address as the preferred starting
-                    // point for the next round's reorder. The lock is
-                    // uncontended (gossip is single-task), so this is
-                    // effectively a memory write.
-                    if let Ok(mut cache) = last_working_address_cache().lock() {
-                        cache.insert(peer_id, *addr);
-                    }
+                    // Pin this endpoint as the preferred starting
+                    // point for the next round's resolution.
+                    transport.note_success(peer_id, TrafficClass::Gossip, ep);
                     let mut mesh = app_state.inner.mesh.write().await;
                     let report = mesh.merge_from(self_id, &their_view);
                     if report.added > 0 {
                         info!(
                             peer = %peer_id,
-                            peer_addr = %addr,
+                            peer_addr = %ep.label,
                             added = report.added,
                             updated = report.updated,
                             "gossip: member added from peer's view"
@@ -356,7 +338,7 @@ pub async fn run_one_round(
                     } else if report.updated > 0 {
                         tracing::debug!(
                             peer = %peer_id,
-                            peer_addr = %addr,
+                            peer_addr = %ep.label,
                             updated = report.updated,
                             "gossip: merged peer's view (last_seen refresh)"
                         );
@@ -376,7 +358,7 @@ pub async fn run_one_round(
                         if was_offline {
                             info!(
                                 peer = %peer_id,
-                                peer_addr = %addr,
+                                peer_addr = %ep.label,
                                 name = %peer.name,
                                 "gossip: peer back Online"
                             );
@@ -398,7 +380,7 @@ pub async fn run_one_round(
                     // which logs at INFO from the decay path.
                     debug!(
                         peer = %peer_id,
-                        peer_addr = %addr,
+                        peer_addr = %ep.label,
                         reach_ms,
                         error = %e,
                         "gossip: reach failed, trying next address"
@@ -447,25 +429,20 @@ pub async fn run_one_round(
             let store_body = serde_json::json!({ "entries": wire_entries });
 
             // Re-read the peer list — the earlier loop consumed `selection`.
-            let store_targets: Vec<(NodeId, Vec<std::net::SocketAddr>)> = {
+            let store_targets: Vec<PeerContact> = {
                 let mesh = app_state.inner.mesh.read().await;
                 mesh.members
                     .values()
                     .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
-                    .map(|m| {
-                        // Sort addresses IPv4-first via the shared
-                        // ranker so mesh-store push retries match
-                        // the order used by inference routing.
-                        let addrs =
-                            commonwealth_core::peer_addr::sorted_addresses(&m.addresses.to_vec());
-                        (m.node_id, addrs)
-                    })
+                    .map(peer_contact)
                     .collect()
             };
 
-            for (peer_id, addrs) in store_targets {
-                for addr in &addrs {
-                    let url = format!("http://{addr}/internal/app/state");
+            for contact in store_targets {
+                let peer_id = contact.node_id;
+                let endpoints = transport.endpoints(&contact, TrafficClass::Gossip).await;
+                for ep in &endpoints {
+                    let url = format!("{}/internal/app/state", ep.base_url);
                     let push_start = Instant::now();
                     match http.post(&url).json(&store_body).send().await {
                         Ok(resp) if resp.status().is_success() => {
@@ -560,15 +537,12 @@ pub async fn broadcast_now(app_state: &AppState, app_id: &str, key: &str) {
         }]
     });
 
-    let targets: Vec<(NodeId, Vec<SocketAddr>)> = {
+    let targets: Vec<PeerContact> = {
         let mesh = app_state.inner.mesh.read().await;
         mesh.members
             .values()
             .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
-            .map(|m| {
-                let addrs = commonwealth_core::peer_addr::sorted_addresses(&m.addresses.to_vec());
-                (m.node_id, addrs)
-            })
+            .map(peer_contact)
             .collect()
     };
 
@@ -586,13 +560,16 @@ pub async fn broadcast_now(app_state: &AppState, app_id: &str, key: &str) {
 
     // Fan out concurrently — claim writers shouldn't pay
     // serial latency for slow peers.
+    let transport = app_state.peer_transport();
     let mut handles = Vec::with_capacity(targets.len());
-    for (peer_id, addrs) in targets {
+    for contact in targets {
+        let peer_id = contact.node_id;
         let http = http.clone();
         let body = wire.clone();
+        let endpoints = transport.endpoints(&contact, TrafficClass::Gossip).await;
         handles.push(tokio::spawn(async move {
-            for addr in addrs {
-                let url = format!("http://{addr}/internal/app/state");
+            for ep in endpoints {
+                let url = format!("{}/internal/app/state", ep.base_url);
                 match http.post(&url).json(&body).send().await {
                     Ok(resp) if resp.status().is_success() => return,
                     Ok(resp) => {
@@ -626,13 +603,13 @@ pub async fn broadcast_now(app_state: &AppState, app_id: &str, key: &str) {
 
 async fn gossip_with_peer(
     http: &reqwest::Client,
-    addr: std::net::SocketAddr,
+    base_url: &str,
     my_view: &Mesh,
 ) -> Result<Mesh, GossipError> {
     let body = GossipRequestWire {
         mesh: MeshWire::from(my_view),
     };
-    let url = format!("http://{addr}/internal/gossip");
+    let url = format!("{base_url}/internal/gossip");
     let response = http
         .post(&url)
         .json(&body)

@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 use serde::{Deserialize, Serialize};
 
 use crate::capabilities::NodeCapabilities;
-use crate::ids::{MeshId, NodeId};
+use crate::ids::{MeshId, NodeId, NodePubkey};
 
 /// A Commonwealth mesh — a closed group of trusted nodes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +29,13 @@ pub struct MemberRecord {
     pub status: NodeStatus,
     pub capabilities: NodeCapabilities,
     pub addresses: Vec<SocketAddr>,
+    /// Ed25519 identity key (see [`NodePubkey`]). `None` for nodes
+    /// running pre-identity builds. Serde-defaulted both directions:
+    /// old nodes ignore the field on receive and new nodes read old
+    /// payloads as `None`; `skip_serializing_if` keeps new→old wire
+    /// bytes identical when no key exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_pubkey: Option<NodePubkey>,
 }
 
 /// Current status of a node as observed by the mesh.
@@ -121,7 +128,21 @@ impl Mesh {
                     report.added += 1;
                 }
                 Some(existing) if incoming.last_seen > existing.last_seen => {
-                    self.members.insert(*id, incoming.clone());
+                    // Anti-downgrade: a newer record relayed by a
+                    // pre-identity build carries `node_pubkey: None`.
+                    // Without this preservation, ONE old peer in the
+                    // gossip path strips every node's pubkey on each
+                    // LWW win. An identity key never changes within
+                    // a membership, so keeping the locally-known key
+                    // while taking the rest of the newer record is
+                    // always correct.
+                    let preserved_pubkey = match incoming.node_pubkey {
+                        Some(pk) => Some(pk),
+                        None => existing.node_pubkey,
+                    };
+                    let mut record = incoming.clone();
+                    record.node_pubkey = preserved_pubkey;
+                    self.members.insert(*id, record);
                     report.updated += 1;
                 }
                 Some(_) => {
@@ -184,6 +205,7 @@ mod tests {
 
     fn member(id: NodeId, name: &str, last_seen: u64) -> MemberRecord {
         MemberRecord {
+            node_pubkey: None,
             node_id: id,
             name: name.into(),
             invited_by: id,
@@ -286,6 +308,89 @@ mod tests {
         assert_eq!(report.added, 0);
         assert_eq!(report.updated, 0);
         assert_eq!(local.members.get(&b).unwrap().name, "B-fresh");
+    }
+
+    #[test]
+    fn merge_preserves_pubkey_when_old_peer_relays_record_without_it() {
+        // The mixed-version mesh scenario: B has an identity key we
+        // already know. An OLD-build peer relays B's record with a
+        // newer last_seen but no node_pubkey field (its build
+        // predates the field, so it gossips None). The LWW win must
+        // NOT strip the key we know.
+        let mesh_id = MeshId::from_u128(1);
+        let hash = [7u8; 32];
+        let a = NodeId::from_u128(100);
+        let b = NodeId::from_u128(200);
+
+        let mut local = mesh_with(
+            vec![member(a, "A", 10), {
+                let mut m = member(b, "B", 5);
+                m.node_pubkey = Some(NodePubkey([0xAB; 32]));
+                m
+            }],
+            mesh_id,
+            hash,
+        );
+        let remote = mesh_with(vec![member(b, "B", 50)], mesh_id, hash);
+
+        let report = local.merge_from(a, &remote);
+        assert_eq!(report.updated, 1);
+        let merged = local.members.get(&b).unwrap();
+        assert_eq!(merged.last_seen, 50, "rest of the newer record adopted");
+        assert_eq!(
+            merged.node_pubkey,
+            Some(NodePubkey([0xAB; 32])),
+            "locally-known pubkey survives a None-bearing LWW win"
+        );
+    }
+
+    #[test]
+    fn merge_adopts_pubkey_from_newer_record_that_carries_one() {
+        let mesh_id = MeshId::from_u128(1);
+        let hash = [7u8; 32];
+        let a = NodeId::from_u128(100);
+        let b = NodeId::from_u128(200);
+
+        let mut local = mesh_with(vec![member(a, "A", 10), member(b, "B", 5)], mesh_id, hash);
+        let remote = mesh_with(
+            vec![{
+                let mut m = member(b, "B", 50);
+                m.node_pubkey = Some(NodePubkey([0xCD; 32]));
+                m
+            }],
+            mesh_id,
+            hash,
+        );
+
+        local.merge_from(a, &remote);
+        assert_eq!(
+            local.members.get(&b).unwrap().node_pubkey,
+            Some(NodePubkey([0xCD; 32]))
+        );
+    }
+
+    #[test]
+    fn member_record_wire_compat_with_pre_identity_builds() {
+        // New → old: a record without a key serializes WITHOUT the
+        // node_pubkey field, byte-identical to the pre-identity wire.
+        let m = member(NodeId::from_u128(1), "A", 10);
+        let json = serde_json::to_value(&m).unwrap();
+        assert!(
+            json.get("node_pubkey").is_none(),
+            "None must not appear on the wire"
+        );
+
+        // Old → new: pre-identity JSON (no node_pubkey key) parses
+        // with node_pubkey = None.
+        let back: MemberRecord = serde_json::from_value(json).unwrap();
+        assert!(back.node_pubkey.is_none());
+
+        // Round-trip with a key present.
+        let mut keyed = member(NodeId::from_u128(2), "B", 10);
+        keyed.node_pubkey = Some(NodePubkey([9u8; 32]));
+        let json = serde_json::to_string(&keyed).unwrap();
+        let back: MemberRecord = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.node_pubkey, Some(NodePubkey([9u8; 32])));
     }
 
     #[test]

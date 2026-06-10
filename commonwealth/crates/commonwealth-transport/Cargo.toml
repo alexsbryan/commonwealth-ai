@@ -1,0 +1,32 @@
+[package]
+name = "commonwealth-transport"
+description = "PeerTransport seam — resolves (peer, traffic class) to dialable endpoints; IP overlay today, iroh-ready"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+commonwealth-core = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+ed25519-dalek = { workspace = true }
+getrandom = "0.3"
+hex = "0.4"
+# EXPERIMENTAL (feature `iroh`): pinned to the final 1.0 release
+# candidate (2026-05-27) — the API surface is committed but the
+# stable release hasn't shipped. Off by default so workspace gates
+# never compile it; all iroh symbol use is confined to src/iroh.rs.
+iroh = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+rustls = { version = "0.23", default-features = false, features = ["ring"], optional = true }
+
+[features]
+iroh = ["dep:iroh", "dep:tokio", "dep:rustls"]
+
+[dev-dependencies]
+tokio = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

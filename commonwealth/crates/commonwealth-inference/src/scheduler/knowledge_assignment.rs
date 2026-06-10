@@ -665,6 +665,7 @@ mod tests {
         };
         use commonwealth_core::mesh::NodeStatus;
         MemberRecord {
+            node_pubkey: None,
             node_id: NodeId::from_u128(id),
             name: format!("node-{id}"),
             invited_by: NodeId::from_u128(1),
