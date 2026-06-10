@@ -1,6 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Parity tests for the CLI namespace collapse.
 //!
+//! Every verb probed here is part of the developer toolchain, which
+//! the default (end-user) build intercepts with an exit-2 pointer at
+//! `--features dev-tools` (see `DEV_VERBS` in main.rs). The binary
+//! under test is built with the same feature set as this test crate,
+//! so the suite only compiles when the verbs actually dispatch. The
+//! default build's intercept contract is covered by
+//! `default_build_gate.rs` (the `cfg(not(...))` twin of this gate).
+#![cfg(feature = "dev-tools")]
+//!
 //! Every command moved into the flat `sovereign <leaf>` namespace
 //! must ALSO keep working under its old `sovereign project <leaf>`
 //! / `sovereign atos <leaf>` / `sovereign reflect` form for the

@@ -506,8 +506,16 @@ mod tests {
         assert!(processed.contains("labyrinths"));
     }
 
+    /// `SOVEREIGN_GLINER_MODEL_DIR` is process-global state, and the
+    /// default test runner is parallel — the two tests below both
+    /// mutate it and race without this lock (observed: the first
+    /// test reading the second's value mid-run). A poisoned lock is
+    /// fine to reuse: the var is reset at the top of each test.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn models_root_honors_env_var() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         std::env::set_var("SOVEREIGN_GLINER_MODEL_DIR", "/tmp/custom-models");
         let root = models_root();
         assert_eq!(root, PathBuf::from("/tmp/custom-models"));
@@ -516,6 +524,7 @@ mod tests {
 
     #[test]
     fn resolve_model_paths_errors_clearly_when_missing() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         std::env::set_var("SOVEREIGN_GLINER_MODEL_DIR", "/tmp/definitely-not-here");
         let err = resolve_model_paths("gliner_small-v2.1");
         assert!(err.is_err());

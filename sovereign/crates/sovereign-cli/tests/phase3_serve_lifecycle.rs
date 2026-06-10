@@ -45,6 +45,12 @@ fn stderr(out: &Output) -> String {
 /// and the stop instructions. This is the user-facing contract that
 /// the Phase 3 plan promised — if either string disappears, users
 /// won't discover the new mode.
+/// `serve` is a developer-toolchain verb — the default build
+/// intercepts it with the `--features dev-tools` pointer before help
+/// dispatch runs (see `DEV_VERBS` in main.rs), so this contract only
+/// exists in dev builds. The intercept itself is covered by
+/// `default_build_gate.rs`.
+#[cfg(feature = "dev-tools")]
 #[test]
 fn serve_help_documents_background_flag() {
     let out = run(&["serve", "--help"]);
@@ -86,6 +92,9 @@ fn stop_help_documents_pid_file() {
 /// in `init.rs` should forward --help directly to cmd_init, which
 /// short-circuits via util::help::wants_help. If we accidentally
 /// trigger the spawn path on --help, this test will hang or fail.
+/// `init` is a developer-toolchain verb — dev builds only, same as
+/// `serve_help_documents_background_flag` above.
+#[cfg(feature = "dev-tools")]
 #[test]
 fn init_help_short_circuits_without_spawning() {
     let out = run(&["init", "--help"]);

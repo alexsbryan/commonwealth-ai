@@ -9,6 +9,12 @@
 //! These tests spawn the actual `sovereign-cli` binary so the
 //! retirement banners are exercised end-to-end. Style mirrors
 //! `aliases.rs` (sibling test file).
+//!
+//! `project` / `atos` are developer-toolchain verbs — the default
+//! build intercepts them before the retirement shim runs (see
+//! `DEV_VERBS` in main.rs), so this suite only applies to dev builds.
+//! The intercept itself is covered by `default_build_gate.rs`.
+#![cfg(feature = "dev-tools")]
 
 use std::process::{Command, Output};
 

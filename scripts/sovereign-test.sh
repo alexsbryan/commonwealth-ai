@@ -18,6 +18,13 @@
 # Treesitter is enabled explicitly (`-F corpus-engine/treesitter`)
 # because sovereign-test ran corpus-engine with --features treesitter
 # before the merge and we don't want test coverage to silently shrink.
+# `sovereign-cli/dev-tools` is enabled for the same reason: the dev
+# verbs (and their integration suites — aliases, phase3 serve/init,
+# phase6 retirement) are feature-gated out of the default end-user
+# build, and this script tests the developer build. The default
+# build's intercept contract is covered separately by
+# `sovereign-cli/tests/default_build_gate.rs` under plain
+# `cargo test -p sovereign-cli`.
 #
 # Definition-of-done. Every feature push expects:
 #   `./scripts/sovereign-test.sh --human` → "all green" (or
@@ -91,6 +98,24 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# `sovereign-cli/dev-tools` re-enables the feature-gated dev-verb
+# suites (aliases, phase3 serve/init, phase6 retirement). The
+# `pkg/feature` syntax is an ERROR (not a no-op) when the package is
+# outside the `-p` selection, and sovereign-cli is a leaf crate no one
+# depends on — so only add it when sovereign-cli is actually selected.
+if [[ -n "$EXTRA_FEATURES" ]]; then
+    if [[ ${#PACKAGES[@]} -eq 0 ]]; then
+        EXTRA_FEATURES+=",sovereign-cli/dev-tools"
+    else
+        for p in "${PACKAGES[@]}"; do
+            if [[ "$p" == "sovereign-cli" ]]; then
+                EXTRA_FEATURES+=",sovereign-cli/dev-tools"
+                break
+            fi
+        done
+    fi
+fi
 
 # Build cargo argv. `--workspace` covers every member; `-p` filters
 # stack on top so `--package foo --package bar` runs only those.

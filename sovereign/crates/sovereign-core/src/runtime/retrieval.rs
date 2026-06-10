@@ -3172,9 +3172,42 @@ impl Runtime {
             let conv_briefing = self
                 .build_conv_briefing_block(&all_chunks, &display_categories)
                 .await;
+            // Phase 3 (budget-sensor redesign): mirror the KQ path's
+            // ctx-aware retrieval ceiling — this path previously
+            // passed EXPANDED_KNOWLEDGE_CHARS unconditionally, blind
+            // to the slot's window. Reserve the response budget plus
+            // last turn's REAL measured system size (memo; 4096
+            // static cushion on a conversation's first turn), then
+            // hand the formatter the tighter of the two caps.
+            let knowledge_char_budget = {
+                let mut budget = EXPANDED_KNOWLEDGE_CHARS;
+                if let Some(n_ctx) = self.inference.effective_context_size() {
+                    let reserved_output = self.inference_config.max_tokens as u32;
+                    let system_overhead = self
+                        .last_assembly(&context.conversation.id)
+                        .map(|m| m.system_tokens.saturating_add(256))
+                        .unwrap_or(4096);
+                    let available_chars = n_ctx
+                        .saturating_sub(reserved_output)
+                        .saturating_sub(system_overhead)
+                        .saturating_mul(4) as usize;
+                    if available_chars < budget {
+                        tracing::info!(
+                            n_ctx,
+                            reserved_output,
+                            system_overhead,
+                            static_budget = budget,
+                            ctx_aware_budget = available_chars,
+                            "deep path: ctx-aware retrieval budget tighter than static cap"
+                        );
+                        budget = available_chars;
+                    }
+                }
+                budget
+            };
             let doc_context = format_scored_chunks_with_kinds(
                 &all_chunks,
-                EXPANDED_KNOWLEDGE_CHARS,
+                knowledge_char_budget,
                 Some(&kinds),
                 if contested_titles.is_empty() {
                     None
@@ -3504,6 +3537,30 @@ impl Runtime {
         // carry 100-500 tokens.
         for mem in &context.memories {
             total = total.saturating_add(self.inference.count_tokens(&mem.content));
+        }
+
+        // Phase 2 (budget-sensor redesign): the component walk above
+        // sees only history + memories + preamble — roughly a third
+        // of the real prompt. System base, retrieval bundle, and the
+        // response reservation are invisible to it, which is how an
+        // 8k window could hard-fail at the engine while this sensor
+        // read "no pressure". The assembly memo records what the LAST
+        // turn's assembly actually demanded (pre-trim, including the
+        // reservation); take it as a floor. First turn of a
+        // conversation has no memo — one turn of the old blindness,
+        // then converged.
+        let real_floor = self
+            .last_assembly(&context.conversation.id)
+            .map(|m| m.input_tokens().saturating_add(m.reserved))
+            .unwrap_or(0);
+        if real_floor > total {
+            tracing::debug!(
+                component_estimate = total,
+                real_floor,
+                ctx_size,
+                "compaction sensor: raising estimate to last turn's measured demand"
+            );
+            total = real_floor;
         }
 
         (total > threshold, total, ctx_size)

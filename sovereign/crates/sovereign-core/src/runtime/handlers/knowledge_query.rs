@@ -586,15 +586,27 @@ impl Runtime {
         let original_budget = knowledge_char_budget;
         if let Some(n_ctx) = self.inference.effective_context_size() {
             let reserved_output = self.inference_config.max_tokens as u32;
+            // Phase 3 (budget-sensor redesign): when the assembly memo
+            // has last turn's REAL system-message size for this
+            // conversation, use it instead of the static cushion —
+            // the 4096 guess under-reserves on long threads (history
+            // + memories ride the system message and grow per turn)
+            // and over-reserves on fresh ones. Small pad on top for
+            // turn-over-turn growth; static cushion remains the
+            // first-turn fallback.
+            let system_overhead = self
+                .last_assembly(&context.conversation.id)
+                .map(|m| m.system_tokens.saturating_add(256))
+                .unwrap_or(SYSTEM_OVERHEAD_TOKEN_RESERVE);
             let available_tokens = n_ctx
                 .saturating_sub(reserved_output)
-                .saturating_sub(SYSTEM_OVERHEAD_TOKEN_RESERVE);
+                .saturating_sub(system_overhead);
             let available_chars = available_tokens.saturating_mul(CHARS_PER_TOKEN) as usize;
             if available_chars < knowledge_char_budget {
                 tracing::info!(
                     n_ctx,
                     reserved_output,
-                    system_overhead_reserve = SYSTEM_OVERHEAD_TOKEN_RESERVE,
+                    system_overhead_reserve = system_overhead,
                     chunk_count = chunks.len(),
                     static_budget = knowledge_char_budget,
                     ctx_aware_budget = available_chars,
@@ -833,14 +845,20 @@ impl Runtime {
         // (note 2cd9227e). Degradation ladder in `prompt_budget`;
         // the note rides the plan into message metadata.
         let prompt_budget_note = match self.inference.effective_context_size() {
-            Some(ctx) => match crate::runtime::prompt_budget::enforce(
-                &mut request,
-                &|s| self.inference.count_tokens(s),
-                ctx,
-            ) {
-                crate::runtime::prompt_budget::BudgetOutcome::Trimmed { note } => Some(note),
-                _ => None,
-            },
+            Some(ctx) => {
+                let (outcome, measured) = crate::runtime::prompt_budget::enforce(
+                    &mut request,
+                    &|s| self.inference.count_tokens(s),
+                    ctx,
+                );
+                // Phase 2: record pre-trim DEMAND for the compaction
+                // sensor + next-turn allocator.
+                self.record_assembly(&context.conversation.id, measured);
+                match outcome {
+                    crate::runtime::prompt_budget::BudgetOutcome::Trimmed { note } => Some(note),
+                    _ => None,
+                }
+            }
             None => None,
         };
 

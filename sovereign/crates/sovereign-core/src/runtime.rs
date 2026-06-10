@@ -856,6 +856,16 @@ pub struct Runtime {
     pub skills: Arc<SkillRegistry>,
     pub approval: Arc<dyn ApprovalChannel>,
     pub inference_config: InferenceConfig,
+    /// Per-conversation record of the last turn's REAL assembled
+    /// prompt sizes, written by the prompt-budget guard at the two
+    /// request-construction sites. Phase 2 of the budget-sensor
+    /// redesign: `estimate_compaction_pressure` uses it as a floor
+    /// (its component estimate sees ~⅓ of the prompt), and the
+    /// Phase-3 allocator derives next-turn knowledge/history budgets
+    /// from it. Bounded (cleared past 512 conversations); never
+    /// persisted — a fresh process re-learns within one turn.
+    pub(crate) assembly_memo:
+        std::sync::RwLock<std::collections::HashMap<String, prompt_budget::MeasuredAssembly>>,
     pub corpus_engine: Option<Arc<corpus_engine::CorpusEngine>>,
     /// Optional structural link graph for a corpus that exposes one
     /// (today: Wikipedia, via metadata `outgoing_links` /
@@ -1026,6 +1036,44 @@ impl Runtime {
         Some(tag)
     }
 
+    /// Record a turn's measured assembly for this conversation —
+    /// Phase 2 of the budget-sensor redesign. Bounded: clears the map
+    /// past 512 conversations (per-process working set is far below
+    /// this; the memo re-learns within one turn).
+    pub(crate) fn record_assembly(
+        &self,
+        conversation_id: &str,
+        measured: prompt_budget::MeasuredAssembly,
+    ) {
+        let mut memo = self
+            .assembly_memo
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+        if memo.len() >= 512 && !memo.contains_key(conversation_id) {
+            memo.clear();
+        }
+        memo.insert(conversation_id.to_string(), measured);
+    }
+
+    /// Last turn's real assembled sizes for this conversation, if the
+    /// budget guard has run on it this process lifetime.
+    pub(crate) fn last_assembly(
+        &self,
+        conversation_id: &str,
+    ) -> Option<prompt_budget::MeasuredAssembly> {
+        self.assembly_memo
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(conversation_id)
+            .copied()
+    }
+
+    /// Phase-3 allocation for this conversation's NEXT assembly,
+    /// derived from the previous turn's measured demand.
+    pub(crate) fn allocation_for(&self, conversation_id: &str) -> prompt_budget::Allocation {
+        prompt_budget::allocate(self.last_assembly(conversation_id).as_ref())
+    }
+
     pub fn new(
         inference: Arc<dyn InferenceProvider>,
         router: Box<dyn Router>,
@@ -1048,6 +1096,7 @@ impl Runtime {
             corpus_engine: None,
             wikipedia_graph: None,
             note_store: None,
+            assembly_memo: std::sync::RwLock::new(std::collections::HashMap::new()),
             compaction: None,
             conv_tiered_reader: None,
             mesh_knowledge: None,
@@ -2939,8 +2988,16 @@ impl Runtime {
         // degradation ladder; the note lands in message metadata.
         let budget_note = match self.inference.effective_context_size() {
             Some(ctx) => {
-                match prompt_budget::enforce(&mut request, &|s| self.inference.count_tokens(s), ctx)
-                {
+                let (outcome, measured) = prompt_budget::enforce(
+                    &mut request,
+                    &|s| self.inference.count_tokens(s),
+                    ctx,
+                );
+                // Phase 2: the memo records pre-trim DEMAND so the
+                // compaction sensor and next-turn allocator see what
+                // assembly actually wanted.
+                self.record_assembly(conversation_id, measured);
+                match outcome {
                     prompt_budget::BudgetOutcome::Trimmed { note } => Some(note),
                     _ => None,
                 }

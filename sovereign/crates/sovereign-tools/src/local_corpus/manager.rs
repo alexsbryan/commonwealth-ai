@@ -190,6 +190,54 @@ pub struct LocalCorpusManager {
     /// the plan; tests override via `set_auto_rebuild_debounce` to
     /// keep them fast.
     auto_rebuild_debounce: Arc<std::sync::RwLock<std::time::Duration>>,
+    /// Corpus ids with a [`Self::ingest`] call currently in flight,
+    /// keyed to a count (concurrent ingests of one corpus are legal —
+    /// they share the engine-side cancellation flag). [`Self::remove`]
+    /// awaits this reaching zero (alongside the engine's own
+    /// cancellation registry) before wiping: the engine's
+    /// `remove_corpus_everything` contract requires the in-flight
+    /// writer to exit first, otherwise it recreates index files after
+    /// the delete — or the wipe itself fails under the writer's feet
+    /// (observed as a 500 from the watched-folder DELETE route when a
+    /// register's detached initial ingest was still building).
+    ///
+    /// `std::sync::RwLock`: the guard increments/decrements in sync
+    /// Drop code, and critical sections are a single map op.
+    active_ingests: Arc<std::sync::RwLock<HashMap<String, usize>>>,
+}
+
+/// RAII ticket marking one in-flight `ingest()` for `corpus_id` in
+/// [`LocalCorpusManager::active_ingests`]. Created before the config
+/// precondition check so `remove()` can never observe "no ticket" for
+/// an ingest call that later writes.
+struct IngestTicket {
+    map: Arc<std::sync::RwLock<HashMap<String, usize>>>,
+    corpus_id: String,
+}
+
+impl IngestTicket {
+    fn acquire(map: &Arc<std::sync::RwLock<HashMap<String, usize>>>, corpus_id: &str) -> Self {
+        *map.write()
+            .expect("active_ingests poisoned")
+            .entry(corpus_id.to_string())
+            .or_insert(0) += 1;
+        Self {
+            map: map.clone(),
+            corpus_id: corpus_id.to_string(),
+        }
+    }
+}
+
+impl Drop for IngestTicket {
+    fn drop(&mut self) {
+        let mut map = self.map.write().expect("active_ingests poisoned");
+        if let Some(count) = map.get_mut(&self.corpus_id) {
+            *count -= 1;
+            if *count == 0 {
+                map.remove(&self.corpus_id);
+            }
+        }
+    }
 }
 
 impl LocalCorpusManager {
@@ -263,6 +311,7 @@ impl LocalCorpusManager {
             auto_rebuild_debounce: Arc::new(std::sync::RwLock::new(
                 std::time::Duration::from_secs(300),
             )),
+            active_ingests: Arc::new(std::sync::RwLock::new(HashMap::new())),
         })
     }
 
@@ -796,7 +845,48 @@ impl LocalCorpusManager {
     /// Drop a corpus: removes the engine index, deletes persisted
     /// config, deletes the corresponding row in StateStore (if any).
     /// Idempotent.
+    ///
+    /// Honors the contract documented on
+    /// `CorpusEngine::remove_corpus_everything`: an in-flight ingest is
+    /// cancelled and awaited BEFORE the wipe. Ordering:
+    ///
+    /// 1. Unlist the config first, so an ingest that hasn't reached its
+    ///    registration check yet (e.g. the detached initial-ingest task
+    ///    the watched-folder register route spawns) fails with NotFound
+    ///    instead of recreating the index after the wipe.
+    /// 2. Fire cancellation and poll both in-flight signals — the
+    ///    manager-level [`IngestTicket`] (covers staging, which runs
+    ///    before the engine pipeline registers its flag) and the
+    ///    engine's cancellation registry (covers pipeline work from any
+    ///    entry point, e.g. sweep workers). Cancel is re-fired each
+    ///    poll because the engine registers its flag only once the
+    ///    pipeline starts.
+    /// 3. Wipe.
     pub async fn remove(&self, id: &str) -> Result<()> {
+        self.corpora.write().await.remove(id);
+
+        const REMOVE_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+        let deadline = tokio::time::Instant::now() + REMOVE_WAIT;
+        loop {
+            let manager_busy = self
+                .active_ingests
+                .read()
+                .expect("active_ingests poisoned")
+                .contains_key(id);
+            let engine_busy = self.engine.cancel_registry().get(id).is_some();
+            if !manager_busy && !engine_busy {
+                break;
+            }
+            self.engine.cancel_corpus_ingest(id);
+            if tokio::time::Instant::now() >= deadline {
+                return Err(Error::Execution(format!(
+                    "remove {id}: in-flight ingest did not stop within \
+                     {REMOVE_WAIT:?} after cancellation — retry the remove"
+                )));
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+
         self.engine
             .remove_corpus_everything(id)
             .map_err(|e| Error::Execution(format!("remove index: {e}")))?;
@@ -806,7 +896,6 @@ impl LocalCorpusManager {
             std::fs::remove_file(&path)
                 .map_err(|e| Error::Execution(format!("remove config: {e}")))?;
         }
-        self.corpora.write().await.remove(id);
         Ok(())
     }
 
@@ -861,6 +950,10 @@ impl LocalCorpusManager {
         with_ocr: Option<bool>,
         progress: Option<ProgressCallback>,
     ) -> Result<IngestStats> {
+        // Ticket BEFORE the registration check: `remove()` unlists the
+        // config and then awaits ticket absence, so an ingest must
+        // never hold a config without holding a ticket.
+        let _ticket = IngestTicket::acquire(&self.active_ingests, id);
         let mut config = self
             .get(id)
             .await

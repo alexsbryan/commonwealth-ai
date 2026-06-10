@@ -320,7 +320,7 @@ mod relay_tests {
     #[test]
     fn classifies_tailscale_cgnat_v4() {
         // Real Tailscale-assigned: 100.64.0.2
-        let ip = IpAddr::V4(Ipv4Addr::new(100, 104, 36, 28));
+        let ip = IpAddr::V4(Ipv4Addr::new(100, 64, 0, 2));
         assert_eq!(classify_ip(&ip), "tailscale");
         // Boundary: 100.64.0.1 is the lowest CGNAT addr.
         assert_eq!(
@@ -372,7 +372,7 @@ mod relay_tests {
 
     #[test]
     fn formats_v4_relay_fragment_without_brackets() {
-        let ip = IpAddr::V4(Ipv4Addr::new(100, 104, 36, 28));
+        let ip = IpAddr::V4(Ipv4Addr::new(100, 64, 0, 2));
         assert_eq!(format_relay_fragment(&ip, 9742), "100.64.0.2:9742");
     }
 
