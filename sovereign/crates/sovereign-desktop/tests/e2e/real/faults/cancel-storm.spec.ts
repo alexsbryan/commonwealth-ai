@@ -10,15 +10,14 @@ test("five rapid send/cancel cycles, then a clean turn", async ({
   sovereignPage: page,
   bridge,
 }) => {
-  // KNOWN BUG (sovereign todo note, 2026-06-10): cancelled partial
-  // outputs accumulate as full history turns and prompt assembly
-  // hard-fails at the context window instead of compacting — after
-  // the storm, EVERY turn in this conversation errors "Prompt too
-  // long … Shorten the conversation." This spec asserts the correct
-  // contract (the conversation stays usable) and is marked
-  // test.fail() until compaction/trimming lands; Playwright alerts
-  // the moment it starts passing.
-  test.fail();
+  // History (note 2cd9227e): before the 2026-06-10 cancel fix this
+  // spec bricked its conversation — cancel was a runtime no-op (the
+  // session token was discarded), so each "cancelled" essay ran to
+  // completion and persisted whole, overflowing the context window
+  // until every turn failed "Prompt too long". With cancel live,
+  // cancelled turns persist only their small partials and the
+  // conversation stays usable. The prompt-budget sensor redesign
+  // (components summed vs ctx) remains a separate captured todo.
   test.setTimeout(480_000);
   await realBootToChat(page);
   await page.locator(".new-btn").click();

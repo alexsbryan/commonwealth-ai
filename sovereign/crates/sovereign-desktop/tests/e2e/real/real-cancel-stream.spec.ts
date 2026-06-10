@@ -57,13 +57,12 @@ test("stop button cancels a live stream; session recovers for the next turn", as
     );
     return (completes[completes.length - 1].payload as { message_id: string }).message_id;
   });
-  // Integrity holds for the partial text. KNOWN GAP (sovereign todo
-  // note, 2026-06-09): a user-cancelled turn reports the provider's
-  // finish_reason ("stop") instead of "cancelled" — ui.rs documents a
-  // "cancelled" value but the engine's frame loop never emits it, so
-  // the glassbox chip can't distinguish a cancel from a natural stop.
-  // When that lands, flip this to { expectFinish: "cancelled" }.
-  await assertTurnInvariants(page, bridge, cancelledId, { expectFinish: null });
+  // Integrity holds for the partial text, and the glassbox reports the
+  // truth: the turn was cancelled, not naturally stopped. (Fixed
+  // 2026-06-10 — the session cancel token was previously discarded by
+  // the runtime, so cancel was a no-op and finish_reason came from the
+  // provider's natural stop; note df66cb8d.)
+  await assertTurnInvariants(page, bridge, cancelledId, { expectFinish: "cancelled" });
 
   // Recovery: a fresh turn in the same conversation completes.
   const nextId = await sendAndAwaitTurn(page, "Reply with the single word: recovered");

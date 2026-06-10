@@ -1174,8 +1174,19 @@ Reply with JSON only:
         let prompt = Self::build_pass2_tool_selection_prompt(message, context, available_tools);
         let tool_ids: Vec<String> = available_tools.iter().map(|t| t.id.clone()).collect();
         let raw = self.classify_call_tool_json(prompt, &tool_ids).await?;
-        Ok(Self::parse_tool_selection(&raw, &tool_ids)
-            .unwrap_or_else(|| available_tools[0].id.clone()))
+        Ok(Self::parse_tool_selection(&raw, &tool_ids).unwrap_or_else(|| {
+            // Parse failure must not land on a high-impact tool by
+            // registry accident — `tools[0]` happened to be `shell`,
+            // which is the worst possible "didn't understand you"
+            // default (note a6193c42). Prefer the first non-shell
+            // tool; shell only when it is genuinely the only option.
+            available_tools
+                .iter()
+                .find(|t| t.id.as_str() != "shell")
+                .unwrap_or(&available_tools[0])
+                .id
+                .clone()
+        }))
     }
 
     /// Called when Pass 1 returns SIMPLE. Runs a fast self-assessment to decide
@@ -1339,33 +1350,44 @@ Reply with JSON only:
     /// the rare case the schema constraint is bypassed (e.g. legacy
     /// providers without `JsonConstraint` wired in).
     fn parse_tool_selection(raw: &str, valid_ids: &[String]) -> Option<String> {
-        let after_think =
-            if let (Some(start), Some(end)) = (raw.find("<think>"), raw.find("</think>")) {
-                if end > start {
-                    &raw[end + "</think>".len()..]
-                } else {
-                    raw
-                }
-            } else {
-                raw
-            };
-        let cleaned = after_think
-            .trim()
-            .trim_start_matches("```json")
-            .trim_start_matches("```")
-            .trim_end_matches("```")
-            .trim();
-
         #[derive(serde::Deserialize)]
         struct ToolSelection {
             tool: String,
         }
-        let parsed: ToolSelection = serde_json::from_str(cleaned).ok()?;
-        if valid_ids.iter().any(|id| id == &parsed.tool) {
-            Some(parsed.tool)
-        } else {
-            None
-        }
+        let try_parse = |s: &str| -> Option<String> {
+            let cleaned = s
+                .trim()
+                .trim_start_matches("```json")
+                .trim_start_matches("```")
+                .trim_end_matches("```")
+                .trim();
+            // Tolerate prose around the object: parse from the first
+            // '{' through the first balanced close.
+            let start = cleaned.find('{')?;
+            let candidate = &cleaned[start..];
+            let end = candidate.find('}')? + 1;
+            let parsed: ToolSelection = serde_json::from_str(&candidate[..end]).ok()?;
+            valid_ids.contains(&parsed.tool).then_some(parsed.tool)
+        };
+
+        // The constrained JSON can land in three places depending on
+        // how the model handled its think budget: after the think
+        // block (the common case), INSIDE the think block (observed
+        // 2026-06-10 — `<think>{"tool": "search"}</think>` followed by
+        // prose; the old after-think-only parser missed it, fell back
+        // to tools[0], and routed a memory question to the SHELL tool;
+        // harness note a6193c42), or with no think block at all.
+        let think = raw
+            .find("<think>")
+            .zip(raw.find("</think>"))
+            .filter(|(s, e)| e > s);
+        let after_think = think.map(|(_, e)| &raw[e + "</think>".len()..]);
+        let inside_think = think.map(|(s, e)| &raw[s + "<think>".len()..e]);
+
+        after_think
+            .and_then(try_parse)
+            .or_else(|| inside_think.and_then(try_parse))
+            .or_else(|| try_parse(raw))
     }
 
     /// Parse a letter response (A/B/C) from the model.
@@ -1407,13 +1429,22 @@ Reply with JSON only:
         match category {
             "deep" => Intent::DeepQuery,
             "knowledge" => Intent::KnowledgeQuery,
-            "action" => {
-                let tool = available_tools
-                    .first()
-                    .map(|t| t.id.clone())
-                    .unwrap_or_default();
-                Intent::SimpleAction { tool }
-            }
+            // Coarse "action" with NO tool-selection pass behind it.
+            // Binding to `available_tools.first()` here routed a plain
+            // factual question into `SimpleAction { tool: "shell" }`
+            // purely from registry ordering — the word "action" in the
+            // classifier's PROSE ("…no action needed") is enough to
+            // land in this arm (harness note a6193c42, 2026-06-10).
+            // Only commit to SimpleAction when the tool is unambiguous
+            // (exactly one registered); otherwise hand the turn to the
+            // agentic path, whose planner picks tools deliberately and
+            // whose approval gates apply.
+            "action" => match available_tools {
+                [only] => Intent::SimpleAction {
+                    tool: only.id.clone(),
+                },
+                _ => Intent::ComplexTask,
+            },
             "complex" => Intent::ComplexTask,
             "continuation" => Intent::ComplexTask,
             _ => Intent::SimpleQuery,
@@ -1641,10 +1672,28 @@ impl Router for LlmRouter {
                         // relative `tool_sim > top_sim` rule keeps this
                         // targeted — a genuine knowledge question matches a
                         // knowledge exemplar best and is unaffected.
+                        // "Clearly out-matches" needs teeth: a bare
+                        // `tool_sim > top_sim` let `decision_log`
+                        // (tool_sim=0.590) hijack a weak ConationQuery
+                        // match (top_sim=0.579) on the trivial request
+                        // "Reply with the single word: lifecycle" —
+                        // 0.011 of cosine noise routed an echo into
+                        // the agentic planner (harness note 410db385,
+                        // 2026-06-10). Require BOTH a floor (the tool
+                        // match must be strong in absolute terms) and
+                        // a margin (decisively above the exemplar) —
+                        // the legitimate trigger class ("compute the
+                        // land-value-tax rate" vs parcel_analytics)
+                        // clears both comfortably.
+                        const TOOL_GATE_MIN_SIM: f32 = 0.65;
+                        const TOOL_GATE_MARGIN: f32 = 0.05;
                         let tool_match = if intent_is_toolless(&verdict.intent) {
                             self.query_best_tool_sim(&query_embedding, available_tools)
                                 .await
-                                .filter(|(_, tool_sim)| *tool_sim > verdict.top_sim)
+                                .filter(|(_, tool_sim)| {
+                                    *tool_sim >= TOOL_GATE_MIN_SIM
+                                        && *tool_sim > verdict.top_sim + TOOL_GATE_MARGIN
+                                })
                         } else {
                             None
                         };
@@ -2089,6 +2138,33 @@ mod tests {
             LlmRouter::parse_intent("", &[]),
             Intent::SimpleQuery
         ));
+    }
+
+    /// The constrained JSON can land INSIDE the think block with prose
+    /// after it — the exact output that routed "What did you mention
+    /// earlier about retrieval?" to the shell tool when the parser only
+    /// looked after `</think>` (note a6193c42, 2026-06-10).
+    #[test]
+    fn parse_tool_selection_reads_json_inside_think_block() {
+        let valid = vec!["search".to_string(), "shell".to_string()];
+        let raw = "<think>{\"tool\": \"search\"}\n</think>\n\nBased on the \
+                   conversation context, I need to determine what was \
+                   discussed about retrieval earlier in this session.";
+        assert_eq!(
+            LlmRouter::parse_tool_selection(raw, &valid),
+            Some("search".to_string())
+        );
+    }
+
+    /// Prose wrapped around the object must not defeat the parse.
+    #[test]
+    fn parse_tool_selection_tolerates_surrounding_prose() {
+        let valid = vec!["search".to_string()];
+        let raw = "The best tool here is {\"tool\": \"search\"} given the ask.";
+        assert_eq!(
+            LlmRouter::parse_tool_selection(raw, &valid),
+            Some("search".to_string())
+        );
     }
 
     #[test]

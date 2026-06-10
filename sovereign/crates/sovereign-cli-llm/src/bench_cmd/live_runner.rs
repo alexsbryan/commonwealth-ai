@@ -80,24 +80,53 @@ pub async fn run_live(session: &ChatSession, corpus: &str, question: &str) -> Li
     };
 
     // Recover retrieved chunk text from the persisted assistant message.
-    let retrieved_chunk_texts = session
+    //
+    // FULL text, not the metadata snippet: `project_retrieved_chunks`
+    // truncates `snippet` to 200 chars, and the deterministic chaos
+    // checks (`citation_faithful`, `verify_grounding`) substring-match
+    // signature quotes against these texts — against snippets, every
+    // ProvenanceTrap quote missed and the direct lane scored
+    // citation-fidelity 0.00 while the bridge lane (which resolves
+    // full text via `read_get_chunk`) scored 0.75 on identical
+    // behaviour (2026-06-10 transport-delta finding). Resolve each
+    // (corpus_id, chunk_id) through the corpus index, mirroring the
+    // bridge; fall back to the snippet only when resolution fails.
+    let chunk_refs: Vec<serde_json::Value> = session
         .store
         .get_conversation(&conv_id)
         .await
         .ok()
         .and_then(|c| c.messages.last().and_then(|m| m.metadata.clone()))
         .and_then(|m| m.get("retrieved_chunks").and_then(|v| v.as_array()).cloned())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|c| {
-                    ["text", "content", "passage_preview", "preview", "snippet"]
-                        .iter()
-                        .find_map(|k| c.get(*k).and_then(|v| v.as_str()))
-                        .map(str::to_string)
-                })
-                .collect::<Vec<_>>()
-        })
         .unwrap_or_default();
+    let mut retrieved_chunk_texts = Vec::with_capacity(chunk_refs.len());
+    for c in &chunk_refs {
+        let resolved = match (
+            c.get("corpus_id").and_then(|v| v.as_str()),
+            c.get("chunk_id").and_then(|v| v.as_u64()),
+        ) {
+            (Some(cid), Some(chid)) => match session.corpus_engine.open_index_for_corpus(cid).await
+            {
+                Ok(index) => index
+                    .chunks_by_ids(&[chid])
+                    .await
+                    .ok()
+                    .and_then(|mut rows| rows.pop())
+                    .map(|row| row.content),
+                Err(_) => None,
+            },
+            _ => None,
+        };
+        let text = resolved.or_else(|| {
+            ["text", "content", "passage_preview", "preview", "snippet"]
+                .iter()
+                .find_map(|k| c.get(*k).and_then(|v| v.as_str()))
+                .map(str::to_string)
+        });
+        if let Some(t) = text {
+            retrieved_chunk_texts.push(t);
+        }
+    }
 
     let visible = strip_think(&raw);
     LiveAnswer { visible, retrieved_chunk_texts }

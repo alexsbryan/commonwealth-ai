@@ -269,6 +269,47 @@
   // no semantic state — only output-smoothing.
   let wordBuffer = new WordBufferedStream();
 
+  // Early-arrival capture window (see the message-chunk listener):
+  // true while a `send_message_stream` invoke is in flight, during
+  // which stream events are queued here instead of hitting the
+  // machine, then replayed for the started message id once SEND_START
+  // has registered it. Bounded implicitly — the window is one IPC
+  // round-trip.
+  let earlyCapture = false;
+  let earlyEvents: Array<
+    | { kind: "chunk"; payload: MessageChunkPayload }
+    | { kind: "complete"; payload: MessageCompletePayload }
+  > = [];
+
+  /** Replay events captured during the invoke round-trip for the
+   *  now-known message id, through the exact same path live events
+   *  take. Events for other ids are dropped (same phantom-id policy
+   *  as the machine). */
+  function flushEarlyEvents(messageId: string) {
+    earlyCapture = false;
+    const queued = earlyEvents;
+    earlyEvents = [];
+    for (const ev of queued) {
+      if (ev.payload.message_id !== messageId) continue;
+      if (ev.kind === "chunk") {
+        const flushed = wordBuffer.push(ev.payload.chunk);
+        if (flushed !== null) {
+          send({ type: "MESSAGE_CHUNK", messageId, text: flushed });
+        }
+      } else {
+        const pendingText = wordBuffer.flush();
+        send({
+          type: "MESSAGE_COMPLETE",
+          messageId,
+          fullText: ev.payload.full_text,
+          pendingText,
+          metadata: ev.payload.metadata,
+        });
+      }
+    }
+    scrollToBottom();
+  }
+
   // Unified loading flag surfaced to the template. Three contributors:
   //   • `preparing` — between user click and `send_message_stream`
   //     resolving (cold-daemon round-trip; without this the surface
@@ -483,6 +524,20 @@
       "message-chunk",
       (event) => {
         const p = event.payload;
+        // Early-arrival capture: a fast handler (e.g. ConationQuery's
+        // canned empty-state reply) can emit its chunks — even its
+        // complete — while `send_message_stream`'s invoke response is
+        // still in flight, BEFORE the machine learns the message id
+        // via SEND_START. Without this buffer those events were
+        // destroyed (wordBuffer.reset() after the await) or dropped
+        // as phantom ids by the chaos-hardened machine, leaving a
+        // spinner and no assistant bubble (harness note 410db385).
+        // Real models mask the race behind first-token latency;
+        // instant handlers expose it.
+        if (earlyCapture) {
+          earlyEvents.push({ kind: "chunk", payload: p });
+          return;
+        }
         const flushed = wordBuffer.push(p.chunk);
         if (flushed !== null) {
           send({ type: "MESSAGE_CHUNK", messageId: p.message_id, text: flushed });
@@ -495,6 +550,10 @@
       "message-complete",
       (event) => {
         const p = event.payload;
+        if (earlyCapture) {
+          earlyEvents.push({ kind: "complete", payload: p });
+          return;
+        }
         const pendingText = wordBuffer.flush();
         send({
           type: "MESSAGE_COMPLETE",
@@ -954,9 +1013,19 @@
       const contextChunks = focused
         ? [{ corpus_id: focused.corpusId, chunk_id: focused.chunkId }]
         : undefined;
-      const started = await sendMessageStream(text, convoId, contextChunks);
       wordBuffer.reset();
+      earlyCapture = true;
+      earlyEvents = [];
+      let started;
+      try {
+        started = await sendMessageStream(text, convoId, contextChunks);
+      } catch (e) {
+        earlyCapture = false;
+        earlyEvents = [];
+        throw e;
+      }
       send({ type: "SEND_START", assistantMessageId: started.message_id });
+      flushEarlyEvents(started.message_id);
       scrollToBottom();
       // Streaming continues via MESSAGE_CHUNK / MESSAGE_COMPLETE.
     } catch (e) {
@@ -1037,11 +1106,20 @@
       const contextChunks = focused
         ? [{ corpus_id: focused.corpusId, chunk_id: focused.chunkId }]
         : undefined;
-      const started =
-        tryResume ?? (await sendMessageStream(text, convoId, contextChunks));
-
       wordBuffer.reset();
+      earlyCapture = true;
+      earlyEvents = [];
+      let started;
+      try {
+        started =
+          tryResume ?? (await sendMessageStream(text, convoId, contextChunks));
+      } catch (e) {
+        earlyCapture = false;
+        earlyEvents = [];
+        throw e;
+      }
       send({ type: "SEND_START", assistantMessageId: started.message_id });
+      flushEarlyEvents(started.message_id);
       scrollToBottom();
     } catch (e) {
       send({ type: "SEND_FAILED", error: String(e) });
