@@ -2993,31 +2993,34 @@ impl Runtime {
             .strip_prefix("[Document attached: ")
             .and_then(|rest| rest.find(']').map(|end| rest[..end].to_string()));
 
-        let mut all_chunks: Vec<corpus_engine::ScoredChunk> = Vec::new();
-        // corpus_id → human-readable peer name, used at the end to
-        // stamp `SourceSummary.from_peer` on any corpus whose hits
-        // came in via the mesh. Only populated for corpora we
-        // don't host locally (so a corpus present both sides stays
-        // tagged as local — we don't pretend to "serve from
-        // mac-peer" a corpus we have right here).
-        let mut peer_attribution: HashMap<String, String> = HashMap::new();
-        // How many hits came from local (before mesh). Drives the
-        // computed `search_method` label. `mesh_hits` is derived
-        // later from the peer-attribution map after dedupe.
-        let mut local_hits: usize = 0;
-
+        // Run the DeepQuery retrieval pipeline — the ordered, traced
+        // step list in `retrieval_pipeline::deep_pipeline()`: local ∥
+        // mesh retrieval → atlas/RAPTOR grounding → store search →
+        // entity/meta-atlas boosts → decomp/title expansion → noise
+        // floor → atom-enum → reweight/sort → graph expand → dedupe →
+        // cap + reserve → truncate → top-sources expansion. Step bodies
+        // are verbatim transplants of the blocks this function used to
+        // inline, calling the same unchanged injection helpers; the
+        // per-step trace rides the `retrieval.pipeline` target. Step
+        // ORDER is bench-tuned data — pinned by golden tests in
+        // retrieval_pipeline.rs.
+        //
+        // Document-attached turns short-circuit the corpus/mesh/atlas/
+        // raptor/store steps (they're routed to ComplexTask and should
+        // never reach this path) but keep the historical control flow
+        // of running the entity/merge tail on the empty pool.
+        let mut pipeline_state = PipelineState::new(
+            message,
+            context,
+            intent,
+            scope,
+            Vec::new(),
+            "DeepQuery",
+            format!("{intent:?}"),
+        );
         if attached_source.is_some() {
-            // Document-attached messages are routed to ComplexTask and should
-            // never reach this path — the planner invokes DocumentOperationTool
-            // for full map-reduce across all chunks. If we somehow get here,
-            // return empty context rather than stuffing a few search results
-            // into the prompt.
             tracing::debug!("prepare_knowledge_context called with attached document — skipping (should be ComplexTask)");
         } else {
-            // Normal mode: search installed corpora (corpus-engine LanceDB)
-            // and corpus-type documents in StateStore. User-uploaded documents
-            // are NOT included — they are only surfaced when explicitly
-            // attached via [Document attached: ...].
             let retrieval_query = build_retrieval_query(message, context);
             if retrieval_query != message {
                 tracing::debug!(
@@ -3026,468 +3029,21 @@ impl Runtime {
                     "retrieval: expanded follow-up query with prior user turns"
                 );
             }
-            let corpus_embedding = self
+            pipeline_state.embedding = self
                 .inference
                 .embed_query(&retrieval_query)
                 .await
                 .unwrap_or_default();
-            let label = format!("{intent:?}");
-
-            // Run the local corpus search and the mesh fan-out
-            // concurrently — the mesh call does HTTP (up to ~3s
-            // budget per peer), the local call is LanceDB disk I/O,
-            // so there's no point serialising them. `tokio::join!`
-            // waits for both.
-            // K calibration mirrors KnowledgeQuery (`KQ_PER_CORPUS_LIMIT`,
-            // `KQ_MERGED_LIMIT`). DeepQuery is the path multi-article
-            // synthesis questions take ("How did the Treaty of Versailles
-            // contribute to WWII?", "How did Stalin's and Churchill's
-            // styles differ?"). At K=5/corpus → top-8, the merged set
-            // contained only 1-2 chunks per source article — not enough
-            // depth for the model to write a sourced multi-paragraph
-            // answer. At K=20/corpus → top-15, the merge holds 4-5
-            // articles each with 2-3 chunks: real synthesis material.
-            let hot_corpora_dq = collect_hot_corpora(&context.conversation.messages);
-            let per_corpus_overrides_dq =
-                build_per_corpus_k_overrides(&hot_corpora_dq, KQ_PER_CORPUS_LIMIT);
-            let enabled_corpora_dq = context.conversation.enabled_corpora.as_deref();
-            let local_corpora_fut = self.search_corpus_indexes_with_overrides(
-                &corpus_embedding,
-                message,
-                KQ_PER_CORPUS_LIMIT,
-                &label,
-                per_corpus_overrides_dq.as_ref(),
-                enabled_corpora_dq,
-            );
-            let mesh_fut = async {
-                match &self.mesh_knowledge {
-                    Some(m) => {
-                        m.search(message, &corpus_embedding, KQ_PER_CORPUS_LIMIT)
-                            .await
-                    }
-                    None => Vec::new(),
-                }
-            };
-            let (mut local_scored, mesh_scored) = tokio::join!(local_corpora_fut, mesh_fut);
-
-            // Scope filter: when the router classified this turn as
-            // `scope = "personal"`, restrict the local hits to
-            // user-owned corpora so the synthesis prompt isn't
-            // dominated by general-knowledge sources. Prefix match
-            // is a TODO placeholder for recipe-level
-            // `[corpus] scope = "personal"` annotation — same
-            // pattern as the KQ plan path (see
-            // `prepare_knowledge_query_plan`).
-            if matches!(scope, Some("personal")) {
-                // TODO: replace prefix match with recipe-level
-                // `[corpus] scope = "personal"` annotation read from
-                // installed_indexes(). Mirror of the KQ plan path
-                // (see `prepare_knowledge_query_plan`).
-                const PERSONAL_CORPUS_PREFIXES: &[&str] =
-                    &["conversations-", "personal-", "journal-", "inner-work-"];
-                let before = local_scored.len();
-                local_scored.retain(|c| {
-                    PERSONAL_CORPUS_PREFIXES
-                        .iter()
-                        .any(|p| c.corpus_id.starts_with(p))
-                });
-                tracing::info!(
-                    kept = local_scored.len(),
-                    dropped = before.saturating_sub(local_scored.len()),
-                    scope = ?scope,
-                    label = %label,
-                    "prepare_knowledge_context: scope-filtered retrieval to personal-corpus prefixes"
-                );
-            }
-
-            local_hits = local_scored.len();
-            // Glass-box log: how many hits from local vs. mesh, and
-            // which corpora did mesh claim to serve? If mesh_hits > 0
-            // but `peer_tagged` is 0, the mesh is only round-tripping
-            // local corpora — meaning no peer actually hosts anything
-            // we're missing. If both are 0 with a live mesh, the
-            // handler on :9741 is either not running or returning
-            // empty. Reading this line is how you tell.
-            let peer_tagged = mesh_scored.iter().filter(|h| h.peer_name.is_some()).count();
-            let mesh_corpora: std::collections::BTreeSet<&str> =
-                mesh_scored.iter().map(|h| h.corpus_id.as_str()).collect();
-            tracing::info!(
-                local_hits = local_scored.len(),
-                mesh_hits = mesh_scored.len(),
-                mesh_peer_tagged = peer_tagged,
-                mesh_corpora = ?mesh_corpora,
-                "runtime: knowledge fan-out summary"
-            );
-            all_chunks.extend(local_scored);
-
-            // Fold mesh hits in, tagging peer attribution per corpus.
-            // A corpus that already appears locally doesn't get
-            // tagged — we own it, mesh is just parroting.
-            let local_corpora_ids: std::collections::HashSet<String> =
-                all_chunks.iter().map(|c| c.corpus_id.clone()).collect();
-            for hit in mesh_scored {
-                if !local_corpora_ids.contains(&hit.corpus_id) {
-                    if let Some(name) = &hit.peer_name {
-                        peer_attribution
-                            .entry(hit.corpus_id.clone())
-                            .or_insert_with(|| name.clone());
-                    }
-                }
-                // Phase C4: stamp peer attribution on the chunk
-                // itself so eval --inspect / desktop hit panels can
-                // show "peer:<name>" inline. peer_attribution above
-                // is corpus-level; metadata is per-chunk.
-                let mut metadata = HashMap::new();
-                if let Some(name) = &hit.peer_name {
-                    metadata.insert("peer".to_string(), name.clone());
-                    metadata.insert("source".to_string(), "mesh".to_string());
-                }
-                all_chunks.push(corpus_engine::ScoredChunk {
-                    content: hit.content,
-                    title: hit.title,
-                    url: hit.url,
-                    corpus_id: hit.corpus_id,
-                    score: hit.score,
-                    metadata,
-                    chunk_id: hit.chunk_id,
-                    source_doc_id: hit.source_doc_id,
-                    // Mesh-served hits don't carry vector_distance
-                    // over the wire today; the cross-corpus merge
-                    // falls back to score-sort for them.
-                    vector_distance: None,
-                });
-            }
-
-            // Atlas grounding — fuse pre-embedded Entity matches as
-            // virtual ScoredChunks (corpus_id = "atlas:<corpus>").
-            // Mirror of the KnowledgeQuery path's 2d step
-            // (`prepare_knowledge_query_plan`); DeepQuery /
-            // ComparisonQuery / contested-style intents take this
-            // route and benefit equally from atlas grounding.
-            // Same env override (`SOVEREIGN_ATLAS_GROUNDING=0`)
-            // applies here.
-            self.apply_atlas_grounding(
-                message,
-                &corpus_embedding,
-                &mut all_chunks,
-                "DeepQuery",
-                scope,
-                context.conversation.enabled_corpora.as_deref(),
-            )
+        }
+        deep_pipeline(attached_source.is_none())
+            .run(self, &mut pipeline_state)
             .await;
-
-            // RAPTOR collapsed-tree grounding (env-gated) — same as the KQ
-            // path's 2c'' step; DeepQuery / ComparisonQuery take this route.
-            if !raptor_late_inject_enabled() {
-                self.apply_raptor_grounding(
-                    &corpus_embedding,
-                    &mut all_chunks,
-                    "DeepQuery",
-                    context.conversation.enabled_corpora.as_deref(),
-                )
-                .await;
-            }
-
-            // Also search StateStore for corpus-type documents (used by test
-            // harness and for corpora ingested directly into the store).
-            let embedding = self.inference.embed(message).await.unwrap_or_default();
-            let store_chunks = self
-                .store
-                .search_documents(&embedding, message, 5)
-                .await
-                .unwrap_or_default();
-            for doc in &store_chunks {
-                // Only include corpus-type documents, not user uploads.
-                let SourceType::Corpus { corpus_id } = &doc.source_type else {
-                    continue;
-                };
-                // Honor the per-conversation isolate seal. The corpus-engine
-                // retrieval paths enforce `enabled_corpora` via
-                // `apply_corpus_allow_list`; this StateStore path was the one
-                // gap — a corpus-scoped conversation must not pull store-ingested
-                // corpus docs from OTHER corpora.
-                if let Some(allow) = context.conversation.enabled_corpora.as_deref() {
-                    if !allow.iter().any(|c| c == corpus_id) {
-                        continue;
-                    }
-                }
-                all_chunks.push(corpus_engine::ScoredChunk {
-                    content: doc.content.clone(),
-                    title: Some(doc.source.clone()),
-                    url: None,
-                    corpus_id: corpus_id.clone(),
-                    score: 0.5,
-                    metadata: HashMap::new(),
-                    chunk_id: None,
-                    source_doc_id: None,
-                    vector_distance: None,
-                });
-            }
-        }
-
-        // Entity boost — extract proper-noun entities from the
-        // question and run a focused hybrid search per entity. The
-        // bag-of-words query embedding tends to land on topic-central
-        // articles (e.g. "How do Einstein's and Newton's conceptions
-        // of gravity differ?" surfaces "Introduction to general
-        // relativity" but not the Albert Einstein and Isaac Newton
-        // articles — those are more biographical than thematic for
-        // the embedded query). A per-entity search gives each named
-        // entity its own retrieval pass; these articles are almost
-        // always fact-rich for the question.
-        let entities = extract_question_entities(message);
-        if !entities.is_empty() {
-            let initial_count = all_chunks.len();
-            let mut entity_added = 0usize;
-            for entity in entities.iter().take(MAX_ENTITY_QUERIES) {
-                let entity_emb = self.inference.embed_query(entity).await.unwrap_or_default();
-                let entity_chunks = self
-                    .search_corpus_indexes_with_overrides(
-                        &entity_emb,
-                        entity,
-                        ENTITY_QUERY_LIMIT,
-                        "EntityBoost",
-                        None,
-                        context.conversation.enabled_corpora.as_deref(),
-                    )
-                    .await;
-                entity_added += entity_chunks.len();
-                all_chunks.extend(entity_chunks);
-            }
-            tracing::info!(
-                entities = ?entities.iter().take(MAX_ENTITY_QUERIES).collect::<Vec<_>>(),
-                initial_count,
-                entity_added,
-                "DeepQuery: entity-boost retrieval"
-            );
-        }
-
-        // Canonical-entity boost (Move 4) — same pass as the streaming
-        // KQ branch. Surfaces the canonical-overview chunk for any
-        // famous entity named in the question, anchored to the
-        // registry's primary corpus, regardless of cross-corpus cosine
-        // ranking. Records are not threaded through KnowledgeContext
-        // (the non-streaming surface is unused by the bench), but the
-        // chunks they inject still survive the merge below.
-        let meta_atlas_hits = self
-            .meta_atlas_boost(
-                &mut all_chunks,
-                &entities,
-                context.conversation.enabled_corpora.as_deref(),
-            )
-            .await;
-
-        // Optional question decomposition (gated by env flag). Catches
-        // concept axes that proper-noun extraction misses ("compassion",
-        // "indeterminism") and gives each named side of a comparison
-        // its own focused retrieval pass.
-        if let Some(sub_queries) = self.decompose_question(message, intent) {
-            let added = self
-                .fan_out_decomposed_queries(
-                    &sub_queries,
-                    &mut all_chunks,
-                    "QueryDecomp",
-                    context.conversation.enabled_corpora.as_deref(),
-                )
-                .await;
-            tracing::info!(
-                sub_queries = sub_queries.len(),
-                chunks_added = added,
-                "DeepQuery: query-decomp retrieval"
-            );
-        }
-
-        // Title expansion (opt-in via SOVEREIGN_TITLE_EXPAND=1).
-        // DeepQuery is the path many comparative/contested/synthesis
-        // questions take, where abstract phrasings need explicit
-        // Wikipedia titles named ("Christopher Columbus", "Buddhism",
-        // "Atomic bombings of Hiroshima and Nagasaki") for retrieval
-        // to land. Mirrors the KnowledgeQuery wiring.
-        let title_expand_titles_dq: Option<Vec<String>> =
-            self.expand_question_to_titles(message, context).await;
-        if let Some(titles) = &title_expand_titles_dq {
-            let added = self
-                .fan_out_decomposed_queries(
-                    titles,
-                    &mut all_chunks,
-                    "TitleExpand",
-                    context.conversation.enabled_corpora.as_deref(),
-                )
-                .await;
-            tracing::info!(
-                titles = ?titles,
-                chunks_added = added,
-                "DeepQuery: title-expand retrieval"
-            );
-        }
-
-        // Noise floor — drop chunks with zero query-token overlap in
-        // both title and content. These survived hybrid RRF on a weak
-        // tangential signal (one shared FTS token in a 1024-char
-        // chunk, or vector similarity to phrasing rather than topic);
-        // they fill prompt budget the model can't act on. See KQ
-        // path comment for the v33 / v36 protection design history.
-        let pre_floor = all_chunks.len();
-        all_chunks = drop_no_overlap_chunks(all_chunks, message);
-        if all_chunks.len() < pre_floor {
-            tracing::info!(
-                pre_floor,
-                post_floor = all_chunks.len(),
-                "DeepQuery: noise floor dropped no-overlap chunks"
-            );
-        }
-
-        // Entity-typed atom enumeration (opt-in SOVEREIGN_ATOM_ENUM=1).
-        // Injected post-floor (these are name+role metadata chunks the
-        // overlap floor would drop). Mirrors the KnowledgeQuery wiring.
-        // See `enumerate_typed_atom_chunks`.
-        if let Some(atom_chunks) = self
-            .enumerate_typed_atom_chunks(message, context.conversation.enabled_corpora.as_deref())
-            .await
-        {
-            tracing::info!(
-                count = atom_chunks.len(),
-                "DeepQuery: atom-enum virtual chunks injected"
-            );
-            all_chunks.extend(atom_chunks);
-        }
-
-        // Reweight chunks by query relevance before the global merge.
-        // RRF rank-1 chunks across corpora come back at the same raw
-        // score (~0.033 with k=60), so without a relevance signal an
-        // off-domain corpus's barely-related top hit ties with the
-        // canonical Wikipedia article on a Wikipedia-domain question.
-        // Reweighting by title- + content-token overlap with the
-        // query lets in-domain chunks rise; off-domain chunks stay at
-        // their RRF baseline and naturally sink in the truncation.
-        reweight_by_query_relevance(&mut all_chunks, message);
-
-        // Dedupe by (corpus_id, content) before truncating so a
-        // corpus that appears both locally and via mesh doesn't
-        // waste context budget on duplicate chunks.
-        all_chunks.sort_by(cross_corpus_sort_cmp);
-
-        // Optional structural-graph one-hop expansion. DeepQuery
-        // is *by classifier* always reasoning across sources, so
-        // there's no FastFocused/PrimarySynthesis gate here — the
-        // helper itself handles the env-flag opt-in.
-        if let Some(neighbors) = self
-            .expand_via_wikipedia_graph(
-                &all_chunks,
-                message,
-                context.conversation.enabled_corpora.as_deref(),
-            )
-            .await
-        {
-            if !neighbors.is_empty() {
-                let added = neighbors.len();
-                all_chunks.extend(neighbors);
-                reweight_by_query_relevance(&mut all_chunks, message);
-                all_chunks.sort_by(cross_corpus_sort_cmp);
-                tracing::info!(
-                    added,
-                    total = all_chunks.len(),
-                    "DeepQuery: graph one-hop expansion"
-                );
-            }
-        }
-
-        {
-            let mut seen: std::collections::HashSet<(String, String)> =
-                std::collections::HashSet::new();
-            all_chunks.retain(|c| seen.insert((c.corpus_id.clone(), c.content.clone())));
-        }
-        all_chunks = cap_chunks_per_article(all_chunks, MAX_CHUNKS_PER_ARTICLE_AT_MERGE);
-        // Title-expand reservation. Mirrors the KnowledgeQuery
-        // wiring — pins chunks from title-expand titles before the
-        // KQ_MERGED_LIMIT truncate so the multi-source expander below
-        // can't displace them by picking a different dominant article.
-        if let Some(titles) = &title_expand_titles_dq {
-            if !titles.is_empty() {
-                all_chunks =
-                    reserve_chunks_per_entity(all_chunks, titles, COMPARISON_PER_ENTITY_RESERVE);
-            }
-        }
-        // Atlas-directed reservation — mirrors the KnowledgeQuery
-        // wiring. atom-enum chunks (no query embedding → vector_distance
-        // None) sort below every base chunk and the truncate drops them
-        // wholesale; pin them so the atlas-directed set survives into
-        // synthesis. See `reserve_atom_enum_chunks`.
-        all_chunks = reserve_atom_enum_chunks(all_chunks);
-        all_chunks = reserve_raptor_chunks(all_chunks);
-        // Additive RAPTOR — see the KnowledgeQuery merge site for the full
-        // rationale: grant reserved collapsed-tree summaries slots on top of
-        // the leaf budget so they supplement rather than displace leaf chunks.
-        let raptor_n = all_chunks
-            .iter()
-            .filter(|c| c.metadata.get("source").map(|s| s == "raptor").unwrap_or(false))
-            .count();
-        all_chunks.truncate(KQ_MERGED_LIMIT + raptor_n);
-
-        // Multi-source cohesion expansion. DeepQuery is the path
-        // multi-article synthesis questions take, so this is exactly
-        // where pulling depth from the top-N source documents pays
-        // off (see `expand_from_top_sources` for the rationale).
-        // Single-source dominance is rare here — DeepQuery questions
-        // are by-classifier "REASONING" — but the expander returns
-        // initial unchanged when fewer than 2 distinct titled sources
-        // appear, so it's safe to call unconditionally.
-        let (mut all_chunks, sources_expanded, _total_fetched) =
-            self.expand_from_top_sources(all_chunks).await;
-
-        // DeepQuery/Simple glassbox (opt-in). This path has no
-        // evidence-shape `turn_summary` (that lives in the KQ planner),
-        // so DeepQuery turns — multi_article_synthesis, causal_reasoning,
-        // contested — were invisible to the retrieval audit. Emit the
-        // FINAL composition (post sort + truncate + top-sources expand +
-        // graph one-hop) so cross-corpus dilution is diagnosable here:
-        // `final_by_corpus` answers "did the target corpus survive the
-        // merge, or did SEP/catalog/fetched crowd it out?" — the thing
-        // the pre-merge `merged_pool` event can't show. Gated on the
-        // `retrieval_audit` target so production pays only a level-check.
-        if tracing::enabled!(target: "retrieval_audit", tracing::Level::INFO) {
-            use std::collections::{HashMap, HashSet};
-            let mut by_corpus: HashMap<String, usize> = HashMap::new();
-            let mut seen: HashSet<String> = HashSet::new();
-            for c in &all_chunks {
-                *by_corpus.entry(c.corpus_id.clone()).or_insert(0) += 1;
-                seen.insert(
-                    c.source_doc_id
-                        .clone()
-                        .or_else(|| c.title.clone())
-                        .unwrap_or_default(),
-                );
-            }
-            let mut corpus_pairs: Vec<(String, usize)> = by_corpus.into_iter().collect();
-            corpus_pairs.sort_by(|a, b| b.1.cmp(&a.1));
-            // Atom-enum survival — see the KnowledgeQuery post_merge
-            // event for the rationale. 0 with an "injected count=N"
-            // upstream is the synth-boundary bug; N means the
-            // reservation pinned the directed set through truncate.
-            let atom_enum_survived = all_chunks
-                .iter()
-                .filter(|c| {
-                    c.metadata
-                        .get("source")
-                        .map(|s| s == "atom-enum")
-                        .unwrap_or(false)
-                })
-                .count();
-            let query_preview: String = message.chars().take(80).collect();
-            tracing::info!(
-                target: "retrieval_audit",
-                event = "deep_turn_summary",
-                intent = ?intent,
-                query = %query_preview,
-                final_chunks = all_chunks.len(),
-                distinct_sources = seen.len(),
-                atom_enum_survived,
-                final_by_corpus = ?corpus_pairs,
-                sources_expanded,
-                meta_atlas_hits = meta_atlas_hits.len(),
-                "retrieval_audit: deep_turn_summary"
-            );
-        }
+        let PipelineState {
+            chunks: mut all_chunks,
+            peer_attribution,
+            local_hits,
+            ..
+        } = pipeline_state;
 
         // Count mesh hits that survived dedupe so the search_method
         // label reflects what's actually in the prompt.

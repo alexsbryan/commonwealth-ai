@@ -656,6 +656,39 @@ the Critic predicate failing its own phantom-error contract, justifying the
 deferral. (Note: effort-tier escalation default-ON *improves* chaos competence
 0.33 → 0.46 — a net win, not a regression.)
 
+**Retrieval pipeline (`runtime/retrieval_pipeline.rs`).** The
+retrieval-injection orchestration — which grounding/boost/expansion steps run,
+in what order, under which `SOVEREIGN_*` gates — is **data**: a
+`RetrievalPipeline` is an ordered list of named `RetrievalStep`s run by one
+tracing runner (one `tracing::info!(target: "retrieval.pipeline")` line per
+step with `chunks_before/after/delta`). Both pipelines are composed as a
+**per-intent head + a SHARED 12-step core + per-intent tail**:
+`kq_pipeline()` (KnowledgeQuery / ComparisonQuery, 15 steps) and
+`deep_pipeline()` (DeepQuery / SimpleQuery, 16 steps; attached-doc turns drop
+the corpus/mesh/store head and the two grounding steps). Golden tests pin the
+step lists and the core-slice identity, so reordering is an explicit,
+reviewed act. The Phase 2 convergence (2026-06-09, CI-bench-A/B'd) moved the
+deep path's atlas/RAPTOR grounding to the KQ post-floor position (the old
+pre-floor position let the noise floor silently drop zero-overlap virtual
+grounding chunks) and extended `dedupe_merged` to the KQ path; per-intent
+differences (comparison-aware entity boost/reserve) ride `PipelineState`,
+not divergent code. The injection helpers
+themselves (`apply_atlas_grounding`, `apply_raptor_grounding`,
+`meta_atlas_boost`, `fan_out_decomposed_queries`, `expand_from_top_sources`, …)
+are unchanged `impl Runtime` methods in `retrieval.rs`; the step bodies are
+verbatim transplants of the orchestration that previously lived inline (and
+duplicated, with silent drift) in `prepare_knowledge_query_plan` and
+`prepare_knowledge_context` — both handlers now build a `PipelineState` and
+call `pipeline.run(...)`, then keep their post-pipeline concerns
+(evidence-shape routing + route-aware expansion + prompt/request assembly on
+the KQ side; provenance + prompt/history assembly + seal audit on the deep
+side). `retrieval_pipeline_flags()` is the SSOT registry of every retrieval
+env knob (name + default + purpose). Remaining per-intent divergences
+(route-aware vs unconditional expansion, scope-filter scope, store-search
+`embed()` vs `embed_query()`, KQ's missing mesh leg) are documented in the
+module doc as deliberate-or-deferred items; any further convergence is a
+measured bench A/B.
+
 Per-intent handlers live in
 `sovereign-core/src/runtime/handlers/{simple,ask_move,conation,commissive,metalingual,expressive,document_op,complex_task,attached_doc,knowledge_query}.rs`
 as `impl Runtime` across files (no vtable hop on dispatch).
