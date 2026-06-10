@@ -362,14 +362,23 @@ fn turn_header_regex() -> &'static Regex {
     CELL.get_or_init(|| Regex::new(r"(?m)^###\s+\[([^\]]+)\]\s+(user|assistant)\s*$").unwrap())
 }
 
+/// One `### [ts] sender` turn block parsed out of rendered conversation
+/// text. Public so downstream read paths (e.g. the wrapped meshapp
+/// artifact builder) reuse the one header grammar instead of
+/// duplicating the regex.
 #[derive(Debug)]
-struct ParsedTurn {
-    attribution: Attribution,
-    timestamp: Option<String>,
-    block: String,
+pub struct ParsedTurn {
+    pub attribution: Attribution,
+    /// `YYYY-MM-DD HH:MM` (UTC, as rendered by the extractor), or
+    /// `None` for `[unknown-time]` headers.
+    pub timestamp: Option<String>,
+    /// The full block, header line included, trailing whitespace trimmed.
+    pub block: String,
 }
 
-fn parse_turns(text: &str) -> Vec<ParsedTurn> {
+/// Split rendered conversation text into its turn blocks. Returns an
+/// empty vec when the text carries no turn headers.
+pub fn parse_turns(text: &str) -> Vec<ParsedTurn> {
     let re = turn_header_regex();
     let captures: Vec<(usize, String, String)> = re
         .captures_iter(text)

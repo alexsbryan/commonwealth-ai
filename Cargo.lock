@@ -11072,10 +11072,13 @@ dependencies = [
 name = "sovereign-meshapp"
 version = "0.1.16"
 dependencies = [
+ "chrono",
  "corpus-engine",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]

@@ -1183,16 +1183,39 @@ Relation/Event atoms → cited edges, resolving each `sec_NNNNN` evidence id
 to a numeric `chunks.lance` row via `chapters.json` so `read_chunk`
 dereferences the source document unchanged; `reconciliation` surfaces the
 cross-origin merge log (canonical + folded surface forms + the signal that
-fired) as the identity glassbox. Three first-party explorers ship on this
+fired) as the identity glassbox. Four first-party apps ship on this
 surface: SF-LVT (`public/meshapp/lvt/`, deterministic parcel compute), UAP
-Blue Book (`public/meshapp/uap/`, investigation graph), and Enron
+Blue Book (`public/meshapp/uap/`, investigation graph), Enron
 (`public/meshapp/enron/`, a story-first atlas experience: scale banner +
 description-led on-ramp + CSP-safe force-graph + collapse timeline +
-reconciliation reveal + cited drill-down). Bundles compose the **MeshApp SDK**
+reconciliation reveal + cited drill-down), and **Wrapped**
+(`public/meshapp/wrapped/`, a Spotify-Wrapped-form story-card show over the
+user's own `conversations-anthropic` corpus). Wrapped's op is different in
+kind: `wrapped_artifact` serves a **precomputed artifact**, never live
+inference — `sovereign-meshapp/src/wrapped.rs` folds every figure
+deterministically (full chunk scan via `all_chunks_full` + the chunker's own
+`parse_turns` header grammar for per-turn timestamps; GLiNER `chunk_entities`
+rows from `~/.sovereign/sovereign.db` for the entity cards, filtered by a
+**case-profile generics pass**: a surface form the assistant's own prose
+frequently writes lowercase is a common noun, not a name — corpus evidence
+instead of an enumerated stoplist, with one glassbox line per build naming
+what was dropped and why), runs a
+**verbatim-citation audit** (`verify_wrapped_artifact`: every cited chunk id
+must resolve, every embedded quote must be a verbatim substring of its chunk
+— a failing artifact is never served), and caches
+`<index>/wrapped/all-time.json` keyed on `_corpus_meta.json`'s
+`last_updated`/fingerprint (desktop-native build trigger: opening the app
+rebuilds a stale artifact on demand). Cards are typed (`scale` / `rhythm` /
+`obsessions` / `cast` / `door`); absent data ⇒ absent card, and the bundle
+SKIPS unknown card types — the forward-compat seam future enriched cards
+(unresolved questions, reversals) ship through. Bundles compose the
+**MeshApp SDK**
 (`public/meshapp/_sdk/`, dependency-free ES modules served under the CSP): a
 corpus-bound `connect()` bridge client, CSP-safe DOM helpers, and the reusable
 views (force-graph, timeline, reconciliation reveal, entity-detail, cited-edge,
-search, scale-banner) + `meshapp.css` — Enron's bundle is ~150 lines of
+search, scale-banner, and Wrapped's `storyShow` full-screen card shell +
+`heatGrid` hour-of-week view in `story.js`) + `meshapp.css` — Enron's bundle
+is ~150 lines of
 composition, not ~600 of hand-rolled DOM. Each bundle carries a self-describing
 `meshapp.json` manifest (id/name/corpus/grants/entry/trust — the unit a registry
 distributes); `scripts/gen-meshapp-catalog.mjs` (pre{dev,build}) aggregates them

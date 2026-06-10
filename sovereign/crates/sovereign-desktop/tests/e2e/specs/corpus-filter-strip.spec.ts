@@ -234,3 +234,93 @@ test.describe("corpus filter strip", () => {
     ).toBeVisible();
   });
 });
+
+// ─── Outer-Work deep link (Wrapped Door card) ────────────────────────
+// The `meshapp-open-outer-work` host event must land the user on a
+// fresh conversation whose strip shows ONLY the relevant conversations
+// corpus selected — and persist that allow-list before the first send.
+// Regression: the strip hydrates exactly once per conversation-id flip,
+// so the scope must be in `initialEnabled` BEFORE the row is minted.
+
+const CONV_CORPUS = {
+  id: "conversations-anthropic",
+  name: "Claude conversations",
+  description: "",
+  size_compressed_gb: 0,
+  size_indexed_gb: 0,
+  license: "private",
+  tiers: [],
+  status: "installed",
+  chunks_count: 600,
+  enrichment_enabled: true,
+  indexed_at: 1,
+  embedding_model: "qwen-embedding-0.6b",
+  embedding_dimensions: 1024,
+  vector_index_ready: true,
+  parent_corpus_id: null,
+};
+
+test.describe("outer-work deep link scopes the strip", () => {
+  test.beforeEach(async ({ sovereignPage: page }) => {
+    await page.addInitScript(
+      (corpora) => {
+        const apply = () => {
+          const api = (window as unknown as { __sovereign_test__?: {
+            setHandler: (cmd: string, fn: (args: unknown) => unknown) => void;
+          } }).__sovereign_test__;
+          if (!api) {
+            setTimeout(apply, 0);
+            return;
+          }
+          api.setHandler("list_corpora", () => corpora);
+        };
+        apply();
+      },
+      [...INSTALLED_CORPORA, CONV_CORPUS],
+    );
+  });
+
+  test("the event selects only the conversations corpus and persists it", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await bootToChat(page, chat);
+
+    // Fire the host event a mesh-app Door card triggers.
+    await page.evaluate(() => {
+      (window as unknown as {
+        __sovereign_test__: { emit: (e: string, p: unknown) => number };
+      }).__sovereign_test__.emit("meshapp-open-outer-work", {
+        corpus_id: "conversations-anthropic",
+      });
+    });
+
+    // The strip shows the conversations chip ENABLED and every other
+    // parent muted — the visible promise of "ask your past self".
+    const strip = page.locator(".corpus-filter-strip").first();
+    const convChip = strip.locator(".kb-tag", { hasText: "Claude conversations" });
+    await expect(convChip).not.toHaveClass(/disabled/);
+    await expect(strip.locator(".kb-tag", { hasText: "Wikipedia" })).toHaveClass(/disabled/);
+    await expect(strip.locator(".kb-tag", { hasText: "SEP" })).toHaveClass(/disabled/);
+
+    // …and the allow-list persisted on the freshly-minted row.
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(
+            () =>
+              (
+                window as unknown as {
+                  __sovereign_test__: {
+                    _lastEnabledCorpora: {
+                      enabledCorpora: string[] | null;
+                    } | null;
+                  };
+                }
+              ).__sovereign_test__._lastEnabledCorpora?.enabledCorpora,
+          ),
+        { timeout: 2_000 },
+      )
+      .toEqual(["conversations-anthropic"]);
+  });
+});

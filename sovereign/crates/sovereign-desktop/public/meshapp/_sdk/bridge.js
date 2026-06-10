@@ -38,6 +38,10 @@ export function connect(corpus) {
     // deterministic-compute family (LVT)
     searchParcels: (query, limit) => m.searchParcels(corpus, query, limit),
     parcelAnalytics: (businessTaxTarget) => m.parcelAnalytics(corpus, businessTaxTarget),
+    // precomputed story artifact (Wrapped)
+    wrappedArtifact: () => m.wrappedArtifact(corpus),
+    // host navigation: open Outer Work (chat) scoped to this corpus
+    openOuterWork: () => m.openOuterWork(corpus),
   };
 }
 

@@ -16,6 +16,7 @@
     enrichListCorpora,
     enrichGetStarterQuestions,
     warmupPrimarySlot,
+    setConversationEnabledCorpora,
   } from "../api";
   import type { IngestDocumentResult } from "../api";
   import type {
@@ -36,6 +37,7 @@
   } from "../types";
   import { enrichProgressStore } from "../stores/enrichProgress.svelte";
   import { chatSeedStore } from "../stores/chatSeed.svelte";
+  import { outerWorkScopeStore } from "../stores/outerWorkScope.svelte";
   import StarterChips from "./StarterChips.svelte";
   import {
     interleaveStarters,
@@ -218,6 +220,35 @@
     // consume before we mutate additional state below.
     queueMicrotask(() => {
       void pickStarter(q);
+    });
+  });
+
+  // Outer-Work scope handoff: a mesh app's Door card (via the host's
+  // `meshapp-open-outer-work` event → App.svelte) asked for a fresh
+  // conversation whose retrieval is scoped to one corpus. Same gate as
+  // the seed — never hijack an in-progress conversation. We mint the
+  // conversation row immediately (like a CorpusFilterStrip toggle on an
+  // empty chat) so the allow-list persists before the first send.
+  $effect(() => {
+    const pending = outerWorkScopeStore.pending;
+    if (!pending) return;
+    if (messages.length > 0) return;
+    const scope = outerWorkScopeStore.consume();
+    if (!scope) return;
+    // Set the local allow-list BEFORE minting: the CorpusFilterStrip
+    // rehydrates exactly once, when the conversation id flips — its
+    // `initialEnabled` must already carry the scope at that moment or
+    // the chips render "all selected" while retrieval is scoped.
+    enabledCorpora = scope;
+    queueMicrotask(() => {
+      void (async () => {
+        try {
+          const convoId = await ensureConversation();
+          await setConversationEnabledCorpora(convoId, scope);
+        } catch (e) {
+          console.error("Failed to apply Outer-Work corpus scope:", e);
+        }
+      })();
     });
   });
 

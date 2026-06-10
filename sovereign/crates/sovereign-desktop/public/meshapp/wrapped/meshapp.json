@@ -1,0 +1,10 @@
+{
+  "id": "wrapped",
+  "name": "Wrapped",
+  "version": "0.1.0",
+  "blurb": "A story-card show over your own conversation archive. Every number is computed on this machine by the host — no model originates a figure — and every quote is your own words, verbatim, cited back to the conversation it came from. Computed locally, uploaded nowhere.",
+  "corpus": "conversations-anthropic",
+  "entry": "index.html",
+  "grants": { "mesh_store_read": true, "mesh_store_write": false, "inference_access": false, "knowledge_access": false },
+  "trust": "unsigned"
+}

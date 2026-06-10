@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::meshapp::{app_id_from_label, authorize, resolve_grant, MeshAppPermissions, Permission};
 use crate::state::AppState;
@@ -478,6 +478,51 @@ pub async fn meshapp_read_chunk(
     sovereign_meshapp::read_chunk(&path, id)
         .await
         .map_err(|e| format!("`{corpus_id}`: {e}"))
+}
+
+/// `window.meshApp.wrappedArtifact(corpusId)` — gated on `mesh_store_read`.
+/// The precomputed Wrapped story-card artifact. Desktop-native build
+/// trigger: the lib op returns the cached `wrapped/all-time.json` under the
+/// corpus index dir when fresh, and rebuilds on demand otherwise (a pure
+/// Rust fold — no inference; every quote audited verbatim before serving).
+/// The GLiNER entity cards read the sovereign state db; when it's absent
+/// those cards are simply absent from the deck.
+#[tauri::command]
+pub async fn meshapp_wrapped_artifact(
+    webview: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<sovereign_meshapp::wrapped::WrappedArtifact, String> {
+    let installs = state.config.read().await.meshapp_installs.clone();
+    authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
+    let path = resolve_index_path(&state, &corpus_id).await?;
+    let state_db = dirs::home_dir().map(|h| h.join(".sovereign").join("sovereign.db"));
+    sovereign_meshapp::wrapped::wrapped_artifact(&path, state_db.as_deref())
+        .await
+        .map_err(|e| format!("`{corpus_id}`: {e}"))
+}
+
+/// `window.meshApp.openOuterWork(corpusId)` — gated on `mesh_store_read`
+/// (only an installed, granted app may ask; no data crosses — it's a
+/// navigation request). The Wrapped Door card's funnel: focus the MAIN
+/// window and ask it (via the `meshapp-open-outer-work` event) to open
+/// Outer Work on a fresh conversation whose retrieval is scoped to this
+/// corpus — "ask your past self anything", literally.
+#[tauri::command]
+pub async fn meshapp_open_outer_work(
+    app: AppHandle,
+    webview: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<(), String> {
+    let installs = state.config.read().await.meshapp_installs.clone();
+    authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
+    let main = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
+    let _ = main.set_focus();
+    app.emit_to("main", "meshapp-open-outer-work", serde_json::json!({ "corpus_id": corpus_id }))
+        .map_err(|e| format!("emit meshapp-open-outer-work: {e}"))
 }
 
 // ─── Host-side install management ────────────────────────────────────
