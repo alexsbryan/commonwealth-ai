@@ -456,6 +456,150 @@ answer. Cover what they support in depth; if a sub-topic is thin, cover it \
 briefly and note that in ONE closing line — never let it stop you. Use \
 [Source: title] when you draw on a passage.";
 
+/// Single source of truth for the knowledge-synthesis system prompt — the
+/// **Synthesizer role's** prompt builder (ARCH §3 single-responsibility, §10.3
+/// SSOT).
+///
+/// Collapses the three historical assembly sites — `knowledge_query` Fast
+/// (Comparison-or-not, no thinking), `knowledge_query` Primary, and `retrieval`
+/// DeepQuery (the latter two: optional thinking) — into ONE deterministic
+/// ordering:
+///
+/// ```text
+/// KNOWLEDGE_SYNTHESIS_SYSTEM
+///   [ + "\n\n" + COMPARISON_DIRECTIVE ]   (bounded-axes comparison shape)
+///   [ + "\n\n" + gap_note ]               (coverage-gap disclosure)
+///   [ + "\n\n" + THINKING_DIRECTIVE ]     (hidden-reasoning channel)
+///   + "\n\n" + budget_note                (always)
+/// ```
+///
+/// Byte-equivalent to the prior inline assembly at every site (pinned by
+/// `synthesis_prompt_tests`, which re-implement the pre-refactor logic and diff
+/// it across the full variant matrix). Callers pass only variant inputs:
+/// `gap_note`/`budget_note` are the already-built directive strings (empty
+/// `gap_note` = none); `comparison`/`include_thinking` are the variant flags.
+/// The chosen slot (Fast vs Primary) and the system-message wrapper
+/// (`build_system_message` vs `build_primary_system_message`) remain the
+/// caller's decision — this fn owns only the prompt *body*.
+pub(crate) fn build_synthesis_system_prompt(
+    comparison: bool,
+    gap_note: &str,
+    include_thinking: bool,
+    budget_note: &str,
+) -> String {
+    let mut s = String::with_capacity(
+        KNOWLEDGE_SYNTHESIS_SYSTEM.len() + gap_note.len() + budget_note.len() + 256,
+    );
+    s.push_str(KNOWLEDGE_SYNTHESIS_SYSTEM);
+    if comparison {
+        s.push_str("\n\n");
+        s.push_str(COMPARISON_DIRECTIVE);
+    }
+    if !gap_note.is_empty() {
+        s.push_str("\n\n");
+        s.push_str(gap_note);
+    }
+    if include_thinking {
+        s.push_str("\n\n");
+        s.push_str(THINKING_DIRECTIVE);
+    }
+    s.push_str("\n\n");
+    s.push_str(budget_note);
+    s
+}
+
+#[cfg(test)]
+mod synthesis_prompt_tests {
+    use super::{
+        build_synthesis_system_prompt, COMPARISON_DIRECTIVE, KNOWLEDGE_SYNTHESIS_SYSTEM,
+        THINKING_DIRECTIVE,
+    };
+
+    const BUDGET: &str = "[budget directive placeholder]";
+    const GAP: &str = "What I don't have: 2 files failed to parse.";
+
+    /// Re-implements the PRE-refactor `knowledge_query` FastFocused assembly
+    /// (base[+comparison][+gap]+budget; never any thinking).
+    fn legacy_kq_fast(comparison: bool, gap: &str, budget: &str) -> String {
+        let base = if comparison {
+            format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{COMPARISON_DIRECTIVE}")
+        } else {
+            KNOWLEDGE_SYNTHESIS_SYSTEM.to_string()
+        };
+        let base = if gap.is_empty() {
+            base
+        } else {
+            format!("{base}\n\n{gap}")
+        };
+        format!("{base}\n\n{budget}")
+    }
+
+    /// Re-implements the PRE-refactor `knowledge_query` PrimarySynthesis AND
+    /// `retrieval` DeepQuery assembly — they were byte-identical
+    /// (base[+gap+thinking]+budget; never comparison on these routes).
+    fn legacy_primary_or_deep(gap: &str, thinking_on: bool, budget: &str) -> String {
+        let thinking = if thinking_on {
+            format!("\n\n{THINKING_DIRECTIVE}")
+        } else {
+            String::new()
+        };
+        let base = if gap.is_empty() {
+            format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}{thinking}")
+        } else {
+            format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{gap}{thinking}")
+        };
+        format!("{base}\n\n{budget}")
+    }
+
+    #[test]
+    fn matches_legacy_kq_fast_all_combos() {
+        for &comparison in &[false, true] {
+            for &gap in &["", GAP] {
+                let got = build_synthesis_system_prompt(comparison, gap, false, BUDGET);
+                let want = legacy_kq_fast(comparison, gap, BUDGET);
+                assert_eq!(
+                    got,
+                    want,
+                    "KQ-Fast byte mismatch: comparison={comparison} gap_empty={}",
+                    gap.is_empty()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn matches_legacy_primary_and_deep_all_combos() {
+        for &thinking in &[false, true] {
+            for &gap in &["", GAP] {
+                let got = build_synthesis_system_prompt(false, gap, thinking, BUDGET);
+                let want = legacy_primary_or_deep(gap, thinking, BUDGET);
+                assert_eq!(
+                    got,
+                    want,
+                    "Primary/Deep byte mismatch: thinking={thinking} gap_empty={}",
+                    gap.is_empty()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ordering_is_synth_comparison_gap_thinking_budget() {
+        let s = build_synthesis_system_prompt(true, GAP, true, BUDGET);
+        let i_comp = s.find(COMPARISON_DIRECTIVE).expect("comparison present");
+        let i_gap = s.find(GAP).expect("gap present");
+        let i_think = s.find(THINKING_DIRECTIVE).expect("thinking present");
+        let i_budget = s.find(BUDGET).expect("budget present");
+        assert!(
+            s.starts_with(KNOWLEDGE_SYNTHESIS_SYSTEM)
+                && i_comp < i_gap
+                && i_gap < i_think
+                && i_think < i_budget,
+            "ordering must be SYNTH < COMPARISON < gap < THINKING < budget"
+        );
+    }
+}
+
 /// Tightly-scoped detector for the model's OWN refusal/deflection openings — a
 /// control-flow signal (like a stop-sequence), NOT a content classifier. It
 /// triggers a single prefill-retry when the model declines a knowledge turn

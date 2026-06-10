@@ -1158,20 +1158,18 @@ impl Runtime {
                 // Comparison-shape contrast — append the directive that
                 // pins the model to a bounded axes structure rather
                 // than the open-ended essay shape.
-                let base = if matches!(intent, Intent::ComparisonQuery) {
-                    format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{COMPARISON_DIRECTIVE}")
-                } else {
-                    KNOWLEDGE_SYNTHESIS_SYSTEM.to_string()
-                };
-                let base = if gap_note.is_empty() {
-                    base
-                } else {
-                    format!("{base}\n\n{gap_note}")
-                };
                 let budget_note = crate::runtime::build_response_length_directive(
                     FAST_KNOWLEDGE_MAX_TOKENS as usize,
                 );
-                let base = format!("{base}\n\n{budget_note}");
+                // Synthesizer role builds the prompt body (SSOT). FastFocused
+                // forces think_budget=0 → no THINKING_DIRECTIVE. The
+                // Comparison-shape directive pins the bounded-axes structure.
+                let base = crate::runtime::build_synthesis_system_prompt(
+                    matches!(intent, Intent::ComparisonQuery),
+                    &gap_note,
+                    false,
+                    &budget_note,
+                );
                 let system = self.build_system_message(&base, context);
                 CompletionRequest {
                     prompt,
@@ -1200,22 +1198,18 @@ impl Runtime {
                 }
             }
             SynthesisRoute::PrimarySynthesis => {
-                // THINKING_DIRECTIVE is a `<think>`-block contract; pass it only
-                // when a think budget is allocated (thinking enabled).
-                let thinking = if self.inference_config.think_budget > 0 {
-                    format!("\n\n{THINKING_DIRECTIVE}")
-                } else {
-                    String::new()
-                };
-                let base = if gap_note.is_empty() {
-                    format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}{thinking}")
-                } else {
-                    format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{gap_note}{thinking}")
-                };
                 let budget_note = crate::runtime::build_response_length_directive(
                     self.inference_config.max_tokens,
                 );
-                let base = format!("{base}\n\n{budget_note}");
+                // Synthesizer role builds the prompt body (SSOT). THINKING_DIRECTIVE
+                // is a `<think>`-block contract — include it only when a think
+                // budget is allocated. Comparison routes to FastFocused, never here.
+                let base = crate::runtime::build_synthesis_system_prompt(
+                    false,
+                    &gap_note,
+                    self.inference_config.think_budget > 0,
+                    &budget_note,
+                );
                 let system = self.build_primary_system_message(&base, context);
                 CompletionRequest {
                     prompt,
