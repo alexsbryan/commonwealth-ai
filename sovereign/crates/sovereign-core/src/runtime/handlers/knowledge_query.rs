@@ -410,6 +410,8 @@ impl Runtime {
                 retrieved_chunks: Vec::new(),
                 source_map: HashMap::new(),
                 result_quality: "empty",
+                // Parametric request — tiny prompt, can't overflow.
+                prompt_budget_note: None,
                 folder_meta: std::collections::HashMap::new(),
                 meta_atlas_hits,
             };
@@ -742,7 +744,7 @@ impl Runtime {
         // string when there's nothing to disclose, so the prompt
         // overhead is zero in the common case.
         let gap_note = build_coverage_gaps_note(&chunks, &folder_meta);
-        let request = match route {
+        let mut request = match route {
             SynthesisRoute::FastFocused => {
                 // Comparison-shape contrast — append the directive that
                 // pins the model to a bounded axes structure rather
@@ -823,6 +825,23 @@ impl Runtime {
                     lark_grammar: None,
                 }
             }
+        };
+
+        // Phase-1 prompt-budget guard: assembled input + response
+        // reservation must fit the window — the engine's "Prompt too
+        // long" rejection is a terminal, user-facing error loop
+        // (note 2cd9227e). Degradation ladder in `prompt_budget`;
+        // the note rides the plan into message metadata.
+        let prompt_budget_note = match self.inference.effective_context_size() {
+            Some(ctx) => match crate::runtime::prompt_budget::enforce(
+                &mut request,
+                &|s| self.inference.count_tokens(s),
+                ctx,
+            ) {
+                crate::runtime::prompt_budget::BudgetOutcome::Trimmed { note } => Some(note),
+                _ => None,
+            },
+            None => None,
         };
 
         // 4f. Build retrieved_chunks summaries for the UI citation
@@ -927,6 +946,7 @@ impl Runtime {
             retrieved_chunks,
             source_map,
             result_quality,
+            prompt_budget_note,
             folder_meta,
             meta_atlas_hits,
         }
@@ -1112,6 +1132,7 @@ impl Runtime {
                 "result_quality": plan.result_quality,
                 "provenance": provenance,
                 "retrieved_chunks": plan.retrieved_chunks,
+                "prompt_budget": plan.prompt_budget_note,
                 "next_steps": offers_json,
             })),
             version: now(),

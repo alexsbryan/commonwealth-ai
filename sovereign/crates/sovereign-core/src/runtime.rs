@@ -832,6 +832,7 @@ mod formatters;
 mod handlers;
 mod intent_helpers;
 mod numeric_audit;
+mod prompt_budget;
 mod question_analysis;
 mod retrieval;
 mod retrieval_helpers;
@@ -2213,6 +2214,7 @@ impl Runtime {
                 retrieved_chunks,
                 source_map,
                 result_quality,
+                prompt_budget_note,
                 folder_meta,
                 meta_atlas_hits,
             } = plan;
@@ -2555,6 +2557,10 @@ impl Runtime {
                     "result_quality": result_quality,
                     "provenance": provenance,
                     "retrieved_chunks": retrieved_chunks,
+                    // Glassbox for the prompt-budget guard: non-null
+                    // when assembly exceeded the context window and
+                    // the prompt was trimmed (runtime::prompt_budget).
+                    "prompt_budget": prompt_budget_note,
                     // Move 4 — canonical-entity-boost echo for the
                     // bench's fourth legibility lens. Empty when the
                     // registry was unset or matched no entities.
@@ -2904,7 +2910,7 @@ impl Runtime {
         // ids exist (Tier 1 prompt discipline is then the only
         // safety net — same posture as today).
         let evidence_id_allowlist = self.gather_evidence_id_allowlist(conversation_id).await;
-        let request = CompletionRequest {
+        let mut request = CompletionRequest {
             prompt: kc.prompt,
             system_message: Some(kc.system),
             preferred_speed: kc.speed,
@@ -2925,6 +2931,21 @@ impl Runtime {
             url_allowlist: None,
             evidence_id_allowlist,
             lark_grammar: None,
+        };
+        // Phase-1 prompt-budget guard: assembled input + response
+        // reservation must fit the context window, or the engine's
+        // "Prompt too long" rejection becomes a terminal user-facing
+        // error loop (note 2cd9227e). See `prompt_budget` for the
+        // degradation ladder; the note lands in message metadata.
+        let budget_note = match self.inference.effective_context_size() {
+            Some(ctx) => {
+                match prompt_budget::enforce(&mut request, &|s| self.inference.count_tokens(s), ctx)
+                {
+                    prompt_budget::BudgetOutcome::Trimmed { note } => Some(note),
+                    _ => None,
+                }
+            }
+            None => None,
         };
 
         let search_method = kc.search_method;
@@ -3229,6 +3250,10 @@ impl Runtime {
                 // inner-work surface renders these as gutter echo
                 // dots; chat ignores the field.
                 "recalled_memories": recalled_memories_for_metadata,
+                // Glassbox for the prompt-budget guard: non-null when
+                // assembly exceeded the context window and the prompt
+                // was trimmed to fit (see runtime::prompt_budget).
+                "prompt_budget": budget_note,
             });
             // Post-synthesis guardrail (DeepQuery / reasoning stream):
             // same contract as the KnowledgeQuery stream — demote any
