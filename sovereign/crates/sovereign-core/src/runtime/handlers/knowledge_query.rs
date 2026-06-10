@@ -305,12 +305,10 @@ impl Runtime {
 
         // 2. Run the KnowledgeQuery retrieval pipeline — the ordered,
         //    traced step list in `retrieval_pipeline::kq_pipeline()`:
-        //    main retrieval → scope filter → entity/meta-atlas boosts →
-        //    decomp/title expansion → noise floor → atom-enum → RAPTOR/
-        //    atlas grounding → reweight/sort → graph expand → cap +
-        //    reserve → truncate. Each step body is a verbatim transplant
-        //    of the block this function used to inline, calling the same
-        //    unchanged injection helpers; the per-step trace rides the
+        //    the shared evidence-gathering head (local ∥ mesh retrieval
+        //    → scope filter → store search) → the shared core (boosts,
+        //    expansions, noise floor, grounding, merge) → the KQ
+        //    truncate tail. The per-step trace rides the
         //    `retrieval.pipeline` target. The step ORDER is bench-tuned
         //    data — pinned by golden tests in retrieval_pipeline.rs.
         let mut pipeline_state = PipelineState::new(

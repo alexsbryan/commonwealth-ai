@@ -173,7 +173,12 @@ expected_sources = []
 id = "metalingual_p_seps_framing"
 category = "metalingual"
 question = "In SEP's framing, where does eudaimonia point?"
-expected_intent = "metalingual_query"
+# Re-adjudicated 2026-06-10 with its cells_v1 twin
+# (`regression_meta_named_source`): a definition ask against a NAMED
+# installed corpus belongs to the retrieval family. This phrasing
+# stably lands DeepQuery (coarse LOOKUP → KQ → effort-tier
+# escalation); pin the observed retrieval-family route.
+expected_intent = "deep_query"
 expected_facts = ["stub"]
 expected_sources = []
 
@@ -207,7 +212,10 @@ expected_sources = []
 id = "comparative_p_next_to"
 category = "comparative"
 question = "Lincoln's leadership style next to FDR's — what's the contrast?"
-expected_intent = "comparison_query"
+# Re-adjudicated 2026-06-10 with its cells_v1 twin
+# (`regression_compare_named`): open-ended qualitative comparison →
+# DeepQuery. See the rationale there.
+expected_intent = "deep_query"
 expected_facts = ["stub"]
 expected_sources = []
 

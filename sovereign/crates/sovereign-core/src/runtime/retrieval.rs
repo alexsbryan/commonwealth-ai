@@ -2994,15 +2994,13 @@ impl Runtime {
             .and_then(|rest| rest.find(']').map(|end| rest[..end].to_string()));
 
         // Run the DeepQuery retrieval pipeline — the ordered, traced
-        // step list in `retrieval_pipeline::deep_pipeline()`: local ∥
-        // mesh retrieval → atlas/RAPTOR grounding → store search →
-        // entity/meta-atlas boosts → decomp/title expansion → noise
-        // floor → atom-enum → reweight/sort → graph expand → dedupe →
-        // cap + reserve → truncate → top-sources expansion. Step bodies
-        // are verbatim transplants of the blocks this function used to
-        // inline, calling the same unchanged injection helpers; the
-        // per-step trace rides the `retrieval.pipeline` target. Step
-        // ORDER is bench-tuned data — pinned by golden tests in
+        // step list in `retrieval_pipeline::deep_pipeline()`: the shared
+        // evidence-gathering head (local ∥ mesh retrieval → scope filter
+        // → store search) → the shared core (boosts, expansions, noise
+        // floor, grounding, merge) → the deep tail (truncate +
+        // strategy-driven top-sources expansion). The per-step trace
+        // rides the `retrieval.pipeline` target. Step ORDER is
+        // bench-tuned data — pinned by golden tests in
         // retrieval_pipeline.rs.
         //
         // Document-attached turns short-circuit the corpus/mesh/atlas/

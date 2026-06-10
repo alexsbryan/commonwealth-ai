@@ -35,6 +35,24 @@
 intent = "knowledge_query"
 query = "What is the Tribunal de las Aguas?"
 
+# Future-schedule lookup shape (2026-06-10): "When is the next
+# <institution event>?" is a calendar fact — corpus-first + gap check
+# (future_timeline_v1 contract), NOT an external-search action. The
+# embed router must catch these before the coarse LLM, which stably
+# called ACTION on the Fed-meeting phrasing (conf=1.00, 3 runs).
+
+[[example]]
+intent = "knowledge_query"
+query = "When is the next World Cup taking place?"
+
+[[example]]
+intent = "knowledge_query"
+query = "When is the next federal election scheduled?"
+
+[[example]]
+intent = "knowledge_query"
+query = "When does the next session of Congress convene?"
+
 [[example]]
 intent = "knowledge_query"
 query = "According to the author's AI Bullcase, where does the deepest rent in the AI stack sit?"
@@ -381,6 +399,25 @@ query = "Elaborate on the second point."
 intent = "conation_query"
 query = "Cancel that, start over."
 
+# Short-dismissal shape (2026-06-10): retract/abandon directives
+# ("forget it", "drop that") are CONATION (steering the assistant),
+# not expressive disclosure. Added when the long-form expressive
+# exemplars below shifted the boundary and "never mind"-class
+# dismissals started falling through to a zero-confidence coarse
+# EXPRESSIVE verdict (caught by cells_v1_paraphrases).
+
+[[example]]
+intent = "conation_query"
+query = "Scratch that, let's move on."
+
+[[example]]
+intent = "conation_query"
+query = "Eh, drop it — doesn't matter."
+
+[[example]]
+intent = "conation_query"
+query = "Never mind, it's not important."
+
 [[example]]
 intent = "conation_query"
 query = "Halt — wrong direction."
@@ -407,6 +444,30 @@ query = "You mentioned my brother before; I keep thinking about that."
 [[example]]
 intent = "expressive_query"
 query = "Remember the thing I said about my mom? I'm still sitting with it."
+
+# ── Long-form reflective prose (expressive cluster, 2026-06-10) ──
+# Multi-sentence journal-register disclosures with interiority markers
+# and no direct question. Short expressive utterances were covered, but
+# LONG reflective paragraphs diluted toward the reasoning centroid and
+# fell through to a low-confidence coarse REASONING verdict (caught by
+# voice_routing `voice_13_journal_heartfelt`). Kept shape-diverse and
+# disjoint from bench texts per this file's discipline.
+
+[[example]]
+intent = "expressive_query"
+query = "Honestly I'm running on empty today and it shows."
+
+[[example]]
+intent = "expressive_query"
+query = "Starting this whole thing over for the third time and I'm completely drained."
+
+[[example]]
+intent = "expressive_query"
+query = "I found a box of my father's old letters this weekend. It's not nostalgia exactly — it's more that the person who wrote them seemed so certain about who he was becoming, and I can't remember the last time I felt that. I keep reading the same one over and over without knowing what I'm looking for in it."
+
+[[example]]
+intent = "expressive_query"
+query = "Lately I catch myself rehearsing conversations with people who aren't part of my life anymore. Not to win the argument — more like checking whether the person I've turned into would still be recognizable to them. There's a quiet kind of sadness in suspecting the answer wouldn't matter either way."
 
 # ── Personal-recall (knowledge_query cluster) ──
 # When looks_like_personal_recall retired, these cover the
