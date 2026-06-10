@@ -1,0 +1,42 @@
+# Effort classifier exemplars — consumed by
+# `sovereign_core::effort_classifier::EffortClassifier`.
+#
+# Binary centroid classifier over the query embedding. HIGH effort → primary
+# slot (exhaustive / multi-section / deep-synthesis answers); LOW effort → fast
+# slot (single fact / short lookup). Orthogonal to the Operation axis — both an
+# "Answer" lookup and an "Answer" exhaustive-essay are the same operation at
+# opposite ends of this axis. See sovereign/docs/QUERY_TAXONOMY_MECE.md.
+#
+# CRITICAL — never teach to the test. These exemplars are GENERAL and span many
+# domains/phrasings; they are NOT paraphrases of any bench question. The
+# held-out validation set is the chaos bank (it was never an exemplar source):
+# a daemon probe (target/ci-bench/effort_centroid_probe.py) built centroids from
+# these and separated the held-out chaos maximal-essay asks (HIGH) from the
+# single-fact lookups (LOW) 6/6. When adding exemplars, keep them general and
+# re-run the probe on held-out questions — do not pull phrasings from a bench.
+
+# ── HIGH effort — exhaustive / multi-section / deep-synthesis asks ──
+[high]
+examples = [
+    "Walk me through the complete history of the Roman Republic, era by era, leaving nothing out.",
+    "Give a full, detailed breakdown of how photosynthesis works at every stage.",
+    "Provide an exhaustive overview of the causes of the First World War, covering every contributing factor.",
+    "Write a comprehensive, in-depth analysis of Keynesian economics covering all its core principles.",
+    "Trace the entire lifecycle of a star in complete detail, from formation to collapse.",
+    "Give a thorough, section-by-section account of the French Revolution from start to finish.",
+    "Produce a complete, detailed treatment of how the immune system responds to infection, covering every stage.",
+    "Lay out the full arc of the Cold War in depth — every major phase and turning point.",
+]
+
+# ── LOW effort — single fact / short lookup ──
+[low]
+examples = [
+    "Who wrote Pride and Prejudice?",
+    "What is the capital of Australia?",
+    "When did the Berlin Wall fall?",
+    "Define photosynthesis in one sentence.",
+    "Who painted Guernica?",
+    "What is the boiling point of water?",
+    "How many moons does Mars have?",
+    "What year was the Eiffel Tower completed?",
+]

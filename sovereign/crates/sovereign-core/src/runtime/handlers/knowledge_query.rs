@@ -870,6 +870,11 @@ impl Runtime {
         } else {
             route_from_evidence(&shape)
         };
+        // MECE operation axis (QUERY_TAXONOMY_MECE.md) — emitted alongside the
+        // legacy route for glassbox legibility. Naming-only today: nothing
+        // routes on `operation` yet (Step 2 will wire effort → tier); the
+        // `route` field remains the load-bearing decision.
+        let operation = operation_of(&intent, has_atom_enum);
         tracing::info!(
             count = shape.count,
             top1 = shape.top1_score,
@@ -880,6 +885,7 @@ impl Runtime {
             title_match = shape.title_match,
             top_source = %shape.top_source_label,
             route = ?route,
+            operation = ?operation,
             "KnowledgeQuery: evidence-shape routing decision"
         );
 

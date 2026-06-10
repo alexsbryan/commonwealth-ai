@@ -72,6 +72,40 @@ pub enum Intent {
     },
 }
 
+/// Referential cognitive **operation** — *what an answer does*. The MECE
+/// re-cut of the conflated `Simple`/`Knowledge`/`Deep`/`Comparison` intents
+/// (see `sovereign/docs/QUERY_TAXONOMY_MECE.md`). Orthogonal to *effort*
+/// (which model tier serves it) — that is a separate axis. Defined for the
+/// referential-knowledge path ONLY; the Jakobson/speech-act intents
+/// (`Metalingual`/`Conation`/`Commissive`/`Expressive`) and the action
+/// intents keep their own handlers and have no `Operation`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Operation {
+    /// Compose an answer from the corpus. Collapses `Simple` + `Knowledge` +
+    /// `Deep` — one operation at different *effort*, not three operations.
+    Answer,
+    /// Bounded contrast of ≥2 named entities along shared axes (distinct
+    /// answer *structure*, not just higher effort).
+    Compare,
+    /// A list / roster (distinct answer *structure*; today the gated
+    /// atom-enum path).
+    Enumerate,
+}
+
+/// The **effort** an answer demands — orthogonal to [`Operation`]. Picks the
+/// model tier: `Low` → fast slot, `High` → primary slot. Derived from a
+/// dedicated effort classifier (centroid over high/low-effort exemplars), not
+/// from the intent label. See `sovereign/docs/QUERY_TAXONOMY_MECE.md`: an
+/// "exhaustive, section-by-section account" and a "who-is-X" lookup are the
+/// same `Answer` operation at opposite ends of this axis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Effort {
+    /// Single fact / short answer — the fast slot suffices.
+    Low,
+    /// Exhaustive / multi-section / deep-synthesis answer — needs the primary slot.
+    High,
+}
+
 // ─── Tool Types ────────────────────────────────────────────────
 
 /// Read/write classification. Gates approval routing and — via

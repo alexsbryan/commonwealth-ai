@@ -601,6 +601,28 @@ The router emits **facts**; the runtime applies **policy**.
 Splitting them keeps classification testable without a model and
 lets thresholds calibrate without touching the trait.
 
+**Router classifier stack — one wiring path, all surfaces.** Before the
+coarse→refine LLM cascade, `Router.classify` consults a stack of
+embedding-centroid pre-checks: the **embed router** (intent exemplars → a
+direct intent when confident, skipping the LLM passes), the **scope**
+classifier (personal vs external), the **effort** classifier (a high-effort
+referential `Answer` → `DeepQuery` → primary slot — the exhaustive-ask
+escalation), and the **current-info** classifier (drives `force_action` for
+time-sensitive queries). All four are assembled by the single helper
+`sovereign-core/src/router_bootstrap.rs::build_llm_router`, which **every**
+surface calls — CLI/bench, desktop, and the served daemon. Exemplars are baked
+into the binary (`include_str!` of `sovereign/router/*.toml`), so the stack
+works regardless of CWD or `.app`-bundle layout; a `SOVEREIGN_*` env var or
+repo-relative file overrides the baked default. This is **parity by
+construction**: before 2026-06-09 the stack was wired only in the CLI/bench
+bootstrap, so the desktop app (bare router) and the daemon (current-info only)
+silently under-routed to the fast slot while the benches — which *did* wire it
+— kept improving ("desktop kind of sucks even as benches get better"). The fix
+collapsed the three call sites onto one path; `tests/router_bootstrap_parity.rs`
+asserts `all_wired()` so it can't silently re-diverge. Effort-tier escalation +
+robust coarse-verdict recovery default **ON** (`SOVEREIGN_KQ_EFFORT_TIER=0` /
+`SOVEREIGN_ROUTER_ROBUST_COARSE=0` disable).
+
 Per-intent handlers live in
 `sovereign-core/src/runtime/handlers/{simple,ask_move,conation,commissive,metalingual,expressive,document_op,complex_task,attached_doc,knowledge_query}.rs`
 as `impl Runtime` across files (no vtable hop on dispatch).
