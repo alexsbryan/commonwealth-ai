@@ -3664,20 +3664,18 @@ impl Runtime {
         let budget_note =
             crate::runtime::build_response_length_directive(self.inference_config.max_tokens);
         let system = if !all_chunks.is_empty() {
-            // THINKING_DIRECTIVE is a `<think>`-block contract — it guides the
-            // model's HIDDEN reasoning channel. Pass it only when a think
-            // budget is allocated (thinking enabled); a model with no `<think>`
-            // block would otherwise execute its checklist in the OPEN.
-            let thinking = if self.inference_config.think_budget > 0 {
-                format!("\n\n{THINKING_DIRECTIVE}")
-            } else {
-                String::new()
-            };
-            let base = if gap_note.is_empty() {
-                format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}{thinking}\n\n{budget_note}")
-            } else {
-                format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{gap_note}{thinking}\n\n{budget_note}")
-            };
+            // Synthesizer role builds the prompt body (SSOT). THINKING_DIRECTIVE
+            // is a `<think>`-block contract — it guides the model's HIDDEN
+            // reasoning channel; include it only when a think budget is
+            // allocated, else a model with no `<think>` block would execute its
+            // checklist in the OPEN. DeepQuery/Simple never take the comparison
+            // shape.
+            let base = crate::runtime::build_synthesis_system_prompt(
+                false,
+                &gap_note,
+                self.inference_config.think_budget > 0,
+                &budget_note,
+            );
             self.build_primary_system_message(&base, context)
         } else {
             self.build_system_message(
