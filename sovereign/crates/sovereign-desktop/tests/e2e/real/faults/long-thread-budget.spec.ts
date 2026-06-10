@@ -66,11 +66,31 @@ test("long thread on a small window: turns keep completing, trims are glassboxed
     await page.locator(".send-btn").waitFor({ state: "visible", timeout: 30_000 });
   }
 
-  // On an 8192 window this thread MUST have tripped the guard at
-  // least once — if it never fires, either the window grew (update
-  // the profile) or the guard regressed to a no-op.
-  expect(sawBudgetNote, "no turn carried metadata.prompt_budget — guard never fired").toBe(
-    true,
+  // On an 8192 window this thread MUST have engaged the budget
+  // machinery somewhere: either the Phase-1 trim ladder (note in
+  // metadata) or — once Phases 2+3 converge the sensor and scale
+  // assembly proactively — the memo-driven ceilings/allocation,
+  // whose evidence is the runtime:prompt_budget / ctx-aware traces
+  // in the app log. If NEITHER fired, the window grew (update the
+  // profile) or the machinery regressed to a no-op.
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const appLog = fs.readFileSync(
+    path.resolve(here, "../../../../test-artifacts/faults-app.log"),
+    "utf8",
+  );
+  const proactive =
+    /ctx-aware retrieval budget tighter|allocation: scaling history|raising estimate to last turn's measured demand|prompt budget enforced/.test(
+      appLog,
+    );
+  expect(
+    sawBudgetNote || proactive,
+    "neither metadata.prompt_budget nor any budget-machinery trace fired on an 8k window",
+  ).toBe(true);
+  console.log(
+    `  budget machinery evidence: trim-note=${sawBudgetNote} proactive-traces=${proactive}`,
   );
 
   // And the conversation is still usable — the original bricking

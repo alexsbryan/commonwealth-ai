@@ -200,14 +200,30 @@ fi
 # ── 5. Run cargo check ─────────────────────────────────────────────────────
 #
 # `--features corpus-engine/treesitter` matches the test runner's feature
-# set so lint and test stay aligned. Cargo treats a feature flag for a
-# crate that isn't in the dependency closure as a no-op, so this is safe
-# under any `-p` scoping.
+# set so lint and test stay aligned. Cargo's `pkg/feature` syntax is a
+# no-op only when `pkg` is in the dependency closure of the selection;
+# for a package OUTSIDE the selection it is an error ("does not contain
+# this feature"). corpus-engine sits in every crate's closure, so the
+# treesitter flag is safe under any `-p` scoping. sovereign-cli is a
+# leaf crate, so its dev-tools flag (which re-enables the gated dev-verb
+# surface the test runner exercises) is only added when sovereign-cli is
+# part of the selection.
+features="corpus-engine/treesitter"
+if (( escalate_to_workspace )) || [[ ${#crates[@]} -eq 0 ]]; then
+    features+=",sovereign-cli/dev-tools"
+else
+    for c in "${crates[@]}"; do
+        if [[ "$c" == "sovereign-cli" ]]; then
+            features+=",sovereign-cli/dev-tools"
+            break
+        fi
+    done
+fi
 if [[ ! -x "$ADAPTER" ]]; then
     echo "sovereign-lint: adapter not found at $ADAPTER — running raw cargo check ($label)" >&2
-    (cd "$REPO_ROOT" && cargo check "${cargo_args[@]}" --features corpus-engine/treesitter 2>&1)
+    (cd "$REPO_ROOT" && cargo check "${cargo_args[@]}" --features "$features" 2>&1)
     exit $?
 fi
-(cd "$REPO_ROOT" && cargo check "${cargo_args[@]}" --features corpus-engine/treesitter --message-format json 2>&1) \
+(cd "$REPO_ROOT" && cargo check "${cargo_args[@]}" --features "$features" --message-format json 2>&1) \
     | "$ADAPTER" "$label"
 exit "${PIPESTATUS[0]}"

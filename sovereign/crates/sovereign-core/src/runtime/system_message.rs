@@ -169,10 +169,22 @@ impl Runtime {
             parts.push(section.trim_end().to_string());
         }
 
+        // Phase 3 (budget-sensor redesign): scale the age-caps by the
+        // conversation's allocation — derived from last turn's REAL
+        // measured demand vs the window. Identity (×1.0) in the
+        // common case; under sustained overshoot the render shrinks
+        // proportionally (floor 120 chars/message) so assembly fits
+        // by construction instead of leaning on the trim ladder.
+        let history_scale = self
+            .allocation_for(&context.conversation.id)
+            .history_scale;
         if let Some(history) = format_conversation_history(
             &context.conversation.messages,
             CONV_HISTORY_TURNS,
-            crate::runtime::chars_for_message_age,
+            move |age| {
+                ((crate::runtime::chars_for_message_age(age) as f32 * history_scale) as usize)
+                    .max(120)
+            },
             context.compacted_history.as_deref(),
         ) {
             parts.push(history);

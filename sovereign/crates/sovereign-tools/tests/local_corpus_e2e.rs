@@ -425,3 +425,108 @@ async fn register_persists_across_manager_reload() -> SovResult<()> {
 
     Ok(())
 }
+
+/// Regression: `remove()` must cancel + await an in-flight ingest
+/// before wiping the index directories (the contract documented on
+/// `CorpusEngine::remove_corpus_everything`). Before the fix, the
+/// watched-folder DELETE route raced the detached initial ingest its
+/// own register route spawns — the wipe failed under the writer's
+/// feet (HTTP 500) or the writer recreated index files after the
+/// delete (zombie corpus on disk).
+///
+/// The slow embed fn (200ms per chunk) holds the ingest reliably
+/// in flight when `remove` lands. The assertions hold under every
+/// interleaving — remove succeeds, the ingest ends (Cancelled /
+/// NotFound / completed are all acceptable), and once both are done
+/// no index directory for the corpus remains on disk.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn remove_awaits_inflight_ingest_before_wiping() -> SovResult<()> {
+    let tmp = tempfile::tempdir().unwrap();
+    let data_dir = tmp.path().to_path_buf();
+    std::fs::create_dir_all(data_dir.join("indexes")).unwrap();
+    std::fs::create_dir_all(data_dir.join("recipes")).unwrap();
+
+    let slow_embed: EmbedFn = Arc::new(|text: &str| {
+        let mut v = vec![0f32; 32];
+        for b in text.as_bytes() {
+            v[(*b as usize) % 32] += 1.0;
+        }
+        let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-6);
+        for x in &mut v {
+            *x /= norm;
+        }
+        Box::pin(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            Ok(v)
+        })
+    });
+
+    let engine = Arc::new(
+        CorpusEngine::new(data_dir.join("recipes"), data_dir.join("indexes"), slow_embed)
+            .with_embedding_model("test-mock"),
+    );
+    let store: Arc<InMemoryStateStore> = Arc::new(InMemoryStateStore::new());
+    let manager = Arc::new(
+        LocalCorpusManager::init(
+            engine,
+            store as Arc<dyn sovereign_core::traits::StateStore>,
+            None,
+            data_dir.clone(),
+            data_dir.join("vault-snapshots"),
+        )
+        .await?,
+    );
+
+    let folder = data_dir.join("race-source");
+    std::fs::create_dir_all(&folder).unwrap();
+    write_text_file(&folder, "a.txt", "first document body for the race test");
+    write_text_file(&folder, "b.txt", "second document body for the race test");
+    write_text_file(&folder, "c.txt", "third document body for the race test");
+
+    let cfg = LocalCorpusConfig::document_folder(folder, "Race Target".into());
+    let id = manager.register(cfg).await?;
+
+    // Mirror of the watched-folder register route's
+    // `sync_initial: false` arm: ingest detached, handle dropped
+    // there — held here only so the test can await task exit.
+    let mgr = manager.clone();
+    let id_for_spawn = id.clone();
+    let ingest_task =
+        tokio::spawn(async move { mgr.ingest(&id_for_spawn, None, None).await });
+
+    // Let the ingest get under way (staging + first slow embed).
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    // The contract under test: remove succeeds even with the ingest
+    // in flight, because it cancels and awaits it first.
+    manager
+        .remove(&id)
+        .await
+        .expect("remove must succeed while an ingest is in flight");
+
+    // The ingest task must terminate (cancelled at a doc boundary,
+    // NotFound if it lost the startup race, or complete if it beat
+    // the cancel) — never panic.
+    let ingest_result = ingest_task.await.expect("ingest task must not panic");
+    drop(ingest_result); // any Result is acceptable; termination is the contract
+
+    // No index directory for the corpus may remain — neither the
+    // canonical `<id>/` nor any `<id>-partition-*` — and the corpus
+    // is unlisted.
+    let leftovers: Vec<String> = std::fs::read_dir(data_dir.join("indexes"))
+        .unwrap()
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|name| name.starts_with(&id))
+        .collect();
+    assert!(
+        leftovers.is_empty(),
+        "index dirs must not survive (or be recreated after) remove; found: {leftovers:?}"
+    );
+    assert!(
+        manager.get(&id).await.is_none(),
+        "corpus must be unlisted after remove"
+    );
+
+    Ok(())
+}
