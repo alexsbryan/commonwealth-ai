@@ -85,6 +85,17 @@ impl EffortClassifier {
     /// with no on-disk exemplars (a desktop `.app`) still gets the classifier —
     /// bench/desktop parity by construction.
     pub async fn from_toml_str(raw: &str, inference: Arc<dyn InferenceProvider>) -> Result<Self> {
+        Self::from_toml_str_cached(raw, inference, None).await
+    }
+
+    /// [`Self::from_toml_str`] with an optional boot embed cache (see
+    /// [`crate::router_embed_cache`]). Cached under the *unprefixed*
+    /// `d:` key space — see the centroid comment below.
+    pub async fn from_toml_str_cached(
+        raw: &str,
+        inference: Arc<dyn InferenceProvider>,
+        mut cache: Option<&mut crate::router_embed_cache::BootEmbedCache>,
+    ) -> Result<Self> {
         let parsed: EffortExamplesFile = toml::from_str(raw)
             .map_err(|e| Error::InvalidInput(format!("parse effort examples: {e}")))?;
         if parsed.high.examples.is_empty() || parsed.low.examples.is_empty() {
@@ -93,8 +104,10 @@ impl EffortClassifier {
             ));
         }
 
-        let centroid_high = compute_centroid(&parsed.high.examples, &*inference).await?;
-        let centroid_low = compute_centroid(&parsed.low.examples, &*inference).await?;
+        let centroid_high =
+            compute_centroid(&parsed.high.examples, &*inference, cache.as_deref_mut()).await?;
+        let centroid_low =
+            compute_centroid(&parsed.low.examples, &*inference, cache.as_deref_mut()).await?;
         if centroid_high.len() != centroid_low.len() {
             return Err(Error::InvalidInput(format!(
                 "effort centroid dim mismatch: high={} low={}",
@@ -188,6 +201,7 @@ impl EffortClassifier {
 async fn compute_centroid(
     examples: &[String],
     inference: &dyn InferenceProvider,
+    mut cache: Option<&mut crate::router_embed_cache::BootEmbedCache>,
 ) -> Result<Vec<f32>> {
     let mut sum: Option<Vec<f32>> = None;
     for ex in examples {
@@ -196,8 +210,12 @@ async fn compute_centroid(
         // 2026-06-09) showed the retrieval Instruct-prefix collapses the
         // effort signal (chaos "bombing" ask margin +0.123 unprefixed →
         // −0.035 prefixed). Both centroids and queries must use the same
-        // unprefixed embedding.
-        let mut emb = inference.embed(ex).await?;
+        // unprefixed embedding — `embed_cached` keys this under `d:`,
+        // disjoint from the other classifiers' `q:` space.
+        let mut emb = match cache.as_deref_mut() {
+            Some(c) => c.embed_cached(inference, ex).await?,
+            None => inference.embed(ex).await?,
+        };
         normalize(&mut emb);
         match sum.as_mut() {
             Some(s) => {

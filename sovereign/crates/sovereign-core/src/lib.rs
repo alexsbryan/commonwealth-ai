@@ -30,6 +30,7 @@ pub mod router;
 pub mod effort_classifier;
 pub mod router_bootstrap;
 pub mod router_embed;
+pub mod router_embed_cache;
 pub mod runtime;
 pub mod scope_classifier;
 pub mod setup_config;

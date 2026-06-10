@@ -233,6 +233,16 @@ pub enum BootstrapPhase {
     LoadingModel,
     /// About to open the SQLite store and run migrations.
     OpeningDatabase,
+    /// About to assemble the router classifier stack (4 embed-based
+    /// classifiers; ~ms when the exemplar embed cache is warm,
+    /// seconds when cold or after an embed-model swap).
+    AssemblingRouter,
+    /// About to wire tools, corpus engine, local-corpus manager and
+    /// knowledge view (lance index opens scale with installed corpora).
+    WiringKnowledge,
+    /// About to construct the Runtime itself (cheap; last phase
+    /// before `backend-ready`).
+    BuildingRuntime,
 }
 
 /// Optional progress callback for `bootstrap_with_progress`. The
@@ -388,6 +398,7 @@ pub async fn bootstrap_with_progress(
     // even as the benches improve"). Parity is now by construction
     // (sovereign-core/router_bootstrap.rs). Exemplars are baked into the binary,
     // so this works inside the packaged `.app` with no on-disk files present.
+    emit(BootstrapPhase::AssemblingRouter);
     let (llm_router, router_report) = sovereign_core::router_bootstrap::build_llm_router(
         Arc::clone(&inference),
         Arc::clone(&store),
@@ -404,6 +415,8 @@ pub async fn bootstrap_with_progress(
         "router classifier stack assembled"
     );
     let router: Box<dyn sovereign_core::traits::Router> = Box::new(llm_router);
+
+    emit(BootstrapPhase::WiringKnowledge);
 
     // Planner.
     let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
@@ -1221,6 +1234,7 @@ pub async fn bootstrap_with_progress(
     // before sending each request to the daemon.
     let local_only_skill_ids_for_digests = skills.local_only_skill_ids();
 
+    emit(BootstrapPhase::BuildingRuntime);
     let mut runtime = Runtime::new(
         inference,
         router,

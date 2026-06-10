@@ -226,6 +226,19 @@ pub async fn run(app: AppHandle, state: Arc<AppState>) -> Result<(), String> {
             BootstrapPhase::OpeningDatabase => {
                 (SetupPhase::OpeningDatabase, "Opening your library.")
             }
+            // The post-database phases reuse the OpeningDatabase
+            // setup chip — they're sub-second in the common case and
+            // don't warrant their own frontend states; the message
+            // still narrates honestly for slow outliers.
+            BootstrapPhase::AssemblingRouter => {
+                (SetupPhase::OpeningDatabase, "Tuning the router.")
+            }
+            BootstrapPhase::WiringKnowledge => {
+                (SetupPhase::OpeningDatabase, "Connecting your knowledge.")
+            }
+            BootstrapPhase::BuildingRuntime => {
+                (SetupPhase::OpeningDatabase, "Almost there.")
+            }
         };
         let _ = app_for_cb.emit(
             EVENT,

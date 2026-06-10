@@ -105,6 +105,17 @@ impl PersonalScopeClassifier {
     /// with no on-disk exemplars still gets the classifier — bench/desktop
     /// parity by construction.
     pub async fn from_toml_str(raw: &str, inference: Arc<dyn InferenceProvider>) -> Result<Self> {
+        Self::from_toml_str_cached(raw, inference, None).await
+    }
+
+    /// [`Self::from_toml_str`] with an optional boot embed cache (see
+    /// [`crate::router_embed_cache`]) — the example embeddings are
+    /// static per (text, model) and re-embedding them is boot time.
+    pub async fn from_toml_str_cached(
+        raw: &str,
+        inference: Arc<dyn InferenceProvider>,
+        mut cache: Option<&mut crate::router_embed_cache::BootEmbedCache>,
+    ) -> Result<Self> {
         let parsed: ScopeExamplesFile = toml::from_str(raw)
             .map_err(|e| Error::InvalidInput(format!("parse scope examples: {e}")))?;
         if parsed.personal.examples.is_empty() || parsed.external.examples.is_empty() {
@@ -113,8 +124,10 @@ impl PersonalScopeClassifier {
             ));
         }
 
-        let centroid_personal = compute_centroid(&parsed.personal.examples, &*inference).await?;
-        let centroid_external = compute_centroid(&parsed.external.examples, &*inference).await?;
+        let centroid_personal =
+            compute_centroid(&parsed.personal.examples, &*inference, cache.as_deref_mut()).await?;
+        let centroid_external =
+            compute_centroid(&parsed.external.examples, &*inference, cache.as_deref_mut()).await?;
 
         if centroid_personal.len() != centroid_external.len() {
             return Err(Error::InvalidInput(format!(
@@ -210,10 +223,14 @@ impl PersonalScopeClassifier {
 async fn compute_centroid(
     examples: &[String],
     inference: &dyn InferenceProvider,
+    mut cache: Option<&mut crate::router_embed_cache::BootEmbedCache>,
 ) -> Result<Vec<f32>> {
     let mut sum: Option<Vec<f32>> = None;
     for ex in examples {
-        let mut emb = inference.embed_query(ex).await?;
+        let mut emb = match cache.as_deref_mut() {
+            Some(c) => c.embed_query_cached(inference, ex).await?,
+            None => inference.embed_query(ex).await?,
+        };
         normalize(&mut emb);
         match sum.as_mut() {
             Some(s) => {

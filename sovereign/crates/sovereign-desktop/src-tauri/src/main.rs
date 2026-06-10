@@ -264,8 +264,38 @@ fn main() -> ExitCode {
                     return;
                 }
 
-                match state::bootstrap(&state_clone).await {
+                // Phase-timing narration: one log line per bootstrap
+                // phase with total elapsed + delta since the previous
+                // phase. This is the glassbox answer to "why does the
+                // splash take N seconds" — every user boot self-
+                // attributes instead of needing a profiling session
+                // (target `bootstrap.phase`; on by default at INFO).
+                let boot_start = std::time::Instant::now();
+                let last_phase = std::sync::Mutex::new((boot_start, String::from("start")));
+                let progress: state::BootstrapProgressCb = Box::new(move |phase| {
+                    let now = std::time::Instant::now();
+                    let mut guard = match last_phase.lock() {
+                        Ok(g) => g,
+                        Err(p) => p.into_inner(),
+                    };
+                    let (prev_at, prev_name) = std::mem::replace(
+                        &mut *guard,
+                        (now, format!("{phase:?}")),
+                    );
+                    tracing::info!(
+                        phase = ?phase,
+                        total_ms = boot_start.elapsed().as_millis() as u64,
+                        prev_phase = %prev_name,
+                        prev_took_ms = now.duration_since(prev_at).as_millis() as u64,
+                        "bootstrap phase"
+                    );
+                });
+                match state::bootstrap_with_progress(&state_clone, Some(progress)).await {
                     Ok(()) => {
+                        tracing::info!(
+                            total_ms = boot_start.elapsed().as_millis() as u64,
+                            "bootstrap complete"
+                        );
                         tracing::info!("Backend ready");
                         let _ = handle_clone.emit("backend-ready", ());
                         // Start the continuous corpus-status poller so
