@@ -2,6 +2,8 @@
 mod approval;
 mod atlas_commands;
 mod bootstrap;
+#[cfg(debug_assertions)]
+mod command_bridge;
 mod commands;
 mod crash_bundle;
 mod enrich_commands;
@@ -125,6 +127,15 @@ fn main() -> ExitCode {
             }
         })
         .setup(|app| {
+            // Command bridge: loopback HTTP surface for external test
+            // harnesses (Playwright real-mode). Debug builds only,
+            // opt-in via SOVEREIGN_COMMAND_BRIDGE=1. See command_bridge.rs.
+            #[cfg(debug_assertions)]
+            if command_bridge::enabled() {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(command_bridge::serve(handle));
+            }
+
             // Listen for sovereign:// deep links and forward them to the frontend.
             {
                 use tauri_plugin_deep_link::DeepLinkExt;

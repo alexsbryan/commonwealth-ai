@@ -2406,7 +2406,23 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>> {
-        let target = self.select_slot_for_request(request);
+        // FastShort doesn't support streaming — same coercion as
+        // `complete_stream` (whose routing this method mirrors).
+        // Without it, a Fast-speed request with small max_tokens and a
+        // short prompt panics on the FastShort `unreachable!` arm
+        // below and the stream never terminates (caught 2026-06-09 by
+        // the desktop real-mode e2e smoke: the chat turn hung at
+        // "Searching your knowledge…" while the worker thread died).
+        let raw_target = self.select_slot_for_request(request);
+        let target = if matches!(raw_target, SlotTarget::FastShort) {
+            tracing::debug!(
+                "FastShort selected for streaming request; falling back to Fast \
+                 (FastShort doesn't expose a streaming API)"
+            );
+            SlotTarget::Fast
+        } else {
+            raw_target
+        };
         let slot_name: String = match &target {
             SlotTarget::Fast => "fast".into(),
             SlotTarget::FastShort => "fast_short".into(),

@@ -65,6 +65,12 @@ hostname = { workspace = true }
 # adjective+mascot generator. Workspace already pins this for
 # commonwealth crates; keeping the same major.
 rand = "0.8"
+# Command bridge (src/command_bridge.rs) — debug-only loopback HTTP
+# surface for the Playwright real-mode harness. The module is gated
+# `#[cfg(debug_assertions)]` + SOVEREIGN_COMMAND_BRIDGE=1 at runtime;
+# the deps compile in release but the code path is unreachable there.
+axum = { workspace = true }
+tower-http = { workspace = true }
 
 [features]
 # Default-on. Forwards to sovereign-tools so the `#[cfg(feature =
@@ -80,11 +86,10 @@ paddle-ocr = ["sovereign-tools/paddle-ocr"]
 tauri-build = { version = "2", features = [] }
 
 [dev-dependencies]
-# Used only by bootstrap.rs tests — stand up a tiny axum server so we
-# can assert `is_daemon_live` correctly accepts an OpenAI-compatible
-# responder and rejects an arbitrary HTTP server that happens to own
-# the port.
-axum = { workspace = true }
+# bootstrap.rs tests stand up a tiny axum server to assert
+# `is_daemon_live` accepts an OpenAI-compatible responder and rejects
+# an arbitrary HTTP server on the port; axum is now a regular dep
+# (command bridge) so no dev-dep entry is needed.
 # Used by enrich_commands.rs tests for isolated tempdir fixtures
 # (JSONL synthesizer smoke + future filesystem-touching tests).
 tempfile = "3"

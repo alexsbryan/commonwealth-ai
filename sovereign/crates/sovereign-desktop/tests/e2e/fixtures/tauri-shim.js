@@ -338,6 +338,21 @@
     return handler(args);
   }
 
+  // Coverage ledger: report every command invoke to the harness when it
+  // exposed a binding (test-base.ts). Internal `plugin:*` commands never
+  // reach a real backend, so they're excluded from coverage. Fire-and-
+  // forget — the ledger must never affect app behaviour or test timing.
+  function recordInvoke(cmd, ok) {
+    if (cmd.startsWith("plugin:")) return;
+    const record = window.__sovereign_ledger_record__;
+    if (!record) return;
+    try {
+      Promise.resolve(record(cmd, ok)).catch(() => {});
+    } catch {
+      /* binding gone (page teardown) — ignore */
+    }
+  }
+
   // ── __TAURI_INTERNALS__ — what the bundle reads ──────────────
   window.__TAURI_INTERNALS__ = {
     invoke: async (cmd, args /*, options */) => {
@@ -345,8 +360,10 @@
       // semantics (matches real Tauri). Errors propagate as rejections.
       try {
         const result = await callHandler(cmd, args ?? {});
+        recordInvoke(cmd, true);
         return result;
       } catch (e) {
+        recordInvoke(cmd, false);
         throw e;
       }
     },

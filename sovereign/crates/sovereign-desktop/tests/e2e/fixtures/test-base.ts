@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { test as base, expect, type Page } from "@playwright/test";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TtfiReport } from "./scenario-player";
@@ -7,6 +8,24 @@ import type { TtfiReport } from "./scenario-player";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SHIM_PATH = path.resolve(__dirname, "./tauri-shim.js");
 const TTFI_PROBE_PATH = path.resolve(__dirname, "./ttfi-probe.js");
+
+// Coverage ledger: one JSONL row per command invoke the shim observed,
+// attributed to the spec that triggered it. Appends are line-atomic
+// (O_APPEND, rows ≪ PIPE_BUF) so parallel workers can share the file.
+// Truncated per-run by global-setup-ledger.mjs; joined against the
+// generate_handler! manifest by scripts/coverage-report.mjs.
+export const LEDGER_PATH = path.resolve(
+  __dirname,
+  "../../../test-results/ledger-synthetic.jsonl",
+);
+let ledgerDirReady = false;
+function appendLedger(row: Record<string, unknown>): void {
+  if (!ledgerDirReady) {
+    fs.mkdirSync(path.dirname(LEDGER_PATH), { recursive: true });
+    ledgerDirReady = true;
+  }
+  fs.appendFileSync(LEDGER_PATH, `${JSON.stringify(row)}\n`);
+}
 
 /** Surface exposed by tauri-shim.js on `window.__sovereign_test__`. */
 export interface SovereignTestAPI {
@@ -129,6 +148,14 @@ export const test = base.extend<{
         fatalConsoleErrors.push(text);
       }
     });
+    // Coverage-ledger sink. The shim calls this binding (when present)
+    // once per invoke; absence is fine (manual dev, non-fixture pages).
+    await page.exposeBinding(
+      "__sovereign_ledger_record__",
+      (_source, cmd: string, ok: boolean) => {
+        appendLedger({ cmd, ok, spec: testInfo.titlePath.join(" › ") });
+      },
+    );
     await page.addInitScript({ path: SHIM_PATH });
     // TTFI probe installs window.__ttfi__ — independent of the shim,
     // but must load before app code so MutationObserver can be primed
