@@ -202,8 +202,21 @@ pub struct AtlasContextManager {
     /// Structural graph layer per atlas (atom-by-id + edge adjacency).
     /// Used by [`crate::atlas_context::atlas_navigate`] for graph BFS;
     /// without it the runtime falls back to bag-of-atoms cosine
-    /// (`atlas_top_k_as_chunks`). Loaded alongside `contexts` at init.
+    /// (`atlas_top_k_as_chunks`). Populated two ways: eagerly at init
+    /// for corpora whose embedding context loaded (those are the only
+    /// ids `atlas_navigate` can ever seed), and on-demand in
+    /// [`AtlasContextProvider::graph`] for everything else (the atom-
+    /// enumeration path pulls graphs for enabled corpora regardless of
+    /// context state). Wikipedia-scale atlases run to GBs parsed —
+    /// eager-loading all of them cost ~20G RSS for graphs no query
+    /// could reach (observed 2026-06-10: contexts=0, graphs=1790).
     graphs: Arc<RwLock<HashMap<String, Arc<sovereign_core::atlas_context::AtlasGraph>>>>,
+    /// Discovery map `corpus_id → atlas dir`, filled by the init scan
+    /// without parsing anything. [`AtlasContextProvider::graph`] uses
+    /// it to lazy-load on first request; a failed parse evicts the
+    /// entry so corrupt atlases aren't re-parsed every turn. Sync
+    /// `RwLock` — read from the sync provider trait on the hot path.
+    graph_dirs: Arc<std::sync::RwLock<HashMap<String, PathBuf>>>,
     /// Per-corpus query-bump map, in-memory mirror of each atlas's
     /// `triage_bumps.json`. Loaded at init time, mutated on every
     /// `record_match`, persisted by [`flush_bumps`] (debounced via
@@ -238,6 +251,7 @@ impl AtlasContextManager {
             filter: AtlasContextFilter::default(),
             contexts: Arc::new(RwLock::new(HashMap::new())),
             graphs: Arc::new(RwLock::new(HashMap::new())),
+            graph_dirs: Arc::new(std::sync::RwLock::new(HashMap::new())),
             bumps: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -322,7 +336,7 @@ impl AtlasContextManager {
                     .counts
                     .extend(state.counts);
             }
-            match self.load_one(&corpus_id, &atlas_dir, cache_only).await {
+            let context_loaded = match self.load_one(&corpus_id, &atlas_dir, cache_only).await {
                 Ok(ctx) => {
                     let count = ctx.entries.len();
                     self.contexts
@@ -330,6 +344,7 @@ impl AtlasContextManager {
                         .await
                         .insert(corpus_id.clone(), Arc::new(ctx));
                     tracing::info!(corpus = corpus_id, entries = count, "atlas-context: loaded");
+                    true
                 }
                 Err(e) => {
                     tracing::debug!(
@@ -337,45 +352,62 @@ impl AtlasContextManager {
                         error = %e,
                         "atlas-context: load skipped"
                     );
+                    false
                 }
+            };
+            // Record where this atlas lives so `graph()` can parse it
+            // on first request. Parsing here is deliberate only when
+            // the embedding context loaded: those ids are the pool
+            // `atlas_navigate` seeds from on every query, so they must
+            // be warm. Everything else (atlas-only siblings, stale
+            // embed caches) loads on demand via the atom-enumeration
+            // path's per-id pull — at wikipedia scale an unused graph
+            // costs GBs of RSS, and an unseedable graph is unreachable
+            // by every consumer.
+            if let Ok(mut dirs) = self.graph_dirs.write() {
+                dirs.insert(corpus_id.clone(), atlas_dir.clone());
             }
-            // Load the structural graph layer alongside. Independent
-            // of embedding load — even if the cache-miss-deferred
-            // path skipped the embeddings, the graph itself is cheap
-            // to parse and we want it available for graph-walk
-            // navigation regardless.
-            match sovereign_core::atlas_context::AtlasGraph::load_from_disk(&corpus_id, &atlas_dir)
-            {
-                Ok(graph) => {
-                    let atom_count = graph.atoms_by_id.len();
-                    let edge_out_count: usize =
-                        graph.edges_by_source.values().map(|v| v.len()).sum();
-                    self.graphs
-                        .write()
-                        .await
-                        .insert(corpus_id.clone(), Arc::new(graph));
-                    tracing::info!(
-                        corpus = corpus_id,
-                        atoms = atom_count,
-                        edges = edge_out_count,
-                        "atlas-graph: loaded"
-                    );
-                }
-                Err(e) => {
-                    tracing::debug!(
-                        corpus = corpus_id,
-                        error = %e,
-                        "atlas-graph: load skipped"
-                    );
+            if context_loaded {
+                match sovereign_core::atlas_context::AtlasGraph::load_from_disk(
+                    &corpus_id, &atlas_dir,
+                ) {
+                    Ok(graph) => {
+                        let atom_count = graph.atoms_by_id.len();
+                        let edge_out_count: usize =
+                            graph.edges_by_source.values().map(|v| v.len()).sum();
+                        self.graphs
+                            .write()
+                            .await
+                            .insert(corpus_id.clone(), Arc::new(graph));
+                        tracing::info!(
+                            corpus = corpus_id,
+                            atoms = atom_count,
+                            edges = edge_out_count,
+                            "atlas-graph: loaded"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::debug!(
+                            corpus = corpus_id,
+                            error = %e,
+                            "atlas-graph: load skipped"
+                        );
+                    }
                 }
             }
         }
         let loaded = self.contexts.read().await.len();
         let graphs_loaded = self.graphs.read().await.len();
+        let graphs_available = self
+            .graph_dirs
+            .read()
+            .map(|m| m.len())
+            .unwrap_or_default();
         tracing::info!(
             contexts = loaded,
             graphs = graphs_loaded,
-            "atlas-context: init complete"
+            graphs_available,
+            "atlas-context: init complete (graphs without a loaded context parse on first use)"
         );
     }
 
@@ -825,10 +857,54 @@ impl AtlasContextProvider for AtlasContextManager {
         &self,
         atlas_corpus_id: &str,
     ) -> Option<Arc<sovereign_core::atlas_context::AtlasGraph>> {
-        self.graphs
+        if let Some(g) = self
+            .graphs
             .try_read()
             .ok()
             .and_then(|m| m.get(atlas_corpus_id).cloned())
+        {
+            return Some(g);
+        }
+        // Miss: parse on demand if the init scan discovered this
+        // atlas. Synchronous parse on the caller's thread — the only
+        // callers reaching ids without a warm graph are per-id pulls
+        // (atom enumeration over a conversation's enabled corpora),
+        // and the one-time cost is paid exactly when the graph is
+        // actually needed instead of for all 1,700+ atlases at boot.
+        let atlas_dir = self
+            .graph_dirs
+            .read()
+            .ok()
+            .and_then(|m| m.get(atlas_corpus_id).cloned())?;
+        match sovereign_core::atlas_context::AtlasGraph::load_from_disk(
+            atlas_corpus_id,
+            &atlas_dir,
+        ) {
+            Ok(graph) => {
+                let graph = Arc::new(graph);
+                tracing::info!(
+                    corpus = atlas_corpus_id,
+                    atoms = graph.atoms_by_id.len(),
+                    "atlas-graph: lazy-loaded on first request"
+                );
+                if let Ok(mut m) = self.graphs.try_write() {
+                    m.entry(atlas_corpus_id.to_string())
+                        .or_insert_with(|| Arc::clone(&graph));
+                }
+                Some(graph)
+            }
+            Err(e) => {
+                tracing::warn!(
+                    corpus = atlas_corpus_id,
+                    error = %e,
+                    "atlas-graph: lazy load failed; evicting so it isn't re-parsed every turn"
+                );
+                if let Ok(mut dirs) = self.graph_dirs.write() {
+                    dirs.remove(atlas_corpus_id);
+                }
+                None
+            }
+        }
     }
 }
 
@@ -936,6 +1012,124 @@ mod tests {
         assert_eq!(parsed.counts.get("Earth"), Some(&5));
         assert_eq!(parsed.counts.get("Mars"), Some(&1));
         assert!(!parsed.dirty, "freshly-loaded state isn't dirty");
+    }
+
+    use futures::Stream;
+    use sovereign_core::types::{
+        CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed,
+    };
+    use std::pin::Pin;
+
+    /// Bare-minimum InferenceProvider. The lazy-graph tests run in
+    /// `cache_only` mode with no embeddings cache on disk, so
+    /// `load_one` bails before any inference call — every method
+    /// panicking keeps that assumption loud.
+    struct PanicInference;
+
+    #[async_trait::async_trait]
+    impl InferenceProvider for PanicInference {
+        async fn complete(
+            &self,
+            _: &CompletionRequest,
+        ) -> sovereign_core::Result<CompletionResponse> {
+            unreachable!("graph lazy-load path must not call complete()")
+        }
+
+        async fn complete_stream(
+            &self,
+            _: &CompletionRequest,
+        ) -> sovereign_core::Result<
+            Pin<Box<dyn Stream<Item = sovereign_core::Result<String>> + Send>>,
+        > {
+            unreachable!("graph lazy-load path must not stream")
+        }
+
+        async fn embed(&self, _: &str) -> sovereign_core::Result<Vec<f32>> {
+            unreachable!("cache_only init must not embed")
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 8192,
+                supports_structured_output: false,
+                relative_speed: Speed::Fast,
+                relative_reasoning: Depth::Shallow,
+            }
+        }
+    }
+
+    /// `<indexes>/<corpus>/atlas/atoms.json` with an empty (but
+    /// schema-valid) atom set — enough for `AtlasGraph::load_from_disk`
+    /// to succeed while `load_one` fails on the missing embed cache.
+    fn write_atlas_fixture(indexes: &Path, corpus: &str, atoms_json: &str) {
+        let atlas = indexes.join(corpus).join(ATLAS_DIRNAME);
+        std::fs::create_dir_all(&atlas).unwrap();
+        std::fs::write(atlas.join("atoms.json"), atoms_json).unwrap();
+    }
+
+    fn manager_for(indexes: &Path) -> AtlasContextManager {
+        AtlasContextManager::new(
+            indexes.to_path_buf(),
+            Arc::new(PanicInference),
+            "test-embed".into(),
+        )
+    }
+
+    const EMPTY_ATOMS: &str = r#"{"schema_version":"2","atoms":[]}"#;
+
+    #[tokio::test]
+    async fn init_defers_graphs_for_contextless_atlases() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_atlas_fixture(tmp.path(), "t1", EMPTY_ATOMS);
+        // Filtered shapes: dot/underscore dirs and a dir without atlas/.
+        write_atlas_fixture(tmp.path(), ".hidden", EMPTY_ATOMS);
+        write_atlas_fixture(tmp.path(), "_scratch", EMPTY_ATOMS);
+        std::fs::create_dir_all(tmp.path().join("no-atlas-here")).unwrap();
+
+        let mgr = manager_for(tmp.path());
+        mgr.init_from_cache().await;
+
+        // No embed cache → no context → no graph parsed at init.
+        assert_eq!(mgr.contexts.read().await.len(), 0);
+        assert_eq!(mgr.graphs.read().await.len(), 0, "graphs must defer");
+        // ...but discovery recorded exactly the one legitimate atlas.
+        let dirs = mgr.graph_dirs.read().unwrap();
+        assert_eq!(dirs.len(), 1);
+        assert!(dirs.contains_key("t1"));
+    }
+
+    #[tokio::test]
+    async fn graph_lazy_loads_on_first_request_and_memoizes() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_atlas_fixture(tmp.path(), "t1", EMPTY_ATOMS);
+        let mgr = manager_for(tmp.path());
+        mgr.init_from_cache().await;
+        assert_eq!(mgr.graphs.read().await.len(), 0);
+
+        let g = AtlasContextProvider::graph(&mgr, "t1");
+        assert!(g.is_some(), "discovered atlas must lazy-load");
+        assert_eq!(
+            mgr.graphs.read().await.len(),
+            1,
+            "lazy load memoizes into the warm map"
+        );
+        // Unknown id: no discovery entry, no load.
+        assert!(AtlasContextProvider::graph(&mgr, "nope").is_none());
+    }
+
+    #[tokio::test]
+    async fn graph_lazy_load_failure_evicts_discovery_entry() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_atlas_fixture(tmp.path(), "bad", "{ not json");
+        let mgr = manager_for(tmp.path());
+        mgr.init_from_cache().await;
+        assert!(mgr.graph_dirs.read().unwrap().contains_key("bad"));
+
+        assert!(AtlasContextProvider::graph(&mgr, "bad").is_none());
+        assert!(
+            !mgr.graph_dirs.read().unwrap().contains_key("bad"),
+            "corrupt atlas must not be re-parsed on every turn"
+        );
     }
 
     #[test]
