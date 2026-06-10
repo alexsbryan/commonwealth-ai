@@ -182,7 +182,7 @@ The pattern:
 Current outliers (the largest; `SYSTEM_OVERVIEW.md` §10 carries the
 full set with per-file deferral rationale):
 
-- `sovereign-inference/src/embedded.rs` (~9636 lines) — embedded daemon glue.
+- `sovereign-inference/src/embedded/model_slot.rs` (~3475 lines) — slot state machine + decode loops + MTP; the residual of the former 9,669-line `embedded.rs` after its per-concern split (engine / rpc_distribution / grammar / prompt_helpers / sampler / embed_slot / rerank_slot / rpc_warm_cache). One tight unsafe-FFI concern; further seam = an alternate backend at the `InferenceProvider` trait.
 - `sovereign-cli-dev/src/project_cmd.rs` (~7040 lines) — the project subcommand surface. Moved out of `sovereign-cli` in the 2026-05-22 binary split; still wants an in-file §3.2 split.
 - `sovereign-desktop/src-tauri/src/state.rs` (~1430 lines, down from 2347) — desktop `AppState` + `bootstrap_with_progress`. **Decomposition in progress:** config / built-in skills and four bootstrap sub-phases (`health`, `store`, `inference`, `knowledge_view`) are extracted to `state/` + `state/builders/` with mock-backed tests; `embedded_daemon` remains, `tools` stays inline (mutated across the whole bootstrap). (The former `commands.rs` monolith was already split into `commands/*.rs`.)
 - `commonwealth-api/src/frontdoor.rs` (~5758 lines) — harness-protocol → model-native normalizer.
@@ -197,8 +197,12 @@ their deferral rationale. Big files without a roadmap entry are
 
 History: `runtime.rs` (15,024 lines) was decomposed in the 2026-05-23
 refactor pass into `runtime/` (13 helper modules + 10 per-intent
-handler modules); the residual `runtime.rs` is ~3,060 lines holding
-the `Runtime` struct, builders, lifecycle, and top-level dispatch.
+handler modules); the 2026-06-10 pass finished the job — the residual
+dispatch monolith split into `runtime/prompts.rs` (~733, the pure
+prompt/budget/refusal policy layer), `runtime/streaming.rs` (~1,950,
+streaming dispatch), and `runtime/turn.rs` (~680, non-streaming
+dispatch), leaving `runtime.rs` at ~745 lines holding the `Runtime`
+struct, builders, lifecycle, and the module façade.
 `atos_cmd.rs` (2673 lines) and `local.rs` (1183 lines) were split into
 folders in the spring 2026 refactor pass — they were the prior
 occupants of this list. `sovereign-core/src/types.rs` (3623 lines, 17

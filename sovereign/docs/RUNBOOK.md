@@ -60,6 +60,13 @@ sovereign daemon run       # foreground (dev) — Ctrl-C to stop
 - Uninstall: `sovereign uninstall-service` (or remove the plist/unit).
 - Verified 2026-06-10: `kill -9` on the supervised daemon → relaunch within
   seconds, models reloaded, `/status` uptime reset.
+- **"Daemon went down during a test run":** grep `daemon: shutdown signal
+  received` — if `signal="SIGTERM"` with healthy RSS, something *deliberately*
+  stopped it (clean exits stay down by design). Known historical culprit: the
+  `phase3_serve_lifecycle` stop test reached past its sandbox via the :9741
+  port fallback and the launchctl leg (fixed 2026-06-10 with
+  `SOVEREIGN_STOP_SANDBOXED=1`, an automation-only knob that confines
+  `daemon stop` to the pidfile legs — operators never set it).
 
 ## 4. Memory budget + canonical model config
 

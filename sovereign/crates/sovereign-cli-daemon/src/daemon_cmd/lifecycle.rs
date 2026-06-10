@@ -58,8 +58,19 @@ pub(super) async fn stop_daemon() -> i32 {
     // Without this, `daemon stop` falls through to `systemctl stop` on
     // an inactive unit, which is a no-op returning exit 0 — i.e. silently
     // reports success while the actual daemon keeps serving.
+    //
+    // `SOVEREIGN_STOP_SANDBOXED=1` confines the stop chain to the
+    // PIDFILE legs only — no :9741 port-lookup SIGTERM, no
+    // service-manager forwarding. It exists for AUTOMATION that
+    // exercises the stop path under an isolated HOME (the
+    // phase3_serve_lifecycle test): HOME isolation only covers the
+    // pidfile legs, and on 2026-06-10 the test's `stop` killed the
+    // developer's live daemon TWICE — first via this port fallback,
+    // then (after the port leg was gated) via `launchctl stop`, which
+    // doesn't consult HOME at all. Operators should never set it.
     #[cfg(unix)]
-    if let Some(pid) = find_daemon_pid_by_port(9741) {
+    if !stop_sandboxed() {
+        if let Some(pid) = find_daemon_pid_by_port(9741) {
         let rc = unsafe {
             libc_kill(pid, 15 /* SIGTERM */)
         };
@@ -76,11 +87,19 @@ pub(super) async fn stop_daemon() -> i32 {
             eprintln!("⚠ pid {pid} (owner of :9741) didn't exit after 10s; leaving it alone");
             return 1;
         }
-        // kill() failed (most likely EPERM on a daemon owned by another
-        // user). Fall through to the service-manager path; it might be
-        // the only thing with permission.
+            // kill() failed (most likely EPERM on a daemon owned by another
+            // user). Fall through to the service-manager path; it might be
+            // the only thing with permission.
+        }
     }
 
+    if stop_sandboxed() {
+        eprintln!(
+            "no running daemon found via pidfile (sandboxed stop: \
+             port-lookup + service-manager legs skipped)"
+        );
+        return 1;
+    }
     match crate::service_install::stop_service() {
         Ok(()) => {
             eprintln!("✓ stop signal sent — daemon will exit after draining in-flight requests");
@@ -91,6 +110,12 @@ pub(super) async fn stop_daemon() -> i32 {
             1
         }
     }
+}
+
+/// See the sandbox note in `stop_daemon` — automation-only escape
+/// hatch confining stop to the pidfile legs.
+fn stop_sandboxed() -> bool {
+    std::env::var("SOVEREIGN_STOP_SANDBOXED").ok().as_deref() == Some("1")
 }
 
 /// Find the PID listening on `port` on localhost. Used by `daemon stop`

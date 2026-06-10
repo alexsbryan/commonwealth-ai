@@ -120,13 +120,18 @@ fn init_help_short_circuits_without_spawning() {
 ///
 /// We can't assert exit 0 here (there's nothing to stop), but the
 /// command must NOT panic and must produce some user-visible
-/// output. Setting HOME to a tempdir prevents the test from
-/// accidentally killing the developer's actual MCP server.
+/// output. Setting HOME to a tempdir isolates the PIDFILE leg only —
+/// the stop chain's :9741 port-lookup fallback would still SIGTERM
+/// the developer's live daemon, and the service-manager leg
+/// (`launchctl stop`) ignores HOME entirely — both killed a live
+/// daemon on 2026-06-10. SOVEREIGN_STOP_SANDBOXED confines the chain
+/// to the pidfile legs so the test cannot reach past its sandbox.
 #[test]
 fn stop_with_no_pid_file_does_not_panic() {
     let tmp = tempfile::tempdir().unwrap();
     let out = sovereign()
         .env("HOME", tmp.path())
+        .env("SOVEREIGN_STOP_SANDBOXED", "1")
         .args(["stop"])
         .output()
         .expect("spawn sovereign-cli");
