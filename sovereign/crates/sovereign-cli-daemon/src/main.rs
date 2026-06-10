@@ -6,6 +6,7 @@
 mod daemon_cmd;
 mod doctor_cmd;
 mod install_service_cmd;
+mod memory_watch;
 pub(crate) mod log_rotation;
 mod service_install;
 mod setup_cmd;

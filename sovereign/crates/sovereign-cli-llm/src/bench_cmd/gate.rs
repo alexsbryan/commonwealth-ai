@@ -184,8 +184,37 @@ pub fn cmd_gate(args: &[String]) -> i32 {
                 return 2;
             }
         };
+        // Staleness advisory ONLY — gates stay deterministic against
+        // the pinned baseline; an old baseline is operator information,
+        // not a regression. (The April-30 incident: a HARD lane
+        // silently diffed against a six-week-old snapshot.)
+        // `SOVEREIGN_BASELINE_AGE_STRICT=1` upgrades over-age to a
+        // failing exit for CI contexts that want to force re-minting.
+        let mut strict_stale = false;
+        if prev.is_some() {
+            if let Some((captured, age_days)) = super::baselines::baseline_age(&dir) {
+                let max_age = super::baselines::baseline_max_age_days();
+                if age_days > max_age {
+                    eprintln!(
+                        "[gate] ⚠ baseline for {lane} captured {captured} ({age_days}d old, threshold {max_age}d) — \
+                         re-mint with --update-baseline once adjudicated"
+                    );
+                    strict_stale = std::env::var("SOVEREIGN_BASELINE_AGE_STRICT")
+                        .ok()
+                        .as_deref()
+                        == Some("1");
+                } else {
+                    eprintln!("[gate] baseline for {lane} captured {captured} ({age_days}d old)");
+                }
+            }
+        }
         let d = diff(prev.as_ref(), &current);
-        render_and_exit_code(&d, lane)
+        let code = render_and_exit_code(&d, lane);
+        if code == 0 && strict_stale {
+            eprintln!("[gate] FAIL: baseline over age threshold and SOVEREIGN_BASELINE_AGE_STRICT=1");
+            return 1;
+        }
+        code
     }
 }
 

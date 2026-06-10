@@ -38,6 +38,7 @@ mod drift_cmd;
 mod git_archaeology_cmd;
 mod init;
 mod llm_bin;
+mod sibling;
 mod memory_cmd;
 mod milestone_cmd;
 mod notes_cmd;

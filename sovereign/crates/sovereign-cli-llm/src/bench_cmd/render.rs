@@ -48,6 +48,9 @@ fn print_enrichment_scoreboard(rows: &[&BenchOutcome]) {
         let label = format!("{} ({}/{})", o.corpus_id, o.group, o.id,);
         let summary = enrichment_summary(o);
         println!("  {label:<46}  {summary}");
+        if let Some(warn) = baseline_age_warning(o) {
+            println!("                                                  {warn}");
+        }
         if let Some(note) = &o.note {
             println!("                                                  note: {note}");
         }
@@ -106,6 +109,9 @@ fn print_retrieval_scoreboard(rows: &[&BenchOutcome]) {
         let label = format!("{} ({}/{})", o.corpus_id, o.group, o.id);
         let summary = retrieval_summary(o);
         println!("  {label:<46}  {summary}");
+        if let Some(warn) = baseline_age_warning(o) {
+            println!("                                                  {warn}");
+        }
         if let Some(note) = &o.note {
             println!("                                                  note: {note}");
         }
@@ -493,6 +499,46 @@ fn print_summary(outcomes: &[BenchOutcome]) {
         .collect::<Vec<_>>()
         .join(" · ");
     println!("  {s}");
+
+    // Stale-baseline footer: name every bench whose diffed baseline is
+    // over the age threshold, at the moment the operator is reading
+    // the verdict. Warn-only — the counts above are the gate.
+    let stale: Vec<String> = outcomes
+        .iter()
+        .filter_map(|o| {
+            baseline_age_warning(o).map(|_| {
+                format!(
+                    "{}/{} {}d ({})",
+                    o.group,
+                    o.id,
+                    o.baseline_age_days.unwrap_or(0),
+                    o.baseline_captured.as_deref().unwrap_or("?"),
+                )
+            })
+        })
+        .collect();
+    if !stale.is_empty() {
+        println!(
+            "  ⚠ stale baselines (> {}d): {} — re-mint with --update-baseline once adjudicated (see RUNBOOK)",
+            super::baselines::baseline_max_age_days(),
+            stale.join(", ")
+        );
+    }
+}
+
+/// `Some("⚠ baseline 41d old (2026-04-30)")` when the baseline this
+/// outcome was diffed against exceeds `SOVEREIGN_BASELINE_MAX_AGE_DAYS`
+/// (default 14). Warn-only: staleness is operator information — the
+/// April-30-baseline incident was a HARD lane silently diffing against
+/// a six-week-old snapshot — and never changes an exit code.
+fn baseline_age_warning(o: &BenchOutcome) -> Option<String> {
+    let age = o.baseline_age_days?;
+    let max_age = super::baselines::baseline_max_age_days();
+    if age <= max_age {
+        return None;
+    }
+    let captured = o.baseline_captured.as_deref().unwrap_or("?");
+    Some(format!("⚠ baseline {age}d old ({captured})"))
 }
 
 fn status_glyph(s: BenchStatus) -> &'static str {
@@ -536,6 +582,8 @@ mod tests {
                 baseline: None,
             }),
             retrieval: None,
+            baseline_captured: None,
+            baseline_age_days: None,
             levers: vec![],
             note: None,
         };
@@ -562,6 +610,8 @@ mod tests {
                 baseline: None,
             }),
             retrieval: None,
+            baseline_captured: None,
+            baseline_age_days: None,
             levers: vec!["mechanism".into()],
             note: None,
         };

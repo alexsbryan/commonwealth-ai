@@ -291,3 +291,42 @@ fn uninstall_systemd() -> Result<(), String> {
 
     Ok(())
 }
+
+/// True when the daemon is registered with the user's service manager
+/// AND the registration is active — i.e. a crash WILL be auto-restarted.
+///
+/// macOS: the plist must exist on disk *and* be loaded into this
+/// user's launchd session (`launchctl list <label>` exits 0) —
+/// plist-on-disk-but-unloaded is NOT supervised, launchd only honors
+/// KeepAlive for loaded jobs. Linux: `systemctl --user is-enabled`
+/// exits 0. Anything else (other platforms, probe failures) reports
+/// unsupervised, which is the safe direction for the doctor check and
+/// the `daemon start` advisory that consume this.
+pub fn service_installed() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        let Ok(plist) = launchd_plist_path() else {
+            return false;
+        };
+        if !plist.exists() {
+            return false;
+        }
+        std::process::Command::new("launchctl")
+            .args(["list", "com.sovereign.daemon"])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("systemctl")
+            .args(["--user", "is-enabled", "sovereign.service"])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        false
+    }
+}

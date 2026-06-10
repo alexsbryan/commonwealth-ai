@@ -38,6 +38,9 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 // stay here (the former is shared with submodules as an ancestor-private).
 mod build;
 mod lifecycle;
+// Liveness probe for the pidfile-managed (manual) daemon — consumed by
+// `install-service`'s double-start guard and doctor's supervision check.
+pub(crate) use lifecycle::read_daemon_pid;
 mod provider;
 mod tool_registry;
 mod worker;
@@ -265,6 +268,14 @@ async fn run_daemon(args: &[String]) -> i32 {
         crate::log_rotation::DEFAULT_KEEP_N_BAKS,
         std::time::Duration::from_secs(30 * 60),
     );
+
+    // ── Memory watch ──────────────────────────────────────────────
+    // 60s RSS sampler: publishes the latest sample, warns above the
+    // soft limit, and (opt-in hard limit) self-SIGTERMs with a
+    // non-zero exit so the service manager relaunches a clean process
+    // before jetsam can SIGKILL mid-write. See `crate::memory_watch`.
+    let _memory_watch_handle =
+        crate::memory_watch::spawn_memory_watch(std::time::Duration::from_secs(60));
 
     // ── Load config ───────────────────────────────────────────────
     let config = match config_override.as_ref() {
@@ -2095,13 +2106,23 @@ async fn run_daemon(args: &[String]) -> i32 {
     //
     // Linux + other targets keep the standard return path — Metal is
     // macOS-only, so the assertion only fires on darwin.
+    // Exit code contract: the memory watcher's hard-limit path needs a
+    // NON-ZERO exit so launchd (`KeepAlive.SuccessfulExit=false`) /
+    // systemd (`Restart=on-failure`) relaunch the daemon; every other
+    // shutdown is deliberate and must stay 0 (= stays down).
+    let exit_code: i32 = if crate::memory_watch::hard_exit_requested() {
+        eprintln!("sovereign daemon exiting non-zero: RSS hard limit (service manager will relaunch)");
+        102
+    } else {
+        0
+    };
     #[cfg(target_os = "macos")]
     unsafe {
-        fast_exit_skip_destructors(0);
+        fast_exit_skip_destructors(exit_code);
     }
     #[cfg(not(target_os = "macos"))]
     {
-        0
+        exit_code
     }
 }
 

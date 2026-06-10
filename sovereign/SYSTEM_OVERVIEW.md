@@ -850,6 +850,8 @@ traversal). The desktop app registers as the system handler.
 | Production search integration | [`docs/PRODUCTION_SEARCH_INTEGRATION.md`](./docs/PRODUCTION_SEARCH_INTEGRATION.md) |
 | Features overview | [`docs/FEATURES.md`](./docs/FEATURES.md) |
 | FAQ / troubleshooting / dev | [`docs/FAQ.md`](./docs/FAQ.md), [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md), [`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md) |
+| **On-call runbook** (incident decision tree, supervision, memory budget, glassbox map, bench noise bands, sibling-rebuild map) | [`docs/RUNBOOK.md`](./docs/RUNBOOK.md) |
+| Retrieval pipeline steps + env-knob registry (GENERATED, freshness-gated) | [`docs/retrieval-pipeline.md`](./docs/retrieval-pipeline.md) |
 
 ### Notable in-tree invariants
 

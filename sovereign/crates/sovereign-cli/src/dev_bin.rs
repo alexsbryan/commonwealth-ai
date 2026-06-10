@@ -54,6 +54,8 @@ pub fn exec(verb: &str, args: &[String]) -> i32 {
         return 127;
     };
 
+    crate::sibling::warn_if_stale(&bin, "sovereign-cli-dev");
+
     let mut argv: Vec<OsString> = Vec::with_capacity(args.len() + 1);
     argv.push(OsString::from(verb));
     for a in args {
