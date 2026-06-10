@@ -63,4 +63,15 @@ examples = [
   "Give a thorough account of the Lebanese Civil War and its aftermath",
   "Summarize the plot and themes of the Epic of Gilgamesh",
   "How did the Industrial Revolution change European society?",
+  # ── Future-schedule cluster (2026-06-10) ──
+  # "When is the next X?" calendar/schedule questions are NOT [current]
+  # by this file's own class definition — a scheduled future date does
+  # not change day-to-day. The routing contract (future_timeline_v1
+  # bank) is corpus-first + gap check; without these, "next <institution
+  # event>" phrasings got pulled to [current] by decided-past neighbors
+  # like "What did the central bank decide this month?".
+  "When is the next total solar eclipse?",
+  "When does the next Olympics begin?",
+  "When is the next census scheduled to take place?",
+  "What date does the next leap year fall on?",
 ]

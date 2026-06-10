@@ -661,18 +661,22 @@ retrieval-injection orchestration — which grounding/boost/expansion steps run,
 in what order, under which `SOVEREIGN_*` gates — is **data**: a
 `RetrievalPipeline` is an ordered list of named `RetrievalStep`s run by one
 tracing runner (one `tracing::info!(target: "retrieval.pipeline")` line per
-step with `chunks_before/after/delta`). Both pipelines are composed as a
-**per-intent head + a SHARED 12-step core + per-intent tail**:
-`kq_pipeline()` (KnowledgeQuery / ComparisonQuery, 15 steps) and
-`deep_pipeline()` (DeepQuery / SimpleQuery, 16 steps; attached-doc turns drop
-the corpus/mesh/store head and the two grounding steps). Golden tests pin the
-step lists and the core-slice identity, so reordering is an explicit,
-reviewed act. The Phase 2 convergence (2026-06-09, CI-bench-A/B'd) moved the
-deep path's atlas/RAPTOR grounding to the KQ post-floor position (the old
-pre-floor position let the noise floor silently drop zero-overlap virtual
-grounding chunks) and extended `dedupe_merged` to the KQ path; per-intent
-differences (comparison-aware entity boost/reserve) ride `PipelineState`,
-not divergent code. The injection helpers
+step with `chunks_before/after/delta`). The governing principle: **the
+intent decides HOW to answer (model tier, expansion, synthesis shape) — never
+WHERE knowledge lives.** Both pipelines are composed as **the SHARED 3-step
+evidence-gathering head (local corpora ∥ mesh fan-out → personal-scope filter
+→ StateStore corpus docs) + the SHARED 12-step core + a per-intent tail**:
+`kq_pipeline()` (KnowledgeQuery / ComparisonQuery, 16 steps; tail = audited
+truncate, then route-aware expansion post-pipeline) and `deep_pipeline()`
+(DeepQuery / SimpleQuery, 17 steps; tail = plain truncate + strategy-driven
+top-sources expansion; attached-doc turns drop the head and the two grounding
+steps). Golden tests pin the step lists and the head+core identity, so
+reordering is an explicit, reviewed act. The Phase 2 convergence (2026-06-09,
+CI-bench-A/B'd) moved the deep path's atlas/RAPTOR grounding to the KQ
+post-floor position (the old pre-floor position let the noise floor silently
+drop zero-overlap virtual grounding chunks) and extended `dedupe_merged` to
+the KQ path; per-intent differences (comparison-aware entity boost/reserve)
+ride `PipelineState`, not divergent code. The injection helpers
 themselves (`apply_atlas_grounding`, `apply_raptor_grounding`,
 `meta_atlas_boost`, `fan_out_decomposed_queries`, `expand_from_top_sources`, …)
 are unchanged `impl Runtime` methods in `retrieval.rs`; the step bodies are
@@ -683,11 +687,23 @@ call `pipeline.run(...)`, then keep their post-pipeline concerns
 (evidence-shape routing + route-aware expansion + prompt/request assembly on
 the KQ side; provenance + prompt/history assembly + seal audit on the deep
 side). `retrieval_pipeline_flags()` is the SSOT registry of every retrieval
-env knob (name + default + purpose). Remaining per-intent divergences
-(route-aware vs unconditional expansion, scope-filter scope, store-search
-`embed()` vs `embed_query()`, KQ's missing mesh leg) are documented in the
-module doc as deliberate-or-deferred items; any further convergence is a
-measured bench A/B.
+env knob (name + default + purpose). The 2026-06-10 divergence-archaeology
+pass resolved the remaining per-intent divergences (see the module doc's
+resolution log): deep's expansion decision now goes through the same
+`decide_expansion_strategy` SSOT the KQ planner uses (chunk-set-identical by
+the helper's internal guard; emits the same `expansion_decision` audit), the
+personal-scope filter is one shared whole-pool step on both paths (mesh
+strays now drop on personal-scope turns), and the store-search leg reuses
+the pipeline's query embedding (closing a missed `embed_query` retrofit from
+2026-05-18). The last accretion artifact — KnowledgeQuery turns silently
+skipping the mesh and the doc store (Deep/Simple have searched both since
+2026-04-21) — was resolved the same day by unifying both pipelines onto
+`shared_head_steps()`: which knowledge sources exist is a property of the
+install, not of the intent label. Environments without a mesh or
+store-ingested corpora see identical behavior; the known mesh round-trip of
+local corpora is collapsed by the shared `dedupe_merged` step. Open
+follow-up: KQ provenance doesn't yet surface mesh peer attribution
+(`search_method` labels live on the deep handler).
 
 Per-intent handlers live in
 `sovereign-core/src/runtime/handlers/{simple,ask_move,conation,commissive,metalingual,expressive,document_op,complex_task,attached_doc,knowledge_query}.rs`

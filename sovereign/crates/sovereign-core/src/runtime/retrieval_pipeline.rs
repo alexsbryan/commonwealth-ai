@@ -21,17 +21,19 @@
 //!
 //! These tables ARE the pipelines — `kq_pipeline()` / `deep_pipeline()`
 //! reproduce them, and golden tests pin the sequences. Since the
-//! Phase 2 convergence (2026-06-09) both pipelines are
-//! **per-intent head + the SHARED 12-step core + per-intent tail**.
+//! 2026-06-10 rationalization both pipelines are
+//! **the SHARED 3-step head + the SHARED 12-step core + a per-intent
+//! tail** — the intent decides HOW to answer (model tier, expansion,
+//! synthesis shape), never WHERE knowledge lives.
 //!
-//! ## Heads (per intent)
+//! ## Shared head (`shared_head_steps`, both pipelines; the deep
+//! attached-doc variant skips it — see below)
 //!
-//! | pipeline | step | gate | helper |
+//! | # | step | gate | helper |
 //! |---|------|------|--------|
-//! | KQ | `main_retrieval` | — | `search_corpus_indexes_with_overrides` (K=`KQ_PER_CORPUS_LIMIT`, hot-corpus overrides) |
-//! | KQ | `scope_personal_filter` | `scope == "personal"` | prefix retain on the merged pool |
-//! | deep | `main_retrieval_mesh` | skipped on attached doc | local search ∥ mesh fan-out (`tokio::join!`), scope filter on local hits, mesh fold + peer attribution |
-//! | deep | `store_search` | skipped on attached doc | `StateStore::search_documents`, corpus-type docs only, seal honored |
+//! | 1 | `main_retrieval_mesh` | — | local search ∥ mesh fan-out (`tokio::join!`), local-hits scope filter (feeds `local_hits`), mesh fold + peer attribution |
+//! | 2 | `scope_personal_filter` | `scope == "personal"` | whole-pool prefix retain — also drops off-scope mesh strays (local already filtered in-head) |
+//! | 3 | `store_search` | — | `StateStore::search_documents` with the shared query embedding, corpus-type docs only, seal honored |
 //!
 //! ## Shared core (`shared_core_steps`, both pipelines)
 //!
@@ -59,7 +61,7 @@
 //! |---|------|--------|
 //! | KQ | `truncate_merged` | `truncate(KQ_MERGED_LIMIT + raptor_n)` + `after_truncate` + `post_merge` audits |
 //! | deep | `truncate_merged` | truncate only (deep's audit is `deep_turn_summary` below) |
-//! | deep | `top_sources_expand` | `expand_from_top_sources` (unconditional) + `deep_turn_summary` audit |
+//! | deep | `top_sources_expand` | `decide_expansion_strategy(intent, PrimarySynthesis, shape)` → `expand_from_top_sources` + `expansion_decision` / `deep_turn_summary` audits |
 //!
 //! KQ-only, **outside** the pipeline (consumes the chunk set): empty-
 //! result parametric path, evidence shape + `resolve_synthesis_route`,
@@ -82,23 +84,49 @@
 //!   unified into shared step fns parameterized by `PipelineState`
 //!   (`is_comparison` is only ever true on the KQ pipeline).
 //!
-//! # Remaining divergences (deliberate or deferred — do NOT converge blind)
+//! # Divergence resolutions (2026-06-10 archaeology pass)
 //!
-//! - **KQ expansion is route-aware** (`decide_expansion_strategy`,
-//!   post-pipeline); deep always runs `expand_from_top_sources`.
-//!   Genuinely tuned per intent — stays.
-//! - **Deep's scope filter is local-hits-only** (pre-mesh-fold); KQ's
-//!   filters the whole pool. Filtering deep's folded mesh hits would
-//!   change mesh semantics — deferred until the recipe-level
-//!   `[corpus] scope` annotation lands.
-//! - **Deep's store-search embeds with `embed()`** (no query-side
-//!   instruction prefix) while every other query leg uses
-//!   `embed_query()`. Likely a latent inconsistency, but benches don't
-//!   exercise the store leg, so changing it would be an unmeasured
-//!   behavior change — deferred.
-//! - **KQ has no mesh leg** — KnowledgeQuery turns never fan out to
-//!   mesh peers. A feature gap, not an accident of structure; adding it
-//!   is product work, not convergence.
+//! Each former "remaining divergence" was traced to its introducing
+//! commit and resolved or explicitly kept:
+//!
+//! - **Expansion policy — RESOLVED (same policy, now one expression).**
+//!   Deep's "unconditional" `expand_from_top_sources` (2026-04-29)
+//!   carried an internal ≥2-titled-groups guard that is exactly
+//!   `decide_expansion_strategy`'s (2026-05-25) TopSources/NoExpansion
+//!   split under `PrimarySynthesis`. The deep tail now calls the SSOT
+//!   strategy fn — provably chunk-set-identical (the helper's guard is
+//!   strictly tighter than `shape.distinct_sources`, so every strategy
+//!   skip is a turn the helper would have no-op'd) — and emits the same
+//!   `expansion_decision` audit the KQ planner does. The KQ-only
+//!   `DominantSource` arm + budget switching remain KQ-only (route-
+//!   dependent, genuinely tuned).
+//! - **Scope-filter shape — CONVERGED.** The local-hits-only shape
+//!   (2026-05-17) was an accident of where the variable lived, not a
+//!   mesh-semantics decision. Both pipelines now run the shared
+//!   whole-pool `scope_personal_filter` step; on deep it additionally
+//!   drops mesh strays on personal-scope turns (mesh peers structurally
+//!   never serve personal corpora, so those hits are off-scope noise by
+//!   construction). The in-head local filter stays to keep `local_hits`
+//!   provenance counts unchanged.
+//! - **Store-search embedding — CONVERGED.** Plain `embed(message)` was
+//!   a missed retrofit from 2026-05-18 (when the corpus leg moved to
+//!   `embed_query(retrieval_query)`); the store leg now reuses the
+//!   pipeline's query embedding — query-consistent with every other leg
+//!   and one less embed call. (Store-corpus docs are real prod data:
+//!   the gutenberg/parquet store-ingest paths write them.)
+//! - **KQ mesh + store legs — RESOLVED (first-principles decision,
+//!   user-directed 2026-06-10).** KnowledgeQuery turns never fanned out
+//!   to mesh peers or searched StateStore corpus docs; Deep/Simple
+//!   turns have since 2026-04-21. There was no principled reason — the
+//!   mesh leg landed on the then-only retrieval path and the KQ planner,
+//!   carved out later, never inherited it. Both pipelines now run the
+//!   identical `shared_head_steps()`: which knowledge sources exist is
+//!   a property of the INSTALL (corpora + mesh + store), not of the
+//!   intent label. Environments without a mesh (`mesh_knowledge: None`,
+//!   every bench) and without store-ingested corpora see byte-identical
+//!   behavior. Follow-up: the KQ plan does not yet surface mesh peer
+//!   attribution in its provenance (`search_method` labels live on the
+//!   deep handler) — wire when KQ provenance grows a mesh story.
 //!
 //! # Tracing
 //!
@@ -368,16 +396,29 @@ fn shared_core_steps() -> Vec<RetrievalStep> {
 /// KQ truncate (which carries the `post_merge` audit). See the
 /// module-doc table.
 pub fn kq_pipeline() -> RetrievalPipeline {
-    let mut steps = vec![
-        step("main_retrieval", None, kq_main_retrieval),
-        step("scope_personal_filter", None, kq_scope_personal_filter),
-    ];
+    let mut steps = shared_head_steps();
     steps.extend(shared_core_steps());
     steps.push(step("truncate_merged", None, kq_truncate_merged));
     RetrievalPipeline {
         name: "knowledge_query",
         steps,
     }
+}
+
+/// The shared evidence-gathering head (2026-06-10 rationalization,
+/// user-directed): local corpora ∥ mesh fan-out → personal-scope
+/// filter → StateStore corpus docs. First principles: the intent
+/// classification decides HOW to answer (model tier, expansion,
+/// synthesis shape) — never WHERE knowledge lives. Before this, KQ
+/// turns silently skipped the mesh and the doc store, an accretion
+/// artifact (mesh landed 2026-04-21 on the then-only path; the KQ
+/// planner was carved out later and never inherited it).
+fn shared_head_steps() -> Vec<RetrievalStep> {
+    vec![
+        step("main_retrieval_mesh", None, step_main_retrieval_mesh),
+        step("scope_personal_filter", None, step_scope_personal_filter),
+        step("store_search", None, step_store_search),
+    ]
 }
 
 /// DeepQuery / SimpleQuery: per-intent head (local ∥ mesh retrieval +
@@ -394,8 +435,7 @@ pub fn deep_pipeline(include_corpus_search: bool) -> RetrievalPipeline {
     let mut steps: Vec<RetrievalStep> = Vec::new();
     let mut core = shared_core_steps();
     if include_corpus_search {
-        steps.push(step("main_retrieval_mesh", None, deep_main_retrieval_mesh));
-        steps.push(step("store_search", None, deep_store_search));
+        steps.extend(shared_head_steps());
     } else {
         core.retain(|s| s.name != "raptor_grounding_early" && s.name != "atlas_grounding");
     }
@@ -644,34 +684,7 @@ fn step_graph_neighbor_expand<'a, 'ctx>(
 
 // ─── KnowledgeQuery-specific steps ───────────────────────────────
 
-fn kq_main_retrieval<'a, 'ctx>(
-    rt: &'a Runtime,
-    st: &'a mut PipelineState<'ctx>,
-) -> StepFuture<'a> {
-    Box::pin(async move {
-        // Per-corpus limit `KQ_PER_CORPUS_LIMIT = 20` gives the merge
-        // real headroom (see the constant's comment). Hot-corpora
-        // pre-merge K boost: corpora the user has been learning from
-        // get a wider pool so the cross-corpus merge filter doesn't
-        // drop their top results. See `build_per_corpus_k_overrides`.
-        st.hot_corpora = collect_hot_corpora(&st.context.conversation.messages);
-        let per_corpus_overrides =
-            build_per_corpus_k_overrides(&st.hot_corpora, KQ_PER_CORPUS_LIMIT);
-        st.chunks = rt
-            .search_corpus_indexes_with_overrides(
-                &st.embedding,
-                st.message,
-                KQ_PER_CORPUS_LIMIT,
-                &st.search_label,
-                per_corpus_overrides.as_ref(),
-                st.enabled_corpora,
-            )
-            .await;
-        StepOutcome::default()
-    })
-}
-
-fn kq_scope_personal_filter<'a, 'ctx>(
+fn step_scope_personal_filter<'a, 'ctx>(
     _rt: &'a Runtime,
     st: &'a mut PipelineState<'ctx>,
 ) -> StepFuture<'a> {
@@ -681,6 +694,14 @@ fn kq_scope_personal_filter<'a, 'ctx>(
         // user-owned corpora — without this, conversations-personal
         // hits get crowded out by wikipedia/SEP chunks that match the
         // QUERY SHAPE better than the actual conversation chunks do.
+        // On the deep pipeline this runs on the WHOLE pool after the
+        // mesh fold (divergence convergence, 2026-06-10): mesh peers
+        // structurally never serve personal corpora (`mesh_sharing =
+        // false`), so any mesh hit on a personal-scope turn is
+        // off-scope noise — exactly what this filter exists to drop.
+        // The in-head local filter (which feeds `local_hits`) already
+        // ran; prefix-retain is idempotent, so this step only removes
+        // mesh strays there.
         // TODO: replace prefix match with a recipe-level
         // `[corpus] scope = "personal"` annotation once schema lands.
         if st.scope == Some("personal") {
@@ -697,7 +718,8 @@ fn kq_scope_personal_filter<'a, 'ctx>(
                     kept = st.chunks.len(),
                     dropped = before - st.chunks.len(),
                     scope = "personal",
-                    "KnowledgeQuery: scope-filtered retrieval to personal-corpus prefixes"
+                    "{}: scope-filtered retrieval to personal-corpus prefixes",
+                    st.label
                 );
             }
         }
@@ -864,7 +886,7 @@ fn kq_truncate_merged<'a, 'ctx>(
 
 // ─── DeepQuery-specific steps ────────────────────────────────────
 
-fn deep_main_retrieval_mesh<'a, 'ctx>(
+fn step_main_retrieval_mesh<'a, 'ctx>(
     rt: &'a Runtime,
     st: &'a mut PipelineState<'ctx>,
 ) -> StepFuture<'a> {
@@ -912,7 +934,7 @@ fn deep_main_retrieval_mesh<'a, 'ctx>(
                 dropped = before.saturating_sub(local_scored.len()),
                 scope = ?st.scope,
                 label = %st.search_label,
-                "prepare_knowledge_context: scope-filtered retrieval to personal-corpus prefixes"
+                "retrieval: scope-filtered local hits to personal-corpus prefixes"
             );
         }
 
@@ -973,18 +995,26 @@ fn deep_main_retrieval_mesh<'a, 'ctx>(
     })
 }
 
-fn deep_store_search<'a, 'ctx>(
+fn step_store_search<'a, 'ctx>(
     rt: &'a Runtime,
     st: &'a mut PipelineState<'ctx>,
 ) -> StepFuture<'a> {
     Box::pin(async move {
         // Also search StateStore for corpus-type documents (used by the
         // test harness and for corpora ingested directly into the
-        // store). User-uploaded documents are NOT included.
-        let embedding = rt.inference.embed(st.message).await.unwrap_or_default();
+        // store, e.g. the gutenberg/parquet store-ingest paths). User-
+        // uploaded documents are NOT included.
+        //
+        // Reuses the pipeline's query embedding (divergence
+        // convergence, 2026-06-10). This leg historically called plain
+        // `embed(message)` — a missed retrofit from 2026-05-18 when the
+        // corpus leg switched to `embed_query(retrieval_query)` (the
+        // query-side instruction prefix for asymmetric models). Sharing
+        // `st.embedding` makes the store leg query-consistent with the
+        // corpus leg and drops a redundant embed round-trip.
         let store_chunks = rt
             .store
-            .search_documents(&embedding, st.message, 5)
+            .search_documents(&st.embedding, st.message, 5)
             .await
             .unwrap_or_default();
         for doc in &store_chunks {
@@ -1056,11 +1086,46 @@ fn deep_top_sources_expand<'a, 'ctx>(
     Box::pin(async move {
         // Multi-source cohesion expansion. DeepQuery is the path
         // multi-article synthesis questions take, so pulling depth from
-        // the top-N source documents pays off here. The expander
-        // returns the initial set unchanged when fewer than 2 distinct
-        // titled sources appear, so it's safe to call unconditionally.
-        let (expanded, sources_expanded, _total_fetched) =
-            rt.expand_from_top_sources(take(&mut st.chunks)).await;
+        // the top-N source documents pays off here.
+        //
+        // The WHICH-expansion decision now goes through the same SSOT
+        // policy fn the KQ planner uses (divergence convergence,
+        // 2026-06-10) with `route = PrimarySynthesis` — deep IS
+        // structurally the primary-synthesis path (SimpleQuery rides it
+        // only when corpora hit). This is chunk-set-IDENTICAL to the
+        // historical unconditional call: the helper's internal guard
+        // (≥ 2 distinct *titled* groups, conversation-history excluded)
+        // is strictly tighter than `shape.distinct_sources`, so every
+        // turn the strategy skips is a turn the helper would have
+        // no-op'd anyway. DominantSource is unreachable under
+        // PrimarySynthesis (see `decide_expansion_strategy`'s truth
+        // table). Deep's prompt budget stays EXPANDED_KNOWLEDGE_CHARS
+        // unconditionally — only KQ varies budget by expansion outcome.
+        let shape = compute_evidence_shape(&st.chunks, st.message);
+        let (strategy, reason) =
+            decide_expansion_strategy(st.intent, SynthesisRoute::PrimarySynthesis, &shape);
+        tracing::info!(
+            target: "retrieval_audit",
+            event = "expansion_decision",
+            intent = ?st.intent,
+            route = ?SynthesisRoute::PrimarySynthesis,
+            strategy = ?strategy,
+            reason = reason,
+            top_source_repeat = shape.top_source_repeat_count,
+            distinct_sources = shape.distinct_sources,
+            "retrieval_audit: expansion_decision"
+        );
+        let (expanded, sources_expanded, _total_fetched) = match strategy {
+            ExpansionStrategy::TopSources => {
+                rt.expand_from_top_sources(take(&mut st.chunks)).await
+            }
+            // NoExpansion (< 2 source keys): the helper would return
+            // the set unchanged — skip the call. DominantSource:
+            // unreachable here, treated identically for totality.
+            ExpansionStrategy::DominantSource | ExpansionStrategy::NoExpansion => {
+                (take(&mut st.chunks), 0, 0)
+            }
+        };
         st.chunks = expanded;
         st.sources_expanded = sources_expanded;
 
@@ -1129,8 +1194,9 @@ mod tests {
         assert_eq!(
             kq_pipeline().step_names(),
             vec![
-                "main_retrieval",
+                "main_retrieval_mesh",
                 "scope_personal_filter",
+                "store_search",
                 "entity_boost",
                 "meta_atlas_boost",
                 "query_decomp",
@@ -1154,6 +1220,7 @@ mod tests {
             deep_pipeline(true).step_names(),
             vec![
                 "main_retrieval_mesh",
+                "scope_personal_filter",
                 "store_search",
                 "entity_boost",
                 "meta_atlas_boost",
@@ -1177,14 +1244,17 @@ mod tests {
     /// two pipelines run the IDENTICAL core slice — per-intent
     /// differences ride `PipelineState`, not divergent step lists.
     #[test]
-    fn kq_and_deep_share_the_core_slice() {
+    fn kq_and_deep_share_head_and_core() {
         let kq = kq_pipeline().step_names();
         let deep = deep_pipeline(true).step_names();
-        // KQ: 2-step head, 1-step tail. Deep: 2-step head, 2-step tail.
-        let kq_core = &kq[2..kq.len() - 1];
-        let deep_core = &deep[2..deep.len() - 2];
-        assert_eq!(kq_core, deep_core);
-        assert_eq!(kq_core.len(), 12);
+        // Shared 3-step head + shared 12-step core; the pipelines
+        // differ ONLY in their tails (KQ: audited truncate; deep:
+        // plain truncate + strategy-driven top-sources expansion).
+        assert_eq!(&kq[..15], &deep[..15]);
+        assert_eq!(kq.len(), 16);
+        assert_eq!(deep.len(), 17);
+        assert_eq!(kq[15], "truncate_merged");
+        assert_eq!(&deep[15..], &["truncate_merged", "top_sources_expand"]);
     }
 
     /// Attached-document turns skip corpus/mesh/atlas/raptor/store but
@@ -1195,10 +1265,11 @@ mod tests {
         let names = deep_pipeline(false).step_names();
         assert_eq!(names.first(), Some(&"entity_boost"));
         assert!(!names.contains(&"main_retrieval_mesh"));
+        assert!(!names.contains(&"scope_personal_filter"));
         assert!(!names.contains(&"store_search"));
         assert!(!names.contains(&"atlas_grounding"));
         assert!(!names.contains(&"raptor_grounding_early"));
-        assert_eq!(names.len(), deep_pipeline(true).step_names().len() - 4);
+        assert_eq!(names.len(), deep_pipeline(true).step_names().len() - 5);
     }
 
     /// Every step-level gate flag must appear in the registry — the

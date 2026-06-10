@@ -158,6 +158,13 @@ expected_sources = []
 id = "regression_meta_named_source"
 category = "metalingual"
 question = "According to SEP, what does eudaimonia refer to?"
+# Re-adjudicated 2026-06-10 (routing re-baseline after the 06-09
+# router-intent/parity work): a definition lookup against a NAMED
+# installed corpus should RETRIEVE (KnowledgeQuery grounds the answer
+# in SEP), not ride the no-retrieval metalingual handler. Pure
+# metalingual probes (codebase term, "what did you mention earlier")
+# still pin metalingual detection above.
+expected_intent = "knowledge_query"
 expected_facts = ["stub"]
 expected_sources = []
 
@@ -188,6 +195,14 @@ expected_sources = []
 id = "regression_compare_named"
 category = "comparative"
 question = "Compare the leadership styles of Lincoln and FDR."
+# Re-adjudicated 2026-06-10: an OPEN-ENDED qualitative comparison is a
+# primary-slot reasoning essay (DeepQuery — multi-source breadth via
+# top-sources expansion), not the bounded-contrast FastFocused shape
+# ComparisonQuery exists for. The bounded technical contrasts above
+# (TCP/UDP, list/tuple) still pin ComparisonQuery detection; its
+# paraphrase twin (cells_v1_paraphrases `comparative_p_next_to`) was
+# re-adjudicated identically.
+expected_intent = "deep_query"
 expected_facts = ["stub"]
 expected_sources = []
 
