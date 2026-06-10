@@ -29,6 +29,9 @@ pub async fn add_host_connection(
         id: id.clone(),
         display_name,
         tailnet_address,
+        // Pairing is tailnet-only today; a future transport's pairing
+        // flow writes its own kind.
+        endpoint_kind: "tailnet".into(),
         is_default: false, // store::insert promotes the first one
         last_status: "off_tailnet".into(),
         created_at: now,

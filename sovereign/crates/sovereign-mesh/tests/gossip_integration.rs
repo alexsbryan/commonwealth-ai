@@ -24,6 +24,7 @@ use sovereign_mesh::gossip;
 
 fn member_at(id: NodeId, name: &str, last_seen: u64, addr: SocketAddr) -> MemberRecord {
     MemberRecord {
+        node_pubkey: None,
         node_id: id,
         name: name.into(),
         invited_by: id,

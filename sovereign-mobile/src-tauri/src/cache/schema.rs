@@ -20,10 +20,16 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         PRAGMA foreign_keys = ON;
 
         -- Client-owned: the only records the phone authors.
+        -- `endpoint_kind` tags how `tailnet_address` is interpreted
+        -- ('tailnet' today; a future dial-by-key transport adds its
+        -- own kind). The column name `tailnet_address` is kept for
+        -- migration-free compat — read it as "opaque transport
+        -- address, interpreted per endpoint_kind".
         CREATE TABLE IF NOT EXISTS host_connection (
             id              TEXT PRIMARY KEY,
             display_name    TEXT NOT NULL,
             tailnet_address TEXT NOT NULL,
+            endpoint_kind   TEXT NOT NULL DEFAULT 'tailnet',
             is_default      INTEGER NOT NULL DEFAULT 0,
             last_status     TEXT NOT NULL DEFAULT 'off_tailnet',
             created_at      INTEGER NOT NULL
@@ -124,6 +130,9 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         "ALTER TABLE response_provenance ADD COLUMN finish_reason TEXT",
         "ALTER TABLE response_provenance ADD COLUMN max_tokens_budget INTEGER",
         "ALTER TABLE response_provenance ADD COLUMN completion_tokens INTEGER",
+        // Transport seam: pre-existing DBs gain the endpoint-kind tag;
+        // every existing row is, by definition, a tailnet host.
+        "ALTER TABLE host_connection ADD COLUMN endpoint_kind TEXT NOT NULL DEFAULT 'tailnet'",
     ] {
         match conn.execute(stmt, []) {
             Ok(_) => {}

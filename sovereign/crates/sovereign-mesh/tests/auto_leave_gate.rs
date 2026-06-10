@@ -66,6 +66,7 @@ async fn join_mesh_against_populated_mesh_errors_and_preserves_on_disk_state() {
         mesh.members.insert(
             peer_id,
             MemberRecord {
+                node_pubkey: None,
                 node_id: peer_id,
                 name: "synthetic-peer".into(),
                 invited_by: peer_id,

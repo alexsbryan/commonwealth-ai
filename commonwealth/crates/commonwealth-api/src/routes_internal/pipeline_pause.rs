@@ -308,15 +308,21 @@ async fn forward_to_peers(state: &AppState, req: &PipelinePauseRequest) -> Vec<N
         "fanout": false,
     });
 
+    let transport = state.peer_transport();
     let mut handles = Vec::with_capacity(peers.len());
     for peer in peers {
         let client = client.clone();
         let body = forwarded_body.clone();
         let node = hex::encode(peer.node_id.as_bytes());
         let name = Some(peer.name.clone());
-        let addresses = peer.addresses.clone();
+        let endpoints = transport
+            .endpoints(
+                &commonwealth_transport::peer_contact(&peer),
+                commonwealth_transport::TrafficClass::ControlPlane,
+            )
+            .await;
         let handle =
-            tokio::spawn(async move { ask_peer(&client, &body, &node, name, &addresses).await });
+            tokio::spawn(async move { ask_peer(&client, &body, &node, name, &endpoints).await });
         handles.push(handle);
     }
 
@@ -332,24 +338,20 @@ async fn forward_to_peers(state: &AppState, req: &PipelinePauseRequest) -> Vec<N
     out
 }
 
-/// Try each advertised address for `peer` in order; the first one that
-/// answers wins. Mirrors the address-cycling pattern in
-/// `corpus_collaborate::queue_broadcast` so peer routing behaves the
-/// same across the codebase (IPv4 preferred, IPv6 falls through, etc.).
+/// Try each transport-resolved endpoint for `peer` in order; the
+/// first one that answers wins. Candidate ordering comes from the
+/// PeerTransport seam so peer routing behaves the same across the
+/// codebase (IPv4 preferred, IPv6 falls through, etc.).
 async fn ask_peer(
     client: &reqwest::Client,
     body: &serde_json::Value,
     node: &str,
     name: Option<String>,
-    addresses: &[std::net::SocketAddr],
+    endpoints: &[commonwealth_transport::PeerEndpoint],
 ) -> NodePauseResult {
     let mut last_error = "no addresses advertised by peer".to_string();
-    for addr in addresses {
-        let host = match addr.ip() {
-            std::net::IpAddr::V4(_) => addr.ip().to_string(),
-            std::net::IpAddr::V6(v6) => format!("[{v6}]"),
-        };
-        let url = format!("http://{host}:9742/internal/pipeline/pause");
+    for ep in endpoints {
+        let url = format!("{}/internal/pipeline/pause", ep.base_url);
         match client.post(&url).json(body).send().await {
             Ok(resp) if resp.status().is_success() => {
                 match resp.json::<PipelinePauseResponse>().await {

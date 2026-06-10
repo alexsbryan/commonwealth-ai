@@ -55,6 +55,17 @@ struct JoinRequestWire {
     /// on the founder side keeps the wire format backward-compatible.
     #[serde(skip_serializing_if = "Option::is_none")]
     proposed_node_id: Option<NodeId>,
+    /// This node's Ed25519 identity pubkey (see
+    /// `commonwealth_core::ids::NodePubkey`). Pre-identity founders
+    /// ignore it (serde default on their side); identity-aware
+    /// founders record it after verifying `pubkey_proof`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    node_pubkey: Option<commonwealth_core::ids::NodePubkey>,
+    /// Hex Ed25519 proof of possession over
+    /// `"cwth-join-pubkey-binding:" || proposed_node_id || name`.
+    /// Always sent together with `node_pubkey`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pubkey_proof: Option<String>,
 }
 
 /// Members transit as a flat Vec because `HashMap<NodeId, _>` doesn't
@@ -249,6 +260,8 @@ pub async fn perform_join(
     mdns: &MdnsDiscovery,
     timeout: Duration,
     proposed_node_id: Option<NodeId>,
+    // (pubkey, hex proof-of-possession) — see `JoinRequestWire`.
+    identity: Option<(commonwealth_core::ids::NodePubkey, String)>,
 ) -> Result<JoinHandshakeResult, JoinError> {
     // 3-second per-peer HTTP timeout. With a 5s overall budget this
     // leaves one retry with a fresh mDNS candidate if the first peer
@@ -258,11 +271,17 @@ pub async fn perform_join(
         .build()
         .expect("reqwest client build");
 
+    let (node_pubkey, pubkey_proof) = match identity {
+        Some((pk, proof)) => (Some(pk), Some(proof)),
+        None => (None, None),
+    };
     let body = JoinRequestWire {
         join_key: join_key.to_string(),
         joining_node_name: joining_node_name.to_string(),
         joining_node_addresses,
         proposed_node_id,
+        node_pubkey,
+        pubkey_proof,
     };
 
     // Direct peer hint — tried first so overlay-network (Tailscale /

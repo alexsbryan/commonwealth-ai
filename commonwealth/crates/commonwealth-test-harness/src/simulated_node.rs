@@ -129,6 +129,7 @@ impl SimulatedNodeBuilder {
         };
 
         let member = MemberRecord {
+            node_pubkey: None,
             node_id,
             name: name.clone(),
             invited_by: node_id,

@@ -354,6 +354,7 @@ mod tests {
     fn sample_mesh() -> (Mesh, NodeId) {
         let node_id = NodeId::generate();
         let member = MemberRecord {
+            node_pubkey: None,
             node_id,
             name: "Alice".into(),
             invited_by: node_id,

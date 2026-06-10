@@ -99,6 +99,7 @@ async fn gossip_round_publishes_live_hosted_corpora() {
     // that's the "bug" we're proving the fix addresses.
     let self_id = NodeId::from_u128(1);
     let self_record = MemberRecord {
+        node_pubkey: None,
         node_id: self_id,
         name: "Host".into(),
         invited_by: self_id,

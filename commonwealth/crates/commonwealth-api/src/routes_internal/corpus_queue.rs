@@ -29,6 +29,34 @@ use crate::state::AppState;
 
 use super::{IngestPartitionRequest, IngestPartitionResponse};
 
+/// One ControlPlane base URL per peer (best transport candidate),
+/// for `ShardManager::coordinate_merge`'s shard pulls. Resolved
+/// through the PeerTransport seam; contacts are snapshotted out of
+/// the mesh lock before resolving so the lock never spans an await.
+async fn peer_control_urls(state: &AppState, local_node_id: NodeId) -> Vec<(NodeId, String)> {
+    let contacts: Vec<commonwealth_transport::PeerContact> = {
+        let mesh = state.inner.mesh.read().await;
+        mesh.members
+            .values()
+            .filter(|m| m.node_id != local_node_id)
+            .map(commonwealth_transport::peer_contact)
+            .collect()
+    };
+    let transport = state.peer_transport();
+    let mut urls = Vec::with_capacity(contacts.len());
+    for contact in &contacts {
+        if let Some(ep) = transport
+            .endpoints(contact, commonwealth_transport::TrafficClass::ControlPlane)
+            .await
+            .into_iter()
+            .next()
+        {
+            urls.push((contact.node_id, ep.base_url));
+        }
+    }
+    urls
+}
+
 pub async fn corpus_ingest_partition(
     State(state): State<AppState>,
     Json(req): Json<IngestPartitionRequest>,
@@ -90,18 +118,7 @@ pub async fn corpus_ingest_partition(
     let mesh_store = Arc::clone(&state.inner.mesh_store);
     let state_clone = state.clone();
     // Snapshot peer base URLs now — we can't hold the mesh lock across an async task.
-    let peer_urls: Vec<(NodeId, String)> = {
-        let mesh = state.inner.mesh.read().await;
-        mesh.members
-            .values()
-            .filter(|m| m.node_id != local_node_id)
-            .filter_map(|m| {
-                m.addresses
-                    .first()
-                    .map(|a| (m.node_id, format!("http://{}:9742", a.ip())))
-            })
-            .collect()
-    };
+    let peer_urls: Vec<(NodeId, String)> = peer_control_urls(&state, local_node_id).await;
 
     // Guard: insert into active_ingests BEFORE spawning so there is no
     // window between the 202 response and the task's first async yield
@@ -506,18 +523,7 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::Ha
         };
         let mesh_store = Arc::clone(&state.inner.mesh_store);
         let local_node_id = *state.inner.self_node_id_swap.load_full().as_ref();
-        let peer_urls: Vec<(NodeId, String)> = {
-            let mesh = state.inner.mesh.read().await;
-            mesh.members
-                .values()
-                .filter(|m| m.node_id != local_node_id)
-                .filter_map(|m| {
-                    m.addresses
-                        .first()
-                        .map(|a| (m.node_id, format!("http://{}:9742", a.ip())))
-                })
-                .collect()
-        };
+        let peer_urls: Vec<(NodeId, String)> = peer_control_urls(&state, local_node_id).await;
 
         let shard_mgr = ShardManager::new(
             Arc::clone(&engine),

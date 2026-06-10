@@ -46,6 +46,20 @@ impl AppState {
             .credentials
             .get_token(&host.id)?
             .ok_or(Error::Unauthenticated)?;
-        Ok(ApiClient::new(&host.tailnet_address, token))
+        Self::client_for_host(&host, token)
+    }
+
+    /// Transport seam: the host's `endpoint_kind` decides how its
+    /// address becomes a dialable client. One arm today (tailnet →
+    /// plain HTTP to the address); a future dial-by-key transport
+    /// adds an arm instead of every caller assuming an IP address.
+    /// Unknown kinds (rows written by a newer app build) fail loudly
+    /// in `EndpointKind::parse`.
+    fn client_for_host(host: &HostConnection, token: String) -> Result<ApiClient> {
+        match crate::connection::EndpointKind::parse(&host.endpoint_kind)? {
+            crate::connection::EndpointKind::Tailnet => {
+                Ok(ApiClient::new(&host.tailnet_address, token))
+            }
+        }
     }
 }

@@ -8,6 +8,7 @@ description = "Commonwealth mesh integration layer for Sovereign"
 [dependencies]
 # Commonwealth crates (embedded as library)
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
+commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport" }
 commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-discovery" }
 commonwealth-api = { path = "../../../commonwealth/crates/commonwealth-api" }
 # Needed because `AppState::new_with_platform_and_engine` requires
@@ -105,7 +106,7 @@ sha2 = { workspace = true }
 # Ed25519 keypair derivation in `worker_pod.rs`. `pkcs8` lets us feed
 # the derived key directly to rcgen for self-signed cert generation;
 # `rand_core` exposes the RNG trait we need on the verify side.
-ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
+ed25519-dalek = { workspace = true }
 # Self-signed TLS cert generation from a deterministic Ed25519 seed
 # (pod side) — version matches commonwealth-discovery to keep one
 # rcgen in the build graph.
@@ -154,6 +155,11 @@ default = []
 # crates. The CLI dispatcher (sovereign-cli) skips this; the daemon
 # host (sovereign-cli-atos) and desktop both enable it.
 treesitter = ["corpus-engine/treesitter"]
+# EXPERIMENTAL: compiles commonwealth-transport's iroh dial-by-key
+# transport and the spike e2e (tests/iroh_transport_e2e.rs). Off by
+# default — never part of the workspace gates. Run via:
+#   cargo test -p sovereign-mesh --features iroh-experimental --test iroh_transport_e2e
+iroh-experimental = ["commonwealth-transport/iroh"]
 
 [dev-dependencies]
 tempfile = "3"

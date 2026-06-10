@@ -72,6 +72,7 @@ pub fn member_with_last_seen(
     addr: SocketAddr,
 ) -> MemberRecord {
     MemberRecord {
+        node_pubkey: None,
         node_id: id,
         name: name.into(),
         invited_by: id,

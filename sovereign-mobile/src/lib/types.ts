@@ -18,7 +18,13 @@ export type {
 export interface HostConnection {
   id: string;
   display_name: string;
+  /** Opaque transport address, interpreted per endpoint_kind.
+   *  For "tailnet": MagicDNS name or overlay IP + port. */
   tailnet_address: string;
+  /** How tailnet_address is interpreted; "tailnet" today, open set
+   *  so future transports (dial-by-key) add kinds without a schema
+   *  change. */
+  endpoint_kind: string;
   is_default: boolean;
   last_status: "reachable" | "host_down" | "off_tailnet";
   created_at: number;

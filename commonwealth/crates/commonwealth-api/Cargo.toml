@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 commonwealth-core = { workspace = true }
+commonwealth-transport = { workspace = true }
 commonwealth-discovery = { workspace = true }
 commonwealth-inference = { workspace = true }
 commonwealth-knowledge = { workspace = true }

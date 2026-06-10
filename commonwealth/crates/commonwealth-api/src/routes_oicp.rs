@@ -151,6 +151,11 @@ pub async fn capabilities(
         })
         .collect();
 
+    // NOT routed through the PeerTransport seam, deliberately: this
+    // formats an *advertised* URL for a federated peer MESH
+    // (`MeshPeering.contact_nodes` — no `MemberRecord`/`NodeId`
+    // exists), embedded in the manifest for clients to read. It is
+    // content, not a dial this daemon performs.
     let peers: Vec<PeerDescriptor> = mesh
         .peers
         .iter()

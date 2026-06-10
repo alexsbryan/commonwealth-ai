@@ -484,9 +484,19 @@ pub async fn corpus_collaborate(
         // mesh_store namespace the pull-loop already scans.
         let handoff_id_for_log = handoff.handoff_id;
         let corpus_id_for_log = handoff.corpus_id.clone();
+        let transport = state.peer_transport();
         for peer in &candidates {
-            let mut ordered_addrs: Vec<std::net::SocketAddr> = peer.addresses.to_vec();
-            if ordered_addrs.is_empty() {
+            // The transport owns address ordering (canonical
+            // `peer_addr` ranking — this loop used to carry its own
+            // inline copy that had drifted to rank Tailscale ULA
+            // tied with CGNAT IPv4) and the port policy.
+            let endpoints = transport
+                .endpoints(
+                    &commonwealth_transport::peer_contact(peer),
+                    commonwealth_transport::TrafficClass::ControlPlane,
+                )
+                .await;
+            if endpoints.is_empty() {
                 tracing::warn!(
                     node = %peer.node_id,
                     handoff = %handoff_id_for_log,
@@ -494,24 +504,6 @@ pub async fn corpus_collaborate(
                 );
                 continue;
             }
-            ordered_addrs.sort_by_key(|addr| match addr.ip() {
-                std::net::IpAddr::V4(v4) => {
-                    let o = v4.octets();
-                    if o[0] == 100 && (o[1] & 0xc0) == 64 {
-                        0
-                    } else {
-                        1
-                    }
-                }
-                std::net::IpAddr::V6(v6) => {
-                    let s = v6.segments();
-                    if s[0] == 0xfd7a && s[1] == 0x115c && s[2] == 0xa1e0 {
-                        0
-                    } else {
-                        2
-                    }
-                }
-            });
             let body = serde_json::json!({
                 "entries": [{
                     "app_id": "corpus-engine",
@@ -540,12 +532,8 @@ pub async fn corpus_collaborate(
                         return;
                     }
                 };
-                for addr in &ordered_addrs {
-                    let host = match addr.ip() {
-                        std::net::IpAddr::V4(_) => addr.ip().to_string(),
-                        std::net::IpAddr::V6(v6) => format!("[{v6}]"),
-                    };
-                    let peer_url = format!("http://{host}:9742/internal/app/state");
+                for ep in &endpoints {
+                    let peer_url = format!("{}/internal/app/state", ep.base_url);
                     match client.post(&peer_url).json(&body).send().await {
                         Ok(resp) if resp.status().is_success() => {
                             tracing::info!(
@@ -764,6 +752,7 @@ pub async fn corpus_collaborate(
     // `ShardManager::coordinate_merge` (via the existing peer-finalise
     // hook), which stitches remote shards in and renames to canonical.
     {
+        let transport = state.peer_transport();
         let mesh = state.inner.mesh.read().await;
         if let Some(local_partition) = handoff.partitions.iter().find(|p| p.node_id == self_id) {
             tracing::info!(
@@ -784,42 +773,26 @@ pub async fn corpus_collaborate(
                 );
                 continue;
             };
-            if peer.addresses.is_empty() {
+            // The transport orders candidates (Tailscale-first
+            // ranking — works across Wi-Fi networks where LAN IPs
+            // silently fail: AP isolation, different subnets,
+            // captive portals on one side. When LAN failed first we
+            // used to give up entirely — that's how Machine A ended
+            // up unable to dispatch to B even though both machines
+            // had routable Tailscale addresses advertised).
+            let endpoints = transport
+                .endpoints(
+                    &commonwealth_transport::peer_contact(peer),
+                    commonwealth_transport::TrafficClass::ControlPlane,
+                )
+                .await;
+            if endpoints.is_empty() {
                 tracing::warn!(
                     node = %partition.node_id,
                     "collaborate: peer has no address — skipping notification"
                 );
                 continue;
             }
-            // Try addresses in preference order: Tailscale (100.64.0.0/10 CGNAT +
-            // fd7a:115c:a1e0::/48 ULA) first, then IPv4 LAN, then other v6.
-            // Tailscale works across Wi-Fi networks where LAN IPs silently
-            // fail (AP isolation, different subnets, captive portals on
-            // one side). When LAN fails first, we used to give up entirely
-            // — that's how Machine A ended up unable to dispatch to B
-            // even though both machines had routable Tailscale addresses
-            // advertised in `MemberRecord.addresses`.
-            let mut ordered_addrs: Vec<std::net::SocketAddr> = peer.addresses.to_vec();
-            ordered_addrs.sort_by_key(|addr| match addr.ip() {
-                std::net::IpAddr::V4(v4) => {
-                    let o = v4.octets();
-                    // CGNAT 100.64.0.0/10 → Tailscale IPv4.
-                    if o[0] == 100 && (o[1] & 0xc0) == 64 {
-                        0
-                    } else {
-                        1
-                    }
-                }
-                std::net::IpAddr::V6(v6) => {
-                    let s = v6.segments();
-                    // Tailscale ULA fd7a:115c:a1e0::/48.
-                    if s[0] == 0xfd7a && s[1] == 0x115c && s[2] == 0xa1e0 {
-                        0
-                    } else {
-                        2
-                    }
-                }
-            });
             let payload = IngestPartitionRequest {
                 handoff_id: handoff.handoff_id,
                 corpus_id: handoff.corpus_id.clone(),
@@ -845,16 +818,8 @@ pub async fn corpus_collaborate(
                 };
                 let mut attempt_errors: Vec<String> = Vec::new();
                 let mut accepted = false;
-                for addr in &ordered_addrs {
-                    // Format with bracket rule for IPv6 (matches
-                    // what sovereign_mesh::daemon::format_relay_fragment
-                    // does for the share link).
-                    let host = match addr.ip() {
-                        std::net::IpAddr::V4(_) => addr.ip().to_string(),
-                        std::net::IpAddr::V6(v6) => format!("[{v6}]"),
-                    };
-                    let peer_url =
-                        format!("http://{host}:{}/internal/corpus/ingest_partition", 9742);
+                for ep in &endpoints {
+                    let peer_url = format!("{}/internal/corpus/ingest_partition", ep.base_url);
                     match client.post(&peer_url).json(&payload).send().await {
                         Ok(resp) if resp.status().is_success() => {
                             tracing::info!(
