@@ -6,9 +6,9 @@
 //
 // Usage:
 //   node tests/e2e/scripts/coverage-report.mjs [ledger.jsonl ...]
-// Defaults to test-results/ledger-synthetic.jsonl. Pass multiple ledgers
+// Defaults to test-artifacts/ledger-synthetic.jsonl. Pass multiple ledgers
 // (e.g. synthetic + real-mode) to get one merged report with per-ledger
-// columns. Writes test-results/coverage.json alongside the printout.
+// columns. Writes test-artifacts/coverage.json alongside the printout.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,9 +18,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CRATE_ROOT = path.resolve(__dirname, "../../..");
 const DEFAULT_LEDGER = path.join(
   CRATE_ROOT,
-  "test-results/ledger-synthetic.jsonl",
+  "test-artifacts/ledger-synthetic.jsonl",
 );
-const OUT_PATH = path.join(CRATE_ROOT, "test-results/coverage.json");
+const OUT_PATH = path.join(CRATE_ROOT, "test-artifacts/coverage.json");
 
 function loadLedger(file) {
   // counts: cmd → { calls, errors, specs:Set }

@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PID_FILE = path.resolve(__dirname, "../../../test-results/real-app.pid");
+const PID_FILE = path.resolve(__dirname, "../../../test-artifacts/real-app.pid");
 
 function alive(pid: number): boolean {
   try {

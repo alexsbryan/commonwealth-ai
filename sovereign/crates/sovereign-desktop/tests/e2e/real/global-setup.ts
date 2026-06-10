@@ -5,8 +5,10 @@
 // backend signals ready. Specs then drive the Vite-served frontend
 // (Chromium) against this process via tauri-shim-real.js.
 //
-// Hermeticity: HOME + XDG_* point into test-results/real-profile/, so
+// Hermeticity: HOME + XDG_* point into test-artifacts/real-profile/, so
 // config, conversations DB, data dir, and caches are all scratch.
+// (test-artifacts/, not test-results/ — Playwright wipes its outputDir
+// at every run start, which would destroy ledgers and the profile.)
 // Models are the one shared resource (multi-GB GGUFs, mmap'd
 // read-only) — referenced by absolute path.
 //
@@ -30,13 +32,18 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CRATE_ROOT = path.resolve(__dirname, "../../..");
 const REPO_ROOT = path.resolve(CRATE_ROOT, "../../..");
-const RESULTS = path.join(CRATE_ROOT, "test-results");
+const RESULTS = path.join(CRATE_ROOT, "test-artifacts");
 const PROFILE = path.join(RESULTS, "real-profile");
 const HOME = path.join(PROFILE, "home");
 const APP_BIN = path.join(REPO_ROOT, "target/debug/sovereign-desktop");
 const APP_LOG = path.join(RESULTS, "real-app.log");
 const PID_FILE = path.join(RESULTS, "real-app.pid");
 export const LEDGER_REAL = path.join(RESULTS, "ledger-real.jsonl");
+/** Specs read this to learn the fixture corpus id + doc paths. */
+export const FIXTURE_INFO = path.join(RESULTS, "real-fixture.json");
+const FIXTURE_CORPUS_DIR = path.join(__dirname, "fixtures/corpus");
+const FIXTURE_ATTACH_DOC = path.join(__dirname, "fixtures/attach/expedition-notes.txt");
+const FIXTURE_DISPLAY_NAME = "E2E Fixture Corpus";
 const BRIDGE = "http://127.0.0.1:9745";
 
 // Fast profile: smallest viable chat model + the standard embedder.
@@ -70,6 +77,110 @@ async function fetchJson(url: string, init?: RequestInit, timeoutMs = 3000) {
   } finally {
     clearTimeout(t);
   }
+}
+
+async function invoke<T = unknown>(
+  cmd: string,
+  args: Record<string, unknown> = {},
+  timeoutMs = 30_000,
+): Promise<T> {
+  const body = await fetchJson(
+    `${BRIDGE}/invoke`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-sovereign-spec": "global-setup" },
+      body: JSON.stringify({ cmd, args }),
+    },
+    timeoutMs,
+  );
+  if (!body.ok) throw new Error(`setup invoke ${cmd} failed: ${JSON.stringify(body.error)}`);
+  return body.result as T;
+}
+
+/// Ingest the 3-file fixture corpus through the same lc_* commands the
+/// watched-folder UI uses, and verify the DYNAMIC progress channel
+/// (`local-corpus://progress/{job_id}`) actually delivers over the
+/// bridge's lazy listen_any path — static event registration can't
+/// cover per-job channel names, so this doubles as that contract's
+/// regression check.
+async function ingestFixtureCorpus(): Promise<void> {
+  const existing = await invoke<Array<{ corpus_id: string; display_name?: string }>>(
+    "lc_list",
+  );
+  let corpusId = existing.find((c) => c.display_name === FIXTURE_DISPLAY_NAME)?.corpus_id;
+
+  if (!corpusId) {
+    const validation = await invoke<{ exists: boolean; is_dir: boolean }>(
+      "lc_validate_path",
+      { path: FIXTURE_CORPUS_DIR },
+    );
+    if (!validation.exists || !validation.is_dir) {
+      throw new Error(`fixture corpus dir invalid: ${FIXTURE_CORPUS_DIR}`);
+    }
+    const pre = await invoke<{ corpus_id: string; job_id: string }>(
+      "lc_pre_scan",
+      { path: FIXTURE_CORPUS_DIR, sourceType: "folder", displayName: FIXTURE_DISPLAY_NAME },
+      60_000,
+    );
+    corpusId = pre.corpus_id;
+
+    const jobId = await invoke<string>("lc_ingest", { corpusId, withOcr: false }, 60_000);
+    const channel = `local-corpus://progress/${jobId}`;
+    // Register the dynamic channel with the bridge; rows published
+    // from here on land in the replay ring (`/events/recent`), so a
+    // fast ingest can't outrun a streaming consumer. This is also the
+    // regression check for lazy listen_any on per-job channel names.
+    await fetchJson(`${BRIDGE}/listen`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ event: channel }),
+    });
+
+    // Completion authority: the job's own terminal event
+    // (Complete / Error) read from the replay ring.
+    const deadline = Date.now() + 180_000;
+    for (;;) {
+      const recent = await fetchJson(`${BRIDGE}/events/recent`);
+      const rows = (recent.rows as Array<{ event: string; payload: unknown }>).filter(
+        (r) => r.event === channel,
+      );
+      const terminal = rows
+        .map((r) => JSON.stringify(r.payload))
+        .find((p) => /complete|error/i.test(p));
+      if (terminal) {
+        if (/error/i.test(terminal)) {
+          throw new Error(`fixture corpus ingest failed: ${terminal}`);
+        }
+        break;
+      }
+      if (Date.now() > deadline) {
+        throw new Error(
+          rows.length === 0
+            ? `fixture ingest emitted nothing on ${channel} within 180s — ` +
+              `bridge listen_any regression or stalled job; see ${APP_LOG}`
+            : `fixture ingest never reached a terminal event within 180s — see ${APP_LOG}`,
+        );
+      }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    console.log(`[real-setup] fixture corpus ingested ✓ (${corpusId})`);
+  } else {
+    console.log(`[real-setup] fixture corpus already present (${corpusId})`);
+  }
+
+  fs.writeFileSync(
+    FIXTURE_INFO,
+    JSON.stringify(
+      {
+        corpus_id: corpusId,
+        display_name: FIXTURE_DISPLAY_NAME,
+        corpus_dir: FIXTURE_CORPUS_DIR,
+        attach_doc: FIXTURE_ATTACH_DOC,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 function bakeProfile(): void {
@@ -194,6 +305,7 @@ export default async function globalSetup(): Promise<void> {
   }
   if (!bridgeUp) throw new Error(`real-mode setup: bridge never came up — see ${APP_LOG}`);
 
+  let ready = false;
   while (Date.now() < deadline) {
     try {
       const r = await fetchJson(`${BRIDGE}/listen`, {
@@ -203,7 +315,8 @@ export default async function globalSetup(): Promise<void> {
       });
       if (r.replayed) {
         console.log("[real-setup] backend-ready ✓");
-        return;
+        ready = true;
+        break;
       }
       const s = await fetchJson(`${BRIDGE}/listen`, {
         method: "POST",
@@ -222,5 +335,12 @@ export default async function globalSetup(): Promise<void> {
     }
     await new Promise((r) => setTimeout(r, 1000));
   }
-  throw new Error(`real-mode setup: backend-ready never fired within 180s — see ${APP_LOG}`);
+  if (!ready) {
+    throw new Error(
+      `real-mode setup: backend-ready never fired within 180s — see ${APP_LOG}`,
+    );
+  }
+  // Outside the readiness retry loop: an ingest failure is a hard
+  // setup error, never silently retried.
+  await ingestFixtureCorpus();
 }

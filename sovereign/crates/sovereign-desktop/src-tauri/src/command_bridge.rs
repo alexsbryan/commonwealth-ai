@@ -92,6 +92,10 @@ struct EventRow {
     payload: Value,
 }
 
+/// Rows kept in the replay ring buffer served by `GET /events/recent`.
+/// Sized for one busy turn (a long stream is a few thousand chunks).
+const RECENT_RING: usize = 4096;
+
 struct EventHub {
     seq: AtomicU64,
     tx: broadcast::Sender<EventRow>,
@@ -102,6 +106,11 @@ struct EventHub {
     subscribed: Mutex<HashSet<String>>,
     /// Latest payload per sticky event (see [`STICKY_EVENTS`]).
     sticky: Mutex<HashMap<String, Value>>,
+    /// Last [`RECENT_RING`] published rows — lets harness code poll
+    /// for events without racing the live SSE stream (the broadcast
+    /// only serves consumers connected at emit time; a fast job can
+    /// finish entirely inside that window).
+    recent: Mutex<std::collections::VecDeque<EventRow>>,
 }
 
 impl EventHub {
@@ -111,6 +120,7 @@ impl EventHub {
             tx: broadcast::channel(EVENT_BUFFER).0,
             subscribed: Mutex::new(HashSet::new()),
             sticky: Mutex::new(HashMap::new()),
+            recent: Mutex::new(std::collections::VecDeque::with_capacity(RECENT_RING)),
         }
     }
 
@@ -146,9 +156,26 @@ impl EventHub {
             event: event.to_string(),
             payload,
         };
-        // No receiver connected yet is fine — sticky events are
-        // buffered above; everything else is only meaningful live.
+        {
+            let mut recent = self.recent.lock().unwrap();
+            if recent.len() == RECENT_RING {
+                recent.pop_front();
+            }
+            recent.push_back(row.clone());
+        }
+        // No live receiver is fine — sticky events replay via /listen,
+        // and the recent ring serves polling consumers.
         let _ = self.tx.send(row);
+    }
+
+    fn recent_since(&self, since_seq: u64) -> Vec<EventRow> {
+        self.recent
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|r| r.seq >= since_seq)
+            .cloned()
+            .collect()
     }
 }
 
@@ -172,6 +199,7 @@ pub async fn serve(app: AppHandle) {
         .route("/invoke", post(invoke))
         .route("/listen", post(listen))
         .route("/events", get(events_stream))
+        .route("/events/recent", get(events_recent))
         .layer(tower_http::cors::CorsLayer::permissive())
         .with_state(BridgeState { app, events });
 
@@ -215,6 +243,24 @@ async fn listen(
         "replayed": replay.is_some(),
         "replay": replay,
     }))
+}
+
+#[derive(Deserialize)]
+struct RecentQuery {
+    #[serde(default)]
+    since_seq: u64,
+}
+
+/// Snapshot of the replay ring (last [`RECENT_RING`] published rows,
+/// optionally filtered to `?since_seq=N`). Poll this instead of the
+/// live SSE stream when the events of interest may fire before a
+/// consumer can connect — e.g. a fast ingest job's progress channel.
+async fn events_recent(
+    State(state): State<BridgeState>,
+    axum::extract::Query(q): axum::extract::Query<RecentQuery>,
+) -> Json<Value> {
+    let rows = state.events.recent_since(q.since_seq);
+    Json(json!({ "ok": true, "rows": rows }))
 }
 
 /// Single SSE stream carrying every subscribed event in `seq` order.
@@ -411,6 +457,22 @@ mod tests {
             }
             last_seq = Some(row.seq);
         }
+    }
+
+    /// The recent ring serves rows published with no live consumer —
+    /// the race /events/recent exists to close — and honors since_seq.
+    #[test]
+    fn recent_ring_replays_unconsumed_rows() {
+        let hub = EventHub::new();
+        for i in 0..5u32 {
+            hub.publish("local-corpus://progress/job-1", json!({ "i": i }));
+        }
+        let all = hub.recent_since(0);
+        assert_eq!(all.len(), 5);
+        assert!(all.windows(2).all(|w| w[0].seq < w[1].seq));
+        let tail = hub.recent_since(all[3].seq);
+        assert_eq!(tail.len(), 2);
+        assert_eq!(tail[0].payload, json!({ "i": 3 }));
     }
 
     /// Ledger rows are one JSON object per line with the fields the

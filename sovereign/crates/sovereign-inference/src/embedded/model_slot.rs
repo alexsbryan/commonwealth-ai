@@ -2258,14 +2258,27 @@ impl ModelSlot {
         //    heuristic that pattern-matched "qwen3.5" / "qwen3.6" /
         //    "qwopus" — those decisions are now declared once on the
         //    family, not re-derived from filenames at every dispatch.
+        // 0. (authoritative) libllama's own model flags. Hybrid
+        //    models — interleaved linear-attention blocks, e.g. the
+        //    DENSE Qwen3.5 lineup whose gguf arch is plain `qwen35`
+        //    (no "moe", so the string ladder below misses it) — break
+        //    partial-keep exactly like pure recurrent ones. Found
+        //    2026-06-09 by the desktop real-mode e2e: ask_document on
+        //    Qwen3.5-2B failed `Decode Error -1: n_tokens == 0` on
+        //    every lcp>0 prefill (batch_n_tokens=444 — the batch was
+        //    never empty; the -1 is the recurrent-state rejection).
+        let model_says_recurrent = model.is_recurrent() || model.is_hybrid();
         let arch_says_recurrent = is_recurrent_arch(&slot_ctx.arch);
         let quirks_say_recurrent = slot_ctx.arch.is_empty() && quirks.has_recurrent_layers;
         let speculative_active = slot_ctx.is_speculative();
-        let prefix_cache_safe =
-            !speculative_active && !arch_says_recurrent && !quirks_say_recurrent;
+        let prefix_cache_safe = !speculative_active
+            && !model_says_recurrent
+            && !arch_says_recurrent
+            && !quirks_say_recurrent;
         tracing::debug!(
             model = %model_id,
             arch = %slot_ctx.arch,
+            model_says_recurrent,
             arch_says_recurrent,
             quirks_say_recurrent,
             mtp_session = speculative_active,

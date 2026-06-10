@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LEDGER_PATH = path.resolve(
   __dirname,
-  "../../test-results/ledger-synthetic.jsonl",
+  "../../test-artifacts/ledger-synthetic.jsonl",
 );
 
 export default function globalSetup() {

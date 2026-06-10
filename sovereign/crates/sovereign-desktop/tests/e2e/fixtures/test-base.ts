@@ -16,7 +16,7 @@ const TTFI_PROBE_PATH = path.resolve(__dirname, "./ttfi-probe.js");
 // generate_handler! manifest by scripts/coverage-report.mjs.
 export const LEDGER_PATH = path.resolve(
   __dirname,
-  "../../../test-results/ledger-synthetic.jsonl",
+  "../../../test-artifacts/ledger-synthetic.jsonl",
 );
 let ledgerDirReady = false;
 function appendLedger(row: Record<string, unknown>): void {
