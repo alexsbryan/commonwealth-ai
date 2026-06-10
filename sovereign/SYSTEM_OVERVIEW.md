@@ -639,7 +639,22 @@ measures it). Two SSOT decisions back this: `build_synthesis_system_prompt`
 (one prompt body, byte-equivalence-tested) and `resolve_synthesis_route` (the
 single traced FastFocused-vs-PrimarySynthesis decision with a typed
 `RouteReason`, truth-table-tested against the legacy ladder) — together they
-end the "live path mis-identified three times" illegibility.
+end the "live path mis-identified three times" illegibility. `role.rs` is
+**load-bearing**, not just declarative: the resolver returns `role::Tier` (via
+`SynthesisRoute::tier()`, surfaced in the KnowledgeQuery trace as
+`role=synthesizer tier=…`), and the chaos bench sources the Critic's gate model
+from `default_profile_for(Role::Critic)` (`--critic-model`, default primary).
+
+**Keystone result (chaos, 2026-06-09): the Critic-as-gate stays out of prod —
+empirically.** Running `verify_grounding` as an answer gate (`--grounding-verify`)
+is net-harmful on the Secret-Agent bank: competence 0.46 → 0.08 (it gates
+present-answerable questions — e.g. `present-wife` at violation_prob 0.806 —
+when retrieval misses the supporting passage and the model answers
+parametrically). The Critic **model tier is not the lever** (primary 0.083 ≈
+fast 0.125). So the role layer's verify-predicate discipline *worked*: it caught
+the Critic predicate failing its own phantom-error contract, justifying the
+deferral. (Note: effort-tier escalation default-ON *improves* chaos competence
+0.33 → 0.46 — a net win, not a regression.)
 
 Per-intent handlers live in
 `sovereign-core/src/runtime/handlers/{simple,ask_move,conation,commissive,metalingual,expressive,document_op,complex_task,attached_doc,knowledge_query}.rs`

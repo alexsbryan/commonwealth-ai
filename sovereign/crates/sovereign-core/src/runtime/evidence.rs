@@ -407,11 +407,25 @@ pub(crate) enum RouteReason {
     EvidenceShape,
 }
 
-/// The synthesis-route decision: the chosen route plus the reason for it.
+impl SynthesisRoute {
+    /// The role-layer [`crate::role::Tier`] this route runs on — the slot the
+    /// Synthesizer role executes on for this turn. The projection that connects
+    /// the synthesis-routing internals to the role vocabulary.
+    pub(crate) fn tier(self) -> crate::role::Tier {
+        match self {
+            SynthesisRoute::FastFocused => crate::role::Tier::Fast,
+            SynthesisRoute::PrimarySynthesis => crate::role::Tier::Primary,
+        }
+    }
+}
+
+/// The synthesis-route decision: the chosen route, the reason for it, and the
+/// role-layer tier (the Synthesizer's slot) it resolves to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct RouteDecision {
     pub(crate) route: SynthesisRoute,
     pub(crate) reason: RouteReason,
+    pub(crate) tier: crate::role::Tier,
 }
 
 /// Resolve the synthesis route in ONE place — the capability decision (Router
@@ -429,21 +443,17 @@ pub(crate) fn resolve_synthesis_route(
     has_atom_enum: bool,
     shape: &EvidenceShape,
 ) -> RouteDecision {
-    if matches!(intent, Intent::ComparisonQuery) {
-        RouteDecision {
-            route: SynthesisRoute::FastFocused,
-            reason: RouteReason::ComparisonPin,
-        }
+    let (route, reason) = if matches!(intent, Intent::ComparisonQuery) {
+        (SynthesisRoute::FastFocused, RouteReason::ComparisonPin)
     } else if has_atom_enum {
-        RouteDecision {
-            route: SynthesisRoute::PrimarySynthesis,
-            reason: RouteReason::AtomEnumPin,
-        }
+        (SynthesisRoute::PrimarySynthesis, RouteReason::AtomEnumPin)
     } else {
-        RouteDecision {
-            route: route_from_evidence(shape),
-            reason: RouteReason::EvidenceShape,
-        }
+        (route_from_evidence(shape), RouteReason::EvidenceShape)
+    };
+    RouteDecision {
+        route,
+        reason,
+        tier: route.tier(),
     }
 }
 
@@ -506,6 +516,17 @@ mod route_resolver_tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn tier_tracks_route() {
+        use crate::role::Tier;
+        let f = resolve_synthesis_route(&Intent::ComparisonQuery, false, &primary_shape());
+        assert_eq!(f.route, SynthesisRoute::FastFocused);
+        assert_eq!(f.tier, Tier::Fast);
+        let p = resolve_synthesis_route(&Intent::KnowledgeQuery, true, &fast_shape());
+        assert_eq!(p.route, SynthesisRoute::PrimarySynthesis);
+        assert_eq!(p.tier, Tier::Primary);
     }
 
     #[test]

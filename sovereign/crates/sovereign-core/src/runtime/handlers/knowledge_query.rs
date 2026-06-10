@@ -886,6 +886,8 @@ impl Runtime {
             top_source = %shape.top_source_label,
             route = ?route,
             reason = ?decision.reason,
+            role = "synthesizer",
+            tier = ?decision.tier,
             operation = ?operation,
             "KnowledgeQuery: evidence-shape routing decision"
         );
