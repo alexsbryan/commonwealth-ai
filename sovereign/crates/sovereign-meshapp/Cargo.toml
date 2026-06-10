@@ -13,6 +13,11 @@ license.workspace = true
 corpus-engine = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# Wrapped artifact builder: weekday/hour folds + read-only GLiNER
+# chunk_entities reads from the sovereign state db.
+chrono = { workspace = true }
+rusqlite = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
+tokio = { workspace = true }

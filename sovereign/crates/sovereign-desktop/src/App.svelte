@@ -11,6 +11,7 @@
   import type { BootstrapSnapshot, StarterQuestion } from "./lib/types";
   import { approvalStore } from "./lib/stores/approval.svelte";
   import { chatSeedStore } from "./lib/stores/chatSeed.svelte";
+  import { outerWorkScopeStore } from "./lib/stores/outerWorkScope.svelte";
   import { joinLinkStore } from "./lib/stores/joinLink.svelte";
   import type {
     StepDonePayload,
@@ -246,6 +247,14 @@
         if (url.startsWith("sovereign://join/")) {
           joinLinkStore.set(url);
         }
+      },
+      onOpenOuterWork: (payload) => {
+        // A mesh-app Door card (Wrapped) asked for "ask your past self":
+        // fresh conversation, retrieval scoped to the app's corpus.
+        // ChatView consumes the scope once the empty pane mounts.
+        outerWorkScopeStore.set([payload.corpus_id]);
+        handleConversationSelect(null);
+        view = "chat";
       },
     });
 

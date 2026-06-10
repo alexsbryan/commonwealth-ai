@@ -16,3 +16,4 @@ export {
   scaleBanner, typeToggle, searchBox, threadList, barList,
   timelineChart, monthLabel, reconciliationList,
 } from "./views.js";
+export { storyShow, heatGrid } from "./story.js";

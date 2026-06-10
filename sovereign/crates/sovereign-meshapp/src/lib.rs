@@ -10,6 +10,8 @@
 //! `investigation/` graph (UAP) or an `atlas/` enrichment (Enron) through the
 //! same DTOs ([`GraphNodeDto`] / [`EdgeDto`] / [`NodeDetailDto`]).
 
+pub mod wrapped;
+
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 

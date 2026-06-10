@@ -283,6 +283,17 @@ async fn op_handler(
             Ok(id) => sovereign_meshapp::read_chunk(idx, id).await.map(to_val),
             Err(_) => Err(format!("chunk id is not numeric: {:?}", a.chunk_id)),
         },
+        // Same load-or-build-and-cache path the desktop host runs, so the
+        // dev loop exercises staleness + the verbatim audit identically.
+        "wrapped_artifact" => {
+            let state_db = sovereign_cli_shared::dirs::sovereign_root().join("sovereign.db");
+            sovereign_meshapp::wrapped::wrapped_artifact(idx, Some(state_db.as_path()))
+                .await
+                .map(to_val)
+        }
+        // Host navigation has no dev-server analogue — the bundle catches
+        // this and renders its fallback copy.
+        "open_outer_work" => Err("Outer Work lives in the desktop app — the dev server has no chat to open".to_string()),
         other => Err(format!("unknown op `{other}`")),
     };
     match result {
@@ -367,6 +378,8 @@ const DEV_SHIM: &str = r#"(function () {
     corpusStats: (c) => call('corpus_stats', {}),
     timeline: (c) => call('timeline', {}),
     readChunk: (c, chunkId) => call('read_chunk', { chunk_id: String(chunkId) }),
+    wrappedArtifact: (c) => call('wrapped_artifact', {}),
+    openOuterWork: (c) => call('open_outer_work', {}),
   };
 })();
 "#;

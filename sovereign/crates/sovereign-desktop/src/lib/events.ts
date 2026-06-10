@@ -18,6 +18,9 @@ export interface EventHandlers {
   onError?: (payload: ErrorPayload) => void;
   onCorpusProgress?: (payload: CorpusProgressPayload) => void;
   onDeepLink?: (url: string) => void;
+  /** A mesh-app window (Wrapped's Door card) asked the host to open
+   *  Outer Work on a fresh conversation scoped to one corpus. */
+  onOpenOuterWork?: (payload: { corpus_id: string }) => void;
 }
 
 export async function initEventListeners(
@@ -89,6 +92,14 @@ export async function initEventListeners(
     unlisteners.push(
       await listen<string>("deep-link-received", (event) =>
         handlers.onDeepLink!(event.payload),
+      ),
+    );
+  }
+
+  if (handlers.onOpenOuterWork) {
+    unlisteners.push(
+      await listen<{ corpus_id: string }>("meshapp-open-outer-work", (event) =>
+        handlers.onOpenOuterWork!(event.payload),
       ),
     );
   }
