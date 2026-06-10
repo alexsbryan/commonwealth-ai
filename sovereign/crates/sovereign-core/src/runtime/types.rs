@@ -92,6 +92,11 @@ pub(crate) struct KnowledgeQueryPlan {
     /// `"empty"` | `"focused"` | `"synthesis"` | `"routed"` —
     /// surfaced in message metadata for the UI to label the turn.
     pub(crate) result_quality: &'static str,
+    /// Non-`None` when the prompt-budget guard trimmed the request to
+    /// fit the context window (see `runtime::prompt_budget`). Rides
+    /// into message metadata as `prompt_budget` so the degradation is
+    /// operator-visible rather than silent.
+    pub(crate) prompt_budget_note: Option<String>,
     /// Snapshot of the folder-metadata oracle taken when the plan
     /// was built. Carried through to the streaming spawn so the
     /// final assistant message's `ResponseProvenance` can include
