@@ -29,6 +29,7 @@ mod atlas;
 mod baselines;
 mod book_report;
 mod chaos_monkey;
+mod desktop_bridge;
 mod discover;
 mod enron;
 mod flywheel;
