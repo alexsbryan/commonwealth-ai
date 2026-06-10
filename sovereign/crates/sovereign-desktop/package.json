@@ -18,7 +18,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:real": "playwright test -c playwright.real.config.ts",
-    "report:coverage:real": "node tests/e2e/scripts/coverage-report.mjs test-results/ledger-synthetic.jsonl test-results/ledger-real.jsonl",
+    "report:coverage:real": "node tests/e2e/scripts/coverage-report.mjs test-artifacts/ledger-synthetic.jsonl test-artifacts/ledger-real.jsonl",
     "test:ttfi": "playwright test specs/ttfi.spec.ts",
     "report:ttfi": "node tests/e2e/scripts/ttfi-summary.mjs",
     "report:coverage": "node tests/e2e/scripts/coverage-report.mjs",

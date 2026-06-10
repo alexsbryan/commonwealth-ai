@@ -1296,9 +1296,14 @@ impl DocumentAssetManager {
             indices.sort();
             indices.dedup();
             if indices.is_empty() {
-                // Fallback: sample evenly across the document.
+                // Fallback: sample evenly across the document. The
+                // `.max(1)` must wrap the DIVISION — `len.max(1) / 20`
+                // is 0 for any document under 20 chunks, and
+                // `step_by(0)` panics (caught 2026-06-09 by the
+                // real-mode e2e: ask_document on a 2-chunk note
+                // killed the worker mid-request).
                 (0..all_chunks.len())
-                    .step_by(all_chunks.len().max(1) / 20)
+                    .step_by((all_chunks.len() / 20).max(1))
                     .collect()
             } else {
                 indices
@@ -1306,7 +1311,7 @@ impl DocumentAssetManager {
         } else {
             // No skeleton — degrade to sampling.
             (0..all_chunks.len())
-                .step_by(all_chunks.len().max(1) / 20)
+                .step_by((all_chunks.len() / 20).max(1))
                 .collect()
         };
 

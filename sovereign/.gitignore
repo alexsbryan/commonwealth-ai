@@ -47,6 +47,7 @@ bench/voice/baseline/diff-*.txt
 
 # Playwright artifacts (chat surface e2e tests).
 crates/sovereign-desktop/test-results/
+crates/sovereign-desktop/test-artifacts/
 crates/sovereign-desktop/playwright-report/
 crates/sovereign-desktop/playwright/.cache/
 
