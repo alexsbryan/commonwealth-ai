@@ -123,3 +123,126 @@ pub struct EventRow {
     pub event: String,
     pub payload: Value,
 }
+
+/// Run one chat turn through the desktop's production path — fresh
+/// conversation, sealed to `corpus` via the same
+/// `set_conversation_enabled_corpora` command the corpus chip strip
+/// uses, dispatched with `send_message_stream`, terminal text read
+/// from the bridge's replay ring. Returns the same [`LiveAnswer`]
+/// shape `run_live` produces so every downstream judge/check is
+/// shared verbatim between transports.
+///
+/// `retrieved_chunk_texts` parity note: message metadata carries
+/// 200-char snippets, but the deterministic chaos checks substring-
+/// match signature quotes against FULL chunk text — so each citation
+/// is resolved through `read_get_chunk` (the reading surface; the
+/// sealed corpus is installed on the desktop, so resolution is local),
+/// falling back to the snippet only if resolution fails.
+///
+/// Call `client.listen("message-complete")` once before the first
+/// turn so completions land in the replay ring.
+/// One bridge-dispatched turn: the transport-shared [`LiveAnswer`]
+/// plus the raw message metadata (provenance, retrieved_chunks) for
+/// callers that read routing/glassbox fields.
+pub struct BridgeTurn {
+    pub answer: super::live_runner::LiveAnswer,
+    pub metadata: Value,
+}
+
+pub async fn run_bridge_live(
+    client: &BridgeClient,
+    corpus: Option<&str>,
+    question: &str,
+    spec: &str,
+) -> Result<BridgeTurn, String> {
+    let conv: Value = client
+        .invoke("create_conversation", serde_json::json!({}), spec)
+        .await?;
+    let conv_id = conv["id"]
+        .as_str()
+        .ok_or("create_conversation returned no id")?
+        .to_string();
+    if let Some(corpus) = corpus {
+        client
+            .invoke::<Value>(
+                "set_conversation_enabled_corpora",
+                serde_json::json!({ "conversationId": conv_id, "enabledCorpora": [corpus] }),
+                spec,
+            )
+            .await?;
+    }
+
+    let since_seq = client
+        .events_recent(0)
+        .await?
+        .last()
+        .map(|r| r.seq + 1)
+        .unwrap_or(0);
+    let started: Value = client
+        .invoke(
+            "send_message_stream",
+            serde_json::json!({ "message": question, "conversationId": conv_id }),
+            spec,
+        )
+        .await?;
+    let message_id = started["message_id"]
+        .as_str()
+        .ok_or("send_message_stream returned no message_id")?
+        .to_string();
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
+    let complete = loop {
+        let rows = client.events_recent(since_seq).await?;
+        if let Some(row) = rows.iter().find(|r| {
+            r.event == "message-complete"
+                && r.payload["message_id"].as_str() == Some(message_id.as_str())
+        }) {
+            break row.payload.clone();
+        }
+        if let Some(err) = rows.iter().find(|r| {
+            r.event == "message-error"
+                && r.payload["message_id"].as_str() == Some(message_id.as_str())
+        }) {
+            return Err(format!("desktop turn errored: {}", err.payload["message"]));
+        }
+        if std::time::Instant::now() > deadline {
+            return Err("desktop turn did not complete within 300s".into());
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+    };
+
+    let raw = complete["full_text"].as_str().unwrap_or_default();
+    let mut chunk_texts = Vec::new();
+    if let Some(chunks) = complete["metadata"]["retrieved_chunks"].as_array() {
+        for c in chunks {
+            let resolved: Option<Value> = match (c["corpus_id"].as_str(), c["chunk_id"].as_u64()) {
+                (Some(cid), Some(chid)) => client
+                    .invoke(
+                        "read_get_chunk",
+                        serde_json::json!({ "corpusId": cid, "chunkId": chid }),
+                        spec,
+                    )
+                    .await
+                    .ok()
+                    .flatten(),
+                _ => None,
+            };
+            match resolved.as_ref().and_then(|r| r["content"].as_str()) {
+                Some(content) => chunk_texts.push(content.to_string()),
+                None => {
+                    if let Some(snippet) = c["snippet"].as_str() {
+                        chunk_texts.push(snippet.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(BridgeTurn {
+        answer: super::live_runner::LiveAnswer {
+            visible: super::live_runner::strip_think(raw),
+            retrieved_chunk_texts: chunk_texts,
+        },
+        metadata: complete["metadata"].clone(),
+    })
+}

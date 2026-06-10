@@ -1,0 +1,34 @@
+{
+  "lane": "chaos-monkey",
+  "captured_at": "2026-06-10T05:47:07.303935609+00:00",
+  "corpus": "chaos-secret-agent",
+  "model": "primary",
+  "note": "competence 14/24 answerable correct · honesty 0/11 absent declined · 6 hallucinated",
+  "metrics": {
+    "citation_fidelity": {
+      "value": 0.75,
+      "direction": "higher_is_better",
+      "tolerance": 0.3
+    },
+    "competence": {
+      "value": 0.5833333333333334,
+      "direction": "higher_is_better",
+      "tolerance": 0.15
+    },
+    "distractor_evasion": {
+      "value": 0.3333333333333333,
+      "direction": "higher_is_better",
+      "tolerance": 0.34
+    },
+    "hallucination_rate": {
+      "value": 0.5454545454545454,
+      "direction": "lower_is_better",
+      "tolerance": 0.18
+    },
+    "honesty": {
+      "value": 0.45454545454545453,
+      "direction": "higher_is_better",
+      "tolerance": 0.18
+    }
+  }
+}

@@ -40,6 +40,7 @@ mod mechanism_fidelity;
 mod obsidian;
 mod promote;
 mod render;
+mod routing_replay;
 mod scaffold;
 mod scaffolding_param;
 mod uap;
@@ -126,6 +127,7 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "atlas" => atlas::cmd_atlas(&args[1..]).await,
         "book-report" => book_report::cmd_book_report(&args[1..]).await,
         "chaos-monkey" => chaos_monkey::cmd_chaos_monkey(&args[1..]).await,
+        "routing-replay" => routing_replay::cmd_routing_replay(&args[1..]).await,
         "enron" => enron::cmd_enron(&args[1..]).await,
         "flywheel" => flywheel::cmd_flywheel(&args[1..]).await,
         "promote" => promote::cmd_promote(&args[1..]).await,

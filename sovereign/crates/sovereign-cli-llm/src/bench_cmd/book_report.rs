@@ -946,7 +946,6 @@ struct BaselineReport {
 #[derive(Debug, Deserialize)]
 struct BaselineQuestion {
     id: String,
-    tier: u8,
     #[serde(default)]
     mechanical_score_pct: u8,
     #[serde(default)]
