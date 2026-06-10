@@ -121,6 +121,14 @@ pub struct BenchOutcome {
     pub levers: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// Capture date (YYYY-MM-DD) of the baseline this run was diffed
+    /// against, from the dated snapshot filename — `None` on first-run
+    /// and stale outcomes. See `baselines::baseline_age`; rendered with
+    /// a staleness warning past `SOVEREIGN_BASELINE_MAX_AGE_DAYS`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baseline_captured: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baseline_age_days: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -340,6 +348,8 @@ async fn run_one(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
                 enrichment: None,
                 retrieval: None,
                 levers: bench.levers.clone(),
+        baseline_captured: None,
+        baseline_age_days: None,
                 note: Some(format!("rebuild failed: {e}")),
             };
         }
@@ -362,6 +372,8 @@ async fn run_one(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
             enrichment: None,
             retrieval: None,
             levers: bench.levers.clone(),
+        baseline_captured: None,
+        baseline_age_days: None,
             note: Some(stale_hint(bench)),
         };
     }
@@ -488,7 +500,7 @@ async fn run_routing_only(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome 
         ))
     };
 
-    BenchOutcome {
+    let mut outcome = BenchOutcome {
         id: bench.id.clone(),
         group: bench.group.clone(),
         corpus_id: bench.corpus_id.clone(),
@@ -497,8 +509,12 @@ async fn run_routing_only(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome 
         enrichment: None,
         retrieval: None,
         levers: bench.levers.clone(),
+        baseline_captured: None,
+        baseline_age_days: None,
         note,
-    }
+    };
+    stamp_baseline_age(&mut outcome, &opts.bench_root, &baseline_view);
+    outcome
 }
 
 /// Shell out to `sovereign enrich build <corpus_id>`. Sequential
@@ -557,6 +573,8 @@ async fn run_enrichment(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
                 enrichment: None,
                 retrieval: None,
                 levers: bench.levers.clone(),
+        baseline_captured: None,
+        baseline_age_days: None,
                 note: Some(format!("score_corpus failed: {e}")),
             };
         }
@@ -584,7 +602,7 @@ async fn run_enrichment(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
         Some(prev) => classify_enrichment(prev, &current, opts.regression_threshold),
     };
 
-    BenchOutcome {
+    let mut outcome = BenchOutcome {
         id: bench.id.clone(),
         group: bench.group.clone(),
         corpus_id: bench.corpus_id.clone(),
@@ -593,8 +611,12 @@ async fn run_enrichment(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
         enrichment: Some(EnrichmentOutcome { current, baseline }),
         retrieval: None,
         levers: bench.levers.clone(),
+        baseline_captured: None,
+        baseline_age_days: None,
         note: None,
-    }
+    };
+    stamp_baseline_age(&mut outcome, &opts.bench_root, bench);
+    outcome
 }
 
 async fn run_retrieval(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
@@ -700,7 +722,7 @@ async fn run_retrieval(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
         Some(prev) => classify_retrieval(prev, &current, effective_threshold, gate_on_answer_equiv),
     };
 
-    BenchOutcome {
+    let mut outcome = BenchOutcome {
         id: bench.id.clone(),
         group: bench.group.clone(),
         corpus_id: bench.corpus_id.clone(),
@@ -709,7 +731,27 @@ async fn run_retrieval(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
         enrichment: None,
         retrieval: Some(RetrievalOutcome { current, baseline }),
         levers: bench.levers.clone(),
+        baseline_captured: None,
+        baseline_age_days: None,
         note: None,
+    };
+    stamp_baseline_age(&mut outcome, &opts.bench_root, &baseline_view);
+    outcome
+}
+
+/// Stamp the capture date + age of the baseline directory this
+/// outcome was diffed against. After an `--update-baseline` write the
+/// age reads 0 — correct by construction (the symlink now points at
+/// today's snapshot). First-run / stale outcomes keep `None`.
+fn stamp_baseline_age(
+    outcome: &mut BenchOutcome,
+    bench_root: &Path,
+    baseline_view: &DiscoveredBench,
+) {
+    let dir = super::baselines::baseline_dir_for(bench_root, baseline_view);
+    if let Some((captured, age_days)) = super::baselines::baseline_age(&dir) {
+        outcome.baseline_captured = Some(captured);
+        outcome.baseline_age_days = Some(age_days);
     }
 }
 
@@ -723,6 +765,8 @@ fn outcome_subprocess_fail(bench: &DiscoveredBench, msg: String) -> BenchOutcome
         enrichment: None,
         retrieval: None,
         levers: bench.levers.clone(),
+        baseline_captured: None,
+        baseline_age_days: None,
         note: Some(msg),
     }
 }

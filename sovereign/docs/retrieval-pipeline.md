@@ -1,0 +1,129 @@
+<!-- GENERATED FILE — do not edit by hand.
+Source: sovereign-core/src/runtime/retrieval_pipeline.rs
+Regenerate: UPDATE_RETRIEVAL_PIPELINE_DOC=1 cargo test -p sovereign-core --test retrieval_pipeline_doc -->
+
+# Retrieval pipeline — steps and knobs
+
+The retrieval-injection orchestration is data: each pipeline is an
+ordered list of named steps run by one tracing runner (one
+`tracing::info!(target: "retrieval.pipeline")` line per step with
+`chunks_before/after/delta`). The governing principle: **the intent
+decides HOW to answer (model tier, expansion, synthesis shape) — never
+WHERE knowledge lives.** Both pipelines share the same 3-step
+evidence-gathering head and 12-step core; they differ only in their
+tails. Step ORDER is bench-tuned data, pinned by golden tests — see
+the module doc in `retrieval_pipeline.rs` for design rationale and the
+dated convergence/divergence log.
+
+## Step sequences
+
+### KnowledgeQuery / ComparisonQuery (`kq_pipeline`)
+
+| # | step | gate flag |
+|---|---|---|
+| 1 | `main_retrieval_mesh` | — |
+| 2 | `scope_personal_filter` | — |
+| 3 | `store_search` | — |
+| 4 | `entity_boost` | — |
+| 5 | `meta_atlas_boost` | — |
+| 6 | `query_decomp` | `SOVEREIGN_QUERY_DECOMP` |
+| 7 | `title_expand` | `SOVEREIGN_TITLE_EXPAND` |
+| 8 | `noise_floor` | — |
+| 9 | `atom_enum` | `SOVEREIGN_ATOM_ENUM` |
+| 10 | `raptor_grounding_early` | `SOVEREIGN_RAPTOR_GROUNDING` |
+| 11 | `atlas_grounding` | `SOVEREIGN_ATLAS_GROUNDING` |
+| 12 | `reweight_and_sort` | — |
+| 13 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
+| 14 | `dedupe_merged` | — |
+| 15 | `cap_and_reserve` | — |
+| 16 | `truncate_merged` | — |
+
+### DeepQuery / SimpleQuery (`deep_pipeline(true)`)
+
+| # | step | gate flag |
+|---|---|---|
+| 1 | `main_retrieval_mesh` | — |
+| 2 | `scope_personal_filter` | — |
+| 3 | `store_search` | — |
+| 4 | `entity_boost` | — |
+| 5 | `meta_atlas_boost` | — |
+| 6 | `query_decomp` | `SOVEREIGN_QUERY_DECOMP` |
+| 7 | `title_expand` | `SOVEREIGN_TITLE_EXPAND` |
+| 8 | `noise_floor` | — |
+| 9 | `atom_enum` | `SOVEREIGN_ATOM_ENUM` |
+| 10 | `raptor_grounding_early` | `SOVEREIGN_RAPTOR_GROUNDING` |
+| 11 | `atlas_grounding` | `SOVEREIGN_ATLAS_GROUNDING` |
+| 12 | `reweight_and_sort` | — |
+| 13 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
+| 14 | `dedupe_merged` | — |
+| 15 | `cap_and_reserve` | — |
+| 16 | `truncate_merged` | — |
+| 17 | `top_sources_expand` | — |
+
+### DeepQuery attached-document variant (`deep_pipeline(false)`)
+
+| # | step | gate flag |
+|---|---|---|
+| 1 | `entity_boost` | — |
+| 2 | `meta_atlas_boost` | — |
+| 3 | `query_decomp` | `SOVEREIGN_QUERY_DECOMP` |
+| 4 | `title_expand` | `SOVEREIGN_TITLE_EXPAND` |
+| 5 | `noise_floor` | — |
+| 6 | `atom_enum` | `SOVEREIGN_ATOM_ENUM` |
+| 7 | `reweight_and_sort` | — |
+| 8 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` |
+| 9 | `dedupe_merged` | — |
+| 10 | `cap_and_reserve` | — |
+| 11 | `truncate_merged` | — |
+| 12 | `top_sources_expand` | — |
+
+## Env-knob registry
+
+Every `SOVEREIGN_*` knob the pipeline (and its immediate
+post-steps) reads. Step `-` marks knobs read inside a helper
+rather than gating a whole step. A registry-coverage test
+asserts every step-level gate appears here.
+
+| step | flag | default | purpose |
+|---|---|---|---|
+| atlas_grounding | `SOVEREIGN_ATLAS_GROUNDING` | on | Atlas graph-walk grounding (cosine seeds → BFS over typed edges → FTS-fetch evidence chunks). =0/false/off/no disables. |
+| query_decomp | `SOVEREIGN_QUERY_DECOMP` | off | Pure-Rust question decomposition; each sub-query gets its own focused retrieval pass. |
+| query_decomp | `SOVEREIGN_DECOMP_DECAY` | 1.0 | Score decay applied to fanned-out sub-query hits (<1 = augment, never displace). |
+| title_expand | `SOVEREIGN_TITLE_EXPAND` | off | Fast-slot LLM names explicit article titles for abstract questions; titles are fan-out-searched and reserved through the merge. |
+| atom_enum | `SOVEREIGN_ATOM_ENUM` | off | Enumeration-class questions get the corpus's top-degree typed atoms injected as virtual chunks (post-floor). |
+| atom_enum | `SOVEREIGN_ATOM_ENUM_TOPK` | see helper | How many enumerated atoms become virtual chunks. |
+| atom_enum | `SOVEREIGN_ATOM_ENUM_POOL` | see helper | Candidate-pool cap before ranking. |
+| atom_enum | `SOVEREIGN_ATOM_ENUM_RANK` | rrf | Atom ranking mode. |
+| atom_enum | `SOVEREIGN_ATOM_ENUM_SCORE` | see helper | Score stamped on enumerated virtual chunks. |
+| atom_enum | `SOVEREIGN_ATOM_ENUM_NOFILTER` | off | Disable the enumeration-question classifier filter. |
+| atom_enum | `SOVEREIGN_ATOM_ENUM_RELATIONS` | off | Include relation atoms in the enumeration. |
+| raptor_grounding_early | `SOVEREIGN_RAPTOR_GROUNDING` | on | RAPTOR collapsed-tree summary nodes injected as virtual chunks. SOVEREIGN_RAPTOR_LATE picks early (pre-merge) vs late (post-rerank) injection. |
+| raptor_grounding_early | `SOVEREIGN_RAPTOR_LATE` | on | Inject RAPTOR summaries AFTER the leaf pipeline (QA-neutral) instead of pre-merge. |
+| raptor_grounding_early | `SOVEREIGN_RAPTOR_TOP_M` | see helper | Top-M summary nodes injected. |
+| raptor_grounding_early | `SOVEREIGN_RAPTOR_MIN_LEVEL` | see helper | Minimum tree level for injected summaries. |
+| raptor_grounding_early | `SOVEREIGN_RAPTOR_DEDUPE` | see helper | Collapse one entry's multi-level nodes to its best. |
+| graph_neighbor_expand | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` | off | Axis-aware structural-graph one-hop expansion (per-entity axis neighbors + co-citation bridges). |
+| - | `SOVEREIGN_CONV_PPR_WEIGHT` | see helper | Post-pipeline: PPR rerank weight for conversation-corpus chunks. |
+| - | `SOVEREIGN_HISTORY_RETRIEVAL` | on | History layer: retrieval over prior conversation turns (=0 disables). |
+| - | `SOVEREIGN_COMPACTION_DISABLE` | off | History layer: =1 disables dropped-history compaction. |
+| - | `SOVEREIGN_FORENSIC` | off | =1 enables audit_pipeline_stage composition snapshots between steps. |
+
+## Verdict buckets (2026-06-10 flag audit)
+
+- **Validated, default ON** — `SOVEREIGN_ATLAS_GROUNDING`,
+`SOVEREIGN_RAPTOR_GROUNDING` (+`_LATE` position),
+`SOVEREIGN_HISTORY_RETRIEVAL`; router-side:
+`SOVEREIGN_KQ_EFFORT_TIER`, `SOVEREIGN_ROUTER_ROBUST_COARSE`
+(both A/B-validated 2026-06-09). Disable only for A/B runs.
+- **Experimental, opt-in (default OFF)** — `SOVEREIGN_ATOM_ENUM`
+(net-negative on focused enumeration per the 2026-06-04
+bench; keep gated), `SOVEREIGN_TITLE_EXPAND` (see
+wikipedia_learn/V36_FINDINGS.md), `SOVEREIGN_QUERY_DECOMP`,
+`SOVEREIGN_GRAPH_NEIGHBOR_EXPAND`, `SOVEREIGN_COMPACTION_DISABLE`.
+Flipping one ON in prod requires its own bench A/B.
+- **Tunable parameters** — the `_TOPK/_POOL/_RANK/_SCORE`,
+`_TOP_M/_MIN_LEVEL/_DEDUPE`, `DECOMP_DECAY`,
+`CONV_PPR_WEIGHT` family. Sub-knobs of their parent feature.
+- **Debug / escape hatches** — `SOVEREIGN_FORENSIC` (audit
+snapshots), `SOVEREIGN_ATOM_ENUM_NOFILTER` (ablation).
+Never set in normal operation.

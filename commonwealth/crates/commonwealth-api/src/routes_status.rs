@@ -48,6 +48,30 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
         })
         .collect();
 
+    // Real hosted-corpora inventory (was hardcoded empty until
+    // 2026-06-10). Same `installed_indexes()` read the gossip tick and
+    // the knowledge routes already perform — metadata-level, not a
+    // corpus scan. Code indexes are excluded: they serve symbol lookup,
+    // not prose retrieval (see `CorpusKind::Code`); every other kind
+    // (Knowledge, Catalog, future additions) counts as searchable.
+    let (hosted_corpora, total_chunks_searchable) = match &state.inner.corpus_engine {
+        Some(engine) => {
+            let infos = engine.installed_indexes().await.unwrap_or_default();
+            let mut ids: Vec<String> = Vec::new();
+            let mut chunks: u64 = 0;
+            for info in infos {
+                if matches!(info.kind, corpus_engine::CorpusKind::Code) {
+                    continue;
+                }
+                chunks += info.chunk_count;
+                ids.push(info.corpus_id);
+            }
+            ids.sort();
+            (ids, chunks)
+        }
+        None => (Vec::new(), 0),
+    };
+
     Json(StatusResponse {
         node_id: format!(
             "{}",
@@ -62,11 +86,84 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
         },
         inference: InferenceStatus { loaded_models },
         knowledge: KnowledgeStatus {
-            hosted_corpora: vec![],
-            total_chunks_searchable: 0,
+            hosted_corpora,
+            total_chunks_searchable,
+        },
+        process: ProcessStatus {
+            uptime_seconds: state.inner.started_at.elapsed().as_secs(),
+            rss_mb: current_rss_mb(),
+            peak_rss_mb: peak_rss_mb(),
         },
         rpc_worker: rpc_worker_port().map(|port| RpcWorkerStatus { port }),
     })
+}
+
+/// Current resident set size in MiB, platform-native. Sampled per
+/// request — a `getrusage`/`proc_pidinfo` call, microseconds. Pairs
+/// with the daemon-side memory watch: this is the pull surface the
+/// doctor's memory check reads.
+fn current_rss_mb() -> Option<u64> {
+    #[cfg(target_os = "macos")]
+    {
+        // SAFETY: zeroed out-struct of the correct size; the call
+        // writes at most `size` bytes into it.
+        let pid = std::process::id() as libc::c_int;
+        let mut info: libc::proc_taskinfo = unsafe { std::mem::zeroed() };
+        let size = std::mem::size_of::<libc::proc_taskinfo>() as libc::c_int;
+        let rc = unsafe {
+            libc::proc_pidinfo(
+                pid,
+                libc::PROC_PIDTASKINFO,
+                0,
+                &mut info as *mut _ as *mut libc::c_void,
+                size,
+            )
+        };
+        if rc != size {
+            return None;
+        }
+        Some(info.pti_resident_size / (1024 * 1024))
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let statm = std::fs::read_to_string("/proc/self/statm").ok()?;
+        let pages: u64 = statm.split_whitespace().nth(1)?.parse().ok()?;
+        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+        if page_size <= 0 {
+            return None;
+        }
+        Some(pages * page_size as u64 / (1024 * 1024))
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        None
+    }
+}
+
+/// Peak RSS in MiB via getrusage. macOS reports `ru_maxrss` in
+/// *bytes*; Linux in *kilobytes* — preserve the unit split.
+#[cfg(unix)]
+fn peak_rss_mb() -> Option<u64> {
+    // SAFETY: getrusage with a properly-zeroed `rusage` struct is safe.
+    let mut ru: libc::rusage = unsafe { std::mem::zeroed() };
+    let rc = unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut ru) };
+    if rc != 0 {
+        return None;
+    }
+    let raw = ru.ru_maxrss as u64;
+    #[cfg(target_os = "macos")]
+    {
+        Some(raw / (1024 * 1024))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Some(raw / 1024)
+    }
+}
+
+#[cfg(not(unix))]
+fn peak_rss_mb() -> Option<u64> {
+    None
 }
 
 /// The TCP port this node's in-process RPC inference worker is serving, parsed
@@ -119,9 +216,22 @@ pub struct StatusResponse {
     pub mesh: MeshStatus,
     pub inference: InferenceStatus,
     pub knowledge: KnowledgeStatus,
+    pub process: ProcessStatus,
     /// Present when this node serves an in-process RPC inference worker.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rpc_worker: Option<RpcWorkerStatus>,
+}
+
+/// Process vitals for the pager: `uptime_seconds` resets are the
+/// witness of a real restart; `rss_mb` is what the doctor's memory
+/// check compares against the soft limit.
+#[derive(Debug, Serialize)]
+pub struct ProcessStatus {
+    pub uptime_seconds: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rss_mb: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub peak_rss_mb: Option<u64>,
 }
 
 /// Advertised RPC inference-worker endpoint for mesh auto-discovery.
@@ -192,5 +302,28 @@ mod tests {
         assert!(!rpc_worker_listening("not-a-bind"));
         assert!(!rpc_worker_listening("0.0.0.0:not-a-port"));
         assert!(!rpc_worker_listening(""));
+    }
+}
+
+#[cfg(test)]
+mod process_status_tests {
+    use super::*;
+
+    #[test]
+    fn process_status_serializes_and_samples() {
+        let p = ProcessStatus {
+            uptime_seconds: 42,
+            rss_mb: current_rss_mb(),
+            peak_rss_mb: peak_rss_mb(),
+        };
+        // We're a live process: both samples must be present + nonzero
+        // on unix targets.
+        #[cfg(unix)]
+        {
+            assert!(p.rss_mb.unwrap() > 0);
+            assert!(p.peak_rss_mb.unwrap() > 0);
+        }
+        let json = serde_json::to_value(&p).unwrap();
+        assert_eq!(json["uptime_seconds"], 42);
     }
 }

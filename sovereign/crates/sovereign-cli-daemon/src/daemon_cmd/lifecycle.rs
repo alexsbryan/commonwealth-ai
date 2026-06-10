@@ -393,16 +393,50 @@ pub(super) async fn start_daemon() -> i32 {
         // stop via `pkill -f 'sovereign daemon run'` if needed.
     }
 
-    if wait_for_ready(std::time::Duration::from_secs(20)).await {
+    let timeout = ready_timeout();
+    if wait_for_ready_with_progress(timeout, &err_path).await {
         eprintln!("✓ daemon ready at http://127.0.0.1:9741 (pid {pid})");
+        // Supervision advisory: a pidfile-managed daemon has no
+        // service manager behind it — a crash/jetsam leaves it down
+        // until someone notices. One line, once, at the moment the
+        // operator is already looking.
+        if !crate::service_install::service_installed() {
+            eprintln!(
+                "note: this daemon is unsupervised (no restart on crash). \
+                 For auto-restart: sovereign install-service"
+            );
+        }
         return 0;
     }
     eprintln!(
-        "⚠ pid {pid} started but :9741 didn't respond within 20s\n\
+        "⚠ pid {pid} started but :9741 didn't respond within {}s\n\
+         the daemon may still be loading models — re-check with `sovereign daemon status`\n\
          tail {} for details",
+        timeout.as_secs(),
         err_path.display()
     );
     1
+}
+
+/// Readiness timeout for `daemon start`, env-overridable via
+/// `SOVEREIGN_DAEMON_READY_TIMEOUT_SECS`. Default 120s: a cold boot
+/// mmap-loads the primary 35B + fast + embed models, which takes
+/// 30–60s on the canonical 64GB config — the old hardcoded 20s made
+/// healthy cold boots report failure. Same respect-operator-override
+/// posture as the RUST_BACKTRACE/RUST_MIN_STACK handling above.
+fn ready_timeout() -> std::time::Duration {
+    parse_ready_timeout(std::env::var("SOVEREIGN_DAEMON_READY_TIMEOUT_SECS").ok().as_deref())
+}
+
+/// Pure parse so the policy is unit-testable without touching
+/// process-global env. Unset/garbage/zero all fall back to the default.
+fn parse_ready_timeout(raw: Option<&str>) -> std::time::Duration {
+    const DEFAULT_SECS: u64 = 120;
+    let secs = raw
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|&s| s > 0)
+        .unwrap_or(DEFAULT_SECS);
+    std::time::Duration::from_secs(secs)
 }
 
 /// Path to the pidfile written by `daemon start`.
@@ -412,7 +446,7 @@ pub(super) fn daemon_pid_path() -> std::path::PathBuf {
 
 /// Read the pidfile and return its pid if the process is still alive.
 /// Returns None for a missing, empty, unparseable, or stale pidfile.
-pub(super) fn read_daemon_pid() -> Option<i32> {
+pub(crate) fn read_daemon_pid() -> Option<i32> {
     let raw = std::fs::read_to_string(daemon_pid_path()).ok()?;
     let pid: i32 = raw.trim().parse().ok()?;
     #[cfg(unix)]
@@ -592,6 +626,35 @@ pub(super) async fn status_daemon() -> i32 {
     }
 }
 
+/// `wait_for_ready` plus operator feedback: a progress line every 10s
+/// so a long (healthy) cold model load is distinguishable from a hang.
+/// Used only by the `daemon start` readiness wait — the 200ms
+/// idempotency probe at the top of `start_daemon` stays silent.
+async fn wait_for_ready_with_progress(
+    timeout: std::time::Duration,
+    err_path: &std::path::Path,
+) -> bool {
+    const PROGRESS_EVERY: std::time::Duration = std::time::Duration::from_secs(10);
+    let start = std::time::Instant::now();
+    let mut next_progress = PROGRESS_EVERY;
+    while start.elapsed() < timeout {
+        let slice = PROGRESS_EVERY.min(timeout.saturating_sub(start.elapsed()));
+        if wait_for_ready(slice).await {
+            return true;
+        }
+        if start.elapsed() >= next_progress {
+            eprintln!(
+                "… still waiting ({}s/{}s) — cold model load takes 30-60s; tail {} to watch",
+                start.elapsed().as_secs(),
+                timeout.as_secs(),
+                err_path.display()
+            );
+            next_progress += PROGRESS_EVERY;
+        }
+    }
+    false
+}
+
 /// Poll `/v1/models` until it returns 2xx or `timeout` elapses.
 /// Returns true when the daemon is answering, false on timeout.
 async fn wait_for_ready(timeout: std::time::Duration) -> bool {
@@ -719,5 +782,30 @@ fn peak_rss_mb() -> Option<u64> {
     #[cfg(not(target_os = "macos"))]
     {
         Some(raw / 1024) // kilobytes → MiB
+    }
+}
+
+#[cfg(test)]
+mod ready_timeout_tests {
+    use super::parse_ready_timeout;
+    use std::time::Duration;
+
+    #[test]
+    fn unset_falls_back_to_default() {
+        assert_eq!(parse_ready_timeout(None), Duration::from_secs(120));
+    }
+
+    #[test]
+    fn garbage_and_zero_fall_back_to_default() {
+        assert_eq!(parse_ready_timeout(Some("soon")), Duration::from_secs(120));
+        assert_eq!(parse_ready_timeout(Some("")), Duration::from_secs(120));
+        assert_eq!(parse_ready_timeout(Some("0")), Duration::from_secs(120));
+        assert_eq!(parse_ready_timeout(Some("-5")), Duration::from_secs(120));
+    }
+
+    #[test]
+    fn valid_override_is_honored() {
+        assert_eq!(parse_ready_timeout(Some("30")), Duration::from_secs(30));
+        assert_eq!(parse_ready_timeout(Some(" 300 ")), Duration::from_secs(300));
     }
 }

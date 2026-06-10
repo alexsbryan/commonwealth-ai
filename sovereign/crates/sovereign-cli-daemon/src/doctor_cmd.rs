@@ -567,6 +567,136 @@ fn find_watcher_health(v: &serde_json::Value) -> Option<serde_json::Value> {
 
 // Commonwealth checks
 
+/// Daemon log directory size. Rotation (copy-truncate, 10 MiB cap,
+/// 5 backups per stream) makes >1 GiB nearly impossible — which is
+/// exactly why this is a good check: it only fires when the rotation
+/// loop itself broke (or something else is dumping into the dir).
+fn check_log_dir_size() -> CheckResult {
+    const WARN_BYTES: u64 = 1024 * 1024 * 1024; // 1 GiB
+    let log_dir = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".sovereign")
+        .join("logs");
+    let total: u64 = std::fs::read_dir(&log_dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter_map(|e| e.metadata().ok())
+                .filter(|m| m.is_file())
+                .map(|m| m.len())
+                .sum()
+        })
+        .unwrap_or(0);
+    let total_mb = total / (1024 * 1024);
+    if total > WARN_BYTES {
+        CheckResult {
+            name: "log_dir_size",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Warning,
+            message: format!(
+                "{} holds {total_mb} MiB — rotation should keep this bounded; \
+                 the rotation loop may be broken (see log_rotation.rs contract)",
+                log_dir.display()
+            ),
+            repair: Repair::Manual(
+                "inspect ~/.sovereign/logs for runaway files; rotation covers \
+                 daemon.{log,err,out} at 10MiB × 5 backups each"
+                    .into(),
+            ),
+        }
+    } else {
+        CheckResult {
+            name: "log_dir_size",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Passed,
+            message: format!("log dir at {total_mb} MiB (bounded by rotation)"),
+            repair: Repair::None,
+        }
+    }
+}
+
+/// Daemon RSS vs the memory-watch soft limit, read from `/status`'s
+/// `process.rss_mb` (the pull surface routes_status exposes). With
+/// `doctor --watch` this is a genuine 30s memory pager. Skipped when
+/// the field is absent (daemon predates the process block).
+async fn check_daemon_memory(client_url: &str) -> CheckResult {
+    let soft = crate::memory_watch::soft_limit_mb();
+    let Some(status) = http_get_json(&format!("{client_url}/status")).await else {
+        return CheckResult {
+            name: "daemon_memory",
+            layer: Layer::Commonwealth,
+            status: CheckStatus::Skipped,
+            message: "/status unreachable".into(),
+            repair: Repair::None,
+        };
+    };
+    let Some(rss_mb) = status
+        .get("process")
+        .and_then(|p| p.get("rss_mb"))
+        .and_then(|v| v.as_u64())
+    else {
+        return CheckResult {
+            name: "daemon_memory",
+            layer: Layer::Commonwealth,
+            status: CheckStatus::Skipped,
+            message: "no process.rss_mb on /status (daemon predates the process block — rebuild + restart)"
+                .into(),
+            repair: Repair::None,
+        };
+    };
+    if rss_mb > soft {
+        CheckResult {
+            name: "daemon_memory",
+            layer: Layer::Commonwealth,
+            status: CheckStatus::Warning,
+            message: format!(
+                "daemon rss {rss_mb} MiB exceeds soft limit {soft} MiB — jetsam risk; \
+                 see RUNBOOK memory section"
+            ),
+            repair: Repair::Manual(
+                "check loaded models vs the canonical config (primary 35B-IQ4 + fast 4B-Q8 \
+                 + embed 0.6B on 64GB); `sovereign daemon restart` reclaims leaked growth"
+                    .into(),
+            ),
+        }
+    } else {
+        CheckResult {
+            name: "daemon_memory",
+            layer: Layer::Commonwealth,
+            status: CheckStatus::Passed,
+            message: format!("daemon rss {rss_mb} MiB (soft limit {soft} MiB)"),
+            repair: Repair::None,
+        }
+    }
+}
+
+/// Is the daemon registered with (and loaded into) the user's service
+/// manager? Unsupervised is a Warning, not a Failure — running the
+/// daemon manually in a terminal is a legitimate dev mode — but the
+/// consequence is named: no auto-restart after a crash/jetsam. The
+/// repair is executable so `doctor --fix` converges the box.
+fn check_daemon_supervised() -> CheckResult {
+    if crate::service_install::service_installed() {
+        CheckResult {
+            name: "daemon_supervised",
+            layer: Layer::Commonwealth,
+            status: CheckStatus::Passed,
+            message: "daemon is service-managed (auto-restarts on crash)".into(),
+            repair: Repair::None,
+        }
+    } else {
+        CheckResult {
+            name: "daemon_supervised",
+            layer: Layer::Commonwealth,
+            status: CheckStatus::Warning,
+            message: "daemon is NOT service-managed — it will not auto-restart \
+                      after a crash or jetsam/OOM kill"
+                .into(),
+            repair: Repair::Executable("sovereign install-service".into()),
+        }
+    }
+}
+
 async fn check_daemon_running() -> CheckResult {
     let up = tcp_connectable("127.0.0.1", 9741).await;
     if up {
@@ -1597,6 +1727,7 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
     results.push(check_test_runner(sovereign_dir));
     results.push(check_lint_runner(sovereign_dir));
     results.push(check_watcher_live().await);
+    results.push(check_log_dir_size());
 
     // Freshness pipeline: registry-level checks that report on the
     // daemon's project watchers and the integrity of their SCIP
@@ -1619,8 +1750,14 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
     let client_url = detect_commonwealth_url(sovereign_dir)
         .unwrap_or_else(|| "http://127.0.0.1:9741".to_string());
     let internal_url = "http://127.0.0.1:9742".to_string();
+    // Supervision check runs UNCONDITIONALLY — outside the :9741
+    // reachability gate below — because it matters most precisely
+    // when the daemon is down: an unsupervised daemon that crashed is
+    // the incident this check exists to prevent.
+    results.push(check_daemon_supervised());
     if tcp_connectable("127.0.0.1", 9741).await {
         results.push(check_daemon_running().await);
+        results.push(check_daemon_memory(&client_url).await);
         results.push(check_mesh_member(&client_url).await);
         results.push(check_inference_capable(&client_url).await);
         results.push(check_activity_reporting(&internal_url).await);

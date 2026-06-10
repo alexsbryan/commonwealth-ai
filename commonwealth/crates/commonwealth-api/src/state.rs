@@ -234,6 +234,10 @@ pub struct AppStateInner {
     /// repo-like context (degrades ATOS pipelines to a noop).
     pub repo_root: Option<std::path::PathBuf>,
     pub corpus_engine: Option<Arc<CorpusEngine>>,
+    /// Process start instant — drives `/status`'s `process.uptime_seconds`
+    /// (an uptime reset is the cheap witness that a supervised restart
+    /// actually produced a fresh process).
+    pub started_at: std::time::Instant,
     /// Distributed KV store for mesh apps.
     pub mesh_store: Arc<MeshStore>,
     /// Registry of known mesh apps (gossiped).
@@ -573,6 +577,7 @@ impl AppState {
         ));
         Self {
             inner: Arc::new(AppStateInner {
+                started_at: std::time::Instant::now(),
                 self_node_id_swap: ArcSwap::from_pointee(self_node_id),
                 mesh: RwLock::new(mesh),
                 inference_store,

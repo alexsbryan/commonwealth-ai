@@ -37,6 +37,24 @@ pub async fn run(args: &[String]) -> i32 {
         }
     };
 
+    // Double-start guard. Install does unload→load, and launchd
+    // immediately spawns `daemon run` — which loses the :9741 bind to
+    // a manually-started daemon and then crash-loops under
+    // `KeepAlive.SuccessfulExit = false`. Refuse loudly instead (same
+    // posture as `daemon start`'s bind-collision detector). The
+    // pidfile is written ONLY by the manual `daemon start` path, so a
+    // live pid there means exactly the conflicting case.
+    if let Some(pid) = crate::daemon_cmd::read_daemon_pid() {
+        eprintln!(
+            "error: a manually-started daemon is running (pid {pid}).\n\
+             Installing the service now would spawn a second daemon that \
+             loses the :9741 bind and crash-loops.\n\
+             Stop it first, then re-run:\n\
+             \n  sovereign daemon stop && sovereign install-service\n"
+        );
+        return 1;
+    }
+
     eprintln!("Registering {} as a system service…", bin_path.display());
     match service_install::install_service(&bin_path) {
         Ok(()) => {

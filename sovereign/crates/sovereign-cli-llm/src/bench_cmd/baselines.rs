@@ -206,3 +206,97 @@ mod tests {
         assert_eq!(got.unwrap().v, 2);
     }
 }
+
+/// Capture date + age-in-days of `<dir>/latest.json`, for staleness
+/// surfacing at the consumption site (the April-30-baseline incident:
+/// a HARD lane silently diffed against a six-week-old snapshot).
+///
+/// Primary source: the dated filename the `latest.json` symlink points
+/// at (`2026-MM-DD.json`). Fallback: the resolved file's mtime (covers
+/// the non-unix copy branch above). `None` when no baseline exists.
+/// Schema-independent by design — works identically for typed
+/// (`EvalReport`/`EvalRun`), untyped (routing), and lane baselines.
+pub fn baseline_age(dir: &Path) -> Option<(String, u64)> {
+    let latest = dir.join("latest.json");
+    let captured: chrono::NaiveDate = fs::read_link(&latest)
+        .ok()
+        .and_then(|target| parse_dated_filename(&target))
+        .or_else(|| {
+            let mtime = fs::metadata(&latest).ok()?.modified().ok()?;
+            Some(chrono::DateTime::<Utc>::from(mtime).date_naive())
+        })?;
+    let age_days = (Utc::now().date_naive() - captured).num_days().max(0) as u64;
+    Some((captured.format("%Y-%m-%d").to_string(), age_days))
+}
+
+fn parse_dated_filename(path: &Path) -> Option<chrono::NaiveDate> {
+    let stem = path.file_stem()?.to_str()?;
+    chrono::NaiveDate::parse_from_str(stem, "%Y-%m-%d").ok()
+}
+
+/// Warn threshold for baseline age, env-overridable via
+/// `SOVEREIGN_BASELINE_MAX_AGE_DAYS`. Default 14. Staleness is
+/// operator information, never a gate verdict — renderers warn, exit
+/// codes don't change.
+pub fn baseline_max_age_days() -> u64 {
+    parse_max_age_days(
+        std::env::var("SOVEREIGN_BASELINE_MAX_AGE_DAYS")
+            .ok()
+            .as_deref(),
+    )
+}
+
+fn parse_max_age_days(raw: Option<&str>) -> u64 {
+    const DEFAULT_DAYS: u64 = 14;
+    raw.and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|&d| d > 0)
+        .unwrap_or(DEFAULT_DAYS)
+}
+
+#[cfg(test)]
+mod age_tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn parses_dated_symlink_target() {
+        assert!(parse_dated_filename(Path::new("2026-04-30.json")).is_some());
+        assert!(parse_dated_filename(Path::new("latest.json")).is_none());
+        assert!(parse_dated_filename(Path::new("notes.txt")).is_none());
+    }
+
+    #[test]
+    fn age_none_when_no_baseline_or_dangling_symlink() {
+        let tmp = TempDir::new().unwrap();
+        assert!(baseline_age(tmp.path()).is_none());
+        #[cfg(unix)]
+        {
+            // Dangling symlink to a dated name: the filename still
+            // carries the capture date — age is reportable even though
+            // the snapshot is gone (read_latest_at treats it as first
+            // run; age is advisory either way).
+            std::os::unix::fs::symlink("2020-01-01.json", tmp.path().join("latest.json"))
+                .unwrap();
+            let (captured, age) = baseline_age(tmp.path()).unwrap();
+            assert_eq!(captured, "2020-01-01");
+            assert!(age > 365);
+        }
+    }
+
+    #[test]
+    fn age_zero_for_baseline_written_today() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("baselines").join("golden");
+        write_dated_and_update_latest_at(&dir, &serde_json::json!({"v": 1})).unwrap();
+        let (_, age) = baseline_age(&dir).unwrap();
+        assert_eq!(age, 0);
+    }
+
+    #[test]
+    fn max_age_parse_policy() {
+        assert_eq!(parse_max_age_days(None), 14);
+        assert_eq!(parse_max_age_days(Some("not-a-number")), 14);
+        assert_eq!(parse_max_age_days(Some("0")), 14);
+        assert_eq!(parse_max_age_days(Some("30")), 30);
+    }
+}
