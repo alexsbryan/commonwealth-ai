@@ -102,6 +102,7 @@ pub(crate) use self::formatters::{
 
 mod collaboration;
 mod evidence;
+mod evidence_loop;
 mod formatters;
 mod handlers;
 mod intent_helpers;

@@ -262,6 +262,18 @@ pub async fn verify_grounding(
     if answer.trim().is_empty() || chunks.is_empty() {
         return Some(0.0);
     }
+    // Scope: the gate exists to catch a CRISP ungrounded factual
+    // assertion (a name, a date, an identification). A long-form
+    // synthesis answer makes dozens of claims — reducing it to one
+    // extracted claim and gating the whole reply on that single
+    // check is the wrong instrument (observed: essay answers
+    // degenerate to a meta-claim no single chunk supports, and a
+    // correct essay gets suppressed). Long-form replies pass through
+    // ungated; per-claim auditing of essays is separate machinery.
+    if answer.chars().count() > 1_800 {
+        eprintln!("    [gv] long-form answer ({} chars) — out of gate scope", answer.chars().count());
+        return Some(0.0);
+    }
     // Two-step, decomposed (2026-06-10 iteration C). The earlier
     // single-pass design asked one forced-choice token to BOTH locate
     // the answer's claim AND search ~24k chars of passages for support
@@ -305,6 +317,12 @@ pub async fn verify_grounding(
                 eprintln!("    [gv] claim=NO_CLAIM → violation_prob=0.000");
                 return Some(0.0);
             }
+            // (A CIRCULAR category for vacuous self-confirmation claims
+            // was tried 2026-06-10 and REVERTED: the extra instruction
+            // bled into NO_CLAIM behaviour and the circular fabrication
+            // came through UNGATED — worse than the 0.31-0.57 vp the
+            // plain extraction gives it. Don't reintroduce as prompt
+            // text; if circularity matters later, detect it in code.)
             t
         }
         Err(e) => {

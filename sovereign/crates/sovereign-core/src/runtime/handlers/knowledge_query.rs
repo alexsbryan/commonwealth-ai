@@ -349,6 +349,7 @@ impl Runtime {
             "handle_knowledge_query: corpus search done (per-corpus survivors)"
         );
 
+
         // 4a. Empty results path — answer from parametric knowledge.
         //
         // v29 attempted to gate this on (entities non-empty +
@@ -714,6 +715,23 @@ impl Runtime {
             )
             .await;
         }
+        // 4d-agentic. Bounded agentic evidence loop (prototype, env-gated
+        // SOVEREIGN_AGENTIC_KQ=1). When the evidence fails a fast
+        // forced-choice sufficiency check, the model formulates 1-3
+        // world-grounded queries and the SAME kq_pipeline runs per
+        // query; new chunks are deduped, hard-sealed to the
+        // conversation's corpora, and appended. Placed HERE — after the
+        // dominance-expansion and rerank — so round-2 evidence feeds
+        // the prompt and metadata directly (the v1 prototype sat
+        // upstream and the expansion rebuilt the set without it).
+        // Contested-markers above are computed from round-0 chunks
+        // only; acceptable for the prototype. Degrades to a no-op on
+        // any judge or formulation failure. See runtime/evidence_loop.rs.
+        if crate::runtime::evidence_loop::agentic_kq_enabled() {
+            chunks = self
+                .agentic_evidence_round(message, chunks, context, intent, scope)
+                .await;
+        }
         let conv_briefing = self
             .build_conv_briefing_block(&chunks, &display_categories)
             .await;
@@ -767,11 +785,15 @@ impl Runtime {
                 // Synthesizer role builds the prompt body (SSOT). FastFocused
                 // forces think_budget=0 → no THINKING_DIRECTIVE. The
                 // Comparison-shape directive pins the bounded-axes structure.
-                let base = crate::runtime::build_synthesis_system_prompt(
+                // provenance_emphasis: the no-thinking fast slot skips the
+                // mid-prompt provenance rule — restate it end-positioned
+                // (see PROVENANCE_DIRECTIVE).
+                let base = crate::runtime::build_synthesis_system_prompt_with_provenance(
                     matches!(intent, Intent::ComparisonQuery),
                     &gap_note,
                     false,
                     &budget_note,
+                    true,
                 );
                 let system = self.build_system_message(&base, context);
                 CompletionRequest {
