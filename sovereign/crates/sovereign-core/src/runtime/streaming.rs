@@ -905,16 +905,12 @@ impl Runtime {
             });
             let route_for_log = route;
 
-            // Production grounding gate (hold → gate → retry → abstain;
-            // see runtime/grounding.rs). FastFocused-only: that route's
-            // short answers are where the measured fabrications live,
-            // and holding a ≤600-token stream for one verification pass
-            // (+2–4s) is inside the latency budget; PrimarySynthesis
-            // long-form is out of the critic's single-claim scope
-            // anyway. Zero-chunk turns skip — the structural GK caveat
-            // owns that path.
+            // Production grounding gate (see runtime/grounding.rs).
+            // Short answers: hold → single-claim verify → retry →
+            // abstain. Long-form (PrimarySynthesis): hold → per-claim
+            // audit → rewrite → annotate. Zero-chunk turns skip — the
+            // structural GK caveat owns that path.
             let gate_on = crate::runtime::grounding::grounding_gate_enabled()
-                && matches!(route, crate::runtime::evidence::SynthesisRoute::FastFocused)
                 && documents_found > 0;
             let gate_chunks: Vec<String> = if gate_on {
                 chunks.iter().map(|c| c.content.clone()).collect()
@@ -926,6 +922,30 @@ impl Runtime {
                 crate::runtime::grounding::dbg(&format!(
                     "gate_on={gate_on} route={route:?} docs={documents_found}"
                 ));
+            }
+
+            // Hold-phase narration: the gate withholds every token
+            // until verification completes, which on a gated turn
+            // reads as a stall without this chip. Emitted on the main
+            // task (we still hold `&self`); try_emit_narration's
+            // elapsed/cap suppression applies as usual.
+            if gate_on {
+                let txt = "Drafting an answer, then verifying it against your \
+                           sources before showing it."
+                    .to_string();
+                if let Some(event) = self.sessions.try_emit_narration(
+                    &_session_id,
+                    NarrationPhase::GroundingVerifyStart,
+                    txt,
+                ) {
+                    self.routing_events
+                        .emit_turn_narration(TurnNarration {
+                            session_id: _session_id.clone(),
+                            conversation_id: conversation_id.to_string(),
+                            event,
+                        })
+                        .await;
+                }
             }
 
             // Narration: synthesis-start chip. Bridges the silent
@@ -1166,11 +1186,10 @@ impl Runtime {
                     break 'synth;
                 }
 
-                // Production grounding gate: hold → gate → retry →
-                // abstain (runtime/grounding.rs). Runs on the HELD
-                // answer before anything reaches the user. Fail-open
-                // on judge failure — the gate is a quality lever, not
-                // an availability risk.
+                // Production grounding gate: the full ladder lives in
+                // grounding::gate_answer (shared with the non-streaming
+                // path). Runs on the HELD answer before anything
+                // reaches the user; fail-open on judge failure.
                 let mut grounding_gate_meta: Option<serde_json::Value> = None;
                 if gate_on
                     && !matches!(
@@ -1178,113 +1197,17 @@ impl Runtime {
                         Some(crate::types::FinishReason::Cancelled)
                     )
                 {
-                    use crate::runtime::grounding::{
-                        grounded_abstention, grounding_gate_threshold, retry_system_note,
-                        verify_grounding,
-                    };
-                    let tau = grounding_gate_threshold();
-                    let mut action = "released";
-                    let mut retried_gate = false;
-                    let mut final_vp: Option<f64> = None;
-                    match verify_grounding(
+                    let outcome = crate::runtime::grounding::gate_answer(
                         &inference,
                         &gate_question,
-                        &full_text,
+                        std::mem::take(&mut full_text),
                         &gate_chunks,
                         gate_entity_anchored,
+                        &request,
                     )
-                    .await
-                    {
-                        Some(v) => {
-                            final_vp = Some(v.violation_prob);
-                            if v.violation_prob >= tau {
-                                if let Some(claim) = v.claim.clone() {
-                                    // Minimal best-of-N: one retry that
-                                    // knows exactly which assertion
-                                    // failed verification.
-                                    retried_gate = true;
-                                    let mut retry_req = request.clone();
-                                    let base_sys =
-                                        retry_req.system_message.clone().unwrap_or_default();
-                                    retry_req.system_message =
-                                        Some(format!("{base_sys}{}", retry_system_note(&claim)));
-                                    retry_req.assistant_prefix = None;
-                                    match inference.complete(&retry_req).await {
-                                        Ok(resp) => {
-                                            let second = resp.text;
-                                            match verify_grounding(
-                                                &inference,
-                                                &gate_question,
-                                                &second,
-                                                &gate_chunks,
-                                                gate_entity_anchored,
-                                            )
-                                            .await
-                                            {
-                                                Some(v2) if v2.violation_prob < tau => {
-                                                    final_vp = Some(v2.violation_prob);
-                                                    full_text = second;
-                                                    action = "retry_released";
-                                                }
-                                                Some(v2) => {
-                                                    final_vp = Some(v2.violation_prob);
-                                                    full_text = grounded_abstention(
-                                                        &claim,
-                                                        gate_chunks.len().min(12),
-                                                    );
-                                                    action = "abstained";
-                                                }
-                                                None => {
-                                                    // Second verdict unavailable —
-                                                    // fail open on the RETRY (it was
-                                                    // written under the grounding
-                                                    // constraint; strictly safer
-                                                    // than draft 1).
-                                                    full_text = second;
-                                                    action = "retry_released_unverified";
-                                                }
-                                            }
-                                        }
-                                        Err(e) => {
-                                            // Draft 1 is KNOWN-failed; with no
-                                            // retry available, abstention is the
-                                            // only honest release.
-                                            tracing::warn!(
-                                                target: "grounding_gate",
-                                                error = %e,
-                                                "gated retry synthesis failed — releasing abstention"
-                                            );
-                                            full_text = grounded_abstention(
-                                                &claim,
-                                                gate_chunks.len().min(12),
-                                            );
-                                            action = "abstained_retry_error";
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        None => {
-                            action = "judge_failed_open";
-                        }
-                    }
-                    tracing::info!(
-                        target: "grounding_gate",
-                        action,
-                        retried = retried_gate,
-                        vp = ?final_vp,
-                        tau,
-                        "grounding gate verdict"
-                    );
-                    crate::runtime::grounding::dbg(&format!(
-                        "verdict action={action} retried={retried_gate} vp={final_vp:?} tau={tau}"
-                    ));
-                    grounding_gate_meta = Some(serde_json::json!({
-                        "action": action,
-                        "retried": retried_gate,
-                        "violation_prob": final_vp,
-                        "threshold": tau,
-                    }));
+                    .await;
+                    full_text = outcome.text;
+                    grounding_gate_meta = Some(outcome.meta);
                 }
 
                 // Post-synthesis guardrail: demote any quoted span that
@@ -1873,6 +1796,38 @@ impl Runtime {
                 None
             };
 
+        // Production grounding gate, DeepQuery side: long-form answers
+        // take the per-claim audit → rewrite → annotate ladder in
+        // grounding::gate_answer (short deep answers fall through to
+        // the single-claim ladder). entity_anchored=false here — the
+        // agentic loop (and its atlas gazetteer verdict) is KQ-only
+        // today, and the long-form ladder doesn't consume it.
+        let deep_gate_on = crate::runtime::grounding::grounding_gate_enabled()
+            && !kc.chunks.is_empty();
+        let deep_gate_chunks: Vec<String> = if deep_gate_on {
+            kc.chunks.iter().map(|c| c.content.clone()).collect()
+        } else {
+            Vec::new()
+        };
+        let deep_gate_question: String = message.to_string();
+        if deep_gate_on {
+            let txt = "Drafting an answer, then verifying it against your                        sources before showing it."
+                .to_string();
+            if let Some(event) = self.sessions.try_emit_narration(
+                &_session_id,
+                NarrationPhase::GroundingVerifyStart,
+                txt,
+            ) {
+                self.routing_events
+                    .emit_turn_narration(TurnNarration {
+                        session_id: _session_id.clone(),
+                        conversation_id: conversation_id.to_string(),
+                        event,
+                    })
+                    .await;
+            }
+        }
+
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(64);
 
         let cancel_for_stream = cancel_token.clone();
@@ -1922,7 +1877,11 @@ impl Runtime {
                     use crate::types::StreamFrame;
                     match frame {
                         StreamFrame::Token(chunk) => {
-                            if head_flushed {
+                            if deep_gate_on {
+                                // Hold mode — see the KQ spawn; the
+                                // gate block after 'synth owns release.
+                                full_text.push_str(&chunk);
+                            } else if head_flushed {
                                 full_text.push_str(&chunk);
                                 if tx.send(Ok(chunk)).await.is_err() {
                                     return;
@@ -2012,8 +1971,9 @@ impl Runtime {
                 }
 
                 // Stream ended while still buffering the head (a short answer
-                // below the threshold): decide on what we have.
-                if !head_flushed {
+                // below the threshold): decide on what we have. Gate
+                // mode never flushes here — release happens post-verdict.
+                if !head_flushed && !deep_gate_on {
                     if !retried && had_retrieved_chunks && looks_like_refusal_opener(&head) {
                         retried = true;
                         tracing::info!(
@@ -2049,6 +2009,25 @@ impl Runtime {
                     }
                 }
                 break 'synth;
+            }
+
+            // Production grounding gate (deep): held answer → shared
+            // ladder. Long-form deep answers take the per-claim audit.
+            let mut grounding_gate_meta: Option<serde_json::Value> = None;
+            if deep_gate_on
+                && !matches!(observed_finish, Some(crate::types::FinishReason::Cancelled))
+            {
+                let outcome = crate::runtime::grounding::gate_answer(
+                    &inference,
+                    &deep_gate_question,
+                    std::mem::take(&mut full_text),
+                    &deep_gate_chunks,
+                    false,
+                    &request,
+                )
+                .await;
+                full_text = outcome.text;
+                grounding_gate_meta = Some(outcome.meta);
             }
 
             // Phase 5 — typed Finish frame from the provider is the
@@ -2098,6 +2077,7 @@ impl Runtime {
                 // assembly exceeded the context window and the prompt
                 // was trimmed to fit (see runtime::prompt_budget).
                 "prompt_budget": budget_note,
+                "grounding_gate": grounding_gate_meta,
             });
             // Post-synthesis guardrail (DeepQuery / reasoning stream):
             // same contract as the KnowledgeQuery stream — demote any
@@ -2119,6 +2099,12 @@ impl Runtime {
                 }
                 v.rewritten
             };
+            // Gate mode held every token — release the final text now.
+            if deep_gate_on && !cancel_for_stream.is_cancelled() {
+                if tx.send(Ok(full_text.clone())).await.is_err() {
+                    return;
+                }
+            }
             let assistant_msg = Message {
                 id: message_id_owned.clone(),
                 conversation_id: conversation_id_owned.clone(),

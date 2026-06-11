@@ -350,6 +350,7 @@ export type NarrationPhase =
   | "routing_committed"
   | "retrieval_complete"
   | "primary_synthesis_start"
+  | "grounding_verify_start"
   | "gap_check_fired"
   | "routing_start"
   | "retrieval_start"
