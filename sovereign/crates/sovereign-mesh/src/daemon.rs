@@ -2089,17 +2089,12 @@ fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: 
         // their slot key directly (the `[models.extra]` map already
         // gives the operator a stable name); only the canonical four
         // (primary/fast/embed/code) need alias indirection because
-        // their backing GGUF can swap freely.
-        match role {
-            "primary" | "fast" | "embed" | "code" => {
-                slot_aliases.insert(role.to_string(), info.name.clone());
-                slot_aliases.insert(format!("commonwealth/{role}"), info.name.clone());
-                if role == "code" {
-                    slot_aliases.insert("coder".into(), info.name.clone());
-                    slot_aliases.insert("commonwealth/coder".into(), info.name.clone());
-                }
-            }
-            _ => {}
+        // their backing GGUF can swap freely. The alias vocabulary is
+        // defined ONCE in `slot_aliases::SLOT_ALIAS_POLICY` — shared
+        // with `oicp_synthesis::build_self_manifest`'s advertisement
+        // side so the two can't drift (the 2026-05-19 fast-alias 503).
+        for key in crate::slot_aliases::resolution_alias_keys(role) {
+            slot_aliases.insert(key, info.name.clone());
         }
     }
 

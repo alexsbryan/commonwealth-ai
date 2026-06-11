@@ -352,9 +352,11 @@ impl EmbedSlot {
         // mirrors what llama-server does per request and is what
         // unblocks the pooled-vector read. Don't remove without
         // re-running the embed probe.
+        super::ffi_trace::record(super::ffi_trace::FfiCall::SetEmbeddings);
         ctx.set_embeddings(true);
         ctx.decode(&mut batch)
             .map_err(|e| Error::Inference(format!("Embed decode failed: {e}")))?;
+        super::ffi_trace::record(super::ffi_trace::FfiCall::EmbedDecode);
 
         let raw = ctx
             .embeddings_seq_ith(0)
@@ -501,11 +503,13 @@ impl EmbedSlot {
                 ctx_lock.ctx.clear_kv_cache();
                 // See run_embed_sync for why this per-decode toggle
                 // is load-bearing on llama-cpp-4 0.2.x.
+                super::ffi_trace::record(super::ffi_trace::FfiCall::SetEmbeddings);
                 ctx_lock.ctx.set_embeddings(true);
                 ctx_lock
                     .ctx
                     .decode(&mut batch)
                     .map_err(|e| Error::Inference(format!("Embed decode failed: {e}")))?;
+                super::ffi_trace::record(super::ffi_trace::FfiCall::EmbedDecode);
             }
 
             // Walk the inputs that belonged to this sub-batch and

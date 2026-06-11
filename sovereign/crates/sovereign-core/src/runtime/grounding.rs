@@ -378,46 +378,6 @@ pub(crate) async fn gate_answer(
     }
 }
 
-/// Per-chunk forced-choice support for ONE claim over the top of the
-/// chunk set; returns the violation probability. Shared by the
-/// long-form audit (the single-claim path keeps its inline loop in
-/// `verify_grounding` to preserve byte-identical bench parity).
-async fn claim_violation(
-    inference: &Arc<dyn InferenceProvider>,
-    claim: &str,
-    chunks: &[String],
-    per_claim_chunks: usize,
-) -> Option<f64> {
-    let mut max_support: f64 = 0.0;
-    let mut checked = 0usize;
-    for c in chunks.iter().take(per_claim_chunks) {
-        let passage: String = c.chars().take(2_400).collect();
-        let prompt = format!(
-            "PASSAGE:\n\"\"\"\n{passage}\n\"\"\"\n\n\
-             CLAIM: {claim}\n\n\
-             Does the passage state or clearly imply this claim? Paraphrase counts; \
-             the passage merely mentioning the people or things involved, without \
-             establishing the claimed connection between them, does NOT count.\n\n\
-             Answer with exactly one letter — A = the passage supports the claim, \
-             B = it does not."
-        );
-        if let Some((a, b)) = forced_choice_ab(inference, &prompt).await {
-            let denom = a + b;
-            let support = if denom > 0.0 { a / denom } else { 0.0 };
-            if support > max_support {
-                max_support = support;
-            }
-            checked += 1;
-            if max_support >= 0.95 {
-                break;
-            }
-        }
-    }
-    if checked == 0 {
-        return None;
-    }
-    Some(1.0 - max_support)
-}
 
 /// Extract up to 4 specific, checkable factual claims from a
 /// long-form answer. Empty vec = nothing checkable (essay of analysis
@@ -480,6 +440,18 @@ async fn extract_claim_list(
     }
 }
 
+/// Decode-committed opening for the long-form rewrite. Instruction-only
+/// shape rules measured non-compliant (v14: the rewrite still led with
+/// "I do not have access to passages detailing…" despite an explicit
+/// "do not open with what the passages lack" rule — same ~60%
+/// instruction-wall as the GK caveat). Committing the opening forces
+/// the rewrite to continue into the supported account; the abstain
+/// read of a disclaimer-led head disappears structurally. Like
+/// GK_CAVEAT_PREFIX, assistant_prefix is decode-commit only — the
+/// caller must prepend it to the returned text.
+pub const LONGFORM_REWRITE_PREFIX: &str =
+    "From the retrieved sources, here is what can be established:\n\n";
+
 /// Rewrite-request system note listing every failed claim.
 fn rewrite_system_note(failed: &[String]) -> String {
     let list = failed
@@ -492,9 +464,48 @@ fn rewrite_system_note(failed: &[String]) -> String {
          supported by any retrieved passage:\n{list}\n\
          Rewrite the answer: keep everything the passages support, and for each \
          unsupported assertion either remove it or replace it with what the passages \
-         actually state. If a fact is simply not in the passages, say so rather than \
-         asserting it."
+         actually state. Structure the rewrite as an ANSWER, not a disclaimer: open \
+         directly with the supported account, organized to address the question. Do \
+         not open with what the passages lack, and do not enumerate the removed \
+         assertions in the body. If material gaps remain, note them briefly in a \
+         single short paragraph at the end."
     )
+}
+
+/// Cross-passage support check for ONE long-form claim: the top
+/// passages are presented TOGETHER and the judge answers whether they
+/// jointly state or imply the claim. Long-form synthesis legitimately
+/// assembles claims across passages — per-chunk max-support is
+/// structurally biased against exactly that (the bench critic's
+/// documented blind spot; measured v13: a correct maximal essay was
+/// rewritten into hedging because its synthesis claims had no single
+/// supporting chunk). One forced-choice call per claim, vs six.
+async fn claim_violation_joint(
+    inference: &Arc<dyn InferenceProvider>,
+    claim: &str,
+    chunks: &[String],
+    n_chunks: usize,
+) -> Option<f64> {
+    let joined: String = chunks
+        .iter()
+        .take(n_chunks)
+        .map(|c| c.chars().take(1_500).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n---\n");
+    let prompt = format!(
+        "PASSAGES (multiple, separated by ---):\n\"\"\"\n{joined}\n\"\"\"\n\n\
+         CLAIM: {claim}\n\n\
+         Do the passages, taken together, state or clearly imply this claim? \
+         Support assembled across several passages counts; paraphrase counts; \
+         the passages merely mentioning the people or things involved, without \
+         establishing the claimed connection, does NOT count.\n\n\
+         Answer with exactly one letter — A = the passages support the claim, \
+         B = they do not."
+    );
+    let (a, b) = forced_choice_ab(inference, &prompt).await?;
+    let denom = a + b;
+    let support = if denom > 0.0 { a / denom } else { 0.0 };
+    Some(1.0 - support)
 }
 
 /// Long-form ladder: per-claim audit → one rewrite → annotate.
@@ -511,14 +522,14 @@ async fn gate_longform(
     base_request: &CompletionRequest,
     tau: f64,
 ) -> GateOutcome {
-    const PER_CLAIM_CHUNKS: usize = 6;
+    const PER_CLAIM_CHUNKS: usize = 8;
     let audit = |text: String| {
         let inference = inference.clone();
         async move {
             let claims = extract_claim_list(&inference, question, &text).await?;
             let mut failed: Vec<String> = Vec::new();
             for claim in &claims {
-                match claim_violation(&inference, claim, chunks, PER_CLAIM_CHUNKS).await {
+                match claim_violation_joint(&inference, claim, chunks, PER_CLAIM_CHUNKS).await {
                     Some(vp) => {
                         dbg(&format!("longform claim vp={vp:.3} {claim:?}"));
                         if vp >= tau {
@@ -558,10 +569,10 @@ async fn gate_longform(
     let mut rewrite_req = base_request.clone();
     let base_sys = rewrite_req.system_message.clone().unwrap_or_default();
     rewrite_req.system_message = Some(format!("{base_sys}{}", rewrite_system_note(&failed)));
-    rewrite_req.assistant_prefix = None;
+    rewrite_req.assistant_prefix = Some(LONGFORM_REWRITE_PREFIX.to_string());
     match inference.complete(&rewrite_req).await {
         Ok(resp) => {
-            let second = resp.text;
+            let second = format!("{LONGFORM_REWRITE_PREFIX}{}", resp.text);
             let second_backup = second.clone();
             match audit(second).await {
                 Some((text2, n2, failed2)) if failed2.is_empty() => GateOutcome {

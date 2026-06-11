@@ -205,6 +205,7 @@ impl SlotContext {
         };
         let rebuilt = MtpSession::new(&*target_ctx, &*draft_ctx, 1, *n_draft_max)
             .map_err(|e| Error::Inference(format!("MTP session rebuild failed: {e:?}")))?;
+        super::ffi_trace::record(super::ffi_trace::FfiCall::MtpSessionBuilt);
         // Drop the old session *after* the rebuild succeeds. Holding
         // two sessions pointing at the same contexts simultaneously
         // would be UB inside `common_speculative_*`, so we use
@@ -361,8 +362,8 @@ fn probe_mtp_roundtrip(
     session: &mut MtpSession,
     model: &LlamaModel,
 ) -> std::result::Result<(), String> {
-    target_ctx.clear_kv_cache();
-    draft_ctx.clear_kv_cache();
+    target_ctx.clear_kv_cache(); // kv-phase: Probe
+    draft_ctx.clear_kv_cache(); // kv-phase: Probe
     let bos = model.token_bos();
     let prompt = [bos];
     let mut batch = LlamaBatch::new(1, 1);
@@ -378,8 +379,8 @@ fn probe_mtp_roundtrip(
     session
         .begin(0, &prompt)
         .map_err(|e| format!("probe: session.begin failed: {e:?}"))?;
-    target_ctx.clear_kv_cache();
-    draft_ctx.clear_kv_cache();
+    target_ctx.clear_kv_cache(); // kv-phase: Probe
+    draft_ctx.clear_kv_cache(); // kv-phase: Probe
     Ok(())
 }
 
@@ -423,7 +424,10 @@ fn try_upgrade_to_speculative(
         }
     };
     let mut session = match MtpSession::new(&target_ctx, &draft_ctx, 1, n_draft_max) {
-        Ok(s) => s,
+        Ok(s) => {
+            super::ffi_trace::record(super::ffi_trace::FfiCall::MtpSessionBuilt);
+            s
+        }
         Err(e) => {
             return Err((
                 target_ctx,
@@ -1472,7 +1476,7 @@ impl ModelSlot {
         // does a defensive full clear.
         cached_tokens.clear();
         if lcp == 0 {
-            ctx.clear_kv_cache();
+            ctx.clear_kv_cache(); // kv-phase: PrefixCacheSetup
         } else {
             // Partial keep: drop positions [lcp, end) from the
             // single sequence we use (seq_id=0). Positions [0, lcp)
@@ -1485,7 +1489,7 @@ impl ModelSlot {
                     new_prompt_len = tokens.len(),
                     "prefix_cache: partial clear failed — falling back to full clear"
                 );
-                ctx.clear_kv_cache();
+                ctx.clear_kv_cache(); // kv-phase: PrefixCacheSetup
             }
         }
 
@@ -1682,11 +1686,25 @@ impl ModelSlot {
                     schema = request.structured_output.is_some(),
                     "inference:deadline exceeded — clearing KV cache and returning"
                 );
-                ctx.clear_kv_cache();
+                ctx.clear_kv_cache(); // kv-phase: ErrorAbort
                 return Err(Error::Inference(format!(
                     "inference deadline exceeded after {elapsed}s ({n_generated} tokens generated; \
                      deadline={deadline_secs}s) — likely pathological JSON-Schema mask state. \
                      Set SOVEREIGN_INFERENCE_TIMEOUT_SECS to override."
+                )));
+            }
+
+            // Constraint-engine failure abort: once the llguidance
+            // matcher errors (latched in `record_failure`), every mask
+            // fails closed — no token is grammar-legal — so this loop
+            // would emit clamp-garbage until the deadline trips (the
+            // "pathological JSON-Schema mask state" above). Fail fast
+            // and loudly instead; the root cause is already on the
+            // `llguidance.health` error event.
+            if let Some(cause) = sampler.constraint_failure() {
+                ctx.clear_kv_cache(); // kv-phase: ErrorAbort
+                return Err(Error::Inference(format!(
+                    "llguidance constraint failed after {n_generated} tokens: {cause}"
                 )));
             }
 
@@ -2035,7 +2053,7 @@ impl ModelSlot {
                     elapsed_ms = started_at.elapsed().as_millis() as u64,
                     "inference: mid-generation decode failed — clearing slot KV to protect next request"
                 );
-                ctx.clear_kv_cache();
+                ctx.clear_kv_cache(); // kv-phase: ErrorAbort
                 return Err(Error::Inference(format!("Decode failed: {e}")));
             }
 
@@ -2070,7 +2088,7 @@ impl ModelSlot {
                                 phase = "think_budget_close",
                                 "inference: think-close decode failed — clearing slot KV"
                             );
-                            ctx.clear_kv_cache();
+                            ctx.clear_kv_cache(); // kv-phase: ErrorAbort
                             return Err(Error::Inference(format!("Decode failed: {e}")));
                         }
                         n_generated += 1;
@@ -2280,8 +2298,8 @@ impl ModelSlot {
         // integration on this path yet. The non-MTP path keeps
         // cached_tokens for itself; we clear it here so a return to
         // the non-MTP path doesn't reuse a stale fingerprint.
-        target_ctx.clear_kv_cache();
-        draft_ctx.clear_kv_cache();
+        target_ctx.clear_kv_cache(); // kv-phase: RequestStartReset
+        draft_ctx.clear_kv_cache(); // kv-phase: RequestStartReset
         cached_tokens.clear();
 
         let full_prompt = format_prompt(model, model_id, request, quirks)?;
@@ -2331,6 +2349,7 @@ impl ModelSlot {
         target_ctx
             .decode(&mut prefill)
             .map_err(|e| Error::Inference(format!("MTP prefill decode failed: {e}")))?;
+        super::ffi_trace::record(super::ffi_trace::FfiCall::MtpDecode);
 
         // `process(&prefill)` after every target decode is what injects
         // target's pre-norm h into the draft side. `begin(seq_id,
@@ -2341,9 +2360,11 @@ impl ModelSlot {
         session
             .process(&prefill)
             .map_err(|e| Error::Inference(format!("MTP process(prefill) failed: {e:?}")))?;
+        super::ffi_trace::record(super::ffi_trace::FfiCall::SessionProcess);
         session
             .begin(0, &tokens)
             .map_err(|e| Error::Inference(format!("MTP begin failed: {e:?}")))?;
+        super::ffi_trace::record(super::ffi_trace::FfiCall::SessionBegin);
 
         // Sample the first token from prefill's last logit position.
         // Use ConstrainedSampler::Explore — no JSON-schema mask is
@@ -2404,10 +2425,21 @@ impl ModelSlot {
                     n_generated,
                     "mtp:deadline exceeded — clearing KV caches"
                 );
-                target_ctx.clear_kv_cache();
-                draft_ctx.clear_kv_cache();
+                target_ctx.clear_kv_cache(); // kv-phase: ErrorAbort
+                draft_ctx.clear_kv_cache(); // kv-phase: ErrorAbort
                 return Err(Error::Inference(format!(
                     "MTP inference deadline exceeded after {elapsed}s ({n_generated} tokens)"
+                )));
+            }
+
+            // Constraint-engine failure abort — see generate_sync for
+            // rationale. Latched matcher failure means fail-closed
+            // masks forever; draft/verify cycles can't recover it.
+            if let Some(cause) = sampler.constraint_failure() {
+                target_ctx.clear_kv_cache(); // kv-phase: ErrorAbort
+                draft_ctx.clear_kv_cache(); // kv-phase: ErrorAbort
+                return Err(Error::Inference(format!(
+                    "llguidance constraint failed after {n_generated} tokens (mtp): {cause}"
                 )));
             }
 
@@ -2499,9 +2531,11 @@ impl ModelSlot {
                 target_ctx
                     .decode(&mut verify)
                     .map_err(|e| Error::Inference(format!("MTP forced decode failed: {e}")))?;
+                super::ffi_trace::record(super::ffi_trace::FfiCall::MtpDecode);
                 session
                     .process(&verify)
                     .map_err(|e| Error::Inference(format!("MTP forced process failed: {e:?}")))?;
+                super::ffi_trace::record(super::ffi_trace::FfiCall::SessionProcess);
                 // **No `session.accept` here.** Upstream's
                 // `common_speculative_accept` asserts on the
                 // speculative impl pointer (`GGML_ASSERT(impl)`)
@@ -2588,9 +2622,11 @@ impl ModelSlot {
             target_ctx
                 .decode(&mut verify)
                 .map_err(|e| Error::Inference(format!("MTP verify decode failed: {e}")))?;
+            super::ffi_trace::record(super::ffi_trace::FfiCall::MtpDecode);
             session
                 .process(&verify)
                 .map_err(|e| Error::Inference(format!("MTP process(verify) failed: {e:?}")))?;
+            super::ffi_trace::record(super::ffi_trace::FfiCall::SessionProcess);
 
             // Sample at each output position; accept the longest prefix
             // of the drafts where the target's sample equals the draft.
@@ -2756,7 +2792,7 @@ impl ModelSlot {
             return Ok(Vec::new());
         }
 
-        ctx.clear_kv_cache();
+        ctx.clear_kv_cache(); // kv-phase: RequestStartReset
 
         // Tokenize every request up-front. `format_prompt` runs the
         // production chat-template renderer (system + user + thinking
@@ -2940,8 +2976,11 @@ impl ModelSlot {
         }
 
         // Cleanup — leave the KV cache empty so the next caller (or a
-        // partial-batch retry) doesn't pick up stale positions.
-        ctx.clear_kv_cache();
+        // partial-batch retry) doesn't pick up stale positions. Legal
+        // as an end-of-generation clear ONLY because this runs on the
+        // batched FastShort companion ctx, which never populates
+        // cached_tokens (no prefix cache on the batched path).
+        ctx.clear_kv_cache(); // kv-phase: EndOfGenerationNoPrefixCache
 
         let mut results = Vec::with_capacity(requests.len());
         for (seq, output) in outputs.into_iter().enumerate() {
@@ -2961,7 +3000,7 @@ impl ModelSlot {
     ) -> Result<()> {
         // Pre-clear for the same reason as generate_sync: a prior failed decode
         // leaves the cache dirty, causing M-RoPE position errors on the next call.
-        ctx.clear_kv_cache();
+        ctx.clear_kv_cache(); // kv-phase: RequestStartReset
 
         let full_prompt = format_prompt(model, model_id, request, quirks)?;
 
@@ -3030,11 +3069,21 @@ impl ModelSlot {
                     schema = request.structured_output.is_some(),
                     "inference:deadline exceeded (stream) — clearing KV cache and returning"
                 );
-                ctx.clear_kv_cache();
+                ctx.clear_kv_cache(); // kv-phase: ErrorAbort
                 return Err(Error::Inference(format!(
                     "inference deadline exceeded after {elapsed}s ({n_generated} tokens generated; \
                      deadline={deadline_secs}s) — likely pathological JSON-Schema mask state. \
                      Set SOVEREIGN_INFERENCE_TIMEOUT_SECS to override."
+                )));
+            }
+
+            // Constraint-engine failure abort — see generate_sync for
+            // rationale. Stream variant: the receiver gets the Err as
+            // an error frame instead of a silent garbage tail.
+            if let Some(cause) = sampler.constraint_failure() {
+                ctx.clear_kv_cache(); // kv-phase: ErrorAbort
+                return Err(Error::Inference(format!(
+                    "llguidance constraint failed after {n_generated} tokens (stream): {cause}"
                 )));
             }
 
@@ -3199,7 +3248,7 @@ impl ModelSlot {
             }
         }
 
-        ctx.clear_kv_cache();
+        ctx.clear_kv_cache(); // kv-phase: EndOfGenerationNoPrefixCache
 
         if saw_close_tag && !saw_open_tag {
             tracing::warn!(
@@ -3233,7 +3282,7 @@ impl ModelSlot {
         quirks: &ModelQuirks,
         cancel: Option<&tokio_util::sync::CancellationToken>,
     ) -> Result<()> {
-        ctx.clear_kv_cache();
+        ctx.clear_kv_cache(); // kv-phase: RequestStartReset
 
         let full_prompt = format_prompt(model, model_id, request, quirks)?;
         let tokens = model
@@ -3297,6 +3346,15 @@ impl ModelSlot {
                     reason = FinishReason::Cancelled;
                     break;
                 }
+            }
+            // Constraint-engine failure abort — see generate_sync for
+            // rationale. This loop's exit idiom is `reason` + break
+            // (tokens already streamed can't be unsent), so the
+            // failure surfaces as finish_reason "error" on the final
+            // frame rather than a transport-level Err.
+            if let Some(cause) = sampler.constraint_failure() {
+                reason = FinishReason::Error(format!("llguidance constraint failed: {cause}"));
+                break;
             }
 
             let role = if tools_present && tc_json_in_string {
@@ -3448,7 +3506,7 @@ impl ModelSlot {
             }
         }
 
-        ctx.clear_kv_cache();
+        ctx.clear_kv_cache(); // kv-phase: EndOfGenerationNoPrefixCache
 
         if saw_close_tag && !saw_open_tag {
             tracing::warn!(

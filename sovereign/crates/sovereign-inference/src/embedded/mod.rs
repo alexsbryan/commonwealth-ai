@@ -6,6 +6,7 @@
 
 mod embed_slot;
 mod engine;
+pub mod ffi_trace;
 mod grammar;
 mod model_slot;
 mod prompt_helpers;
