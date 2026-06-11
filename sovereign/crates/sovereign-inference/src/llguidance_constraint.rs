@@ -2,31 +2,46 @@
 //! `LlguidanceConstraint` — adapter between the upstream `llguidance`
 //! grammar engine and our `ConstrainedSampler` byte-loop.
 //!
-//! Sits in parallel with `JsonConstraint`. Same shape:
+//! The **sole** schema/grammar constraint engine since 2026-05-22; the
+//! in-house `JsonConstraint` FSM it originally sat in parallel with
+//! was retired (see `LLGUIDANCE_MIGRATION_AUDIT.md`). API shape:
 //!
 //! ```text
-//! step()            → compute the mask for the next sampled token
-//! allows(token_id)  → query the mask
-//! accept(token_id)  → commit the sample, advance the parser
+//! mask(data)        → clamp grammar-illegal candidates to -inf (prod path)
+//! step()/allows()   → mask-compute + per-token query (probe path)
+//! accept_llama(tok) → commit the sample, advance the parser
 //! is_stopped()      → grammar satisfied, generation may end
+//! failure()         → Some(cause) once the matcher has errored (latched)
 //! ```
 //!
-//! Why a separate constraint: `JsonConstraint` validates byte-by-byte
-//! against an in-house JSON-Schema FSM; `LlguidanceConstraint`
-//! validates against an arbitrary Lark grammar with `%json {…}` rules
-//! and top-level alternation. The grammar that closes the agent-bench
-//! `parse_failed_envelope` + `loop_trap` failure classes is exactly
-//! that shape: `start: text_branch | tool_envelope`. See
-//! `memory/project_llguidance_readoption_plan.md` for the design.
+//! Accepts an arbitrary Lark grammar with `%json {…}` rules and
+//! top-level alternation (`start: text_branch | tool_envelope` closes
+//! the agent-bench `parse_failed_envelope` + `loop_trap` classes), or
+//! a bare JSON Schema via `from_schema_value`.
 //!
-//! Re-uses `vocab_bytes_for(model)` from `json_constraint.rs` so the
-//! tokenizer view stays consistent across both engines — same
-//! `special=true` rendering, same per-model `Arc<Vec<Vec<u8>>>` cache.
+//! Builds its own `TokTrie` from `vocab_cache::vocab_bytes_for(model)`
+//! — the same per-model byte view the sampler loop observes. This is
+//! load-bearing: the 2026-04-26 llguidance failure (silent fallthrough,
+//! unconstrained decode) was vocab misalignment from the binding's own
+//! token env. Sampler and matcher must share one vocab source.
 //!
 //! Factory caching: one `ParserFactory` per `LlamaModel` (keyed by
 //! pointer identity, mirroring `vocab_cache`). Building the factory's
 //! tokenizer/TokTrie is the expensive bit; sharing across requests
 //! keeps per-request cost on the parser create + matcher step paths.
+//!
+//! ## Failure loudness contract (2026-06-11)
+//!
+//! Matcher errors LATCH: the first error logs ONE
+//! `tracing::error!(target: "llguidance.health")` event and sets
+//! `failure()`; every subsequent mask fails closed silently (debug
+//! level — no per-token spam). The decode loops in
+//! `embedded/model_slot.rs` poll `ConstrainedSampler::constraint_failure`
+//! and abort the request instead of burning the token budget on
+//! clamp-garbage until the deadline. Historical failure mode this
+//! guards: April 2026's matcher errors surfaced only as an upstream
+//! stderr `printf` while decode ran fully unconstrained — constraint
+//! bugs masquerading as model bugs for four days of triage.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -61,6 +76,13 @@ pub struct LlguidanceConstraint {
     /// mask to be queried across an `accept()` boundary would let the
     /// sampler use an out-of-date validity bitmap on the next token.
     last_mask: Option<SimpleVob>,
+    /// Latched on the first matcher error (`compute_mask` /
+    /// `consume_token*`). Once set, `mask()` fails closed without
+    /// re-driving the errored matcher, and the decode loop is expected
+    /// to abort the request (see module doc "Failure loudness
+    /// contract"). Never cleared — a matcher that has errored is not
+    /// recoverable within a request.
+    failed: Option<String>,
 }
 
 impl LlguidanceConstraint {
@@ -81,7 +103,24 @@ impl LlguidanceConstraint {
     /// alternation (text vs structured), but the recommended
     /// pattern for tool calls is `from_json_schema(envelope_schema)`.
     pub fn new(grammar_or_schema: &str, model: &LlamaModel) -> Result<Self, LlgError> {
-        let factory = factory_for(model);
+        Self::with_factory(&factory_for(model), grammar_or_schema)
+    }
+
+    /// Model-free constructor used by the in-module tests: builds a
+    /// one-shot `ParserFactory` over a synthetic `TokEnv` so the
+    /// differential tests can drive the REAL mask/accept path without
+    /// a GGUF. Production goes through `new` (cached factory).
+    #[cfg(test)]
+    pub(crate) fn new_with_tok_env(
+        tok_env: TokEnv,
+        grammar_or_schema: &str,
+    ) -> Result<Self, LlgError> {
+        let factory = ParserFactory::new_simple(&tok_env)
+            .map_err(|e| LlgError::ParserCreate(format!("test factory: {e}")))?;
+        Self::with_factory(&factory, grammar_or_schema)
+    }
+
+    fn with_factory(factory: &ParserFactory, grammar_or_schema: &str) -> Result<Self, LlgError> {
         let trimmed = grammar_or_schema.trim_start();
         let grammar = if trimmed.starts_with('{') {
             let schema: serde_json::Value = serde_json::from_str(trimmed)
@@ -100,7 +139,40 @@ impl LlguidanceConstraint {
         Ok(Self {
             matcher,
             last_mask: None,
+            failed: None,
         })
+    }
+
+    /// Latched matcher-failure cause, if any. The decode loop polls
+    /// this (via `ConstrainedSampler::constraint_failure`) and aborts
+    /// the request — continuing past a failed matcher only produces
+    /// fail-closed clamp-garbage until the deadline.
+    pub fn failure(&self) -> Option<&str> {
+        self.failed.as_deref()
+    }
+
+    /// Record a matcher error. First error is LOUD (single
+    /// `tracing::error!` on the `llguidance.health` target — grep for
+    /// that target when triaging "structured output suddenly garbage");
+    /// repeats are debug-level so a 150K-token-budget request can't
+    /// flood the journal (the pre-2026-06 behavior was a warn per
+    /// sampled token: ten-thousand-line logs that buried the cause).
+    fn record_failure(&mut self, op: &'static str, err: &str) {
+        if self.failed.is_some() {
+            tracing::debug!(op, error = %err, "llguidance: matcher error (already failed)");
+            return;
+        }
+        tracing::error!(
+            target: "llguidance.health",
+            op,
+            error = %err,
+            "llguidance constraint engine FAILED — masks fail closed from here and the \
+             decode loop aborts this request with an explicit error instead of emitting \
+             unparseable output. If you are triaging \"model produces garbage under \
+             structured_output\": this event is the cause, not the model. \
+             SOVEREIGN_TRACE_LLGUIDANCE=1 traces per-token matcher state."
+        );
+        self.failed = Some(format!("{op}: {err}"));
     }
 
     /// Build a constraint from a JSON Schema value. Applies
@@ -127,10 +199,14 @@ impl LlguidanceConstraint {
     /// Compute the next-token mask. Call once per sampling step
     /// before any `allows()` queries.
     pub fn step(&mut self) -> Result<(), LlgError> {
-        let mask = self
-            .matcher
-            .compute_mask()
-            .map_err(|e| LlgError::Matcher(e.to_string()))?;
+        let mask = match self.matcher.compute_mask() {
+            Ok(m) => m,
+            Err(e) => {
+                let msg = e.to_string();
+                self.record_failure("compute_mask", &msg);
+                return Err(LlgError::Matcher(msg));
+            }
+        };
         self.last_mask = Some(mask);
         Ok(())
     }
@@ -150,9 +226,11 @@ impl LlguidanceConstraint {
     /// mask so a subsequent `allows()` without an intervening
     /// `step()` will fail closed.
     pub fn accept(&mut self, token_id: u32) -> Result<(), LlgError> {
-        self.matcher
-            .consume_token(token_id)
-            .map_err(|e| LlgError::Matcher(e.to_string()))?;
+        if let Err(e) = self.matcher.consume_token(token_id) {
+            let msg = format!("token {token_id}: {e}");
+            self.record_failure("consume_token", &msg);
+            return Err(LlgError::Matcher(msg));
+        }
         self.last_mask = None;
         Ok(())
     }
@@ -181,6 +259,18 @@ impl LlguidanceConstraint {
     /// `from_json_schema` path immediately after the envelope
     /// closed.
     pub fn mask(&mut self, data: &mut LlamaTokenDataArray) {
+        // A latched failure never recovers within a request: fail
+        // closed without re-driving the errored matcher. The decode
+        // loop's `constraint_failure` poll aborts before this clamp
+        // can matter, but the clamp stays as defence in depth — a
+        // loop that forgets to poll must not decode unconstrained.
+        if self.failed.is_some() {
+            for entry in data.data.iter_mut() {
+                entry.set_logit(f32::NEG_INFINITY);
+            }
+            self.last_mask = None;
+            return;
+        }
         if self.matcher.is_stopped() {
             self.last_mask = None;
             return;
@@ -188,7 +278,7 @@ impl LlguidanceConstraint {
         let mask = match self.matcher.compute_mask() {
             Ok(m) => m,
             Err(e) => {
-                tracing::warn!(error = %e, "llguidance: compute_mask failed — fail-closed");
+                self.record_failure("compute_mask", &e.to_string());
                 for entry in data.data.iter_mut() {
                     entry.set_logit(f32::NEG_INFINITY);
                 }
@@ -228,7 +318,7 @@ impl LlguidanceConstraint {
             return;
         }
         if let Err(e) = self.matcher.consume_token(token.0 as u32) {
-            tracing::warn!(error = %e, token = token.0, "llguidance: consume_token failed");
+            self.record_failure("consume_token", &format!("token {}: {e}", token.0));
         }
         if trace_enabled() {
             let stopped = self.matcher.is_stopped();
@@ -254,9 +344,11 @@ impl LlguidanceConstraint {
 
     /// Commit a forced-run of tokens (the result of `forced_ff_tokens`).
     pub fn accept_run(&mut self, tokens: &[u32]) -> Result<(), LlgError> {
-        self.matcher
-            .consume_tokens(tokens)
-            .map_err(|e| LlgError::Matcher(e.to_string()))?;
+        if let Err(e) = self.matcher.consume_tokens(tokens) {
+            let msg = e.to_string();
+            self.record_failure("consume_tokens", &msg);
+            return Err(LlgError::Matcher(msg));
+        }
         self.last_mask = None;
         Ok(())
     }
@@ -571,6 +663,186 @@ mod tests {
             accepting_after,
             "grammar should accept after the final `}}`"
         );
+    }
+
+    // ── Differential + loudness tests (2026-06-11) ──────────────────
+    //
+    // These drive the PRODUCTION `mask()` / `accept_llama()` path —
+    // not the raw Matcher like the smoke tests above — over the
+    // single-byte env, so the contract they pin is the one the decode
+    // loop actually sees.
+
+    use crate::llama::cpp::token::data::LlamaTokenData;
+
+    /// All 256 single-byte tokens, logits at 0.0 (i.e. "model would
+    /// emit anything"); the constraint's job is to clamp the illegal
+    /// ones to -inf.
+    fn full_byte_array() -> LlamaTokenDataArray {
+        LlamaTokenDataArray::new(
+            (0..256)
+                .map(|i| LlamaTokenData::new(LlamaToken(i), 0.0, 0.0))
+                .collect(),
+            false,
+        )
+    }
+
+    fn allowed_bytes(data: &LlamaTokenDataArray) -> Vec<u8> {
+        data.data
+            .iter()
+            .filter(|e| e.logit() > f32::NEG_INFINITY)
+            .map(|e| e.id().0 as u8)
+            .collect()
+    }
+
+    const TEST_SCHEMA: &str = r#"{
+        "type": "object",
+        "properties": {"a": {"type": "integer"}},
+        "required": ["a"],
+        "additionalProperties": false
+    }"#;
+
+    /// Walk the constraint to completion by always picking an
+    /// allowed byte (preference-ordered so the walk terminates), and
+    /// return the emitted bytes. Panics if the mask ever clamps
+    /// EVERYTHING while healthy (that would be the fail-closed bug
+    /// class) or the walk doesn't complete within `cap` steps.
+    fn drive_to_completion(c: &mut LlguidanceConstraint, prefer: &[u8], cap: usize) -> Vec<u8> {
+        let mut out = Vec::new();
+        for _ in 0..cap {
+            if c.is_stopped() {
+                return out;
+            }
+            let mut data = full_byte_array();
+            c.mask(&mut data);
+            let allowed = allowed_bytes(&data);
+            assert!(
+                !allowed.is_empty(),
+                "mask clamped every candidate while the constraint is healthy \
+                 (failure()={:?}, emitted so far: {:?}) — fail-closed must only \
+                 happen after a latched matcher error",
+                c.failure(),
+                String::from_utf8_lossy(&out)
+            );
+            // Fallback: highest allowed byte, NOT lowest — the lowest
+            // allowed byte is usually 0x20 (JSON permits inter-token
+            // whitespace forever), and a space-picking walk never
+            // terminates. Same trap the in-house enforcer documented
+            // ("no leading whitespace" rule); llguidance legitimately
+            // allows it, so the WALK must avoid it.
+            let pick = *prefer
+                .iter()
+                .find(|b| allowed.contains(b))
+                .unwrap_or_else(|| allowed.last().unwrap());
+            out.push(pick);
+            c.accept_llama(LlamaToken(pick as i32));
+        }
+        panic!(
+            "constraint did not reach accept state within {cap} steps; emitted: {:?}",
+            String::from_utf8_lossy(&out)
+        );
+    }
+
+    /// THE differential guarantee: any byte sequence the production
+    /// mask admits to completion parses as JSON conforming to the
+    /// schema. This is the generic form of both historical constraint
+    /// bugs — the in-house FSM's `step_object` comma bug (admitted
+    /// invalid JSON) and the URL-FSM EOS bypass (admitted truncated
+    /// output) were each "the mask admitted something it shouldn't".
+    #[test]
+    fn differential_mask_admits_only_schema_valid_completions() {
+        // Greedy close-first walk: terminates fast, exercises the
+        // happy path. Preference: close object, quote, the required
+        // key, colon, a digit, open brace.
+        let mut c = LlguidanceConstraint::new_with_tok_env(
+            ApproximateTokEnv::single_byte_env(),
+            TEST_SCHEMA,
+        )
+        .expect("constraint from schema");
+        let bytes = drive_to_completion(&mut c, &[b'}', b'"', b'a', b':', b'7', b'{'], 64);
+        let text = String::from_utf8(bytes).expect("mask admitted non-UTF8");
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap_or_else(|e| {
+            panic!(
+                "mask admitted a completion that does not parse as JSON: {text:?} ({e}) — \
+                 the constraint engine is not enforcing the schema"
+            )
+        });
+        assert!(
+            parsed.get("a").map(|v| v.is_i64() || v.is_u64()).unwrap_or(false),
+            "completion missing required integer field `a`: {text:?}"
+        );
+        assert_eq!(
+            parsed.as_object().map(|o| o.len()),
+            Some(1),
+            "additionalProperties:false violated: {text:?}"
+        );
+        assert!(
+            c.failure().is_none(),
+            "healthy run must not latch a failure: {:?}",
+            c.failure()
+        );
+
+        // Adversarial-preference walks: prefer bytes that would
+        // CORRUPT JSON if admitted (commas, braces, quotes in odd
+        // spots — the step_object bug shape). Whatever the mask
+        // admits must still parse.
+        for prefer in [
+            &[b',', b',', b'}', b'"', b'a', b':', b'0', b'{'][..],
+            &[b'"', b'}', b'{', b':', b'a', b',', b'9'][..],
+            // `}` before the digit or the walk extends the integer
+            // forever (digits are always legal mid-number).
+            &[b'-', b'}', b'1', b'"', b'a', b':', b'{'][..],
+        ] {
+            let mut c = LlguidanceConstraint::new_with_tok_env(
+                ApproximateTokEnv::single_byte_env(),
+                TEST_SCHEMA,
+            )
+            .expect("constraint");
+            let bytes = drive_to_completion(&mut c, prefer, 128);
+            let text = String::from_utf8(bytes).expect("non-UTF8 admitted");
+            assert!(
+                serde_json::from_str::<serde_json::Value>(&text).is_ok(),
+                "adversarial walk produced unparseable output the mask admitted: {text:?}"
+            );
+        }
+    }
+
+    /// The loudness contract: a matcher error LATCHES — `failure()`
+    /// flips and stays, and every subsequent mask fails closed. The
+    /// decode loops poll `constraint_failure` and abort; this pins
+    /// the state machine they rely on. If this test fails, the
+    /// April-2026 class returns: constraint failures that present as
+    /// "the model suddenly produces garbage under structured_output".
+    #[test]
+    fn matcher_failure_latches_and_fails_closed() {
+        let mut c = LlguidanceConstraint::new_with_tok_env(
+            ApproximateTokEnv::single_byte_env(),
+            TEST_SCHEMA,
+        )
+        .expect("constraint");
+        assert!(c.failure().is_none());
+
+        // 'x' is not a legal first byte for this schema ('{' is).
+        // The production accept path swallows the Err but must latch.
+        c.accept_llama(LlamaToken(b'x' as i32));
+        let cause = c
+            .failure()
+            .expect("consume of grammar-illegal token must latch failure()")
+            .to_string();
+        assert!(
+            cause.contains("consume_token"),
+            "failure cause should name the failing op: {cause}"
+        );
+
+        // From here every mask fails closed — no token escapes.
+        let mut data = full_byte_array();
+        c.mask(&mut data);
+        assert!(
+            allowed_bytes(&data).is_empty(),
+            "post-failure mask must clamp every candidate (defence in depth \
+             for decode loops that fail to poll constraint_failure)"
+        );
+        // And the latch is permanent for the request.
+        assert_eq!(c.failure(), Some(cause.as_str()));
     }
 
     #[test]

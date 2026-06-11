@@ -230,6 +230,17 @@ impl ConstrainedSampler {
             .unwrap_or(false)
     }
 
+    /// Latched llguidance matcher failure, if any. The decode loops
+    /// poll this each iteration and ABORT the request when it flips:
+    /// past this point every mask fails closed (no token is
+    /// grammar-legal), so continuing emits clamp-garbage until the
+    /// deadline — the failure mode the sync loop's deadline message
+    /// calls "pathological JSON-Schema mask state". `None` when no
+    /// llguidance constraint is active or it is healthy.
+    pub fn constraint_failure(&self) -> Option<&str> {
+        self.llg_constraint.as_ref().and_then(|llg| llg.failure())
+    }
+
     /// Tier 1 jump-forward — single-token shortcut when the FSM has
     /// exactly one legal continuation. Always returns `None` after the
     /// JsonConstraint retirement: llguidance's `compute_ff_tokens`

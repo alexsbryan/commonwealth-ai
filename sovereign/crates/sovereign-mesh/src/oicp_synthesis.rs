@@ -158,10 +158,11 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
                 (caps, None)
             }
         };
-        for alias_id in ["commonwealth/primary", "primary"] {
-            if !seen_ids.insert(alias_id.to_string()) {
+        for alias_id in crate::slot_aliases::advertised_alias_ids("primary") {
+            if !seen_ids.insert(alias_id.clone()) {
                 continue;
             }
+            let alias_id = alias_id.as_str();
             // Synthesize claims with the alias id so the
             // ProviderModel emits coherent attribution if a peer
             // hits this row. The underlying slot is still Slow,
@@ -217,10 +218,11 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
                 (caps, None)
             }
         };
-        for alias_id in ["commonwealth/fast", "fast"] {
-            if !seen_ids.insert(alias_id.to_string()) {
+        for alias_id in crate::slot_aliases::advertised_alias_ids("fast") {
+            if !seen_ids.insert(alias_id.clone()) {
                 continue;
             }
+            let alias_id = alias_id.as_str();
             let claims = synthesize_slot_claims(Speed::Fast, alias_id, &capabilities);
             tracing::info!(
                 alias = %alias_id,
@@ -739,6 +741,78 @@ mod self_manifest_tests {
         let profile: CapabilityProfile = std::collections::HashMap::new();
         let claims = synthesize_code_slot_claims("mystery-model.Q4_K_M", &profile);
         assert_eq!(claims[0].affinity, 0.0);
+    }
+
+    /// THE alias parity test. `SLOT_ALIAS_POLICY` is the single
+    /// source of truth for which slot roles are mesh-routable by
+    /// alias; this asserts `build_self_manifest` actually advertises
+    /// exactly that set — no more, no less — for a provider with
+    /// every slot loaded.
+    ///
+    /// If this fails after you added a role to SLOT_ALIAS_POLICY
+    /// with `mesh_advertised: true`: build_self_manifest has no
+    /// advertisement block for it yet. Add one (mirror the fast-slot
+    /// block, which exists because exactly this omission caused
+    /// every `commonwealth/fast` request to 503 mesh-wide,
+    /// 2026-05-19) and extend `SlotStub` if the role maps to a new
+    /// provider surface.
+    ///
+    /// If this fails because an alias appeared that the policy
+    /// doesn't advertise: someone hand-added an alias row to
+    /// build_self_manifest. Route it through SLOT_ALIAS_POLICY
+    /// instead, or peers will route on vocabulary the daemon-side
+    /// resolution map (also table-derived) may not honour.
+    #[test]
+    fn manifest_advertises_exactly_the_policy_alias_set() {
+        use crate::slot_aliases::{advertised_alias_ids, resolution_alias_keys, SLOT_ALIAS_POLICY};
+
+        let stub = SlotStub {
+            fast_id: "fast.Q4_0",
+            primary_id: "primary.Q5_K_M",
+            code_id: Some("qwen-coder-32b-instruct.Q4_K_M"),
+        };
+        let manifest = build_self_manifest(&stub);
+        let manifest_ids: std::collections::HashSet<&str> =
+            manifest.models.iter().map(|m| m.id.as_str()).collect();
+
+        // The full alias vocabulary across all roles — used to tell
+        // "alias row" apart from concrete-GGUF rows in the manifest.
+        let all_alias_forms: std::collections::HashSet<String> = SLOT_ALIAS_POLICY
+            .iter()
+            .flat_map(|p| resolution_alias_keys(p.role))
+            .collect();
+
+        for policy in SLOT_ALIAS_POLICY {
+            for advertised in advertised_alias_ids(policy.role) {
+                assert!(
+                    manifest_ids.contains(advertised.as_str()),
+                    "SLOT_ALIAS_POLICY marks role `{}` mesh_advertised, but \
+                     build_self_manifest emitted no `{advertised}` row. Peers \
+                     requesting `{advertised}` will 503 with \"no node advertises \
+                     model\" even though this node serves it — the 2026-05-19 \
+                     fast-alias bug, recurring. Add the advertisement block for \
+                     this role in build_self_manifest.",
+                    policy.role
+                );
+            }
+        }
+
+        let advertised_set: std::collections::HashSet<String> = SLOT_ALIAS_POLICY
+            .iter()
+            .flat_map(|p| advertised_alias_ids(p.role))
+            .collect();
+        for id in &manifest_ids {
+            if all_alias_forms.contains(*id) {
+                assert!(
+                    advertised_set.contains(*id),
+                    "build_self_manifest advertises alias `{id}` but \
+                     SLOT_ALIAS_POLICY doesn't mark its role mesh_advertised — \
+                     hand-added alias row bypassing the SSOT table. Flip the \
+                     table entry instead so the daemon-side resolution map stays \
+                     in agreement."
+                );
+            }
+        }
     }
 
     #[test]
