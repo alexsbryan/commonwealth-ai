@@ -129,6 +129,7 @@ impl DeterministicVerifier {
             citation_faithful,
             used_distractor,
             caveat_present: obs.caveat_present,
+            violation_prob: None,
             model_id: model_id.to_string(),
             corpus: corpus.to_string(),
             answer_excerpt: obs.answer.chars().take(200).collect(),

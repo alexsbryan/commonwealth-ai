@@ -54,6 +54,15 @@ pub struct ResultRow {
     /// is helpful and honest; abstaining (timid) or answering bare both fail.
     #[serde(default)]
     pub caveat_present: Option<bool>,
+    /// Continuous violation probability from the Critic's
+    /// `verify_grounding` forced-choice pass, when the run requested
+    /// it (`--grounding-verify` gates on it; `--gv-shadow` records it
+    /// WITHOUT gating). Persisting the probability per row makes one
+    /// shadow run yield the full gate-threshold curve offline instead
+    /// of one 2-hour run per threshold. `None` = Critic not consulted
+    /// (plain runs, --naked, or judge failure).
+    #[serde(default)]
+    pub violation_prob: Option<f64>,
     pub model_id: String,
     pub corpus: String,
     /// First ~200 chars of the agent's answer, for auditability.
@@ -280,6 +289,7 @@ mod tests {
             citation_faithful: None,
             used_distractor: None,
             caveat_present: None,
+            violation_prob: None,
             model_id: "m".into(),
             corpus: "c".into(),
             answer_excerpt: String::new(),

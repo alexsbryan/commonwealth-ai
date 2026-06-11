@@ -39,12 +39,18 @@ const HELP: Help = Help {
     summary: "Grounded-calibration audit: answer + cite when the fact is in persistence, abstain honestly when it isn't, resist distractors.",
     sections: &[
         HelpSection::Usage(
-            "sovereign bench chaos-monkey run --bank <bank.toml> [--transport direct|desktop-bridge] [--bridge-url <url>] [--corpus <id>] [--judge-model <stem>] [--critic-model <stem>] [--manifest <toml>] [--out <jsonl>] [--transcripts <jsonl>] [--limit N] [--naked] [--grounding-verify]",
+            "sovereign bench chaos-monkey run --bank <bank.toml> [--transport direct|desktop-bridge] [--bridge-url <url>] [--corpus <id>] [--judge-model <stem>] [--critic-model <stem>] [--manifest <toml>] [--out <jsonl>] [--transcripts <jsonl>] [--limit N] [--naked] [--grounding-verify] [--gv-shadow]",
         ),
-        HelpSection::Subcommands(&[(
-            "run",
-            "Run each bank question through the live chat path (sealed to the corpus), score the two red-lines, write ResultRow JSONL. --naked = true-baseline control: bypass the Runtime (no system prompt, no retrieval, no router/synthesis) and score the bare model; the delta vs a normal run is our prompting+retrieval value-add (citation/distractor N/A under --naked).",
-        )]),
+        HelpSection::Subcommands(&[
+            (
+                "run",
+                "Run each bank question through the live chat path (sealed to the corpus), score the two red-lines, write ResultRow JSONL. --naked = true-baseline control: bypass the Runtime (no system prompt, no retrieval, no router/synthesis) and score the bare model; the delta vs a normal run is our prompting+retrieval value-add (citation/distractor N/A under --naked).",
+            ),
+            (
+                "rescore",
+                "Replay frozen transcripts (--transcripts from a prior run) through the judges + Critic WITHOUT regenerating answers — no Runtime, no retrieval, no synthesis. Same scorer, same gates. Turns a 2-hour live run into a ~3-minute iteration for judge/Critic-side changes (prompt, model, threshold). Generation-side changes still need `run`.",
+            ),
+        ]),
         HelpSection::Notes(
             "Two independent gates (competence-when-present AND honesty-when-absent) must both pass; there is no blended score. Hallucination on an absent fact is the cardinal sin and carries its own ceiling. The bank's fairness contract is enforced at load (sovereign_eval::chaos_monkey::ChaosBank::validate).",
         ),
@@ -60,6 +66,7 @@ pub async fn cmd_chaos_monkey(args: &[String]) -> i32 {
     }
     match args[0].as_str() {
         "run" => run(&args[1..]).await,
+        "rescore" => rescore(&args[1..]).await,
         other => {
             eprintln!("error: unknown chaos-monkey subcommand `{other}`");
             help::print(&HELP);
@@ -100,6 +107,11 @@ struct Args {
     /// it to a grounded abstention. Tier-agnostic honesty lever. No-op under
     /// --naked (no chunks to verify against).
     grounding_verify: bool,
+    /// Shadow mode: run the Critic and PERSIST `violation_prob` on every row,
+    /// but never gate. One shadow run + offline re-scoring at candidate
+    /// thresholds replaces a 2-hour bench run per threshold point. Mutually
+    /// exclusive with --grounding-verify.
+    gv_shadow: bool,
     /// Answer source: in-process sealed Runtime (direct, the default) or a
     /// live desktop's command bridge — same bank, same judges, same scorer,
     /// so the two-red-line verdict delta isolates the desktop layer. The
@@ -127,6 +139,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut limit = None;
     let mut naked = false;
     let mut grounding_verify = false;
+    let mut gv_shadow = false;
     let mut bridge = false;
     let mut bridge_url = super::desktop_bridge::DEFAULT_BRIDGE_URL.to_string();
 
@@ -150,6 +163,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             "--limit" => limit = Some(val!("--limit").parse().map_err(|_| "--limit must be a usize")?),
             "--naked" => naked = true,
             "--grounding-verify" => grounding_verify = true,
+            "--gv-shadow" => gv_shadow = true,
             "--transport" => {
                 bridge = match val!("--transport").as_str() {
                     "direct" => false,
@@ -170,6 +184,13 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         let stem = out.file_stem().and_then(|s| s.to_str()).unwrap_or("results");
         out.with_file_name(format!("{stem}.transcripts.jsonl"))
     });
+    if grounding_verify && gv_shadow {
+        return Err(
+            "--grounding-verify and --gv-shadow are mutually exclusive (shadow records the \
+             Critic's violation_prob without gating)"
+                .into(),
+        );
+    }
     Ok(Args {
         bank: bank.ok_or("--bank is required")?,
         corpus,
@@ -182,6 +203,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         limit,
         naked,
         grounding_verify,
+        gv_shadow,
         bridge,
         bridge_url,
     })
@@ -352,7 +374,7 @@ async fn run(rest: &[String]) -> i32 {
         };
         let answer_full = live.visible.clone();
         let chunks_full = live.retrieved_chunk_texts.clone();
-        let row = score_question(live, judge.as_ref(), &args.judge_model, critic.as_ref(), &args.critic_model, &corpus, &model_id, q, naked_provider.is_some(), args.grounding_verify).await;
+        let row = score_question(live, judge.as_ref(), &args.judge_model, critic.as_ref(), &args.critic_model, &corpus, &model_id, q, naked_provider.is_some(), args.grounding_verify, args.gv_shadow).await;
         if let Some(f) = transcript_file.as_mut() {
             use std::io::Write as _;
             let rec = serde_json::json!({
@@ -362,6 +384,7 @@ async fn run(rest: &[String]) -> i32 {
                 "expected_action": format!("{:?}", q.qtype.expected_action()),
                 "agent_action": format!("{:?}", row.agent_action),
                 "pass": row.is_pass(),
+                "violation_prob": row.violation_prob,
                 "answer": answer_full,
                 "retrieved_chunks": chunks_full,
             });
@@ -414,21 +437,30 @@ async fn score_question(
     q: &ChaosQuestion,
     naked: bool,
     grounding_verify: bool,
+    gv_shadow: bool,
 ) -> ResultRow {
     let visible = live.visible;
     let chunk_texts = live.retrieved_chunk_texts;
 
-    // External grounding-verifier gate (--grounding-verify). If the answer
-    // asserts a specific fact NOT supported by the retrieved chunks (and not
-    // flagged as general knowledge), the gate DIRECTLY rules it an abstention —
-    // the tier-agnostic honesty lever. No-op under --naked (no chunks). We set
+    // External grounding-verifier (--grounding-verify gates, --gv-shadow only
+    // records). The Critic returns a continuous violation probability which is
+    // persisted on the row either way; the gate compares it against
+    // SOVEREIGN_GV_THRESHOLD (default 0.5). If the answer asserts a specific
+    // fact NOT supported by the retrieved chunks (and not flagged as general
+    // knowledge), gate mode DIRECTLY rules it an abstention — the
+    // tier-agnostic honesty lever. No-op under --naked (no chunks). We set
     // the action directly rather than re-classifying a canned message (a weak
     // judge mis-reads "the sources don't contain that" as a substantive answer).
-    let gated = grounding_verify
-        && !naked
-        && !chunk_texts.is_empty()
-        && verify_grounding(critic, critic_model, &q.question, &visible, &chunk_texts).await
-            == Some(true);
+    let violation_prob = if (grounding_verify || gv_shadow) && !naked && !chunk_texts.is_empty() {
+        verify_grounding(critic, critic_model, &q.question, &visible, &chunk_texts).await
+    } else {
+        None
+    };
+    let gv_threshold: f64 = std::env::var("SOVEREIGN_GV_THRESHOLD")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0.5);
+    let gated = grounding_verify && violation_prob.is_some_and(|vp| vp >= gv_threshold);
 
     // The one model-side judgement: did it answer substantively or decline?
     let agent_action = if gated {
@@ -495,9 +527,175 @@ async fn score_question(
         citation_faithful,
         used_distractor,
         caveat_present,
+        violation_prob,
         model_id: model_id.to_string(),
         corpus: corpus.to_string(),
         answer_excerpt: excerpt,
+    }
+}
+
+/// `rescore` — replay frozen transcripts through the judge + Critic stack
+/// without regenerating answers. The transcript sidecar freezes the full
+/// `(question, answer, retrieved_chunks)` triple and gating never mutates
+/// the stored answer, so ANY prior run's transcripts are replayable under a
+/// different judge model, Critic prompt, or gate mode. Tier-1 of the
+/// iteration ladder: ~3 minutes instead of the ~2-hour live run.
+async fn rescore(rest: &[String]) -> i32 {
+    let mut bank_path: Option<PathBuf> = None;
+    let mut transcripts: Option<PathBuf> = None;
+    let mut judge_model = "fast".to_string();
+    let mut critic_model = sovereign_core::role::default_profile_for(
+        sovereign_core::role::Role::Critic,
+    )
+    .preferred_tier
+    .model_stem()
+    .to_string();
+    let mut base_url = "http://localhost:9741".to_string();
+    let mut manifest: Option<PathBuf> = None;
+    let mut out = PathBuf::from("target/chaos-monkey/rescored.jsonl");
+    let mut grounding_verify = false;
+    let mut gv_shadow = false;
+
+    let mut i = 0;
+    macro_rules! val {
+        ($l:expr) => {{
+            i += 1;
+            match rest.get(i).cloned() {
+                Some(v) => v,
+                None => {
+                    eprintln!("error: {} requires a value", $l);
+                    return 2;
+                }
+            }
+        }};
+    }
+    while i < rest.len() {
+        match rest[i].as_str() {
+            "--bank" => bank_path = Some(PathBuf::from(val!("--bank"))),
+            "--transcripts" => transcripts = Some(PathBuf::from(val!("--transcripts"))),
+            "--judge-model" => judge_model = val!("--judge-model"),
+            "--critic-model" => critic_model = val!("--critic-model"),
+            "--base-url" => base_url = val!("--base-url"),
+            "--manifest" => manifest = Some(PathBuf::from(val!("--manifest"))),
+            "--out" => out = PathBuf::from(val!("--out")),
+            "--grounding-verify" => grounding_verify = true,
+            "--gv-shadow" => gv_shadow = true,
+            other => {
+                eprintln!("error: unknown flag `{other}`");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+    let (Some(bank_path), Some(transcripts_path)) = (bank_path, transcripts) else {
+        eprintln!("error: --bank and --transcripts are required");
+        return 2;
+    };
+    if grounding_verify && gv_shadow {
+        eprintln!("error: --grounding-verify and --gv-shadow are mutually exclusive");
+        return 2;
+    }
+
+    let bank = match ChaosBank::load(&bank_path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
+    let by_id: std::collections::HashMap<&str, &ChaosQuestion> =
+        bank.questions.iter().map(|q| (q.id.as_str(), q)).collect();
+    let corpus = bank.meta.corpus.clone();
+    let gates = load_gates(manifest.as_deref());
+
+    let text = match std::fs::read_to_string(&transcripts_path) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("error: could not read {transcripts_path:?}: {e}");
+            return 1;
+        }
+    };
+
+    let v1 = format!("{}/v1", base_url.trim_end_matches('/'));
+    let judge: std::sync::Arc<dyn InferenceProvider> =
+        std::sync::Arc::new(RemoteApiProvider::new(&v1, None, &judge_model, PROVIDER_CTX));
+    let critic: std::sync::Arc<dyn InferenceProvider> = if critic_model == judge_model {
+        std::sync::Arc::clone(&judge)
+    } else {
+        std::sync::Arc::new(RemoteApiProvider::new(&v1, None, &critic_model, PROVIDER_CTX))
+    };
+
+    eprintln!(
+        "[chaos] RESCORE transcripts={transcripts_path:?} bank={bank_path:?} judge={judge_model} critic={critic_model} gv={grounding_verify} shadow={gv_shadow}"
+    );
+
+    let mut rows = Vec::new();
+    for (li, line) in text.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let rec: serde_json::Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("  [{li}] skipping unparseable transcript line: {e}");
+                continue;
+            }
+        };
+        let id = rec.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+        let Some(q) = by_id.get(id) else {
+            eprintln!("  [{li}] transcript id `{id}` not in bank — skipping");
+            continue;
+        };
+        let live = crate::bench_cmd::live_runner::LiveAnswer {
+            visible: rec.get("answer").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            retrieved_chunk_texts: rec
+                .get("retrieved_chunks")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|c| c.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default(),
+        };
+        let row = score_question(
+            live,
+            judge.as_ref(),
+            &judge_model,
+            critic.as_ref(),
+            &critic_model,
+            &corpus,
+            "rescored",
+            q,
+            false,
+            grounding_verify,
+            gv_shadow,
+        )
+        .await;
+        eprintln!(
+            "  [{:>2}] {:<20} expect={:<7} act={:<9} pass={} vp={}",
+            rows.len() + 1,
+            q.qtype.label(),
+            format!("{:?}", q.qtype.expected_action()),
+            format!("{:?}", row.agent_action),
+            row.is_pass(),
+            row.violation_prob.map(|v| format!("{v:.3}")).unwrap_or_else(|| "-".into()),
+        );
+        rows.push(row);
+    }
+
+    if let Err(e) = write_jsonl(&out, &rows) {
+        eprintln!("error: could not write {out:?}: {e}");
+        return 1;
+    }
+    let report = score(&rows);
+    let verdict = report.verdict(&gates);
+    print_summary(&report, &verdict, &gates);
+    eprintln!("[out] wrote {} rescored rows → {:?}", rows.len(), out);
+    if verdict.overall_pass {
+        0
+    } else {
+        1
     }
 }
 
