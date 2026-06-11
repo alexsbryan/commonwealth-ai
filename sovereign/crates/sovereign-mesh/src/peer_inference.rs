@@ -898,7 +898,32 @@ impl MeshInferenceProvider {
         let local_bench = self.local_benchmark.read().await.clone();
         let self_manifest = self.self_manifest.load();
         let local_cand = score_manifest_for_request(&self_manifest, req_oicp).map(|c| {
-            adjust_for_observations(c, &local_obs, NodeLocality::Local, local_bench.as_ref())
+            // Local availability is `None` (neutral): the local
+            // node's business is already captured by
+            // `local_obs.in_flight`; the gossiped availability
+            // signal exists to protect busy PEERS.
+            let (cand, breakdown) = adjust_for_observations(
+                c,
+                &local_obs,
+                NodeLocality::Local,
+                local_bench.as_ref(),
+                None,
+            );
+            tracing::debug!(
+                candidate = "local",
+                model_id = %cand.model_id,
+                claim_score = breakdown.claim_score,
+                observation_mult = breakdown.observation_mult,
+                load_penalty = breakdown.load_penalty,
+                locality_bonus = breakdown.locality_bonus,
+                cold_start_weight = breakdown.cold_start_weight,
+                throughput_factor = breakdown.throughput_factor,
+                throughput_source = breakdown.throughput_source,
+                availability = breakdown.availability,
+                final_score = breakdown.final_score,
+                "mesh-inference: score breakdown"
+            );
+            cand
         });
         tracing::info!(
             local_models = self_manifest.models.len(),
@@ -984,11 +1009,30 @@ impl MeshInferenceProvider {
                 );
                 obs.in_flight = gossiped;
             }
-            let cand = adjust_for_observations(
+            let (cand, breakdown) = adjust_for_observations(
                 raw,
                 &obs,
                 classify_rtt_ms(rtt_ms),
                 peer.benchmark.as_ref(),
+                // Gossiped availability — ADOPTED 2026-06-10 (the
+                // signal was previously dropped on the floor; a peer
+                // advertising 0.2 was scored as if idle). `None` for
+                // peers that haven't gossiped one keeps them neutral.
+                peer.inference_availability,
+            );
+            tracing::debug!(
+                candidate = %peer.name,
+                model_id = %cand.model_id,
+                claim_score = breakdown.claim_score,
+                observation_mult = breakdown.observation_mult,
+                load_penalty = breakdown.load_penalty,
+                locality_bonus = breakdown.locality_bonus,
+                cold_start_weight = breakdown.cold_start_weight,
+                throughput_factor = breakdown.throughput_factor,
+                throughput_source = breakdown.throughput_source,
+                availability = breakdown.availability,
+                final_score = breakdown.final_score,
+                "mesh-inference: score breakdown"
             );
             tracing::info!(
                 peer = %peer.name,

@@ -19,61 +19,20 @@
 //! Keeping the primitives in one place means the two sides can't
 //! drift out of agreement about what "best" means.
 use sovereign_core::oicp::{
-    self, cold_start_weight, effective_affinity, load_penalty, locality_bonus, throughput_factor,
-    throughput_factor_source, BenchmarkResult, CapabilityHint, InferenceRequirements, LatencyClass,
-    NodeLocality, NodeObservations, ProviderManifest,
+    self as oicp, score_with_adjustments, BenchmarkResult, CapabilityHint, InferenceRequirements,
+    LatencyClass, NodeLocality, NodeObservations, ScoreBreakdown,
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::Speed;
 
-/// A scored model pick from a single manifest. Carries the claim
-/// score (protocol-level) alongside the claim's self-reported
-/// affinity so the caller can apply observation / load / locality
-/// adjustments without re-scoring.
-#[derive(Debug, Clone)]
-pub(crate) struct ModelCandidate {
-    pub(crate) score: f32,
-    pub(crate) size_gb: Option<f32>,
-    pub(crate) model_id: String,
-    /// The self-reported affinity of the claim this score came from.
-    /// Needed by `adjust_for_observations` to compute the observed-
-    /// health multiplier.
-    pub(crate) claim_affinity: f32,
-}
-
-/// Score-floor below which score-ties are considered "the same".
-/// Floating-point noise in the OICP scorer (division-by-max-level
-/// produces 1/3, 2/3, 1.0 type values) shouldn't cause spurious
-/// decisions where a 5.5 GB model beats a 16.5 GB model by a
-/// rounding blip.
-pub(crate) const SCORE_TIE_EPSILON: f32 = 1e-3;
-
-/// Compare two `ModelCandidate`s under the OICP selection policy
-/// and return the winner:
-///
-/// 1. Strictly higher `score` wins.
-/// 2. Scores tied (within `SCORE_TIE_EPSILON`): smaller known
-///    `size_gb` wins.
-/// 3. Known size always beats unknown size on a score tie — an
-///    annotated manifest entry represents curated data we trust
-///    over a silent BYOM default.
-/// 4. Full tie (same score bucket, both sizes unknown or equal):
-///    incumbent (`cur`) wins for stability. Caller uses this to
-///    encode "local wins ties" and "earlier peer wins duplicate-
-///    score ties".
-pub(crate) fn pick_better(cur: ModelCandidate, new: ModelCandidate) -> ModelCandidate {
-    if new.score > cur.score + SCORE_TIE_EPSILON {
-        return new;
-    }
-    if cur.score > new.score + SCORE_TIE_EPSILON {
-        return cur;
-    }
-    match (cur.size_gb, new.size_gb) {
-        (Some(c), Some(n)) if n < c => new,
-        (None, Some(_)) => new,
-        _ => cur,
-    }
-}
+// The scoring primitives are the oicp-types SSOT (2026-06-10
+// rationalization — this module used to carry its own copies, one of
+// three divergent implementations). Re-exported under the historical
+// local names so call sites and tests read unchanged.
+pub(crate) use sovereign_core::oicp::{
+    best_claim_for_request as score_manifest_for_request, pick_better,
+    ScoredClaim as ModelCandidate, SCORING_EPSILON as SCORE_TIE_EPSILON,
+};
 
 /// Used by the Joiner-side selector to detect "peer pick is
 /// identical to local pick" so a zero-delta routing decision
@@ -83,39 +42,6 @@ pub(crate) fn candidates_equal(a: &ModelCandidate, b: &ModelCandidate) -> bool {
     (a.score - b.score).abs() <= SCORE_TIE_EPSILON
         && a.size_gb == b.size_gb
         && a.model_id == b.model_id
-}
-
-/// Rank each (model, claim) pair in `manifest` against the request
-/// and return the best [`ModelCandidate`] via v0.3 claim-based
-/// scoring. Returns `None` when no claim can serve the request.
-///
-/// Tiebreaker within a score bucket: smaller `size_gb` wins
-/// (closest proxy to "fastest at this work shape"). Unknown sizes
-/// sort after any known size so an unannotated BYOM entry can't
-/// sneak past an annotated one on a score tie.
-pub(crate) fn score_manifest_for_request(
-    manifest: &ProviderManifest,
-    req: &InferenceRequirements,
-) -> Option<ModelCandidate> {
-    let mut best: Option<ModelCandidate> = None;
-    for model in &manifest.models {
-        for claim in &model.claims {
-            let Some(score) = oicp::score_claim_for_request(claim, req) else {
-                continue;
-            };
-            let cand = ModelCandidate {
-                score,
-                size_gb: model.size_gb,
-                model_id: model.id.clone(),
-                claim_affinity: claim.effective_affinity(),
-            };
-            best = Some(match best {
-                None => cand,
-                Some(cur) => pick_better(cur, cand),
-            });
-        }
-    }
-    best
 }
 
 /// RTT threshold below which a peer is classified as
@@ -147,44 +73,44 @@ pub(crate) fn classify_rtt_ms(rtt_ms: u32) -> NodeLocality {
 }
 
 /// Fold v0.3 §7 operational adjustments (observation, load,
-/// locality, cold-start, throughput) into a claim-scored candidate.
-/// The returned candidate has `score` rescaled; all other fields
-/// are preserved so downstream tie-breaks (`size_gb`, `model_id`)
-/// still work.
+/// locality, cold-start, throughput, availability) into a
+/// claim-scored candidate via the oicp-types SSOT scorer. The
+/// returned candidate has `score` rescaled; all other fields are
+/// preserved so downstream tie-breaks (`size_gb`, `model_id`) still
+/// work. The full [`ScoreBreakdown`] rides along for the caller's
+/// glassbox event — emit it, don't drop it.
 ///
-/// `baseline_benchmark` is the peer's gossiped
-/// [`BenchmarkResult`] (or `None` for older peers) and feeds the
-/// throughput-extrapolation path. `cand.size_gb` provides the
-/// candidate-side input for the size-ratio scaling.
+/// `baseline_benchmark` is the peer's gossiped [`BenchmarkResult`]
+/// (or `None` for older peers). `availability` is the peer's
+/// gossiped `inference_availability` — pass `None` when scoring the
+/// local node (its business is already captured by
+/// `obs.in_flight`), `Some(...)` for peers. Adopting the gossiped
+/// signal on the Joiner side is the one disclosed behavior change
+/// of the 2026-06-10 rationalization: a peer advertising 0.2
+/// availability used to be scored as if idle.
 pub(crate) fn adjust_for_observations(
     cand: ModelCandidate,
     obs: &NodeObservations,
     locality: NodeLocality,
     baseline_benchmark: Option<&BenchmarkResult>,
-) -> ModelCandidate {
-    let observation_mult = if cand.claim_affinity > 0.0 {
-        effective_affinity(cand.claim_affinity, obs) / cand.claim_affinity
-    } else {
-        1.0
-    };
-    let load = load_penalty(obs);
-    let loc = locality_bonus(locality);
-    let cold = cold_start_weight(obs.samples);
-    let candidate_size = cand.size_gb.unwrap_or(0.0);
-    let throughput = throughput_factor(obs, candidate_size, baseline_benchmark);
-    tracing::debug!(
-        model_id = %cand.model_id,
-        factor = throughput,
-        source = throughput_factor_source(obs, baseline_benchmark),
-        obs_samples = obs.samples,
-        obs_tg_tok_s = obs.tg_tok_s_ewma,
-        candidate_size_gb = candidate_size,
-        "oicp_select: throughput_factor"
+    availability: Option<f32>,
+) -> (ModelCandidate, ScoreBreakdown) {
+    let breakdown = score_with_adjustments(
+        cand.score,
+        cand.claim_affinity,
+        obs,
+        locality,
+        cand.size_gb.unwrap_or(0.0),
+        baseline_benchmark,
+        availability,
     );
-    ModelCandidate {
-        score: cand.score * observation_mult * load * loc * cold * throughput,
-        ..cand
-    }
+    (
+        ModelCandidate {
+            score: breakdown.final_score,
+            ..cand
+        },
+        breakdown,
+    )
 }
 
 /// Decide which `Speed` slot on the local provider should serve a
@@ -333,6 +259,7 @@ fn slot_loaded(provider: &dyn InferenceProvider, speed: Speed) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sovereign_core::oicp::ProviderManifest;
 
     fn cand(score: f32, size_gb: Option<f32>, id: &str) -> ModelCandidate {
         ModelCandidate {
@@ -341,6 +268,73 @@ mod tests {
             model_id: id.into(),
             claim_affinity: score,
         }
+    }
+
+    /// GOLDEN VECTOR — pins the operational-adjustment product
+    /// bit-for-bit across the SSOT move to oicp-types (Phase B of
+    /// the 2026-06-10 rationalization). Every factor ≠ 1.0:
+    ///   observation_mult = eff(0.95, obs)/0.95
+    ///                    = (0.95·(1 − (10/50)·0.1))/0.95 = 0.98
+    ///   load   = 1/(1 + 0.05·10)   = 2/3
+    ///   loc    = Near              = 1.05
+    ///   cold   = 0.7 + 0.3·(10/20) = 0.85
+    ///   thru   = 10/20 (observed)  = 0.5
+    ///   final  = 0.5 · 0.98 · (2/3) · 1.05 · 0.85 · 0.5
+    /// If this fails after a refactor, the refactor changed routing
+    /// behavior — that is a disclosure, not a test update.
+    #[test]
+    fn golden_adjustment_product_all_factors_active() {
+        let obs = NodeObservations {
+            in_flight: 10,
+            samples: 10,
+            recent_failure_rate: 0.1,
+            tg_tok_s_ewma: 10.0,
+            ..Default::default()
+        };
+        let raw = ModelCandidate {
+            score: 0.5,
+            size_gb: Some(8.0),
+            model_id: "golden".into(),
+            claim_affinity: 0.95,
+        };
+        let (adjusted, breakdown) =
+            adjust_for_observations(raw, &obs, NodeLocality::Near, None, None);
+        let expected = 0.5_f32 * 0.98 * (2.0 / 3.0) * 1.05 * 0.85 * 0.5;
+        assert!(
+            (adjusted.score - expected).abs() < 1e-6,
+            "golden product drifted: got {}, want {expected}",
+            adjusted.score
+        );
+        // Equivalence: the wrapper's candidate score IS the SSOT
+        // breakdown's final score, forever.
+        assert_eq!(adjusted.score.to_bits(), breakdown.final_score.to_bits());
+        assert!((breakdown.availability - 1.0).abs() < 1e-6, "None ⇒ neutral");
+        // Tie-break inputs must survive adjustment untouched.
+        assert_eq!(adjusted.model_id, "golden");
+        assert_eq!(adjusted.size_gb, Some(8.0));
+    }
+
+    /// The decided behavior change (2026-06-10): the Joiner honors
+    /// gossiped `inference_availability`. Two otherwise-identical
+    /// peers — the one advertising 0.2 loses to the idle one 5:1.
+    #[test]
+    fn gossiped_availability_demotes_busy_peer() {
+        let obs = NodeObservations {
+            samples: 100, // fully ramped — isolate the availability term
+            ..Default::default()
+        };
+        let raw = |id: &str| ModelCandidate {
+            score: 0.8,
+            size_gb: Some(8.0),
+            model_id: id.into(),
+            claim_affinity: 0.9,
+        };
+        let (busy, _) =
+            adjust_for_observations(raw("busy"), &obs, NodeLocality::Far, None, Some(0.2));
+        let (idle, _) =
+            adjust_for_observations(raw("idle"), &obs, NodeLocality::Far, None, Some(1.0));
+        assert!(idle.score > busy.score * 4.9);
+        assert_eq!(pick_better(busy, idle).model_id, "idle");
     }
 
     #[test]

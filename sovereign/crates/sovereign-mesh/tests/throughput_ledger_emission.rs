@@ -201,6 +201,7 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
         system_ram_gb: 64,
         benchmark: None,
         current_in_flight: None,
+        inference_availability: None,
         transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource {
@@ -326,6 +327,7 @@ async fn peer_route_failure_without_chunks_does_not_emit_ledger_event() {
         system_ram_gb: 64,
         benchmark: None,
         current_in_flight: None,
+        inference_availability: None,
         transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource {

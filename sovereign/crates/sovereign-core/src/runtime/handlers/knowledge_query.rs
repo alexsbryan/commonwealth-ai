@@ -379,6 +379,10 @@ impl Runtime {
             let request = CompletionRequest {
                 prompt,
                 system_message: None,
+                // Intentional pin (not a routing decision): empty
+                // retrieval means there is no evidence shape to
+                // resolve — this is the 300-token general-knowledge
+                // fallback and always belongs on the fast slot.
                 preferred_speed: Speed::Fast,
                 max_tokens: Some(300),
                 temperature: Some(0.3),
@@ -817,6 +821,10 @@ impl Runtime {
                 );
             }
         }
+        // The slot is THE route's slot — both arms below consume this
+        // instead of re-stating a Speed literal that could drift from
+        // the arm it sits in.
+        let route_speed = route.to_speed();
         let mut request = match route {
             SynthesisRoute::FastFocused => {
                 // Comparison-shape contrast — append the directive that
@@ -842,7 +850,7 @@ impl Runtime {
                 CompletionRequest {
                     prompt,
                     system_message: Some(system),
-                    preferred_speed: Speed::Fast,
+                    preferred_speed: route_speed,
                     max_tokens: Some(FAST_KNOWLEDGE_MAX_TOKENS as usize),
                     temperature: Some(self.inference_config.temperature),
                     think_budget: Some(0),
@@ -882,7 +890,7 @@ impl Runtime {
                 CompletionRequest {
                     prompt,
                     system_message: Some(system),
-                    preferred_speed: Speed::Slow,
+                    preferred_speed: route_speed,
                     max_tokens: Some(self.inference_config.max_tokens),
                     temperature: Some(self.inference_config.temperature),
                     think_budget: Some(self.inference_config.think_budget),

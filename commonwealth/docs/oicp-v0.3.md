@@ -161,6 +161,32 @@ counterparty is available:
 - `infer_hint_from_profile(CapabilityProfile) → CapabilityHint` — returns `code` when code proficiency ≥ 3 (Strong), else `general`. Intentionally conservative: "handles code adequately" is not a specialization.
 - `latency_class_from_preference(LatencyPreference) → LatencyClass` — `Interactive → Fast`, `Throughput | Background → Extended`, `BestEffort → Normal`.
 
+## 6a. The composed scorer (reference implementation, normative for this codebase)
+
+As of 2026-06-10 the operational scoring product lives ONCE, in
+`oicp-types` (`score_with_adjustments` → `ScoreBreakdown`), consumed
+by every scheduler in the workspace (sovereign-mesh peer selection,
+sovereign-inference backend selection). The product:
+
+```
+final_score = claim_score                     # §3/§5 hint × latency × affinity
+            × observation_mult                # effective_affinity(claimed, obs) / claimed
+            × load_penalty                    # 1 / (1 + 0.05·in_flight)
+            × locality_bonus                  # Local 1.15 / Near 1.05 / Far 1.0
+            × cold_start_weight               # 0.7 → 1.0 over 20 samples
+            × throughput_factor               # [0.3, 1.0], observed > benchmark > neutral
+            × availability                    # gossiped inference_availability, clamp [0.2, 1.0]
+```
+
+The `availability` term is **normative for this codebase** (adopted
+2026-06-10): a peer gossiping low `inference_availability` is
+deprioritized everywhere, floored at 0.2 so a busy peer stays
+routable. Callers with no signal pass `None` (= 1.0) — notably a
+node scoring ITSELF, whose business is already captured by
+`in_flight`. Every consumer logs the full `ScoreBreakdown` per
+candidate, which is the glassbox contract: any routing decision is
+reconstructible from one trace event.
+
 ## 7. What v0.3 does not change
 
 - The v0.2 `Capability` enum, `CapabilityProfile`, and the `required`/`preferred` scoring helpers remain unchanged and continue to be the fallback routing path.

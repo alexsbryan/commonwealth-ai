@@ -398,10 +398,10 @@ pub struct AppStateInner {
     /// build_local_capabilities`, which clamps the gossiped
     /// `free_storage_gb` (both the static `HardwareProfile` field and
     /// the live `AvailableResources` reading) to
-    /// `min(actual_free, max(0, budget − used))`. Every existing
-    /// scheduler (`knowledge_assignment::assign_knowledge_shards`,
-    /// the three `plan_collaborative_ingestion*` planners) reads
-    /// that one value to decide what to assign here, so clamping it
+    /// `min(actual_free, max(0, budget − used))`. The live planner
+    /// (the three `knowledge_assignment::plan_collaborative_ingestion*`
+    /// variants) reads that one value to decide what to assign here
+    /// (a peer at 0 is skipped outright), so clamping it
     /// at the publish boundary makes the budget self-enforcing
     /// across the whole mesh — peers won't push us shards that
     /// would breach the budget, and our own local install path

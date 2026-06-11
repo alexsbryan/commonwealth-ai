@@ -994,25 +994,34 @@ instance hangs off commonwealth-api's `AppState`
 
 ### Scheduling + orchestration
 
-`commonwealth-inference/scheduler/` is a pure-functional layer
-over gossiped state. A deterministic per-decision leader (lowest
-`NodeId`) prevents thrash without consensus.
+**The live decision topology** (rationalized 2026-06-10 — a dead
+second-generation scheduler that previously filled this section was
+deleted; see `docs/specs/OICP_RATIONALIZATION.md` for the audit):
 
-| Module                    | Algorithm                                                    |
-|---------------------------|--------------------------------------------------------------|
-| `layer_assignment.rs`     | Proportional VRAM, contiguous ranges per node, topology-aware, privacy-aware entry-node preference |
-| `plan_builder.rs`         | `build_shard_plan`, `build_inference_plan`, `estimate_performance` (TPS / TTFT) |
-| `knowledge_assignment.rs` | Greedy by free storage; whole-corpus if it fits, else `ChunkRange` split; respects per-corpus `mesh_sharing` |
-| `oicp_select.rs`          | Shared OICP scoring (see [`docs/inference.md`](./docs/inference.md)) |
-| `oicp_cache.rs`           | Hashes `CapabilityRequirements` to `(ModelId, score)` keyed by portfolio version |
-| `portfolio.rs`            | `ModelPortfolio` w/ `ModelTransition` state machine; `SWAP_THRESHOLD = 0.3` |
-| `usage_predictor.rs`      | `(weekday, hour, CapabilityCategory)` → preemptive loading   |
-| `adaptive.rs`             | Adaptive scheduler hooks                                     |
+| Decision | Where | Mechanism |
+|---|---|---|
+| Joiner picks peer-vs-local for a turn | `sovereign-mesh/peer_inference.rs::select_peer` | OICP claim score × operational adjustments (observations, load, locality, cold-start, throughput, availability) |
+| Hub picks a local model for a peer request | `commonwealth-api/routes_inference.rs::route_with_oicp` | OICP claim score over synthesized claims |
+| Serving peer picks Fast-vs-Slow slot | `sovereign-mesh/oicp_select.rs::pick_slot_for_oicp` | latency_class→Speed map + hint veto |
+| Synthesis tier (Fast vs Primary) | `sovereign-core/runtime/evidence.rs::resolve_synthesis_route` | intent + atom-enum + evidence-shape heuristic |
+| Distributed placement (model > one node) | `sovereign-inference/embedded/rpc_distribution.rs` | LocalOnly default; StreamSplit ≤500MB; warmed owned-overrides as last resort |
+| Collaborative ingest partitioning | `commonwealth-inference/scheduler/knowledge_assignment.rs` | `plan_collaborative_ingestion*`: embed-model-compatible peers, storage-proportional contiguous blocks, zero-storage peers skipped |
 
-`commonwealth-inference/orchestrator/`:
+The composed OICP scoring product lives ONCE in `oicp-types`
+(`score_with_adjustments` + `ScoreBreakdown`, Phase B of the
+rationalization) and is consumed by sovereign-mesh and
+sovereign-inference; leader election lives in
+`commonwealth_core::partition::elect_leader`.
 
-- `Orchestrator::apply_shard_plan` spawns `llama-server` on the
-  entry node and `rpc-server` on remote nodes holding layer subsets.
+The strong-peer-topology roadmap (latency-class hierarchy: cascade
+routing, draft-on-spoke/verify-on-hub speculation, hub queue
+discipline — each reality-checked against this codebase) is
+[`docs/specs/MESH_INFERENCE.md`](./docs/specs/MESH_INFERENCE.md).
+
+`commonwealth-inference/orchestrator/` (multi-process supervision for
+the standalone-daemon topology — flagged for its own liveness
+investigation in OICP_RATIONALIZATION.md):
+
 - `ManagedProcess` tracks lifecycle states (`Starting | Running |
   Unhealthy | Failed | Stopped`); graceful SIGTERM with timeout,
   then SIGKILL.

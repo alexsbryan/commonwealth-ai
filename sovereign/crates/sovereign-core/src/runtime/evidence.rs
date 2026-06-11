@@ -194,6 +194,50 @@ pub(crate) enum SynthesisRoute {
     PrimarySynthesis,
 }
 
+impl SynthesisRoute {
+    /// The slot a resolved route runs on. THE mapping — request
+    /// builders consume this instead of re-stating the literal per
+    /// match arm (the pre-2026-06-10 pattern, which let arms drift
+    /// from the route they sat in).
+    pub(crate) fn to_speed(self) -> crate::types::Speed {
+        match self {
+            SynthesisRoute::FastFocused => crate::types::Speed::Fast,
+            SynthesisRoute::PrimarySynthesis => crate::types::Speed::Slow,
+        }
+    }
+}
+
+/// Speed for a retrieval-context turn from intent + evidence
+/// presence — the coarse, pre-synthesis sibling of
+/// [`resolve_synthesis_route`] (which refines Fast-vs-Primary with
+/// the full evidence shape once retrieval has run). Extracted from
+/// an anonymous ladder in `retrieval.rs` so the second decision
+/// centre has a name, a doc, and one home.
+pub(crate) fn speed_for_retrieval_intent(
+    intent: &crate::types::Intent,
+    has_evidence: bool,
+) -> crate::types::Speed {
+    use crate::types::{Intent, Speed};
+    match intent {
+        // Knowledge found for a simple question upgrades to the
+        // primary model; without evidence the fast slot answers
+        // from general knowledge.
+        Intent::SimpleQuery => {
+            if has_evidence {
+                Speed::Slow
+            } else {
+                Speed::Fast
+            }
+        }
+        Intent::DeepQuery => Speed::Slow,
+        // Bounded contrast — Fast slot is enough; the constrained
+        // synthesis prompt does the structuring work the primary
+        // model would otherwise do.
+        Intent::ComparisonQuery => Speed::Fast,
+        _ => Speed::Medium,
+    }
+}
+
 /// Identity used for source-dominance: corpus_id + document title, since a
 /// single corpus can host many unrelated documents.
 pub(crate) fn chunk_source_key(c: &ScoredChunk) -> (String, String) {
@@ -527,6 +571,40 @@ mod route_resolver_tests {
         let p = resolve_synthesis_route(&Intent::KnowledgeQuery, true, &fast_shape());
         assert_eq!(p.route, SynthesisRoute::PrimarySynthesis);
         assert_eq!(p.tier, Tier::Primary);
+    }
+
+    #[test]
+    fn route_to_speed_is_the_canonical_mapping() {
+        use crate::types::Speed;
+        assert_eq!(SynthesisRoute::FastFocused.to_speed(), Speed::Fast);
+        assert_eq!(SynthesisRoute::PrimarySynthesis.to_speed(), Speed::Slow);
+    }
+
+    #[test]
+    fn retrieval_intent_ladder_pinned() {
+        use crate::types::Speed;
+        // SimpleQuery upgrades to primary only when evidence exists.
+        assert_eq!(
+            speed_for_retrieval_intent(&Intent::SimpleQuery, true),
+            Speed::Slow
+        );
+        assert_eq!(
+            speed_for_retrieval_intent(&Intent::SimpleQuery, false),
+            Speed::Fast
+        );
+        assert_eq!(
+            speed_for_retrieval_intent(&Intent::DeepQuery, false),
+            Speed::Slow
+        );
+        // Bounded contrast pins Fast regardless of evidence.
+        assert_eq!(
+            speed_for_retrieval_intent(&Intent::ComparisonQuery, true),
+            Speed::Fast
+        );
+        assert_eq!(
+            speed_for_retrieval_intent(&Intent::KnowledgeQuery, true),
+            Speed::Medium
+        );
     }
 
     #[test]

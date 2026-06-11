@@ -1212,6 +1212,7 @@ impl EmbeddedDaemon {
                 system_ram_gb: m.capabilities.hardware.system_ram_gb,
                 benchmark: m.capabilities.benchmark.clone(),
                 current_in_flight: m.capabilities.current_in_flight,
+                inference_availability: Some(m.capabilities.inference_availability),
                 // Mesh peers always use the default plain-HTTP transport
                 // — TLS pinning is reserved for ephemeral worker pods,
                 // which surface through `PinnedWorkerEndpointSource` in
@@ -2171,6 +2172,12 @@ pub struct PeerInferenceEndpoint {
     /// scoring falls back to `peer_observations` in that case.
     /// See `sovereign/docs/MESH_LOAD_AWARENESS.md`.
     pub current_in_flight: Option<u32>,
+    /// Peer's gossiped `inference_availability` (0.0–1.0; 1.0 =
+    /// fully idle, written by the peer's ActivityReporter).
+    /// Multiplied into the OICP score (clamped to ≥0.2 so a busy
+    /// peer stays routable) — adopted 2026-06-10; the signal was
+    /// previously gossiped but ignored by routing.
+    pub inference_availability: Option<f32>,
     /// How to actually open a connection to this endpoint.
     ///
     /// `None` is the default mesh transport — plain HTTP to `base_urls`,

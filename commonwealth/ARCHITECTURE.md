@@ -9,7 +9,11 @@ _A coordination daemon for community-owned distributed inference and knowledge._
 > This document was written early in the project and has drifted from the
 > code as the system evolved (the contribution ledger was redesigned, the
 > crate layout grew from 6 to 9, the FairnessPolicy enum was abandoned in
-> favour of per-peer affinity preferences, etc.). Read it for the *why*
+> favour of per-peer affinity preferences, and the §4 scheduler generation
+> described below — model portfolio, adaptive scheduler, shard plan_builder,
+> usage prediction — was never wired into the runtime and was deleted
+> 2026-06-10; see `sovereign/docs/specs/OICP_RATIONALIZATION.md` for what
+> replaced it). Read it for the *why*
 > behind the original design, the design-philosophy section that still
 > governs the project, and the threat-model framing — those parts hold.
 >
