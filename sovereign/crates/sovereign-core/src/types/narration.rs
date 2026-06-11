@@ -182,6 +182,9 @@ pub enum NarrationPhase {
     PrimarySynthesisStart,
     /// Gap-check fired and found a missing piece.
     GapCheckFired,
+    /// Grounding gate is verifying the drafted answer against the
+    /// retrieved passages before releasing it (the stream is held).
+    GroundingVerifyStart,
 
     // ── Team-pipeline stage frames ────────────────────────────
     /// Router invocation began. Pairs with `RoutingComplete`.

@@ -1128,6 +1128,32 @@ impl Runtime {
 
         let completion = self.inference.complete(&plan.request).await?;
 
+        // Production grounding gate — non-streaming sibling of the
+        // held-stream gate in streaming.rs; same shared ladder
+        // (grounding::gate_answer: single-claim verify→retry→abstain
+        // for short answers, per-claim audit→rewrite→annotate for
+        // long-form). No hold needed here: nothing was sent yet.
+        let mut grounding_gate_meta: Option<serde_json::Value> = None;
+        let completion_text = if crate::runtime::grounding::grounding_gate_enabled()
+            && !plan.chunks.is_empty()
+        {
+            let gate_chunks: Vec<String> =
+                plan.chunks.iter().map(|c| c.content.clone()).collect();
+            let outcome = crate::runtime::grounding::gate_answer(
+                &self.inference,
+                message,
+                completion.text.clone(),
+                &gate_chunks,
+                plan.gate_entity_anchored,
+                &plan.request,
+            )
+            .await;
+            grounding_gate_meta = Some(outcome.meta);
+            outcome.text
+        } else {
+            completion.text.clone()
+        };
+
         let final_content = if plan.gap_check_enabled {
             // Humility principle: always run the gap check on KQ
             // paths. The retrieval-shape route is a synthesis-
@@ -1142,12 +1168,12 @@ impl Runtime {
             self.maybe_collaborate(
                 conversation_id,
                 message,
-                &completion.text,
+                &completion_text,
                 &plan.doc_context,
             )
             .await
         } else {
-            completion.text.clone()
+            completion_text.clone()
         };
 
         // Post-synthesis guardrail: demote any quoted span that isn't
@@ -1258,6 +1284,7 @@ impl Runtime {
                 "retrieved_chunks": plan.retrieved_chunks,
                 "prompt_budget": plan.prompt_budget_note,
                 "next_steps": offers_json,
+                "grounding_gate": grounding_gate_meta,
             })),
             version: now(),
         };

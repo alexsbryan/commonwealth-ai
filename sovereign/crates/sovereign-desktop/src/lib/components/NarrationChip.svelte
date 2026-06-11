@@ -29,6 +29,7 @@
     routing_complete: "→",
     retrieval_start: "⌕",
     retrieval_complete: "◇",
+    grounding_verify_start: "✓",
     curation_start: "✂",
     curation_complete: "✓",
     drafting_start: "✎",
