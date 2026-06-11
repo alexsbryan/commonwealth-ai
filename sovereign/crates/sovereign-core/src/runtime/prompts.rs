@@ -429,8 +429,44 @@ pub(crate) fn build_synthesis_system_prompt(
     include_thinking: bool,
     budget_note: &str,
 ) -> String {
+    build_synthesis_system_prompt_with_provenance(
+        comparison,
+        gap_note,
+        include_thinking,
+        budget_note,
+        false,
+    )
+}
+
+/// End-positioned restatement of the provenance rule that already lives
+/// mid-prompt in `KNOWLEDGE_SYNTHESIS_SYSTEM`. The no-thinking fast
+/// slot demonstrably skips the mid-prompt version: 2026-06-10 chaos
+/// runs, all 5 out-of-domain answers were content-correct but BARE (no
+/// "from general knowledge" flag) once thinking suppression landed —
+/// the small model only honoured the rule when its leaked CoT happened
+/// to restate it. Recency-positioning a short, hard restatement is the
+/// prompt-side fix; an evidence-conditioned structural prefix (caveat
+/// injected when retrieval scores are weak) is the durable follow-up if
+/// this proves insufficient. SHAPE-level wording only — no
+/// fact-category examples, per the no-teaching-to-the-test rule.
+pub(crate) const PROVENANCE_DIRECTIVE: &str = "\
+FINAL CHECK — provenance (mandatory). If the key fact in your answer does not \
+come from the retrieved passages above, your FIRST sentence must say so \
+plainly (\"Not in your sources — from general knowledge: …\") and then \
+answer. This flag is required even when the fact is famous and you are \
+certain of it. If the key fact does come from the passages, cite them with \
+[Source: title]. Never present a general-knowledge fact as if it were \
+retrieved from the user's sources.";
+
+pub(crate) fn build_synthesis_system_prompt_with_provenance(
+    comparison: bool,
+    gap_note: &str,
+    include_thinking: bool,
+    budget_note: &str,
+    provenance_emphasis: bool,
+) -> String {
     let mut s = String::with_capacity(
-        KNOWLEDGE_SYNTHESIS_SYSTEM.len() + gap_note.len() + budget_note.len() + 256,
+        KNOWLEDGE_SYNTHESIS_SYSTEM.len() + gap_note.len() + budget_note.len() + 512,
     );
     s.push_str(KNOWLEDGE_SYNTHESIS_SYSTEM);
     if comparison {
@@ -444,6 +480,10 @@ pub(crate) fn build_synthesis_system_prompt(
     if include_thinking {
         s.push_str("\n\n");
         s.push_str(THINKING_DIRECTIVE);
+    }
+    if provenance_emphasis {
+        s.push_str("\n\n");
+        s.push_str(PROVENANCE_DIRECTIVE);
     }
     s.push_str("\n\n");
     s.push_str(budget_note);
