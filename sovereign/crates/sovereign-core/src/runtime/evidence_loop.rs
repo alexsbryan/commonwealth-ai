@@ -138,6 +138,44 @@ fn question_is_entity_anchored(keywords: &[String], corpus_ids: &[String]) -> bo
     keywords.iter().any(|k| entity_toks.contains(k))
 }
 
+/// Broader companion to `question_is_entity_anchored`: does the
+/// question share ANY content word (stemmed) with the corpus's atlas —
+/// entity names or atom-description vocabulary? Drives the structural
+/// general-knowledge caveat: when a question is topically FOREIGN to
+/// every enabled corpus and two retrieval rounds found nothing, the
+/// answer is coming from the model's parametric memory and must say
+/// so. The caveat is committed via `assistant_prefix` in code because
+/// prompt instructions to add it are followed ~60% of the time
+/// (measured across the 2026-06-11 banks: 3/5 OOD caveat omissions on
+/// one run was the difference between honesty 0.64 and 0.91).
+fn question_is_corpus_anchored(keywords: &[String], corpus_ids: &[String]) -> bool {
+    if keywords.is_empty() {
+        // No content words to test — err on the side of "anchored"
+        // (no caveat) rather than mislabeling a corpus answer as GK.
+        return true;
+    }
+    let kw_stems: Vec<String> = keywords.iter().map(|k| stem(k).to_string()).collect();
+    for cid in corpus_ids {
+        for name in atlas_entity_names(cid) {
+            let nl = name.to_lowercase();
+            for t in nl.split(|c: char| !c.is_alphanumeric()) {
+                if t.len() >= 4 && kw_stems.iter().any(|s| s == stem(t)) {
+                    return true;
+                }
+            }
+        }
+        for (desc, _) in atlas_atom_records(cid) {
+            let dl = desc.to_lowercase();
+            for w in dl.split(|c: char| !c.is_alphanumeric()) {
+                if w.len() >= 4 && kw_stems.iter().any(|s| s == stem(w)) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 /// Minimal suffix-stripping stem so "abandons"/"abandoned"/"abandon"
 /// compare equal. Deliberately crude — it only needs to make keyword
 /// overlap robust to inflection, not be linguistically right.
@@ -316,7 +354,7 @@ impl Runtime {
     /// Returns the (possibly augmented) chunk set; on any judge or
     /// formulation failure it degrades to the input unchanged — the
     /// loop can only ADD evidence, never lose or reorder round 0.
-    /// Returns `(chunks, still_insufficient, entity_anchored)`.
+    /// Returns `(chunks, still_insufficient, entity_anchored, corpus_anchored)`.
     ///
     /// `still_insufficient` — the loop fired, did its round, and the
     /// merged evidence STILL fails the sufficiency judge (or round 2
@@ -339,7 +377,7 @@ impl Runtime {
         context: &ConversationContext,
         intent: &Intent,
         scope: Option<&str>,
-    ) -> (Vec<corpus_engine::ScoredChunk>, bool, bool) {
+    ) -> (Vec<corpus_engine::ScoredChunk>, bool, bool, bool) {
         // Empty round 0 is the strongest possible insufficiency signal
         // — skip the judge and go straight to formulation.
         let insufficiency = if chunks.is_empty() {
@@ -352,7 +390,7 @@ impl Runtime {
                         target: "agentic_kq",
                         "sufficiency judge failed — keeping round-0 evidence unchanged"
                     );
-                    return (chunks, false, false);
+                    return (chunks, false, false, true);
                 }
             }
         };
@@ -371,7 +409,7 @@ impl Runtime {
             insufficiency >= threshold
         ));
         if insufficiency < threshold {
-            return (chunks, false, false);
+            return (chunks, false, false, true);
         }
 
         // Corpora the atom-matching stage may read atlases from, and
@@ -384,6 +422,7 @@ impl Runtime {
         };
         let kw = question_keywords(message);
         let entity_anchored = question_is_entity_anchored(&kw, &lookup_ids);
+        let corpus_anchored = entity_anchored || question_is_corpus_anchored(&kw, &lookup_ids);
         // Lexical-only matching, deliberately. A v10 probe tried a
         // cosine-similarity fallback (floor 0.5) for synonymy gaps and
         // it matched WRONG atoms at 0.52–0.59 — short-text embedding
@@ -420,7 +459,7 @@ impl Runtime {
                 "agentic_kq: in-world question with zero atlas-atom support — append round skipped"
             );
             dbg("in-world + zero atoms: append round skipped (anti-fabrication)");
-            return (chunks, true, true);
+            return (chunks, true, true, true);
         }
 
         let queries = match self.formulate_evidence_queries(message, &chunks, context).await {
@@ -432,7 +471,7 @@ impl Runtime {
                 );
                 // The loop FIRED (round 0 judged insufficient) and
                 // produced nothing — synthesis should know.
-                return (chunks, true, entity_anchored);
+                return (chunks, true, entity_anchored, corpus_anchored);
             }
         };
         tracing::info!(
@@ -605,7 +644,7 @@ impl Runtime {
             "complete: appended={appended} total={} still_insufficient={still_insufficient}",
             merged.len()
         ));
-        (merged, still_insufficient, entity_anchored)
+        (merged, still_insufficient, entity_anchored, corpus_anchored)
     }
 
 

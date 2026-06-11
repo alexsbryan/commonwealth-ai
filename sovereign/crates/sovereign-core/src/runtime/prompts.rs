@@ -449,6 +449,15 @@ pub(crate) fn build_synthesis_system_prompt(
 /// injected when retrieval scores are weak) is the durable follow-up if
 /// this proves insufficient. SHAPE-level wording only — no
 /// fact-category examples, per the no-teaching-to-the-test rule.
+/// The canonical provenance caveat, structurally committed via
+/// `assistant_prefix` when a turn is topically foreign to every
+/// enabled corpus and two retrieval rounds found nothing (see the
+/// agentic loop's `question_is_corpus_anchored`). This is the
+/// "evidence-conditioned structural prefix" follow-up the directive's
+/// doc anticipates — instruction compliance measured ~60% on the fast
+/// slot (3/5 OOD caveat omissions on the 2026-06-11 holdout run).
+pub(crate) const GK_CAVEAT_PREFIX: &str = "Not in your sources — from general knowledge: ";
+
 pub(crate) const PROVENANCE_DIRECTIVE: &str = "\
 FINAL CHECK — provenance (mandatory). If the key fact in your answer does not \
 come from the retrieved passages above, your FIRST sentence must say so \
