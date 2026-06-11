@@ -910,13 +910,28 @@ impl Runtime {
             // abstain. Long-form (PrimarySynthesis): hold → per-claim
             // audit → rewrite → annotate. Zero-chunk turns skip — the
             // structural GK caveat owns that path.
-            let gate_on = crate::runtime::grounding::grounding_gate_enabled()
-                && documents_found > 0;
-            let gate_chunks: Vec<String> = if gate_on {
-                chunks.iter().map(|c| c.content.clone()).collect()
-            } else {
-                Vec::new()
+            let gate_surface = crate::runtime::grounding::GateSurface::KnowledgeQuery;
+            let gate_on = gate_surface.enabled() && documents_found > 0;
+            // The turn's sealed evidence universe — built here because
+            // the spawned task holds no `&self`. Claim search is
+            // sealed to the conversation's corpora.
+            let gate_evidence = crate::runtime::grounding::EvidenceContext {
+                chunks: if gate_on {
+                    chunks.iter().map(|c| c.content.clone()).collect()
+                } else {
+                    Vec::new()
+                },
+                searcher: if gate_on {
+                    Some(std::sync::Arc::new(self.claim_searcher(
+                        context.conversation.enabled_corpora.as_deref(),
+                        &chunks,
+                    )) as _)
+                } else {
+                    None
+                },
+                entity_anchored: gate_entity_anchored,
             };
+            let gate_profile = gate_surface.profile();
             let gate_question: String = message.to_string();
             if crate::runtime::grounding::grounding_gate_enabled() {
                 crate::runtime::grounding::dbg(&format!(
@@ -1201,9 +1216,9 @@ impl Runtime {
                         &inference,
                         &gate_question,
                         std::mem::take(&mut full_text),
-                        &gate_chunks,
-                        gate_entity_anchored,
+                        &gate_evidence,
                         &request,
+                        &gate_profile,
                     )
                     .await;
                     full_text = outcome.text;
@@ -1802,13 +1817,29 @@ impl Runtime {
         // the single-claim ladder). entity_anchored=false here — the
         // agentic loop (and its atlas gazetteer verdict) is KQ-only
         // today, and the long-form ladder doesn't consume it.
-        let deep_gate_on = crate::runtime::grounding::grounding_gate_enabled()
-            && !kc.chunks.is_empty();
-        let deep_gate_chunks: Vec<String> = if deep_gate_on {
-            kc.chunks.iter().map(|c| c.content.clone()).collect()
-        } else {
-            Vec::new()
+        let deep_gate_surface = crate::runtime::grounding::GateSurface::DeepQuery;
+        let deep_gate_on = deep_gate_surface.enabled() && !kc.chunks.is_empty();
+        // The turn's sealed evidence universe (deep answers are
+        // usually long-form). Built pre-spawn; claim search sealed to
+        // the conversation's corpora. entity_anchored=false — the
+        // agentic loop (and its atlas gazetteer verdict) is KQ-only.
+        let deep_gate_evidence = crate::runtime::grounding::EvidenceContext {
+            chunks: if deep_gate_on {
+                kc.chunks.iter().map(|c| c.content.clone()).collect()
+            } else {
+                Vec::new()
+            },
+            searcher: if deep_gate_on {
+                Some(std::sync::Arc::new(self.claim_searcher(
+                    context.conversation.enabled_corpora.as_deref(),
+                    &kc.chunks,
+                )) as _)
+            } else {
+                None
+            },
+            entity_anchored: false,
         };
+        let deep_gate_profile = deep_gate_surface.profile();
         let deep_gate_question: String = message.to_string();
         if deep_gate_on {
             let txt = "Drafting an answer, then verifying it against your                        sources before showing it."
@@ -2021,9 +2052,9 @@ impl Runtime {
                     &inference,
                     &deep_gate_question,
                     std::mem::take(&mut full_text),
-                    &deep_gate_chunks,
-                    false,
+                    &deep_gate_evidence,
                     &request,
+                    &deep_gate_profile,
                 )
                 .await;
                 full_text = outcome.text;
