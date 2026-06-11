@@ -62,12 +62,21 @@ pub async fn run(args: &[String]) -> i32 {
     };
     let db_path = data_dir.join("sovereign.db");
     let indexes_dir = data_dir.join("indexes");
-    let corpus_dir = match find_corpus_index_path(&indexes_dir, &parsed.corpus_id) {
+    // Accept a display name or unique fragment, not just the raw id —
+    // ids carry a hash suffix nobody should have to type.
+    let corpus_id = match crate::corpus_resolve::resolve_corpus_id(&indexes_dir, &parsed.corpus_id)
+    {
+        Ok(id) => id,
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            return 1;
+        }
+    };
+    let corpus_dir = match find_corpus_index_path(&indexes_dir, &corpus_id) {
         Some(p) => p,
         None => {
             eprintln!(
-                "error: no installed index for corpus '{}' under {}",
-                parsed.corpus_id,
+                "error: no installed index for corpus '{corpus_id}' under {}",
                 indexes_dir.display()
             );
             return 1;
@@ -75,7 +84,7 @@ pub async fn run(args: &[String]) -> i32 {
     };
     let atlas_dir = corpus_dir.join("atlas");
 
-    eprintln!("corpus:    {}", parsed.corpus_id);
+    eprintln!("corpus:    {corpus_id}");
     eprintln!("state db:  {}", db_path.display());
     eprintln!("atlas dir: {}", atlas_dir.display());
     eprintln!("endpoint:  {}", parsed.endpoint);
@@ -120,7 +129,7 @@ pub async fn run(args: &[String]) -> i32 {
     }
 
     let started = std::time::Instant::now();
-    let report = match run_typed_extension(&parsed.corpus_id, &store, &inference, &atlas_dir).await
+    let report = match run_typed_extension(&corpus_id, &store, &inference, &atlas_dir).await
     {
         Ok(r) => r,
         Err(e) => {

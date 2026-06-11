@@ -15,6 +15,7 @@ mod chat_cmd;
 mod claim_cmd;
 mod corpus_catalog_cmd;
 mod corpus_cmd;
+mod corpus_resolve;
 mod corpus_extract_entities_cmd;
 mod corpus_scrub_cmd;
 mod corpus_snapshot_cmd;

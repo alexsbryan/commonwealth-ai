@@ -150,6 +150,36 @@ async fn obsidian_vault_source_is_reconcilable() {
 }
 
 #[tokio::test]
+async fn register_reuses_existing_id_for_same_path() {
+    // Path identity guard: ids gained readable slugs on 2026-06-11 —
+    // a vault registered under a pre-slug id must KEEP that id when
+    // re-registered (the id keys every sidecar; a second id would
+    // orphan the corpus). Simulate the legacy state by registering
+    // under a mutated id first.
+    let fx = boot().await;
+    let snapshots = fx._tmp.path().join("vault-snapshots");
+    write_note(&fx.vault.join("alpha.md"), "# Alpha\n");
+
+    let mut legacy = LocalCorpusConfig::obsidian_vault(fx.vault.clone(), snapshots.clone());
+    legacy.id = "obsidian-959ee8a8f330".to_string(); // pre-slug shape
+    let legacy_id = fx.manager.register(legacy).await.expect("register legacy");
+    assert_eq!(legacy_id, "obsidian-959ee8a8f330");
+
+    // Re-register the same path through the current factory (which
+    // mints a slugged id) — the existing id must win.
+    let fresh = LocalCorpusConfig::obsidian_vault(fx.vault.clone(), snapshots);
+    assert_ne!(
+        fresh.id, legacy_id,
+        "factory now mints a different (slugged) id"
+    );
+    let resolved = fx.manager.register(fresh).await.expect("re-register");
+    assert_eq!(
+        resolved, legacy_id,
+        "same path must reuse the registered id, not mint a second corpus"
+    );
+}
+
+#[tokio::test]
 async fn vault_initial_ingest_then_no_changes_sweep() {
     let fx = boot().await;
     let snapshots = fx._tmp.path().join("vault-snapshots");

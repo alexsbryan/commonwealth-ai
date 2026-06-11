@@ -878,7 +878,29 @@ impl LocalCorpusManager {
 
     /// Persist a new corpus config. Idempotent: registering the same
     /// ID overwrites (re-canonicalising the root path, for example).
-    pub async fn register(&self, config: LocalCorpusConfig) -> Result<String> {
+    pub async fn register(&self, mut config: LocalCorpusConfig) -> Result<String> {
+        // Path identity guard: a folder already registered under a
+        // DIFFERENT id (e.g. a pre-2026-06-11 `<kind>-<hex>` id, from
+        // before ids gained readable slugs) keeps its original id —
+        // the id is the citation handle and the key of every sidecar;
+        // minting a second id for the same path would orphan the
+        // existing corpus and double-ingest the folder.
+        if let Some(existing_id) = self
+            .corpora
+            .read()
+            .await
+            .values()
+            .find(|c| c.root_path == config.root_path && c.id != config.id)
+            .map(|c| c.id.clone())
+        {
+            tracing::info!(
+                path = %config.root_path.display(),
+                minted = %config.id,
+                existing = %existing_id,
+                "register: path already registered — reusing existing corpus id"
+            );
+            config.id = existing_id;
+        }
         let id = config.id.clone();
         persist_config(&config_dir(&self.data_dir), &config)?;
         self.corpora.write().await.insert(id.clone(), config);

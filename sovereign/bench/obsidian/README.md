@@ -52,11 +52,15 @@ signal lives in the SQLite sidecars (`chunk_entities`,
 `conv_raptor_nodes`), which this golden's atoms reader doesn't see.
 Compare per-axis, not aggregate, across the two surfaces.
 
-**Score the live tiered surface** (what vault chat actually uses):
+**Score the live tiered surface** (what vault chat actually uses).
+Corpus arguments accept the display name or any unique fragment —
+not just the raw id (2026-06-11; ids themselves are now readable:
+`obsidian-vault-959ee8a8f330`-style for new registrations):
 ```bash
-sovereign bench obsidian --corpus obsidian-<hash> --report /tmp/r.json
-# re-run extraction after a prompt iteration, no rebuild needed:
-sovereign atlas typed-extension obsidian-<hash>
+sovereign bench obsidian --corpus "Obsidian Vault" --report /tmp/r.json
+# re-run extraction after a prompt iteration, no rebuild needed
+# (--force re-runs with unchanged inputs, for run-variance checks):
+sovereign atlas typed-extension "Obsidian Vault"
 ```
 
 **Or pin the legacy `literary_atlas` comparison surface**:

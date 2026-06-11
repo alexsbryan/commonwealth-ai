@@ -325,9 +325,15 @@ pub fn derive_stability_from_info(info: &crate::types::IndexInfo) -> (Stability,
         return (Stability::Rolling, format!("corpus_id={}", info.corpus_id));
     }
     // Watched-folder corpora: ids stamped by the watcher tooling
-    // (`watched-<hex>`, `folder-<hex>`). Live local-file content; the
-    // user keeps editing files. Versioned by definition.
-    if info.corpus_id.starts_with("watched-") || info.corpus_id.starts_with("folder-") {
+    // (`watched-…`, `folder-…`, `obsidian-…` — since 2026-06-11 a
+    // readable slug sits between kind prefix and hash). Live
+    // local-file content; the user keeps editing files. Versioned by
+    // definition. `obsidian-` was missing here before — vaults fell
+    // through to the Knowledge-kind default.
+    if info.corpus_id.starts_with("watched-")
+        || info.corpus_id.starts_with("folder-")
+        || info.corpus_id.starts_with("obsidian-")
+    {
         return (
             Stability::Versioned,
             format!("corpus_id={}", info.corpus_id),
